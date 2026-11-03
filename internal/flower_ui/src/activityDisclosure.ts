@@ -211,10 +211,17 @@ export function createFlowerActivityDisclosureMotion(
     } else if (mounted()) {
       options.onBeforeClose?.();
       stopMeasuring();
+      // Immediate closure has no interpolated start or target. Measuring them
+      // would force style/layout during every semantic arrival in a drag.
+      if (reduced || options.animateClose?.() === false || closeDurationMs <= 0) {
+        cancelAnimation();
+        finishClose();
+        return;
+      }
       const current = presentation();
       const start = options.closePresentation?.(current) ?? current;
       setState('closing');
-      animate(start, Math.max(0, options.collapsedHeight?.() ?? 0), reduced || options.animateClose?.() === false ? 0 : closeDurationMs, true);
+      animate(start, Math.max(0, options.collapsedHeight?.() ?? 0), closeDurationMs, true);
     }
   }));
   onCleanup(() => { stopMeasuring(); cancelAnimation(); });

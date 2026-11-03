@@ -22,7 +22,8 @@ export function runGate({ fast = false, execute = spawnSync, exists = existsSync
   };
   for (const file of fastTests) if (!exists(path.join(root, 'internal/flower_ui/src', file))) throw new Error('Missing long-thread regression: ' + file);
   run(['--test', 'scripts/flower_long_thread_contract.test.mjs']);
-  run([path.join(ui, 'node_modules/vitest/vitest.mjs'), 'run', '--root', root, '--config', path.join(ui, 'vite.config.ts'), '--environment=node', '--maxWorkers=2', ...fastTests.map(file => 'internal/flower_ui/src/' + file)]);
+  run([path.join(ui, 'node_modules/vitest/vitest.mjs'), 'run', '--root', root, '--config', path.join(ui, 'vite.config.ts'), '--environment=node', '--maxWorkers=2', ...fastTests.filter(file => !file.endsWith('.client.test.ts')).map(file => 'internal/flower_ui/src/' + file)]);
+  run([path.join(root, 'desktop/node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.client.config.mts', ...fastTests.filter(file => file.endsWith('.client.test.ts')).map(file => '../internal/flower_ui/src/' + file)], path.join(root, 'desktop'));
   if (fast) return;
   for (const file of browserTests) if (!exists(path.join(ui, 'src/ui', file))) throw new Error('Missing browser regression: ' + file);
   run([path.join(ui, 'node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.browser.config.ts', ...browserTests.map(file => 'src/ui/' + file)], ui);

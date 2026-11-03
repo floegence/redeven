@@ -2,7 +2,7 @@ import { batch, createSignal } from 'solid-js';
 import { createStore, type SetStoreFunction } from 'solid-js/store';
 import type { FlowerChatMessage, FlowerHistoryPage, FlowerHistoryBodyChunk, FlowerHistoryWindow, FlowerRuntimeTurn, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { FlowerLiveSyncError } from './flowerLiveWire';
-import { readPresentationValue, retainEqualValue } from './presentationIdentity';
+import { readPresentationValue, retainEqualValue, retainKeyedItems } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 import { retainThinkingTiming } from './thinkingTiming';
 import { createMessageTextSource } from './messageTextSource';
@@ -13,6 +13,8 @@ type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: Flo
 type MutableMessage = Omit<{ -readonly [K in keyof FlowerChatMessage]: FlowerChatMessage[K] }, 'blocks'>
   & { blocks?: NonNullable<FlowerChatMessage['blocks']>[number][] };
 type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; appendText: (text: string) => void };
+type MutableThread = { -readonly [K in keyof FlowerThreadSnapshot]: FlowerThreadSnapshot[K] };
+type ThreadPresentation = readonly [MutableThread, SetStoreFunction<MutableThread>];
 const utf8 = new TextEncoder();
 export type HistoryBodyAppendResult = 'applied' | 'covered' | 'superseded';
 
@@ -76,6 +78,8 @@ function retainBody(before: ItemRecord | undefined, incoming: FlowerRuntimeCurre
 
 type PreviousRecord = {
   readonly threadID: string;
+  readonly runID: string | undefined;
+  readonly presentation: ThreadPresentation;
   findMessage(id: string): MessageRecord | undefined;
   retainedItem(item: FlowerRuntimeCurrentItem): ItemRecord | undefined;
   readingState(): { window?: FlowerHistoryWindow; records: readonly ItemRecord[]; turns: readonly FlowerRuntimeTurn[];
@@ -101,7 +105,10 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   let order = [...items.keys()];
   let priorReading = previous?.readingState();
   const priorWindow = priorReading?.window;
-  const priorTurns = new Map((priorReading?.turns ?? []).map(turn => [turn.turn_id, turn]));
+  const priorTurns = new Map(readPresentationValue(priorReading?.turns ?? []).map(turn => {
+    const value = readPresentationValue(turn);
+    return [value.turn_id, value];
+  }));
   const archive = new Map<string, ItemRecord>();
   const sameLeaf = Boolean(current.window?.leaf_id && current.window.leaf_id === priorReading?.window?.leaf_id);
   // A matching sealed canonical item proves its preceding active-path prefix.
@@ -159,11 +166,14 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     const records = readingRecords();
     return historyWindowForItems(window, retainedWindows, records.map(record => record.item));
   };
-  const mergeTurns = (turns: readonly FlowerRuntimeTurn[] | undefined) => {
-    if (!archive.size) return turns;
-    const ids = new Set(readingRecords().map(record => record.item.turn_id));
+  const mergeTurns = (turns: readonly FlowerRuntimeTurn[] | undefined, previous?: readonly FlowerRuntimeTurn[]) => {
+    const retain = (next: readonly FlowerRuntimeTurn[] | undefined) => next
+      ? retainKeyedItems(previous && readPresentationValue(previous), next, turn => turn.turn_id) : next;
+    if (!archive.size) return retain(turns);
+    const records = readingRecords();
+    const ids = new Set(records.map(record => record.item.turn_id));
     const byID = new Map([...priorTurns.values()].filter(turn => ids.has(turn.turn_id)).map(turn => [turn.turn_id, turn]));
-    const positions = new Map(readingRecords().map(record => [record.item.id, record.item.ordinal]));
+    const positions = new Map(records.map(record => [record.item.id, record.item.ordinal]));
     const mergeMembership = (previous: readonly string[], incoming: readonly string[]) =>
       [...new Set([...previous.filter(id => archive.has(id)), ...incoming])].filter(id => positions.has(id))
         .sort((a, b) => positions.get(a)! - positions.get(b)!);
@@ -175,16 +185,32 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         final_item_ids: mergeMembership(prior.run_id === turn.run_id ? prior.final_item_ids : [], turn.final_item_ids),
       } : turn);
     }
-    return [...byID.values()].sort((a, b) => a.started_at.localeCompare(b.started_at));
+    // Compare the complete reading document after merging retained history.
+    // The observed window alone omits archived members and is not comparable
+    // with the document already published to the UI.
+    return retain([...byID.values()].sort((a, b) => a.started_at.localeCompare(b.started_at)));
   };
   let components: FlowerRuntimeCurrentView = { ...current, items: undefined };
+  let observedTurns = initial.turns;
   const messages = new Map<string, MessageRecord>();
+  let messageStructureChanged = false;
+  let messageOwnersChanged = false;
   const makeMessage = (message: FlowerChatMessage) => {
     const prior = messages.get(message.id) ?? previous?.findMessage(message.id);
     message = retainThinkingTiming(message, prior?.value);
     if (prior) {
       const { text_source: _source, ...presentation } = readPresentationValue(prior.value);
-      if (retainEqualValue(presentation, message) === presentation || advanceMessage(prior, message)) {
+      const fields = [...new Set([...Object.keys(presentation), ...Object.keys(message)])];
+      const equal = fields.every(name => {
+        const key = name as keyof typeof presentation;
+        return retainEqualValue(presentation[key], message[key]) === presentation[key];
+      });
+      if (equal || advanceMessage(prior, message)) {
+        messageStructureChanged ||= fields.some(name => {
+          if (name === 'content' || name === 'text_source') return false;
+          const key = name as keyof typeof presentation;
+          return retainEqualValue(presentation[key], message[key]) !== presentation[key];
+        });
         messages.set(message.id, prior);
         return prior;
       }
@@ -194,6 +220,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     const textSource = text.source;
     const [value, set] = createStore<MutableMessage>({ ...message, blocks: message.blocks ? [...message.blocks] : undefined, ...(message.role === 'assistant' && !message.blocks?.length ? { text_source: textSource } : {}) });
     const record = { value, set, appendText: text.append };
+    messageOwnersChanged = true;
     messages.set(message.id, record);
     return record;
   };
@@ -209,12 +236,40 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     const message = previous?.findMessage(id);
     if (message) messages.set(id, message);
   }
-  const withReadingMessages = (observed: readonly FlowerChatMessage[]) => archive.size
-    ? [...readingRecords().flatMap(record => messages.has(record.item.id) ? [messages.get(record.item.id)!.value] : []),
-      ...observed.filter(message => !items.has(message.id) && !archive.has(message.id))] : observed;
+  const withReadingMessages = (observed: readonly FlowerChatMessage[]) => {
+    if (!archive.size) return observed;
+    const result: FlowerChatMessage[] = [];
+    for (const record of readingRecords()) {
+      const message = messages.get(record.item.id);
+      if (message) result.push(message.value);
+    }
+    for (const source of readPresentationValue(observed)) {
+      const message = readPresentationValue(source);
+      if (!items.has(message.id) && !archive.has(message.id)) result.push(source);
+    }
+    return result;
+  };
   projectedMessages = withReadingMessages(projectedMessages);
+  const presentation = previous?.runID === current.run_id ? previous?.presentation ?? createStore<MutableThread>({ ...initial })
+    : createStore<MutableThread>({ ...initial });
+  const [thread, setThread] = presentation;
+  const nextPresentation = { ...initial, ...readingDecorations(initial), messages: projectedMessages, turns: mergeTurns(initial.turns), history_window: readingWindow(current.window) };
+  // A refreshed observation replaces runtime facts, not the mounted document.
+  // Keep this thread's reactive owner and equal collections so all retained
+  // rows do not rebind their scroll/layout controllers on a new baseline.
+  const before = readPresentationValue(thread);
+  if (previous) {
+    const oldMessages = readPresentationValue(thread.messages);
+    if (!messageStructureChanged && oldMessages.length === projectedMessages.length && projectedMessages.every((message, index) =>
+      readPresentationValue(message) === readPresentationValue(oldMessages[index]))) nextPresentation.messages = thread.messages;
+  }
+  batch(() => {
+    for (const key of new Set([...Object.keys(before), ...Object.keys(nextPresentation)]) as Set<keyof MutableThread>) {
+      const value = key === 'messages' ? nextPresentation.messages : retainEqualValue(before[key], nextPresentation[key]);
+      if (value !== before[key]) setThread({ [key]: value });
+    }
+  });
   previous = undefined;
-  const [thread, setThread] = createStore<{ -readonly [K in keyof FlowerThreadSnapshot]: FlowerThreadSnapshot[K] }>({ ...initial, ...readingDecorations(initial), messages: projectedMessages, turns: mergeTurns(initial.turns), history_window: readingWindow(current.window) });
   projectedMessages = thread.messages;
   const updateMessage = (message: FlowerChatMessage, rebuildMembership = true) => {
     const prior = messages.get(message.id);
@@ -227,6 +282,8 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
 
   return {
     threadID,
+    get runID() { return components.run_id; },
+    presentation,
     get version() { return acceptedVersion; },
     item(id: string) { return (items.get(id) ?? archive.get(id))?.item; },
     previewItem(id: string) { const record = items.get(id) ?? archive.get(id); return record?.preview ?? record?.item; },
@@ -275,7 +332,8 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           retainedWindows.splice(0, retainedWindows.length, ...[before, after].filter((value): value is FlowerHistoryWindow => Boolean(value)));
         }
         projectedMessages = withReadingMessages(projectedMessages);
-        setThread({ messages: projectedMessages, turns: mergeTurns(components.turns ?? []), history_window: readingWindow(components.window) });
+        setThread({ messages: projectedMessages, turns: mergeTurns(components.turns ?? [], thread.turns),
+          history_window: retainEqualValue(readPresentationValue(thread).history_window, readingWindow(components.window)) });
         projectedMessages = thread.messages;
       });
       return true;
@@ -387,7 +445,6 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       const staged = new Map<string, ItemRecord | undefined>();
       const read = (id: string) => staged.has(id) ? staged.get(id) : items.get(id);
       let structure = false;
-      let replacedContent = false;
       for (const change of update.items ?? []) {
         const id = change.item_id;
         if (typeof id !== 'string' || !id.trim()) invalid('runtime change requires item identity');
@@ -417,7 +474,6 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           if (!item || item.id !== id || change.append || (change.kind === 'add' ? Boolean(before) : !before)) invalid('runtime replacement has invalid item identity');
           if (!Number.isSafeInteger(item.ordinal) || item.ordinal < 0) invalid('runtime item requires an ordinal');
           const record = retainBody(before, item) ?? { item, bytes: utf8.encode(item.text ?? '').length, retained: Boolean(item.live) };
-          replacedContent ||= Boolean(before && retainEqualValue(before.item, record.item) !== before.item);
           staged.set(id, record);
           structure ||= change.kind === 'add' || before?.item.ordinal !== item.ordinal;
         } else invalid('unknown runtime item change');
@@ -483,15 +539,10 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
             : { ...before, content: record.item.text ?? '' }
           : record ? runtimeMessages(base, { ...next, items: [record.item] }).map(message => present(record, message)).find(message => message.id === id) : undefined);
       }
-      let turns = base.turns;
+      let turns = observedTurns;
       const turnsChanged = Boolean(update.turns) || structure || (update.items ?? []).some(change => change.kind === 'replace');
       if (turnsChanged) {
-        const validated = validateFlowerRuntimeTurns({ ...next, items: nextOrder.map(id => read(id)!.item) });
-        const priorTurns = base.turns && readPresentationValue(base.turns);
-        const prior = new Map(priorTurns?.map(turn => [turn.turn_id, readPresentationValue(turn)]));
-        const retained = validated.map(turn => retainEqualValue(prior.get(turn.turn_id), turn));
-        turns = priorTurns?.length === retained.length && retained.every((turn, index) => turn === readPresentationValue(priorTurns[index]))
-          ? base.turns : retained;
+        turns = retainKeyedItems(observedTurns, validateFlowerRuntimeTurns({ ...next, items: nextOrder.map(id => read(id)!.item) }), turn => turn.turn_id);
       }
       const projectionView = update.interactions ? { ...next, items: [...items.keys()].flatMap(id => {
         const record = read(id);
@@ -504,13 +555,19 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         return item.kind === 'tool' && item.turn_id === message.turn_id && item.run_id === message.run_id && `tool:${item.turn_id}:${item.activity?.tool_id}` === message.id;
       })) : undefined;
       if (previews) {
-        for (const message of projectedMessages) if (message.blocks?.[0]?.type === 'tool-call-preview') replacements.set(message.id, undefined);
+        for (const source of readPresentationValue(projectedMessages)) {
+          const message = readPresentationValue(source);
+          if (message.blocks?.[0]?.type === 'tool-call-preview') replacements.set(message.id, undefined);
+        }
         for (const message of previews) replacements.set(message.id, message);
       }
+      const readingMembershipChanged = structure || Boolean(update.item_order);
       structure ||= (update.items ?? []).some(change => change.kind === 'replace') || Boolean(previews) || [...replacements].some(([id, message]) => Boolean(messages.has(id)) !== Boolean(message));
       let result!: FlowerThreadSnapshot;
       batch(() => {
-        if (structure || update.item_order) readingOrder = undefined;
+        messageStructureChanged = false;
+        messageOwnersChanged = false;
+        if (readingMembershipChanged) readingOrder = undefined;
         for (const [id, record] of staged) { if (record) items.set(id, record); else items.delete(id); }
         if (previewGrowth) for (const call of nextPreviews) {
           const message = messages.get('tool:' + call.turn_id + ':' + call.call_id);
@@ -518,7 +575,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         }
         for (const [id, message] of replacements) {
           const previous = messages.get(id);
-          if (!message) messages.delete(id);
+          if (!message) { messageOwnersChanged ||= messages.has(id); messages.delete(id); }
           else if (previous && bodyOnly.has(id)) previous.set('body_pending', message.body_pending);
           else if (previous && appendOnly.has(id)) {
             if (read(id)!.item.kind === 'thinking') previous.set('blocks', 0, { content: read(id)!.item.text ?? '' });
@@ -531,14 +588,16 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           else if (previous) updateMessage(message, !(structure || update.item_order));
           else makeMessage(message);
         }
-        if (structure || update.item_order) {
+        if (messageStructureChanged || messageOwnersChanged || readingMembershipChanged) {
           let membership: readonly FlowerChatMessage[] = [...nextOrder.flatMap(id => messages.has(id) ? [messages.get(id)!.value] : []),
-            ...(previews ?? projectedMessages.filter(message => message.blocks?.[0]?.type === 'tool-call-preview')).flatMap(message => messages.has(message.id) ? [messages.get(message.id)!.value] : [])];
+            ...(previews ?? readPresentationValue(projectedMessages).filter(message => readPresentationValue(message).blocks?.[0]?.type === 'tool-call-preview'))
+              .flatMap(message => messages.has(message.id) ? [messages.get(message.id)!.value] : [])];
           membership = withReadingMessages(membership);
           // Protocol boundaries can replace an equal item or clear an already
           // empty preview. Keep the mounted timeline when its ordered owners
           // are unchanged; mutable message fields have their own subscribers.
-          if (replacedContent || membership.length !== projectedMessages.length || membership.some((message, index) => message !== projectedMessages[index])) {
+          const priorMembership = readPresentationValue(projectedMessages);
+          if (messageStructureChanged || membership.length !== priorMembership.length || membership.some((message, index) => readPresentationValue(message) !== readPresentationValue(priorMembership[index]))) {
             projectedMessages = membership;
           }
         }
@@ -546,11 +605,12 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         // Historical membership, metadata and turn boundaries do not depend on
         // text growth. Preserve their identities so an append neither sorts the
         // retained document nor invalidates every completed timeline section.
-        const membershipChanged = structure || Boolean(update.item_order);
         const incoming = { ...projected,
-          ...(membershipChanged || update.context ? readingDecorations(projected) : {}),
-          history_window: membershipChanged ? readingWindow(next.window) : thread.history_window,
-          messages: projectedMessages, turns: turnsChanged ? mergeTurns(turns) : thread.turns };
+          ...(readingMembershipChanged || update.context ? readingDecorations(projected) : {}),
+          history_window: readingMembershipChanged
+            ? retainEqualValue(readPresentationValue(thread).history_window, readingWindow(next.window)) : thread.history_window,
+          messages: projectedMessages, turns: turns !== observedTurns || readingMembershipChanged ? mergeTurns(turns, thread.turns) : thread.turns };
+        observedTurns = turns;
         for (const key of Object.keys(incoming) as (keyof FlowerThreadSnapshot)[]) {
           if (!Object.is(thread[key], incoming[key])) setThread({ [key]: incoming[key] });
         }

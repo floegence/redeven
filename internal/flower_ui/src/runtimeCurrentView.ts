@@ -20,7 +20,7 @@ import type {
 import { mapFlowerActivityItem } from './flowerLiveMapper';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
-import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
+import { readPresentationValue, retainEqualValue, retainThreadPresentation } from './presentationIdentity';
 import { retainThreadFileActivityTargets } from './fileActivityTargets';
 import { retainThinkingTiming, runtimeThinkingTiming } from './thinkingTiming';
 
@@ -459,7 +459,7 @@ export function applyFlowerRuntimeCurrentView(
   context: FlowerRuntimeContext = {},
 ): FlowerThreadSnapshot {
   const projected = projectFlowerRuntimeComponents(base, current, context);
-  const previousThinking = new Map(base.messages.filter(message => message.thinking_timing).map(message => [message.id, message]));
+  const previousThinking = new Map(readPresentationValue(base.messages).filter(message => message.thinking_timing).map(message => [message.id, message]));
   const messages = runtimeMessages(base, current).map(message => retainThinkingTiming(message, previousThinking.get(message.id)));
   return retainThreadPresentation(base, retainThreadFileActivityTargets(base, {
     ...projected, history_window: current.window, messages, turns: validateFlowerRuntimeTurns(current),

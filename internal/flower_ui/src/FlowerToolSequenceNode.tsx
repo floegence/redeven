@@ -74,7 +74,10 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     nearBottomThreshold: 24,
     observeChildren: true,
   });
-  const scrollToLatest = () => scroll.flushLayout(false);
+  // Disclosure callbacks run inside reactive DOM updates. Let the scroll
+  // owner's before-paint pass measure the completed tree once; synchronous
+  // flushes here repeatedly lay out the entire growing transcript.
+  const scrollToLatest = () => scroll.measureAfterLayout();
   const prepareArrival = () => scroll.prepareArrival();
   const prepareDestination = () => {
     if (!first() || !expanded() || parentCollapsed()) return true;
@@ -142,7 +145,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         body.scrollTop = savedReading.top;
         if (savedReading.following) scroll.startFollowing(); else scroll.stopFollowing();
         savedReading = undefined;
-      } else scroll.scrollToBottom();
+      } else scroll.scheduleTailScroll({ force: true });
     });
     onCleanup(() => {
       cancelled = true;

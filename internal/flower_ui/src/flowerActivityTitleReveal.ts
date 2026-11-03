@@ -61,15 +61,17 @@ export function createFlowerActivityTitleReveal(options: {
     const live = options.liveConfirmed();
     const restored = restoration !== options.restoration();
     restoration = options.restoration();
-    const sameThread = Boolean(threadID && threadID === thread?.thread_id);
+    const currentThreadID = thread?.thread_id;
+    const sameThread = Boolean(threadID && threadID === currentThreadID);
     if (!sameThread || !live || restored) { finishAll(); known.clear(); }
     const execution = thread?.current_execution;
+    const turnID = execution?.turn_id, runID = execution?.run_id;
     const now = performance.now();
     const next = new Map<string, { deadline: number; entryKey: string }>();
     const fresh = !restored && sameThread && wasLive && live && !document.hidden && (thread?.status === 'running' || wasRunning);
     for (const entry of entries) {
-      if (!entry || !execution || entry.threadID !== thread?.thread_id
-        || entry.turnID !== execution.turn_id || entry.runID !== execution.run_id) continue;
+      if (!entry || !execution || entry.threadID !== currentThreadID
+        || entry.turnID !== turnID || entry.runID !== runID) continue;
       for (const key of entry.keys) {
         const prior = sameThread && live ? known.get(key) : undefined;
         // Visibility is checked at admission and again against the real node
@@ -78,7 +80,7 @@ export function createFlowerActivityTitleReveal(options: {
         next.set(key, arrival);
       }
     }
-    threadID = thread?.thread_id;
+    threadID = currentThreadID;
     wasLive = live;
     wasRunning = thread?.status === 'running';
     known = next;

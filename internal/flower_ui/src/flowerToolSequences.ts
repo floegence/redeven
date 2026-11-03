@@ -155,7 +155,6 @@ export function projectFlowerToolSequences(
     sequenceGaps?: ReadonlyMap<string, HistoryReadingGap>; compactions?: readonly FlowerContextCompaction[] }> = { hasBefore: false, hasAfter: false },
   messageTokens: (entry: MessageEntry) => readonly SequenceToken[] = messageSequenceTokens,
 ): FlowerToolSequenceProjection {
-  const tokens: SequenceToken[] = [];
   const turnsByID = uniqueTurnsByID(readPresentationValue(turns));
   const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
   const parentEventNode = (entry: Extract<FlowerTimelineEntry, { type: 'parent_event' }>): SequenceNode | null => {
@@ -167,30 +166,6 @@ export function projectFlowerToolSequences(
     return scope ? { key: entry.key, entryKey: entry.key, scope, turnID: turn?.turn_id, kind: 'subagent_event', active: false,
       failed: event.kind === 'failed' || event.kind === 'timed_out' } : null;
   };
-
-  for (const [index, entry] of entries.entries()) {
-    if (breakBefore.has(entry.key)) {
-      const gap = coverage.sequenceGaps?.get(entry.key), prior = entries[index - 1];
-      const before = prior?.type === 'message' ? readPresentationValue(prior.message) : undefined;
-      const after = entry.type === 'message' ? readPresentationValue(entry.message) : undefined;
-      const lower = before?.canonical_ordinal, upper = after?.canonical_ordinal;
-      const scoped = (message: typeof before) => message && message.thread_id === threadID
-        && message.turn_id === gap?.sequence?.turnID && message.run_id === gap?.sequence?.runID;
-      // Kind counts certify omitted item continuity, never omitted receipts or
-      // compactions. Known decorations still pass through the normal tokenizer.
-      const certified = gap?.sequence && before?.id === gap.beforeID && after?.id === gap.afterID
-        && scoped(before) && scoped(after) && lower !== undefined && upper !== undefined && lower < upper
-        && !coverage.compactions?.some(value => value.canonical_ordinal > lower && value.canonical_ordinal < upper)
-        && !coverage.missingEvents?.some(value => lower < value.before && upper > value.after);
-      tokens.push(certified ? { continuity: gap } : { gap: true });
-    }
-    if (entry.type === 'parent_event') {
-      tokens.push(parentEventNode(entry));
-      continue;
-    }
-    if (entry.type === 'message') tokens.push(...messageTokens(entry));
-    else tokens.push(null);
-  }
 
   const runs: { nodes: SequenceNode[]; followingContentKeys: string[]; countsComplete: boolean; missingBefore: boolean; missingAfter: boolean; gap?: HistoryReadingGap }[] = [];
   let followingRun: typeof runs[number] | undefined;
@@ -213,24 +188,48 @@ export function projectFlowerToolSequences(
     pendingGap = undefined;
     startComplete = endComplete;
   };
-  for (const node of tokens) {
+  const visit = (node: SequenceToken) => {
     if (node && 'continuity' in node) {
       if (pending.length) pendingGap ??= node.continuity; else flush(false);
-      continue;
+      return;
     }
-    if (node && 'gap' in node) { flush(false); continue; }
+    if (node && 'gap' in node) { flush(false); return; }
     if (node && 'outputScope' in node) {
       if (pending.length) flush(true, node.outputScope, node.contentKey);
       else if (followingRun?.nodes[0].scope === node.outputScope) followingRun.followingContentKeys.push(node.contentKey);
       else followingRun = undefined;
       startComplete = true;
-      continue;
+      return;
     }
-    if (!node) { flush(true); continue; }
+    if (!node) { flush(true); return; }
     followingRun = undefined;
     if (pending.length && pending[0].scope !== node.scope) flush(true);
     pending.push(node);
+  };
+  for (const [index, entry] of entries.entries()) {
+    if (breakBefore.has(entry.key)) {
+      const gap = coverage.sequenceGaps?.get(entry.key), prior = entries[index - 1];
+      const before = prior?.type === 'message' ? readPresentationValue(prior.message) : undefined;
+      const after = entry.type === 'message' ? readPresentationValue(entry.message) : undefined;
+      const lower = before?.canonical_ordinal, upper = after?.canonical_ordinal;
+      const scoped = (message: typeof before) => message && message.thread_id === threadID
+        && message.turn_id === gap?.sequence?.turnID && message.run_id === gap?.sequence?.runID;
+      // Kind counts certify omitted item continuity, never omitted receipts or
+      // compactions. Known decorations still pass through the normal tokenizer.
+      const certified = gap?.sequence && before?.id === gap.beforeID && after?.id === gap.afterID
+        && scoped(before) && scoped(after) && lower !== undefined && upper !== undefined && lower < upper
+        && !coverage.compactions?.some(value => value.canonical_ordinal > lower && value.canonical_ordinal < upper)
+        && !coverage.missingEvents?.some(value => lower < value.before && upper > value.after);
+      visit(certified ? { continuity: gap } : { gap: true });
+    }
+    if (entry.type === 'parent_event') {
+      visit(parentEventNode(entry));
+      continue;
+    }
+    if (entry.type === 'message') for (const token of messageTokens(entry)) visit(token);
+    else visit(null);
   }
+
   flush(!coverage.hasAfter);
 
   const groups = new Map<string, FlowerToolSequence>();
@@ -249,8 +248,9 @@ export function projectFlowerToolSequences(
   };
   runs.forEach(({ nodes, followingContentKeys, countsComplete, missingBefore, missingAfter, gap }, index) => {
     if (nodes.length < 2) return;
-    const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
-    const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
+    // Tokens retain document order, including multiple nodes in one entry.
+    const firstEntry = entryPositions.get(nodes[0].entryKey) ?? 0;
+    const lastEntry = entryPositions.get(nodes.at(-1)!.entryKey) ?? firstEntry;
     const sourceEntries = entries.slice(firstEntry, lastEntry + 1);
     const ordinal = (entry: FlowerTimelineEntry | undefined) => entry?.type === 'message' ? readPresentationValue(entry.message).canonical_ordinal
       : entry?.type === 'parent_event' ? entry.event.canonical_ordinal

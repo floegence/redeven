@@ -76,6 +76,25 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('does not force layout while binding a newly mounted viewport', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport();
+    let reads = 0;
+    Object.defineProperties(metrics.viewport, {
+      scrollTop: { get: () => { reads++; return metrics.scrollTop(); }, set: metrics.setScrollTop },
+      scrollHeight: { get: () => { reads++; return 500; } },
+      clientHeight: { get: () => { reads++; return 100; } },
+    });
+    controller.bind(metrics.viewport);
+    expect(reads).toBe(0);
+    controller.scheduleTailScroll({ force: true });
+    expect(reads).toBe(0);
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(400);
+    expect(controller.nearBottom()).toBe(true);
+    controller.dispose();
+  });
+
   it('follows a new text line over several frames without repeating layout work', () => {
     const raf = createRafHarness();
     let notifications = 0;

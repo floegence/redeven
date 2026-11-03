@@ -154,8 +154,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   });
 
   const inspectionProtected = (turnID: string, processKeys: readonly string[], protectThinking = false, inspectedNodes?: readonly HTMLElement[]) => {
-    const viewport = props.scroll.viewport();
-    const visible = viewport?.getBoundingClientRect();
+    const reading = !props.scroll.followingLatest();
+    let visible: DOMRect | undefined;
     const selection = document.getSelection();
     return (inspectedNodes ?? processKeys.map(key => nodes.get(key))).some((row) => {
       if (!row) return false;
@@ -174,8 +174,10 @@ export function FlowerTurnTimeline(props: TimelineProps) {
           if (selection.getRangeAt(i).intersectsNode(row)) return true;
         }
       }
+      if (!reading) return false;
+      visible ??= props.scroll.viewport()?.getBoundingClientRect();
       const rect = row.getBoundingClientRect();
-      return !props.scroll.followingLatest() && Boolean(visible && rect.bottom > visible.top && rect.top < visible.bottom);
+      return Boolean(visible && rect.bottom > visible.top && rect.top < visible.bottom);
     });
   };
   const preserveReadingAnchor = (processKeys: readonly string[]) => {
@@ -256,9 +258,14 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     }, sequenceTokens);
     // The canonical first node may change on prepend. Share its choice so a
     // later navigation remount resolves the same manually controlled state.
-    for (const group of next.groups.values()) props.choices.alias(sequenceIdentity(group.nodeKeys[0]), sequenceIdentity(group.key));
+    for (const group of next.groups.values()) {
+      if (previous?.groups.get(group.key)?.nodeKeys[0] !== group.nodeKeys[0]) {
+        props.choices.alias(sequenceIdentity(group.nodeKeys[0]), sequenceIdentity(group.key));
+      }
+    }
     if (previous) untrack(() => {
       for (const group of next.groups.values()) {
+        if (previous.groups.get(group.key) === group) continue;
         // A mounted singleton may become a settled group in the same frame as
         // its final tool arrives. Let that row mount and claim its title reveal
         // before the existing automatic-disclosure observer settles the group.
@@ -287,6 +294,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       if (previous && liveArrival() && !props.reducedMotion()) {
         for (const group of next.groups.values()) {
           const prior = previous.groups.get(group.key);
+          if (prior === group) continue;
           const waiting = group.followingContentKeys.map(key => pending.get(key)).find(owner => owner?.nodeKey === group.nodeKeys[0]);
           if (waiting) for (const key of group.followingContentKeys) pending.set(key, waiting);
           else if (group.followingContentKeys.length && group.followingContentKeys[0] !== prior?.followingContentKeys[0]

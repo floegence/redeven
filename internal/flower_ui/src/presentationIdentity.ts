@@ -42,6 +42,8 @@ export function retainKeyedItems<T>(
   identity: (item: T) => string,
 ): readonly T[] {
   if (previous === next || !previous) return next;
+  previous = readPresentationValue(previous);
+  next = readPresentationValue(next);
   const byID = new Map(previous.map((item) => [identity(item), item]));
   const retained = next.map((item) => retainEqualValue(byID.get(identity(item)), item));
   return previous.length === retained.length && retained.every((item, index) => item === previous[index])

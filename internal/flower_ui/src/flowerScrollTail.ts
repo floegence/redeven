@@ -60,6 +60,7 @@ export function createFlowerScrollTailController(
   const [nearBottom, setNearBottom] = createSignal(true);
   let node: HTMLDivElement | undefined;
   let knownScrollTop = 0;
+  let measuredViewport = false;
   let knownScrollHeight = 0;
   let knownViewportHeight = 0;
   let readingTailSpace = 0;
@@ -214,7 +215,9 @@ export function createFlowerScrollTailController(
     cancelSmoothScroll();
     immediateTail = true;
     setFollowingLatest(true);
-    setNearBottom(isNearBottom());
+    // Changing intent does not need synchronous geometry. The scheduled
+    // tail/layout pass publishes current extents before the next paint.
+    setNearBottom(Math.abs(Math.max(0, knownScrollHeight - readingTailSpace - knownViewportHeight) - knownScrollTop) <= nearBottomThreshold);
   };
   const distanceToLatest = () => node
     ? Math.max(0, node.scrollHeight - readingTailSpace - node.clientHeight) - node.scrollTop : 0;
@@ -237,6 +240,7 @@ export function createFlowerScrollTailController(
   const setScrollTop = (target: HTMLDivElement, scrollTop: number) => {
     target.scrollTop = scrollTop;
     knownScrollTop = target.scrollTop;
+    measuredViewport = true;
     // Our own position writes cannot count as user scrolling.
     if (userScroll) userScroll.top = target.scrollTop;
   };
@@ -291,6 +295,7 @@ export function createFlowerScrollTailController(
     if (notify) layoutNotificationPending = false;
     const target = node;
     if (!target) return;
+    if (!measuredViewport) { knownScrollTop = target.scrollTop; measuredViewport = true; }
     if (options.preparing?.()) { clearAutomaticFold(); setReadingTailSpace(0); }
     if (gesture() && !gesture()!.target.isConnected) finishGesture();
     const nativeDelta = target.scrollTop - knownScrollTop;
@@ -438,6 +443,7 @@ export function createFlowerScrollTailController(
   };
   const startUserScroll = (direction: number) => {
     if (!node) return;
+    if (!measuredViewport) { knownScrollTop = node.scrollTop; measuredViewport = true; }
     const notifyIntent = () => { if (direction) options.onScrollIntent?.(direction < 0 ? 'before' : 'after'); };
     // Input cannot leave the tail while all content fits in the viewport.
     if (node.scrollHeight <= node.clientHeight) {
@@ -560,6 +566,7 @@ export function createFlowerScrollTailController(
     }
     growthScrollEvent = false;
     knownScrollTop = node.scrollTop;
+    measuredViewport = true;
     let direction: 'before' | 'after' | undefined;
     const input = userScroll;
     if (input) {
@@ -650,10 +657,15 @@ export function createFlowerScrollTailController(
     presentationHidden = false;
     immediateTail = true;
     node = nextNode;
-    knownScrollTop = node?.scrollTop ?? 0;
-    knownScrollHeight = node?.scrollHeight ?? 0;
-    knownViewportHeight = node?.clientHeight ?? 0;
-    setNearBottom(isNearBottom());
+    knownScrollTop = 0;
+    measuredViewport = false;
+    // A ref binds during DOM mutation. Reading extents here forces the whole
+    // growing transcript to lay out once for each arriving nested viewport.
+    // The normal before-paint pass measures the completed placement instead.
+    knownScrollHeight = 0;
+    knownViewportHeight = 0;
+    setNearBottom(true);
+    if (node) scheduleLayout();
     if (!node?.ownerDocument) return;
     // Solid binds cloned template nodes before adoption into the live document.
     const document = globalThis.document;

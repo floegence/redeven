@@ -30,8 +30,13 @@ export function createFlowerKeyedSubscriptions<T>(source: Accessor<ReadonlyMap<s
   return (key: string): Accessor<T | undefined> => {
     let listener = listeners.get(key);
     if (!listener) {
-      const [read, set] = createSignal<T | undefined>(undefined, { equals });
-      listener = { read, write: value => set(() => value), users: 0 };
+      const [read, set] = createSignal<T | undefined>(undefined, { equals: false });
+      let published: T | undefined;
+      listener = { read, write: value => {
+        if (equals(published, value)) return;
+        published = value;
+        set(() => value);
+      }, users: 0 };
       listener.write(untrack(current).get(key));
       listeners.set(key, listener);
     }
@@ -75,14 +80,22 @@ type ProcessRow = Readonly<{
   summary?: FlowerTurnProcess;
 }>;
 export function createFlowerProcessSubscriptions(projection: Accessor<FlowerTurnProcessProjection>) {
-  return createFlowerKeyedSubscriptions<ProcessRow>(() => new Map([...projection().rows].map(([key, group]) => [key, {
-    turnID: group.turnID, process: group.processMembers.has(key), disclosure: group.disclosure,
-    interleavedInputs: group.interleavedInputs, historical: Boolean(group.turn?.ended_at),
-    outcome: group.terminalKey === key ? group.turn?.outcome : undefined,
-    summary: group.summaryKey === key && group.turn?.kind !== 'context_compaction' ? group : undefined,
-  }])), (a, b) => a === b || Boolean(a && b && a.turnID === b.turnID && a.process === b.process
-    && a.disclosure === b.disclosure && a.interleavedInputs === b.interleavedInputs
-    && a.historical === b.historical && a.outcome === b.outcome && a.summary === b.summary));
+  let previous = new Map<string, ProcessRow>();
+  return createFlowerKeyedSubscriptions<ProcessRow>(() => {
+    const next = new Map<string, ProcessRow>();
+    for (const [key, group] of projection().rows) {
+      const process = group.processMembers.has(key), historical = Boolean(group.turn?.ended_at);
+      const outcome = group.terminalKey === key ? group.turn?.outcome : undefined;
+      const summary = group.summaryKey === key && group.turn?.kind !== 'context_compaction' ? group : undefined;
+      const prior = previous.get(key);
+      next.set(key, prior && prior.turnID === group.turnID && prior.process === process && prior.disclosure === group.disclosure
+        && prior.interleavedInputs === group.interleavedInputs && prior.historical === historical && prior.outcome === outcome && prior.summary === summary
+        ? prior : { turnID: group.turnID, process, disclosure: group.disclosure,
+          interleavedInputs: group.interleavedInputs, historical, outcome, summary });
+    }
+    previous = next;
+    return next;
+  });
 }
 
 export function createFlowerMembershipSubscriptions(keys: Accessor<ReadonlySet<string>>) {

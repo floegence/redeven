@@ -93,6 +93,22 @@ function expectSharedRailBetween(root: HTMLElement, previousID: string, nextID: 
 afterEach(async () => { await media.emulateTouchInput(false); document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it('does not measure retained tool row geometry to protect reading while following the tail', async () => {
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    const first = tool('first'), active = tool('active', 'running');
+    const { root, push } = await mount([first, active]);
+    const retained = group(root, 'first');
+    const bounds = vi.spyOn(retained, 'getBoundingClientRect');
+    try {
+      push([first, tool('active'), item('answer', 'assistant', 'The tools completed.')]);
+      await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="answer"]')));
+      await waitFor(() => collapsed(root, 'first'));
+      expect(bounds).not.toHaveBeenCalled();
+      expect(group(root, 'first')).toBe(retained);
+      expect(root.querySelector('[data-flower-message-id="answer"]')?.textContent).toContain('The tools completed.');
+    } finally { bounds.mockRestore(); }
+  });
+
   it.each([
     ['en-US', '2 failed'], ['zh-CN', '2 次失败'], ['zh-TW', '2 次失敗'],
     ['de-DE', '2 fehlgeschlagen'], ['ja-JP', '2 件失敗'], ['ko-KR', '2건 실패'],

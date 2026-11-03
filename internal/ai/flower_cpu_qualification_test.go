@@ -95,7 +95,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 		toolEvery = value
 	}
 	configValue := &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
-	service, err := NewServiceContext(t.Context(), Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: configValue, DeferExecution: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	service, err := NewServiceContext(t.Context(), Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: configValue, DeferExecution: true, Logger: slog.New(slog.NewTextHandler(os.Stderr, nil))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -635,7 +635,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 					reasoning.WriteString(item.Text)
 				}
 			}
-			value := map[string]any{"items": values, "run_id": runID, "text": output.text.String(), "reasoning": output.reasoning.String(), "exact_text": prose.String() == output.text.String(), "exact_reasoning": reasoning.String() == output.reasoning.String(), "updates": output.index, "timings": output.timings}
+			value := map[string]any{"items": values, "run_id": runID, "text": output.text.String(), "reasoning": output.reasoning.String(), "exact_text": prose.String() == output.text.String(), "exact_reasoning": reasoning.String() == output.reasoning.String(), "updates": output.index, "timings": output.timings, "failure": current.Failure, "outcome": current.LastOutcome}
 			if !exportEvidence(w, "canonical.json", value) {
 				return
 			}

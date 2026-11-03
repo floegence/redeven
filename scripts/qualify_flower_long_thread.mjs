@@ -24,6 +24,7 @@ const output = await mkdtemp(path.join(tmpdir(), 'flower-long-thread-evidence-')
 const sourceDirty = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).length > 0;
 console.log('Long-thread evidence: ' + output);
 await session.run(async () => {
+  assert.equal(sourceDirty, false, 'Formal qualification requires a clean committed source');
   const temporary = await mkdtemp(path.join(tmpdir(), 'flower-long-thread-runtime-'));
   await session.directory(temporary);
   const dist = path.join(temporary, 'dist'), state = path.join(temporary, 'state');
@@ -170,11 +171,14 @@ await session.run(async () => {
     }
     await sample('long'); await sample('repeat');
     await api('stop');
+    await api('evidence');
+    const canonical = JSON.parse(await readFile(path.join(output, 'canonical.json'), 'utf8'));
+    report.canonical = { outcome: canonical.outcome, failure: canonical.failure };
+    assert.equal(canonical.failure, null, 'Canonical terminal failure: ' + JSON.stringify(canonical.failure));
+    assert.equal(canonical.outcome, 'completed', 'Canonical turn must complete successfully');
     // Backend completion can precede consumption of the queued final snapshot.
     // Wait for the observed terminal state before navigating folded content.
     await page.locator('main[data-flower-selected-thread-status="success"]').waitFor({ timeout: 60000 });
-    await api('evidence');
-    const canonical = JSON.parse(await readFile(path.join(output, 'canonical.json'), 'utf8'));
     for (const measured of samples.filter(item => item.name !== 'idle')) {
       const expected = [...canonical.text.matchAll(/word(\d{6})/g)].map(match => Number(match[1])).filter(index => canonical.timings[index] >= measured.startedAt && canonical.timings[index] <= measured.startedAt + measured.seconds * 1000 - 250);
       const observed = new Map(measured.outputs.map(item => [item.index,item.at]));
@@ -182,7 +186,7 @@ await session.run(async () => {
       measured.output = { ...distribution(delays), expected: expected.length, coverage: expected.length ? delays.length / expected.length : 0 };
     }
     const tools = canonical.items.filter(item => item.kind === 'tool');
-    report.canonical = { exact_text: canonical.exact_text, exact_reasoning: canonical.exact_reasoning, updates: canonical.updates, tools: tools.length, exact_tools: tools.length === Math.floor(canonical.updates / workload.toolEvery) && tools.every((item, index) => item.activity?.status === 'success' && item.activity.tool_id === 'live-' + ((index + 1) * workload.toolEvery)), renderedIDs: canonical.items.filter(item => ['assistant', 'thinking'].includes(item.kind)).map(item => item.id) };
+    report.canonical = { ...report.canonical, exact_text: canonical.exact_text, exact_reasoning: canonical.exact_reasoning, updates: canonical.updates, tools: tools.length, exact_tools: tools.length === Math.floor(canonical.updates / workload.toolEvery) && tools.every((item, index) => item.activity?.status === 'success' && item.activity.tool_id === 'live-' + ((index + 1) * workload.toolEvery)), renderedIDs: canonical.items.filter(item => ['assistant', 'thinking'].includes(item.kind)).map(item => item.id) };
     await writeFile(path.join(output, 'metrics.json'), JSON.stringify(report, null, 2));
     console.log('Checking complete rendered content: ' + report.canonical.renderedIDs.length + ' items');
     // Close unrelated overlays before inspecting all canonical generated rows.

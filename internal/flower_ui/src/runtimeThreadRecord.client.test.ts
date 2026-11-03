@@ -1,12 +1,14 @@
 import { createComputed, createMemo, createRoot } from 'solid-js';
-import { unwrap } from 'solid-js/store';
+import { $RAW, createStore, unwrap } from 'solid-js/store';
 import { expect, it } from 'vitest';
 import { readPresentationValue } from './presentationIdentity';
 import { createRuntimeThreadRecord } from './runtimeThreadRecord';
+import { createThreadCache } from './threadCache';
+import { retainThreadFileActivityTargets } from './fileActivityTargets';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { projectFlowerTurnProcess } from './flowerTurnPresentation';
 import { createFlowerSequenceTokens, projectFlowerToolSequences } from './flowerToolSequences';
-import { createFlowerTimelineProjection } from './flowerTimelineProjection';
+import { buildFlowerTimelineEntries, createFlowerTimelineProjection } from './flowerTimelineProjection';
 import type { FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 
 it('keeps covered body responses inert for text, timeline and historical subscribers', () => createRoot(dispose => {
@@ -91,6 +93,7 @@ it('retains growing records across an authoritative snapshot and continues the s
     createComputed(() => { void record.initializeThread().messages; identityRuns++; });
     const next = { ...current, view_version: 2, items: [{ ...current.items![0], text: 'Text next' }] };
     const refreshed = createRuntimeThreadRecord(next, applyFlowerRuntimeCurrentView(base, next), record);
+    expect(refreshed.initializeThread()).toBe(record.initializeThread());
     expect(refreshed.initializeThread().messages[0]).toBe(prior);
     expect(prior.content).toBe('Text next');
     expect({ textRuns, sourceRuns, identityRuns }).toEqual({ textRuns: 2, sourceRuns: 2, identityRuns: 1 });
@@ -224,6 +227,58 @@ it('keeps grouping structural while observing sealed prose and tool outcomes', (
   } finally { dispose(); }
 }));
 
+it('preserves retained turn and coverage identities when only an observed tool changes', () => createRoot(dispose => {
+  try {
+    const turn = { turn_id: 'turn', run_id: 'run', started_at: '2026-10-28T00:00:00Z', elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0,
+      final_item_ids: [], intermediate_item_ids: ['prose'], final_boundary_complete: false };
+    const tool = { id: 'tool', ordinal: 2, kind: 'tool' as const, turn_id: 'turn', run_id: 'run',
+      activity: { item_id: 'tool', tool_id: 'call', tool_name: 'read', kind: 'tool', status: 'running', severity: 'normal' } };
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, turns: [turn],
+      window: { leaf_id: 'leaf', first_item_id: 'prose', last_item_id: 'tool', has_before: false, has_after: false },
+      items: [{ id: 'prose', ordinal: 1, kind: 'assistant', turn_id: 'turn', run_id: 'run', text: 'Earlier explanation', canonical_ordinal: 1 }, tool] };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    let cache = createThreadCache().receiveCurrent({ version: 1, thread: applyFlowerRuntimeCurrentView(base, current) }, { current }).cache;
+    const owner = cache.views.get('thread')!.thread;
+    const narrowed = { ...current, view_version: 2, items: [tool], turns: [{ ...turn, intermediate_item_ids: [] }],
+      window: { ...current.window!, first_item_id: 'tool', has_before: true } };
+    cache = cache.receiveCurrent({ version: 2, thread: applyFlowerRuntimeCurrentView(base, narrowed) }, { current: narrowed }).cache;
+    const thread = cache.views.get('thread')!.thread, turns = thread.turns, coverage = thread.history_window;
+    expect(thread).toBe(owner);
+    const archivedItem = cache.runtimeItem('thread', 'prose')!;
+    const archivedOrdinal = archivedItem.ordinal;
+    let archivedReads = 0;
+    Object.defineProperty(archivedItem, 'ordinal', { configurable: true, get() { archivedReads++; return archivedOrdinal; } });
+    cache = cache.receiveUpdate({ thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 2, view_version: 3,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'replace', item_id: 'tool', item: { ...tool, window_bytes: 1000 } }] }).cache;
+    expect(archivedReads).toBe(0);
+    Object.defineProperty(archivedItem, 'ordinal', { configurable: true, value: archivedOrdinal });
+    let turnRuns = 0, coverageRuns = 0;
+    createComputed(() => { void thread.turns; turnRuns++; });
+    createComputed(() => { void thread.history_window; coverageRuns++; });
+    cache = cache.receiveUpdate({ thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 3, view_version: 4,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'replace', item_id: 'tool', item: { ...tool, activity: { ...tool.activity, status: 'success' } } }] }).cache;
+    expect(cache.views.get('thread')!.thread).toBe(thread);
+    expect(thread.messages.find(message => message.id === 'tool')?.blocks?.[0]).toMatchObject({ type: 'activity-timeline', items: [{ status: 'success' }] });
+    expect(thread.turns?.[0].intermediate_item_ids).toEqual(['prose']);
+    expect(thread.turns).toBe(turns);
+    expect(thread.history_window).toBe(coverage);
+    expect({ turnRuns, coverageRuns }).toEqual({ turnRuns: 1, coverageRuns: 1 });
+    cache = cache.receiveUpdate({ thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 4, view_version: 5,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      turns: { value: [{ ...narrowed.turns[0], intermediate_item_ids: ['new-prose'] }] },
+      items: [{ kind: 'add', item_id: 'new-prose', item: { id: 'new-prose', ordinal: 3, kind: 'assistant',
+        turn_id: 'turn', run_id: 'run', text: 'Next explanation', live: true } }] }).cache;
+    expect(cache.views.get('thread')!.thread.turns?.[0].intermediate_item_ids).toEqual(['prose', 'new-prose']);
+    expect(thread.history_window?.last_item_id).toBe('new-prose');
+    expect({ turnRuns, coverageRuns }).toEqual({ turnRuns: 2, coverageRuns: 2 });
+  } finally { dispose(); }
+}));
+
 it('reads structural presentation values shallowly without changing ordinary inputs', () => createRoot(dispose => {
   try {
     const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'idle', items: [] };
@@ -239,6 +294,56 @@ it('reads structural presentation values shallowly without changing ordinary inp
     record.syncMetadata({ ...thread, title: 'Updated' });
     expect(readPresentationValue(thread).title).toBe('Updated');
     expect(runs).toBe(1);
+  } finally { dispose(); }
+}));
+
+it('does not reopen every retained reactive row when one timeline item arrives', () => createRoot(dispose => {
+  try {
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'idle',
+      items: Array.from({ length: 600 }, (_, index) => ({ id: 'retained-' + index, ordinal: index,
+        kind: 'assistant' as const, turn_id: 'turn', run_id: 'run', text: 'Retained answer' })) };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'idle', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread(), project = createFlowerTimelineProjection();
+    const before = project(thread);
+    const arrived = { ...readPresentationValue(thread.messages[0]), id: 'arrived' };
+    const raw = [...readPresentationValue(thread.messages), arrived];
+    let indexedReads = 0;
+    const source = new Proxy([...thread.messages, arrived], { get(target, key, receiver) {
+      if (key === $RAW) return raw;
+      if (typeof key === 'string' && /^\d+$/.test(key)) indexedReads++;
+      return Reflect.get(target, key, receiver);
+    } });
+    const after = project({ ...thread, messages: source });
+    expect(after).toHaveLength(601);
+    expect(after[0]).toBe(before[0]);
+    expect(indexedReads).toBeLessThan(4);
+  } finally { dispose(); }
+}));
+
+it('reads retained baseline membership without opening each historical message proxy', () => createRoot(dispose => {
+  try {
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'idle',
+      items: Array.from({ length: 600 }, (_, index) => ({ id: 'history-' + index, ordinal: index + 1, kind: 'thinking' as const,
+        turn_id: 'turn', run_id: 'run', text: 'Completed reasoning' })) };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'idle', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread(), raw = readPresentationValue(thread.messages);
+    let indexedReads = 0;
+    const messages = new Proxy(thread.messages, { get(target, key, receiver) {
+      if (key === $RAW) return raw;
+      if (typeof key === 'string' && /^\d+$/.test(key)) indexedReads++;
+      return Reflect.get(target, key, receiver);
+    } });
+    const inspected = { ...thread, messages };
+    const refreshed = applyFlowerRuntimeCurrentView(inspected, { ...current, view_version: 2, items: [current.items!.at(-1)!] });
+    expect(refreshed.messages[0].id).toBe('history-599');
+    expect(retainThreadFileActivityTargets(refreshed, inspected)).toBe(inspected);
+    expect(indexedReads).toBe(0);
   } finally { dispose(); }
 }));
 
@@ -264,6 +369,27 @@ it('retains timeline membership for identical replacements and empty preview bou
     expect(thread.messages).toBe(original);
     expect(projections).toBe(1);
     expect(record.version).toBe(5);
+  } finally { dispose(); }
+}));
+
+it('does not republish unchanged tool presentation for transport extent replacements', () => createRoot(dispose => {
+  try {
+    const tool = { id: 'tool', ordinal: 1, kind: 'tool' as const, turn_id: 'turn', run_id: 'run', window_bytes: 100,
+      activity: { item_id: 'tool', tool_id: 'call', tool_name: 'read', kind: 'tool', status: 'running', severity: 'normal' } };
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, items: [tool] };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread(), membership = thread.messages, project = createFlowerTimelineProjection();
+    let projections = 0; createComputed(() => { project(thread); projections++; });
+    for (let version = 2; version <= 10; version++) record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run',
+      base_version: version - 1, view_version: version, facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'replace', item_id: 'tool', item: { ...tool, window_bytes: version * 100 } }] });
+    expect(record.item('tool')?.window_bytes).toBe(1000);
+    expect(thread.messages).toBe(membership);
+    expect(projections).toBe(1);
   } finally { dispose(); }
 }));
 
@@ -296,5 +422,28 @@ it('publishes a structural batch without rescanning membership for each replaced
     expect(thread.messages[0]).toBe(firstMessage);
     expect(thread.messages.slice(1).every(message => message.blocks?.[0]?.type === 'thinking'
       && message.blocks[0].content === 'Canonical reasoning' && !message.live)).toBe(true);
+  } finally { dispose(); }
+}));
+
+it('keeps plain snapshot projections separate from their reactive message owners', () => createRoot(dispose => {
+  try {
+    const message = { id: 'live', turn_id: 'turn', run_id: 'run', role: 'assistant' as const,
+      content: 'First', status: 'streaming' as const, live: true, created_at_ms: 1 };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [message],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const plain = buildFlowerTimelineEntries(base);
+    const [live, set] = createStore(base);
+    const reactive = createFlowerTimelineProjection()(live);
+    expect(reactive[0]).not.toBe(plain[0]);
+    let runs = 0, text = '';
+    createComputed(() => {
+      const entry = reactive[0];
+      if (entry.type === 'message' && entry.blocks[0].type === 'content') text = entry.blocks[0].content;
+      runs++;
+    });
+    set('messages', 0, 'content', 'Next');
+    expect({ runs, text }).toEqual({ runs: 2, text: 'Next' });
+    expect(buildFlowerTimelineEntries({ ...base, messages: [message] })[0]).toBe(plain[0]);
   } finally { dispose(); }
 }));

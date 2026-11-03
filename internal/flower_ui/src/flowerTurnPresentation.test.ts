@@ -41,6 +41,61 @@ const withRun = (value: MessageEntry, runID: string): MessageEntry => ({
 });
 
 describe('canonical turn process presentation', () => {
+  it('classifies immutable retained row structure only once during active-turn growth', () => {
+    let reads = 0;
+    const rows = Array.from({ length: 600 }, (_, index) => {
+      const source = toolEntry('tool-' + index);
+      return { ...source, get blocks() { reads++; return source.blocks; } };
+    });
+    const facts = [turn({ intermediate_item_ids: [], final_item_ids: [], outcome: undefined, ended_at: undefined })];
+    const before = projectFlowerTurnProcess(rows, facts, ['turn']);
+    reads = 0;
+    const after = projectFlowerTurnProcess([...rows, toolEntry('arrived', 'error')], facts, ['turn'], before);
+    expect(reads).toBe(0);
+    expect(after.groups.get('turn')).toMatchObject({ toolCallCount: 601, failedCallCount: 1, disclosure: 'none' });
+  });
+
+  it('counts each immutable activity once while retaining exact replacements and turn ownership', () => {
+    let reads = 0;
+    const rows = Array.from({ length: 600 }, (_, index) => {
+      const value = toolEntry('tool-' + index);
+      const block = value.blocks[0];
+      if (block.type !== 'activity') throw new Error('Activity fixture required');
+      const item = block.block.items[0];
+      return { ...value, blocks: [{ ...block, block: { ...block.block, items: [{ ...item,
+        get kind() { reads++; return item.kind; },
+      }] } }] };
+    });
+    const facts = [turn({ intermediate_item_ids: [], final_item_ids: [] })];
+    const before = projectFlowerTurnProcess(rows, facts);
+    expect(before.groups.get('turn')?.toolCallCount).toBe(600);
+    reads = 0;
+    const arrived = toolEntry('arrived', 'error');
+    const after = projectFlowerTurnProcess([...rows, arrived], facts, [], before);
+    expect(reads).toBe(0);
+    expect(after.groups.get('turn')).toMatchObject({ toolCallCount: 601, failedCallCount: 1 });
+    const replacement = toolEntry('tool-0', 'error');
+    const changed = projectFlowerTurnProcess([replacement, ...rows.slice(1), arrived], facts, [], after);
+    expect(changed.groups.get('turn')).toMatchObject({ toolCallCount: 601, failedCallCount: 2 });
+    const moved = { ...replacement, message: { ...replacement.message, turn_id: 'different-turn' } };
+    const shifted = projectFlowerTurnProcess([moved, ...rows.slice(1), arrived], facts, [], changed);
+    expect(shifted.groups.get('different-turn')).toMatchObject({ toolCallCount: 0, failedCallCount: 0 });
+    expect(shifted.groups.get('turn')).toMatchObject({ toolCallCount: 600, failedCallCount: 1 });
+  });
+
+  it('visits a retained process document once instead of rebuilding parallel row indexes', () => {
+    const rows = Array.from({ length: 600 }, (_, index) => toolEntry('tool-' + index));
+    let reads = 0;
+    const document = new Proxy(rows, { get(target, key, receiver) {
+      if (typeof key === 'string' && /^\d+$/.test(key)) reads++;
+      return Reflect.get(target, key, receiver);
+    } });
+    const projected = projectFlowerTurnProcess(document, [turn({ intermediate_item_ids: [], final_item_ids: [] })]);
+    expect(projected.groups.get('turn')).toMatchObject({ toolCallCount: 600, disclosure: 'automatic' });
+    expect(projected.rows.size).toBe(600);
+    expect(reads).toBeLessThanOrEqual(rows.length + 4);
+  });
+
   it('reads canonical membership once when projecting a long turn', () => {
     const rows = Array.from({ length: 600 }, (_, index) => entry('part-' + index));
     let reads = 0;

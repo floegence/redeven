@@ -386,12 +386,16 @@ function messageTimelineEntries(
 
 const emptyDecorations: readonly FlowerTimelineDecoration[] = [];
 type MessageProjection = Readonly<{
+  facts: FlowerChatMessage;
+  messageID: string;
   threadID: string;
   activeCursor: boolean;
   decorations: readonly FlowerTimelineDecoration[];
   entries: readonly FlowerTimelineEntry[];
+  goalActivity: boolean;
 }>;
 const messageProjections = new WeakMap<FlowerChatMessage, MessageProjection>();
+const reactiveMessageProjections = new WeakMap<FlowerChatMessage, MessageProjection>();
 const decorationProjections = new WeakMap<readonly FlowerTimelineDecoration[], ReadonlyMap<string, readonly FlowerTimelineDecorationEntry[]>>();
 const decorationsByMessage = new WeakMap<readonly FlowerTimelineDecoration[], ReadonlyMap<string, readonly FlowerTimelineDecoration[]>>();
 const parentEventProjections = new WeakMap<FlowerParentEvent, Extract<FlowerTimelineEntry, { type: 'parent_event' }>>();
@@ -420,8 +424,8 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
     if (entry.type !== 'message') continue;
     const message = readPresentationValue(entry.message);
     if (!message.turn_id || !message.run_id || message.canonical_ordinal === undefined) continue;
-    const execution = JSON.stringify([message.turn_id, message.run_id]);
     if (message.goal) {
+      const execution = JSON.stringify([message.turn_id, message.run_id]);
       const candidates = pending.get(execution) ?? [];
       pending.delete(execution);
       if (message.goal.actor !== 'model' || candidates.length !== 1) continue;
@@ -439,6 +443,7 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
     if (entry.blocks.length !== 1) continue;
     const block = entry.blocks[0];
     if (block.type !== 'activity' || readPresentationValue(block.block).items.length !== 1 || readPresentationValue(block.block).items[0].tool_name !== 'goal') continue;
+    const execution = JSON.stringify([message.turn_id, message.run_id]);
     const candidates = pending.get(execution) ?? [];
     candidates.push(entry);
     pending.set(execution, candidates);
@@ -448,6 +453,7 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
 
 function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events ? thread.parent_events.events : emptyParentEvents): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
+  const threadID = thread.thread_id;
   const threadRunning = thread.status === 'running';
   let activeCursorMessageID = '';
   if (threadRunning) {
@@ -482,38 +488,54 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
   }
   const seenMessageIDs = new Set<string>();
   const positions = new Map<string, number>();
-  const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
-    const facts = readPresentationValue(message);
-    const messageID = trimString(facts.id);
-    if (!messageID || seenMessageIDs.has(messageID)) return [];
+  // Membership replacement is the structural boundary. Reuse each cached row
+  // from raw source identity without reopening thousands of store proxies.
+  // Newly projected rows still receive the reactive message owner for growth.
+  const sources = readPresentationValue(thread.messages);
+  const reactiveMembership = sources !== thread.messages;
+  const entries: FlowerTimelineEntry[] = [];
+  let goalActivity = false;
+  for (let index = 0; index < sources.length; index++) {
+    const source = sources[index];
+    // A plain snapshot and a store can share raw facts, but only the store
+    // projection may own live getters. Solid retains one proxy per raw object.
+    const projections = reactiveMembership ? reactiveMessageProjections : messageProjections;
+    const prior = projections.get(source);
+    const facts = prior?.facts ?? readPresentationValue(source);
+    const messageID = prior?.messageID ?? trimString(facts.id);
+    if (!messageID || seenMessageIDs.has(messageID)) continue;
     seenMessageIDs.add(messageID);
     const activeCursor = messageID === activeCursorMessageID;
-    const prior = messageProjections.get(message);
     const localDecorations = messageDecorations.get(messageID) ?? emptyDecorations;
-    let entries: readonly FlowerTimelineEntry[];
-    if (prior && prior.threadID === thread.thread_id && prior.activeCursor === activeCursor
+    let messageEntries: readonly FlowerTimelineEntry[];
+    if (prior && prior.threadID === threadID && prior.activeCursor === activeCursor
       && prior.decorations.length === localDecorations.length
       && prior.decorations.every((value, index) => value === localDecorations[index])) {
-      entries = prior.entries;
+      messageEntries = prior.entries;
+      goalActivity ||= prior.goalActivity;
     } else {
+      const message = thread.messages[index];
       const projectedMessage = activeCursor === (facts.active_cursor === true)
         ? message
         // Cursor decoration must not snapshot reactive text/body fields.
         // This view lives as long as the cached message projection.
         : new Proxy(message, { get: (target, key, receiver) => key === 'active_cursor' ? activeCursor : Reflect.get(target, key, receiver) });
-      entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
-      messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: localDecorations, entries });
+      messageEntries = messageTimelineEntries(threadID, projectedMessage, decorations);
+      const hasGoalActivity = Boolean(facts.goal) || messageEntries.some(entry => entry.type === 'message'
+        && entry.blocks.some(block => block.type === 'activity' && readPresentationValue(block.block).items.some(item => item.tool_name === 'goal')));
+      goalActivity ||= hasGoalActivity;
+      projections.set(source, { facts, messageID, threadID, activeCursor, decorations: localDecorations, entries: messageEntries, goalActivity: hasGoalActivity });
     }
     if (facts.canonical_ordinal !== undefined) {
-      for (const entry of entries) {
+      for (const entry of messageEntries) {
         const ordinal = entry.type === 'context_compaction' && entry.decoration.anchor.target_kind === 'message'
           && entry.decoration.anchor.edge === 'after'
           ? entry.decoration.compaction.canonical_ordinal : facts.canonical_ordinal;
         positions.set(entry.key, ordinal);
       }
     }
-    return entries;
-  });
+    for (const entry of messageEntries) entries.push(entry);
+  }
   // Canonical Path positions order messages, their anchored decorations and
   // receipts together. Uncommitted tail rows retain their original order.
   const seenEvents = new Set<string>();
@@ -568,7 +590,7 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
       error,
     });
   }
-  const visibleEntries = coalesceGoalActivity(entries);
+  const visibleEntries = goalActivity ? coalesceGoalActivity(entries) : entries;
   timelineProjections.set(thread.messages, {
     threadID: thread.thread_id, cursorID: activeCursorMessageID, decorations: sourceDecorations,
     queued: thread.queued_turns, input, error: thread.error, status: thread.status, parentEvents, entries: visibleEntries,

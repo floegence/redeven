@@ -18,7 +18,9 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
   const [revision, setRevision] = createSignal(0);
   let disposed = false;
   let scheduled = false;
-  let owners = new Map<string, FlowerToolSequenceElement>();
+  const owners = new Map<string, { key: string; element: FlowerToolSequenceElement }>();
+  const registrations = new Set<string>();
+  let placed: FlowerToolSequenceProjection | undefined;
   const move = (parent: HTMLElement, node: HTMLElement, before: ChildNode | null) => {
     if (node.parentNode === parent && node.nextSibling === before) return;
     // Native movement retains embedded content and focus, but selection ranges
@@ -31,9 +33,10 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
   };
   const reading = new Map<string, { body: HTMLElement; bodyTop: number; anchor?: HTMLElement; top: number; offset: number }>();
   const captureReading = (current: FlowerToolSequenceProjection) => {
-    for (const [key, owner] of owners) {
+    for (const [key, value] of owners) {
       const next = current.groups.get(key);
-      if (!next || next.nodeKeys[0] === owner.node.dataset.flowerToolRowIdentity || reading.has(key)) continue;
+      if (!next || next.nodeKeys[0] === value.key || reading.has(key)) continue;
+      const owner = value.element;
       const bounds = owner.body.getBoundingClientRect();
       if (!bounds.height) continue;
       const focus = document.activeElement instanceof HTMLElement && owner.body.contains(document.activeElement)
@@ -48,6 +51,29 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
     scheduled = false;
     if (disposed) return;
     const current = untrack(projection);
+    // Projection facts are immutable. Status/title updates do not move rows;
+    // append, prepend, split and registration affect only their own groups.
+    const changed = new Set<string>();
+    const rows = new Set(registrations);
+    registrations.clear();
+    for (const [key, prior] of placed?.groups ?? []) {
+      const next = current.groups.get(key);
+      if (next === prior || next && next.nodeKeys.length === prior.nodeKeys.length
+        && next.nodeKeys.every((node, index) => node === prior.nodeKeys[index])) continue;
+      changed.add(key);
+      for (const node of prior.nodeKeys) rows.add(node);
+      if (next) for (const node of next.nodeKeys) rows.add(node);
+    }
+    for (const [key, group] of current.groups) if (!placed?.groups.has(key)) {
+      changed.add(key);
+      for (const node of group.nodeKeys) rows.add(node);
+    }
+    for (const key of rows) {
+      const group = current.members.get(key)?.group;
+      if (group) changed.add(group.key);
+    }
+    placed = current;
+    if (!rows.size && !changed.size) return;
     const selection = document.getSelection();
     const ranges = selection && !selection.isCollapsed
       ? Array.from({ length: selection.rangeCount }, (_, index) => {
@@ -56,38 +82,39 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
       }) : [];
 
     // Restore independent rows before grouping; never nest a group in itself.
-    for (const [key, element] of elements) {
+    for (const key of rows) {
+      const element = elements.get(key);
+      if (!element) continue;
       const member = current.members.get(key);
       if (!member || member.first || !elements.has(member.group.nodeKeys[0])) move(element.slot, element.node, null);
     }
-    for (const group of current.groups.values()) {
+    for (const key of changed) {
+      const group = current.groups.get(key);
+      if (!group) { owners.delete(key); reading.delete(key); continue; }
       const first = elements.get(group.nodeKeys[0]);
-      if (!first) continue;
+      if (!first) { owners.delete(key); continue; }
       let next: ChildNode | null = null;
-      for (const key of [...group.nodeKeys.slice(1)].reverse()) {
-        const element = elements.get(key);
+      for (let index = group.nodeKeys.length - 1; index > 0; index--) {
+        const element = elements.get(group.nodeKeys[index]);
         if (!element) continue;
         move(first.body, element.node, next);
         next = element.node;
       }
+      owners.set(key, { key: group.nodeKeys[0], element: first });
     }
-    owners = new Map([...current.groups].flatMap(([key, group]) => {
-      const first = elements.get(group.nodeKeys[0]);
-      if (!first) return [];
-      const saved = reading.get(key);
-      if (saved) {
-        outerScroll.transferReadingAnchor(saved.body, first.body, saved.bodyTop);
-        first.restore(saved.anchor, saved.top, saved.offset);
-        reading.delete(key);
-      }
-      return [[key, first] as const];
-    }));
-    const changed = ranges.length && selection && (selection.rangeCount !== ranges.length || ranges.some((saved, index) => {
+    for (const [key, saved] of reading) {
+      const first = owners.get(key)?.element;
+      if (!first) continue;
+      outerScroll.transferReadingAnchor(saved.body, first.body, saved.bodyTop);
+      first.restore(saved.anchor, saved.top, saved.offset);
+      reading.delete(key);
+    }
+    const selectionChanged = ranges.length && selection && (selection.rangeCount !== ranges.length || ranges.some((saved, index) => {
       const range = selection.getRangeAt(index);
       return range.startContainer !== saved.start || range.startOffset !== saved.startOffset
         || range.endContainer !== saved.end || range.endOffset !== saved.endOffset;
     }));
-    if (changed && selection) {
+    if (selectionChanged && selection) {
       selection.removeAllRanges();
       ranges.forEach(saved => {
         const range = document.createRange();
@@ -102,7 +129,7 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
     revision();
     if (!scheduled) { scheduled = true; queueMicrotask(place); }
   });
-  onCleanup(() => { disposed = true; elements.clear(); });
+  onCleanup(() => { disposed = true; elements.clear(); owners.clear(); reading.clear(); registrations.clear(); placed = undefined; });
   return {
     captureReading,
     prepareDestination: () => {
@@ -118,14 +145,20 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
     element: (key: string) => elements.get(key)?.node,
     register: (key: string, element: FlowerToolSequenceElement) => {
       elements.set(key, element);
+      registrations.add(key);
       setRevision(value => value + 1);
       return () => {
         if (elements.get(key) !== element) return;
         // Return borrowed children before disposing the owning row.
-        for (const other of elements.values()) {
-          if (other !== element && other.node.parentNode === element.body) move(other.slot, other.node, null);
+        for (const child of Array.from(element.body.children)) {
+          const other = child instanceof HTMLElement ? elements.get(child.dataset.flowerToolRowIdentity ?? '') : undefined;
+          if (other && other !== element && other.node === child) {
+            move(other.slot, other.node, null);
+            registrations.add(child.getAttribute('data-flower-tool-row-identity')!);
+          }
         }
         elements.delete(key);
+        registrations.add(key);
         element.node.remove();
         setRevision(value => value + 1);
       };

@@ -116,6 +116,7 @@ import { observeHistoryBodyLayout } from './historyBodyLayout';
 import { useFlowerActivityTitleReveal } from './flowerActivityTitleReveal';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
+import { createFlowerComputerActivities } from './flowerComputerActivities';
 import { FlowerToolIcon } from './FlowerToolIcon';
 import { FlowerThreadToolPreview } from './FlowerThreadToolPreview';
 import { FlowerActivityPreview } from './FlowerActivityPreview';
@@ -7077,12 +7078,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!thread?.history_window) return;
     // Ordinals change with replaced membership, not cache-wide live text updates.
     const cache = untrack(threadCache);
-    const members = readPresentationValue(thread.messages).flatMap(value => {
+    const threadID = thread.thread_id;
+    const members: { canonical: number; ordinal: number | undefined }[] = [];
+    for (const value of readPresentationValue(thread.messages)) {
       const message = readPresentationValue(value);
-      return message.canonical_ordinal !== undefined && Number.isSafeInteger(message.canonical_ordinal) && message.canonical_ordinal > 0
-        ? [{ canonical: message.canonical_ordinal, ordinal: cache.runtimeItem(thread.thread_id, message.id)?.ordinal }] : [];
-    })
-      .sort((a, b) => a.canonical - b.canonical);
+      if (message.canonical_ordinal !== undefined && Number.isSafeInteger(message.canonical_ordinal) && message.canonical_ordinal > 0) {
+        members.push({ canonical: message.canonical_ordinal, ordinal: cache.runtimeItem(threadID, message.id)?.ordinal });
+      }
+    }
+    members.sort((a, b) => a.canonical - b.canonical);
     if (!members.length) return;
     const spans: { first: number; last: number }[] = [];
     for (const [index, member] of members.entries()) {
@@ -7207,35 +7211,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPrivateControlRequested(false); setComputerControlReady(false); setComputerControlError(false);
     setComputerResponseSubmitting(false); setComputerResponseCommitting(false); setComputerResponseError(''); setComputerViewFailed(false);
   });
+  const computerActivities = createFlowerComputerActivities(selectedTimelineEntries);
   const selectedComputerStage = createMemo<FlowerComputerStageSnapshot | null>(() => {
-    const entries = selectedTimelineEntries();
+    const activities = computerActivities();
     const candidates: FlowerComputerStageSnapshot[] = [];
-    for (let entryIndex = entries.length - 1; entryIndex >= 0; entryIndex -= 1) {
-      const entry = entries[entryIndex];
-      if (entry?.type !== 'message' && entry?.type !== 'queued_turn') continue;
-      const blocks = entry.blocks;
-      for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-        const block = blocks[blockIndex];
-        if (block?.type !== 'activity') continue;
-        for (let itemIndex = block.block.items.length - 1; itemIndex >= 0; itemIndex -= 1) {
-          const item = block.block.items[itemIndex];
-          const toolName = item?.tool_name || '';
-          if (toolName[0] !== 'c' && toolName[0] !== 'b') continue;
-          const presentation = presentFlowerActivityItem(item, { tools: copy().chat.toolActivity });
-          const detail = computerActivityResource(item);
-          if (!detail.target_id && !detail.frame) continue;
-          candidates.push({
-            item,
-            runID: block.block.run_id,
-            turnID: block.block.turn_id,
-            target: detail.target,
-            action: presentation.label,
-            ...(detail.target_id ? { targetID: detail.target_id } : {}),
-            ...(detail.frame ? { frame: detail.frame } : {}),
-            status: item.status,
-          });
-        }
-      }
+    for (let index = activities.length - 1; index >= 0; index--) {
+      const { item, runID, turnID } = activities[index];
+      const detail = computerActivityResource(item);
+      if (!detail.target_id && !detail.frame) continue;
+      const presentation = presentFlowerActivityItem(item, { tools: copy().chat.toolActivity });
+      candidates.push({ item, runID, turnID, target: detail.target, action: presentation.label,
+        ...(detail.target_id ? { targetID: detail.target_id } : {}),
+        ...(detail.frame ? { frame: detail.frame } : {}), status: item.status });
     }
     const pending = selectedInputRequest();
     if (isComputerInput(pending)) {
@@ -7470,10 +7457,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const visibleTimelineEntries = createMemo((previous: readonly FlowerTimelineEntry[] = []): readonly FlowerTimelineEntry[] => {
     const canonical = selectedTimelineEntries().filter((entry) => entry.type !== 'queued_turn');
+    const outbox = visibleTransportOutbox().filter(entry => entry.presentation === 'composer' && !entry.operation);
+    if (!outbox.length) return canonical.length === previous.length && canonical.every((entry, index) => entry === previous[index]) ? previous : canonical;
     const keys = new Set(canonical.map(entry => entry.key));
     const prior = new Map(previous.map(entry => [entry.key, entry]));
-    const pending = visibleTransportOutbox().filter(entry => entry.presentation === 'composer' && !entry.operation
-      && !keys.has(`message:user:${entry.requestId}`)).map(entry => {
+    const pending = outbox.filter(entry => !keys.has(`message:user:${entry.requestId}`)).map(entry => {
       const id = `user:${entry.requestId}`;
       const key = `message:${id}`;
       const retained = prior.get(key);

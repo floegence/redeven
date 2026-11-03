@@ -357,6 +357,29 @@ describe('createFlowerActivityDisclosureMotion', () => {
     reduced.dispose();
   });
 
+  it.each(['reduced', 'disabled', 'zero-duration'] as const)('closes without reading animation geometry when motion is %s', mode => {
+    const collapsedHeight = vi.fn(() => 32);
+    const closePresentation = vi.fn(value => value);
+    const beforeClose = vi.fn();
+    const harness = createMotionHarness(false, mode === 'reduced', {
+      collapsedHeight, closePresentation, onBeforeClose: beforeClose,
+      ...(mode === 'disabled' ? { animateClose: () => false } : {}),
+      ...(mode === 'zero-duration' ? { closeDurationMs: 0 } : {}),
+    });
+    try {
+      harness.setOpen(true);
+      const measure = vi.spyOn(harness.platform.platform, 'readPresentation');
+      harness.setOpen(false);
+      expect(beforeClose).toHaveBeenCalledOnce();
+      expect(measure).not.toHaveBeenCalled();
+      expect(collapsedHeight).not.toHaveBeenCalled();
+      expect(closePresentation).not.toHaveBeenCalled();
+      expect(harness.motion.state()).toBe('closed');
+      expect(harness.motion.height()).toBe('0px');
+      expect(harness.platform.pendingFrames()).toBe(0);
+    } finally { harness.dispose(); }
+  });
+
   it('cleans observers, animations, and animation frames on disposal', () => {
     const harness = createMotionHarness();
 

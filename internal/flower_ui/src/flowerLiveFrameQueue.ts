@@ -113,11 +113,13 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
     const bytes = pendingBytes;
     const ageMs = pendingStartedAt === undefined ? 0 : Math.max(0, started - pendingStartedAt);
     let updates = 0;
+    let slowest: Readonly<{ durationMs: number; kind: string; items: readonly string[]; turns: number; order: number; previews: number; baselineItems: number }> | undefined;
     // Include reactive commits in the budget. Each envelope remains atomic;
     // yielding between envelopes gives input and painting a real task boundary.
     while (pending.length && scheduledGeneration === generation) {
       const value = pending.shift()!;
       pendingBytes -= value.bytes;
+      const applyStarted = performance.now();
       if (options.batch) {
         let failure: { error: unknown } | undefined;
         options.batch(() => {
@@ -127,6 +129,14 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
         });
         if (failure) throw failure.error;
       } else apply(value);
+      const durationMs = performance.now() - applyStarted;
+      if (!slowest || durationMs > slowest.durationMs) {
+        const update = value.envelope.update ?? value.envelope.subagent_update;
+        slowest = { durationMs, kind: value.envelope.kind, items: update?.items?.map(item => item.kind) ?? [],
+          turns: update?.turns?.value?.length ?? 0, order: update?.item_order?.value?.length ?? 0,
+          previews: update?.tool_call_previews?.value?.length ?? 0,
+          baselineItems: (value.envelope.current ?? value.envelope.subagent_current)?.items?.length ?? 0 };
+      }
       updates++;
       if (performance.now() - started >= APPLY_BUDGET_MS) break;
     }
@@ -134,7 +144,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
     releaseCapacity();
     maxPendingAgeMs = Math.max(maxPendingAgeMs, ageMs);
     if (updates) {
-      const metrics = { bytes, ageMs, updates, maxPendingBytes, maxPendingAgeMs, durationMs: performance.now() - started };
+      const metrics = { bytes, ageMs, updates, maxPendingBytes, maxPendingAgeMs, durationMs: performance.now() - started, slowest };
       options.onPendingMetrics?.(metrics);
       performance.clearMarks('flower.live.frame_queue');
       performance.mark('flower.live.frame_queue', { detail: metrics });

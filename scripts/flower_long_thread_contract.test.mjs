@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
 import { readFileSync, existsSync } from 'node:fs';
-import { evaluateLongThread, distribution, presentedMouseLatency, longThreadAffected, fastTests, browserTests } from './flower_long_thread_contract.mjs';
+import { workload, evaluateLongThread, distribution, presentedMouseLatency, longThreadAffected, fastTests, browserTests } from './flower_long_thread_contract.mjs';
 import { affected, runGate } from './check_flower_long_thread.mjs';
 const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
 test('only the long-thread host isolates native input before showing its visible window', async () => {
@@ -35,21 +35,25 @@ test('only the long-thread host isolates native input before showing its visible
   }
 });
 function valid() {
-  return { setup: { history_verified: true, history_turns: 500, history_messages: 1000, history_completed_activities: 1000 },
-    canonical: { exact_text: true, exact_reasoning: true, tools: 190, exact_tools: true, renderedIDs: Array.from({ length: 380 }, (_, i) => String(i)) }, rendered: Array.from({ length: 380 }, (_, i) => ({ id: String(i), exact: true })), errors: [],
+  const tools = Math.ceil(workload.hz * (workload.warmupSeconds + 30) / workload.toolEvery);
+  return { source: 'a'.repeat(40), sourceDirty: false, setup: { history_verified: true, history_turns: 500, history_messages: 1000, history_completed_activities: 1000 },
+    canonical: { outcome: 'completed', failure: null, exact_text: true, exact_reasoning: true, tools, exact_tools: true, renderedIDs: Array.from({ length: tools * 2 }, (_, i) => String(i)) }, rendered: Array.from({ length: tools * 2 }, (_, i) => ({ id: String(i), exact: true })), errors: [],
     samples: ['idle', 'early', 'long', 'repeat'].map(name => ({ name, seconds: 12, visible: true, active: 'drag', draftPreserved: true, focusPreserved: true, selectionPreserved: true,
       sent: 720, commits: 680, presented: { count: 650, p95: name === 'idle' ? 40 : 55 }, frames: { count: 700, p95: 18 }, longTasks: { count: 0, max: null },
-      output: { count: 650, coverage: .99, p95: 100 }, queue: { count: 150, p95: 8, max: 20 }, updates: 960, inputErrors: [], interruptions: [], generationSeconds: 125, producedBefore: 10000 })) };
+      output: { count: 650, coverage: .99, p95: 100 }, queue: { count: 150, p95: 8, max: 20 }, updates: 960, inputErrors: [], interruptions: [], generationSeconds: workload.warmupSeconds + 5, producedBefore: workload.hz * workload.warmupSeconds })) };
 }
 test('acceptance rejects missing evidence, short workloads and every correctness/performance regression', () => {
   assert.equal(evaluateLongThread(valid()).passed, true);
   for (const mutate of [
+    r => r.sourceDirty = true, r => delete r.sourceDirty, r => r.source = '',
+    r => r.canonical.outcome = 'failed', r => r.canonical.failure = { code: 'engine_contract' }, r => delete r.canonical.outcome,
     r => r.samples.pop(), r => r.samples.push(r.samples[0]), r => r.setup.history_verified = false,
     r => r.canonical.exact_tools = false, r => r.rendered[1].id = r.rendered[0].id, r => r.canonical.exact_text = false, r => r.canonical.exact_reasoning = false, r => r.canonical.tools = 3,
     r => r.rendered.pop() && (r.rendered[0].exact = false), r => r.rendered = [], r => r.errors.push('renderer error'),
     ...['visible','draftPreserved','focusPreserved','selectionPreserved'].map(key => r => r.samples[2][key] = false),
     r => r.samples[2].active = 'true', r => r.samples[2].sent = 300, r => r.samples[2].commits = 250,
     r => r.samples[2].updates = 500, r => r.samples[2].generationSeconds = 10, r => r.samples[2].producedBefore = 100,
+    r => r.samples[2].generationSeconds = 125, r => r.samples[2].producedBefore = 10000,
     r => r.samples[2].queue.p95 = 70, r => r.samples[2].queue.max = 51, r => r.samples[2].presented.p95 = 110,
     r => r.samples[2].presented.count = 0, r => r.samples[2].presented.p95 = null, r => r.samples[2].frames.p95 = 66,
     r => r.samples[2].longTasks = { count: 1, max: 100 }, r => r.samples[2].inputErrors.push('CDP failed'),

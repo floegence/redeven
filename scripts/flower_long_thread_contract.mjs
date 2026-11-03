@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 
 // Fixed acceptance policy. The runner exposes no workload/threshold overrides.
-export const workload = Object.freeze({ historyTurns: 500, hz: 80, toolEvery: 60, initialBytes: 32768, warmupSeconds: 120, sampleSeconds: 12 });
+export const workload = Object.freeze({ historyTurns: 500, hz: 80, toolEvery: 60, initialBytes: 32768, warmupSeconds: 600, sampleSeconds: 12 });
 export const fastTests = Object.freeze([
-  'runtimeThreadRecord.test.ts', 'runtimeThreadRecord.client.test.ts', 'runtimeCurrentView.stability.test.ts', 'flowerTimelineProjection.test.ts', 'flowerLiveFrameQueue.test.ts', 'threadCache.test.ts',
+  'runtimeThreadRecord.test.ts', 'runtimeThreadRecord.client.test.ts', 'composer/flowerInputHistory.client.test.ts', 'runtimeCurrentView.stability.test.ts', 'flowerTimelineProjection.test.ts', 'flowerLiveFrameQueue.test.ts', 'threadCache.test.ts',
   'historySequenceCompletion.test.ts', 'historyBodyLoader.test.ts', 'historyBodyLayout.client.test.ts', 'historyWindowRetention.test.ts', 'historyReadingWindow.test.ts', 'flowerTurnDisclosure.test.ts',
-  'flowerTurnPresentation.test.ts', 'flowerToolSequences.test.ts', 'flowerToolSequences.client.test.ts', 'flowerPresentationSubscriptions.client.test.ts', 'flowerActivityTitleReveal.client.test.ts', 'flowerMotionPreference.client.test.ts', 'flowerSequenceDisclosure.client.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
+  'flowerTurnPresentation.test.ts', 'flowerToolSequences.test.ts', 'flowerToolSequences.client.test.ts', 'flowerToolSequenceLayout.client.test.ts', 'flowerPresentationSubscriptions.client.test.ts', 'flowerActivityTitleReveal.client.test.ts', 'flowerComputerActivities.client.test.ts', 'flowerMotionPreference.client.test.ts', 'flowerSequenceDisclosure.client.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
 ]);
 export const browserTests = Object.freeze([
   'FlowerSurface.continuousHistory.browser.test.tsx', 'FlowerSurface.coldHistory.browser.test.tsx',
@@ -51,11 +51,14 @@ export function evaluateLongThread(report) {
   const failures = [];
   const check = (value, message) => { if (!value) failures.push(message); };
   const finite = (value, predicate) => Number.isFinite(value) && predicate(value);
+  check(report.sourceDirty === false && /^[0-9a-f]{40}$/u.test(report.source ?? ''), 'exact clean committed source');
   check(report.setup?.history_verified === true && report.setup.history_turns === workload.historyTurns
     && report.setup.history_messages === 1000 && report.setup.history_completed_activities === 1000, 'verified 500-turn canonical history');
-  check(report.canonical?.exact_text === true && report.canonical.exact_reasoning === true && report.canonical.tools >= 160 && report.canonical.exact_tools === true, 'complete canonical text, reasoning and tool workload');
+  const minimumTools = Math.floor(workload.hz * workload.warmupSeconds * .95 / workload.toolEvery);
+  check(report.canonical?.outcome === 'completed' && report.canonical.failure === null, 'successful canonical terminal outcome');
+  check(report.canonical?.exact_text === true && report.canonical.exact_reasoning === true && report.canonical.tools >= minimumTools && report.canonical.exact_tools === true, 'complete canonical text, reasoning and tool workload');
   const ids = report.canonical?.renderedIDs;
-  check(Array.isArray(ids) && ids.length >= 320 && new Set(ids).size === ids.length && report.rendered?.length === ids.length && new Set(report.rendered.map(item => item.id)).size === ids.length && report.rendered.every(item => ids.includes(item.id) && item.exact === true), 'every generated prose/reasoning item remains accessible and exact');
+  check(Array.isArray(ids) && ids.length >= minimumTools * 2 && new Set(ids).size === ids.length && report.rendered?.length === ids.length && new Set(report.rendered.map(item => item.id)).size === ids.length && report.rendered.every(item => ids.includes(item.id) && item.exact === true), 'every generated prose/reasoning item remains accessible and exact');
   check(Array.isArray(report.errors) && report.errors.length === 0, 'no renderer or synchronization errors');
   const names = ['idle', 'early', 'long', 'repeat'];
   check(report.samples?.length === names.length && names.every(name => report.samples.filter(item => item.name === name).length === 1), 'complete unique idle/early/long/repeat samples');

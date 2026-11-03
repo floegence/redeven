@@ -1,5 +1,5 @@
 import type { FlowerActivityItem, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
-import { retainEqualValue } from './presentationIdentity';
+import { readPresentationValue, retainEqualValue } from './presentationIdentity';
 
 // Authorized detail reads may enrich immutable historical file facts. Keep that
 // enrichment in the existing thread cache when an otherwise equal live item
@@ -47,9 +47,9 @@ type ThreadPresentation = Pick<FlowerThreadSnapshot, 'thread_id' | 'messages'>;
 export function retainThreadFileActivityTargets<T extends ThreadPresentation>(source: ThreadPresentation | undefined, incoming: T): T {
   if (!source || source.thread_id !== incoming.thread_id) return incoming;
   const messageKey = (message: FlowerThreadSnapshot['messages'][number]) => JSON.stringify([message.id, message.turn_id, message.run_id]);
-  const previous = new Map(source.messages.map(message => [messageKey(message), message]));
+  const previous = new Map(readPresentationValue(source.messages).map(message => [messageKey(message), message]));
   let changed = false;
-  const messages = incoming.messages.map(message => {
+  const messages = readPresentationValue(incoming.messages).map(message => {
     const before = previous.get(messageKey(message));
     if (!before) return message;
     const activities = new Map((before.blocks ?? []).flatMap(block => block.type === 'activity-timeline'
