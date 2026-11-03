@@ -69,45 +69,49 @@ export function FlowerTurnHeader(props: Readonly<{
   };
   const label = () => [status(), timeLabel(), details()].filter(Boolean).join(' · ');
   const timingDetail = () => terminal() ? props.copy.timingDetail(duration(props.group.turn!.work_duration_ms), duration(props.group.turn!.waiting_ms)) : undefined;
-  let text: HTMLSpanElement | undefined;
+  let text!: HTMLSpanElement;
   let revision = 0;
-  const [reveal, setReveal] = createSignal<Animation>();
-  const finishReveal = () => {
+  let pending = false;
+  const [motion, setMotion] = createSignal<Animation>();
+  const finishMotion = () => {
     revision++;
-    untrack(reveal)?.cancel();
-    setReveal(undefined);
+    pending = false;
+    untrack(motion)?.cancel();
+    setMotion(undefined);
   };
-  // Paint complete text progressively; never enqueue characters or subscribe
-  // motion to elapsed ticks. Restored history and urgent states stay immediate.
+  // Keep one complete, readable label. Motion only softens its contrast; it
+  // never erases, clips, duplicates or queues text, and ticks do not replay it.
   createEffect(on(phase, (current, previous) => {
-    finishReveal();
-    if ((!previous && terminal()) || !['running', 'completed'].includes(current) || previous === 'reconnecting') return;
-    if (!props.animate() || props.reducedMotion() || !props.visible() || !props.connected()) return;
-    const pending = revision;
+    if ((!previous && terminal()) || !['running', 'completed'].includes(current) || previous === 'reconnecting'
+      || !props.animate() || props.reducedMotion() || !props.visible() || !props.connected()) { finishMotion(); return; }
+    // A fast reply or rapid transition inherits the in-flight entrance. Never
+    // reset visible text to transparent or queue another animation behind it.
+    if (pending || untrack(motion)) return;
+    pending = true;
+    const request = ++revision;
     queueMicrotask(() => {
-      if (pending !== revision || !text?.isConnected || document.hidden || !props.animate()
-        || props.reducedMotion() || !props.visible() || !props.connected() || header.contains(document.activeElement)) return;
+      if (request !== revision) return;
+      pending = false;
+      if (!text.isConnected || document.hidden || !props.animate() || props.reducedMotion()
+        || !props.visible() || !props.connected() || header.contains(document.activeElement)) { finishMotion(); return; }
       const rect = text.getBoundingClientRect();
       const viewport = props.viewport()?.getBoundingClientRect();
       if (!rect.width || !rect.height || rect.bottom <= Math.max(0, viewport?.top ?? 0)
-        || rect.top >= Math.min(window.innerHeight, viewport?.bottom ?? window.innerHeight)) return;
-      const steps = Math.max(8, Math.min(36, [...(text.textContent ?? '')].length));
-      const animation = text.animate([
-        { clipPath: 'inset(0 100% 0 0)', opacity: 0.55 },
-        { clipPath: 'inset(0 0% 0 0)', opacity: 1 },
-      ], { duration: Math.min(360, 120 + steps * 7), easing: 'steps(' + steps + ', end)' });
-      setReveal(animation);
-      void animation.finished.then(() => { if (untrack(reveal) === animation) finishReveal(); }, () => {});
+        || rect.top >= Math.min(window.innerHeight, viewport?.bottom ?? window.innerHeight)) { finishMotion(); return; }
+      const animation = text.animate([{ opacity: previous ? 0.88 : 0.68 }, { opacity: 1 }],
+        { duration: previous ? 160 : 180, easing: 'cubic-bezier(0.2, 0, 0, 1)' });
+      setMotion(animation);
+      void animation.finished.then(() => { if (request === revision) finishMotion(); }, () => {});
     });
   }));
   createEffect(() => {
-    if (reveal() && (!props.animate() || props.reducedMotion() || !props.visible() || !props.connected())) finishReveal();
+    if (motion() && (!props.animate() || props.reducedMotion() || !props.visible() || !props.connected())) finishMotion();
   });
   createEffect(() => {
-    if (!reveal()) return;
+    if (!motion()) return;
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const preferenceChanged = () => { if (media.matches) finishReveal(); };
-    const visibilityChanged = () => { if (document.hidden) finishReveal(); };
+    const preferenceChanged = () => { if (media.matches) finishMotion(); };
+    const visibilityChanged = () => { if (document.hidden) finishMotion(); };
     media.addEventListener('change', preferenceChanged);
     document.addEventListener('visibilitychange', visibilityChanged);
     onCleanup(() => {
@@ -115,31 +119,26 @@ export function FlowerTurnHeader(props: Readonly<{
       document.removeEventListener('visibilitychange', visibilityChanged);
     });
   });
-  onCleanup(finishReveal);
-  const bindText = (node: HTMLSpanElement) => {
-    text = node;
-    // Terminal disclosure may replace the label's wrapper in the same update.
-    // Retain the existing reveal timing when the real text node changes owner.
-    const animation = untrack(reveal);
-    if (animation?.effect) (animation.effect as KeyframeEffect).target = node;
-  };
-  const Label = () => <span class="flower-turn-header-label">
-    <span ref={bindText} class="flower-turn-header-text">
+  onCleanup(finishMotion);
+  // One JSX owner survives the non-interactive label becoming a native button.
+  // Moving this node retains text identity and the active animation.
+  const content = <span class="flower-turn-header-label">
+    <span ref={text} class="flower-turn-header-text">
       <span class="flower-turn-header-status" aria-live={terminal() ? 'off' : 'polite'}>{status()}</span>
       <Show when={timeLabel()}><span class="flower-turn-header-time"> · {timeLabel()}</span></Show>
       <Show when={details()}><span class="flower-turn-header-details"> · {details()}</span></Show>
     </span>
   </span>;
   return <div ref={header} class="flower-turn-summary" data-flower-turn-header={props.group.turnID}
-    onPointerDown={finishReveal} onFocusIn={finishReveal}>
+    onPointerDown={finishMotion} onFocusIn={finishMotion}>
     <Show when={props.toggleable} fallback={<div class="flower-turn-summary-label" title={timingDetail()} aria-description={timingDetail()}>
-      <Label />
+      {content}
     </div>}>
       <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
         aria-expanded={props.expanded} aria-controls={props.controls}
         aria-label={(props.expanded ? props.copy.collapse : props.copy.expand) + ': ' + label()}
         title={timingDetail()} aria-description={timingDetail()} onClick={event => props.onToggle(event.currentTarget)}>
-        <Label /><ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
+        {content}<ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
       </button>
     </Show>
   </div>;

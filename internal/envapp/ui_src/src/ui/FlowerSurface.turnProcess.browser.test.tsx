@@ -110,7 +110,7 @@ function expectEndedPresentation(notice: HTMLElement, label: string) {
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
-  it('reveals fresh admission and completion while restored history stays static', async () => {
+  it('keeps one continuous entrance through a fast reply while restored history stays static', async () => {
     const initial = current(true);
     const { root, live } = await mount(initial);
     const historical = root.querySelector<HTMLElement>('.flower-turn-header-text')!;
@@ -130,7 +130,9 @@ describe('completed turn process disclosure', () => {
       items: [...next.items!, { id: 'next-final', turn_id: 'next', run_id: 'next-run', ordinal: 8, kind: 'assistant', text: 'Hi! How can I help?' }],
     });
     await waitFor(() => Boolean(header.textContent?.includes('Completed · Total less than a second')));
-    await waitFor(() => text.getAnimations().length === 1 && text.getAnimations()[0] !== admission);
+    await waitFor(() => text.getAnimations().length === 1);
+    expect(text.getAnimations()[0]).toBe(admission);
+    expect(getComputedStyle(text).clipPath).toBe('none');
     const completion = text.getAnimations()[0];
     completion.pause();
     expect(header.querySelector('.flower-turn-header-text')).toBe(text);
@@ -142,7 +144,7 @@ describe('completed turn process disclosure', () => {
       const duration = Number(completion.effect!.getTiming().duration);
       for (const progress of [0, 0.5, 1]) {
         completion.currentTime = duration * progress;
-        await page.screenshot({ element: header, path: '__screenshots__/flower-header-reveal-' + progress + '.png' });
+        await page.screenshot({ element: header, path: '__screenshots__/flower-header-transition-' + progress + '.png' });
       }
     }
     await media.emulateMediaPreferences({ reducedMotion: 'reduce' });

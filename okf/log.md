@@ -4,6 +4,8 @@ Concepts own contracts/evidence; Git retains history.
 
 ## 2026-11-02
 
+- [Turn presentation](ui/flower-turn-process-disclosure.md): replace restarting clipped typing with a restrained readable opacity transition, retain the text node through disclosure changes, and absorb rapid state changes without a blank frame.
+
 - [Turn presentation](ui/flower-turn-process-disclosure.md): add a short stepped text reveal for live admission and completion, preserving immediate accessible content, stable geometry and static history/timer updates.
 
 - [Turn presentation](ui/flower-turn-process-disclosure.md): show status from admission, reuse existing samples for isolated visible elapsed time, and retain terminal-only disclosure with stable geometry and no extra transport.
