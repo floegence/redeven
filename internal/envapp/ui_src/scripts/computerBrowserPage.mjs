@@ -660,10 +660,15 @@ export class BrowserComputerPage {
           matches=await evaluate(element.frame.session, 'Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,arguments:[{value:state},{value:equals}],functionDeclaration:'function(state,expected){return (state==="value"?this.value:this.textContent)===expected;}'}, value => typeof value === 'boolean');
         } finally {if(object.objectId)await element.frame.session.send('Runtime.releaseObject',{objectId:object.objectId});}
       }
-      // Bind the state/value read to the candidate actually sampled. A
-      // detached candidate is not proof that the original query is hidden.
-      if (selector.root_ref) await this.resolve({ref:selector.root_ref});
-      await this.validateIdentity(element, typeof selector.ref !== 'string');
+      // The sampled state belongs to this query only while its unique match
+      // retains identity and scope. Reuse resolution, never invent a fallback.
+      let currentMatch;
+      try { currentMatch = await this.resolve(selector, false, true); }
+      catch (error) {
+        if (error.message === 'ELEMENT_NOT_FOUND') throw new BrowserObservationInvalidated();
+        throw error;
+      }
+      if (currentMatch.ref !== element.ref || currentMatch.document !== element.document) throw new BrowserObservationInvalidated();
     } catch (error) {
       if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
     }

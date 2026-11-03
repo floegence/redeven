@@ -139,3 +139,21 @@ test('missing descendant never hides a changed fixed root',async()=>fixture(asyn
   const response=await call('computer.action',{action:'wait',selector:{role:'button',name:'Ready',exact:true,root_ref},state:'hidden',timeout_ms:80});
   assert.equal(response.error,'STALE_REFERENCE',JSON.stringify(response));
 }));
+
+for(const change of ['outside_scope','ambiguous']) {
+  test('state reads retain original query membership: '+change,async()=>fixture(async({tab,controller,call,initial})=>{
+    const root_ref=initial.result.observation.nodes.find(n=>n.role==='region').ref;
+    const read=controller.page.elementState.bind(controller.page);let changed=false;
+    controller.page.elementState=async element=>{
+      if(!changed){changed=true;await tab.evaluate(change=>{
+        const button=document.querySelector('button');
+        if(change==='outside_scope')document.body.append(button);
+        else button.after(button.cloneNode(true));
+      },change);}
+      return read(element);
+    };
+    const response=await call('computer.action',{action:'wait',selector:{role:'button',name:'Ready',exact:true,root_ref},state:'visible',timeout_ms:80});
+    if(change==='outside_scope')assert.equal(response.result.state,'timeout',JSON.stringify(response));
+    else assert.equal(response.error,'AMBIGUOUS_ELEMENT',JSON.stringify(response));
+  }));
+}

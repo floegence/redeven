@@ -42,7 +42,7 @@ Condition waits own a deadline and repeatedly obtain independently validated
 read-only samples. Typed lifecycle or temporary query-candidate invalidation
 discards only that sample; unknown protocol/evaluation failures, ambiguity, stale
 fixed refs/root_ref, permission changes and cancellation stop. Semantic waits
-revalidate the sampled identity after reading its state, keep the original query
+revalidate the original unique match and scope after reading its state, keep the original query
 and deadline, and never turn an invalid sample into an absent/hidden result.
 Fixed scope identity is checked even when a descendant query has no matches.
 Ordinary reads and input do not retry candidate failures.

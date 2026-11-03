@@ -45,7 +45,16 @@ public-task prompt/assertion mismatch (Home was not expressly prohibited), and o
 long-text task where the model read a text-node prefix instead of the documented
 HTML-element text read, then requested input until the runner deadline. The public
 prompt now expressly disallows keyboard/pointer input, matching its existing
-assertion; supplemental runs are separate and never rewrite these results.
+assertion; the public supplement passes 6/6 (31 requests) on unchanged production
+sources. Supplemental runs remain separate and never rewrite earlier results.
+A final scope review reproduces two further sampling gaps: the same candidate
+moves outside root_ref or a second match appears during the state read. Reusing
+original-query resolution at sample completion fixes both; focused coverage is
+21/21. A separate rebuilt 22-type, two-round release run passes 43/44 (278
+requests), including both new repair lanes and all six public tasks. frame_refs/1
+changes the instructed single-call diagnostic, reads a replaced child and fails
+ELEMENT_NOT_FOUND; the same parent ref subsequently saves once. Preserve this
+failed contract attempt; no input replay or silent target substitution occurred.
 No site-specific production rule, input replay or relaxed boundary was introduced.
 
 ## October 29
