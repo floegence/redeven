@@ -1,5 +1,5 @@
 // Package gatewayegress forwards approved Runtime connections without
-// terminating their inner Cloud TLS or Flowersec sessions.
+// terminating their inner application TLS or Flowersec sessions.
 package gatewayegress
 
 import (
@@ -150,7 +150,7 @@ func (s *Server) ActiveMembers() map[string]int {
 	return counts
 }
 
-// ActiveThrough counts only streams from the revoked path version. New Cloud
+// ActiveThrough counts only streams from the revoked path version. New egress
 // acknowledgement connections do not prevent the old session closure receipt.
 func (s *Server) ActiveThrough(memberID string, generation uint64) int {
 	s.mu.Lock()
@@ -209,7 +209,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upstream, err := s.dialDestination(dialCtx, r.Host)
 	dialCancel()
 	if err != nil {
-		http.Error(w, "Cloud destination unavailable", http.StatusBadGateway)
+		http.Error(w, "Egress destination unavailable", http.StatusBadGateway)
 		return
 	}
 	defer upstream.Close()

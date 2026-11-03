@@ -36,7 +36,7 @@ import type { DesktopWSLDiscoverySnapshot } from './desktopWSL';
 import type {
   DesktopEnvironmentSource,
   DesktopGatewayConnectionKind,
-  DesktopGatewayEnvironment,
+  DesktopGatewayAttachment,
   DesktopGatewayDiagnosis,
   DesktopGatewayServiceState,
   DesktopGatewaySource,
@@ -438,7 +438,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   gateway_status_message?: string;
   gateway_endpoint_label?: string;
   gateway_member?: RuntimeAttachment;
-  gateway_access_result?: DesktopGatewayEnvironment['last_access_result'];
+  gateway_access_result?: DesktopGatewayAttachment['last_access_result'];
   gateway_sync_state?: DesktopGatewaySource['sync_state'];
   environment_source?: DesktopEnvironmentSource;
   pinned: boolean;

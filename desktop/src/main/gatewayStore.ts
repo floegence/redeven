@@ -10,7 +10,7 @@ import {
   type DesktopGatewayServiceState,
   type DesktopGatewayStatus,
   type DesktopGatewaySource,
-  type DesktopGatewayEnvironment,
+  type DesktopGatewayAttachment,
   type DesktopGatewayTrustState,
 } from '../shared/desktopGateway';
 import {
@@ -562,7 +562,7 @@ export function gatewayRecordToSourceWithCatalog(
     status?: DesktopGatewayStatus;
     status_message?: string;
     capabilities?: readonly DesktopGatewayCapability[];
-    environments?: readonly DesktopGatewayEnvironment[];
+    environments?: readonly DesktopGatewayAttachment[];
     listener_address?: string;
     listener_addresses?: DesktopGatewaySource['listener_addresses'];
     listener_running?: boolean;

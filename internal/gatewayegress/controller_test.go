@@ -2,13 +2,54 @@ package gatewayegress
 
 import (
 	"context"
-	"github.com/floegence/redeven/internal/gatewayflow"
-	"github.com/floegence/redeven/internal/gatewaymembership"
-	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven/internal/gatewayflow"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
+
+func TestEgressAdmissionIsIndependentOfReverseConnection(t *testing.T) {
+	budget := gatewayflow.New(0, 0)
+	controller, err := NewController(budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer controller.Close()
+	connections := gatewaymembership.NewConnections(budget)
+	defer connections.Close()
+	records := []gatewaymembership.MemberRecord{{
+		Member:                gp.RuntimeAttachment{AttachmentID: "runtime", AttachmentVersion: 1, State: "active", Connected: false, EgressPermission: gp.EgressInherit},
+		ClientExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli(), ClientCertificateSHA256: strings.Repeat("a", 64),
+		HookEgressAllowed: true, HookPolicyRevision: 1,
+	}}
+	policy := gp.GatewayPolicy{Revision: 1, DefaultEgressAllowed: true, Destinations: []string{"approved.example:443"}}
+	connections.Apply(records, policy)
+	controller.Apply(records, policy)
+	if connections.IsConnected("runtime") {
+		t.Fatal("fixture unexpectedly has a reverse application connection")
+	}
+	flowContext, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	flow, status := controller.server.reserve(records[0].ClientCertificateSHA256, "approved.example:443", cancel)
+	if status != http.StatusOK {
+		t.Fatalf("eligible attachment without reverse connection: status %d", status)
+	}
+	defer flow.reservation.Release()
+	// Durable attachment withdrawal still cancels egress and prevents new admission.
+	controller.Apply(nil, policy)
+	select {
+	case <-flowContext.Done():
+	default:
+		t.Fatal("removed attachment retained its egress flow")
+	}
+	if _, status := controller.server.reserve(records[0].ClientCertificateSHA256, "approved.example:443", func() {}); status != http.StatusForbidden {
+		t.Fatalf("removed attachment admitted egress: status %d", status)
+	}
+}
 
 func TestLocalPolicyRevokesOnlyEgressAndExpiryCannotRestoreOldPolicy(t *testing.T) {
 	budget := gatewayflow.New(0, 0)

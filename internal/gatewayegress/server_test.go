@@ -20,6 +20,34 @@ import (
 	"time"
 )
 
+func TestEgressDestinationFailureIsTransportNeutral(t *testing.T) {
+	server, err := New(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	_, _, certificate := testCertificates(t)
+	leaf, err := x509.ParseCertificate(certificate.Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := sha256.Sum256(leaf.Raw)
+	// The product's private-address restriction rejects this approved authority
+	// before dialing, making the failure deterministic without external services.
+	const destination = "127.0.0.1:443"
+	if err := server.ReplaceMembers([]Member{{ID: "runtime", AttachmentVersion: 1, Generation: 1, CertificateSHA256: hex.EncodeToString(fingerprint[:]), Destinations: []string{destination}}}); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodConnect, "https://"+destination, nil)
+	request.Host, request.URL.Host, request.URL.Path = destination, destination, ""
+	request.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{leaf}, VerifiedChains: [][]*x509.Certificate{{leaf}}}
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusBadGateway || response.Body.String() != "Egress destination unavailable\n" {
+		t.Fatalf("destination failure: status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
 func TestEgressRequiresCertificateAndApprovedDestination(t *testing.T) {
 	server, err := New(Options{})
 	if err != nil {

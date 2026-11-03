@@ -28,7 +28,7 @@ await session.run(async () => {
   await session.target(path.join(bundle, process.platform === 'win32' ? 'redeven.exe' : 'redeven'), state);
   const application = await session.launchElectron(_electron, {
     executablePath: electron,
-    args: [root, `--redeven-smoke-run=${marker}`],
+    args: [root, `--redeven-smoke-run=${marker}`, `--redeven-dev-instance=${marker}`],
     cwd: state,
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -37,6 +37,10 @@ await session.run(async () => {
       ELECTRON_RUN_AS_NODE: undefined,
       REDEVEN_STATE_ROOT: state,
       REDEVEN_DESKTOP_USER_DATA_ROOT: path.join(state, 'desktop'),
+      REDEVEN_DESKTOP_DEV_INSTANCE_ID: marker,
+      REDEVEN_DESKTOP_CACHE_ROOT: path.join(state, 'desktop/cache'),
+      REDEVEN_DESKTOP_TEMP_ROOT: path.join(state, 'desktop/temp'),
+      REDEVEN_DESKTOP_LOCAL_UI_BIND: '127.0.0.1:0',
       REDEVEN_DESKTOP_AUTO_START_RUNTIME: '0',
       REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT: path.resolve(root, '..'),
       REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG: manifest.version,

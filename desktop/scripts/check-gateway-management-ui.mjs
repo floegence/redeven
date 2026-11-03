@@ -48,6 +48,7 @@ try {
           await document.fonts.ready;
           window.settingsFixture.actionResult = request => {
             if (request.kind === 'list_gateway_clients') return { ok: true, outcome: 'gateway_clients_listed', gateway_clients: [{ client_key_id: 'studio', client_name: 'Studio Desktop', paired_at_unix_ms: Date.now(), last_verified_at_unix_ms: Date.now(), revoked_at_unix_ms: 0 }] };
+            if (request.kind === 'revoke_gateway_client' && window.gatewayUnknownRevocation) return { ok: false, gateway_error_code: 'OPERATION_RESULT_UNKNOWN', gateway_operation_id: 'qa-uncertain-revocation' };
             if (request.kind === 'revoke_gateway_client') return { ok: true, gateway_clients: [{ client_key_id: 'studio', client_name: 'Studio Desktop', paired_at_unix_ms: Date.now(), last_verified_at_unix_ms: Date.now(), revoked_at_unix_ms: Date.now() }] };
             if (request.kind === 'issue_gateway_access_code') return { ok: true, outcome: 'gateway_access_code_created', gateway_access_code: { access_code: 'qa-explicit-access-code', expires_at_unix_ms: Date.now() + 600000 } };
             if (request.kind === 'invite_gateway_runtime') return { ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: { ...window.gatewayInvitationFixture, expires_at_unix_ms: Date.now() + 600000 } };
@@ -133,6 +134,7 @@ try {
         const dialog = page.getByRole('dialog');
         await dialog.waitFor();
         assert.equal(await dialog.locator('.redeven-gateway-access-code').count(), 0);
+        assert.equal(await dialog.getByRole('heading', { name: i18n.t('gatewayClients.createCode'), exact: true }).count(), 0, 'Issuance action needs no duplicate heading');
         await button(dialog, 'gatewayClients.createCode').click();
         await dialog.locator('.redeven-gateway-access-code code').waitFor();
         const bounds = await dialog.boundingBox();
@@ -149,6 +151,16 @@ try {
         await button(nav, 'gatewayExperience.clients').click(); await button(workspace, 'gatewayExperience.connectClient').click();
         assert.equal(await dialog.locator('.redeven-gateway-access-code code').innerText(), 'qa-explicit-access-code');
         await button(dialog, 'common.close').click(); await page.locator('[data-floe-dialog-panel].redeven-gateway-dialog').waitFor({ state: 'detached' });
+        await page.evaluate(() => { window.gatewayUnknownRevocation = true; });
+        await button(workspace, 'gatewayClients.revoke').click();
+        await button(workspace, 'gatewayClients.confirmRevoke').click();
+        await workspace.getByText(i18n.t('gatewayMembers.operationUnknown', { id: 'qa-uncertain-revocation' }), { exact: true }).waitFor();
+        const clientsPanel = workspace.locator('#gateway-management-clients');
+        await button(clientsPanel, 'common.refresh').click();
+        assert.ok(await button(clientsPanel, 'gatewayClients.revoke').isDisabled(), 'Unknown revocation fences mutations after refresh');
+        await button(clientsPanel, 'gatewayMembers.operationReviewed').click();
+        assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(request => request.kind === 'revoke_gateway_client').length), 1, 'Review never repeats revocation');
+        await page.evaluate(() => { window.gatewayUnknownRevocation = false; });
         const beforeRevoke = await page.evaluate(() => window.settingsFixture.requests.length);
         await button(workspace, 'gatewayClients.revoke').click();
         assert.equal(await page.evaluate(() => window.settingsFixture.requests.length), beforeRevoke, 'Revocation awaits explicit confirmation');

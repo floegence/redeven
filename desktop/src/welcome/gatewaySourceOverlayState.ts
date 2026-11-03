@@ -10,28 +10,28 @@ export function closedGatewaySourceOverlayState(): GatewaySourceOverlayState {
 
 export function openGatewaySourceOverlayState(
   kind: GatewaySourceOverlayKind,
-  gatewayID: string,
+  connectionID: string,
 ): GatewaySourceOverlayState {
   return {
     kind,
-    connection_id: gatewayID,
+    connection_id: connectionID,
   };
 }
 
 export function gatewaySourceOverlayOpenFor(
   state: GatewaySourceOverlayState,
   kind: GatewaySourceOverlayKind,
-  gatewayID: string,
+  connectionID: string,
 ): boolean {
-  return state.kind === kind && state.connection_id === gatewayID;
+  return state.kind === kind && state.connection_id === connectionID;
 }
 
 export function closeGatewaySourceOverlayState(
   state: GatewaySourceOverlayState,
   kind: GatewaySourceOverlayKind,
-  gatewayID: string,
+  connectionID: string,
 ): GatewaySourceOverlayState {
-  return gatewaySourceOverlayOpenFor(state, kind, gatewayID)
+  return gatewaySourceOverlayOpenFor(state, kind, connectionID)
     ? closedGatewaySourceOverlayState()
     : state;
 }

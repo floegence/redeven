@@ -18,12 +18,41 @@ function mount(perform: ReturnType<typeof vi.fn>, currentClientKeyID?: string) {
   const root = document.createElement('div'); document.body.append(root);
   const [id, setID] = createSignal('gateway-one');
   const [enrolling, setEnrolling] = createSignal(false);
-  dispose = render(() => <GatewayClientsPanel gatewayID={id()} currentClientKeyID={currentClientKeyID} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
+  dispose = render(() => <GatewayClientsPanel connectionID={id()} currentClientKeyID={currentClientKeyID} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
   return setID;
 }
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway client enrollment', () => {
+  it('shows list failures on the clients page and recovers through refresh', async () => {
+    const perform = vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValue({ ok: true, gateway_clients: [] });
+    mount(perform); await settle();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(i18n.t('gatewayMembers.failed'));
+    button('common.refresh').click(); await settle();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(perform).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps uncertain revocation visible and recoverable outside enrollment', async () => {
+    const client = { client_key_id: 'client-one', client_name: 'Studio', paired_at_unix_ms: 1, last_verified_at_unix_ms: 2, revoked_at_unix_ms: 0 };
+    const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [client] });
+    mount(perform); await settle();
+    button('gatewayClients.revoke').click(); await settle();
+    perform.mockResolvedValueOnce({ ok: false, gateway_error_code: 'OPERATION_RESULT_UNKNOWN', gateway_operation_id: 'uncertain-revocation' });
+    button('gatewayClients.confirmRevoke').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect([...document.querySelectorAll('[role="alert"]')].some(element => element.textContent?.includes('uncertain-revocation'))).toBe(true);
+    expect(button('gatewayMembers.operationReviewed')).toBeDefined();
+    button('common.refresh').click(); await settle();
+    expect([...document.querySelectorAll('[role="alert"]')].some(element => element.textContent?.includes('uncertain-revocation'))).toBe(true);
+    expect(button('gatewayClients.revoke').disabled).toBe(true);
+    button('gatewayMembers.operationReviewed').click(); await settle();
+    expect(perform.mock.calls.at(-1)?.[0]).toEqual({ kind: 'acknowledge_gateway_operation', connection_id: 'gateway-one', operation_id: 'uncertain-revocation' });
+    expect(document.body.textContent).not.toContain('uncertain-revocation');
+    expect(perform.mock.calls.filter(([request]) => request.kind === 'revoke_gateway_client')).toHaveLength(1);
+  });
+
   it('keeps exact authorization timestamps while showing readable date and time lines', async () => {
     const paired = 0;
     const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [
@@ -44,7 +73,7 @@ describe('Gateway client enrollment', () => {
     const root = document.createElement('div'); document.body.append(root);
     const [available, setAvailable] = createSignal(true);
     const [enrolling, setEnrolling] = createSignal(false);
-    dispose = render(() => <GatewayClientsPanel gatewayID="gateway-one" available={available()} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
+    dispose = render(() => <GatewayClientsPanel connectionID="gateway-one" available={available()} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
     await settle(); button('gatewayExperience.connectClient').click(); await settle();
     perform.mockResolvedValueOnce({ ok: true, gateway_access_code: { access_code: 'invalidated-code', expires_at_unix_ms: Date.now() + 600000 } });
     button('gatewayClients.createCode').click(); await settle();
@@ -76,7 +105,7 @@ describe('Gateway client enrollment', () => {
     const [endpoints, setEndpoints] = createSignal([{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan' as const, priority: 0 }]);
     const root = document.createElement('div'); document.body.append(root);
     const [enrolling, setEnrolling] = createSignal(false);
-    dispose = render(() => <GatewayClientsPanel gatewayID="one" enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={endpoints()} i18n={i18n} />, root);
+    dispose = render(() => <GatewayClientsPanel connectionID="one" enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={endpoints()} i18n={i18n} />, root);
     await settle(); button('gatewayExperience.connectClient').click();
     const address = document.querySelector<HTMLInputElement>('input')!;
     address.value = ''; address.dispatchEvent(new Event('input', { bubbles: true }));

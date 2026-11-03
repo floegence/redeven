@@ -25,7 +25,7 @@ export type DesktopGatewayTrustState =
   | 'trust_changed'
   | 'revoked';
 
-export type DesktopGatewayEnvironment = RuntimeAttachment & Readonly<{
+export type DesktopGatewayAttachment = RuntimeAttachment & Readonly<{
   last_access_result?: DesktopGatewayAccessResult;
 }>;
 export type DesktopGatewayAccessResult = Readonly<{
@@ -175,7 +175,7 @@ export type DesktopGatewaySource = Readonly<{
   diagnosis?: DesktopGatewayDiagnosis;
   created_at_ms: number;
   updated_at_ms: number;
-  environments: readonly DesktopGatewayEnvironment[];
+  environments: readonly DesktopGatewayAttachment[];
   permissions?: GatewayPermissions;
   policy?: GatewayPolicy;
   catalog_revision?: number;
@@ -295,7 +295,7 @@ export function desktopGatewayNeedsResolution(status: DesktopGatewayStatus): boo
 
 export function desktopGatewayCanOpenEnvironment(
   gateway: Pick<DesktopGatewaySource, 'status' | 'permissions'>,
-  environment: Pick<DesktopGatewayEnvironment, 'state' | 'connected'>,
+  environment: Pick<DesktopGatewayAttachment, 'state' | 'connected'>,
 ): boolean {
   return gateway.status === 'online' && gateway.permissions?.access === true
     && environment.state === 'active' && environment.connected;

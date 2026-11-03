@@ -6,7 +6,7 @@ import {
   desktopGatewayNeedsResolution,
   desktopGatewaySourceID,
   type DesktopEnvironmentSource,
-  type DesktopGatewayEnvironment,
+  type DesktopGatewayAttachment,
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
 import {
@@ -133,7 +133,7 @@ export function buildGatewayEnvironmentEntries(
 
 function buildGatewayEnvironmentEntry(
   gateway: DesktopGatewaySource,
-  environment: DesktopGatewayEnvironment,
+  environment: DesktopGatewayAttachment,
   source: DesktopEnvironmentSource,
   createdAtMS: number,
 ): DesktopEnvironmentEntry | null {
@@ -240,7 +240,7 @@ function gatewayRuntimeOperations(input: Readonly<{
 
 function gatewayOfflineReasonCode(
   gatewayStatus: DesktopGatewaySource['status'],
-  member: DesktopGatewayEnvironment,
+  member: DesktopGatewayAttachment,
 ): NonNullable<DesktopEnvironmentEntry['runtime_health']['offline_reason_code']> | undefined {
   if (gatewayStatus === 'online' && member.state === 'active' && member.connected) {
     return undefined;
@@ -263,7 +263,7 @@ function gatewayOfflineReasonCode(
 
 function gatewayOfflineReason(
   gateway: DesktopGatewaySource,
-  environment: DesktopGatewayEnvironment,
+  environment: DesktopGatewayAttachment,
 ): string | undefined {
   if (gateway.status === 'online' && environment.state === 'active' && environment.connected) {
     return undefined;

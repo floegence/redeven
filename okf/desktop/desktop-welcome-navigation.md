@@ -3,7 +3,7 @@ type: UI Contract
 title: Desktop Welcome navigation
 tags: [desktop, welcome, flower, navigation]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -15,7 +15,7 @@ Welcome owns immediate local page selection. Flower/Environments navigation neve
 - Selecting Environments, Redeven Cloud or Gateways renders immediately. Hiding/disposing cancels motion; return does not replay it. [Environment library](desktop-environment-library.md) retains card/state ownership.
 - Environments and Flower mount on first visit and remain mounted until disposal. Filesystem invalidation uses environment ID, Runtime start identity and session key, never health/probe timestamps.
 
-- Gateway management retains this shell and its search/filter state. Overview, Environments, Access and Settings belong only to a selected Gateway modal. Enrollment replaces that layer and returns to its retained context; it does not introduce a separate workspace or navigation rail.
+- Gateway management is an in-shell detail page. Returning to All Gateways restores list search, filter, scroll and focus. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns its sections, enrollment dialogs and recovery behavior; global navigation preserves the retained management context.
 
 # Boundaries
 
