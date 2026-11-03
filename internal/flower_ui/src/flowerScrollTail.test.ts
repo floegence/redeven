@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFlowerScrollTailController } from './flowerScrollTail';
 
@@ -615,4 +615,31 @@ it('keeps the original anchor when another completion arrives before its offscre
   controller.flushLayout();
   expect(title.getBoundingClientRect().top).toBe(20);
   raf.flushAll(); expect(raf.pending()).toBe(0); controller.dispose();
+});
+
+it('advances retained wheel distance only once per animation frame', () => {
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(10000);
+  const raf = createRafHarness();
+  const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => false, canReadBefore: () => true,
+    requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+  const metrics = createViewport(100);
+  let documentTop = 20;
+  const title = { isConnected: true, closest: () => null, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as unknown as HTMLElement;
+  Object.assign(metrics.viewport, { contains: () => true });
+  try {
+    controller.bind(metrics.viewport); controller.stopFollowing(); controller.preserveLayoutAnchor(title);
+    controller.onWheel({ target: metrics.viewport, deltaY: -120 } as unknown as WheelEvent);
+    documentTop += 1000; metrics.setScrollHeight(1100);
+    controller.flushLayout(false); raf.flushFrame();
+    const first = title.getBoundingClientRect().top;
+    // Body completion and ResizeObserver may flush with performance.now()
+    // after rAF supplied an older timestamp in the same displayed frame.
+    controller.flushLayout(false); controller.flushLayout(false); controller.flushLayout();
+    expect(title.getBoundingClientRect().top).toBe(first);
+    raf.flushFrame();
+    expect(title.getBoundingClientRect().top).toBeGreaterThan(first);
+    expect(title.getBoundingClientRect().top - first).toBeLessThan(40);
+    raf.flushAll();
+    expect(title.getBoundingClientRect().top).toBeCloseTo(140, 0);
+  } finally { controller.dispose(); clock.mockRestore(); }
 });

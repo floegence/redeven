@@ -267,7 +267,7 @@ export function createFlowerScrollTailController(
   };
   // Resize, tail-follow, smooth scrolling and disclosure anchoring share one
   // read/write pass. Notifications never cancel and restart the frame deadline.
-  const layout = (timestamp: number, notify = true) => {
+  const layout = (timestamp: number, notify = true, advanceInput = false) => {
     layoutDirty = false;
     if (notify) layoutNotificationPending = false;
     const target = node;
@@ -328,7 +328,7 @@ export function createFlowerScrollTailController(
         scrollHeight = target.scrollHeight;
       }
     }
-    if (pendingHistoryWheel && anchor?.reading && !followingLatest() && nextTop > 0) {
+    if (advanceInput && pendingHistoryWheel && anchor?.reading && !followingLatest() && nextTop > 0) {
       const elapsed = Math.min(32, Math.max(0, timestamp - (historyWheelTimestamp ?? timestamp)));
       const amount = options.reducedMotionPreferred() || pendingHistoryWheel <= 0.75 ? pendingHistoryWheel
         : pendingHistoryWheel * (1 - Math.exp(-elapsed / 44));
@@ -338,7 +338,7 @@ export function createFlowerScrollTailController(
       anchor.top += consumed;
       for (const fallback of anchor.fallbacks ?? []) fallback.top += consumed;
       historyWheelTimestamp = timestamp;
-    } else historyWheelTimestamp = undefined;
+    } else if (advanceInput) historyWheelTimestamp = undefined;
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
     if (automaticFold && !automaticFold()) clearAutomaticFold();
     knownScrollHeight = scrollHeight;
@@ -354,7 +354,7 @@ export function createFlowerScrollTailController(
   const requestFrame = () => {
     if (!layoutFrame && !presentationHidden) layoutFrame = options.requestAnimationFrame(timestamp => {
       layoutFrame = 0;
-      if (layoutDirty || gesture() || anchor && !anchor.reading || smoothScroll || pendingHistoryWheel && anchor?.reading && node && node.scrollTop > 0) layout(timestamp);
+      if (layoutDirty || gesture() || anchor && !anchor.reading || smoothScroll || pendingHistoryWheel && anchor?.reading && node && node.scrollTop > 0) layout(timestamp, true, true);
       else if (layoutNotificationPending) {
         layoutNotificationPending = false;
         options.onLayout?.();
