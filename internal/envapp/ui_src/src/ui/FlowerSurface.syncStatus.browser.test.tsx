@@ -10,8 +10,9 @@ import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import type { EnvAppTranslationKey } from './i18n';
 import { adapter, deferred, flush, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
-afterEach(async () => { document.documentElement.classList.remove('dark'); await touch.emulateTouchInput(false); });
+const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void>;
+  emulateMediaPreferences: (value: { reducedMotion: 'reduce' | 'no-preference'; forcedColors: 'active' | 'none' }) => Promise<void> };
+afterEach(async () => { document.documentElement.classList.remove('dark'); await touch.emulateTouchInput(false); await touch.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 it.each([['zh-CN', 1280, true], ['en-US', 320, false], ['de-DE', 390, true]] as const)(
   'shows one floating %s loading failure with keyboard retry at %i pixels', async (locale, width, dark) => {
@@ -108,7 +109,7 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     const status = surface.querySelector<HTMLElement>('.flower-workspace-sync')!;
     expect(status.getAttribute('role')).toBe('alert');
     expect(status.textContent).toContain(copy.chat.syncPaused);
-    expect(status.textContent).not.toContain(copy.chat.syncFailed);
+    expect(status.querySelector('.flower-sync-disclosure')?.getAttribute('aria-hidden')).toBe('true');
     const details = status.querySelector<HTMLButtonElement>('.flower-sync-details-toggle')!;
     details.click();
     expect(status.textContent).toContain(copy.chat.syncFailed);
@@ -123,24 +124,35 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
     expect(surface.textContent).not.toContain('private application diagnostic');
     details.click();
+    await waitFor(() => getComputedStyle(status).opacity === '1' && getComputedStyle(status.querySelector('.flower-sync-disclosure')!).opacity === '1');
     const audit = await axe.run(status, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } });
     expect(audit.violations).toEqual([]);
     await touch.emulateTouchInput(true);
     const touchBounds = viewport.getBoundingClientRect();
     expect(details.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-    status.querySelector<HTMLButtonElement>('.flower-sync-detail-actions button')!.click();
+    const centerBeforeCollapse = status.getBoundingClientRect().left + status.getBoundingClientRect().width / 2;
+    status.querySelector<HTMLButtonElement>('.flower-sync-minimize')!.click();
     expect(status.getAttribute('data-collapsed')).toBe('true');
     const compact = status.querySelector<HTMLButtonElement>('.flower-sync-compact')!;
     expect(compact.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(Math.abs(status.getBoundingClientRect().left + status.getBoundingClientRect().width / 2 - centerBeforeCollapse)).toBeLessThanOrEqual(1);
+    await waitFor(() => document.activeElement === compact);
     compact.click();
     expect(status.getAttribute('data-collapsed')).toBeNull();
     expect(Math.abs(viewport.getBoundingClientRect().height - touchBounds.height)).toBeLessThanOrEqual(1);
     await touch.emulateTouchInput(false);
     expect(surface.querySelector('[data-flower-progress-kind]')).toBeNull();
-    const retry = status.querySelector<HTMLButtonElement>('button')!;
+    const retry = status.querySelector<HTMLButtonElement>('.flower-sync-retry')!;
     const restoredDetails = status.querySelector<HTMLButtonElement>('.flower-sync-details-toggle')!;
     expect(Math.abs(retry.getBoundingClientRect().top - restoredDetails.getBoundingClientRect().top)).toBeLessThanOrEqual(4);
     expect(retry.getBoundingClientRect().right).toBeLessThanOrEqual(status.getBoundingClientRect().right + 1);
+    await touch.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });
+    expect(getComputedStyle(status).transitionDuration).toBe('0s');
+    restoredDetails.click();
+    restoredDetails.click();
+    expect(status.querySelector('.flower-sync-disclosure')?.getAttribute('aria-hidden')).toBe('true');
+    expect(getComputedStyle(status).borderTopStyle).not.toBe('none');
+    await touch.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
     retry.focus();
     expect(document.activeElement).toBe(retry);
     await page.screenshot({ element: surface, path: '__screenshots__/flower-sync-status-' + locale + '.png' });
@@ -148,6 +160,8 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     await waitFor(() => attempts === 2);
     expect(surface.querySelector('.flower-sync-label')?.textContent).toBe(copy.chat.syncWorking);
     expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.textContent).toContain(copy.chat.syncWorking);
+    expect(retry.querySelector('svg')).not.toBeNull();
     retry.click();
     expect(attempts).toBe(2);
     ready.resolve();

@@ -1,3 +1,4 @@
+import boundedPreview from './testdata/boundedWhitespaceCurrentView.json';
 import { describe, expect, it, vi } from 'vitest';
 import { createRuntimeThreadRecord } from './runtimeThreadRecord';
 import { FlowerLiveSyncError } from './flowerLiveWire';
@@ -646,4 +647,50 @@ describe('visited history presentation', () => {
     const replaced = createRuntimeThreadRecord(changed, applyFlowerRuntimeCurrentView(initial, changed), returned);
     expect(replaced.initializeThread().messages.map(message => message.id)).toEqual(['two']);
   });
+});
+
+
+it('accepts published bounded canonical text through snapshots, deltas and complete body hydration', () => {
+  const current = boundedPreview as unknown as FlowerRuntimeCurrentView;
+  const base = fixture().initial;
+  const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+  const initialMessages = [...record.initializeThread().messages];
+  // The original incident stopped in delta turn validation, not only bootstrap.
+  const update: FlowerRuntimeUpdate = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 1, view_version: 2,
+    facts: { activity: 'idle', attention: {}, queue_count: 0 }, items: [], turns: { value: current.turns! } };
+  const pending = current.items![0];
+  expect(record.appendBody({ ...pending.body!, thread_id: 'thread', item_id: pending.id,
+    offset_bytes: pending.body!.preview_bytes, through_bytes: pending.body!.bytes, text: '\n'.repeat(256) })).toBe('applied');
+  record.apply(record.initializeThread(), { ...update, items: [{ kind: 'replace', item_id: pending.id, item: { ...pending, created_at: '2026-11-03T00:00:00Z' } }] });
+  expect(record.version).toBe(2);
+  expect(record.initializeThread().messages[0]).toBe(initialMessages[0]);
+  for (const item of current.items!) {
+    const full = '\n'.repeat(2048) + (item.id === 'final' ? 'Final answer.' : 'Intermediate observation.');
+    expect(record.appendBody({ ...item.body!, thread_id: 'thread', item_id: item.id,
+      offset_bytes: record.bodyOffset(item.id)!, through_bytes: item.body!.bytes,
+      text: full.slice(record.bodyOffset(item.id)!) })).toBe('applied');
+    expect(record.item(item.id)?.text).toBe(full);
+    expect(record.initializeThread().messages.find(message => message.id === item.id)?.body_pending).toBeUndefined();
+  }
+  const accepted = record.initializeThread();
+  expect(() => record.apply(accepted, { ...update, base_version: 2, view_version: 3,
+    turns: { value: [{ ...current.turns![0], intermediate_item_ids: ['missing-private-source'] }] } })).toThrow(/canonical turn presentation/);
+  expect(record.version).toBe(2);
+  expect(record.initializeThread().messages).toEqual(accepted.messages);
+  expect(record.initializeThread().turns).toEqual(accepted.turns);
+});
+
+
+it('retains exact cached whitespace extents when a live body grows alongside canonical membership', () => {
+  const { initial } = fixture();
+  const published = boundedPreview as unknown as FlowerRuntimeCurrentView;
+  const item = { ...published.items![0], live: true, body: { ...published.items![0].body!, run_id: 'run' } };
+  const current: FlowerRuntimeCurrentView = { ...published, items: [item], turns: [{ ...published.turns![0], final_item_ids: [] }] };
+  const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(initial, current));
+  record.appendBody({ ...item.body, thread_id: 'thread', item_id: item.id, offset_bytes: 1024, through_bytes: item.body.bytes, text: '\n'.repeat(256) });
+  record.apply(record.initializeThread(), { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 1, view_version: 2,
+    facts: { activity: 'idle', attention: {}, queue_count: 0 }, turns: { value: current.turns! },
+    items: [{ kind: 'body', item_id: item.id, body: { ...item.body, bytes: item.body.bytes + 100 } }] });
+  expect(record.item(item.id)?.body?.preview_bytes).toBe(1280);
+  expect(record.version).toBe(2);
 });

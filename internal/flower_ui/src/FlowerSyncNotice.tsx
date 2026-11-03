@@ -1,6 +1,6 @@
 import { Show, batch, createEffect, createSignal, createUniqueId, on, onCleanup } from 'solid-js';
-import { Button } from '@floegence/floe-webapp-core/ui';
-import { Check, MoreHorizontal } from '@floegence/floe-webapp-core/icons';
+import { Button, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
+import { Check, ChevronDown, Refresh } from '@floegence/floe-webapp-core/icons';
 import type { FlowerSurfaceCopy } from './copy';
 import type { LiveTransportState } from './liveTransport';
 
@@ -9,6 +9,7 @@ export function FlowerSyncNotice(props: {
   state: LiveTransportState;
   stopUnconfirmed: boolean;
   confirmed: boolean;
+  explainFailure?: boolean;
   message: string;
   copy: FlowerSurfaceCopy['chat'];
   onResync: () => void;
@@ -30,6 +31,7 @@ export function FlowerSyncNotice(props: {
   const busy = () => props.state.status === 'connecting' || props.state.status === 'reconnecting'
     || awaitingConfirmation();
   const visible = () => failed() || busy() || restored() || recoveryVisible();
+  const presence = createFloatingPresence({ open: visible, element: () => root });
   const label = () => failed() ? props.copy.syncPaused : restored() ? props.copy.syncRestored : props.copy.syncWorking;
   const close = () => { setExpanded(false); detailButton?.focus({ preventScroll: true }); };
   const settle = () => {
@@ -56,30 +58,41 @@ export function FlowerSyncNotice(props: {
     document.addEventListener('pointerdown', outside);
     onCleanup(() => document.removeEventListener('pointerdown', outside));
   });
+  createEffect(on(() => failed() && props.explainFailure, explain => {
+    // When no transcript is available, expose the reason in this same notice.
+    // There is still one recovery action and no second empty-state error owner.
+    if (explain) { setCollapsed(false); setExpanded(true); }
+  }));
   onCleanup(() => { if (timer !== undefined) clearTimeout(timer); });
-  return <Show when={visible()}>
+  return <Show when={presence.mounted()}>
     <div ref={root} class="flower-workspace-sync flower-chat-notice"
-      role={failed() ? 'alert' : 'status'} aria-live="polite"
+      role={failed() ? 'alert' : 'status'} aria-live="polite" aria-atomic="true"
+      data-state={presence.state()} inert={presence.exiting()}
       data-flower-sync-state={props.state.status} data-collapsed={collapsed() ? 'true' : undefined}
       data-restored={restored() ? 'true' : undefined}
       onMouseLeave={settleAfterInteraction} onFocusOut={settleAfterInteraction}
       onKeyDown={event => { if (event.key === 'Escape' && expanded()) { event.stopPropagation(); close(); } }}>
-      <Show when={!collapsed()} fallback={<button ref={compactButton} type="button" class="flower-sync-compact"
+      <Show when={!collapsed()} fallback={<Button ref={compactButton} size="sm" variant="ghost" class="flower-sync-compact"
         aria-label={props.copy.syncDetails} onClick={() => { setCollapsed(false); queueMicrotask(() => detailButton?.focus({ preventScroll: true })); }}>
         <span class="flower-sync-dot" aria-hidden="true" />{label()}
-      </button>}>
+      </Button>}>
         <div class="flower-sync-bar">
           <span class="flower-sync-label"><Show when={restored()} fallback={<span class="flower-sync-dot" aria-hidden="true" />}><Check class="size-3.5" aria-hidden="true" /></Show>{label()}</span>
-          <Show when={!restored()}><Button ref={retryButton} size="sm" variant="ghost" class="flower-sync-retry" aria-disabled={busy()} onClick={() => { if (!busy()) props.onResync(); }}>{props.copy.syncResync}</Button></Show>
-          <button ref={detailButton} type="button" class="flower-sync-details-toggle" aria-label={props.copy.syncDetails}
-            aria-expanded={expanded()} aria-controls={id} onClick={() => setExpanded(value => !value)}><MoreHorizontal class="size-4" aria-hidden="true" /></button>
+          <Show when={!restored()}><Button ref={retryButton} size="sm" variant="ghost" class="flower-sync-retry" aria-disabled={busy()} aria-busy={busy()}
+            onClick={() => { if (!busy()) props.onResync(); }}>
+            <Refresh class={busy() ? 'size-3.5 flower-sync-spinner' : 'size-3.5'} aria-hidden="true" />
+            {busy() ? props.copy.syncWorking : props.copy.syncResync}
+          </Button></Show>
+          <Button ref={detailButton} size="sm" variant="ghost" class="flower-sync-details-toggle" aria-label={props.copy.syncDetails}
+            aria-expanded={expanded()} aria-controls={id} onClick={() => setExpanded(value => !value)}><ChevronDown class="size-4 flower-sync-chevron" aria-hidden="true" /></Button>
         </div>
-        <Show when={expanded()}><div id={id} class="flower-sync-details">
+        <div id={id} class="flower-sync-disclosure" data-expanded={expanded() ? 'true' : undefined} inert={!expanded()} aria-hidden={!expanded()}>
+          <div class="flower-sync-disclosure-clip"><div class="flower-sync-details">
           <p>{restored() ? props.copy.syncRestored : props.message}</p>
           <p>{props.copy.syncReadOnly}</p>
           <div class="flower-sync-detail-actions"><Button size="sm" variant="ghost" class="flower-sync-minimize" onClick={() => { setExpanded(false); setCollapsed(true); queueMicrotask(() => compactButton?.focus({ preventScroll: true })); }}>{props.copy.syncCollapse}</Button>
             <Button size="sm" variant="ghost" class="flower-sync-close" onClick={close}>{props.copy.syncCloseDetails}</Button></div>
-        </div></Show>
+        </div></div></div>
       </Show>
     </div>
   </Show>;

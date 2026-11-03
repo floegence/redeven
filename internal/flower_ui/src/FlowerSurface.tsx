@@ -293,7 +293,7 @@ import {
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
 import { createFilesystemPickerDirectory, formatFilesystemPickerError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filePicker/filesystemPicker';
-import { applyFlowerRuntimeContext, applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { applyFlowerRuntimeContext, applyFlowerRuntimeCurrentView, FlowerTurnPresentationError } from './runtimeCurrentView';
 import { threadNeedsFileActivityTargets } from './fileActivityTargets';
 import { mapFlowerActivityItem, mapFlowerGoal } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
@@ -5849,6 +5849,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           error_name: typeof failure?.name === 'string' ? failure.name.slice(0, 80) : 'Error',
           error_code: typeof failure?.code === 'string' ? failure.code.slice(0, 80) : 'unclassified',
           http_status: Number(failure?.status) || 0,
+          ...(error instanceof FlowerTurnPresentationError ? { contract_field: error.field, contract_reason: error.reason } : {}),
         });
       },
     });
@@ -13206,6 +13207,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const workspaceSyncNotice = () => (
     <Show when={props.adapter.connectLiveStream || unconfirmedStops().size > 0}>
       <FlowerSyncNotice state={liveSyncState()} stopUnconfirmed={unconfirmedStops().size > 0}
+        explainFailure={Boolean(selectedThreadID()) && !selectedThreadHasContent()}
         confirmed={!selectedThreadID() || !threadLoadError() && !selectedThreadDetailPending()
           && Boolean(threadCache().views.get(selectedThreadID())?.version) && !selectedThreadSummaryNeedsDetail()}
         message={workspaceSyncMessage()} copy={copy().chat} onResync={resyncWorkspace} />

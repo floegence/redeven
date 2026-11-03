@@ -3,6 +3,7 @@ import './flower-feature.css';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
 import { adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -146,7 +147,7 @@ describe('Flower streaming presentation stability', () => {
     });
     await waitFor(() => Boolean(root.querySelector('.flower-answer-actions')));
     await waitFor(() => Boolean(root.querySelector('.flower-turn-summary')));
-    expect(root.querySelector('.flower-turn-summary')!.textContent).toContain('Worked for');
+    expect(root.querySelector('.flower-turn-summary')!.textContent).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.turnProcess.completed);
     expect([...finalMessage()!.querySelectorAll('ul > li strong')].map(node => node.textContent)).toEqual(['Under the limit', 'Over the limit', 'No partial writes']);
     expect(finalMessage()!.querySelector('ul')?.textContent).toContain('ErrLimitExceeded');
     expect(finalMessage()!.textContent).toContain('One follow-up:');

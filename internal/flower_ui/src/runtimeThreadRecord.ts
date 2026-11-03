@@ -69,7 +69,7 @@ function retainBody(before: ItemRecord | undefined, incoming: FlowerRuntimeCurre
   // Ending a segment can publish a longer preview from the same live source.
   // Accept that prefix atomically with its pending state, retaining the locator
   // in preview for later growth even when this extent is already complete.
-  return { ...before, bytes, item: { ...incoming, text, body: sameLiveSource && bytes >= body.bytes ? undefined : body },
+  return { ...before, bytes, item: { ...incoming, text, body: sameLiveSource && bytes >= body.bytes ? undefined : { ...body, preview_bytes: bytes } },
     displayText: sameLiveSource && bytes >= body.bytes ? undefined : before.displayText,
     preview: incoming, retained: before.retained || !before.item.body || Boolean(incoming.live) };
 }
@@ -296,7 +296,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       if (expected.body?.run_id && bytes < before.bytes) return false;
       if (expected.activity && (loaded.activity?.tool_id !== expected.activity.tool_id || loaded.activity?.status !== expected.activity.status || loaded.activity?.ended_at_unix_ms !== expected.activity.ended_at_unix_ms)) return false;
       const pending = before.item.body;
-      const item = { ...loaded, ...(pending?.run_id && pending.bytes > bytes ? { body: pending } : {}) };
+      const item = { ...loaded, ...(pending?.run_id && pending.bytes > bytes ? { body: { ...pending, preview_bytes: bytes } } : {}) };
       const after = { item, bytes, preview: before.preview ?? expected, retained: true };
       const projected = runtimeMessages(thread, { ...components, items: [item] }).find(message => message.id === loaded.id);
       if (!projected) invalid('expanded item has no presentation');
@@ -333,7 +333,8 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       }
       if (!before.item.body) return 'covered';
       const bytes = before.bytes + size;
-      const item = { ...before.item, text: (before.item.text ?? '') + chunk.text, body: bytes < (body.run_id ? body.bytes : Math.min(body.bytes, chunk.bytes)) ? body : undefined };
+      const item = { ...before.item, text: (before.item.text ?? '') + chunk.text,
+        body: bytes < (body.run_id ? body.bytes : Math.min(body.bytes, chunk.bytes)) ? { ...body, preview_bytes: bytes } : undefined };
       // A sealed historical body is one document, not a stream. Keep its
       // loading presentation (or already readable text) until the complete
       // source is available; partial Markdown would visibly reflow per chunk.
@@ -407,7 +408,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           if (!source || change.body.run_id !== source.run_id || change.body.source_id !== source.source_id
             || change.body.entry_id !== source.entry_id || change.body.field !== source.field
             || !version(change.body.bytes) || change.body.bytes < source.bytes) invalid('body source changed during growth');
-          staged.set(id, { ...before, item: { ...before.item, body: change.body.bytes > before.bytes ? change.body : undefined }, preview: { ...preview, body: change.body } });
+          staged.set(id, { ...before, item: { ...before.item, body: change.body.bytes > before.bytes ? { ...change.body, preview_bytes: before.bytes } : undefined }, preview: { ...preview, body: change.body } });
         } else if (change.kind === 'remove') {
           if (!before || change.item || change.append) invalid('runtime removal requires an existing item');
           staged.set(id, undefined); structure = true;

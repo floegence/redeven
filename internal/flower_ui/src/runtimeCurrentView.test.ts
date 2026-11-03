@@ -950,6 +950,50 @@ describe('canonical turn facts', () => {
     expect(mapped.turns?.[1].final_item_ids).toEqual(['final-a', 'final-b']);
     expect(mapped.turns).not.toBe(source.turns);
   });
+  it.each(['intermediate', 'final'] as const)('accepts an authoritative %s reference with an unread text suffix', kind => {
+    const source = current();
+    const item = { ...source.items![1], text: ' '.repeat(128),
+      body: { source_id: 'final-a', field: 'content' as const, bytes: 160, preview_bytes: 128 } };
+    const turn = { ...source.turns![1], final_item_ids: kind === 'final' ? ['final-a'] : [],
+      intermediate_item_ids: kind === 'intermediate' ? ['final-a'] : [] };
+    const mapped = applyFlowerRuntimeCurrentView(summary(), { ...source, items: [item], turns: [turn] });
+    expect(mapped.turns?.[0][kind === 'final' ? 'final_item_ids' : 'intermediate_item_ids']).toEqual(['final-a']);
+    expect(mapped.messages[0].body_pending?.bytes).toBe(160);
+  });
+
+  it.each(['', '\u3000'.repeat(128)])('accepts exact UTF-8 empty or whitespace previews with a live source', text => {
+    const source = current();
+    const bytes = new TextEncoder().encode(text).length;
+    const item = { ...source.items![1], text, live: true,
+      body: { run_id: 'new-run', source_id: 'final-a', field: 'content', bytes: bytes + 20, preview_bytes: bytes } };
+    const mapped = applyFlowerRuntimeCurrentView(summary(), { ...source, items: [item],
+      turns: [{ ...source.turns![1], final_item_ids: [], intermediate_item_ids: ['final-a'] }] });
+    expect(mapped.turns?.[0].intermediate_item_ids).toEqual(['final-a']);
+  });
+
+  it.each([
+    undefined,
+    { source_id: 'final-a', field: 'content', bytes: 128, preview_bytes: 128 },
+    { source_id: 'final-a', field: 'content', bytes: 160, preview_bytes: 127 },
+    { source_id: 'final-a', field: 'content', bytes: 160.5, preview_bytes: 128 },
+    { source_id: 'final-a', field: 'reasoning', bytes: 160, preview_bytes: 128 },
+    { source_id: 'other', field: 'content', bytes: 160, preview_bytes: 128 },
+    { source_id: 'final-a', entry_id: 'other', field: 'content', bytes: 160, preview_bytes: 128 },
+    { source_id: 'final-a', run_id: 'other', field: 'content', bytes: 160, preview_bytes: 128 },
+  ])('rejects empty content without an exact unread text locator: %j', body => {
+    for (const kind of ['intermediate', 'final'] as const) {
+      const source = current();
+      const invalid = { ...source, items: [{ ...source.items![1], text: ' '.repeat(128), body }],
+        turns: [{ ...source.turns![1], final_item_ids: kind === 'final' ? ['final-a'] : [],
+          intermediate_item_ids: kind === 'intermediate' ? ['final-a'] : [] }] } as FlowerRuntimeCurrentView;
+      expect(() => applyFlowerRuntimeCurrentView(summary(), invalid)).toThrow(/canonical turn presentation/);
+      try { applyFlowerRuntimeCurrentView(summary(), invalid); } catch (error) {
+        expect(error).toMatchObject({ code: 'flower_turn_presentation_error', field: kind + '_item_ids', reason: 'empty_content' });
+        expect(String(error)).not.toContain('final-a');
+      }
+    }
+  });
+
   it('rejects an ambiguous final identity rather than hiding the wrong segment', () => {
     const source = current();
     expect(() => applyFlowerRuntimeCurrentView(summary(), { ...source, items: [

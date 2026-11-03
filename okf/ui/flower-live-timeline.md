@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower incremental live state
 tags: [ui, flower, live, threads]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -30,6 +30,8 @@ Retain accepted prose/media/anchors/follow during refresh; skeletons cover only 
 
 ThreadCache binds item/turn/run/source. Public text reads <=16 KiB at accepted UTF-8 offsets; coalesce growth and yield between chunks. Live visibility owners survive complete extents; completed reads detach parent cancellation listeners without aborting. Navigation, offscreen visibility and source changes retain cancellation. No polling/full-prefix download. Source/sealing change restarts from canonical preview while retaining readable content until replacement. Same-source progress survives refresh; reject late replies. Retired locator source_changed needs authoritative ItemBody: release slot and await observation, never guess offsets. Terminal/exhausted reads Retry without replay.
 
+Canonical final/intermediate membership is validated by Floret against full content. An empty or whitespace-only bounded preview remains valid when its exact content source matches the item, optional run matches, UTF-8 preview length matches, and safe integer extent proves unread bytes. Cached body hydration, source growth and same-source replacement keep preview_bytes equal to the retained UTF-8 prefix length. Do not infer empty canonical content from a prefix. Missing/duplicate/wrong-kind/wrong-execution/out-of-order references still stop application atomically; typed diagnostics record only field/reason categories, never payloads or source identities.
+
 live:false alone does not change source. Same-source previews atomically update text/pending/locator; overlap retains layout and suffix resumes at current offset. Changed source retires reads; identity/range/prefix/empty-nonterminal failures stay explicit.
 
 Schema v3 has one decoder. Base64 fragments <=32 KiB carry ID/index/count/total and exact scope/revision with contiguous version/UTF-8 offsets. Growth carries locators. Constant-storage coalescing preserves original base/semantics. Bound 16 pending batches, 32 MiB envelope/subscriber and 32 MiB global refs. Started frames are immutable; byte-accounted coverage suppresses duplicates. Summary/private/child mailboxes stay separate. Pending controls use authorized 64-item pages back to user boundary, verify leaf/version and individually read oversized items, never full View/body. Missing authority or a broken sequence invalidates observation.
@@ -46,7 +48,7 @@ Detail/baseline backoff: 200/600/1200 ms, <=4 attempts/15 s. New revisions retir
 
 Transport/handshake/gaps retain backoff; disposal cannot publish; reconnect publishes a boundary. Observers follow DOM lifetime. Auth/capacity/version/malformed stop; transport errors may classify, mapper exceptions never retry. Diagnostics retain category/status/epoch and SSE503/baseline504/invalid400/capacity429. Unknown effects keep request keys.
 
-A pointer-local floating stack above the companion shows sync status, Resync and minimizable details without moving content or occupying headers. Escape/outside dismisses without stealing focus; targets >=44 px. The owner coalesces reconnect. Restored requires current connection/selected authoritative detail, not optional collapsed reads. Dismiss after 2.6 s unless focused/hovered/expanded. Preserve drafts/selection/bounds. Canonical cancellation owns Stopping; viewer facts grant no coverage. [Approvals](flower-approval-context.md), [read state](flower-read-state.md) and [turn disclosure](flower-turn-process-disclosure.md) retain policy.
+A centered floating stack above the companion shows interrupted live updates, Resync and minimizable details without moving content or occupying headers. Minimize preserves its horizontal center. Shared Button and floating presence own control feedback and entry/exit; detail expansion uses a bounded transition, chevron and inert hidden controls. Reduced motion removes animation; forced colors retain borders/focus. Busy Resync shows progress and coalesces repeated activation. Without transcript content, the same notice exposes its explanation immediately; it never implies that the underlying task paused. Escape/outside dismisses without stealing focus; targets >=44 px. The owner coalesces reconnect. Restored requires current connection/selected authoritative detail, not optional collapsed reads. Dismiss after 2.6 s unless focused/hovered/expanded. Preserve drafts/selection/bounds. Canonical cancellation owns Stopping; viewer facts grant no coverage. [Approvals](flower-approval-context.md), [read state](flower-read-state.md) and [turn disclosure](flower-turn-process-disclosure.md) retain policy.
 
 # Boundaries
 
@@ -56,3 +58,5 @@ Streams/queues/cache are ephemeral, never durable cursors/lifecycle. Preserve da
 
 - [Electron startup](../../desktop/scripts/check-flower-startup.mjs) and [localized navigation](../../desktop/scripts/check-flower-navigation.mjs): partial/final baselines, selection, drafts, one stream, no duplicate list scan, owned cleanup.
 - [Floating notice geometry](../../internal/envapp/ui_src/src/ui/FlowerSurface.floatingNotices.browser.test.tsx) and [localized recovery](../../internal/envapp/ui_src/src/ui/FlowerSurface.syncStatus.browser.test.tsx) cover new-chat loading/failure/retry, narrow layouts, keyboard recovery and unchanged transcript/composer bounds.
+
+- [Published bounded-preview acceptance](../../internal/ai/flower_preview_contract_test.go) produces the sanitized full-contract fixture from released Floret v7.102.0, including canonical intermediate/final membership and exact prefix locators. Mapper/record tests cover atomic deltas and body completion; [browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.boundedPreview.browser.test.tsx) verifies hydration without task replay.

@@ -12656,7 +12656,21 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   box-shadow: 0 5px 18px color-mix(in srgb, var(--redeven-surface-shadow-source) 12%, transparent), 0 1px 3px color-mix(in srgb, var(--redeven-surface-shadow-source) 10%, transparent);
 }
 .flower-chat-notices > .flower-workspace-sync[role='alert'] { color: var(--foreground); }
-.flower-workspace-sync[data-collapsed='true'] { align-self: flex-end; }
+.flower-workspace-sync { opacity: 1; transform: translateY(0); transition: opacity 160ms ease, transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.flower-workspace-sync[data-state='entering'], .flower-workspace-sync[data-state='exiting'] { opacity: 0; transform: translateY(-0.25rem); }
+.flower-workspace-sync[data-state='exiting'] { pointer-events: none; }
+.flower-workspace-sync button { transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease; }
+.flower-workspace-sync button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.flower-workspace-sync button:active:not([aria-disabled='true']) { background: var(--accent); }
+.flower-sync-chevron { transition: transform 160ms ease; }
+.flower-sync-details-toggle[aria-expanded='true'] .flower-sync-chevron { transform: rotate(180deg); }
+.flower-sync-disclosure { display: grid; grid-template-rows: 0fr; visibility: hidden; opacity: 0; transition: grid-template-rows 180ms ease, opacity 140ms ease, visibility 180ms; }
+.flower-sync-disclosure[data-expanded='true'] { grid-template-rows: 1fr; visibility: visible; opacity: 1; }
+.flower-sync-disclosure-clip { min-height: 0; overflow: hidden; }
+.flower-sync-spinner { animation: flower-sync-spin 900ms linear infinite; }
+@keyframes flower-sync-spin { to { transform: rotate(360deg); } }
+.flower-sync-bar, .flower-sync-compact { animation: flower-sync-control-enter 160ms ease-out; }
+@keyframes flower-sync-control-enter { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
 .flower-sync-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.35rem; padding: 0.3rem 0.35rem 0.3rem 0.75rem; }
 .flower-workspace-sync[data-restored='true'] .flower-sync-bar { grid-template-columns: minmax(0, 1fr) auto; }
 .flower-sync-label, .flower-sync-compact { display: inline-flex; align-items: center; gap: 0.45rem; }
@@ -12665,10 +12679,10 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-workspace-sync[role='alert'] .flower-sync-dot { background: var(--flower-reading-warning); }
 .flower-workspace-sync[data-restored='true'] .flower-sync-label { color: var(--foreground); }
 .flower-sync-retry { background: var(--muted); flex-shrink: 0; }
-.flower-sync-retry[aria-disabled='true'] { opacity: 0.5; cursor: default; }
+.flower-sync-retry[aria-disabled='true'] { color: var(--muted-foreground); cursor: progress; }
 .flower-sync-details-toggle { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; min-height: 2rem; border-radius: 0.5rem; flex-shrink: 0; }
 .flower-sync-details-toggle:hover, .flower-sync-compact:hover { background: var(--muted); }
-.flower-sync-compact { padding: 0.55rem 0.75rem; border-radius: inherit; text-align: start; }
+.flower-sync-compact { height: auto; white-space: normal; padding: 0.55rem 0.75rem; border-radius: inherit; text-align: start; }
 .flower-sync-details { padding: 0.65rem 0.85rem 0.5rem; border-top: 1px solid var(--border); color: var(--muted-foreground); }
 .flower-sync-details p { margin: 0 0 0.65rem; }
 .flower-sync-detail-actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
@@ -12678,7 +12692,15 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   .flower-sync-compact { min-height: 2.75rem; }
   .flower-workspace-sync button { min-height: 2.75rem; }
 }
-@media (forced-colors: active) { .flower-sync-dot { background: CanvasText; } }
+@media (prefers-reduced-motion: reduce) {
+  .flower-workspace-sync, .flower-workspace-sync button, .flower-sync-chevron, .flower-sync-disclosure { transition: none; }
+  .flower-sync-spinner, .flower-sync-bar, .flower-sync-compact { animation: none; }
+}
+@media (forced-colors: active) {
+  .flower-sync-dot { background: CanvasText; }
+  .flower-chat-notices > .flower-workspace-sync { border-color: CanvasText; box-shadow: none; }
+  .flower-workspace-sync button:focus-visible { outline-color: Highlight; }
+}
 
 /* A collapsed companion keeps recovery floating above its single-line editor. */
 .flower-surface-companion-collapsed,

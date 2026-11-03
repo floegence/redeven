@@ -555,6 +555,28 @@ export function projectFlowerRuntimeComponents(
   return applyFlowerRuntimeContext(projected, context);
 }
 
+/** Safe contract diagnostics never include conversation content or identities. */
+export class FlowerTurnPresentationError extends Error {
+  readonly code = 'flower_turn_presentation_error';
+  constructor(readonly field: 'turn' | 'final_item_ids' | 'intermediate_item_ids',
+    readonly reason: 'invalid' | 'missing_item' | 'duplicate_item' | 'wrong_kind' | 'empty_content' | 'execution_mismatch' | 'out_of_order') {
+    super('Flower contract error: invalid canonical turn presentation.');
+    this.name = 'FlowerTurnPresentationError';
+  }
+}
+
+function hasCanonicalText(item: FlowerRuntimeCurrentItem): boolean {
+  if (trim(item.text)) return true;
+  const body = item.body;
+  // Floret validates full content. A bounded UTF-8 prefix can be whitespace
+  // while an unread suffix contains the canonical intermediate/final answer.
+  return Boolean(body && body.field === 'content' && body.source_id === item.id && !body.entry_id
+    && (!body.run_id || body.run_id === item.run_id)
+    && Number.isSafeInteger(body.bytes) && Number.isSafeInteger(body.preview_bytes)
+    && body.preview_bytes >= 0 && body.bytes > body.preview_bytes
+    && new TextEncoder().encode(item.text ?? '').length === body.preview_bytes);
+}
+
 export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
   const seen = new Set<string>();
   const duplicateItems = new Set<string>();
@@ -564,7 +586,7 @@ export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
     items.set(item.id, item);
   }
   return (current.turns ?? []).map((turn) => {
-    const failure = () => { throw new Error('Flower contract error: invalid canonical turn presentation.'); };
+    const failure = (field: FlowerTurnPresentationError['field'] = 'turn', reason: FlowerTurnPresentationError['reason'] = 'invalid') => { throw new FlowerTurnPresentationError(field, reason); };
     if (!trim(turn.turn_id) || !trim(turn.run_id) || seen.has(turn.turn_id)) failure();
     seen.add(turn.turn_id);
     const start = Date.parse(turn.started_at);
@@ -583,8 +605,12 @@ export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
     let ordinal = 0;
     for (const id of turn.final_item_ids) {
       const item = items.get(id);
-      if (!trim(id) || refs.has(id) || duplicateItems.has(id) || !item || item.kind !== 'assistant' || item.live || !trim(item.text)
-        || item.turn_id !== turn.turn_id || item.run_id !== turn.run_id || item.ordinal < ordinal) failure();
+      if (!trim(id) || !item) failure('final_item_ids', 'missing_item');
+      if (refs.has(id) || duplicateItems.has(id)) failure('final_item_ids', 'duplicate_item');
+      if (item!.kind !== 'assistant' || item!.live) failure('final_item_ids', 'wrong_kind');
+      if (!hasCanonicalText(item!)) failure('final_item_ids', 'empty_content');
+      if (item!.turn_id !== turn.turn_id || item!.run_id !== turn.run_id) failure('final_item_ids', 'execution_mismatch');
+      if (item!.ordinal < ordinal) failure('final_item_ids', 'out_of_order');
       refs.add(id); ordinal = item!.ordinal;
     }
     if (turn.intermediate_item_ids !== undefined && !Array.isArray(turn.intermediate_item_ids)) failure();
@@ -592,8 +618,12 @@ export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
     let intermediateOrdinal = 0;
     for (const id of turn.intermediate_item_ids ?? []) {
       const item = items.get(id);
-      if (!trim(id) || intermediates.has(id) || refs.has(id) || duplicateItems.has(id) || !item || item.kind !== 'assistant'
-        || !trim(item.text) || item.turn_id !== turn.turn_id || !trim(item.run_id) || item.ordinal < intermediateOrdinal) failure();
+      if (!trim(id) || !item) failure('intermediate_item_ids', 'missing_item');
+      if (intermediates.has(id) || refs.has(id) || duplicateItems.has(id)) failure('intermediate_item_ids', 'duplicate_item');
+      if (item!.kind !== 'assistant') failure('intermediate_item_ids', 'wrong_kind');
+      if (!hasCanonicalText(item!)) failure('intermediate_item_ids', 'empty_content');
+      if (item!.turn_id !== turn.turn_id || !trim(item!.run_id)) failure('intermediate_item_ids', 'execution_mismatch');
+      if (item!.ordinal < intermediateOrdinal) failure('intermediate_item_ids', 'out_of_order');
       intermediates.add(id); intermediateOrdinal = item!.ordinal;
     }
     return { ...turn, final_item_ids: [...turn.final_item_ids], ...(turn.intermediate_item_ids ? { intermediate_item_ids: [...turn.intermediate_item_ids] } : {}) };

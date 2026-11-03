@@ -76,7 +76,7 @@ function expectNoticeFits(runtime: HTMLElement): HTMLButtonElement {
   expect(notice.getAttribute('role')).toBe('alert');
   expect(notice.closest('.flower-chat-notices')).not.toBeNull();
   expect(notice.getAttribute('aria-live')).toBe('polite');
-  expect(notice.textContent).toContain('View updates paused');
+  expect(notice.textContent).toContain('Live updates interrupted');
   expect(notice.scrollWidth - notice.clientWidth).toBeLessThanOrEqual(1);
   const bounds = notice.getBoundingClientRect();
   const button = resync.getBoundingClientRect();
@@ -194,4 +194,24 @@ it('retries a failed reading interest locally and preserves the draft', async ()
   expect(attempts.filter(attempt => !attempt.signal.aborted)).toHaveLength(1);
   expect(runtime.querySelector('.flower-workspace-sync')).toBeNull();
   expect(drafts.read(selected.thread_id).value.text).toBe('Keep my recovery draft');
+});
+
+
+it('explains interrupted synchronization in the same notice when the transcript is empty', async () => {
+  const selected = thread({ thread_id: 'empty-sync-failure', messages: [] });
+  const stream = terminalStream([selected]);
+  const loadThread = vi.fn(async () => liveBootstrap(selected, 9));
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(), loadThread, connectLiveStream: stream.connectLiveStream },
+    { focusThreadRequest: { request_id: 'empty-sync', thread_id: selected.thread_id } });
+  await waitFor(() => loadThread.mock.calls.length > 0 && Boolean(runtime.querySelector('.flower-thread-empty')));
+  stream.fail();
+  await waitFor(() => Boolean(runtime.querySelector('[data-flower-sync-state="failed"]')));
+  const notice = runtime.querySelector<HTMLElement>('.flower-workspace-sync')!;
+  expect(notice.querySelector('.flower-sync-details-toggle')?.getAttribute('aria-expanded')).toBe('true');
+  expect(notice.querySelector('.flower-sync-disclosure')?.getAttribute('aria-hidden')).toBe('false');
+  expect(runtime.querySelectorAll('[role="alert"]')).toHaveLength(1);
+  expect(notice.textContent).toContain('without running the task again');
+  const compact = notice.querySelector<HTMLButtonElement>('.flower-sync-minimize')!;
+  compact.click();
+  expect(notice.getAttribute('data-collapsed')).toBe('true');
 });
