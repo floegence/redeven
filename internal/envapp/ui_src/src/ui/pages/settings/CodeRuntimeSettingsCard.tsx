@@ -141,8 +141,7 @@ function VersionRow(props: {
   return (
     <SettingRow class="redeven-settings-version-row"
       title={props.version.version}
-      description={props.version.error_message || i18n.t(props.version.selected_by_local_environment
-        ? 'codeRuntime.notes.codespacesUsesSelectedManagedVersion' : 'settingsDesign.availableEditorVersion')}
+      description={props.version.error_message}
       control={<div class="settings-row-actions">
         <Show when={props.version.selected_by_local_environment} fallback={<>
           <Show when={props.version.detection_state !== 'ready'}>
@@ -337,9 +336,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <SettingsSection
         icon={Code}
         title={i18n.t('codeRuntime.title')}
-        description={i18n.t('codeRuntime.description')}
-        badge={operationRunning() ? operationLabel(props.status, i18n) : undefined}
-        badgeVariant="warning"
+        badge={showSetupActivity() ? setupActivity().badge_label : operationRunning() ? operationLabel(props.status, i18n) : runtimeReady() ? i18n.t('common.status.ready') : undefined}
+        badgeVariant={operationRunning() || operationNeedsAttention() || platformUnsupported() ? 'warning' : runtimeReady() ? 'success' : 'default'}
         error={props.error}
         actions={
           <>
@@ -367,6 +365,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             <BrowserEditorSetupActivityPanel
               activity={setupActivity()}
               layout="compact"
+              variant="settings"
               loading={props.loading}
               prepareSubmitting={props.actionLoading}
               cancelSubmitting={props.cancelLoading}
@@ -377,7 +376,6 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               installMethodLocked={props.actionLoading || setupActivity().state === 'preparing'}
               onInstallMethodChange={props.onInstallMethodChange}
               onPrepare={props.canInteract && props.canManage ? () => void props.onPrepare() : undefined}
-              onRefresh={props.onRefresh}
               onCancel={props.canInteract && props.canManage ? () => void props.onCancel() : undefined}
               onDismiss={() => setDismissedSetupActivityKey(setupActivityKey())}
               extraDetails={setupActivity().state === 'missing' || setupActivity().state === 'checking' ? undefined : (
@@ -440,25 +438,25 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <SettingsList>
-            <SettingRow title={i18n.t('codeRuntime.currentEditorSection')}
-              description={props.status?.managed_runtime_version
-                ? `${props.status.managed_runtime_version} · ${i18n.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')}`
-                : i18n.t('codeRuntime.notes.setupOrSelectManagedVersion')}
-              control={<SettingsPill tone={runtimeStatusTone(activeRuntime()?.detection_state)}>{runtimeStatusLabel(activeRuntime()?.detection_state, i18n)}</SettingsPill>} />
-            <SettingRow title={i18n.t('codeRuntime.rows.activeSource')}
-              description={activeRuntime()?.error_message}
-              control={<span class="text-xs">{runtimeSourceLabel(activeRuntime()?.source, i18n)} · {activeRuntime()?.version || i18n.t('codeRuntime.none')}</span>} />
-            <Show when={!operationRunning() && !platformUnsupported() && !showSetupActivity()}>
-              <SettingRow title={prepareActionLabel()} description={i18n.t('codeRuntime.confirm.workspaceFilesStay')}
-                control={<ActionButtonTooltip content={prepareActionTooltip()} disabled={!props.canInteract || !props.canManage || props.actionLoading}>
-                  <Button size="sm" variant="outline" onClick={openPrepareConfirmation}
-                    disabled={!props.canInteract || !props.canManage || props.actionLoading}>
-                    <StableText reserve={[localizedPrepareCopy().runningLabel, prepareActionLabel()]}>{props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}</StableText>
-                  </Button>
-                </ActionButtonTooltip>} />
-            </Show>
-          </SettingsList>
+          <Show when={activeRuntime()?.present || (!showSetupActivity() && props.status)}>
+            <SettingsList>
+              <SettingRow title={i18n.t('codeRuntime.currentEditorSection')}
+                description={activeRuntime()?.error_message || [activeRuntime()?.version, runtimeSourceLabel(activeRuntime()?.source, i18n)].filter(Boolean).join(' · ')}
+                control={<div class="settings-row-actions">
+                  <Show when={!runtimeReady()}>
+                    <SettingsPill tone={runtimeStatusTone(activeRuntime()?.detection_state)}>{runtimeStatusLabel(activeRuntime()?.detection_state, i18n)}</SettingsPill>
+                  </Show>
+                  <Show when={!operationRunning() && !platformUnsupported() && !showSetupActivity()}>
+                    <ActionButtonTooltip content={prepareActionTooltip()} disabled={!props.canInteract || !props.canManage || props.actionLoading}>
+                      <Button size="sm" variant="outline" onClick={openPrepareConfirmation}
+                        disabled={!props.canInteract || !props.canManage || props.actionLoading}>
+                        <StableText reserve={[localizedPrepareCopy().runningLabel, prepareActionLabel()]}>{props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}</StableText>
+                      </Button>
+                    </ActionButtonTooltip>
+                  </Show>
+                </div>} />
+            </SettingsList>
+          </Show>
 
           <Show
             when={installedVersions().length > 0}
@@ -473,8 +471,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               </Show>
             }
           >
-            <div class="space-y-3">
-              <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] font-semibold text-foreground">{i18n.t('codeRuntime.installedEditorVersionsSection')}<span class="text-xs font-normal text-muted-foreground">{installedVersions().length}</span></div>
+            <details class="settings-technical-details code-runtime-versions">
+              <summary>{i18n.t('codeRuntime.installedEditorVersionsSection')} <span class="ml-1 tabular-nums text-muted-foreground">{installedVersions().length}</span></summary>
               <SettingsList>
                 <For each={installedVersions()}>
                   {(version) => (
@@ -489,7 +487,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                   )}
                 </For>
               </SettingsList>
-            </div>
+            </details>
           </Show>
           <details class="settings-technical-details code-runtime-details">
             <summary>{i18n.t('settingsDesign.installationDetails')}</summary>
@@ -518,7 +516,6 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             locked={props.actionLoading}
             onChange={props.onInstallMethodChange}
           />
-          <p class="text-[length:var(--floe-type-body)] text-foreground">{installMethodDescription()}</p>
           <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('codeRuntime.confirm.workspaceFilesStay')}</p>
         </div>
       </ConfirmDialog>

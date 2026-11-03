@@ -4431,6 +4431,8 @@ html.dark .git-content-skeleton__block {
   overflow-wrap: anywhere;
 }
 
+.browser-editor-setup__controls { display: contents; }
+
 .browser-editor-setup__actions {
   flex-wrap: wrap;
 }

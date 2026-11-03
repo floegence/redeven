@@ -100,7 +100,7 @@ export interface SettingsSectionProps {
   variant?: 'page' | 'section';
   icon: (props: { class?: string }) => JSX.Element;
   title: string;
-  description: string;
+  description?: string;
   badge?: string;
   badgeVariant?: 'default' | 'warning' | 'success';
   actions?: JSX.Element;

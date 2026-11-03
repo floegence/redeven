@@ -1,5 +1,5 @@
 import { createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Code, Hash } from '@floegence/floe-webapp-core/icons';
+import { Code } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
@@ -76,7 +76,8 @@ export function CodespacesSection() {
   onCleanup(() => { autoSaveTimer = clearTimer(autoSaveTimer); });
 
   return (
-    <SettingsSection variant="page" icon={Code} title={i18n.t('settings.nav.codespaces')} description={i18n.t('settingsDesign.toolingDescription')}>
+    <div class="codespaces-settings">
+      <h1 class="sr-only">{i18n.t('settings.nav.codespaces')}</h1>
       <CodeRuntimeSettingsCard
         status={ctx.codeRuntimeStatus()} loading={ctx.codeRuntimeStatus.loading} error={null}
         localPrepareFailure={ctx.codeRuntimeLocalPrepareFailure()}
@@ -95,30 +96,30 @@ export function CodespacesSection() {
       />
 
       <SettingsSection
-        icon={Code} title={i18n.t('codespacesSettings.title')} description={i18n.t('codespacesSettings.description')}
+        icon={Code} title={i18n.t('codespacesSettings.title')}
         feedback={error() ? [{ id: 'save', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={!canEdit() || saving()} onClick={() => setError(null)}>{i18n.t('common.actions.retry')}</Button> }] : []}
         actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} savedAt={savedAt()} enabled={canEdit()} />}
       >
         {/* Port range card */}
         <SettingsList>
           <SettingRow
-            icon={Hash}
             title={i18n.t('codespacesSettings.portRange')}
-            description={`${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}`}
+            description={!useDefaults() && (Number(portMin()) !== effective().effective_min || Number(portMax()) !== effective().effective_max)
+              ? `${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}` : undefined}
             control={
               <div class="settings-port-controls">
                 <div class="settings-port-pair">
                   <Input id="settings-port-min" type="number" min={1024} max={65535}
                     aria-label={i18n.t('settingsDesign.startPort')}
-                    value={portMin() === '' ? '' : String(portMin())}
+                    value={useDefaults() ? String(DEFAULT_CODE_SERVER_PORT_MIN) : portMin() === '' ? '' : String(portMin())}
                     onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setError(null); setDirty(true); }}
-                    placeholder="20000" size="sm" disabled={!canEdit() || useDefaults()} />
+                    size="sm" disabled={!canEdit() || useDefaults()} />
                   <span aria-hidden="true">–</span>
                   <Input id="settings-port-max" type="number" min={1024} max={65535}
                     aria-label={i18n.t('settingsDesign.endPort')}
-                    value={portMax() === '' ? '' : String(portMax())}
+                    value={useDefaults() ? String(DEFAULT_CODE_SERVER_PORT_MAX) : portMax() === '' ? '' : String(portMax())}
                     onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setError(null); setDirty(true); }}
-                    placeholder="21000" size="sm" disabled={!canEdit() || useDefaults()} />
+                    size="sm" disabled={!canEdit() || useDefaults()} />
                 </div>
                   <Checkbox label={i18n.t('codespacesSettings.useDefaultRange')} checked={useDefaults()} onChange={(v) => {
                     setUseDefaults(Boolean(v));
@@ -130,6 +131,6 @@ export function CodespacesSection() {
           />
         </SettingsList>
       </SettingsSection>
-    </SettingsSection>
+    </div>
   );
 }

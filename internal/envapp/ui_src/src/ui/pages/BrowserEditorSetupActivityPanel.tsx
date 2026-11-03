@@ -17,6 +17,8 @@ import {
 export type BrowserEditorSetupActivityPanelProps = Readonly<{
   activity: BrowserEditorSetupActivity;
   layout?: 'wide' | 'compact';
+  /** The settings section supplies the title, status and refresh action. */
+  variant?: 'standalone' | 'settings';
   loading?: boolean;
   prepareSubmitting?: boolean;
   cancelSubmitting?: boolean;
@@ -148,6 +150,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
   const i18n = useI18n();
   const activity = () => props.activity;
   const layout = () => props.layout ?? 'compact';
+  const showSteps = () => activity().show_steps && (props.variant !== 'settings' || Boolean(activity().platform_diagnosis) || !['missing', 'checking'].includes(activity().state));
   const canPrepare = createMemo(() => activity().state === 'missing' || activity().can_retry);
   const hasTechnicalDetails = createMemo(() => Boolean(props.extraDetails || activity().show_log));
   const actionLabel = createMemo(() => (props.prepareSubmitting ? props.runningLabel : props.actionLabel));
@@ -276,8 +279,9 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
       data-layout={layout()}
       data-presentation={activity().presentation}
       data-state={activity().state}
-      data-steps-visible={activity().show_steps ? 'true' : 'false'}
+      data-steps-visible={showSteps() ? 'true' : 'false'}
       class="browser-editor-setup"
+      data-variant={props.variant ?? 'standalone'}
       aria-live="off"
     >
       <div class="sr-only" aria-live="polite" aria-atomic="true">
@@ -287,35 +291,40 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
             : i18n.t('codeRuntime.installMethod.remoteDownload'),
         })}
       </div>
-      <div class="browser-editor-setup__body" data-steps-visible={activity().show_steps ? 'true' : 'false'}>
+      <div class="browser-editor-setup__body" data-steps-visible={showSteps() ? 'true' : 'false'}>
         <div class="browser-editor-setup__primary">
-          <div class="browser-editor-setup__header">
-            <div class="flex min-w-0 items-center gap-3">
-              <BrowserEditorSetupStatusGlyph activity={activity()} />
-              <div class="flex min-w-0 flex-wrap items-center gap-2">
-                <h3 class="text-sm font-semibold text-foreground">{activity().title}</h3>
-                <Tag variant={activity().badge_variant} tone="soft" size="sm" class="cursor-default select-none">
-                  {activity().badge_label}
-                </Tag>
+          <Show when={props.variant !== 'settings'}>
+            <div class="browser-editor-setup__header">
+              <div class="flex min-w-0 items-center gap-3">
+                <BrowserEditorSetupStatusGlyph activity={activity()} />
+                <div class="flex min-w-0 flex-wrap items-center gap-2">
+                  <h3 class="text-sm font-semibold text-foreground">{activity().title}</h3>
+                  <Tag variant={activity().badge_variant} tone="soft" size="sm" class="cursor-default select-none">
+                    {activity().badge_label}
+                  </Tag>
+                </div>
               </div>
+
+              <Show when={props.onRefresh}>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => props.onRefresh?.()}
+                  disabled={props.loading}
+                  aria-label={i18n.t('common.actions.refresh')}
+                >
+                  <RefreshIcon class={cn('h-4 w-4', props.loading ? 'animate-spin' : '')} />
+                </Button>
+              </Show>
             </div>
 
-            <Show when={props.onRefresh}>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => props.onRefresh?.()}
-                disabled={props.loading}
-                aria-label={i18n.t('common.actions.refresh')}
-              >
-                <RefreshIcon class={cn('h-4 w-4', props.loading ? 'animate-spin' : '')} />
-              </Button>
-            </Show>
-          </div>
+          </Show>
 
-          <p class="browser-editor-setup__summary">{activity().summary}</p>
+          <Show when={props.variant !== 'settings' || activity().state !== 'missing'}>
+            <p class="browser-editor-setup__summary">{activity().summary}</p>
+          </Show>
 
-          <Show when={activity().detail}>
+          <Show when={(props.variant !== 'settings' || activity().state !== 'preparing') && activity().detail}>
             {(detail) => (
               <div class={cn('browser-editor-setup__callout', detailCalloutClass(activity().state))}>
                 {detail()}
@@ -323,45 +332,47 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
             )}
           </Show>
 
-          <Show when={showInstallMethodSelector()}>
-            <BrowserEditorInstallMethodSelector
-              installMethod={props.installMethod}
-              desktopTransferAvailable={props.desktopTransferAvailable}
-              locked={props.installMethodLocked}
-              onChange={(method) => props.onInstallMethodChange?.(method)}
-            />
-          </Show>
+          <div class="browser-editor-setup__controls">
+            <Show when={showInstallMethodSelector()}>
+              <BrowserEditorInstallMethodSelector
+                installMethod={props.installMethod}
+                desktopTransferAvailable={props.desktopTransferAvailable}
+                locked={props.installMethodLocked}
+                onChange={(method) => props.onInstallMethodChange?.(method)}
+              />
+            </Show>
 
-          <Show when={showActions()}>
-            <div class="browser-editor-setup__actions">
-              <div class="browser-editor-setup__action-group">
-                <Show when={activity().can_continue && props.onContinue}>
-                  <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
-                    {activity().pending_action_label || i18n.t('codeRuntime.continueAction')}
-                  </Button>
-                </Show>
-                <Show when={canPrepare() && props.onPrepare}>
-                  <Button class="browser-editor-setup__install-action" size="md" variant="default" onClick={() => props.onPrepare?.()} disabled={props.prepareSubmitting} aria-busy={props.prepareSubmitting}>
-                    <Download class="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <StableText reserve={[props.actionLabel, props.runningLabel]}>{actionLabel()}</StableText>
-                  </Button>
-                </Show>
-                <Show when={activity().can_cancel && props.onCancel}>
-                  <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
-                    <StableText reserve={[i18n.t('codeRuntime.cancelling'), i18n.t('common.actions.cancel')]}>{props.cancelSubmitting ? i18n.t('codeRuntime.cancelling') : i18n.t('common.actions.cancel')}</StableText>
+            <Show when={showActions()}>
+              <div class="browser-editor-setup__actions">
+                <div class="browser-editor-setup__action-group">
+                  <Show when={activity().can_continue && props.onContinue}>
+                    <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
+                      {activity().pending_action_label || i18n.t('codeRuntime.continueAction')}
+                    </Button>
+                  </Show>
+                  <Show when={canPrepare() && props.onPrepare}>
+                    <Button class="browser-editor-setup__install-action" size="md" variant="default" onClick={() => props.onPrepare?.()} disabled={props.prepareSubmitting} aria-busy={props.prepareSubmitting}>
+                      <Download class="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <StableText reserve={[props.actionLabel, props.runningLabel]}>{actionLabel()}</StableText>
+                    </Button>
+                  </Show>
+                  <Show when={activity().can_cancel && props.onCancel}>
+                    <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
+                      <StableText reserve={[i18n.t('codeRuntime.cancelling'), i18n.t('common.actions.cancel')]}>{props.cancelSubmitting ? i18n.t('codeRuntime.cancelling') : i18n.t('common.actions.cancel')}</StableText>
+                    </Button>
+                  </Show>
+                </div>
+                <Show when={canDismiss(activity()) && props.onDismiss}>
+                  <Button size="sm" variant="ghost" onClick={() => props.onDismiss?.()}>
+                    {i18n.t('codeRuntime.dismiss')}
                   </Button>
                 </Show>
               </div>
-              <Show when={canDismiss(activity()) && props.onDismiss}>
-                <Button size="sm" variant="ghost" onClick={() => props.onDismiss?.()}>
-                  {i18n.t('codeRuntime.dismiss')}
-                </Button>
-              </Show>
-            </div>
-          </Show>
+            </Show>
+          </div>
         </div>
 
-        <Show when={activity().show_steps}>
+        <Show when={showSteps()}>
           <div class="browser-editor-setup__secondary">
           <Show
             when={activity().platform_diagnosis}

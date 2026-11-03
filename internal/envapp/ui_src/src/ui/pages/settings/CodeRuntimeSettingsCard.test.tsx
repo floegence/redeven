@@ -217,6 +217,21 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
   });
 
+  it('keeps an uninstalled editor focused on one setup action without idle progress or empty inventory', () => {
+    renderCard(host, {
+      status: makeStatus({
+        active_runtime: { present: false, detection_state: 'missing', source: 'none' },
+        managed_runtime: { present: false, detection_state: 'missing', source: 'none' },
+        managed_runtime_source: 'none', managed_runtime_version: '', installed_versions: [],
+      }),
+    });
+    expect(host.querySelectorAll('button[aria-label="Refresh"]')).toHaveLength(1);
+    expect(host.querySelector('.browser-editor-setup__progress')).toBeNull();
+    expect(controlText(host)).not.toContain('Current editor');
+    expect(host.querySelector('.browser-editor-setup__header')).toBeNull();
+    expect(host.querySelector('[role="radiogroup"]')).not.toBeNull();
+  });
+
   it('renders Browser Editor inventory sections with update wording', () => {
     renderCard(host);
 
@@ -325,7 +340,7 @@ describe('CodeRuntimeSettingsCard', () => {
     prepareButton?.click();
 
     expect(controlText(host)).toContain('Update Browser Editor');
-    expect(controlText(host)).toContain('Desktop downloads and verifies the Browser Editor package');
+    expect(controlText(host)).toContain('Desktop network → current connection → environment');
     expect(onInstallMethodChange).toHaveBeenCalledWith('desktop_transfer');
 
     const methodButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
@@ -337,7 +352,7 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(onInstallMethodChange).toHaveBeenLastCalledWith('remote_download');
     expect(methodButtons[1].getAttribute('aria-checked')).toBe('true');
     expect(controlText(host)).toContain('Environment network → Redeven package service');
-    expect(controlText(host)).toContain('This environment downloads and verifies the Browser Editor package directly');
+    expect(controlText(host)).not.toContain('Desktop network → current connection → environment');
 
     const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => controlText(button) === 'Update Browser Editor').at(-1);
     confirmButton?.click();
@@ -430,7 +445,7 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(controlText(host)).not.toContain('Update Browser Editor');
   });
 
-  it('uses the Runtime operation stage for the badge while the current editor stays usable', () => {
+  it('shows a compact setup badge and the Runtime stage once while the current editor stays usable', () => {
     renderCard(host, {
       status: makeStatus({
         operation: {
@@ -446,7 +461,8 @@ describe('CodeRuntimeSettingsCard', () => {
     });
 
     expect(controlText(host.querySelector('[data-testid="settings-section-badge"]')))
-      .toBe('This environment is downloading the Browser Editor...');
+      .toBe('Preparing');
+    expect(host.querySelector('.browser-editor-setup__summary')?.textContent).toBe('This environment is downloading the Browser Editor...');
     expect(controlText(host.querySelector('[data-testid="settings-section-badge"]'))).not.toBe('Ready');
   });
 

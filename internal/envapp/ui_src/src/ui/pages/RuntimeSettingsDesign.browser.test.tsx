@@ -266,7 +266,9 @@ it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overf
     for (const description of panel.querySelectorAll('.floe-setting-row__label p')) {
       expect(getComputedStyle(description).fontSize).toBe('12px');
     }
-    expect(getComputedStyle(panel.querySelector('.floe-settings-section__heading > p')!).fontSize).toBe('12px');
+    for (const description of panel.querySelectorAll('.floe-settings-section__heading > p')) {
+      expect(getComputedStyle(description).fontSize).toBe('12px');
+    }
     if (item.id === 'config') {
       expect(getComputedStyle(panel.querySelector('code')!).fontSize).toBe('12px');
     }

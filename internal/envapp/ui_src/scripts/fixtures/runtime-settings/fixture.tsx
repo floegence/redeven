@@ -43,6 +43,7 @@ export function createRuntimeSettingsFixture() {
   const ready = { state: 'ready' as const, reason_code: '' as const, retryable: false, safe_to_retry: false };
   const [readinessSnapshot, setReadinessSnapshot] = createSignal<import('../../../src/ui/flower/aiReadiness').AIReadinessSnapshot>(ready);
   const readiness = { snapshot: readinessSnapshot, loading: () => false, retryPending: () => false, busyStartedAt: () => null, startupElapsedMs: () => null, longStartupReadySequence: () => 0, refresh: async () => ready, retry: async () => ready, pause() {}, resume: async () => ready, dispose() {} };
+  const [codeRuntimeStatus, setCodeRuntimeStatus] = createSignal<import('../../../src/ui/services/codeRuntimeApi').CodeRuntimeStatus>({ updated_at_unix_ms: 1, active_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1', binary_path: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server' }, managed_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1' }, managed_runtime_source: 'managed', managed_runtime_version: '4.109.1', managed_prefix: '/Users/alex/.redeven/apps/code', shared_runtime_root: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64', installed_versions: ['4.109.1', '4.108.2'].map((version, index) => ({ version, selected_by_local_environment: index === 0, removable: index !== 0, detection_state: 'ready', binary_path: `/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/${version}/bin/code-server` })), operation: { state: 'idle', log_tail: [] } });
   const noop = () => undefined;
   const context = {
     activeSection, setActiveSection, searchQuery, setSearchQuery, canAdmin, canInteract: () => true,
@@ -52,7 +53,7 @@ export function createRuntimeSettingsFixture() {
     settings: Object.assign(settings, { loading: false, error: null, state: 'ready' }),
     mutateSettings: setSettings, saveSettings, refreshSettings: async () => undefined,
     saveDefaultAIPermission: async (permission_type: 'readonly' | 'approval_required' | 'full_access') => { setSettings((current) => ({ ...current, ai: { ...current.ai!, permission_type } })); return { settings: settings() }; },
-    codeRuntimeStatus: Object.assign(() => ({ active_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1', binary_path: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server' }, managed_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1' }, managed_runtime_source: 'managed', managed_runtime_version: '4.109.1', managed_prefix: '/Users/alex/.redeven/apps/code', shared_runtime_root: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64', installed_versions: ['4.109.1', '4.108.2'].map((version, index) => ({ version, selected_by_local_environment: index === 0, removable: index !== 0, detection_state: 'ready', binary_path: `/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/${version}/bin/code-server` })), operation: { state: 'idle', log_tail: [] } }), { loading: false, error: null, state: 'ready' }),
+    codeRuntimeStatus: Object.assign(codeRuntimeStatus, { loading: false, error: null, state: 'ready' }),
     refreshCodeRuntimeStatus: noop, codeRuntimeInstallMethod: installMethod, setCodeRuntimeInstallMethod: setInstallMethod, desktopCodeRuntimeTransferAvailable: () => true,
     latestVersion: () => ({ latest_version: 'v1.2.4', manifest_etag: 'release-2026-09' }), latestVersionLoading: () => false, latestVersionError: () => null,
     maintenanceContext: () => ({ authority: 'runtime_rpc' }), upgradeState: () => ({ allowsUpgradeAction: true, requiresTargetVersion: true, actionLabel: 'Update Redeven', policy: 'self_upgrade' }), displayedStatus: () => 'online', maintenanceStage: () => '', maintenanceError: () => null, maintaining: () => false, isUpgrading: () => false, isRestarting: () => false,
@@ -69,5 +70,5 @@ export function createRuntimeSettingsFixture() {
     if (url.endsWith('/current_model')) return {};
     throw new Error(`Unmapped acceptance request: ${url}`);
   };
-  return { context, request, requests, setActiveSection, setCanAdmin, setReadinessSnapshot, setSaveError, settings };
+  return { context, request, requests, setCodeRuntimeStatus, setActiveSection, setCanAdmin, setReadinessSnapshot, setSaveError, settings };
 }

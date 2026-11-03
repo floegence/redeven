@@ -30856,7 +30856,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "runtime",
           "settings",
@@ -30865,15 +30865,15 @@
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 2220,
+      "body_length": 3728,
       "summary": "Env App owns settings destinations/drafts/API adapters; Floe reusable layout/navigation. Narrow/revisited panels retain usability, drafts and scroll. APIs authorize writes, never reader UI. Failure retains input; maintenance continues through its controller after explicit consent.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Navigation and visual hierarchy\nDestinations are Config File, Connection, Runtime Status, Shell \u0026 Workspace, Codespaces \u0026 Tooling, Logging, Permission Policy, Flower and Debug Console. Page-owned geometry avoids competing global/lazy styles. Full padded diagnostic summaries toggle native disclosure with neutral hover and visible keyboard focus.\n\n## Settings controls and identity\nRuntime, Desktop environment, Flower, terminal and managed-service fields share the published Floe control height (32px, `--floe-control-height-md`), `--floe-radius-field` corners, 12px text, quiet fill and subdued 1px border. Row identity icons and provider brands occupy the same 32px square on `--floe-radius-md`, so icon, field and select edges stay concentric within a row. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.\n\n## Configuration editing\nExisting autosave/restart rules govern shell, filesystem, logging, ports and permissions. Settings PUT accepts flat fields, never response-group wrappers such as `runtime`/`logging`/`codespaces`. Health, diagnostics, backup/restore use right-column actions without bypassing permission/confirmation.\n\n## Flower extension placement\n[Flower extensions](flower-extensions.md) own Skills/MCP browsing and management.",
-          "char_count": 1303
+          "body": "## Navigation and visual hierarchy\nDestinations are Config File, Connection, Runtime Status, Shell \u0026 Workspace, Codespaces \u0026 Tooling, Logging, Permission Policy, Flower and Debug Console. Page-owned geometry avoids competing global/lazy styles. Full padded diagnostic summaries toggle native disclosure with neutral hover and visible keyboard focus.\n\n## Codespaces and Browser Editor\nThe breadcrumb owns the visible destination label. The content has one Browser Editor heading, one status badge and one inventory refresh action. The settings installation surface omits its standalone heading and refresh control; initial setup shows the selected installation route and one primary action without an idle progress checklist or empty current-editor rows. Active setup shows the current stage once, measured progress, cancellation and diagnostics; errors retain explicit retry and failure details. Runtime permissions and install/update confirmations remain authoritative.\n\nA ready editor has a compact version/source row with the update action. Installed versions and installation paths use keyboard-accessible disclosures; selection, removal confirmation and copying stay available. Port fields show their values directly, including disabled defaults. The effective range is explained only when normalization changes custom input; autosave and its flat API payload remain unchanged. Floe tokens set field heights, corners and text; setup actions wrap and progress adapts within narrow settings surfaces.\n\n## Settings controls and identity\nRuntime, Desktop environment, Flower, terminal and managed-service fields share the published Floe control height (32px, `--floe-control-height-md`), `--floe-radius-field` corners, 12px text, quiet fill and subdued 1px border. Row identity icons and provider brands occupy the same 32px square on `--floe-radius-md`, so icon, field and select edges stay concentric within a row. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.\n\n## Configuration editing\nExisting autosave/restart rules govern shell, filesystem, logging, ports and permissions. Settings PUT accepts flat fields, never response-group wrappers such as `runtime`/`logging`/`codespaces`. Health, diagnostics, backup/restore use right-column actions without bypassing permission/confirmation.\n\n## Flower extension placement\n[Flower extensions](flower-extensions.md) own Skills/MCP browsing and management.",
+          "char_count": 2457
         },
         {
           "id": "boundaries",
@@ -31904,5 +31904,5 @@
       ]
     }
   ],
-  "source_sha256": "3a872cb3909be8c0a9bbda694f96a9ed341ff5648d632442df172435ca209698"
+  "source_sha256": "0f35d6fd1e60363cc6738d92637aba68b8b97186e0f481ef2d0d64ac01cda4f5"
 }

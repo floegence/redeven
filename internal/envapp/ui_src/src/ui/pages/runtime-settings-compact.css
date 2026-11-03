@@ -190,3 +190,63 @@
 }
 
 .redeven-settings-shell .settings-provider-row > .floe-setting-row { border: 0; border-radius: 0; box-shadow: none; }
+
+/* The tooling destination has one editor heading and one installation surface. */
+.codespaces-settings { display: flex; flex-direction: column; gap: 28px; }
+.codespaces-settings .floe-settings-section__header { flex-direction: row; align-items: center; }
+.codespaces-settings > .redeven-settings-section + .redeven-settings-section { margin-top: 0; }
+.codespaces-settings .browser-editor-setup[data-variant='settings'] {
+  border-color: var(--redeven-settings-inset-border);
+  border-radius: var(--floe-radius-group);
+  background: var(--redeven-settings-inset-bg);
+}
+.codespaces-settings .browser-editor-setup__primary { padding: 16px; gap: 12px; }
+.codespaces-settings .browser-editor-setup__controls {
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px 24px;
+}
+.codespaces-settings .browser-editor-setup__method-section { flex: 1 1 300px; gap: 8px; }
+.codespaces-settings .browser-editor-setup__method-label {
+  font-size: var(--floe-type-control); line-height: var(--floe-line-control); font-weight: 500; color: var(--foreground);
+}
+.codespaces-settings .browser-editor-setup__method-selector { gap: 8px; }
+.codespaces-settings .browser-editor-setup__method-option {
+  min-height: var(--floe-control-height-md); padding: 6px 10px;
+  border-radius: var(--floe-radius-field); font-size: var(--floe-type-control); font-weight: 500;
+  background: var(--redeven-settings-field-bg); border-color: var(--redeven-settings-control-border);
+}
+.codespaces-settings .browser-editor-setup__method-option[data-selected='true'] {
+  color: var(--foreground); border-color: var(--redeven-settings-choice-selected-border);
+  background: var(--redeven-settings-choice-selected-bg);
+}
+.codespaces-settings .browser-editor-setup__method-name { white-space: normal; overflow: visible; }
+.codespaces-settings .browser-editor-setup__data-path,
+.codespaces-settings .browser-editor-setup__method-availability,
+.codespaces-settings .browser-editor-setup__summary {
+  font-size: var(--floe-type-supporting); line-height: 18px; margin: 0;
+}
+.codespaces-settings .browser-editor-setup__actions { padding-top: 26px; gap: 8px; }
+.codespaces-settings .browser-editor-setup__controls:not(:has(.browser-editor-setup__method-section)) .browser-editor-setup__actions { padding-top: 0; }
+.codespaces-settings .browser-editor-setup__install-action { width: auto; }
+.codespaces-settings .browser-editor-setup__secondary { padding: 16px; background: transparent; }
+.codespaces-settings .browser-editor-setup__secondary-heading { font-size: var(--floe-type-supporting); font-weight: 500; margin-bottom: 12px; }
+.codespaces-settings .browser-editor-setup__steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.codespaces-settings .browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step { display: flex; flex-direction: column; gap: 8px; }
+.codespaces-settings .browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step-connector { flex-direction: row; width: 100%; min-height: 0; }
+.codespaces-settings .browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step-line { height: 1px; min-height: 0; width: auto; flex: 1; margin: 0 0 0 8px; }
+.codespaces-settings .browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step-label { font-size: var(--floe-type-supporting); padding: 0; }
+.codespaces-settings .browser-editor-setup__details-trigger { padding-inline: 16px; font-weight: 500; }
+.codespaces-settings .browser-editor-setup__details-content { padding-inline: 16px; }
+@container redeven-settings (max-width: 900px) {
+  .codespaces-settings .browser-editor-setup__actions { padding-top: 0; }
+  .codespaces-settings .browser-editor-setup__method-section { flex-basis: 100%; }
+}
+@container redeven-settings (max-width: 600px) {
+  .codespaces-settings .browser-editor-setup__method-selector { grid-template-columns: minmax(0, 1fr); }
+  .codespaces-settings .browser-editor-setup__method-option { justify-content: flex-start; }
+  .codespaces-settings .browser-editor-setup__actions,
+  .codespaces-settings .browser-editor-setup__install-action { width: 100%; }
+  .codespaces-settings .browser-editor-setup__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+}
+@media (pointer: coarse) {
+  .codespaces-settings .browser-editor-setup__method-option { min-height: 44px; }
+}
