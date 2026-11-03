@@ -11,7 +11,7 @@ export type FlowerScrollTailController = Readonly<{
   nearBottom: Accessor<boolean>;
   followingLatest: Accessor<boolean>;
   viewport: () => HTMLDivElement | undefined;
-  preserveLayoutAnchor: (title: HTMLElement) => void;
+  preserveLayoutAnchor: (title?: HTMLElement) => void;
   beginAutomaticFold: (moving?: () => boolean) => void;
   restoreReadingAnchor: (title: HTMLElement, screenTop: number) => void;
   transferReadingAnchor: (previous: HTMLElement, next: HTMLElement, screenTop: number) => void;
@@ -41,6 +41,7 @@ export type FlowerScrollTailControllerOptions = Readonly<{
   observeChildren?: boolean;
   smoothContentGrowth?: boolean;
   canFollowLatest?: () => boolean;
+  canReadBefore?: () => boolean;
   preparing?: () => boolean;
   reducedMotionPreferred: () => boolean;
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
@@ -62,6 +63,11 @@ export function createFlowerScrollTailController(
   let knownScrollHeight = 0;
   let knownViewportHeight = 0;
   let readingTailSpace = 0;
+  // Only the part of an upward wheel clamped by the loaded history edge.
+  // Prepending restores the anchor first, then spends this input distance.
+  let pendingHistoryWheel = 0;
+  let historyWheelTimestamp: number | undefined;
+  const clearHistoryWheel = () => { pendingHistoryWheel = 0; historyWheelTimestamp = undefined; };
   // Fold geometry already animates. Follow its real content edge before paint,
   // without a second scroll animation or synthetic space below the answer.
   let automaticFold: (() => boolean) | undefined;
@@ -78,7 +84,7 @@ export function createFlowerScrollTailController(
   let smoothScroll: { startedAt: number; startTop: number } | undefined;
   const [followingLatest, setFollowingLatest] = createSignal(true);
   let userInterruptionRevision = 0;
-  let anchor: { title: HTMLElement; top: number; activated: boolean; finished?: boolean; reading?: boolean; fallbacks?: { title: HTMLElement; top: number }[] } | undefined;
+  let anchor: { title: HTMLElement; top: number; activated: boolean; finished?: boolean; reading?: boolean; fallbacks?: { title: HTMLElement; top: number }[]; turnHeaderID?: string } | undefined;
   type Gesture = {
     target: Element;
     pointerID?: number;
@@ -156,11 +162,20 @@ export function createFlowerScrollTailController(
         fallbacks.push({ title: parent, top: parent.getBoundingClientRect().top });
       }
     }
-    return { title, top: title.getBoundingClientRect().top, activated: true, reading: true, fallbacks };
+    const turnHeaderID = title.closest<HTMLElement>('[data-flower-turn-header]')?.dataset.flowerTurnHeader;
+    return { title, top: title.getBoundingClientRect().top, activated: true, reading: true, fallbacks, turnHeaderID };
   };
   const restoreConnectedAnchor = () => {
     if (!anchor || !node) return false;
     if (anchor.title.isConnected && node.contains(anchor.title) && anchor.title.getBoundingClientRect().height !== 0) return true;
+    // A folded summary moves to the canonical first row as pages arrive.
+    // Its turn identity, unlike that temporary DOM node, remains stable.
+    if (anchor.turnHeaderID) {
+      const header = [...node.querySelectorAll<HTMLElement>('[data-flower-turn-header]')]
+        .find(element => element.dataset.flowerTurnHeader === anchor!.turnHeaderID);
+      const title = header?.querySelector<HTMLElement>('.flower-turn-summary-button') ?? header;
+      if (title && title.getBoundingClientRect().height > 0) { anchor.title = title; return true; }
+    }
     const fallback = anchor.fallbacks?.find(value => value.title.isConnected && node!.contains(value.title) && value.title.getBoundingClientRect().height > 0);
     if (fallback) { anchor = { ...anchor, ...fallback }; return true; }
     clearAnchor();
@@ -173,6 +188,7 @@ export function createFlowerScrollTailController(
   };
   const startFollowing = () => {
     clearAutomaticFold();
+    clearHistoryWheel();
     clearAnchor();
     endUserScroll();
     cancelScheduledScroll();
@@ -263,6 +279,7 @@ export function createFlowerScrollTailController(
     // Layout correction must follow that input, never undo it for one frame.
     if (userScroll && nativeDelta && anchor?.reading
       && (userScroll.direction === 0 || Math.sign(nativeDelta) === Math.sign(userScroll.direction))) {
+      if (nativeDelta < 0) pendingHistoryWheel = Math.max(0, pendingHistoryWheel + nativeDelta);
       anchor.top -= nativeDelta;
       for (const fallback of anchor.fallbacks ?? []) fallback.top -= nativeDelta;
       knownScrollTop = target.scrollTop;
@@ -311,6 +328,17 @@ export function createFlowerScrollTailController(
         scrollHeight = target.scrollHeight;
       }
     }
+    if (pendingHistoryWheel && anchor?.reading && !followingLatest() && nextTop > 0) {
+      const elapsed = Math.min(32, Math.max(0, timestamp - (historyWheelTimestamp ?? timestamp)));
+      const amount = options.reducedMotionPreferred() || pendingHistoryWheel <= 0.75 ? pendingHistoryWheel
+        : pendingHistoryWheel * (1 - Math.exp(-elapsed / 44));
+      const consumed = Math.min(nextTop, amount);
+      nextTop -= consumed;
+      pendingHistoryWheel -= consumed;
+      anchor.top += consumed;
+      for (const fallback of anchor.fallbacks ?? []) fallback.top += consumed;
+      historyWheelTimestamp = timestamp;
+    } else historyWheelTimestamp = undefined;
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
     if (automaticFold && !automaticFold()) clearAutomaticFold();
     knownScrollHeight = scrollHeight;
@@ -321,12 +349,12 @@ export function createFlowerScrollTailController(
     // Reading anchors survive asynchronous Markdown, images and page decoration.
     // Only an active disclosure animation needs frame polling.
     if (anchor?.finished) { anchor.finished = false; anchor.reading = true; }
-    if (gesture() || anchor && !anchor.reading || smoothScroll || growthScroll) requestFrame();
+    if (gesture() || anchor && !anchor.reading || smoothScroll || growthScroll || pendingHistoryWheel && anchor?.reading && nextTop > 0) requestFrame();
   };
   const requestFrame = () => {
     if (!layoutFrame && !presentationHidden) layoutFrame = options.requestAnimationFrame(timestamp => {
       layoutFrame = 0;
-      if (layoutDirty || gesture() || anchor && !anchor.reading || smoothScroll) layout(timestamp);
+      if (layoutDirty || gesture() || anchor && !anchor.reading || smoothScroll || pendingHistoryWheel && anchor?.reading && node && node.scrollTop > 0) layout(timestamp);
       else if (layoutNotificationPending) {
         layoutNotificationPending = false;
         options.onLayout?.();
@@ -393,7 +421,13 @@ export function createFlowerScrollTailController(
     if (!node) return;
     const notifyIntent = () => { if (direction) options.onScrollIntent?.(direction < 0 ? 'before' : 'after'); };
     // Input cannot leave the tail while all content fits in the viewport.
-    if (followingLatest() && node.scrollHeight <= node.clientHeight) { notifyIntent(); return; }
+    if (node.scrollHeight <= node.clientHeight) {
+      notifyIntent();
+      // The host may accept an older-history intent even when the loaded
+      // tail fits. Protect the visible folded summary before its page arrives.
+      captureReadingAnchor();
+      return;
+    }
     clearAnchor();
     stopFollowing();
     // At the oldest loaded edge, wheel input may not produce a scroll event.
@@ -460,6 +494,7 @@ export function createFlowerScrollTailController(
   };
   const beginGesture = (target: Element, identity: { pointerID?: number; key?: string }) => {
     if (gesture()) finishGesture();
+    clearHistoryWheel();
     clearAnchor();
     const latest = Boolean(target.closest('[data-flower-scroll-to-latest]'));
     setGesture({ target, ...identity, latest, wasFollowing: followingLatest(), activated: false, scrolled: false, latestVisible: latestVisible() });
@@ -474,6 +509,7 @@ export function createFlowerScrollTailController(
     if (event.target === node && event.pointerType !== 'touch') startUserScroll(0);
   };
   const onTouchMove = (event: TouchEvent) => {
+    clearHistoryWheel();
     const nextY = event.touches[0]?.clientY;
     if (nextY === undefined) return;
     const direction = touchY === undefined ? 0 : touchY - nextY;
@@ -491,7 +527,7 @@ export function createFlowerScrollTailController(
     if (event.key === ' ' && event.target.closest('button, summary')) return;
     const direction = ['ArrowDown', 'PageDown', 'End', ' '].includes(event.key) ? (event.shiftKey ? -1 : 1)
       : ['ArrowUp', 'PageUp', 'Home'].includes(event.key) ? -1 : 0;
-    if (direction && ownsScrollInput(event.target, direction)) startUserScroll(direction);
+    if (direction && ownsScrollInput(event.target, direction)) { clearHistoryWheel(); startUserScroll(direction); }
   };
   const onScroll = () => {
     if (!node) return;
@@ -523,6 +559,7 @@ export function createFlowerScrollTailController(
         // Empty reserved rows may have no hit-testable reading target. Move
         // the existing anchor with the native input before trying to replace it.
         if (anchor?.reading && externalDelta) {
+          if (externalDelta < 0) pendingHistoryWheel = Math.max(0, pendingHistoryWheel + externalDelta);
           anchor.top -= externalDelta;
           for (const fallback of anchor.fallbacks ?? []) fallback.top -= externalDelta;
         }
@@ -542,14 +579,15 @@ export function createFlowerScrollTailController(
         }
       }
     }
-    if (direction && !followingLatest()) captureReadingAnchor();
+    if (direction && !followingLatest() && !pendingHistoryWheel) captureReadingAnchor();
     else if (!input && externalDelta && anchor?.reading
       && node.scrollHeight === knownScrollHeight && node.clientHeight === knownViewportHeight) {
       // Native focus/scrollIntoView and scrollbar movement can occur without a
       // wheel event. They establish a new reading position, unlike our writes.
+      if (externalDelta < 0) pendingHistoryWheel = Math.max(0, pendingHistoryWheel + externalDelta);
       anchor.top -= externalDelta;
       for (const fallback of anchor.fallbacks ?? []) fallback.top -= externalDelta;
-      captureReadingAnchor();
+      if (!pendingHistoryWheel) captureReadingAnchor();
     }
     if (readingTailSpace || node.scrollHeight !== knownScrollHeight || node.clientHeight !== knownViewportHeight) scheduleLayout();
     // Scroll events report geometry; only a verified user scroll may resume.
@@ -558,9 +596,15 @@ export function createFlowerScrollTailController(
   };
   const onWheel = (event: WheelEvent) => {
     if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0 || !ownsScrollInput(event.target, event.deltaY)) return;
+    if (event.deltaY > 0) { clearHistoryWheel(); }
     startUserScroll(event.deltaY);
+    if (node && event.deltaY < 0 && !followingLatest() && options.canReadBefore?.()) {
+      const pixels = -event.deltaY * (event.deltaMode === 2 ? node.clientHeight : event.deltaMode === 1 ? parseFloat(getComputedStyle(node).lineHeight) || 16 : 1);
+      pendingHistoryWheel += Math.max(0, pixels - node.scrollTop);
+    }
   };
   const activateDisclosure = (title: HTMLElement) => {
+    clearHistoryWheel();
     const current = gesture();
     if (current) current.activated = true;
     beginAnchor(title, true);
@@ -573,6 +617,7 @@ export function createFlowerScrollTailController(
   };
   const bind = (nextNode: HTMLDivElement | undefined) => {
     disconnect?.();
+    clearHistoryWheel();
     finishGesture();
     clearAnchor();
     endUserScroll();
@@ -607,11 +652,12 @@ export function createFlowerScrollTailController(
       if (current.latest && event.target instanceof Element && event.target.closest('[data-flower-scroll-to-latest]')) current.activated = true;
       scheduleGestureRelease();
     };
-    const onBlur = () => { finishGesture(); clearAnchor(); endUserScroll(); };
+    const onBlur = () => { finishGesture(); clearHistoryWheel(); clearAnchor(); endUserScroll(); };
     const onSelectionChange = () => {
       if (!options.smoothContentGrowth || !followingLatest()) return;
       const selection = document.getSelection();
       if (!selection || selection.isCollapsed || !node?.contains(selection.anchorNode) && !node?.contains(selection.focusNode)) return;
+      clearHistoryWheel();
       stopFollowing();
       const current = gesture();
       if (current) current.scrolled = true;
@@ -726,13 +772,12 @@ export function createFlowerScrollTailController(
       scheduleLayout();
     },
     preserveLayoutAnchor: (title) => {
-      if (!node?.contains(title) || followingLatest()) return;
+      if (!node || title && !node.contains(title) || followingLatest()) return;
       // Preserve the earliest uncorrected screen position across concurrent
       // body, event and page completions; a later caller must not bless a jump.
       if (restoreConnectedAnchor()) return;
       const visible = visibleReadingTarget() ?? title;
-      anchor = readingAnchor(visible);
-      scheduleLayout();
+      if (visible) { anchor = readingAnchor(visible); scheduleLayout(); }
     },
     restoreReadingAnchor: (title, screenTop) => {
       if (!node?.contains(title) || followingLatest()) return;

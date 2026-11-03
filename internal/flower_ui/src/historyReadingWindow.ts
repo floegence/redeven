@@ -26,6 +26,9 @@ export function historyReadingItemBytes(item: FlowerRuntimeCurrentItem): number 
 export function historyReadingRequest(window: FlowerHistoryWindow | undefined, geometry: Readonly<{ top: number; height: number; viewport: number }>,
   following: boolean, direction: 'before' | 'after' | undefined, accepted?: FlowerHistoryRequest): FlowerHistoryRequest | undefined {
   if (!window || geometry.viewport <= 0) return;
+  // Reversing at a short latest tail cannot move the viewport. It cancels
+  // older demand without reinstalling a tail interest or reclaiming follow.
+  if (direction === 'after' && !window.has_after && geometry.height <= geometry.viewport) return;
   if (!window.has_after && (accepted?.anchor_id || accepted?.item_ids?.length) && direction === 'after'
     && geometry.height - geometry.top - geometry.viewport <= 2) return { direction: 'before', limit: HISTORY_READING_ITEMS };
   const before = window.has_before && geometry.top < HISTORY_EDGE_MARGIN_PX;

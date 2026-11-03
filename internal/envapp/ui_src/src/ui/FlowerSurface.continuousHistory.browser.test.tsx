@@ -1,6 +1,6 @@
 import '../index.css';
 import './flower-feature.css';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { createRoot } from 'solid-js';
 import { createFlowerScrollTailController } from '../../../../flower_ui/src/flowerScrollTail';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -339,7 +339,7 @@ describe('continuous history navigation', () => {
       await waitFor(() => viewport.scrollTop === 400); expectTail();
     } finally { root.scroll.dispose(); root.dispose(); viewport.remove(); }
   });
-  it.each([1, 12])('keeps a short collapsed tail stationary while loading %i older turns', async count => {
+  it.each([1, 12])('honors one wheel without layout jumps while loading %i older turns', async count => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'short-collapsed-tail', messages: [] });
     const peer = thread({ thread_id: 'short-peer', messages: [{ id: 'peer-answer', turn_id: 'peer-turn', role: 'assistant', content: 'Peer answer.', status: 'complete', created_at_ms: 1 }] });
@@ -383,7 +383,7 @@ describe('continuous history navigation', () => {
     const summary = root.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!;
     expect(summary.getAttribute('aria-expanded')).toBe('false');
     expect(viewport().scrollHeight).toBe(viewport().clientHeight);
-    const top = user.getBoundingClientRect().top;
+    let top = user.getBoundingClientRect().top;
     const samples: number[] = [];
     let sampling = true;
     const sample = () => { if (sampling) { samples.push(user.getBoundingClientRect().top); requestAnimationFrame(sample); } };
@@ -392,10 +392,13 @@ describe('continuous history navigation', () => {
       viewport().dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
       await waitFor(() => Boolean(root.querySelector('.flower-history-loading-notice')));
       await new Promise(resolve => setTimeout(resolve, 100));
+      expect(Math.max(...samples.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(1);
       held.resolve();
       await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="older-0"]')));
       await new Promise(resolve => setTimeout(resolve, 300));
-      expect(Math.max(...samples.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(1);
+      expect(Math.max(...samples.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(101);
+      expect(user.getBoundingClientRect().top - top).toBeCloseTo(100, 0);
+      top = user.getBoundingClientRect().top;
       sampling = false;
       expect(root.querySelector('.flower-turn-summary-button')).toBe(summary);
       expect(summary.getAttribute('aria-expanded')).toBe('false');
@@ -923,7 +926,7 @@ describe('continuous history navigation', () => {
     expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it.each([2, 5])('satisfies one upward gesture through %i folded failed retry turns', async count => {
+  it.each([2, 5])('prepares readable history with one gesture through %i folded failed retry turns', async count => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'failed-retries', messages: [] });
     const items: FlowerRuntimeCurrentItem[] = [{ id: 'original-request', kind: 'user', text: 'Read the original conversation',
@@ -958,15 +961,136 @@ describe('continuous history navigation', () => {
     viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
     await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="original-request"]')), 2500);
     expect(root.querySelector('[data-flower-message-id="original-request"]')?.getBoundingClientRect().height).toBeGreaterThan(0);
-    const original = root.querySelector('[data-flower-message-id="original-request"]')!.getBoundingClientRect();
-    expect(original.bottom).toBeGreaterThan(viewport.getBoundingClientRect().top);
-    expect(original.top).toBeLessThan(viewport.getBoundingClientRect().bottom);
     expect([...root.querySelectorAll('.flower-turn-summary-button')].every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
     expect(root.querySelector('.flower-history-navigation[role="alert"]')).toBeNull();
     const calls = history.mock.calls.length;
     await new Promise(resolve => setTimeout(resolve, 150));
     expect(history.mock.calls.length).toBe(calls);
     expect(calls).toBeLessThanOrEqual(count + 1);
+  });
+
+  it.each([{ count: 2, reduced: false, child: false, interrupt: false, repeated: false }, { count: 5, reduced: false, child: false, interrupt: false, repeated: false }, { count: 2, reduced: true, child: false, interrupt: false, repeated: false }, { count: 2, reduced: false, child: true, interrupt: false, repeated: false }, { count: 2, reduced: false, child: false, interrupt: true, repeated: false }, { count: 2, reduced: false, child: false, interrupt: false, repeated: true }])('keeps one native wheel continuous across folded retries and a cold table (%j)', async ({ count, reduced, child, interrupt, repeated }) => {
+    const matchMedia = window.matchMedia.bind(window);
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => {
+      const result = matchMedia(query);
+      if (query.includes('prefers-reduced-motion')) Object.defineProperty(result, 'matches', { value: reduced });
+      return result;
+    });
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'folded-cold-reader', messages: [] });
+    const summary = subagentSummary({ parent_thread_id: 'folded-cold-parent', thread_id: seed.thread_id, task_name: 'Reader', status: 'failed' });
+    const parent = thread({ thread_id: summary.parent_thread_id, subagents: [summary], messages: [{
+      id: 'spawn-message', role: 'assistant', content: '', status: 'complete', created_at_ms: 100, turn_id: 'parent-turn',
+      blocks: [activityTimeline({ thread_id: summary.parent_thread_id, turn_id: 'parent-turn', run_id: 'parent-run', items: [activityItem({
+        item_id: 'spawn', tool_id: 'spawn', tool_name: 'subagents', renderer: 'subagent_operation', status: 'success',
+        payload: { action: 'spawn', targets: [{ thread_id: summary.thread_id, task_name: summary.task_name, status: 'failed' }], requested_count: 1 },
+      })] })],
+    }] });
+    const selectedThread = child ? parent : seed;
+    const selector = child ? '.flower-subagent-detail-transcript' : '.flower-chat-transcript';
+    const pageHeld = deferred<void>();
+    const items: FlowerRuntimeCurrentItem[] = [{ id: 'original-request', kind: 'user', text: 'Read the original conversation',
+      turn_id: 'old-turn', run_id: 'old-run', ordinal: 1, canonical_ordinal: 1 }];
+    const text = '## Earlier report\n\n| City | Weather | Observation |\n| --- | --- | --- |\n'
+      + Array.from({ length: 36 }, (_, i) => '| ' + (i === 35 ? 'A much longer historical city name' : 'City ' + i) + ' | Clear | Recorded observation ' + i + ' |').join('\n')
+      + '\n\nThe complete report ends here.';
+    const preview = text.slice(0, 320);
+    const old: FlowerRuntimeCurrentItem = { id: 'old-table', kind: 'assistant', turn_id: 'old-turn', run_id: 'old-run',
+      ordinal: 2, canonical_ordinal: 2, text: preview, body: { field: 'content', source_id: 'old-table', bytes: text.length, preview_bytes: preview.length } };
+    items.push(old, { id: 'retry-user', kind: 'user', turn_id: 'work-0', run_id: 'run-0', ordinal: 3, canonical_ordinal: 3, text: 'Continue.' });
+    const held = deferred<void>();
+    const body = vi.fn(async () => { await held.promise; return { ...old, body: undefined, text }; });
+    const turns = Array.from({ length: count }, (_, index) => {
+      for (let i = 0; i < 120; i++) {
+        const id = 'work-' + index + '-tool-' + i;
+        items.push({ id, kind: 'tool', turn_id: 'work-' + index, run_id: 'run-' + index, ordinal: items.length + 1, canonical_ordinal: items.length + 1,
+          activity: { item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal.exec', status: 'success',
+            severity: 'quiet', needs_attention: false, requires_approval: false } });
+      }
+      return { turn_id: 'work-' + index, run_id: 'run-' + index, started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:01:00Z',
+        outcome: 'failed' as 'failed' | 'completed', elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000, final_item_ids: [] as string[], final_boundary_complete: false };
+    });
+    turns.unshift({ ...turns[0], turn_id: 'old-turn', run_id: 'old-run', outcome: 'completed', final_item_ids: ['old-table'], final_boundary_complete: true });
+    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
+      if ((interrupt || repeated) && (request.anchor_id || request.item_ids)) await pageHeld.promise;
+      await new Promise(resolve => setTimeout(resolve, 35));
+      const selected = request.anchor_id || request.item_ids ? selectPage(items, request) : items.slice(-150);
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', last_outcome: 'failed', view_version: 1,
+        items: selected, turns: turns.filter(turn => turn.outcome !== 'completed' || selected.some(item => item.id === 'old-table')), window: { ...pageBounds(items, selected, request), leaf_id: 'folded-leaf' } };
+      return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
+    });
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [selectedThread], loadHistory: child ? async () => liveBootstrap(parent) : history, loadHistoryItem: body,
+      loadSubagentDetail: async (_parent, _child, request = {}) => { const result = await history(seed.thread_id, request); return { ...subagentDetail({ summary }), current: result.current, window: result.current.window }; },
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'failed-reader', summaries: [selectedThread] };
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'failed-retries', thread_id: selectedThread.thread_id } });
+    root.style.height = '780px';
+    if (child) {
+      await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-capsule]')));
+      root.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
+    }
+    await waitFor(() => Boolean(document.querySelector(selector + ' .flower-turn-summary-button')) && document.querySelector<HTMLElement>(selector)?.dataset.flowerTailPreparing !== 'true');
+    const viewport = document.querySelector<HTMLDivElement>(selector)!;
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+    const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
+    editor.focus(); editor.value = 'Preserve the next request'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const header = () => viewport.querySelector<HTMLElement>('[data-flower-turn-header="work-' + (count - 1) + '"]')!;
+    const initialTop = header().getBoundingClientRect().top;
+    const samples: { displacement: number; skeleton: boolean; missing: boolean }[] = [];
+    let sampling = true;
+    const sample = () => {
+      samples.push({ displacement: header() ? header().getBoundingClientRect().top - initialTop : NaN, missing: !header(), skeleton: Boolean(viewport.querySelector('.flower-history-text-loading')) });
+      if (sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    try {
+      const wheel = commands as unknown as { wheelScrollRegion: (input: { regionSelector: string; deltaY: number; preserveScroll: boolean }) => Promise<unknown> };
+      await wheel.wheelScrollRegion({ regionSelector: selector, deltaY: -80, preserveScroll: true });
+      if (repeated) {
+        await waitFor(() => history.mock.calls.length > 1);
+        await wheel.wheelScrollRegion({ regionSelector: selector, deltaY: -40, preserveScroll: true });
+        pageHeld.resolve();
+      }
+      if (interrupt) {
+        await waitFor(() => history.mock.calls.length > 1);
+        await wheel.wheelScrollRegion({ regionSelector: selector, deltaY: 40, preserveScroll: true });
+        pageHeld.resolve();
+      }
+      await waitFor(() => Boolean(viewport.querySelector('[data-flower-message-id="old-table"]')));
+      await new Promise(resolve => setTimeout(resolve, 400));
+      const expectedWheel = interrupt ? 0 : repeated ? 120 : 80;
+      expect(Math.max(...samples.map(frame => Math.abs(frame.displacement)))).toBeLessThanOrEqual(expectedWheel + 2);
+      expect(header().getBoundingClientRect().top - initialTop).toBeCloseTo(expectedWheel, 0);
+      const steps = samples.slice(1).map((frame, i) => frame.displacement - samples[i].displacement);
+      expect(Math.min(...steps)).toBeGreaterThanOrEqual(-2);
+      if (!reduced) expect(Math.max(...steps)).toBeLessThanOrEqual(expectedWheel * 0.53 + 1);
+      // Five summary cards legitimately span more than one wheel distance.
+      // Subsequent native input approaches the cold body without crossing pages.
+      let expectedDisplacement = expectedWheel;
+      while (!body.mock.calls.length && expectedDisplacement < 400) {
+        await wheel.wheelScrollRegion({ regionSelector: selector, deltaY: -80, preserveScroll: true });
+        expectedDisplacement += 80;
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+      await waitFor(() => body.mock.calls.length > 0);
+      samples.length = 0;
+      const hydrationTop = header().getBoundingClientRect().top;
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const beforeHydration = header().getBoundingClientRect().top;
+      held.resolve();
+      await waitFor(() => viewport.textContent?.includes('The complete report ends here.') === true);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      expect(samples.length).toBeGreaterThan(10);
+      expect(samples.every(frame => !frame.missing && !frame.skeleton)).toBe(true);
+      expect(Math.max(...samples.map(frame => Math.abs(frame.displacement - (hydrationTop - initialTop))))).toBeLessThanOrEqual(2);
+      expect(Math.abs(header().getBoundingClientRect().top - beforeHydration)).toBeLessThanOrEqual(2);
+      expect([...viewport.querySelectorAll('.flower-turn-summary-button')].every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
+      expect(editor.value).toBe('Preserve the next request');
+      expect(document.activeElement).toBe(editor);
+    } finally { sampling = false; held.resolve(); pageHeld.resolve(); media.mockRestore(); }
   });
 
   it('bounds collapsed history reads to scroll demand, including input at an immovable edge', async () => {

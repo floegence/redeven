@@ -5,6 +5,7 @@ Concepts own current contracts and original qualification outcomes; Git retains 
 ## 2026-11-03
 
 - [Tool sequence summaries](ui/flower-tool-sequences.md) omit thinking counts and use concise failure counts in every locale; expanded thinking remains available.
+- [Live timeline](ui/flower-live-timeline.md): preserve folded header identity across history insertion, honor only the clamped wheel distance, and verify first-gesture and cold-table geometry with native input in main/child views.
 - [Live timeline](ui/flower-live-timeline.md): retain canonical previews instead of artificial skeleton bubbles, correct cold-body geometry after Markdown commits, and require frame-level regressions during live generation and native scrolling.
 
 - [Thread selection](ui/flower-thread-selection.md): adopt published Floret preparation-read optimization while preserving bounded browsing and cancellation.

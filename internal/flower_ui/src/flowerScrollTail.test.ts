@@ -238,7 +238,7 @@ describe('Flower scroll tail controller', () => {
     const { controller, raf } = createController();
     const metrics = createViewport(2000);
     let documentTop = 1920;
-    const title = { isConnected: true, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as HTMLElement;
+    const title = { isConnected: true, closest: () => null, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as unknown as HTMLElement;
     Object.assign(metrics.viewport, { contains: (value: unknown) => value === title });
     controller.bind(metrics.viewport);
     controller.onWheel({ target: metrics.viewport, deltaY: -900 } as unknown as WheelEvent);
@@ -256,7 +256,7 @@ describe('Flower scroll tail controller', () => {
   it('keeps native input when reserved space has no new reading target', () => {
     const { controller, raf } = createController();
     const metrics = createViewport(2000);
-    const title = { isConnected: true, getBoundingClientRect: () => ({ top: 1920 - metrics.scrollTop(), height: 20 }) } as HTMLElement;
+    const title = { isConnected: true, closest: () => null, getBoundingClientRect: () => ({ top: 1920 - metrics.scrollTop(), height: 20 }) } as unknown as HTMLElement;
     Object.assign(metrics.viewport, { contains: (value: unknown) => value === title });
     controller.bind(metrics.viewport);
     controller.onWheel({ target: metrics.viewport, deltaY: -200 } as unknown as WheelEvent);
@@ -585,7 +585,7 @@ it('preserves a reader through late layout after the initiating mutation finishe
   const metrics = createViewport(2000);
   metrics.setScrollTop(400);
   let documentTop = 420;
-  const title = { isConnected: true, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop() }) } as HTMLElement;
+  const title = { isConnected: true, closest: () => null, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop() }) } as unknown as HTMLElement;
   Object.assign(metrics.viewport, { contains: (candidate: unknown) => candidate === title });
   controller.bind(metrics.viewport); controller.stopFollowing();
   controller.preserveLayoutAnchor(title);
@@ -604,8 +604,8 @@ it('keeps the original anchor when another completion arrives before its offscre
   const { controller, raf } = createController();
   const metrics = createViewport(2000); metrics.setScrollTop(400);
   let documentTop = 420;
-  const title = { isConnected: true, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as HTMLElement;
-  const inserted = { isConnected: true, getBoundingClientRect: () => ({ top: 25, height: 20 }) } as HTMLElement;
+  const title = { isConnected: true, closest: () => null, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as unknown as HTMLElement;
+  const inserted = { isConnected: true, closest: () => null, getBoundingClientRect: () => ({ top: 25, height: 20 }) } as unknown as HTMLElement;
   Object.assign(metrics.viewport, { contains: () => true });
   controller.bind(metrics.viewport); controller.stopFollowing();
   controller.preserveLayoutAnchor(title);

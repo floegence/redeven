@@ -28,6 +28,9 @@ describe('continuous reading interest', () => {
     expect(historyReadingRequest(window, { top: 5300, height: 6000, viewport: 700 }, false, 'after', around))
       .toEqual({ anchor_id: 'last', direction: 'after', limit: HISTORY_PAGE_ITEMS });
   });
+  it('does not reclaim tail following when downward input cannot move a short tail', () => {
+    expect(historyReadingRequest({ ...window, has_after: false }, { top: 0, height: 700, viewport: 700 }, false, 'after', { item_ids: ['last'] })).toBeUndefined();
+  });
   it('changes request identity only with relevant bounds or reading intent', () => {
     const request = { anchor_id: 'visible', direction: 'around' as const, limit: HISTORY_READING_ITEMS };
     expect(historyReadingKey('thread', window, request)).toBe(historyReadingKey('thread', { ...window }, request));

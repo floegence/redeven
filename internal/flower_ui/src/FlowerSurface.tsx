@@ -299,7 +299,7 @@ import { threadNeedsFileActivityTargets } from './fileActivityTargets';
 import { mapFlowerActivityItem, mapFlowerGoal } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerHistoryRequest } from './contracts/flowerSurfaceContracts';
-import { historyFoldedNavigation, historyReadingKey, historyReadingRequest, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes, type HistoryReadingGap } from './historyReadingWindow';
+import { HISTORY_EDGE_MARGIN_PX, historyFoldedNavigation, historyReadingKey, historyReadingRequest, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes, type HistoryReadingGap } from './historyReadingWindow';
 import { recoverHistoryRead, recoverableHistoryRead } from './historyReadRecovery';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
@@ -1474,6 +1474,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     canFollowLatest: () => !selectedThread()?.history_window?.has_after
       && (selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0),
     onUserInteraction: () => { if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal(); },
+    canReadBefore: () => Boolean(selectedThread()?.history_window?.has_before),
     onScrollIntent: direction => requestHistoryReading(direction),
     onViewportResize: viewport => {
       // Reuse the viewport's resize delivery; streamed rows never measure or
@@ -1504,6 +1505,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     preparing: () => subagentTailPreparing(),
     canFollowLatest: () => !subagentDetailThread()?.history_window?.has_after,
     onUserInteraction: () => cancelSubagentTailReveal(),
+    canReadBefore: () => Boolean(subagentDetailThread()?.history_window?.has_before),
     onScrollIntent: direction => requestSubagentHistoryReading(direction),
     onLayout: () => settleSubagentTailReveal(),
     reducedMotionPreferred,
@@ -4268,6 +4270,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   onCleanup(() => cancelTranscriptAnimationFrame(historyReadingFrame));
   let historyScrollDirection: 'before' | 'after' | undefined;
   const requestHistoryReading = (direction: 'before' | 'after') => {
+    const viewport = transcriptScroll.viewport();
+    if (direction === 'after' && !selectedThread()?.history_window?.has_after && viewport && viewport.scrollHeight <= viewport.clientHeight) { historyReadingPending = false; return; }
     historyScrollDirection = direction;
     historyReadingPending = true;
     historyEdgeKey = '';
@@ -4290,12 +4294,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   // demand while canonical bounds advance without revealing readable content.
   // Each request remains bounded; disclosure, new intent, and failed reads stop it.
   const foldedHistoryDemandPending = (viewport: HTMLElement, before: FlowerHistoryWindow, after: FlowerHistoryWindow | undefined,
-    direction: 'before' | 'after' | 'around' | undefined, readable: ReadonlySet<string>) => {
+    direction: 'before' | 'after' | 'around' | undefined, readable: ReadonlySet<string>, skippedFolded: boolean) => {
     if (!after || direction !== 'before' && direction !== 'after') return false;
     const advanced = direction === 'before' ? after.has_before && after.first_item_id !== before.first_item_id
       : after.has_after && after.last_item_id !== before.last_item_id;
     if (!advanced || [...readableHistoryItems(viewport)].some(id => !readable.has(id))) return false;
-    return direction === 'before' ? viewport.scrollTop < 2 : viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 2;
+    const margin = skippedFolded ? HISTORY_EDGE_MARGIN_PX : 2;
+    return direction === 'before' ? viewport.scrollTop < margin : viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < margin;
   };
   const protectedHistoryItems = (scroll: FlowerScrollTailController) => {
     const viewport = scroll.viewport();
@@ -4377,8 +4382,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       // Preserve the currently visible owner, including user movement that
       // happened while this read was pending. Never reset the viewport to a page.
       const currentAnchor = visibleHistoryAnchor(transcriptScroll);
-      if (currentAnchor) transcriptScroll.preserveLayoutAnchor(currentAnchor);
       if (input.anchor_id && !handoff?.moved) transcriptScroll.stopFollowing();
+      transcriptScroll.preserveLayoutAnchor(currentAnchor);
       receiveThreadView(view, 'user_action', epoch, true);
       transcriptScroll.flushLayout();
       requestTranscriptAnimationFrame(() => {
@@ -4388,7 +4393,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         if (currentAnchor?.isConnected) transcriptScroll.finishDisclosure(currentAnchor);
         if (!handoff?.moved && historyEdgeKey === key && tid === selectedThreadID()
-          && epoch === liveTransport.connectionEpoch() && foldedHistoryDemandPending(viewport, window, selectedThread()?.history_window, input.direction, readable)) {
+          && epoch === liveTransport.connectionEpoch() && foldedHistoryDemandPending(viewport, window, selectedThread()?.history_window, input.direction, readable, Boolean(interest.skip_folded))) {
           historyReadingPending = true;
           scheduleHistoryReading();
         }
@@ -6129,8 +6134,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const current = untrack(activeSubagentDetail);
       if (!current || current.generation !== generation || requestEpoch !== liveTransport.connectionEpoch()) return false;
       const readingAnchor = preserveReading ? visibleHistoryAnchor(subagentDetailScroll) : undefined;
-      if (readingAnchor) subagentDetailScroll.preserveLayoutAnchor(readingAnchor);
-      if (preserveReading) subagentDetailScroll.stopFollowing();
+      if (preserveReading) { subagentDetailScroll.stopFollowing(); subagentDetailScroll.preserveLayoutAnchor(readingAnchor); }
       batch(() => {
         acceptActiveSubagentCurrent(request.parentThreadID, { ...detail.current, ...(detail.window ? { window: detail.window } : {}) }, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations, true);
         acceptHistoryReading(revision, true);
@@ -6170,6 +6174,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let subagentReadingPending = false;
   let subagentHistoryDirection: 'before' | 'after' | undefined;
   const requestSubagentHistoryReading = (direction: 'before' | 'after') => {
+    const viewport = subagentDetailScroll.viewport();
+    if (direction === 'after' && !subagentDetailThread()?.history_window?.has_after && viewport && viewport.scrollHeight <= viewport.clientHeight) { subagentReadingPending = false; return; }
     subagentHistoryDirection = direction;
     subagentReadingPending = true;
     subagentHistoryEdgeKey = '';
@@ -6232,7 +6238,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!accepted || activeSubagentID() !== active.childThreadID) return;
     requestTranscriptAnimationFrame(() => {
       if (subagentHistoryEdgeKey === key && activeSubagentID() === active.childThreadID
-        && foldedHistoryDemandPending(viewport, window, subagentDetailThread()?.history_window, input.direction, readable)) subagentReadingPending = true;
+        && foldedHistoryDemandPending(viewport, window, subagentDetailThread()?.history_window, input.direction, readable, Boolean(interest.skip_folded))) subagentReadingPending = true;
       scheduleSubagentHistoryReading();
     });
   };
