@@ -37,7 +37,7 @@ const fixture = (groups: FlowerToolSequence[]) => {
     return element;
   };
   for (const value of groups) for (const key of value.nodeKeys) register(key);
-  return { layout, elements, removals, register, dispose, transferReadingAnchor, update: (values: FlowerToolSequence[]) => setProjection(project(values)) };
+  return { layout, elements, removals, register, dispose, transferReadingAnchor, projection, update: (values: FlowerToolSequence[]) => setProjection(project(values)) };
 };
 
 it('places only the arriving group after hundreds of unchanged groups', async () => {
@@ -54,9 +54,11 @@ it('places only the arriving group after hundreds of unchanged groups', async ()
     expect(value.elements.get('arrived-child')!.node.parentNode).toBe(value.elements.get('arrived')!.body);
     expect(value.elements.get('group-0-child')!.node.parentNode).toBe(value.elements.get('group-0')!.body);
     parentReads.mockClear();
+    const historyReads = vi.spyOn(value.projection().groups, Symbol.iterator);
     value.register('standalone');
     await Promise.resolve();
     expect(parentReads.mock.calls.length).toBeLessThan(4);
+    expect(historyReads).not.toHaveBeenCalled();
   } finally { value.dispose(); }
 });
 

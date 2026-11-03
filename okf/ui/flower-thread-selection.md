@@ -43,6 +43,8 @@ and interaction state. First-use preparation of older prompt histories is
 cancellable and yields between transactions. It is separate from transcript
 readiness and never authorizes a full-history UI load. Formal qualification uses
 the checksummed published module without workspace or sibling source wiring.
+Exact token counts reuse an upstream vocabulary-scoped, bounded digest-only cache;
+attribution, budgets and canonical storage remain unchanged.
 
 The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title editing, pending-action presentation and pin ordering. A completed detail read alone never marks content as seen. Canonical View and Summary stay in Floret; the host does not reconstruct its history or lifecycle.
 

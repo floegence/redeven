@@ -16,7 +16,7 @@ export function affected(args, execute = spawnSync) {
 export function runGate({ fast = false, execute = spawnSync, exists = existsSync } = {}) {
   const ui = path.join(root, 'internal/envapp/ui_src');
   const run = (args, cwd = root) => {
-    const result = execute(process.execPath, args, { cwd, stdio: 'inherit', env: process.env, timeout: args.includes('scripts/qualify_flower_long_thread.mjs') ? 1900000 : 300000 });
+    const result = execute(process.execPath, args, { cwd, stdio: 'inherit', env: process.env, timeout: args.includes('scripts/qualify_flower_long_thread.mjs') ? 3700000 : 300000 });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error('Long-thread gate failed: ' + args.join(' '));
   };

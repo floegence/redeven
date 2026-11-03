@@ -110,6 +110,25 @@ function expectEndedPresentation(notice: HTMLElement, label: string) {
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it('defers inspection of newly classified live prose until the turn can actually fold', async () => {
+    const { root, live } = await mount();
+    const row = messageRow(root, 'progress');
+    const query = vi.spyOn(row.querySelector('.flower-turn-row-content')!, 'querySelector');
+    const active = current(false, { view_version: 2, turns: [{ ...current().turns![0], intermediate_item_ids: ['progress'] }] });
+    live.push(active);
+    await waitFor(() => row.getAttribute('data-flower-turn-process') === 'true');
+    expect(query.mock.calls.filter(([selector]) => selector === 'details[open]')).toHaveLength(0);
+    expect(hidden(root, 'progress')).toBe(false);
+    const range = document.createRange();
+    range.selectNodeContents(message(root, 'progress'));
+    document.getSelection()!.removeAllRanges();
+    document.getSelection()!.addRange(range);
+    live.push(current(true, { view_version: 3 }));
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
+    expect(document.getSelection()?.toString()).toContain('Intermediate progress report.');
+    expect(hidden(root, 'progress')).toBe(false);
+  });
+
   it('keeps one continuous entrance through a fast reply while restored history stays static', async () => {
     const initial = current(true);
     const { root, live } = await mount(initial);

@@ -63,18 +63,18 @@ export async function verifyFlowerRendered({ page, visible, ui, output, bodySele
     const disclosure = page.locator(bodySelector + '.flower-turn-summary-button[aria-controls~=' + JSON.stringify(viewportID) + ']').first();
     if (await disclosure.count() && await disclosure.getAttribute('aria-expanded') === 'false') await disclosure.click();
     await settleDisclosures();
-    // Sequence members move into their first row's disclosure. Open that
-    // parent before locating a member that has intentionally unmounted.
-    // Query only closed groups. Rechecking every already-open sequence for
-    // each item creates quadratic protocol traffic during long-turn checks.
-    const closedSequenceControls = await page.locator(turnSelector + ' .flower-tool-sequence-toggle[aria-expanded="false"]')
-      .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-controls')));
-    for (const controls of closedSequenceControls) {
-      // Pin identity before actionability waits. An expanded-state filter can
-      // retarget its first match while the preceding disclosure animates.
-      if (!controls) throw new Error('Sequence disclosure must identify its content');
-      const sequence = page.locator(turnSelector + ' .flower-tool-sequence-toggle[aria-controls=' + JSON.stringify(controls) + ']').first();
-      if (await sequence.count() && await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+    // A borrowed row retains its original slot and the owning sequence key.
+    // Reveal only that item's parent through the real control. Opening every
+    // group first needlessly animates hundreds of unrelated disclosures.
+    const sequenceKeys = await wrapper.locator('[data-flower-sequence-owner]')
+      .evaluateAll(nodes => [...new Set(nodes.map(node => node.getAttribute('data-flower-sequence-owner')).filter(Boolean))]);
+    for (const key of sequenceKeys) {
+      const sequence = page.locator(turnSelector + ' [data-flower-sequence-owner=' + JSON.stringify(key)
+        + '] .flower-tool-sequence-toggle').first();
+      if (await sequence.count() && await sequence.getAttribute('aria-expanded') === 'false') {
+        await revealSection(sequence);
+        await sequence.click();
+      }
       await settleDisclosures();
     }
     const row = page.locator(bodySelector + (item.kind === 'thinking'

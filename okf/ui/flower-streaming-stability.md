@@ -22,6 +22,8 @@ Viewport binding reads no offsets or extents during DOM mutation. Initial nested
 
 Same-run authoritative snapshots retain the thread presentation store and equal collections. Replacing the observed runtime window must not rebind every retained row's layout controller. A new execution retains the existing canonical-prefix checks and gets its own presentation. Structural message changes still invalidate membership; content-only advancement stays on its existing text owner.
 
+History-gap measurement runs after accepted membership, inside the same publication batch while old rows remain mounted. Only removed interior rows contribute new gap height; preserved/appended membership performs no historical row geometry reads. Existing gap geometry and virtual anchors remain authoritative. Live process classification cannot collapse a running turn, so inspection protection runs when folding becomes possible; terminal selection/focus/manual disclosure checks stay intact. Standalone row registration does not enumerate unchanged sequence projections.
+
 Published createIncrementalMarkdownParser owns Marked/CJK/GFM. reset installs full baseline, append changes regions and finish corrects complete content. Changed snapshots reset because token offsets/identity can move; reuse only exact tokens/offsets. Same-source metadata preserves regions. Completion/collapse/replacement retains every authored block. [Highlighting](flower-code-highlighting.md), [diagrams](markdown-diagrams.md) and [media](flower-inline-media.md) retain their owners.
 
 ## Text and layout

@@ -25,8 +25,10 @@ Sustained fixture creates 500 canonical turns, 1,000 messages and 1,000 tools th
 
 Export canonical terminal outcome and failure before waiting for UI completion so engine failures cannot appear as unexplained UI timeouts. Require successful canonical and observed completion, then use actual history/disclosure controls to compare every generated prose/reasoning item and exact code blocks with canonical content/full Markdown. Enter reading mode and reveal parents before children; never force hidden clicks/change disclosure state. Draft/focus/selection survive drag. Synthetic floating output does not qualify terminal emulation.
 
-## Timing
-Same visible production UI/two PersistentFloatingWindows: idle/early/late/repeat each>=12 monotonic seconds. Cancel/release/blur/hidden invalidates sample. Nonfocusable Electron uses primary work-area origin and pointer isolation before show, preserving real composition/CDP/DOM focus/interruption. Assert both drafts throughout.
+Allow preparation, ten-minute output and complete post-timing inspection to finish within the supervised fixture lifetime. Each generated item opens only its owning sequence through the real disclosure control; do not repeatedly open unrelated historical groups. A 1,200-row regression forbids geometry reads for preserved/appended baselines and verifies exact interior-gap height after removal. Actual folding still protects selection, focus and inspected content.
+
+## Responsiveness
+Sample idle/early/late/repeat on the same visible production UI with two PersistentFloatingWindows, >=12 monotonic seconds each. Cancellation, button release, blur or hidden document invalidates samples. Dedicated nonfocusable Electron host uses the primary display work-area origin for repeatable visible placement and installs pointer isolation before showing, preventing native keyboard input while retaining real composition, CDP input, DOM focus and interruption checks. Assert both drafts before and throughout sampling.
 
 Read counter before press; one CDP session press/move/release, no backend calls between. Chromium monotonic time; independent60Hz producer cannot await dispatch. Offer>=55events-s, require>=45position-commits-s and>=80% idle cadence.
 

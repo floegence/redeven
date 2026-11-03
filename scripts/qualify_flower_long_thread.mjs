@@ -18,7 +18,9 @@ const ui = path.join(root, 'internal/envapp/ui_src');
 const require = createRequire(path.join(ui, 'package.json'));
 const desktopRequire = createRequire(path.join(root, 'desktop/package.json'));
 const { _electron: electron } = require('playwright');
-const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 1800000 });
+// History admission, ten-minute generation and complete visible-content
+// inspection have separate costs; the fixture must outlive all three.
+const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 3600000 });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const output = await mkdtemp(path.join(tmpdir(), 'flower-long-thread-evidence-'));
 const sourceDirty = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).length > 0;
@@ -34,7 +36,7 @@ await session.run(async () => {
   const build = await session.spawn(process.execPath, ['scripts/qualify_flower_cpu.mjs', '--build', '--dist=' + dist], { cwd: root, stdio: 'inherit' }, { kind: 'qualification-build', allowCleanExit: true });
   await session.wait(build, 120000);
   assert.equal(build.exitCode, 0, 'Build current production UI');
-  const fixture = await session.spawn('go', ['test', './internal/ai', '-run', '^TestFlowerCPUQualification$', '-count=1', '-v', '-timeout=25m'], {
+  const fixture = await session.spawn('go', ['test', './internal/ai', '-run', '^TestFlowerCPUQualification$', '-count=1', '-v', '-timeout=55m'], {
     cwd: root, env: { ...process.env, GOWORK: 'off', REDEVEN_CPU_QUALIFICATION: '1', REDEVEN_CPU_EVIDENCE_DIR: output, REDEVEN_CPU_STATE: state, REDEVEN_CPU_DIST: dist,
       REDEVEN_CPU_RETAIN_SEED_SCOPE: '0', REDEVEN_CPU_CHILD_DETAIL: '0', REDEVEN_CPU_SEED_ONLY: '0', REDEVEN_CPU_SYSTEM_PROMPT_BYTES: '', REDEVEN_CPU_HISTORY_TURNS: String(workload.historyTurns), REDEVEN_CPU_TOOL_EVERY: String(workload.toolEvery) }, stdio: ['ignore', 'pipe', 'pipe'],
   }, { kind: 'synthetic-flower-runtime', allowCleanExit: true });

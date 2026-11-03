@@ -56,7 +56,7 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
     const changed = new Set<string>();
     const rows = new Set(registrations);
     registrations.clear();
-    for (const [key, prior] of placed?.groups ?? []) {
+    for (const [key, prior] of current === placed ? [] : placed?.groups ?? []) {
       const next = current.groups.get(key);
       if (next === prior || next && next.nodeKeys.length === prior.nodeKeys.length
         && next.nodeKeys.every((node, index) => node === prior.nodeKeys[index])) continue;
@@ -64,7 +64,7 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
       for (const node of prior.nodeKeys) rows.add(node);
       if (next) for (const node of next.nodeKeys) rows.add(node);
     }
-    for (const [key, group] of current.groups) if (!placed?.groups.has(key)) {
+    for (const [key, group] of current === placed ? [] : current.groups) if (!placed?.groups.has(key)) {
       changed.add(key);
       for (const node of group.nodeKeys) rows.add(node);
     }

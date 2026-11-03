@@ -104,6 +104,31 @@ it('retains growing records across an authoritative snapshot and continues the s
   } finally { dispose(); }
 }));
 
+it('keeps completed tool and thinking owners across a narrowed same-run baseline', () => createRoot(dispose => {
+  try {
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' },
+      window: { leaf_id: 'leaf', first_item_id: 'thought-0', last_item_id: 'tool-599', has_before: false, has_after: false },
+      items: Array.from({ length: 600 }, (_, i) => [
+        { id: 'thought-' + i, kind: 'thinking' as const, ordinal: i * 2 + 1, turn_id: 'turn', run_id: 'run', text: 'Completed thought ' + i },
+        { id: 'tool-' + i, kind: 'tool' as const, ordinal: i * 2 + 2, turn_id: 'turn', run_id: 'run',
+          activity: { item_id: 'tool-' + i, tool_id: 'call-' + i, tool_name: 'inspect', kind: 'tool', status: 'success', severity: 'normal' } },
+      ]).flat() };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    let record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread(), members = thread.messages;
+    const rows = [...members];
+    const next = { ...current, view_version: 2, items: current.items!.slice(-50).map(item => structuredClone(item)),
+      window: { ...current.window!, first_item_id: 'thought-575', has_before: true } };
+    record = createRuntimeThreadRecord(next, applyFlowerRuntimeCurrentView(thread, next), record);
+    expect(record.initializeThread()).toBe(thread);
+    expect(thread.messages).toBe(members);
+    expect(thread.messages.every((message, i) => message === rows[i])).toBe(true);
+  } finally { dispose(); }
+}));
+
 
 it('updates a preview subscriber without rebuilding completed tools or the timeline', () => createRoot(dispose => {
   try {

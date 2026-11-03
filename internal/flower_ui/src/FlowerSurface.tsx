@@ -301,7 +301,7 @@ import { threadNeedsFileActivityTargets } from './fileActivityTargets';
 import { mapFlowerActivityItem, mapFlowerGoal } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerHistoryRequest } from './contracts/flowerSurfaceContracts';
-import { HISTORY_EDGE_MARGIN_PX, historyFoldedNavigation, historyReadingKey, historyReadingRequest, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes, type HistoryReadingGap } from './historyReadingWindow';
+import { HISTORY_EDGE_MARGIN_PX, historyFoldedNavigation, historyReadingKey, historyReadingRequest, historyReadingSelection, historyReadingGaps, measureHistoryReadingHeights, historyGapRequest, historyReadingItemBytes, type HistoryReadingGap } from './historyReadingWindow';
 import { recoverHistoryRead, recoverableHistoryRead } from './historyReadRecovery';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
@@ -3797,19 +3797,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const previous = threadCache().readingItemIDs(tid).flatMap(id => {
       const item = threadCache().runtimeItem(tid, id); return item ? [item] : [];
     });
-    const heights = new Map<string, number>();
-    const rows = [...viewport?.querySelectorAll<HTMLElement>('[data-flower-row-message-id]') ?? []];
-    for (let index = 0; index < rows.length; index++) {
-      const row = rows[index], id = row.dataset.flowerRowMessageId!;
-      const box = row.getBoundingClientRect();
-      const next = rows[index + 1];
-      const gap = row.nextElementSibling?.matches('[data-flower-history-gap]') ? row.nextElementSibling : undefined;
-      const end = (gap ?? next)?.getBoundingClientRect().top ?? box.bottom;
-      heights.set(id, (heights.get(id) ?? 0) + Math.max(0, end - box.top));
-    }
     const retained = child ? childReadingGaps() : mainReadingGaps();
-    const bounds = viewport?.getBoundingClientRect();
-    const gapNode = bounds && [...viewport!.querySelectorAll<HTMLElement>('[data-flower-history-gap]')].find(node => {
+    const gapNodes = [...viewport?.querySelectorAll<HTMLElement>('[data-flower-history-gap]') ?? []];
+    const bounds = gapNodes.length ? viewport?.getBoundingClientRect() : undefined;
+    const gapNode = bounds && gapNodes.find(node => {
       const box = node.getBoundingClientRect(); return box.top <= bounds.top && box.bottom >= bounds.bottom;
     });
     const virtualAnchor = gapNode && bounds ? (() => {
@@ -3822,6 +3813,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const interruption = scroll.userInterruptionRevision();
     return (cache: ReturnType<typeof createThreadCache>) => {
       const next = cache.readingItemIDs(tid).flatMap(id => { const item = cache.runtimeItem(tid, id); return item ? [item] : []; });
+      // receiveThreadDetail owns one batch: membership is accepted, but the
+      // old rows remain mounted until this pre-publication measurement ends.
+      const heights = measureHistoryReadingHeights(viewport, previous, next);
       const gaps = historyReadingGaps(previous, next, retained.thread === tid ? retained.gaps : [], heights, current.window?.skipped_range, current.window?.sequence_gaps);
       (child ? setChildReadingGaps : setMainReadingGaps)({ thread: tid, gaps });
       if (virtualAnchor) queueMicrotask(() => {

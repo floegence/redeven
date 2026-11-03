@@ -226,8 +226,10 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         if (group.interleavedInputs && !previous.value.groups.get(group.turnID)?.interleavedInputs) {
           preserveReadingAnchor(group.processKeys);
         }
-        const priorProcess = new Set(prior?.processKeys);
-        const newlyFoldable = group.processKeys.filter((key) => previous.value.rows.has(key) && !priorProcess.has(key));
+        // A live turn cannot hide its process rows. Inspect at the actual
+        // folding boundary, when the user's current selection/focus matters.
+        if (group.disclosure === 'none') continue;
+        const newlyFoldable = group.processKeys.filter((key) => previous.value.rows.has(key) && !prior?.processMembers.has(key));
         if (newlyFoldable.length && inspectionProtected(group.turnID, newlyFoldable)) {
           // A newly classified row may already contain the user's selection.
           // Keep that row visible without reopening the rest of a folded turn.

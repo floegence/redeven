@@ -94,6 +94,30 @@ export type HistoryReadingGap = Readonly<{ beforeID: string; afterID: string; fi
 }>;
 type Member = Readonly<{ id: string; ordinal: number }>;
 
+// Measure the space represented by rows before installing new membership.
+export function measureHistoryReadingHeights(viewport: HTMLElement | undefined, previous: readonly Member[], next: readonly Member[]): ReadonlyMap<string, number> {
+  const heights = new Map<string, number>();
+  if (!viewport || next.length < 2) return heights;
+  const retained = new Set(next.map(item => item.id));
+  const first = next[0].ordinal, last = next[next.length - 1].ordinal;
+  const removed = new Set(previous.filter(item => !retained.has(item.id) && item.ordinal > first && item.ordinal < last).map(item => item.id));
+  // Live baselines normally preserve the reading document. Reading every
+  // retained row here forces offscreen layout as that document grows. Only
+  // evicted interior rows contribute new space to a reading gap.
+  if (!removed.size) return heights;
+  const rows = [...viewport?.querySelectorAll<HTMLElement>('[data-flower-row-message-id]') ?? []];
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index], id = row.dataset.flowerRowMessageId!;
+    if (!removed.has(id)) continue;
+    const box = row.getBoundingClientRect();
+    const nextRow = rows[index + 1];
+    const gap = row.nextElementSibling?.matches('[data-flower-history-gap]') ? row.nextElementSibling : undefined;
+    const end = (gap ?? nextRow)?.getBoundingClientRect().top ?? box.bottom;
+    heights.set(id, (heights.get(id) ?? 0) + Math.max(0, end - box.top));
+  }
+  return heights;
+}
+
 // Retain geometry only for gaps between the current finite selection. No map
 // grows with all previously visited history. Ordinals are public membership
 // positions, not journal depths, so hidden control records cannot create gaps.
