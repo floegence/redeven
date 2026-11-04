@@ -39,6 +39,7 @@ export const toolActivityEnUS = {
   "computerPreparedOnly": "Preparation completed; input not sent",
   "computerInputIncomplete": "Input partially sent; inspect before continuing",
   "computerEffectConfirmed": "An action completed; inspect before continuing",
+  "computerOutputLimitReached": "Output limit reached; completed work is retained",
   "computerBudgetExhausted": "Script limit reached; completed work is retained",
   "computerObservationUnavailable": "Page could not be read",
   "computerActionObservedUnavailable": "Action performed; page could not be read",

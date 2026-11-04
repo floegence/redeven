@@ -58,6 +58,12 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 	if reads := toAnySlice(payload["completed_reads"]); len(reads) > 0 {
 		add("completed_reads", "", toolDetailValue(reads), fltools.StructuredActivityRowFormatCode)
 	}
+	if outcomes := toAnySlice(payload["read_outcomes"]); len(outcomes) > 0 {
+		add("read_outcomes", "", toolDetailValue(outcomes), fltools.StructuredActivityRowFormatCode)
+	}
+	if limit := computerOutputLimitFacts(payload["output_limit"]); limit != nil {
+		add("output_limit", "", toolDetailValue(limit), fltools.StructuredActivityRowFormatCode)
+	}
 	if tool == "computer.targets" {
 		candidates := toAnySlice(payload["candidates"])
 		defaultRef := anyToString(payload["default_candidate_ref"])

@@ -146,6 +146,39 @@ func TestComputerBudgetPresentationRetainsCanonicalFailure(t *testing.T) {
 	}
 }
 
+func TestComputerOutputBudgetPresentationPreservesDeliveryFacts(t *testing.T) {
+	for _, uncertain := range []bool{false, true} {
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError, effectUncertain: uncertain, Error: &aitools.ToolError{Code: "SCRIPT_FAILED", Message: "Output limit reached"}, Data: map[string]any{"budget_exhausted": "output", "output_limit": map[string]any{"stage": "log", "limit_bytes": 65536, "emitted_logs": 1, "content": "must not pass"}, "read_outcomes": []any{map[string]any{"action": "observe", "status": "completed", "operation_index": 0}}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, chip := range activity.Chips {
+			if chip.Kind == "computer_budget" && chip.Value == "output" {
+				found = true
+			}
+		}
+		if found == uncertain {
+			t.Fatalf("uncertainty hidden or output budget absent: %#v", activity.Chips)
+		}
+		rows := activity.Payload.(fltools.StructuredActivityPayload).Rows
+		for _, title := range []string{"output_limit", "read_outcomes"} {
+			found = false
+			for _, row := range rows {
+				if row.Title == title {
+					found = true
+					if strings.Contains(row.Content, "must not pass") {
+						t.Fatal("unvalidated output content leaked")
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("missing %s", title)
+			}
+		}
+	}
+}
+
 func TestComputerNarrowReadHasSeparatePresentationFacts(t *testing.T) {
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
 		return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"text": "Source fact", "truncated": false, "scope": "element", "source": "browser_dom", "property": "innerText", "document_id": "sample", "frame_id": "frame", "ref": "ref"}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToSendToModel: true, SafeToCapture: true}}, nil

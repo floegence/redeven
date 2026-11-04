@@ -580,7 +580,7 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   if (repairAction) detail.repair_action = repairAction;
   if (suggestedTargets.length > 0) detail.suggested_targets = suggestedTargets;
   if (computerObservationInterruption(item)) detail.observation_interruption = true;
-  if (computerObservationInterruption(item) === 'budget') detail.budget_interruption = true;
+  if (['budget','output'].includes(computerObservationInterruption(item) ?? '')) detail.budget_interruption = true;
   if (code && (detail.observation_interruption || targetKind || targetState || repairAction || suggestedTargets.length > 0)) detail.code = code;
   return {
     kind: 'error',
@@ -1596,7 +1596,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     if (phase) meta = phaseCopy[phase] ?? meta;
   }
   const interruption = computerObservationInterruption(item);
-  if (interruption) meta = {budget:words.computerBudgetExhausted,effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
+  if (interruption) meta = {output:words.computerOutputLimitReached,budget:words.computerBudgetExhausted,effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
   if (uncertain) meta = words.effectUncertain;
   const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
     'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');

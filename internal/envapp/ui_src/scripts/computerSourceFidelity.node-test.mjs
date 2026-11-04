@@ -22,6 +22,37 @@ async function fixture(html, run) {
   } finally {if(controller){await controller.page.releasePage();controller.close();}await browser.close();}
 }
 
+test('attribute reads preserve arbitrary source fields, empty and missing values without input',async()=>fixture(
+  '<a id="target" href="/report?q=a#detail" data-resource="original" title="">Report</a>',
+  async({tab,call,domTarget})=>{
+    const ref=await domTarget();
+    for(const [attribute,value] of [['href','/report?q=a#detail'],['data-resource','original'],['title',''],['data-absent',null]]){
+      const read=await call('computer.action',{action:'attribute',selector:{ref},attribute});
+      assert.equal(read.error,undefined,JSON.stringify(read));assert.equal(read.result.value,value);
+    }
+    assert.equal(tab.url(),'about:blank');
+    await tab.locator('#target').evaluate(e=>e.setAttribute('data-large','中'.repeat(2001)));
+    const long=await call('computer.action',{action:'attribute',selector:{ref},attribute:'data-large'});
+    assert.equal(long.error,'TARGET_CAPABILITY_UNAVAILABLE');assert.equal(long.result.diagnostic.expected,'attribute_max_2000');
+  }));
+
+test('URL attributes redact credentials without removing source query or fragment',async()=>fixture(
+  '<form id="target" action="https://person:secret@example.test/report?q=a#detail"></form>',
+  async({call,domTarget})=>{
+    const read=await call('computer.action',{action:'attribute',selector:{ref:await domTarget()},attribute:'action'});
+    assert.equal(read.error,undefined,JSON.stringify(read));assert.equal(read.result.value,'https://example.test/report?q=a#detail');
+    assert.deepEqual(read.result.redacted,['url_credentials']);
+  }));
+
+for(const attribute of ['type="password"','autocomplete="one-time-code"'])test('hidden credential attributes remain protected: '+attribute,async()=>fixture(
+  '<input id="target" style="display:none" value="private-secret">',
+  async({tab,call,domTarget})=>{
+    const ref=await domTarget();
+    await tab.locator('#target').evaluate((e,attribute)=>{const [name,value]=attribute.split('=');e.setAttribute(name,value.slice(1,-1));},attribute);
+    const read=await call('computer.action',{action:'attribute',selector:{ref},attribute:'value'});
+    assert.equal(read.error,'TAKEOVER_REQUIRED',JSON.stringify(read));assert.ok(!JSON.stringify(read).includes('private-secret'));
+  }));
+
 for(const style of ['display:contents','visibility:hidden'])test('text preserves browser innerText: '+style,async()=>fixture(
   '<div id="target" style="'+style+'"><span style="visibility:visible">Unchanged source text</span></div>',
   async({tab,call,source,domTarget})=>{

@@ -25,7 +25,7 @@ export async function createComputerScript({ browser = true } = {}) {
     vm.setProp(vm.global, name, handle);
     handle.dispose();
   };
-  install('__budget', () => vm.newString(JSON.stringify({remaining_ms:Math.max(0, active.deadline-Date.now()),remaining_operations:Math.max(0,50-active.count)})));
+  install('__budget', () => vm.newString(JSON.stringify({remaining_ms:Math.max(0, active.deadline-Date.now()),remaining_operations:Math.max(0,50-active.count),remaining_log_bytes:65536-active.outputBytes,log_limit_bytes:65536})));
   install('__invalidArgument', (method, field, expected) => {
     if (active) { active.sealed = true; active.diagnostic = 'SCRIPT_ARGUMENT_ERROR'; active.argumentDiagnostic={method:vm.getString(method),field:vm.getString(field),expected:vm.getString(expected),recovery:'correct_arguments'}; }
     return { error: vm.newError('SCRIPT_ARGUMENT_ERROR') };
@@ -78,6 +78,7 @@ export async function createComputerScript({ browser = true } = {}) {
       active.sealed = true;
       active.outputTruncated = true;
       active.diagnostic = 'SCRIPT_OUTPUT_LIMIT';
+      active.outputLimit = {stage:'log',limit_bytes:65536,attempted_bytes:Buffer.byteLength(text),remaining_bytes:65536-active.outputBytes,emitted_logs:active.logs.length};
       return { error: vm.newError('SCRIPT_OUTPUT_LIMIT') };
     }
     active.outputBytes += Buffer.byteLength(text);
@@ -159,7 +160,7 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const attribute = async (selector, name, href = false, value={}) => {
         string(name,'attribute');
-        if(!['title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount',...(href?['href']:[])].includes(name)) invalid();
+        if(!name.length||name.length>2000) invalid('attribute','attribute_name');
         const result=await call({action:'attribute',selector,attribute:name,...(href?{summary:true}:{}),...readOptions(value)});return result.status==='invalidated'?result:result.value;
       };
       const navigationOptions = (value={}) => {
@@ -232,7 +233,7 @@ export async function createComputerScript({ browser = true } = {}) {
           rows: (value={}) => call({action:'table',selector,...pageOptions(value)}),
           attribute: (name,value={}) => attribute(selector,name,false,value),
           linkSummary: async (value={}) => {const result=await attribute(selector,'href',true,value);return result?.status==='invalidated'?result:{url:result,redacted:true};},
-          getAttribute: (attribute,value={}) => { string(attribute,'attribute'); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute,...readOptions(value)}); },
+          getAttribute: (attribute,value={}) => { string(attribute,'attribute'); if(!attribute.length||attribute.length>2000) invalid('attribute','attribute_name'); return call({action:'attribute',selector,attribute,...readOptions(value)}); },
         } : {}),
         click: (value={}) => call({action: 'click', selector,...clickOptions(value,true)}),
         fill: (text) => call({action: 'fill', selector, text: string(text)}),
@@ -349,7 +350,7 @@ export async function createComputerScript({ browser = true } = {}) {
         // Preserve bounded output without exposing guest exception text, which
         // can include values from the page or sensitive input.
         const failure = new Error('SCRIPT_FAILED');
-        failure.result = { context_reusable: !execution.hostStopped && !execution.pending.size && !runtime.hasPendingJob() && Date.now() < execution.deadline && diagnostic.phase === 'parse', logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, ...execution.argumentDiagnostic, ...execution.conditionDiagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
+        failure.result = { context_reusable: !execution.hostStopped && !execution.pending.size && !runtime.hasPendingJob() && Date.now() < execution.deadline && diagnostic.phase === 'parse', logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, ...(execution.outputLimit?{output_limit:execution.outputLimit}:{}), diagnostic: { ...diagnostic, ...execution.argumentDiagnostic, ...execution.conditionDiagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
         throw failure;
       } finally {
         execution.sealed = true;

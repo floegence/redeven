@@ -523,6 +523,7 @@
         "computerCompletedActions": "Выполненные действия",
         "computerUnavailable": "Недоступно",
         "computerBlankPage": "Пустая страница",
+        "computerOutputLimitReached": "Достигнут лимит вывода; выполненная работа сохранена",
         "computerBudgetExhausted": "Достигнут лимит скрипта; выполненная работа сохранена",
         "computerNoTargets": "Нет доступных страниц или приложений",
         "previewLoading": "Загрузка сведений…",

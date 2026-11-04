@@ -5490,6 +5490,7 @@
         "computerPreparedOnly": "Preparação concluída; nenhuma entrada enviada",
         "computerInputIncomplete": "Entrada parcialmente enviada; verifique antes de continuar",
         "computerEffectConfirmed": "Uma ação foi concluída; verifique antes de continuar",
+        "computerOutputLimitReached": "Limite de saída atingido; o trabalho concluído foi preservado",
         "computerBudgetExhausted": "Limite do script atingido; o trabalho concluído foi preservado",
         "computerReadCompleted": "Leitura concluída",
         "computerReadScope": "Somente o escopo solicitado; uma captura atual é separada.",

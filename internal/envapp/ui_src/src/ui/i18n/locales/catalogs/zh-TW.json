@@ -5490,6 +5490,7 @@
         "computerPreparedOnly": "已完成準備，尚未傳送輸入",
         "computerInputIncomplete": "部分輸入已傳送，請先檢查目前狀態",
         "computerEffectConfirmed": "已有操作完成，請先檢查再繼續",
+        "computerOutputLimitReached": "已達輸出上限；已完成的工作會保留",
         "computerBudgetExhausted": "指令碼已達執行上限，已完成的工作已保留",
         "computerReadCompleted": "讀取已完成",
         "computerReadScope": "僅表示請求範圍的讀取；不代表已有目前截圖。",

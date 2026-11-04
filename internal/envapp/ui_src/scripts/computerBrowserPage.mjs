@@ -275,9 +275,13 @@ export class BrowserComputerPage {
     const sessions = this.transport.frameSessions ? await this.transport.frameSessions() : [this.transport];
     const result = [];
     const seen = new Set();
+    for (const session of sessions) await this.initializeSession(session);
+    const inventoryRevision = this.revision;
     for (const session of sessions) {
-      await this.initializeSession(session);
       const { frameTree } = await session.send('Page.getFrameTree');
+      // A successful inventory cannot reinstall a document already retired by
+      // a lifecycle event. Unknown protocol failures remain unknown failures.
+      if (inventoryRevision !== this.revision) throw new BrowserObservationInvalidated('document_changed', {event:'document_inventory'});
       const walk = (tree) => {
         if (!seen.has(tree.frame.id)) { seen.add(tree.frame.id); result.push({ session, frame: tree.frame }); }
         for (const child of tree.childFrames || []) walk(child);
@@ -286,10 +290,11 @@ export class BrowserComputerPage {
     }
     for (const frame of result) {
       const previous = this.observedFrames.get(frame.frame.id);
-      if (previous?.ready && previous.session === frame.session && previous.frame.loaderId === frame.frame.loaderId) continue;
+      if (previous?.ready && previous.session === frame.session && previous.frame.loaderId === frame.frame.loaderId) { frame.document = previous; continue; }
       if (previous) this.invalidate([frame.frame.id]);
       const record = {...frame, revision:this.revision, ready:false};
       this.observedFrames.set(frame.frame.id,record);
+      frame.document = record;
       try {
         await this.readFrame(frame, async () => {
           const {executionContextId} = await protocolRead(frame.session, 'Page.createIsolatedWorld', {frameId:frame.frame.id,worldName:'flower-observation'}, value=>Number.isInteger(value?.executionContextId));
@@ -305,9 +310,15 @@ export class BrowserComputerPage {
   // Only a lifecycle change of the exact document being read classifies a
   // protocol failure as invalidation. Unrelated frame churn is not evidence.
   async readFrame(frame, read) {
-    const record=this.observedFrames.get(frame.frame.id);
+    // Keep the enumerated document, including its retirement evidence. Looking
+    // it up again after detach loses the exact event or binds a replacement.
+    const record=frame.document ?? this.observedFrames.get(frame.frame.id);
+    const check = () => { if(record?.invalidation) throw new BrowserObservationInvalidated('document_changed',record.invalidation); };
+    check();
     try {
-      return await read();
+      const value = await read();
+      check();
+      return value;
     } catch(error) {
       if(record?.invalidation && error.protocolDiagnostic?.phase==='protocol')
         throw new BrowserObservationInvalidated('document_changed',record.invalidation,error.protocolDiagnostic);
@@ -739,10 +750,15 @@ export class BrowserComputerPage {
   async attribute(element, name, summary = false) {
     const {node} = await element.frame.session.send('DOM.describeNode',{backendNodeId:element.backendNodeId});
     const attributes=node.attributes || [];
+    const ownAttributes = new Map();
+    for(let i=0;i<attributes.length;i+=2) ownAttributes.set(attributes[i].toLowerCase(),attributes[i+1]);
+    // Attribute reads expose only this node's captured attributes. Protect
+    // hidden credential inputs too, without inspecting or selecting content.
+    if(node.nodeName==='INPUT'&&((ownAttributes.get('type')??'').toLowerCase()==='password'||(ownAttributes.get('autocomplete')??'').toLowerCase().split(/\s+/u).includes('one-time-code')))throw new Error('TAKEOVER_REQUIRED');
     let index=-1; for(let i=0;i<attributes.length;i+=2) if(attributes[i]===name) {index=i;break;}
     let value=index>=0?attributes[index+1]:null;
     let redacted;
-    if (value !== null && name==='href') {
+    if (value !== null && ['href','src','action','formaction','poster','cite','data','xlink:href'].includes(name.toLowerCase())) {
       try {
         const url=new URL(value,element.frame.frame.url);
         if (summary) {

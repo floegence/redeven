@@ -2000,6 +2000,14 @@ it.each([false, true])('presents an explicit observation interruption without ch
   expect(source.status).toBe('error');
 });
 
+it('shows output exhaustion as a budget interruption while preserving canonical details', () => {
+  const source=item({tool_name:'computer.exec',renderer:'structured',status:'error',chips:[{kind:'computer_budget',label:'budget',value:'output'}],payload:{error:{code:'SCRIPT_FAILED',message:'Output limit reached'}}});
+  const result=presentFlowerActivityItem(source);
+  expect(result.meta).toBe(toolActivityEnUS.computerOutputLimitReached);
+  expect(result.detailBlocks.find(block=>block.kind==='error')).toMatchObject({error:{code:'SCRIPT_FAILED',budget_interruption:true}});
+  expect(source.status).toBe('error');
+});
+
 it.each([
  ['prepared','Preparation completed; input not sent'],
  ['partial_input','Input partially sent; inspect before continuing'],

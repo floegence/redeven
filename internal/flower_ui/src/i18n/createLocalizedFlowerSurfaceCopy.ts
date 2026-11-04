@@ -184,6 +184,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         computerPreparedOnly: t(i18n, k('chat.toolActivity.computerPreparedOnly')),
         computerInputIncomplete: t(i18n, k('chat.toolActivity.computerInputIncomplete')),
         computerEffectConfirmed: t(i18n, k('chat.toolActivity.computerEffectConfirmed')),
+        computerOutputLimitReached: t(i18n, k('chat.toolActivity.computerOutputLimitReached')),
         computerBudgetExhausted: t(i18n, k('chat.toolActivity.computerBudgetExhausted')),
         computerReadCompleted: t(i18n, k('chat.toolActivity.computerReadCompleted')),
         computerReadScope: t(i18n, k('chat.toolActivity.computerReadScope')),

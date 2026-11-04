@@ -40,3 +40,14 @@ it('presents a confirmed budget stop as partial work without masking other failu
   }
   expect(computerObservationInterruption(item({chips,field_summary:{uncertain_effect:true,fields:[]}}))).toBeUndefined();
 });
+
+it('presents an explicit output limit without hiding unrelated errors or uncertainty', () => {
+  const chips = [{kind:'computer_budget',label:'budget',value:'output'}];
+  for (const code of [undefined,'SCRIPT_OUTPUT_LIMIT','SCRIPT_FAILED']) {
+    expect(computerObservationInterruption(item({chips,payload:{error:{code}}}))).toBe('output');
+  }
+  for (const code of ['SCRIPT_ARGUMENT_ERROR','TARGET_PERMISSION_REQUIRED','TIMEOUT']) {
+    expect(isPresentedToolFailure(item({chips,payload:{error:{code}}}))).toBe(true);
+  }
+  expect(isPresentedToolFailure(item({chips,field_summary:{uncertain_effect:true,fields:[]}}))).toBe(true);
+});

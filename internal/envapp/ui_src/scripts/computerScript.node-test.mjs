@@ -236,7 +236,7 @@ test('strict waits seal later input even when a guest catches timeout', async ()
  } finally {script.dispose();}
 });
 
-test('read helpers preserve legacy shapes and never treat redacted href as an action URL',async()=>{
+test('read helpers preserve legacy shapes and precise attributes',async()=>{
  const script=await createComputerScript(); const actions=[];
  try {
   const result=await script.execute("const l=ui.ref('r'); log(await l.node(),await l.read(),await l.count(),await l.attribute('title'),await l.linkSummary(),await l.rows({limit:2}));",async op=>{
@@ -245,7 +245,22 @@ test('read helpers preserve legacy shapes and never treat redacted href as an ac
    return {rows:[],total:0,truncated:false};
   });
   assert.deepEqual(result.logs[0],[{ref:'r',role:'button',platform_role:'AXButton'},{node:{ref:'r',role:'AXButton',canonical_role:'button',platform_role:'AXButton'}},9,'Title',{url:'https://example.test/path',redacted:true},{rows:[],total:0,truncated:false}]);
-  await assert.rejects(script.execute("await ui.ref('r').attribute('href');",async()=>assert.fail('unsafe dispatch')));
+  const raw=await script.execute("log(await ui.ref('r').attribute('href'),await ui.ref('r').getAttribute('data-resource'));",async op=>({attribute:op.attribute,value:op.attribute==='href'?'/report?id=2#tab':'raw source'}));
+  assert.deepEqual(raw.logs,[['/report?id=2#tab',{attribute:'data-resource',value:'raw source'}]]);
+ }finally{script.dispose();}
+});
+
+test('log budget measures encoded UTF-8 and reports a rejected output without claiming read failure',async()=>{
+ const script=await createComputerScript();const actions=[];
+ try{
+  const result=await script.execute("log('中');log(ui.budget());",async()=>assert.fail('unexpected operation'));
+  assert.equal(result.logs[1][0].remaining_log_bytes,65536-Buffer.byteLength(JSON.stringify(['中'])));
+  assert.equal(result.logs[1][0].log_limit_bytes,65536);
+  await assert.rejects(script.execute("await ui.snapshot({full:true});log('a'.repeat(65532));log('x');await ui.key('Enter');",async op=>{actions.push(op.action);return {observation:{nodes:[]}};}),error=>{
+   assert.equal(error.result.diagnostic.code,'SCRIPT_OUTPUT_LIMIT');
+   assert.deepEqual(error.result.output_limit,{stage:'log',limit_bytes:65536,attempted_bytes:5,remaining_bytes:0,emitted_logs:1});
+   assert.deepEqual(actions,['snapshot']);assert.equal(error.result.logs.length,1);return true;
+  });
  }finally{script.dispose();}
 });
 

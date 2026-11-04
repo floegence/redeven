@@ -5490,6 +5490,7 @@
         "computerPreparedOnly": "準備は完了しました。入力は送信されていません",
         "computerInputIncomplete": "入力は一部送信済みです。続行前に状態を確認してください",
         "computerEffectConfirmed": "操作が完了しています。続行前に確認してください",
+        "computerOutputLimitReached": "出力上限に達しました。完了した作業は保持されます",
         "computerBudgetExhausted": "スクリプトの実行上限に達しました。完了した作業は保持されています",
         "computerReadCompleted": "読み取り完了",
         "computerReadScope": "要求された範囲のみ。現在のスクリーンショットとは別です。",

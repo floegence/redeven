@@ -657,6 +657,45 @@ func TestComputerScriptLogBudgetUsesWireUTF8Bytes(t *testing.T) {
 	}
 }
 
+func TestComputerScriptOutputLimitRetainsReadAndExplicitPrefix(t *testing.T) {
+	calls := 0
+	rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		calls++
+		return TargetToolResult{Result: map[string]any{"observation": semanticTestTree()}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToCapture: true, SafeToSendToModel: true}}, nil
+	})
+	result, err := executeTestScript(t.Context(), rt, call, "await ui.snapshot(); log('prefix'); log('x'.repeat(65536)); await ui.key('Enter');")
+	p := result.Result.(map[string]any)
+	limit, _ := p["output_limit"].(map[string]any)
+	budget, _ := p["budget"].(map[string]any)
+	if err == nil || calls != 1 || p["script_error"] != "SCRIPT_OUTPUT_LIMIT" || p["budget_exhausted"] != "output" || p["context_reset"] != true {
+		t.Fatalf("output stop contract: calls=%d %#v %v", calls, p, err)
+	}
+	if limit["stage"] != "log" || limit["limit_bytes"] != int64(65536) || limit["emitted_logs"] != int64(1) || budget["remaining_log_bytes"] != 65526 || len(toAnySlice(p["completed_reads"])) != 1 || p["observation"] == nil || !strings.Contains(fmt.Sprint(p["logs"]), "prefix") {
+		t.Fatalf("completed output lost: %#v", p)
+	}
+}
+
+func TestComputerScriptReadOutcomesSurviveExplicitRecoveryWithoutContentEmission(t *testing.T) {
+	calls := 0
+	rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		calls++
+		if calls == 1 {
+			return computerObservationFailure(c, map[string]any{"action_executed": false, "observation_invalidated": true, "reason": "document_changed", "observation_stage": "safety_scan", "invalidation": map[string]any{"scope": "safety", "event": "Page.frameDetached", "frame_id": "child"}}, "fixture")
+		}
+		return TargetToolResult{Result: map[string]any{"observation": semanticTestTree()}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToCapture: true, SafeToSendToModel: true}}, nil
+	})
+	result, err := executeTestScript(t.Context(), rt, call, "const first=await ui.snapshot({emit:false,on_invalidated:'return'}); if(first.status==='invalidated') await ui.snapshot({emit:false});")
+	p := result.Result.(map[string]any)
+	outcomes := toAnySlice(p["read_outcomes"])
+	if err != nil || calls != 2 || len(outcomes) != 2 {
+		t.Fatalf("recovery receipts missing: %#v %v", p, err)
+	}
+	first, second := outcomes[0].(map[string]any), outcomes[1].(map[string]any)
+	if first["status"] != "invalidated" || first["operation_index"] != 0 || first["reason"] != "document_changed" || first["invalidation"] == nil || second["status"] != "completed" || second["operation_index"] != 1 || first["nodes"] != nil || second["nodes"] != nil {
+		t.Fatalf("read receipts changed facts or retained content: %#v", outcomes)
+	}
+}
+
 func TestComputerScriptUnknownEffectWithTakeoverDiscardsContent(t *testing.T) {
 	rt, call := scriptRuntimeFixture(t, func(context.Context, TargetToolCall) (TargetToolResult, error) {
 		return TargetToolResult{Result: map[string]any{"observation": map[string]any{"text": "private-observation"}}, Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}}, errComputerEffectUnknown

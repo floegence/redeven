@@ -67,7 +67,7 @@ export function validateBrowserAction(args, privateInput = false) {
       break;
     case 'attribute':
       if (args.summary !== undefined && (typeof args.summary !== 'boolean' || args.attribute !== 'href')) throw argumentFailure('arguments','documented_fields');
-      if (!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(args.attribute)) throw argumentFailure('attribute','readable_attribute');
+      if (typeof args.attribute!=='string'||!args.attribute.length||args.attribute.length>2000) throw argumentFailure('attribute','attribute_name');
       break;
     case 'source':
       if(args.source!==undefined&&!['ax','dom'].includes(args.source))throw argumentFailure('arguments','documented_fields');

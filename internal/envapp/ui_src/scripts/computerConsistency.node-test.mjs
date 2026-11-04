@@ -34,6 +34,41 @@ test('unrelated frame churn cannot reclassify an unknown protocol failure',async
  const response=await call('computer.action',{action:'wait',selector:{role:'button',name:'Ready'},timeout_ms:1500});assert.equal(response.error,'TARGET_OBSERVATION_UNAVAILABLE',JSON.stringify(response));
 }));
 
+test('a frame detached before its safety read retains the enumerated document identity',async()=>fixture(async({tab,session,controller,call})=>{
+ const read=controller.page.inFrame.bind(controller.page);let removed=false,dispatched=false;
+ const send=session.send.bind(session);
+ session.send=async(method,params)=>{if(removed&&method==='Page.createIsolatedWorld'&&params.frameId===removed)dispatched=true;return send(method,params);};
+ controller.page.inFrame=async(frame,...args)=>{
+  if(frame.frame.parentId&&!removed&&args[0].includes('__flowerPrivacyObserver.secretChanged()')){
+   removed=frame.frame.id;
+   const detached=new Promise(resolve=>session.once('Page.frameDetached',resolve));
+   await tab.evaluate(()=>document.querySelector('iframe').remove());await detached;
+  }
+  return read(frame,...args);
+ };
+ const response=await call('computer.observe');
+ assert.equal(response.result.reason,'document_changed',JSON.stringify(response));
+ assert.equal(response.result.invalidation.frame_id,removed);
+ assert.equal(response.result.invalidation.event,'Page.frameDetached');
+ assert.equal(response.result.invalidation.scope,'safety');assert.equal(dispatched,false);
+ assert.equal((await call('computer.observe')).error,undefined);
+}));
+
+test('a lifecycle change during frame enumeration cannot install stale documents',async()=>fixture(async({tab,session,controller,call})=>{
+ const send=session.send.bind(session);let removed=false;
+ session.send=async(method,params)=>{
+  const result=await send(method,params);
+  if(method==='Page.getFrameTree'&&!removed){removed=true;const detached=new Promise(resolve=>session.once('Page.frameDetached',resolve));await tab.evaluate(()=>document.querySelector('iframe').remove());await detached;}
+  return result;
+ };
+ const response=await call('computer.observe');
+ assert.equal(response.result.reason,'document_changed',JSON.stringify(response));
+ assert.equal(response.result.invalidation.event,'document_inventory');
+ assert.equal(response.result.observation,undefined);
+ assert.equal((await call('computer.observe')).error,undefined);
+ assert.equal([...controller.page.observedFrames.values()].some(record=>record.frame.parentId),false);
+}));
+
 test('scoped text distinguishes page-wide safety loss from preserved content identity',async()=>fixture(async({tab,controller,call,initial})=>{
  const ref=initial.result.observation.nodes.find(n=>n.role==='main').ref;
  const entry=controller.page.references.get(ref);

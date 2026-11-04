@@ -5490,6 +5490,7 @@
         "computerPreparedOnly": "Vorbereitung abgeschlossen; keine Eingabe gesendet",
         "computerInputIncomplete": "Eingabe teilweise gesendet; vor dem Fortfahren prüfen",
         "computerEffectConfirmed": "Eine Aktion wurde ausgeführt; vor dem Fortfahren prüfen",
+        "computerOutputLimitReached": "Ausgabelimit erreicht; abgeschlossene Arbeit bleibt erhalten",
         "computerBudgetExhausted": "Skriptlimit erreicht; abgeschlossene Arbeit bleibt erhalten",
         "computerReadCompleted": "Lesen abgeschlossen",
         "computerReadScope": "Nur der angeforderte Bereich; ein aktueller Screenshot ist separat.",

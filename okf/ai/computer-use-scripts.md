@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script execution and semantic observations
 tags: [ai, computer-use, scripts, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -21,14 +21,14 @@ Require target/code/readable description. Limits:30s/50 operations/eight namespa
 
 SCRIPT_NO_PROGRESS=no supported pending work; STALE_REFERENCE=invalid observed identity. Neither implies interference or allows replay/retarget. Failed host calls seal even if caught, retire namespace/dormant Promises, return context_reset/confirmed effects. Parse rejection before execution preserves a healthy namespace; execution faults still retire dormant jobs. Unique missing/ambiguous lookup fails; optional query/count zero and waitFor timeout remain data.
 
-snapshot/observe/screenshot and readonly locator methods with on_invalidated:"return" explicitly returns status:invalidated/reason:document_changed/observation_stage/needs_observation with no content only for typed no-effect document change: no preparation/input, takeover, cancellation or revoked authority. Default throws. The invalid read consumes budget without a completed_actions entry; LLM decides subsequent reads, with no automatic retry/reset. The option also covers locator.snapshot pre-resolution. Candidate changes, unknown protocol faults and uncertainty still stop. completed_reads records successful read kinds/scopes separately from observation_status and screenshot authority. Activity displays context_reset and zero-based failed-operation facts without changing execution status.
+snapshot/observe/screenshot and readonly locator methods with on_invalidated:"return" explicitly returns status:invalidated/reason:document_changed/observation_stage/needs_observation with no content only for typed no-effect document change: no preparation/input, takeover, cancellation or revoked authority. Default throws. The invalid read consumes budget without a completed_actions entry; LLM decides subsequent reads, with no automatic retry/reset. The option also covers locator.snapshot pre-resolution. Candidate changes, unknown protocol faults and uncertainty still stop. read_outcomes retains invocation-local operation_index/action/status and bounded document identity/typed invalidation, including explicit returned invalidations with emit:false. It never captures guest locals, page content or recovery decisions; the existing 50-operation limit bounds receipts. Privacy pauses discard them. completed_reads records successful read kinds/scopes separately from observation_status and screenshot authority. Activity displays context_reset and zero-based failed-operation facts without changing execution status.
 
 Compilation phase=parse; rejected jobs/execution preserve execution/host_operation even for SyntaxError. Closed diagnostics include phase/known method/field/expected/example/available source position-symbol; raw interpreter text private. Echo known unsupported option names only. Guide/help(read/source/interaction/visual/downloads/legacy) owns signatures/deltas/waits/validation and observed roles, not business guesses. CDP retains method/signed code. Source-owner absent/closed/busy/identity rejection returns action_executed:false before dispatch. helper_exchange retains response_unavailable|invalid_response|helper_rejected and uncertainty regardless of wording; only exact request/target/validated evidence confirms non-execution.
 
 ## Output
 Bounds: snapshot256KiB/helper512KiB/final1MiB/log64KiB UTF-8/explicit prefix384KiB encoded. Exact-size admission yields SCRIPT_OUTPUT_LIMIT/continuation, never replay or silent middle loss. Logs precede later operations. Explicit prefix survives later failure/timeout/uncertainty; failed read drops only its own data/pixels and stops subsequent calls/logs. Private pause removes invocation content.
 
-One prefix retains emitted trees/operation_index/target_id; output_order indexes logs/observations/images; observation is internal compatibility view. Model output replaces an exactly duplicate emitted observation with current_observation_index; distinct recovery observations remain. Confirmed time/operation exhaustion reports budget_exhausted; uncertainty never becomes a neutral budget stop. Prior images survive but authorize no stale coordinates. Encoding/Activity keeps order and discloses preview limits. Only snapshot/observe/locator.snapshot accept emit; collections need log, screenshot/help always emit. emit:false retains guest structure/identity/budget.
+One prefix retains emitted trees/operation_index/target_id; output_order indexes logs/observations/images; observation is internal compatibility view. Model output replaces an exactly duplicate emitted observation with current_observation_index; distinct recovery observations remain. Confirmed time/operation/output exhaustion reports budget_exhausted. ui.budget and final budget expose remaining_log_bytes/log_limit_bytes; logs allow 65536 UTF-8 bytes including JSON encoding. Output overflow returns output_limit stage/delivery counts/remaining bytes and retains earlier explicit output. Snapshot emission already returns its tree; do not duplicate it with log(snapshot). Activity presents confirmed output limits as an interruption while retaining canonical failure, namespace reset and delivery facts; uncertainty never becomes a neutral budget stop. Prior images survive but authorize no stale coordinates. Encoding/Activity keeps order and discloses preview limits. Only snapshot/observe/locator.snapshot accept emit; collections need log, screenshot/help always emit. emit:false retains guest structure/identity/budget.
 
 Automatic tree_text avoids duplicate nodes;32KiB includes escaping/metadata. Title/URL each4KiB encoded with loss flags; document identity exact. Activity handles bounded/blank fields. Legacy observe/full:true/node keep structure. JSON-quoted ref/role/name and key=JSON prevent quote/newline/bidi forgery. Indent expresses ancestry; parent_ref handles sparse/depth>8. Frame inheritance only within full trees; frame_absent explicit. False/mixed/empty/loss flags survive. source_truncated vs output_truncated separates collection/presentation; truncated covers either.
 
@@ -58,7 +58,7 @@ No second history/recovery ledger. Sanitized input_progress preserves partial po
 ## Qualified browser batch example
 
 
-For inspected URLs and a unique Score region, combine navigation, reads, condition/computation and final screenshot. Visual interpretation follows the result.
+For inspected URLs and a unique Score region, combine navigation, reads, condition/computation and final screenshot. Emit each completed item before a later step can fail; guest-local values alone are not published. Assert scope, resource, period and coverage from source facts before making a business conclusion; navigation milestones or node counts do not establish application readiness. Visual interpretation follows the result.
 
 <!-- qualified-browser-batch -->
 ```javascript
@@ -68,6 +68,7 @@ for (let page = 1; page <= 3; page++) {
   const value = await ui.getByRole('region', {name: 'Score', exact: true}).text();
   ui.assert(!value.truncated && Number.isFinite(Number(value.text)));
   batchScores.push(Number(value.text));
+  log({page, score: Number(value.text)});
 }
 globalThis.batchTotal = batchScores.reduce((sum, value) => sum + value, 0);
 log({scores: batchScores, total: batchTotal});

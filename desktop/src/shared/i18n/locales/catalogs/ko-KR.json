@@ -516,6 +516,7 @@
         "computerCompletedActions": "완료된 작업",
         "computerUnavailable": "사용할 수 없음",
         "computerBlankPage": "빈 페이지",
+        "computerOutputLimitReached": "출력 한도에 도달했습니다. 완료된 작업은 유지됩니다",
         "computerBudgetExhausted": "스크립트 실행 한도에 도달했습니다. 완료된 작업은 유지됩니다",
         "computerNoTargets": "사용 가능한 페이지나 앱이 없습니다",
         "previewLoading": "세부 정보 불러오는 중…",

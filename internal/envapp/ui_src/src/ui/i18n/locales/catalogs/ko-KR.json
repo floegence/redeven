@@ -5490,6 +5490,7 @@
         "computerPreparedOnly": "준비가 완료되었지만 입력은 보내지 않았습니다",
         "computerInputIncomplete": "입력이 일부 전송되었습니다. 계속하기 전에 상태를 확인하세요",
         "computerEffectConfirmed": "완료된 작업이 있습니다. 계속하기 전에 확인하세요",
+        "computerOutputLimitReached": "출력 한도에 도달했습니다. 완료된 작업은 유지됩니다",
         "computerBudgetExhausted": "스크립트 실행 한도에 도달했습니다. 완료된 작업은 유지됩니다",
         "computerReadCompleted": "읽기 완료",
         "computerReadScope": "요청한 범위만 읽었습니다. 현재 스크린샷과는 별개입니다.",

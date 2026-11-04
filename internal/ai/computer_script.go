@@ -212,6 +212,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	needsObservation := false
 	currentObservation := false
 	var completedReads []any
+	var readOutcomes []any
 	var invalidationFacts map[string]any
 	var invalidatedWait map[string]any
 	var observationFailureStage string
@@ -255,13 +256,15 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				delete(payload, "observation")
 				output.Attachments = nil
 			}
-			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations)}
+			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations), "remaining_log_bytes": max(0, 65536-logBytes), "log_limit_bytes": 65536}
 			if !errors.Is(outputErr, errComputerEffectUnknown) {
 				switch {
 				case errors.Is(outputErr, context.DeadlineExceeded), payload["script_error"] == "SCRIPT_TIMEOUT":
 					payload["budget_exhausted"] = "time"
 				case payload["script_error"] == "SCRIPT_OPERATION_LIMIT":
 					payload["budget_exhausted"] = "operations"
+				case payload["script_error"] == "SCRIPT_OUTPUT_LIMIT" && computerOutputLimitFacts(payload["output_limit"]) != nil:
+					payload["budget_exhausted"] = "output"
 				}
 			}
 			if failureStage != "" {
@@ -294,6 +297,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if len(completedReads) > 0 && pause == nil {
 				payload["completed_reads"] = completedReads
+			}
+			if len(readOutcomes) > 0 && pause == nil {
+				payload["read_outcomes"] = readOutcomes
 			}
 			if invalidationFacts != nil {
 				payload["invalidation"] = invalidationFacts
@@ -435,6 +441,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				if detail := computerOperationDiagnostic(facts["diagnostic"]); detail != nil {
 					observed.Result.(map[string]any)["diagnostic"] = detail
 				}
+				readOutcomes = append(readOutcomes, computerReadOutcome(msg.Operation, operations-1, "invalidated", observed.Result.(map[string]any)))
 				if sendErr := send(map[string]any{"type": "operation_result", "id": msg.ID, "result": observed.Result}); sendErr != nil {
 					return result, sendErr
 				}
@@ -470,6 +477,13 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				safety := computerPauseSafety(observed, err)
 				pause = &safety
 				stopped = ErrInteractionTakeoverRequired
+			}
+			if computerOperationReturnsInvalidation(msg.Operation) && pause == nil {
+				status := "completed"
+				if err != nil {
+					status = "error"
+				}
+				readOutcomes = append(readOutcomes, computerReadOutcome(msg.Operation, operations-1, status, facts))
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
 				argumentDiagnostic = computerOperationDiagnostic(payload["diagnostic"])
@@ -615,6 +629,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				return result, errors.New("computer script response identity mismatch")
 			}
 			result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "logs": msg.Result["logs"], "truncated": msg.Result["truncated"] == true, "observation": lastObservation, "completed": stopped == nil && msg.Type == "result"}
+			if limit := computerOutputLimitFacts(msg.Result["output_limit"]); limit != nil {
+				result.Result.(map[string]any)["output_limit"] = limit
+			}
 			if observationInvalidated {
 				result.Result.(map[string]any)["observation_invalidated"] = true
 			}
