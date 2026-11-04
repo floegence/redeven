@@ -12,7 +12,7 @@ afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren();
 const group = (key: string, nodeKeys = [key, key + '-child']): FlowerToolSequence => ({
   key, nodeKeys, entryKeys: nodeKeys, countsComplete: true, missingBefore: false, missingAfter: false,
   toolCount: nodeKeys.length, failedCount: 0, uncertainCount: 0, failedSubagentEventCount: 0,
-  thinkingCount: 0, subagentEventCount: 0, runningCount: 0, disclosure: 'automatic', followingContentKeys: [],
+  subagentEventCount: 0, runningCount: 0, disclosure: 'automatic', followingContentKeys: [],
 });
 const project = (groups: FlowerToolSequence[]): FlowerToolSequenceProjection => ({
   groups: new Map(groups.map(value => [value.key, value])),
