@@ -5238,19 +5238,6 @@ html.dark .git-content-skeleton__block {
   }
 }
 
-.managed-release-compact-row {
-  align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 3.75rem;
-}
-.managed-release-compact-row > div:nth-child(3) {
-  grid-column: 2;
-  max-width: min(14rem, 45vw);
-  align-self: center;
-}
-.managed-release-selected-content {
-  padding: 0.25rem 1rem 1.25rem 2.25rem;
-}
 .managed-release-inline-notice {
   scroll-margin-block: 1rem;
 }
@@ -5285,18 +5272,6 @@ html.dark .git-content-skeleton__block {
 }
 .managed-release-details summary {
   width: fit-content;
-}
-
-.managed-release-browser[data-compact='true'] .managed-release-list-status {
-  flex-basis: 40px;
-  height: 40px;
-  padding: 0 4px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted-foreground);
-}
-.managed-release-browser[data-compact='true'] .managed-release-list-status[data-error='true'] {
-  color: var(--destructive);
 }
 
 /* Product palette adapters for the published settings surfaces. */

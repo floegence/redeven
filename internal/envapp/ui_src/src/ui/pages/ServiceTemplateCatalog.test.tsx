@@ -30,8 +30,9 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Tabs: (props: any) => <div role="tablist" aria-label={props.ariaLabel}>{props.items.map((item: any) => <button role="tab" aria-selected={item.id === props.activeId} onClick={() => props.onChange(item.id)}>{item.label}</button>)}</div>,
   Button: (props: any) => <button type="button" class={props.class} disabled={props.disabled} data-testid={props['data-testid']} onClick={props.onClick}>{props.children}</button>,
-  Dropdown: (props: any) => <div data-dropdown>{props.trigger}<div data-dropdown-items>{props.items.map((item: any) => <button type="button" disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.label}</button>)}</div></div>,
+  Dropdown: (props: any) => <div data-dropdown aria-disabled={props.disabled ? "true" : "false"}>{props.trigger}<div data-dropdown-items>{props.items.map((item: any) => <button type="button" disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.label}</button>)}</div></div>,
   Input: (props: any) => <input value={props.value} class={props.class} aria-label={props['aria-label']} placeholder={props.placeholder} onInput={props.onInput} />,
   Tag: (props: any) => <span>{props.children}</span>,
 }));
@@ -153,8 +154,8 @@ describe('ServiceTemplateCatalog', () => {
     expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Example Service');
     expect(host.textContent).toContain('Built-in templates');
     expect(host.textContent).toContain('Custom templates');
-    expect(host.textContent).toContain('Host templates 2');
-    expect(host.textContent).toContain('Container templates 1');
+    expect(host.textContent).toContain('Host templates · 2');
+    expect(host.textContent).toContain('Container templates · 1');
   });
 
   it('retains available templates and their details during a refresh', () => {
@@ -310,7 +311,7 @@ describe('ServiceTemplateCatalog', () => {
       .find((button) => button.textContent?.includes('Open'));
     expect(openAction?.disabled).toBe(true);
     expect(openAction?.textContent).toContain('The service is not running.');
-    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-more"]')?.disabled).toBe(false);
+    expect(host.querySelector('[data-testid="service-template-more"]')?.closest('[data-dropdown]')?.getAttribute('aria-disabled')).toBe('false');
   });
 
   it('shows a distinct no-results state and clears the search', () => {
@@ -331,7 +332,7 @@ describe('ServiceTemplateCatalog', () => {
 
   it('disables create and management actions without permission', () => {
     mount({ canManage: false });
-    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-create-menu"]')?.disabled).toBe(true);
+    expect(host.querySelector('[data-testid="service-template-create-menu"]')?.closest('[data-dropdown]')?.getAttribute('aria-disabled')).toBe('true');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
     expect(Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dropdown-items] button')).every((button) => button.disabled)).toBe(true);
     const versions = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Versions');

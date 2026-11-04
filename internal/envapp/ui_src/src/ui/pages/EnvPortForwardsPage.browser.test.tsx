@@ -177,7 +177,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(surface.textContent).toContain('Current installed release');
     expect(surface.textContent).toContain('sha512-current');
     expect(surface.textContent).toContain('0.1.2-alpha.3');
-    expect(surface.textContent).toContain('Published');
+    await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-release-id="preview"]')!);
+    expect(surface.querySelector('.managed-release-provenance')?.textContent).toContain('Published');
     expect(surface.textContent).toContain('Deprecated');
     expect(document.querySelector<HTMLButtonElement>('[data-release-id="deprecated"]')?.disabled).toBe(false);
     expect(scrollViewport.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
@@ -483,13 +484,13 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const status = host.querySelector<HTMLElement>('[data-testid="managed-release-more-sentinel"]')!;
     const initialStatusBounds = status.getBoundingClientRect();
     expect(viewport.scrollTop).toBe(0);
-    expect(initialStatusBounds.height).toBe(56);
+    expect(initialStatusBounds.height).toBe(36);
     expect(initialStatusBounds.top).toBeGreaterThan(viewport.getBoundingClientRect().bottom);
     expect(status.textContent).toContain('Loading available versions');
     expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth);
     const spinner = status.querySelector<HTMLElement>('[data-testid="managed-release-loading-spinner"]')!;
     expect(spinner).toBeTruthy();
-    expect(spinner.getBoundingClientRect().width).toBeGreaterThanOrEqual(20);
+    expect(spinner.getBoundingClientRect().width).toBeGreaterThanOrEqual(14);
     const animation = spinner.getAnimations()[0];
     expect(animation?.playState).toBe('running');
     const before = getComputedStyle(spinner).transform;

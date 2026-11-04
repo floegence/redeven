@@ -1,5 +1,5 @@
 import type { Spec, TemplateParameter, HostTemplateSpec, ContainerTemplateSpec, ContainerMountSpec } from '@floegence/redeven-service-templates';
-import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, createUniqueId, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
   AlertTriangle,
@@ -12,7 +12,7 @@ import {
   Plus,
   Search,
 } from '@floegence/floe-webapp-core/icons';
-import { Button, Dropdown, Input, Tag, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, Input, Tag, Tabs, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
 import './service-template-center.css';
@@ -464,7 +464,7 @@ function ServiceTemplateStatus(props: {
         props.template.installed
           ? 'service-template-status--installed text-[var(--redeven-status-success-foreground)]'
           : props.template.available
-            ? 'service-template-status--available text-muted-foreground'
+            ? 'service-template-status--available text-[var(--floe-ink-soft)]'
             : 'service-template-status--unavailable text-[var(--redeven-status-warning-foreground)]',
       )}
       role={props.detailed && (props.template.available || props.template.installed) ? 'status' : undefined}
@@ -488,8 +488,6 @@ export function ServiceTemplateRow(props: {
   onSelect: () => void;
   onKeyDown: JSX.EventHandler<HTMLButtonElement, KeyboardEvent>;
 }): JSX.Element {
-  const i18n = useI18n();
-
   return (
     <button
       type="button"
@@ -515,16 +513,10 @@ export function ServiceTemplateRow(props: {
         </div>
         <div class="min-w-0 flex-1">
           <h3 class="truncate text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground" dir="auto">{props.template.name}</h3>
-          <p class="service-template-row__description mt-0.5 truncate text-xs leading-4 text-muted-foreground" dir="auto">{props.template.description}</p>
+          <p class="service-template-row__description mt-0.5 truncate text-xs leading-4 text-[var(--floe-ink-soft)]" dir="auto">{props.template.description}</p>
           <div class="mt-1 flex min-w-0 items-center justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-1.5 truncate text-[10px] leading-4 text-muted-foreground" data-template-metadata>
-              <span class="service-template-row__source truncate">
-                {props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span class="shrink-0">{props.template.deploymentLabel}</span>
+            <div class="flex min-w-0 items-center gap-1.5 truncate text-[10px] leading-4 text-[var(--floe-ink-soft)]" data-template-metadata>
               <Show when={props.template.defaultReleaseLabel}>
-                <span aria-hidden="true">·</span>
                 <span class="shrink-0 font-mono">v{props.template.defaultReleaseLabel}</span>
               </Show>
             </div>
@@ -606,7 +598,7 @@ export function ServiceTemplateDetailsPane(props: {
               <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>
             </Show>
           </div>
-          <h2 class="service-template-details__title mt-0.5 text-[length:var(--floe-type-heading)] font-medium leading-[1.375rem] text-foreground" dir="auto">{props.template.name}</h2>
+          <h2 class="service-template-details__title mt-1 text-lg font-medium leading-6 text-foreground" dir="auto">{props.template.name}</h2>
           <p class="mt-1 text-xs leading-5 text-muted-foreground" dir="auto">{props.template.description}</p>
         </div>
       </div>
@@ -620,7 +612,7 @@ export function ServiceTemplateDetailsPane(props: {
             mono
           />
           <DetailField label={i18n.t('webServices.managed.details.templateRevision')} value={props.template.revision} />
-          <DetailField label={i18n.t('webServices.managed.settings.accessMode')} value={props.template.defaultAccessMode || '—'} mono />
+          <DetailField label={i18n.t('webServices.managed.settings.accessMode')} value={props.template.defaultAccessMode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackShort') : props.template.defaultAccessMode === 'unified_proxy' ? i18n.t('webServices.accessMode.unifiedProxyShort') : '—'} />
           <Show when={(props.template.runtimeSpec?.parameters?.length ?? 0) > 0}>
             <DetailField label={i18n.t('webServices.managed.settings.templateParameters')} value={props.template.runtimeSpec?.parameters?.map((parameter) => parameter.name).join(', ')} mono wide />
           </Show>
@@ -683,17 +675,18 @@ export function ServiceTemplateDetailsPane(props: {
           onSelect={selectMenuItem}
           triggerAriaLabel={`${props.template.name}: ${i18n.t('webServices.managed.moreTemplateActions')}`}
           triggerClass="shrink-0 rounded-md"
+          disabled={!props.template.installed && menuItems().every((item) => item.disabled)}
           trigger={(
-            <button
-              type="button"
-              class="service-template-more inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
+            <span
+              data-floe-surface="raised"
+              data-floe-surface-part="button"
+              class="service-template-more inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium text-foreground"
               data-testid="service-template-more"
-              disabled={!props.template.installed && menuItems().every((item) => item.disabled)}
               title={i18n.t('webServices.managed.moreTemplateActions')}
             >
               <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
               <span>{i18n.t('webServices.managed.moreActions')}</span>
-            </button>
+            </span>
           )}
         />
       </div>
@@ -703,6 +696,7 @@ export function ServiceTemplateDetailsPane(props: {
 
 export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.Element {
   const i18n = useI18n();
+  const categoryID = createUniqueId();
   const categoryPresentation = createMemo<Readonly<{
     category: ServiceTemplateCategory;
     active: boolean;
@@ -747,26 +741,19 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
     <section class="service-template-catalog min-h-0" data-testid="service-template-catalog">
       <div class="service-template-toolbar sticky top-0 z-10 -mx-1 px-1 pb-4" data-testid="service-template-toolbar">
         <div class="flex flex-wrap items-center gap-3">
-          <div class="service-template-switcher inline-flex min-h-9 items-center gap-1" role="tablist" aria-label={i18n.t('webServices.managed.templateCategories')}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={props.category === 'host'}
-              class="service-template-switcher__item min-h-9 rounded-lg px-3 text-xs font-semibold text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => props.onCategoryChange('host')}
-            >
-              {i18n.t('webServices.managed.hostTemplates')} <span class="service-template-switcher__count ml-1.5 tabular-nums">{props.hostCount}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={props.category === 'container'}
-              class="service-template-switcher__item min-h-9 rounded-lg px-3 text-xs font-semibold text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => props.onCategoryChange('container')}
-            >
-              {i18n.t('webServices.managed.containerTemplates')} <span class="service-template-switcher__count ml-1.5 tabular-nums">{props.containerCount}</span>
-            </button>
-          </div>
+          <Tabs
+            class="service-template-switcher"
+            size="md"
+            slotClassNames={{ tab: '[&>span]:max-w-none' }}
+            ariaLabel={i18n.t('webServices.managed.templateCategories')}
+            activeId={props.category}
+            onChange={(id) => props.onCategoryChange(id as ServiceTemplateCategory)}
+            features={{ indicator: { mode: 'none' }, containerBorder: false, scrollButtons: 'never' }}
+            items={[
+              { id: 'host', domId: categoryID + '-host', panelId: categoryID, label: `${i18n.t('webServices.managed.hostTemplates')} · ${props.hostCount}` },
+              { id: 'container', domId: categoryID + '-container', panelId: categoryID, label: `${i18n.t('webServices.managed.containerTemplates')} · ${props.containerCount}` },
+            ]}
+          />
           <div class="service-template-search relative min-w-[12rem] flex-1">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
@@ -777,25 +764,26 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
               aria-label={i18n.t('webServices.managed.searchTemplates')}
             />
           </div>
-          <Show when={props.onImport}><Button size="lg" variant="outline" class="shrink-0" disabled={!props.canManage} onClick={() => props.onImport?.()}>{i18n.t('webServices.sources.import')}</Button></Show>
+          <Show when={props.onImport}><Button size="md" variant="outline" class="shrink-0" disabled={!props.canManage} onClick={() => props.onImport?.()}>{i18n.t('webServices.sources.import')}</Button></Show>
           <Dropdown
             align="end"
             items={createItems()}
             onSelect={(id) => props.onCreate(id as ServiceTemplateKind)}
             triggerAriaLabel={i18n.t('webServices.managed.newTemplate')}
             triggerClass="service-template-create-trigger shrink-0 rounded-md"
+            disabled={!props.canManage}
             trigger={(
-              <Button size="lg" variant="default" class="gap-1.5" data-testid="service-template-create-menu" disabled={!props.canManage}>
+              <span data-floe-surface="raised" data-floe-surface-part="button" class="service-template-create-face inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" data-testid="service-template-create-menu">
                 <Plus class="h-4 w-4" aria-hidden="true" />
                 <span>{i18n.t('webServices.managed.newTemplate')}</span>
-                <ChevronDown class="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-              </Button>
+                <ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
             )}
           />
         </div>
       </div>
 
-      <div class="service-template-category-stage">
+      <div class="service-template-category-stage" id={categoryID} role="tabpanel" aria-labelledby={categoryID + '-' + props.category}>
         <Show when={categoryPresentation()} keyed>{(presentation) => (
           <div
             class="service-template-category-transition"
@@ -825,7 +813,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                     aria-label={i18n.t('webServices.managed.serviceTemplates')}
                     data-testid="service-template-list"
                   >
-                    <div class="space-y-7">
+                    <div class="service-template-groups" role="presentation">
                       <TemplateGroup
                         title={i18n.t('webServices.managed.builtInTemplates')}
                         description={i18n.t('webServices.managed.builtInTemplatesDescription')}
@@ -885,17 +873,16 @@ function TemplateGroup(props: {
 }): JSX.Element {
   return (
     <Show when={props.templates.length > 0}>
-      <section class="service-template-group" role="group" aria-label={props.title} data-testid="service-template-group">
-        <div class="mb-3 px-0.5">
+      <section class="service-template-group" role="group" aria-label={props.title} title={props.description} data-testid="service-template-group">
+        <div class="service-template-group__heading" aria-hidden="true">
           <div class="min-w-0">
             <div class="flex min-w-0 items-center gap-2">
               <h2 class="truncate text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground">{props.title}</h2>
               <span class="service-template-group__count shrink-0 rounded-full px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">{props.templates.length}</span>
             </div>
-            <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">{props.description}</p>
           </div>
         </div>
-        <div class="service-template-list grid">
+        <div class="service-template-list grid" role="presentation">
           <For each={props.templates}>{(template) => (
             <ServiceTemplateRow
               template={template}

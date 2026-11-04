@@ -18147,15 +18147,15 @@
         "title": "Web Services interface",
         "type": "UI Contract"
       },
-      "body_length": 2294,
+      "body_length": 3637,
       "summary": "Activity/Workbench share service list/drawer: identity, state, action, facts. Retain narrow/localized/large-text usability. Historical failure never replaces current state; failed checks preserve facts and authorized recovery. Resource cache grants no lifecycle or route authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Collection\nCentered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/asynchronous-layout-stability.md); narrow/localized text wraps.\n\n## Opening restrictions\nUnavailable Open retains its ordinary icon and native disabled state. Focusable wrapper exposes reason on keyboard/touch/hover; active work names action/stage. When backend offers executable Start, it is primary within existing permissions.\n\n## Review and focus\nOne drawer shows conclusion, compact resources and recommended actions. New known inventory may replace old inspection; unknown preserves facts. Older/unknown targets retain stop-first then explicit update. Originally stopped services remain stopped after update.\n\n## Execution feedback\nExecution details keep one bounded command/output viewport. Downloaded bytes remain visible when the total is unknown; unknown totals keep the byte bar indeterminate. Speed is shown once measured bytes are available, while fully cached pulls show zero transfer. Layer counts remain separate. New output does not expand the panel or move a reader away from earlier lines.",
-          "char_count": 1173
+          "body": "## Collection\nCentered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/asynchronous-layout-stability.md); narrow/localized text wraps.\n\n## Opening restrictions\nUnavailable Open retains its ordinary icon and native disabled state. Focusable wrapper exposes reason on keyboard/touch/hover; active work names action/stage. When backend offers executable Start, it is primary within existing permissions.\n\n## Review and focus\nOne drawer shows conclusion, compact resources and recommended actions. New known inventory may replace old inspection; unknown preserves facts. Older/unknown targets retain stop-first then explicit update. Originally stopped services remain stopped after update.\n\n## Templates and versions\nTemplate categories use published Floe Tabs with paired selection colors, roving keyboard focus and a labelled panel. Product styles never override tab ink. Template lists use compact rounded rows with source groups; the wider detail pane keeps deployment facts, runtime details and actions together. Dropdown wrappers own the sole focus target and disabled state.\n\nBoth template and installed-service versions use the same bounded directory/detail workspace. Rows emphasize version and state; the selected detail owns trust, source, platform and expandable artifact identity. Current releases retain useful provenance. Narrow layouts stack independently scrollable panes, while request feedback and submission remain outside the list. Refresh and verification preserve selection, focus, scroll and footer geometry. Confirmation, stop-first and update authorization remain unchanged. Selection motion is brief and local; reduced motion removes travel.\n\n## Execution feedback\nExecution details keep one bounded command/output viewport. Downloaded bytes remain visible when the total is unknown; unknown totals keep the byte bar indeterminate. Speed is shown once measured bytes are available, while fully cached pulls show zero transfer. Layer counts remain separate. New output does not expand the panel or move a reader away from earlier lines.",
+          "char_count": 2152
         },
         {
           "id": "boundaries",
@@ -18166,6 +18166,16 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceCatalogDesign.browser.test.tsx:0:classic/porcelain light/dark, desktop/narrow contrast, keyboard, accessibility and reduced-motion acceptance.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceCatalogDesign.browser.test.tsx",
+          "description": "Classic/Porcelain light/dark, desktop/narrow contrast, keyboard, accessibility and reduced-motion acceptance."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceVersions.browser.test.tsx:0:version verification, consent, stop-first, update and workbench continuity.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceVersions.browser.test.tsx",
+          "description": "Version verification, consent, stop-first, update and Workbench continuity."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:product presentation.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx",
@@ -32032,5 +32042,5 @@
       ]
     }
   ],
-  "source_sha256": "9a3b754c771462c29c47039e4fdbe3cc3336f64d378beae3eaace973cda96d4b"
+  "source_sha256": "627ea88087584ca1d70507f18db4a90e0b257f02bbe7613603ff2b6fe87c536d"
 }

@@ -163,6 +163,28 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     ), host);
   }
 
+  it.each(['light', 'dark'])('keeps selected category text readable in %s mode', (mode) => {
+    document.documentElement.classList.add(mode);
+    mount();
+    const tab = document.querySelector<HTMLElement>('[role=tab][aria-selected=true]')!;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d')!;
+    const luminance = (color: string) => {
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const channels = Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3).map((value) => {
+        const channel = value / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    let background = tab;
+    while (getComputedStyle(background).backgroundColor === 'rgba(0, 0, 0, 0)' && background.parentElement) background = background.parentElement;
+    const foreground = luminance(getComputedStyle(tab).color);
+    const backdrop = luminance(getComputedStyle(background).backgroundColor);
+    expect((Math.max(foreground, backdrop) + 0.05) / (Math.min(foreground, backdrop) + 0.05)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('uses aligned master-detail columns and lets a single template fill the list', async () => {
     await page.viewport(1280, 720);
     mount();
@@ -171,15 +193,17 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const row = document.querySelector<HTMLElement>('[data-testid="service-template-row"]')!;
     const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
     expect(row.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeGreaterThan(0.95);
-    expect(details.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeGreaterThan(0.72);
-    expect(details.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeLessThan(0.9);
+    expect(details.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeGreaterThan(1.5);
+    expect(details.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeLessThan(1.9);
     expect(details.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().top, 0);
     expect(details.getBoundingClientRect().left).toBeGreaterThan(list.getBoundingClientRect().right);
     expect(row.getAttribute('aria-selected')).toBe('true');
 
     await userEvent.tab();
     expect(document.activeElement?.getAttribute('role')).toBe('tab');
-    expect((document.activeElement as HTMLElement).className).toContain('focus-visible');
+    expect(document.activeElement?.matches(':focus-visible')).toBe(true);
+    const focusStyle = getComputedStyle(document.activeElement!);
+    expect(focusStyle.outlineStyle !== 'none' || focusStyle.boxShadow !== 'none').toBe(true);
   });
 
   it('keeps the catalog and details flat while preserving a themed interactive row', () => {
@@ -417,6 +441,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const hostContent = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
     const hostRect = hostContent.getBoundingClientRect();
     await userEvent.click(containerTab);
+    await expect.poll(() => category()).toBe('container');
     const content = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
     expect(content.dataset.templateCategory).toBe('container');
     expect(content.dataset.transitionActive).toBe('true');
@@ -441,6 +466,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const hostTab = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
       .find((tab) => tab.textContent?.includes('Host templates'))!;
     await userEvent.click(hostTab);
+    await expect.poll(() => category()).toBe('host');
     const reducedContent = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
     const reducedAnimations = reducedContent.getAnimations().filter((animation) => (
       (animation.effect as KeyframeEffect | null)?.target === reducedContent

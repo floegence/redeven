@@ -26,13 +26,6 @@
   .service-management-panel *, .service-management-panel *::before, .service-management-panel *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 
-.managed-release-verification { height: 2rem; overflow: auto; align-content: start; width: clamp(6rem, 28cqw, 12rem); max-width: 100%; }
-
-.managed-release-origin { display: flex; align-items: center; gap: 6px; }
-.managed-release-origin > * { min-width: 0; }
-.managed-release-origin > code { flex: 1; margin-top: 0; }
-.managed-release-origin.hidden { display: none; }
-
 /* Product composition consumes the published Dialog, controls, and semantic palette. */
 .service-management-identity { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; color: var(--muted-foreground); font-size: 12px; }
 .service-management-identity code { overflow-wrap: anywhere; font-size: 11px; }
@@ -60,35 +53,13 @@
 .service-operation-summary-actions { font-size: 11px; }
 .service-operation-summary-actions button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; color: var(--primary); cursor: pointer; }
 .service-management-panel .web-service-operation-error { margin: 0 0 12px; }
-.managed-release-workspace { display: flex; flex: 1; min-width: 0; min-height: 0; }
-.managed-release-list-pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; flex: 1; }
-.managed-release-workspace[data-split] { display: grid; grid-template-columns: minmax(0, 13.75rem) minmax(0, 1fr); gap: 20px; }
-.managed-release-workspace[data-split] > .managed-release-list-pane { border-inline-end: 1px solid var(--border); padding-inline-end: 16px; }
-.managed-release-workspace[data-split] .managed-release-candidate-scroll { border: 0; border-radius: 0; }
-.managed-release-workspace[data-split] .managed-release-compact-row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 10px 8px; min-height: 56px; }
-.managed-release-workspace[data-split] .managed-release-compact-row > .managed-release-verification { grid-column: 1; grid-row: auto; justify-content: flex-start; height: auto; min-height: 16px; width: 100%; max-width: none; padding-inline-start: 24px; }
-.managed-release-plan-pane { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-inline-end: 4px; font-size: var(--floe-type-body); }
-.managed-release-plan-heading { display: grid; gap: 6px; padding-block: 4px 20px; }
-.managed-release-plan-heading h3 { font-size: 14px; line-height: 20px; }
-.managed-release-plan-placeholder { color: var(--muted-foreground); padding-block: 48px; text-align: center; }
 @media (max-width: 639px) {
   .service-management-footer-main { align-items: flex-start; }
   .service-management-footer-note { flex-basis: 100%; }
-  .managed-release-workspace[data-split] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(18rem, 1fr) minmax(6rem, .65fr); gap: 12px; overflow-y: auto; }
-  .managed-release-workspace[data-split] > .managed-release-list-pane { border-inline-end: 0; border-bottom: 1px solid var(--border); padding-inline-end: 0; padding-bottom: 8px; }
-  .managed-release-browser-toolbar > :first-child { min-width: 0; flex-basis: 100%; }
-  .managed-release-plan-heading { padding-block: 4px 12px; }
-  .managed-release-plan-placeholder { padding-block: 16px; }
 }
 @media (pointer: coarse) {
   .service-management-panel button, .service-management-panel summary, .service-operation-summary-actions button { min-height: 44px; }
 }
-
-.managed-release-workspace[data-split] .managed-release-compact-row > :last-child { grid-column: 1; }
-.managed-release-plan-facts { display: grid; gap: 0; }
-.managed-release-plan-facts > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; border-bottom: 1px solid var(--border); padding-block: 10px; }
-.managed-release-plan-facts dt { color: var(--muted-foreground); }
-.managed-release-plan-facts dd { min-width: 0; text-align: end; }
 
 /* Match the approved native composition without replacing the shared Dialog. */
 .service-management-panel [data-floe-dialog-header] h2 { font-weight: 500; }
@@ -124,16 +95,6 @@
 .service-operation-fraction { color: var(--muted-foreground); font: 11px/18px var(--font-mono); white-space: nowrap; }
 .service-operation-row-details { display: grid; place-items: center; height: 28px; width: 28px; flex: none; color: var(--muted-foreground); cursor: pointer; }
 .service-operation-row-details:focus-visible, .service-operation-trigger:focus-visible, .service-management-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
-.managed-release-list-heading { color: var(--muted-foreground); font-size: 11px; font-weight: 500; }
-.managed-release-option { border-radius: 4px; margin-bottom: 3px; }
-.managed-release-option-selected { background: var(--accent); }
-.managed-release-option-selected .managed-release-compact-row > :first-child > span { background: var(--background); border-width: 4px; }
-.managed-release-option-selected .managed-release-compact-row > :first-child > span svg { display: none; }
-.managed-release-workspace[data-split] .managed-release-compact-row { padding: 10px; gap: 0; min-height: 52px; }
-.managed-release-plan-impact { background: color-mix(in srgb, var(--warning) 7%, transparent); color: var(--warning); padding: 10px 12px; border-radius: 6px; font-size: 12px; line-height: 20px; }
-.managed-release-plan-heading { padding-bottom: 16px; }
-.managed-release-plan-facts > div { border: 0; padding-block: 8px; }
-.managed-release-plan-facts dd { font-size: 12px; }
 @keyframes service-operation-spin { to { transform: rotate(360deg); } }
 @container web-services (max-width: 32rem) {
   .service-operation-row { padding-left: 16px; gap: 7px; }
@@ -215,3 +176,68 @@
 @media (prefers-reduced-motion: reduce) {
   .service-operation, .service-operation-timeline > li, .service-operation-transfer [data-floe-surface-part='progress-fill'] { transition: none; animation: none; }
 }
+
+/* A consistent release directory: scan versions on the left, review the selection on the right. */
+.managed-release-browser { container-type: inline-size; }
+.managed-release-browser-toolbar { align-items: center; gap: 12px; }
+.managed-release-workspace[data-split] { display: grid; flex: 1; min-width: 0; min-height: 0; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 24px; }
+.managed-release-list-pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; padding-inline-end: 20px; border-inline-end: 1px solid var(--floe-line-quiet); }
+.managed-release-list-heading { display: flex; align-items: center; justify-content: space-between; padding-inline: 10px; color: var(--floe-ink-soft); font-size: 11px; font-weight: 500; }
+.managed-release-candidate-scroll { border: 0; border-radius: 0; }
+.managed-release-options { display: grid; align-content: start; gap: 4px; padding: 2px; }
+.managed-release-option { min-width: 0; border-radius: var(--floe-radius-md); background: transparent; }
+.managed-release-option-selected { background: var(--floe-state-selected); }
+.managed-release-compact-row { display: grid; align-content: center; gap: 5px; min-height: 62px; padding: 12px; border-radius: inherit; transition: background-color 120ms var(--floe-ease-out); }
+.managed-release-option-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.managed-release-version-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px/20px var(--font-mono); color: var(--foreground); }
+.managed-release-selection-mark { width: 14px; height: 14px; flex: none; color: var(--floe-accent-ink); }
+.managed-release-verification { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-height: 16px; color: var(--floe-ink-soft); font-size: 11px; line-height: 16px; }
+.managed-release-plan-pane { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-inline-end: 4px; font-size: 12px; line-height: 20px; }
+.managed-release-plan-heading { animation: managed-release-present 180ms var(--floe-ease-out); display: grid; gap: 8px; padding-block: 2px 20px; }
+.managed-release-plan-heading h3 { color: var(--foreground); font: 500 20px/28px var(--font-mono); overflow-wrap: anywhere; letter-spacing: -.025em; }
+.managed-release-detail-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.managed-release-plan-placeholder { padding-block: 24px; color: var(--floe-ink-soft); }
+.managed-release-selection-note { padding: 12px 14px; margin-bottom: 20px; border-radius: var(--floe-radius-md); color: var(--floe-ink-soft); background: var(--floe-well); }
+.managed-release-provenance { padding-block: 20px; border-top: 1px solid var(--floe-line-quiet); }
+.managed-release-trust { display: flex; align-items: center; gap: 7px; margin-bottom: 16px; color: var(--floe-ink-soft); }
+.managed-release-identity-facts { display: grid; gap: 16px; }
+.managed-release-identity-facts dt { color: var(--floe-ink-soft); font-size: 11px; margin-bottom: 4px; }
+.managed-release-identity-facts dd { min-width: 0; overflow-wrap: anywhere; color: var(--foreground); }
+.managed-release-registry { display: block; margin-top: 2px; color: var(--floe-ink-soft); font-size: 11px; }
+.managed-release-published { margin-top: 16px; color: var(--floe-ink-soft); font-size: 11px; }
+.managed-release-artifact-details { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--floe-line-quiet); }
+.managed-release-artifact-details > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--floe-ink-soft); cursor: pointer; list-style: none; }
+.managed-release-artifact-details > summary::-webkit-details-marker { display: none; }
+.managed-release-artifact-details > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 2px; }
+.managed-release-artifact-details > summary svg { transition: transform 120ms var(--floe-ease-out); }
+.managed-release-artifact-details[open] > summary svg { transform: rotate(180deg); }
+.managed-release-artifact-details[open] > dl { padding-top: 16px; }
+.managed-release-plan-facts { display: grid; gap: 8px; }
+.managed-release-plan-facts > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.managed-release-plan-facts dt { color: var(--floe-ink-soft); }
+.managed-release-plan-facts dd { min-width: 0; text-align: end; }
+.managed-release-plan-impact { background: color-mix(in srgb, var(--warning) 7%, transparent); color: var(--warning); padding: 10px 12px; border-radius: var(--floe-radius-md); font-size: 12px; line-height: 20px; }
+.managed-release-browser .managed-release-list-status { flex-basis: 36px; height: 36px; padding: 0 2px; border: 0; border-top: 1px solid var(--floe-line-quiet); border-radius: 0; background: transparent; color: var(--floe-ink-soft); gap: 8px; }
+.managed-release-browser .managed-release-list-status[data-error='true'] { color: var(--destructive); }
+.managed-release-list-status__spinner { flex-basis: 14px; width: 14px; height: 14px; }
+@media (hover: hover) {
+  .managed-release-option:not(.managed-release-option-selected) > button:not(:disabled):hover { background: var(--floe-state-hover); }
+}
+@container (max-width: 34rem) {
+  .managed-release-workspace[data-split] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(15rem, 1.15fr) minmax(6rem, 1fr); overflow-y: auto; gap: 16px; }
+  .managed-release-list-pane { padding-inline-end: 0; padding-bottom: 12px; border-inline-end: 0; border-bottom: 1px solid var(--floe-line-quiet); }
+  .managed-release-plan-heading { padding-bottom: 16px; }
+  .managed-release-browser-toolbar > :first-child { min-width: 0; flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .managed-release-compact-row, .managed-release-artifact-details > summary svg { transition: none; }
+}
+
+.managed-release-current { flex: none; color: var(--floe-ink-soft); font-size: 11px; }
+.managed-release-current > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.managed-release-current > summary code { color: var(--foreground); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.managed-release-current > summary svg { margin-inline-start: auto; }
+.managed-release-current[open] > summary svg { transform: rotate(180deg); }
+
+@keyframes managed-release-present { from { opacity: .94; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .managed-release-plan-heading { animation: none; } }
