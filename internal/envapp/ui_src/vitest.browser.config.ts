@@ -135,25 +135,41 @@ export default mergeConfig(viteConfig, defineConfig({
           if (!header || !transcript) throw new Error('Flower reading surface is unavailable');
           const regions = [header, { ...transcript, height: Math.min(200, transcript.height) }];
           const paint = (png: ReturnType<typeof PNG.sync.read>) => regions.map(region => hashPngRegion(png, region)).join(':');
-          const baseline = paint(PNG.sync.read(await page.screenshot({ scale: 'css' })));
+          // Flush the mounted surface; screencast may initially return a cached
+          // compositor frame from before the fixture's layout/theme settled.
+          await page.screenshot({ scale: 'css' });
           const cdp = await page.context().newCDPSession(page);
           const frames: string[] = [];
+          let firstFrame!: () => void;
+          let initialTimeout: ReturnType<typeof setTimeout> | undefined;
+          const initialFrame = new Promise<void>((resolve, reject) => {
+            firstFrame = resolve;
+            initialTimeout = setTimeout(() => reject(new Error('No initial screencast frame')), 5000);
+          });
           cdp.on('Page.screencastFrame', event => {
             frames.push(paint(PNG.sync.read(Buffer.from(event.data, 'base64'))));
+            firstFrame();
             void cdp.send('Page.screencastFrameAck', { sessionId: event.sessionId });
           });
+          let openingStart = 0;
           try {
             await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
+            // Use one capture pipeline: screenshot and screencast can differ by
+            // one color level at antialiased edges before any interaction.
+            await initialFrame;
+            clearTimeout(initialTimeout);
+            openingStart = frames.length;
             await frame.locator('button.flower-permission-trigger').click();
             await frame.locator('.flower-permission-menu').evaluate(async menu => {
               for (let sample = 0; sample < 24; sample++) await new Promise(resolve => requestAnimationFrame(resolve));
               await Promise.all(menu.getAnimations().map(animation => animation.finished));
             });
           } finally {
+            clearTimeout(initialTimeout);
             await cdp.send('Page.stopScreencast');
             await cdp.detach();
           }
-          return { baseline, frames };
+          return { baseline: frames[0], frames: frames.slice(openingStart) };
         },
         resizeTerminalSidebar: async ({ page }, delta: number) => {
           const frame = await terminalPanelFrame(page);
