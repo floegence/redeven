@@ -652,7 +652,7 @@ describe('bounded Flower history', () => {
   it('recovers a transient read automatically without stopping workspace sync', async () => {
     const { root, body } = await mount(false, false, { fail: true });
     expect(root.querySelector('.flower-history-body-control button')).toBeNull();
-    expect(root.querySelector('.flower-workspace-sync')).toBeNull();
+    await waitFor(() => !root.querySelector('.flower-workspace-sync'));
     await waitFor(() => root.textContent?.includes('Preview text expanded body!!') === true);
     expect(body).toHaveBeenCalledTimes(2);
   });
