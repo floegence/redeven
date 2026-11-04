@@ -9492,7 +9492,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "ai",
           "flower",
@@ -9502,15 +9502,15 @@
         "title": "Flower thread Goals",
         "type": "AI Interaction Contract"
       },
-      "body_length": 1503,
+      "body_length": 2062,
       "summary": "Floret owns canonical Goal, model tool, reflection and completion; Redeven authorizes and presents facts. One current Goal/thread states intent without text limits or Todo dependency. Stop/navigation/recovery remain usable; unresolved requests never imply successful mutation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Compaction and continuation\n[Manual compaction](flower-context-compaction.md) defaults to explicit continue_goal intent. Retry and restart use canonical preparation and confirmed tools. Redeven forwards intent and renders state without a second execution coordinator.\n\n## Goal ownership and execution\nUser and model updates enter Floret's shared journal writer with request identity and expected version. An existing unfinished Goal remains authoritative across continuation and context restoration.\n\nStop cancels execution and reflection; deletion only cancels future Goal checks.\n\n## Interaction and recovery\nSelecting or entering /goal opens an in-composer command chip.\n\nEach popup opening confirms detail through the existing read coordinator before showing canonical text.\n\nA failed binding leaves the draft available for retry; no cross-thread target validation is relaxed and no attachment is uploaded twice.",
-          "char_count": 919
+          "body": "## Compaction and continuation\n[Manual compaction](flower-context-compaction.md) defaults to explicit continue_goal intent. Retry and restart use canonical preparation and confirmed tools. Redeven forwards intent and renders state without a second execution coordinator.\n\n## Goal ownership and execution\nUser and model updates enter Floret's shared journal writer with request identity and expected version. An existing unfinished Goal remains authoritative across continuation and context restoration.\n\nStop cancels execution and reflection; deletion only cancels future Goal checks.\n\n## Interaction and recovery\nSelecting or entering /goal opens an in-composer command chip.\nThe chip shares the editor's typography and first line box. Entering, typing a\nsingle-line Goal and exiting preserve composer, footer and transcript geometry;\nmultiline text retains normal bounded autosizing. Native command conversion\nsynchronizes the editable value even when the canonical draft stays empty, so\nthe localized Goal placeholder appears immediately.\n\nEach popup opening confirms detail through the existing read coordinator before showing canonical text.\n\nA failed binding leaves the draft available for retry; no cross-thread target validation is relaxed and no attachment is uploaded twice.",
+          "char_count": 1284
         },
         {
           "id": "boundaries",
@@ -32200,5 +32200,5 @@
       ]
     }
   ],
-  "source_sha256": "cebf41546f6f54c072780c92bf1555117b2e7c64b3fd98b1ea3d898a81745fae"
+  "source_sha256": "192d6f7b3bc727fc500767b98bca660c3cade143e12103076b93d565083ca3d7"
 }

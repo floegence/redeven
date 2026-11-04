@@ -617,6 +617,7 @@
 }
 
 @media (pointer: coarse) {
+  .flower-component-shell .flower-composer-entry,
   .flower-component-shell .flower-composer textarea,
   .flower-component-shell .flower-composer input[type='password'] {
     /* iOS Safari zooms focused text controls below 16 CSS pixels. */
@@ -923,9 +924,14 @@
   gap: 0.5rem;
 }
 
-.flower-composer[data-flower-companion-compact='true'] textarea {
+.flower-composer[data-flower-companion-compact='true'] :is(textarea, .flower-composer-entry) {
   padding: 0.375rem 0.25rem;
   line-height: 1.5rem;
+}
+
+.flower-composer[data-flower-companion-compact='true'] .flower-composer-entry > textarea {
+  padding: 0;
+  line-height: inherit;
 }
 
 .flower-composer[data-flower-companion-compact='true'] .flower-composer-footer {
@@ -9002,6 +9008,7 @@ button.flower-composer-context-source:focus-visible,
   box-shadow: none;
 }
 
+.flower-composer-entry,
 .flower-composer textarea,
 .flower-composer input[type='password'] {
   cursor: text;
@@ -9011,7 +9018,7 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-composer textarea {
   display: block;
-  min-height: 1.6em;
+  min-height: 1lh;
   resize: none;
 }
 
@@ -11841,6 +11848,7 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-chat-header-title-input { min-height: 44px; }
 
   .flower-chat-header-title-input,
+  .flower-composer-entry,
   .flower-composer textarea,
   .flower-composer input[type='password'],
   .flower-reasoning-menu-budget { font-size: 1rem; }
@@ -12405,8 +12413,10 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-goal-error { color: var(--destructive); }
 .flower-composer-entry { display: flex; align-items: flex-start; gap: 0.625rem; min-width: 0; }
 .flower-composer-entry > textarea, .flower-composer-entry > input { flex: 1; min-width: 0; }
-.flower-goal-command-chip { display: inline-flex; align-items: center; gap: 0.375rem; flex-shrink: 0; padding: 0.2rem 0.4rem; margin-top: 0.125rem; border-radius: 0.375rem; background: var(--muted); color: var(--foreground); font-size: 0.75rem; line-height: 1.4; }
-.flower-goal-command-chip button { display: inline-flex; cursor: pointer; color: var(--muted-foreground); }
+/* Share the editor's first line box so entering/exiting Goal never grows the row. */
+.flower-goal-command-chip { display: inline-flex; align-items: center; gap: 0.375rem; flex-shrink: 0; padding-inline: 0.4rem; border-radius: 0.375rem; background: var(--muted); color: var(--foreground); font-size: inherit; line-height: inherit; }
+.flower-goal-command-chip button { display: inline-flex; align-items: center; justify-content: center; width: 1.125rem; height: 1.125rem; border-radius: 0.25rem; cursor: pointer; color: var(--muted-foreground); }
+.flower-goal-command-chip button:is(:hover, :focus-visible) { background: var(--accent); color: var(--accent-foreground); }
 .flower-goal-history { min-width: 0; max-width: 100%; font-size: 0.75rem; color: var(--muted-foreground); }
 .flower-goal-history summary { display: flex; align-items: center; gap: 0.42rem; min-width: 0; min-height: 2rem; padding: 0.35rem 0.25rem 0.35rem 0; border-radius: 0.4rem; list-style: none; cursor: pointer; }
 .flower-goal-history summary::-webkit-details-marker { display: none; }

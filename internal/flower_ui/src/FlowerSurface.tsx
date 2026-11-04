@@ -8936,7 +8936,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestCompanionForEditing();
     const value = event.currentTarget.value;
     if (!goalCommand() && /^\/goal\s/.test(value)) {
-      updateComposerText(''); enterGoalCommand(value.slice(6)); return;
+      updateComposerText('');
+      enterGoalCommand(value.slice(6));
+      // A paste may produce the same canonical value as the prior empty draft.
+      // Synchronize the native edit even when the value memo does not change.
+      event.currentTarget.value = composerTextValue();
+      return;
     }
     if (!inspectFlowerText(value)) {
       event.currentTarget.value = composerTextValue();

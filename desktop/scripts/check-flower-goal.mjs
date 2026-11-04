@@ -45,6 +45,7 @@ await session.run(async () => {
     compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: 'inspecting' },
   } }));
   for (const locale of ['en-US', 'zh-CN']) {
+    await page.setViewportSize({ width: 1100, height: 850 });
     await page.addInitScript(({ snapshot, locale }) => {
       window.navigationSnapshot = { ...snapshot, navigation_revision: 1 };
       const language = { preference: locale, resolved_locale: locale, source: 'explicit', system_candidates: [] };
@@ -86,7 +87,54 @@ await session.run(async () => {
     assert.equal(await page.locator('.flower-thread-sync-error').count(), 0);
     await page.locator('.flower-goal-popup').getByRole('button', { name: labels.retry, exact: true }).click(); await input.waitFor();
     assert.equal(await input.inputValue(), 'My carefully retained draft');
-    report.cases.push({ locale, freshConfirmation: true, currentFirst: true, reviewedReplacement: true, saveOnly: true, localFailure: true });
+    await page.keyboard.press('Escape');
+    const entryLayouts = [];
+    const editor = page.locator('.flower-composer textarea');
+    const settle = () => page.evaluate(async () => {
+      await document.fonts.ready;
+      for (let index = 0; index < 4; index++) await new Promise(resolve => requestAnimationFrame(resolve));
+    });
+    for (const width of [1100, 430]) {
+      await page.setViewportSize({ width, height: 850 });
+      await editor.fill(''); await settle();
+      await page.evaluate(() => {
+        const composer = document.querySelector('.flower-composer');
+        const footer = composer.querySelector('.flower-composer-footer');
+        const transcript = document.querySelector('.flower-chat-transcript');
+        const geometry = () => [composer.getBoundingClientRect().top, composer.getBoundingClientRect().height,
+          footer.getBoundingClientRect().top, transcript.getBoundingClientRect().height, transcript.scrollTop, window.scrollY];
+        const capture = window.goalEntryLayout = { initial: geometry(), samples: [], active: true };
+        const sample = () => { if (capture.active) { capture.samples.push(geometry()); requestAnimationFrame(sample); } };
+        requestAnimationFrame(sample);
+      });
+      await editor.fill('/goal'); await editor.press('Space'); await settle();
+      assert.equal(await editor.inputValue(), '');
+      assert.equal(await editor.getAttribute('placeholder'), locale === 'zh-CN' ? '设置目标' : 'Set a goal');
+      const alignment = await editor.evaluate(element => {
+        const chip = document.querySelector('.flower-goal-command-chip');
+        const style = getComputedStyle(element), rect = element.getBoundingClientRect(), chipRect = chip.getBoundingClientRect();
+        return { offset: Math.abs(chipRect.top + chipRect.height / 2 - rect.top - parseFloat(style.paddingTop)
+          - parseFloat(style.borderTopWidth) - parseFloat(style.lineHeight) / 2),
+        fontSize: style.fontSize, chipFontSize: getComputedStyle(chip).fontSize };
+      });
+      assert.ok(alignment.offset <= 1, JSON.stringify(alignment));
+      assert.equal(alignment.chipFontSize, alignment.fontSize);
+      await page.locator('.flower-composer').screenshot({ path: path.join(output, locale + '-entry-' + width + '.png') });
+      await editor.fill('Verify result'); await settle(); await editor.press('Escape'); await settle();
+      const layout = await page.evaluate(() => {
+        const capture = window.goalEntryLayout;
+        capture.active = false;
+        return { drift: Math.max(...capture.samples.flatMap(sample => sample.map((value, index) => Math.abs(value - capture.initial[index])))),
+          samples: capture.samples.length };
+      });
+      assert.ok(layout.samples > 0 && layout.drift <= 1, JSON.stringify(layout));
+      await editor.fill('/goal '); await settle();
+      assert.equal(await editor.inputValue(), '');
+      await editor.press('Backspace');
+      assert.equal(await page.locator('.flower-goal-command-chip').count(), 0);
+      entryLayouts.push({ width, ...alignment, ...layout, pastedCommandCleared: true });
+    }
+    report.cases.push({ locale, freshConfirmation: true, currentFirst: true, reviewedReplacement: true, saveOnly: true, localFailure: true, entryLayouts });
   }
   assert.deepEqual(report.errors, []);
   report.status = 'passed';

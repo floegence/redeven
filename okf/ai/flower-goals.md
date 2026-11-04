@@ -3,7 +3,7 @@ type: AI Interaction Contract
 title: Flower thread Goals
 tags: [ai, flower, goals, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -21,6 +21,11 @@ Stop cancels execution and reflection; deletion only cancels future Goal checks.
 
 ## Interaction and recovery
 Selecting or entering /goal opens an in-composer command chip.
+The chip shares the editor's typography and first line box. Entering, typing a
+single-line Goal and exiting preserve composer, footer and transcript geometry;
+multiline text retains normal bounded autosizing. Native command conversion
+synchronizes the editable value even when the canonical draft stays empty, so
+the localized Goal placeholder appears immediately.
 
 Each popup opening confirms detail through the existing read coordinator before showing canonical text.
 
@@ -36,3 +41,6 @@ Default Flower tools, capability lists and prompts omit write_todos and current 
 - redeven:internal/ai/activity_goal_test.go
 
 - redeven:internal/ai/thread_goal.go
+
+- [Goal entry browser regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.goalLayout.browser.test.tsx)
+- [Native Desktop Goal acceptance](../../desktop/scripts/check-flower-goal.mjs)
