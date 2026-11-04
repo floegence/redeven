@@ -11,7 +11,7 @@ Published Flowersec owns acquisition, framing, retries and connection replacemen
 
 # Contract
 
-Published Flowersec owns Transportv3 connection/session/RPC/streams; Floeterm owns terminal lifecycle. Pins:Go/TSFlowersec5.11.1,terminal-go0.20.0. Each Env App shares one current protocol session; switching thread/Activity/Workbench/terminal/file cannot reconnect it. Register complete AI inventory in direct/remote profiles before session freeze; declared methods cannot become router404. Stop is one RPC lifecycle command,no fallback.
+Published Flowersec owns Transportv3 connection/session/RPC/streams; Floeterm owns terminal lifecycle. Pins: terminal-go v0.20.0 and Flowersec Go v5.11.1. Env App and Desktop consume Flowersec TypeScript v5.11.1. Each Env App shares one current protocol session; switching thread/Activity/Workbench/terminal/file cannot reconnect it. Register complete AI inventory in direct/remote profiles before session freeze; declared methods cannot become router404. Stop is one RPC lifecycle command,no fallback.
 
 Published WebSocketHTTPServerOptions.ApplicationHandler composes Gateway HTTP/Runtime on one TLS endpoint; egress.HTTPSProxy supplies explicit Cloud routing. [Web Center](web-environment-center.md) uses published controller/pinned RuntimeTLS/in-process Connector without new wire/replay. Desktop SSH placementHTTP2 remains separate. [Terminal](runtime-terminal-lifecycle.md) owns framing/history/attachment/warmup.
 

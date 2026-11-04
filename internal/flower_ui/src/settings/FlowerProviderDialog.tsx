@@ -7,7 +7,7 @@ import { ModelCatalogControls } from './ModelCatalogControls';
 import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, flowerProviderModelChoices, setFlowerModelsEnabled } from './modelSelection';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
-import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
+import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, ExternalLink, Info, Pencil, Save } from '@floegence/floe-webapp-core/icons';
@@ -976,6 +976,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                     <div class="flower-provider-model-list">
                       <For each={visibleModelNames()}>
                         {(name) => <Show when={catalogByName().get(name)}>{(preset) => {
+                          const selectionID = createUniqueId();
                           const modelName = () => cleanModelName(name);
                           const enabled = () => modelSelected(store.draft!, modelName());
                           const selectionDisabled = createMemo(() => Boolean(preset().unavailable && !enabled()));
@@ -992,7 +993,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                             <div class="flower-provider-model-row">
                               <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
                                 <Checkbox
-                                  class="mt-1"
+                                  id={selectionID}
+                                  class="flower-provider-model-choice"
                                   checked={enabled()}
                                   disabled={selectionDisabled()}
                                   aria-label={preset().display_name || modelName()}
@@ -1001,7 +1003,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 />
                                 <div class="min-w-0 flex-1">
                                   <div class="flex flex-wrap items-center gap-2">
-                                    <span class={cn('break-all flower-body-copy font-medium', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset().display_name || modelName()}</span>
+                                    <label for={selectionID} class={cn('flower-provider-model-name break-all flower-body-copy font-medium', selectionDisabled() ? 'cursor-not-allowed' : 'cursor-pointer', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset().display_name || modelName()}</label>
                                     <WebSearchCapabilityBadge availability={JSON.stringify([store.draft?.web_search, model().web_search_enabled]) === JSON.stringify([props.provider?.web_search, props.provider?.models.find(saved => saved.model_name === modelName())?.web_search_enabled]) ? model().web_search : undefined} copy={copy().catalog} />
                                     <Show when={preset().unavailable}><FlowerSettingsPill>{copy().catalog.unavailableModel}</FlowerSettingsPill></Show>
                                     <Show when={preset().quantization}><FlowerSettingsPill>{preset().quantization}</FlowerSettingsPill></Show>

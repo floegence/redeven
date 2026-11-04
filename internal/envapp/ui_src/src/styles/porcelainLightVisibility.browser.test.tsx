@@ -154,6 +154,15 @@ it.each(['default', 'soft-neumorphic'])('measures published text and controls wi
     const glyph = indicator.querySelector<SVGElement>('svg');
     if (glyph) expect(ratio(paint(getComputedStyle(glyph).color, fill), fill), material + ' selected checkmark').toBeGreaterThanOrEqual(3);
   }
+  for (const input of host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:not([role="switch"])')) {
+    const face = input.closest('label')!.querySelector<HTMLElement>('[data-floe-choice-kind="checkbox"]')!;
+    expect(face, 'the published Checkbox owns its state recipe').not.toBeNull();
+    expect(getComputedStyle(face).borderTopWidth).toBe('1px');
+    if (!input.checked) {
+      expect(getComputedStyle(face).backgroundColor, 'unchecked is hollow rather than an inactive solid').toBe('rgba(0, 0, 0, 0)');
+      expect(face.querySelector('svg')).toBeNull();
+    } else expect(face.querySelector('svg')).not.toBeNull();
+  }
   const selectedSegments = host.querySelectorAll<HTMLElement>('button[aria-checked="true"]');
   expect(selectedSegments.length).toBe(4);
   for (const selected of selectedSegments) expectClearSelection(selected, material);

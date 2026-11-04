@@ -12814,3 +12814,18 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-activity-observation-diagnostic > summary { cursor: pointer; }
 .flower-activity-observation-diagnostic > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .flower-activity-observation-message { margin-top: 0.5rem; white-space: pre-wrap; }
+
+/* The model name is a native label; sibling metadata and actions retain their
+ * own interaction targets and text selection. */
+.flower-provider-model-choice,
+.flower-provider-model-name {
+  min-height: max(var(--floe-control-height-sm), var(--floe-line-body));
+}
+.flower-provider-model-name {
+  display: inline-flex;
+  align-items: center;
+}
+@media (pointer: coarse) {
+  .flower-provider-model-choice,
+  .flower-provider-model-name { min-height: max(44px, var(--floe-line-body)); }
+}
