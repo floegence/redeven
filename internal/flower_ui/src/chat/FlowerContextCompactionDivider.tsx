@@ -117,7 +117,9 @@ export function FlowerContextCompactionDivider(props: {
           }}
           onClick={openTooltip}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') {
+            if (event.key === 'Escape' && tooltipOpen()) {
+              event.preventDefault();
+              event.stopPropagation();
               closeTooltip();
               return;
             }

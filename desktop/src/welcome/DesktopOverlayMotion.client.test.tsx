@@ -8,6 +8,7 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../internal/flower_ui/src/cop
 import { FlowerWorkingDirPickerDialog } from '../../../internal/flower_ui/src/filePicker/FlowerWorkingDirPickerDialog';
 import { FlowerTurnLauncherWindow } from '../../../internal/flower_ui/src/FlowerTurnLauncherWindow';
 import type { FlowerTurnLauncherIntent } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
+import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -87,4 +88,20 @@ it.each(['directory', 'launcher'] as const)('%s lets the shared dialog own exit 
   expect(surface.textContent).toBe(text);
   await new Promise(resolve => setTimeout(resolve, 300));
   expect(surface.isConnected).toBe(false);
+});
+
+it('dismisses compaction details before their containing window', async () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  const close = vi.fn();
+  dispose = render(() => <FloatingWindow open onOpenChange={close}><FlowerContextCompactionDivider copy={DEFAULT_FLOWER_SURFACE_COPY} decoration={{
+    decoration_id: 'fixture', kind: 'context_compaction', ordinal: 1, anchor: { target_kind: 'message', message_id: 'fixture', edge: 'after' },
+    compaction: { operation_id: 'fixture', turn_id: 'fixture', canonical_ordinal: 1, phase: 'complete', status: 'compacted', updated_at_ms: 1, tokens_before: 60000, tokens_after_estimate: 488 },
+  }} /></FloatingWindow>, document.body);
+  const trigger = document.querySelector<HTMLElement>('.flower-compaction-divider-pill')!;
+  trigger.focus();
+  await new Promise(resolve => setTimeout(resolve, 40));
+  trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  expect(close).not.toHaveBeenCalled();
+  expect(document.querySelector<HTMLElement>('[role=tooltip]')!.dataset.floatingPresence).toBe('exiting');
 });
