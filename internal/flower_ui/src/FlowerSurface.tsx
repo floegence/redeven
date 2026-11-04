@@ -3381,7 +3381,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const needsSetup = createMemo(() => !!snapshot() && !anyModelReady());
   const showSetupWelcome = createMemo(() => {
     const source = unavailableModelSource();
-    return needsSetup() && !unavailablePlatformCatalog() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
+    return needsSetup() && catalogModelOptions().length === 0 && !unavailablePlatformCatalog() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
       && (!source || source.state === 'not_configured' || source.state === 'empty');
   });
   const companionCompactComposer = createMemo(() => (

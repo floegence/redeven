@@ -19,9 +19,13 @@ it.each(['ready', 'unavailable'] as const)('preserves the selected model and men
   expect(trigger.querySelector('[class*="animate-spin"]')).toBeNull();
   expect(trigger.hasAttribute('aria-busy')).toBe(false);
   expect(trigger.getAttribute('aria-label')).toContain('Current provider / Agent');
+  const composer = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  composer.value = 'Keep this draft';
+  composer.dispatchEvent(new InputEvent('input', { bubbles: true }));
   trigger.click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
   const search = document.querySelector<HTMLInputElement>('.flower-model-menu input')!;
+  await waitFor(() => document.activeElement === search);
   search.value = 'Agent'; search.dispatchEvent(new InputEvent('input', { bubbles: true }));
   expect(document.querySelector('.flower-model-menu-status')).toBeNull();
   publish({ ...directory,
@@ -29,6 +33,9 @@ it.each(['ready', 'unavailable'] as const)('preserves the selected model and men
   });
   expect(document.querySelector('.flower-model-menu-status')?.textContent ?? '').not.toMatch(/checking|seconds|failed/iu);
   expect(search.value).toBe('Agent');
+  expect(surface.querySelector('.flower-chat-main')?.getAttribute('data-setup-welcome')).not.toBe('true');
+  expect(surface.querySelector('.flower-composer textarea')).toBe(composer);
+  expect(composer.value).toBe('Keep this draft');
   await waitFor(() => document.activeElement === search);
   expect(trigger.textContent).toContain('Current provider / Agent');
   expect(trigger.querySelector('[class*="animate-spin"]')).toBeNull();

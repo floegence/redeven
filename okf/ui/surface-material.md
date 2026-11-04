@@ -29,6 +29,8 @@ The expanded composer consumes Floe field fill, edge and panel radius with one b
 
 Model and permission menus have one surface-owned lifetime, independent of inline/More toolbar placement. Published anchored layers own positioning and boundary clamping for model, permission, reasoning and More; animated children do not own geometry. Moving an open control into More retains its editor and focus. Hover context disclosures retain their content, scroll and expansion while hidden, with shared presence controlling paint.
 
+Unavailable catalog models remain configured choices. A background availability update must not replace the composer with first-time setup or discard its draft, menu search or focus; unavailable models remain disabled for admission.
+
 Cached Activity pages retain their last visible transcript gutter and toolbar allocation while hidden. Restoring a page must not resize the composer for a zero-width hidden measurement; saved thread-rail width is applied before the first visible layout.
 
 # Boundaries
