@@ -22379,7 +22379,7 @@
         "title": "ReDevPlugin target build toolchain",
         "type": "Runtime Build Contract"
       },
-      "body_length": 4228,
+      "body_length": 4445,
       "summary": "Redeven prepares target C compilation and archiving alongside Rust before building the exact published ReDevPlugin source crate. macOS builds Linux static PIE with pinned Zig and the existing Rust LLD wrapper. This is product packaging ownership; it introduces no alternate plugin executor or upstream source dependency.",
       "sections": [
         {
@@ -32185,5 +32185,5 @@
       ]
     }
   ],
-  "source_sha256": "8b92e53f29bede31b8f557b8965c5c0892de0e1179592678a4cba4e537cd3501"
+  "source_sha256": "2b3fb6151deced4058d9523b08145ea3b2c2db9d259973450506461a72c15653"
 }

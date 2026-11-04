@@ -21,11 +21,13 @@ Preparation distinguishes unavailable tools/cache, network acquisition, source c
 
 # Evidence
 
-November 4, 2026: macOS ARM64 builds published 3.15.0 for both Linux targets and verifies static PIE/no dynamic dependencies, signature and product evidence. First/cache runs take amd64 116/6 seconds and arm64 109/5 seconds on the recorded candidate. Real target Worker I/O passes on native x86_64 Linux and arm64 Docker Linux, including 64 MiB FS/HTTP and WS/TCP/UDP. Published cancellation/isolation correctness passes on both and hardened Darwin; these are functional tests without performance gate thresholds.
+November 4, 2026: macOS ARM64 builds published 3.15.0 for both Linux targets and verifies static PIE/no dynamic dependencies, signature and product evidence. First/cache runs take amd64 116/5 seconds and arm64 109/5 seconds on the recorded candidate. Real target Worker I/O passes on native x86_64 Linux and arm64 Docker Linux, including 64 MiB FS/HTTP and WS/TCP/UDP. Published cancellation/isolation correctness passes on both and hardened Darwin; these are functional tests without performance gate thresholds.
 
 Desktop's real main-process update function prepares source packages through the affected staging script and completes install/start/final process verification on arm64 Docker and native amd64 Linux through SSH. The harness imports production modules without mocks; it does not claim a native GUI click qualification. Offline tool absence, refused downloads and user cancellation preserve installed bytes/process inventory and leave no temporary tool directories.
 
-Keep adverse evidence: amd64 architecture emulation fails containment and final process inventory, so it is not a native acceptance substitute. Published 3.15.0 still returns a duplicate TCP-close error during live revocation even though resources close and pending work rejects. That pre-existing upstream failure remains unaccepted; the cross-compiler repair neither masks it nor consumes unpublished fixes. The prior [qualification](redevplugin-performance-qualification.md) records that separate issue.
+Keep adverse evidence: amd64 architecture emulation fails containment and final process inventory, so it is not a native acceptance substitute. Published 3.15.0 still returns a duplicate TCP-close error during live revocation even though resources close and pending work rejects. That pre-existing upstream failure remains unaccepted; the cross-compiler repair neither masks it nor consumes unpublished fixes. After rebasing onto concurrent main changes, published Floe 0.90.4 passes 154 plugin browser cases, 156 focused Desktop cases and the product integration checks. Ordinary commit hooks pass all three required groups.
+
+The prior [qualification](redevplugin-performance-qualification.md) records that separate issue.
 
 # References
 
