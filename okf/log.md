@@ -2,6 +2,7 @@
 
 Concepts own current contracts and original qualification outcomes; Git retains change history.
 
+- 2026-11-04: [Provider tool names](ai/model-provider-surface-and-history.md) explain canonical-to-callable mappings in detached tool descriptions before freezing; preserve canonical content, return identities and retry bytes.
 - 2026-11-04: Qualify published transaction-local Flower history read improvements with 1 px per-frame anchors, visible-content continuity, compositor frame capture and explicit settled-reading endurance.
 - 2026-11-04: Keep newly exposed history paintable before intersection callbacks with native automatic layout skipping; reproduce and guard scrollbar-jump continuity.
 

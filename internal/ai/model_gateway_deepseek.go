@@ -133,7 +133,7 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		} else if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
 			return nil, fmt.Errorf("DeepSeek tool %s schema: %w", tool.Name, err)
 		}
-		request.Tools = append(request.Tools, fltools.ToolDefinition{Name: aliases.wireName(tool.Name), Description: tool.Description, InputSchema: schema, Strict: p.strictTools, Annotations: map[string]any{"source": tool.Source, "namespace": tool.Namespace, "canonical_name": tool.Name}})
+		request.Tools = append(request.Tools, fltools.ToolDefinition{Name: aliases.wireName(tool.Name), Description: aliases.wireDescription(tool.Name, tool.Description), InputSchema: schema, Strict: p.strictTools, Annotations: map[string]any{"source": tool.Source, "namespace": tool.Namespace, "canonical_name": tool.Name}})
 	}
 	preparer, ok := gateway.(flprovider.RequestPreparer)
 	if !ok {

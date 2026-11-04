@@ -3,13 +3,16 @@ type: AI Runtime Contract
 title: Model provider surface and history
 tags: [ai, models, providers, history]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
 Floret owns canonical provider history/rendering lineage; Redeven supplies model, prompt, permissions and ephemeral overlays at declared boundaries. History stays readable without restoring removed tools or rewriting facts. Surface changes create compatible lineage, never a host continuation store.
 
 # Contract
+
+## Tool names
+Redeven owns the canonical-to-callable alias table at its provider boundary. Internal definitions, execution, history and Flower keep canonical names. When serialization changes a name, the detached tool description explicitly maps its canonical name to the callable name using that same table. OpenAI Responses/Chat, ChatGPT namespaces and DeepSeek receive this guidance before request measurement and freezing; unchanged names, including Anthropic definitions, receive none. Prompts, user content, scripts, argument schemas and canonical records are never text-rewritten. Returned stream/final calls still map back through the registered aliases; frozen retries retain identical guidance. This requires no Floret API, storage or dependency change.
 
 ## Responses
 Hosted search includes web_search_call.action.sources for Activity URLs; Qwen keeps its tool shape. Floret7.97.0 ResponsesOutput reconciles done/terminal. Completed reasoning ciphertext wins; fill only missing/null/empty from matching terminal item. Search done bytes win when only valid action.sources differ,never merge/overwrite lists; answer annotations independent. Validate terminal-only fallback; omitted terminal retains ordered done events. Duplicate done,identity/content/arguments/status/inputs/unknown fields/missing items/byte limits remain strict.
@@ -41,6 +44,7 @@ Redeven maps typed product state,never persists envelopes,reconstructs history o
 
 # Evidence
 
+- `redeven:internal/ai/model_gateway_tool_names_test.go` - Real builtin definitions across 15 provider routes verify dispatched mappings, unchanged inputs/schemas, canonical stream/final identities and byte-identical retries.
 - `redeven:internal/ai/floret_runtime.go` - Source.
 - `redeven:internal/ai/floret_bootstrap.go` - Source.
 - model_gateway_responses_output_test.go/Floret restart:source variants,terminal-only citations,all adapters,one Activity,Goal/restart/Fork/Retry with confirmed tools. TestResponsesLiveHostedSearchCompletion uses synthetic searches/recreated adapters/configured provider,never production state.

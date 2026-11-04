@@ -1421,7 +1421,7 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAlias
 		alias := aliases.wireName(name)
 		fn := oshared.FunctionDefinitionParam{
 			Name:        alias,
-			Description: openai.String(strings.TrimSpace(def.Description)),
+			Description: openai.String(strings.TrimSpace(aliases.wireDescription(name, def.Description))),
 			Strict:      openai.Bool(strict && def.Strict),
 		}
 		if len(schema) > 0 {
@@ -1886,7 +1886,7 @@ func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolAliases) 
 		}
 		alias := aliases.wireName(def.Name)
 		tool := oresponses.ToolParamOfFunction(alias, schema, strict && def.Strict)
-		tool.OfFunction.Description = openai.String(strings.TrimSpace(def.Description))
+		tool.OfFunction.Description = openai.String(strings.TrimSpace(aliases.wireDescription(def.Name, def.Description)))
 		out = append(out, tool)
 	}
 	return out
@@ -2929,6 +2929,21 @@ func contentPartToolName(part ContentPart) string {
 
 func (a providerToolAliases) wireName(canonical string) string {
 	return a.canonicalToWire[strings.TrimSpace(canonical)]
+}
+
+// Explain canonical references without rewriting prompts, scripts, or history.
+// Only the detached provider definition receives this request-local mapping.
+func (a providerToolAliases) wireDescription(canonical, description string) string {
+	canonical = strings.TrimSpace(canonical)
+	wire := a.wireName(canonical)
+	if wire == "" || wire == canonical {
+		return description
+	}
+	guidance := fmt.Sprintf("Tool name mapping: `%s` in instructions or documentation refers to this tool. Invoke it as `%s`.", canonical, wire)
+	if strings.TrimSpace(description) == "" {
+		return guidance
+	}
+	return description + "\n\n" + guidance
 }
 
 func (a providerToolAliases) canonicalName(wire string) string {
