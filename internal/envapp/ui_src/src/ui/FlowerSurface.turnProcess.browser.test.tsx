@@ -993,7 +993,7 @@ describe('completed turn process disclosure', () => {
 
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     expect(overview()?.textContent).toContain('1 user response');
-    expect(overview()?.textContent).toContain('1 failed tool call');
+    expect(overview()?.textContent).toContain('1 failed');
     expect(hidden(root, 'before-one')).toBe(false);
     expect(hidden(root, 'after-one')).toBe(false);
     expect(hidden(root, 'answer')).toBe(false);
@@ -1064,7 +1064,7 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => overview()?.textContent?.includes('4 tool calls') === true && toolGroups().length === 2
       && toolGroups().every((button) => button.getAttribute('aria-expanded') === 'false'));
     expect(overview()?.textContent).toContain('1 user response');
-    expect(overview()?.textContent).toContain('1 failed tool call');
+    expect(overview()?.textContent).toContain('1 failed');
     expect(message(root, 'answer').textContent).toContain('Scenic');
     expect(messageRow(root, 'answer').dataset.flowerInputCheckpoint).toBe('true');
     expect(message(root, 'before-one')).not.toBeNull();

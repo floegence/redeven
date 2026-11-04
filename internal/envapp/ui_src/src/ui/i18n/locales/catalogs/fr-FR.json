@@ -5886,16 +5886,12 @@
           "other": "{count} réponses utilisateur"
         },
         "failedCalls": {
-          "one": "{count} appel d’outil en échec",
-          "other": "{count} appels d’outils en échec"
+          "one": "{count} échec",
+          "other": "{count} échecs"
         },
         "failedSubtaskUpdates": {
           "one": "{count} mise à jour de sous-agent échouée",
           "other": "{count} mises à jour de sous-agent échouées"
-        },
-        "thinkingSegments": {
-          "one": "{count} étape de réflexion",
-          "other": "{count} étapes de réflexion"
         },
         "runningTools": {
           "one": "{count} en cours",

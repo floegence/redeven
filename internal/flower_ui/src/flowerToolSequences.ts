@@ -49,7 +49,6 @@ export type FlowerToolSequence = Readonly<{
   failedCount: number;
   uncertainCount: number;
   failedSubagentEventCount: number;
-  thinkingCount: number;
   subagentEventCount: number;
   runningCount: number;
   disclosure: FlowerTurnDisclosurePolicy;
@@ -280,7 +279,6 @@ export function projectFlowerToolSequences(
       return;
     }
     const tools = nodes.filter(node => node.kind === 'tool');
-    const thinking = nodes.filter(node => node.kind === 'thinking');
     const subagentEvents = nodes.filter(node => node.kind === 'subagent_event');
     const entryKeys = sourceEntries.map(entry => entry.key);
     const messageEntries = sourceEntries.filter((entry): entry is MessageEntry => entry.type === 'message');
@@ -300,7 +298,6 @@ export function projectFlowerToolSequences(
       failedCount: tools.filter(node => node.failed).length,
       uncertainCount: tools.filter(node => node.uncertain).length,
       failedSubagentEventCount: subagentEvents.filter(node => node.failed).length,
-      thinkingCount: thinking.length,
       subagentEventCount: subagentEvents.length,
       runningCount: tools.filter(node => node.active).length,
       followingContentKeys,

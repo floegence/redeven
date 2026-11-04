@@ -965,8 +965,8 @@
         "failedCalls": {
           "kind": "plural",
           "forms": {
-            "one": "{count} appel d’outil en échec",
-            "other": "{count} appels d’outils en échec"
+            "one": "{count} échec",
+            "other": "{count} échecs"
           }
         },
         "failedSubtaskUpdates": {
@@ -974,13 +974,6 @@
           "forms": {
             "one": "{count} mise à jour de sous-agent échouée",
             "other": "{count} mises à jour de sous-agent échouées"
-          }
-        },
-        "thinkingSegments": {
-          "kind": "plural",
-          "forms": {
-            "one": "{count} étape de réflexion",
-            "other": "{count} étapes de réflexion"
           }
         },
         "runningTools": {

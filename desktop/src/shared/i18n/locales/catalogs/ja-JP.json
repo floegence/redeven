@@ -965,8 +965,8 @@
         "failedCalls": {
           "kind": "plural",
           "forms": {
-            "one": "失敗したツール呼び出し {count} 件",
-            "other": "失敗したツール呼び出し {count} 件"
+            "one": "{count} 件失敗",
+            "other": "{count} 件失敗"
           }
         },
         "failedSubtaskUpdates": {
@@ -974,13 +974,6 @@
           "forms": {
             "one": "{count} 件のサブタスク更新に失敗",
             "other": "{count} 件のサブタスク更新に失敗"
-          }
-        },
-        "thinkingSegments": {
-          "kind": "plural",
-          "forms": {
-            "one": "思考 {count} 件",
-            "other": "思考 {count} 件"
           }
         },
         "runningTools": {

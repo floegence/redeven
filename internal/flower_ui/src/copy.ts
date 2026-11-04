@@ -23,7 +23,6 @@ export type FlowerTurnProcessCopy = Readonly<{
   failedCalls: (count: number) => string;
   effectUncertain: string;
   failedSubtaskUpdates: (count: number) => string;
-  thinkingSegments: (count: number) => string;
   runningTools: (count: number) => string;
   expandTools: string;
   collapseTools: string;
@@ -1258,9 +1257,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       continuousTools: 'Consecutive tool calls',
       effectUncertain: toolActivityEnUS.effectUncertain,
       toolCalls: count => `${count} ${count === 1 ? 'tool call' : 'tool calls'}`,
-      failedCalls: count => `${count} ${count === 1 ? 'failed tool call' : 'failed tool calls'}`,
+      failedCalls: count => `${count} failed`,
       failedSubtaskUpdates: count => `${count} failed ${count === 1 ? 'subtask update' : 'subtask updates'}`,
-      thinkingSegments: count => `${count} ${count === 1 ? 'thinking segment' : 'thinking segments'}`,
       runningTools: count => `${count} running`,
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
       expandToolsShort: 'Expand', collapseToolsShort: 'Collapse',

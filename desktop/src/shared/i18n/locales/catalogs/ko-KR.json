@@ -965,8 +965,8 @@
         "failedCalls": {
           "kind": "plural",
           "forms": {
-            "one": "실패한 도구 호출 {count}건",
-            "other": "실패한 도구 호출 {count}건"
+            "one": "{count}건 실패",
+            "other": "{count}건 실패"
           }
         },
         "failedSubtaskUpdates": {
@@ -974,13 +974,6 @@
           "forms": {
             "one": "하위 작업 업데이트 {count}개 실패",
             "other": "하위 작업 업데이트 {count}개 실패"
-          }
-        },
-        "thinkingSegments": {
-          "kind": "plural",
-          "forms": {
-            "one": "생각 과정 {count}개",
-            "other": "생각 과정 {count}개"
           }
         },
         "runningTools": {

@@ -6,6 +6,15 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../internal/flower_ui/src/
 import { presentFlowerActivityItem } from '../../../../internal/flower_ui/src/flowerActivityPresentation';
 
 describe('createDesktopFlowerSurfaceCopy', () => {
+  it.each([
+    ['en-US', '1 failed', '2 failed'], ['zh-CN', '1 次失败', '2 次失败'], ['zh-TW', '1 次失敗', '2 次失敗'],
+    ['de-DE', '1 fehlgeschlagen', '2 fehlgeschlagen'], ['ja-JP', '1 件失敗', '2 件失敗'], ['ko-KR', '1건 실패', '2건 실패'],
+    ['fr-FR', '1 échec', '2 échecs'], ['es-ES', '1 fallo', '2 fallos'], ['pt-BR', '1 falha', '2 falhas'], ['ru-RU', '1 сбой', '2 сбоя'],
+  ] as const)('provides concise Flower failure counts in %s', (locale, one, two) => {
+    const copy = createDesktopFlowerSurfaceCopy(createDesktopI18n(locale)).chat.turnProcess;
+    expect(copy.failedCalls(1)).toBe(one);
+    expect(copy.failedCalls(2)).toBe(two);
+  });
   it.each(REDEVEN_SUPPORTED_LOCALES)('resolves every immediate surface message in %s', locale => {
     const i18n = createDesktopI18n(locale);
     const copy = createDesktopFlowerSurfaceCopy({ ...i18n, t: (key, params) => {

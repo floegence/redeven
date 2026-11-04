@@ -561,7 +561,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         toolCalls: count => i18n.tn(k('chat.turnProcess.toolCalls'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
         failedCalls: count => i18n.tn(k('chat.turnProcess.failedCalls'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
         failedSubtaskUpdates: count => i18n.tn(k('chat.turnProcess.failedSubtaskUpdates'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
-        thinkingSegments: count => i18n.tn(k('chat.turnProcess.thinkingSegments'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
         runningTools: count => i18n.tn(k('chat.turnProcess.runningTools'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
         expandTools: t(i18n, k('chat.turnProcess.expandTools')),
         collapseTools: t(i18n, k('chat.turnProcess.collapseTools')),

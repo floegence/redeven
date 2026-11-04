@@ -5886,16 +5886,12 @@
           "other": "{count} respostas do usuário"
         },
         "failedCalls": {
-          "one": "{count} chamada de ferramenta com falha",
-          "other": "{count} chamadas de ferramentas com falha"
+          "one": "{count} falha",
+          "other": "{count} falhas"
         },
         "failedSubtaskUpdates": {
           "one": "{count} atualização de subtarefa com falha",
           "other": "{count} atualizações de subtarefa com falha"
-        },
-        "thinkingSegments": {
-          "one": "{count} etapa de raciocínio",
-          "other": "{count} etapas de raciocínio"
         },
         "runningTools": {
           "one": "{count} em execução",

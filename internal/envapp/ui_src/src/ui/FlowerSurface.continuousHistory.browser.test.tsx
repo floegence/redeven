@@ -672,7 +672,7 @@ describe('continuous history navigation', () => {
     group = root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
     expect(group.closest<HTMLElement>('.flower-tool-sequence-node')!.dataset.flowerSequence).toBe(identity);
     expect(group.getAttribute('aria-expanded')).toBe('true');
-    expect(group.textContent).toContain('1 thinking segment');
+    expect(group.textContent).not.toMatch(/thinking segment/i);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     cancelAnimationFrame(sampleFrame);
     expect(Math.max(...visualOffsets)).toBeLessThanOrEqual(1);

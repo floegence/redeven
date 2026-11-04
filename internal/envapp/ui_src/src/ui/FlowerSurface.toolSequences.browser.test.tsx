@@ -94,6 +94,45 @@ afterEach(async () => { await media.emulateTouchInput(false); document.getSelect
 
 describe('consecutive tools in the shared Flower surface', () => {
   it.each([
+    ['en-US', '2 failed'], ['zh-CN', '2 次失败'], ['zh-TW', '2 次失敗'],
+    ['de-DE', '2 fehlgeschlagen'], ['ja-JP', '2 件失敗'], ['ko-KR', '2건 실패'],
+    ['fr-FR', '2 échecs'], ['es-ES', '2 fallos'], ['pt-BR', '2 falhas'], ['ru-RU', '2 сбоя'],
+  ] as const)('keeps the tool summary concise while preserving thinking in %s', async (locale, failures) => {
+    const i18n = createTestI18nHelpers(locale);
+    const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+      tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+    const calls = [tool('summary-first', 'error'), item('summary-thought', 'thinking', 'Keep the reasoning available.'), tool('summary-last', 'error')];
+    const { root, push } = await mount(calls, [], [], false, copy);
+    const button = toggle(root, 'summary-first');
+    const label = button.querySelector<HTMLElement>('.flower-tool-sequence-label')!;
+    const assertSummary = () => {
+      expect([...label.children].map(child => child.textContent)).toEqual([copy.chat.turnProcess.toolCalls(2), failures]);
+      expect(button.getAttribute('aria-label')).toContain(`${copy.chat.turnProcess.toolCalls(2)} · ${failures}`);
+      expect(button.getAttribute('aria-label')).not.toMatch(/thinking|思考/i);
+    };
+    assertSummary();
+    await userEvent.click(button);
+    await waitFor(() => group(root, 'summary-first').dataset.state === 'closed');
+    for (const width of [1280, 390]) {
+      await page.viewport(width, 900);
+      assertSummary();
+      expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth + 1);
+      if (locale === 'zh-CN' && import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') {
+        await page.screenshot({ element: root, path: `__screenshots__/flower-concise-summary-${width}.png` });
+      }
+    }
+    await userEvent.click(button);
+    await waitFor(() => group(root, 'summary-first').dataset.state === 'open');
+    const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
+    thinking.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
+    await waitFor(() => thinking.querySelector('.flower-thinking-content')?.textContent?.includes('Keep the reasoning available.') === true);
+    expect(thinking.closest('[inert]')).toBeNull();
+    push([...calls, item('summary-answer', 'assistant', 'Finished.')], [], true);
+    await waitFor(() => root.textContent?.includes('Finished.') === true);
+    assertSummary();
+  });
+
+  it.each([
     ['terminal.exec', 'terminal'], ['web_search', 'web_search'],
     ['computer.exec', 'computer'], ['browser.navigate', 'browser'], ['computer.screenshot', 'computer'],
     ['read_files', 'structured'], ['extension.inspect', 'structured'],
@@ -1296,7 +1335,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
     const sequenceKey = group(root, 'search').dataset.flowerSequence;
     expect(sequenceToggle.textContent).toContain('2 tool calls');
-    expect(sequenceToggle.textContent).toContain('1 thinking segment');
+    expect(sequenceToggle.textContent).not.toMatch(/thinking segment/i);
     expect(getComputedStyle(sequenceToggle).fontSize).toBe('13px');
     expect(getComputedStyle(sequenceToggle).lineHeight).toBe('18px');
     expect(group(root, 'goal').dataset.flowerSequence).toBe(sequenceKey);
@@ -1387,12 +1426,12 @@ describe('consecutive tools in the shared Flower surface', () => {
       item('progress', 'assistant', 'A useful progress report.'), tool('failure', 'error'), tool('c'), tool('d', 'running')]);
     const firstToggle = root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
     expect(firstToggle.textContent).toContain('2 tool calls');
-    expect(firstToggle.textContent).toContain('3 thinking segments');
+    expect(firstToggle.textContent).not.toMatch(/thinking segment/i);
     expect(collapsed(root, 'a')).toBe(true);
     expect(collapsed(root, 'b')).toBe(true);
     expect(collapsed(root, 'failure')).toBe(false);
     expect(toggle(root, 'failure').textContent).toContain('3 tool calls');
-    expect(toggle(root, 'failure').textContent).toContain('1 failed tool call');
+    expect(toggle(root, 'failure').textContent).toContain('1 failed');
     expect(toggle(root, 'failure').textContent).toContain('1 running');
     expect(row(root, 'failure').closest('[inert]')).toBeNull();
     expect(root.querySelector('[data-flower-message-id="progress"]')?.closest('[inert]')).toBeNull();
@@ -1415,7 +1454,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const { root } = await mount([tool('failed', 'error'), tool('succeeded'), item('progress', 'assistant'), tool('c'), tool('d')]);
     const failedGroup = group(root, 'failed');
     expect(toggle(root, 'failed').textContent).toContain('2 tool calls');
-    expect(toggle(root, 'failed').textContent).toContain('1 failed tool call');
+    expect(toggle(root, 'failed').textContent).toContain('1 failed');
     expect(collapsed(root, 'failed')).toBe(true);
     expect(row(root, 'failed')).toBeNull();
     toggle(root, 'failed').click();

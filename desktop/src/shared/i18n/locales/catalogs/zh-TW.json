@@ -965,8 +965,8 @@
         "failedCalls": {
           "kind": "plural",
           "forms": {
-            "one": "{count} 次工具呼叫失敗",
-            "other": "{count} 次工具呼叫失敗"
+            "one": "{count} 次失敗",
+            "other": "{count} 次失敗"
           }
         },
         "failedSubtaskUpdates": {
@@ -974,13 +974,6 @@
           "forms": {
             "one": "{count} 則失敗的子任務動態",
             "other": "{count} 則失敗的子任務動態"
-          }
-        },
-        "thinkingSegments": {
-          "kind": "plural",
-          "forms": {
-            "one": "{count} 段思考",
-            "other": "{count} 段思考"
           }
         },
         "runningTools": {

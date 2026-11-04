@@ -965,8 +965,8 @@
         "failedCalls": {
           "kind": "plural",
           "forms": {
-            "one": "{count} fehlgeschlagener Werkzeugaufruf",
-            "other": "{count} fehlgeschlagene Werkzeugaufrufe"
+            "one": "{count} fehlgeschlagen",
+            "other": "{count} fehlgeschlagen"
           }
         },
         "failedSubtaskUpdates": {
@@ -974,13 +974,6 @@
           "forms": {
             "one": "{count} fehlgeschlagenes Unteraufgaben-Update",
             "other": "{count} fehlgeschlagene Unteraufgaben-Updates"
-          }
-        },
-        "thinkingSegments": {
-          "kind": "plural",
-          "forms": {
-            "one": "{count} Denkabschnitt",
-            "other": "{count} Denkabschnitte"
           }
         },
         "runningTools": {

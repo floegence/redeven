@@ -124,7 +124,7 @@ describe('consecutive tool presentation', () => {
   it('counts complete running sequences without requiring a settled turn or full bodies', () => {
     const entries = [text('before'), tool('a'), tool('b', { status: 'running' }), { ...text('thinking', true), message: { ...text('thinking', true).message, live: true, status: 'streaming' as const } }];
     const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(), { hasBefore: true, hasAfter: false });
-    expect([...value.groups.values()][0]).toMatchObject({ countsComplete: true, toolCount: 2, thinkingCount: 1, runningCount: 1 });
+    expect([...value.groups.values()][0]).toMatchObject({ countsComplete: true, toolCount: 2, runningCount: 1 });
   });
   it('retains a partial group identity when normal pagination completes its prefix', () => {
     const first = projectFlowerToolSequences([tool('c'), tool('d')], 'thread', [], undefined, new Set(), { hasBefore: true, hasAfter: false });
@@ -237,7 +237,7 @@ describe('consecutive tool presentation', () => {
     const group = [...result.groups.values()][0];
     expect(result.groups.size).toBe(1);
     expect(group.toolCount).toBe(2);
-    expect(group.thinkingCount).toBe(4);
+    expect(group.nodeKeys).toHaveLength(6);
     expect(result.members.get('leading')?.group).toBe(group);
     expect(result.members.get('trailing')?.group).toBe(group);
     expect(result.members.get('middle')?.group).toBe(group);
@@ -250,14 +250,14 @@ describe('consecutive tool presentation', () => {
     ]);
     const group = [...result.groups.values()][0];
     expect(result.groups.size).toBe(1);
-    expect(group).toMatchObject({ toolCount: 2, thinkingCount: 1, failedCount: 0 });
+    expect(group).toMatchObject({ toolCount: 2, failedCount: 0 });
     expect(group.nodeKeys).toHaveLength(3);
     expect([...result.members.values()].filter(member => member.group === group)).toHaveLength(3);
   });
   it('allows one tool and its following thought to be folded together', () => {
     const result = projectFlowerToolSequences([tool('only'), text('after', true)]);
     const group = [...result.groups.values()][0];
-    expect(group).toMatchObject({ toolCount: 1, thinkingCount: 1 });
+    expect(group).toMatchObject({ toolCount: 1 });
     expect(result.members.get('after')?.group).toBe(group);
   });
   it('treats goal call previews like ordinary calls while preserving explicit input boundaries', () => {
@@ -321,7 +321,7 @@ describe('consecutive tool presentation', () => {
     ]);
     expect(result.groups.size).toBe(1);
     const group = [...result.groups.values()][0];
-    expect(group).toMatchObject({ toolCount: 2, thinkingCount: 3, subagentEventCount: 0 });
+    expect(group).toMatchObject({ toolCount: 2, subagentEventCount: 0 });
     expect([...result.members.values()].map(member => [member.first, member.last])).toEqual([
       [true, false], [false, false], [false, false], [false, false], [false, true],
     ]);
@@ -339,7 +339,7 @@ describe('consecutive tool presentation', () => {
     const result = projectFlowerToolSequences(entries, 'thread', [runtimeTurn()]);
     const group = [...result.groups.values()][0];
     expect(result.groups.size).toBe(1);
-    expect(group).toMatchObject({ toolCount: 2, thinkingCount: 2, subagentEventCount: 3, failedSubagentEventCount: 1 });
+    expect(group).toMatchObject({ toolCount: 2, subagentEventCount: 3, failedSubagentEventCount: 1 });
     expect(group.entryKeys).toEqual(entries.map(entry => entry.key));
     expect(group.disclosure).toBe('manual');
     expect(result.members.get('parent-event:report')?.group).toBe(group);

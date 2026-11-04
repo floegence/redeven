@@ -984,10 +984,10 @@
         "failedCalls": {
           "kind": "plural",
           "forms": {
-            "one": "{count} неудачный вызов инструмента",
-            "few": "{count} неудачных вызова инструмента",
-            "many": "{count} неудачных вызовов инструмента",
-            "other": "{count} неудачных вызовов инструмента"
+            "one": "{count} сбой",
+            "few": "{count} сбоя",
+            "many": "{count} сбоев",
+            "other": "{count} сбоя"
           }
         },
         "failedSubtaskUpdates": {
@@ -997,15 +997,6 @@
             "few": "{count} неудачных обновления подзадачи",
             "many": "{count} неудачных обновлений подзадачи",
             "other": "{count} неудачных обновления подзадачи"
-          }
-        },
-        "thinkingSegments": {
-          "kind": "plural",
-          "forms": {
-            "one": "{count} этап размышления",
-            "few": "{count} этапа размышления",
-            "many": "{count} этапов размышления",
-            "other": "{count} этапов размышления"
           }
         },
         "runningTools": {

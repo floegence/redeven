@@ -367,9 +367,8 @@ export const flowerSurfaceEnUS = {
     turnProcess: {
       continuousTools: 'Consecutive tool calls',
       toolCalls: { one: '{count} tool call', other: '{count} tool calls' },
-      failedCalls: { one: '{count} failed tool call', other: '{count} failed tool calls' },
+      failedCalls: { one: '{count} failed', other: '{count} failed' },
       failedSubtaskUpdates: { one: '{count} failed subtask update', other: '{count} failed subtask updates' },
-      thinkingSegments: { one: '{count} thinking segment', other: '{count} thinking segments' },
       runningTools: { one: '{count} running', other: '{count} running' },
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
       expandToolsShort: 'Expand', collapseToolsShort: 'Collapse',

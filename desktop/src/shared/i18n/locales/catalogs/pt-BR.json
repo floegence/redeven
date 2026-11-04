@@ -965,8 +965,8 @@
         "failedCalls": {
           "kind": "plural",
           "forms": {
-            "one": "{count} chamada de ferramenta com falha",
-            "other": "{count} chamadas de ferramentas com falha"
+            "one": "{count} falha",
+            "other": "{count} falhas"
           }
         },
         "failedSubtaskUpdates": {
@@ -974,13 +974,6 @@
           "forms": {
             "one": "{count} atualização de subtarefa com falha",
             "other": "{count} atualizações de subtarefa com falha"
-          }
-        },
-        "thinkingSegments": {
-          "kind": "plural",
-          "forms": {
-            "one": "{count} etapa de raciocínio",
-            "other": "{count} etapas de raciocínio"
           }
         },
         "runningTools": {

@@ -707,8 +707,8 @@
       "failedCalls": {
         "kind": "plural",
         "forms": {
-          "one": "{count} failed tool call",
-          "other": "{count} failed tool calls"
+          "one": "{count} failed",
+          "other": "{count} failed"
         }
       },
       "failedSubtaskUpdates": {
@@ -716,13 +716,6 @@
         "forms": {
           "one": "{count} failed subtask update",
           "other": "{count} failed subtask updates"
-        }
-      },
-      "thinkingSegments": {
-        "kind": "plural",
-        "forms": {
-          "one": "{count} thinking segment",
-          "other": "{count} thinking segments"
         }
       },
       "runningTools": {
