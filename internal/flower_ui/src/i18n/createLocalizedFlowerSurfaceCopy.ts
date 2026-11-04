@@ -195,6 +195,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         contentRedacted: t(i18n, k('chat.toolActivity.contentRedacted')),
         contentEncodingReplaced: t(i18n, k('chat.toolActivity.contentEncodingReplaced')),
         computerObservationUnavailable: t(i18n, k('chat.toolActivity.computerObservationUnavailable')),
+        computerActionReadFailed: t(i18n, k('chat.toolActivity.computerActionReadFailed')),
         computerActionObservedUnavailable: t(i18n, k('chat.toolActivity.computerActionObservedUnavailable')),
         computerObservationDetails: t(i18n, k('chat.toolActivity.computerObservationDetails')),
         computerPageChanges: t(i18n, k('chat.toolActivity.computerPageChanges')),

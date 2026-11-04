@@ -290,6 +290,7 @@
       "computerPreparedOnly": "Preparation completed; input not sent",
       "computerEffectConfirmed": "An action completed; inspect before continuing",
       "computerObservationUnavailable": "Page could not be read",
+      "computerActionReadFailed": "Action performed; requested content could not be read",
       "computerActionObservedUnavailable": "Action performed; page could not be read",
       "computerObservationDetails": "Technical details",
       "computerReadCompleted": "Read completed",

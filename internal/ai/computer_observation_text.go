@@ -45,7 +45,7 @@ func compactComputerObservation(current map[string]any) map[string]any {
 	nodes := make([]any, 0, len(ordered))
 	for _, node := range ordered {
 		item := map[string]any{}
-		for _, key := range []string{"ref", "parent_ref", "role", "platform_role", "name", "value", "description", "frame_id", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
+		for _, key := range []string{"ref", "parent_ref", "role", "platform_role", "name", "value", "description", "frame_id", "frame_document_id", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
 			if v, ok := node[key]; ok {
 				item[key] = v
 			}
@@ -196,14 +196,18 @@ func computerObservationLine(node, parent map[string]any, depth int) string {
 			line.WriteString(" parent_ref=" + computerObservationQuote(ref))
 		}
 	}
-	for _, key := range []string{"value", "states", "description", "frame_id", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
+	for _, key := range []string{"value", "states", "description", "frame_id", "frame_document_id", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
 		if value, ok := node[key]; ok {
-			if key == "frame_id" && depth <= 8 && parent != nil && parent[key] == value {
+			if (key == "frame_id" || key == "frame_document_id") && depth <= 8 && parent != nil && parent[key] == value {
 				continue
 			}
 			line.WriteString(" " + key + "=" + computerObservationQuote(value))
-		} else if key == "frame_id" && (depth > 8 || parent != nil && parent[key] != nil) {
-			line.WriteString(" frame_absent=true")
+		} else if (key == "frame_id" || key == "frame_document_id") && (depth > 8 || parent != nil && parent[key] != nil) {
+			if key == "frame_id" {
+				line.WriteString(" frame_absent=true")
+			} else {
+				line.WriteString(" frame_document_absent=true")
+			}
 		}
 	}
 	return line.String()

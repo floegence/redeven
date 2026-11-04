@@ -5588,6 +5588,7 @@
         "previewGroupBy": "Группировка",
         "previewUnavailable": "Этот инструмент не предоставил предварительный просмотр результата.",
         "effectUncertain": "Результат не подтверждён",
+        "computerNotDispatched": "Страница изменилась до отправки действия",
         "computerInputRejected": "Недопустимые аргументы; ввод не отправлен",
         "computerPreparedOnly": "Подготовка завершена; ввод не отправлен",
         "computerNotDispatched": "Страница изменилась до отправки действия",
@@ -5603,6 +5604,7 @@
         "contentRedacted": "Учётные данные скрыты в этом представлении.",
         "contentEncodingReplaced": "Недопустимые байты текста заменены для отображения.",
         "computerObservationUnavailable": "Не удалось прочитать страницу",
+        "computerActionReadFailed": "Действие выполнено; не удалось прочитать запрошенное содержимое",
         "computerActionObservedUnavailable": "Действие выполнено; не удалось прочитать страницу",
         "computerObservationDetails": "Технические сведения"
       },

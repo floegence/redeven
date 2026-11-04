@@ -543,6 +543,7 @@
         "computerPreparedOnly": "Préparation terminée ; aucune saisie envoyée",
         "computerEffectConfirmed": "Une action a été effectuée ; vérifiez avant de continuer",
         "computerObservationUnavailable": "Impossible de lire la page",
+        "computerActionReadFailed": "Action effectuée ; impossible de lire le contenu demandé",
         "computerActionObservedUnavailable": "Action effectuée ; impossible de lire la page",
         "computerObservationDetails": "Détails techniques",
         "computerReadCompleted": "Lecture terminée",

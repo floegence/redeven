@@ -10496,7 +10496,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           terminateCommand: copy().chat.toolActivityTerminateCommand,
         },
       }).label,
-      computerObservationInterruption(item) ? ({not_dispatched:copy().chat.toolActivity.computerNotDispatched,output:copy().chat.toolActivity.computerOutputLimitReached,budget:copy().chat.toolActivity.computerBudgetExhausted,effect_confirmed:copy().chat.toolActivity.computerActionObservedUnavailable,prepared:copy().chat.toolActivity.computerPreparedOnly,partial_input:copy().chat.toolActivity.computerInputIncomplete,unavailable:copy().chat.toolActivity.computerObservationUnavailable}[computerObservationInterruption(item)!]) : copy().chat.toolStatuses[item.status],
+      computerObservationInterruption(item) ? ({not_dispatched:copy().chat.toolActivity.computerNotDispatched,output:copy().chat.toolActivity.computerOutputLimitReached,budget:copy().chat.toolActivity.computerBudgetExhausted,read_failed:copy().chat.toolActivity.computerActionReadFailed,effect_confirmed:copy().chat.toolActivity.computerActionObservedUnavailable,prepared:copy().chat.toolActivity.computerPreparedOnly,partial_input:copy().chat.toolActivity.computerInputIncomplete,unavailable:copy().chat.toolActivity.computerObservationUnavailable}[computerObservationInterruption(item)!]) : copy().chat.toolStatuses[item.status],
     ].filter(Boolean).join('. ')
   );
 

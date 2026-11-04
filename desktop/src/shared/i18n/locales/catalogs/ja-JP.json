@@ -543,6 +543,7 @@
         "computerPreparedOnly": "準備は完了しました。入力は送信されていません",
         "computerEffectConfirmed": "操作が完了しています。続行前に確認してください",
         "computerObservationUnavailable": "ページを読み取れませんでした",
+        "computerActionReadFailed": "操作は実行されました。要求された内容を読み取れませんでした",
         "computerActionObservedUnavailable": "操作は実行されました。ページを読み取れませんでした",
         "computerObservationDetails": "技術的な詳細",
         "computerReadCompleted": "読み取り完了",

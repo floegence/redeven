@@ -5487,6 +5487,7 @@
         "previewGroupBy": "分組方式",
         "previewUnavailable": "此工具未提供結果預覽。",
         "effectUncertain": "結果未確認",
+        "computerNotDispatched": "操作尚未傳送，頁面已變更",
         "computerInputRejected": "參數無效，尚未傳送輸入",
         "computerPreparedOnly": "已完成準備，尚未傳送輸入",
         "computerNotDispatched": "操作尚未傳送，頁面已變更",
@@ -5502,6 +5503,7 @@
         "contentRedacted": "此顯示內容中的憑證已遮蔽。",
         "contentEncodingReplaced": "無效文字位元組已替換後顯示。",
         "computerObservationUnavailable": "暫時無法讀取頁面",
+        "computerActionReadFailed": "操作已執行，未能讀取要求的內容",
         "computerActionObservedUnavailable": "操作已執行，頁面尚未讀取",
         "computerObservationDetails": "技術詳細資料"
       },

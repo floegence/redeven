@@ -296,7 +296,6 @@ func TestComputerExplicitInvalidationCoversReadonlyLocators(t *testing.T) {
 		"ui.getByRole('main').selection({on_invalidated:'return'})",
 		"ui.getByRole('link').attribute('title',{on_invalidated:'return'})",
 		"ui.getByRole('link').getAttribute('href',{on_invalidated:'return'})",
-		"ui.getByRole('link').linkSummary({on_invalidated:'return'})",
 		"ui.screenshot({on_invalidated:'return'})",
 	} {
 		t.Run(expression, func(t *testing.T) {

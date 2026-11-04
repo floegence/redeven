@@ -1596,7 +1596,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     if (phase) meta = phaseCopy[phase] ?? meta;
   }
   const interruption = computerObservationInterruption(item);
-  if (interruption) meta = {not_dispatched:words.computerNotDispatched,output:words.computerOutputLimitReached,budget:words.computerBudgetExhausted,effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
+  if (interruption) meta = {not_dispatched:words.computerNotDispatched,output:words.computerOutputLimitReached,budget:words.computerBudgetExhausted,read_failed:words.computerActionReadFailed,effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
   if (uncertain) meta = words.effectUncertain;
   const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
     'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');

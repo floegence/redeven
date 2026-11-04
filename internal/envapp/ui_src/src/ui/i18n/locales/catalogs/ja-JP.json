@@ -5487,6 +5487,7 @@
         "previewGroupBy": "グループ化",
         "previewUnavailable": "このツールは結果のプレビューを提供していません。",
         "effectUncertain": "結果未確認",
+        "computerNotDispatched": "操作の送信前にページが変更されました",
         "computerInputRejected": "引数が無効です。入力は送信されていません",
         "computerPreparedOnly": "準備は完了しました。入力は送信されていません",
         "computerNotDispatched": "操作の送信前にページが変更されました",
@@ -5502,6 +5503,7 @@
         "contentRedacted": "表示内の認証情報を伏せています。",
         "contentEncodingReplaced": "無効なテキストバイトを置換して表示しています。",
         "computerObservationUnavailable": "ページを読み取れませんでした",
+        "computerActionReadFailed": "操作は実行されました。要求された内容を読み取れませんでした",
         "computerActionObservedUnavailable": "操作は実行されました。ページを読み取れませんでした",
         "computerObservationDetails": "技術的な詳細"
       },

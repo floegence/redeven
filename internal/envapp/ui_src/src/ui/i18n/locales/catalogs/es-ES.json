@@ -5487,6 +5487,7 @@
         "previewGroupBy": "Agrupar por",
         "previewUnavailable": "Esta herramienta no proporcionó una vista previa del resultado.",
         "effectUncertain": "Resultado sin confirmar",
+        "computerNotDispatched": "La página cambió antes de enviar la acción",
         "computerInputRejected": "Argumentos no válidos; no se envió ninguna entrada",
         "computerPreparedOnly": "Preparación completada; no se envió ninguna entrada",
         "computerNotDispatched": "La página cambió antes de enviar la acción",
@@ -5502,6 +5503,7 @@
         "contentRedacted": "Las credenciales están ocultas en esta vista.",
         "contentEncodingReplaced": "Se sustituyeron los bytes de texto no válidos para mostrarlos.",
         "computerObservationUnavailable": "No se pudo leer la página",
+        "computerActionReadFailed": "Acción realizada; no se pudo leer el contenido solicitado",
         "computerActionObservedUnavailable": "Acción realizada; no se pudo leer la página",
         "computerObservationDetails": "Detalles técnicos"
       },

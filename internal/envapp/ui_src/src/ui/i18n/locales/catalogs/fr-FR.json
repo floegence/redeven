@@ -5487,6 +5487,7 @@
         "previewGroupBy": "Regrouper par",
         "previewUnavailable": "Cet outil n’a pas fourni d’aperçu du résultat.",
         "effectUncertain": "Résultat non confirmé",
+        "computerNotDispatched": "La page a changé avant l’envoi de l’action",
         "computerInputRejected": "Arguments invalides ; aucune saisie envoyée",
         "computerPreparedOnly": "Préparation terminée ; aucune saisie envoyée",
         "computerNotDispatched": "La page a changé avant l’envoi de l’action",
@@ -5502,6 +5503,7 @@
         "contentRedacted": "Les identifiants sensibles sont masqués dans cet affichage.",
         "contentEncodingReplaced": "Les octets de texte invalides ont été remplacés pour l’affichage.",
         "computerObservationUnavailable": "Impossible de lire la page",
+        "computerActionReadFailed": "Action effectuée ; impossible de lire le contenu demandé",
         "computerActionObservedUnavailable": "Action effectuée ; impossible de lire la page",
         "computerObservationDetails": "Détails techniques"
       },

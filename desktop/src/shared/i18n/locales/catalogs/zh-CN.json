@@ -543,6 +543,7 @@
         "computerPreparedOnly": "已完成准备，未发送输入",
         "computerEffectConfirmed": "已有操作完成，请先检查再继续",
         "computerObservationUnavailable": "暂时无法读取页面",
+        "computerActionReadFailed": "操作已执行，未能读取请求的内容",
         "computerActionObservedUnavailable": "操作已执行，页面暂未读取",
         "computerObservationDetails": "技术详情",
         "computerReadCompleted": "读取已完成",

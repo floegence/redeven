@@ -523,7 +523,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				}
 				if err == nil && computerOperationReturnsInvalidation(msg.Operation) && payload["observation_invalidated"] != true && payload["target_changed"] != true && (observed.Safety == nil || observed.Safety.SafeToSendToModel) {
 					read := map[string]any{"operation_index": operations - 1, "action": msg.Operation["action"]}
-					for _, key := range []string{"scope", "source", "ref", "frame_id", "document_id"} {
+					for _, key := range []string{"scope", "source", "ref", "frame_id", "frame_document_id", "document_id"} {
 						if value, ok := payload[key]; ok {
 							read[key] = value
 						}

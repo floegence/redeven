@@ -700,8 +700,8 @@ test('text capability checks retain explicit node scope across documents and SVG
       }
       const root = nodes.find(node => node.role === 'RootWebArea');
       const text = await page.text(await page.resolve({role:'main', root_ref:root.ref}));
-      assert.deepEqual({...text,ref:undefined,frame_id:undefined,document_id:undefined}, {text:'Visible',truncated:false,scope:'element',source:'browser_dom',property:'innerText',url:'about:blank',title:'',ref:undefined,frame_id:undefined,document_id:undefined});
-      assert.ok(text.ref && text.frame_id && text.document_id);
+      assert.deepEqual({...text,ref:undefined,frame_id:undefined,frame_document_id:undefined,document_id:undefined}, {text:'Visible',truncated:false,scope:'element',source:'browser_dom',property:'innerText',url:'about:blank',title:'',ref:undefined,frame_id:undefined,frame_document_id:undefined,document_id:undefined});
+      assert.ok(text.ref && text.frame_id && text.frame_document_id && text.document_id);
     } finally { page.close(); }
   } finally { await browser.close(); }
 });

@@ -64,14 +64,13 @@ test('browser node actions do not guess supported input from role',()=>fixture('
   assert.equal((await call('computer.action',{action:'click',selector:{ref:cell.ref}})).result.action_executed,true);
 }));
 
-test('attribute href preserves source while summary is explicitly redacted',()=>fixture('<a href="https://user:pass@example.test/report?period=7#daily">Report</a>',async({call})=>{
+test('attribute href preserves source and rejects retired summary requests',()=>fixture('<a href="https://user:pass@example.test/report?period=7#daily">Report</a>',async({call})=>{
   const args={action:'attribute',selector:{role:'link',name:'Report'},attribute:'href'};
   const raw=await call('computer.action',args);
   assert.equal(raw.result.value,'https://example.test/report?period=7#daily');
   assert.deepEqual(raw.result.redacted,['url_credentials']);
   const summary=await call('computer.action',{...args,summary:true});
-  assert.equal(summary.result.value,'https://example.test/report');
-  assert.equal(summary.result.value_kind,'link_summary');
+  assert.equal(summary.error,'INVALID_REQUEST');
 }));
 
 for(const transition of ['scan_failure','private_input','permission','cancel']) {

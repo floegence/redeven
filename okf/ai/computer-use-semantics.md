@@ -42,6 +42,8 @@ later explicit call. Only confirmed identity changes invalidate the token. Seman
 
 Both directions of every parent/child edge must agree. An observation describes the bounded returned tree, not an exhaustive view of every application node.
 
+Browser document_id describes the page sample revision across reads. Each source-backed node/query item/row/cell exposes frame_id and frame_document_id for its actual frame lifetime. An unrelated iframe replacement may advance document_id without changing a main-frame ref or frame_document_id. Ref validation remains owned by the existing frame/document records. Text-tree frame_document_id inherits like frame_id; frame_document_absent explicitly clears inheritance.
+
 ## Roles, states and relationships
 One Runtime alias inventory owns normalization and canonical selector expansion.
 Standard landmarks including navigation, main, banner, contentinfo and
@@ -60,7 +62,7 @@ actionability. Native source-declared actions retain their platform meaning.
 An ignored or truncated target has no invented reference; a platform-computed name or safe description may still be available.
 
 ## Reading order
-Browser collection and Runtime normalization both preserve preorder depth-first root/sibling order, including guest/full/model output. Parents precede children, preserving valid bounded prefixes and omission flags. Structure never joins independently filtered fields into invented records; use source relationships and explicit object keys.
+Browser snapshot/query enumeration and Runtime normalization preserve preorder depth-first source AX child order through ignored ancestors within each authorized frame; this is not a visual or cross-frame interleaving order. They preserve root/sibling order, including guest/full/model output. Parents precede children, preserving valid bounded prefixes and omission flags. Structure never joins independently filtered fields into invented records; use source relationships and explicit object keys.
 
 # Boundaries
 

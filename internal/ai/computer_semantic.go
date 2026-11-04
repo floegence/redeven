@@ -19,6 +19,7 @@ type computerSemanticNode struct {
 	ParentRef            string                  `json:"parent_ref,omitempty"`
 	ChildRefs            []string                `json:"child_refs"`
 	ChildrenTruncated    bool                    `json:"children_truncated,omitempty"`
+	FrameDocumentID      string                  `json:"frame_document_id,omitempty"`
 	FrameID              string                  `json:"frame_id,omitempty"`
 	Role                 string                  `json:"role"`
 	PlatformRole         string                  `json:"platform_role"`
@@ -139,7 +140,7 @@ func normalizeComputerSemanticNode(node *computerSemanticNode) error {
 	if node.PlatformRole != node.Role {
 		return errors.New("invalid semantic platform role")
 	}
-	if len(node.Subrole) > 100 || len(node.FrameID) > 1024 || len(node.ParentRef) > 1024 {
+	if len(node.Subrole) > 100 || len(node.FrameID) > 1024 || len(node.FrameDocumentID) > 1024 || len(node.ParentRef) > 1024 {
 		return errors.New("invalid semantic platform identity")
 	}
 	if node.Role == "password text" || node.Subrole == "AXSecureTextField" {

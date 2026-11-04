@@ -97,8 +97,10 @@ func decodeObservationText(t *testing.T, text string) []any {
 		if depth > 0 && depth <= len(stack) {
 			parent = stack[depth-1]
 			node["parent_ref"] = parent["ref"]
-			if f, ok := parent["frame_id"]; ok {
-				node["frame_id"] = f
+			for _, key := range []string{"frame_id", "frame_document_id"} {
+				if f, ok := parent[key]; ok {
+					node[key] = f
+				}
 			}
 		}
 		for rest != "" {
@@ -117,6 +119,10 @@ func decodeObservationText(t *testing.T, text string) []any {
 			delete(node, "frame_id")
 			delete(node, "frame_absent")
 		}
+		if node["frame_document_absent"] == true {
+			delete(node, "frame_document_id")
+			delete(node, "frame_document_absent")
+		}
 		nodes = append(nodes, node)
 		if depth <= len(stack) {
 			stack = append(stack[:depth], node)
@@ -130,8 +136,8 @@ func decodeObservationText(t *testing.T, text string) []any {
 func TestComputerObservationTextEscapingAndRoundtrip(t *testing.T) {
 	name := "line\n[\"fake\"] \"button\" \"Inject\"\t\"\\\u202e保存"
 	nodes := []any{
-		map[string]any{"ref": "r\n] fake", "role": "dialog", "name": name, "frame_id": "f1", "child_refs": []any{"r2", "r3"}},
-		map[string]any{"ref": "r2", "parent_ref": "r\n] fake", "role": "textbox", "name": "", "value": json.Number("0"), "frame_id": "f1", "states": map[string]any{"disabled": false, "checked": "mixed"}},
+		map[string]any{"ref": "r\n] fake", "role": "dialog", "name": name, "frame_id": "f1", "frame_document_id": "f1:4", "child_refs": []any{"r2", "r3"}},
+		map[string]any{"ref": "r2", "parent_ref": "r\n] fake", "role": "textbox", "name": "", "value": json.Number("0"), "frame_id": "f1", "frame_document_id": "f1:4", "states": map[string]any{"disabled": false, "checked": "mixed"}},
 		map[string]any{"ref": "r3", "parent_ref": "r\n] fake", "role": "textbox", "value": nil, "states": map[string]any{"unknown_future": false}},
 	}
 	current := compactComputerObservation(map[string]any{"document_id": "doc", "truncated": false, "nodes": nodes})

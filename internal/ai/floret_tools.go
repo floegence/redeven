@@ -1393,6 +1393,11 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		if rawPayload["context_reset"] == true {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_context", Label: "context", Value: "reset"})
 		}
+		if status == toolResultStatusError {
+			if action := anyToString(rawPayload["failed_action"]); computerOperationReturnsInvalidation(map[string]any{"action": action}) {
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_failed_read", Label: "read", Value: action})
+			}
+		}
 		if index, ok := rawPayload["failed_operation_index"]; ok {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_failed_operation", Label: "operation", Value: fmt.Sprint(index)})
 		}

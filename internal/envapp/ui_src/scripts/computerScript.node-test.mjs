@@ -239,12 +239,12 @@ test('strict waits seal later input even when a guest catches timeout', async ()
 test('read helpers preserve legacy shapes and precise attributes',async()=>{
  const script=await createComputerScript(); const actions=[];
  try {
-  const result=await script.execute("const l=ui.ref('r'); log(await l.node(),await l.read(),await l.count(),await l.attribute('title'),await l.linkSummary(),await l.rows({limit:2}));",async op=>{
+  const result=await script.execute("const l=ui.ref('r'); log(await l.node(),await l.read(),await l.count(),await l.attribute('title'),await l.rows({limit:2}));",async op=>{
    actions.push(op);if(op.action==='read')return {node:{ref:'r',role:'AXButton',canonical_role:'button',platform_role:'AXButton'}};
    if(op.action==='query')return {total:9,items:[]};if(op.action==='attribute')return {attribute:op.attribute,value:op.attribute==='href'?'https://example.test/path':'Title'};
    return {rows:[],total:0,truncated:false};
   });
-  assert.deepEqual(result.logs[0],[{ref:'r',role:'button',platform_role:'AXButton'},{node:{ref:'r',role:'AXButton',canonical_role:'button',platform_role:'AXButton'}},9,'Title',{url:'https://example.test/path',redacted:true},{rows:[],total:0,truncated:false}]);
+  assert.deepEqual(result.logs[0],[{ref:'r',role:'button',platform_role:'AXButton'},{node:{ref:'r',role:'AXButton',canonical_role:'button',platform_role:'AXButton'}},9,'Title',{rows:[],total:0,truncated:false}]);
   const raw=await script.execute("log(await ui.ref('r').attribute('href'),await ui.ref('r').getAttribute('data-resource'));",async op=>({attribute:op.attribute,value:op.attribute==='href'?'/report?id=2#tab':'raw source'}));
   assert.deepEqual(raw.logs,[['/report?id=2#tab',{attribute:'data-resource',value:'raw source'}]]);
  }finally{script.dispose();}
@@ -351,4 +351,10 @@ test('pointer geometry and preparation are explicit guest choices',async()=>{
   }finally{script.dispose();}
   const native=await createComputerScript({browser:false});
   try{await assert.rejects(native.execute("await ui.ref('r').click({point:{x:3,y:4}})",async()=>assert.fail('unsupported native point must not silently dispatch')));}finally{native.dispose();}
+});
+
+
+test('retired lossy link summaries reject before reading and name the exact replacement',async()=>{
+ const script=await createComputerScript();let calls=0;
+ try{await assert.rejects(script.execute("await ui.ref('r').linkSummary();",async()=>{calls++;return {};}),e=>e.result?.diagnostic?.expected==='precise_attribute_read'&&e.result?.diagnostic?.method==='locator.linkSummary');assert.equal(calls,0);}finally{script.dispose();}
 });

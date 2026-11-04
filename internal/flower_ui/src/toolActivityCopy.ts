@@ -43,6 +43,7 @@ export const toolActivityEnUS = {
   "computerOutputLimitReached": "Output limit reached; completed work is retained",
   "computerBudgetExhausted": "Script limit reached; completed work is retained",
   "computerObservationUnavailable": "Page could not be read",
+  "computerActionReadFailed": "Action performed; requested content could not be read",
   "computerActionObservedUnavailable": "Action performed; page could not be read",
   "computerObservationDetails": "Technical details",
   "computerPageChanges": "Page changes",

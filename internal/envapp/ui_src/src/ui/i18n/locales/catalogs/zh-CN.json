@@ -5487,6 +5487,7 @@
         "previewGroupBy": "分组方式",
         "previewUnavailable": "此工具未提供结果预览。",
         "effectUncertain": "结果未确认",
+        "computerNotDispatched": "操作尚未发送，页面已变化",
         "computerInputRejected": "参数无效，未发送输入",
         "computerPreparedOnly": "已完成准备，未发送输入",
         "computerNotDispatched": "操作尚未发送，页面已变化",
@@ -5502,6 +5503,7 @@
         "contentRedacted": "此显示内容中的凭据已脱敏。",
         "contentEncodingReplaced": "无效文本字节已替换后显示。",
         "computerObservationUnavailable": "暂时无法读取页面",
+        "computerActionReadFailed": "操作已执行，未能读取请求的内容",
         "computerActionObservedUnavailable": "操作已执行，页面暂未读取",
         "computerObservationDetails": "技术详情"
       },

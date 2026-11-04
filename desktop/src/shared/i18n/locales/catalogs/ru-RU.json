@@ -550,6 +550,7 @@
         "computerPreparedOnly": "Подготовка завершена; ввод не отправлен",
         "computerEffectConfirmed": "Действие выполнено; проверьте результат перед продолжением",
         "computerObservationUnavailable": "Не удалось прочитать страницу",
+        "computerActionReadFailed": "Действие выполнено; не удалось прочитать запрошенное содержимое",
         "computerActionObservedUnavailable": "Действие выполнено; не удалось прочитать страницу",
         "computerObservationDetails": "Технические сведения",
         "computerReadCompleted": "Чтение завершено",

@@ -39,7 +39,7 @@ export async function withDOM(page,element,fn,args=[],mutates=false){
 
 export async function browserSource(page,element,args){
   const source=args.source??'ax',document_id=page.prefix+':'+page.revision;
-  const metadata={source:source==='ax'?'browser_accessibility':'browser_dom',document_id,frame_id:element.frame.frame.id,ref:element.ref};
+  const metadata={source:source==='ax'?'browser_accessibility':'browser_dom',document_id,...page.sourceIdentity(element),ref:element.ref};
   if(source==='dom'&&!element.backendNodeId)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
   const privacyElement=element.backendNodeId?element:{...element,backendNodeId:element.privacyBackendNodeId};
   if(!privacyElement.backendNodeId)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
@@ -173,7 +173,7 @@ export async function browserSelection(page,element,args){
     }
     return {selection:read(),mechanism:'dom_selection'};
   },[args],args.action!=='selection');
-  return args.action==='selection'?{...result,ref:element.ref}:{...result,action_executed:true,execution_mode:'background'};
+  return args.action==='selection'?{...result,ref:element.ref,...page.sourceIdentity(element),document_id:page.prefix+':'+page.revision}:{...result,action_executed:true,execution_mode:'background'};
 }
 
 export async function browserEditCommand(page,element,args){

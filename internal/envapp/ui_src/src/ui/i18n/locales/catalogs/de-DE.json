@@ -5487,6 +5487,7 @@
         "previewGroupBy": "Gruppieren nach",
         "previewUnavailable": "Dieses Werkzeug hat keine Ergebnisvorschau bereitgestellt.",
         "effectUncertain": "Ergebnis unbestätigt",
+        "computerNotDispatched": "Die Seite hat sich vor dem Senden der Aktion geändert",
         "computerInputRejected": "Ungültige Argumente; keine Eingabe gesendet",
         "computerPreparedOnly": "Vorbereitung abgeschlossen; keine Eingabe gesendet",
         "computerNotDispatched": "Die Seite hat sich vor dem Senden der Aktion geändert",
@@ -5502,6 +5503,7 @@
         "contentRedacted": "Zugangsdaten in dieser Anzeige sind geschwärzt.",
         "contentEncodingReplaced": "Ungültige Textbytes wurden für die Anzeige ersetzt.",
         "computerObservationUnavailable": "Seite konnte nicht gelesen werden",
+        "computerActionReadFailed": "Aktion ausgeführt; angeforderter Inhalt konnte nicht gelesen werden",
         "computerActionObservedUnavailable": "Aktion ausgeführt; Seite konnte nicht gelesen werden",
         "computerObservationDetails": "Technische Details"
       },

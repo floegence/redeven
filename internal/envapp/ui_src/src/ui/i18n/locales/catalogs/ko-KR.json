@@ -5487,6 +5487,7 @@
         "previewGroupBy": "그룹 기준",
         "previewUnavailable": "이 도구는 결과 미리보기를 제공하지 않았습니다.",
         "effectUncertain": "결과 미확인",
+        "computerNotDispatched": "작업을 보내기 전에 페이지가 변경되었습니다",
         "computerInputRejected": "잘못된 인수로 입력을 보내지 않았습니다",
         "computerPreparedOnly": "준비가 완료되었지만 입력은 보내지 않았습니다",
         "computerNotDispatched": "작업을 보내기 전에 페이지가 변경되었습니다",
@@ -5502,6 +5503,7 @@
         "contentRedacted": "표시 내용의 인증 정보가 가려졌습니다.",
         "contentEncodingReplaced": "유효하지 않은 텍스트 바이트를 대체하여 표시합니다.",
         "computerObservationUnavailable": "페이지를 읽을 수 없습니다",
+        "computerActionReadFailed": "작업은 실행되었지만 요청한 내용을 읽을 수 없습니다",
         "computerActionObservedUnavailable": "작업이 실행되었지만 페이지를 읽을 수 없습니다",
         "computerObservationDetails": "기술 세부 정보"
       },

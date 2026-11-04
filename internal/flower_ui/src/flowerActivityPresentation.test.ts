@@ -2039,3 +2039,14 @@ it('keeps completed reads, interpreter reset and zero-based failure position dis
  ]});
  expect(result.meta).not.toContain('No new page observation');
 });
+
+it('presents a confirmed action followed by a failed content read with its exact diagnostic', () => {
+ const source=item({tool_name:'computer.exec',renderer:'structured',status:'error',chips:[
+ {kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'},
+ {kind:'computer_failed_read',label:'read',value:'text'},
+ ],payload:{error:{code:'ELEMENT_NOT_FOUND',message:'Requested main is missing'}}});
+ const result=presentFlowerActivityItem(source);
+ expect(result.meta).toBe(toolActivityEnUS.computerActionReadFailed);
+ expect(result.detailBlocks.find(block=>block.kind==='error')).toMatchObject({error:{code:'ELEMENT_NOT_FOUND',observation_interruption:true}});
+ expect(source.status).toBe('error');
+});

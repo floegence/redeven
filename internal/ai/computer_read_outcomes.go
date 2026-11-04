@@ -19,9 +19,41 @@ func computerReadOutcome(operation map[string]any, index int, status string, fac
 	if observation, ok := facts["observation"].(map[string]any); ok {
 		identity = observation
 	}
-	for _, key := range []string{"frame_id", "document_id", "ref"} {
+	for _, key := range []string{"frame_id", "frame_document_id", "document_id", "ref"} {
 		if value, ok := identity[key].(string); ok && len(value) <= 512 {
 			out[key] = value
+		}
+	}
+	// Collection counts describe the actual returned source page, never readiness.
+	if status == "completed" {
+		key := ""
+		switch operation["action"] {
+		case "query":
+			key = "items"
+		case "table":
+			key = "rows"
+		}
+		if key != "" {
+			rawTotal := facts["total"]
+			switch n := rawTotal.(type) {
+			case int:
+				rawTotal = float64(n)
+			case int64:
+				rawTotal = float64(n)
+			case json.Number:
+				if v, e := n.Float64(); e == nil {
+					rawTotal = v
+				}
+			}
+			if total, ok := computerNonnegativeInteger(rawTotal); ok && total <= math.MaxInt32 {
+				out["total"] = int64(total)
+			}
+			if items, ok := facts[key].([]any); ok {
+				out["returned_count"] = len(items)
+			}
+			if truncated, ok := facts["truncated"].(bool); ok {
+				out["truncated"] = truncated
+			}
 		}
 	}
 	if invalidation := computerInvalidationFacts(facts["invalidation"]); invalidation != nil {

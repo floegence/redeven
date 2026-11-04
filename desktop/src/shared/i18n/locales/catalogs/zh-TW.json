@@ -543,6 +543,7 @@
         "computerPreparedOnly": "已完成準備，尚未傳送輸入",
         "computerEffectConfirmed": "已有操作完成，請先檢查再繼續",
         "computerObservationUnavailable": "暫時無法讀取頁面",
+        "computerActionReadFailed": "操作已執行，未能讀取要求的內容",
         "computerActionObservedUnavailable": "操作已執行，頁面尚未讀取",
         "computerObservationDetails": "技術詳細資料",
         "computerReadCompleted": "讀取已完成",

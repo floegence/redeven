@@ -158,10 +158,10 @@ export async function createComputerScript({ browser = true } = {}) {
         if(value.cursor!==undefined) string(value.cursor,'cursor');
         return value;
       };
-      const attribute = async (selector, name, href = false, value={}) => {
+      const attribute = async (selector, name, value={}) => {
         string(name,'attribute');
         if(!name.length||name.length>2000) invalid('attribute','attribute_name');
-        const result=await call({action:'attribute',selector,attribute:name,...(href?{summary:true}:{}),...readOptions(value)});return result.status==='invalidated'?result:result.value;
+        const result=await call({action:'attribute',selector,attribute:name,...readOptions(value)});return result.status==='invalidated'?result:result.value;
       };
       const navigationOptions = (value={}) => {
         options(value,['wait_until','timeout_ms']); waitOptions(value.timeout_ms === undefined ? {} : {timeout_ms:value.timeout_ms});
@@ -231,8 +231,8 @@ export async function createComputerScript({ browser = true } = {}) {
           query: (value={}) => call({action:'query',selector,...pageOptions(value)}),
           count: async (value={}) => {const result=await call({action:'query',selector,limit:1,...readOptions(value)});return result.status==='invalidated'?result:result.total;},
           rows: (value={}) => call({action:'table',selector,...pageOptions(value)}),
-          attribute: (name,value={}) => attribute(selector,name,false,value),
-          linkSummary: async (value={}) => {const result=await attribute(selector,'href',true,value);return result?.status==='invalidated'?result:{url:result,redacted:true};},
+          attribute: (name,value={}) => attribute(selector,name,value),
+          linkSummary: (value={}) => {readOptions(value);invalid('method','precise_attribute_read');},
           getAttribute: (attribute,value={}) => { string(attribute,'attribute'); if(!attribute.length||attribute.length>2000) invalid('attribute','attribute_name'); return call({action:'attribute',selector,attribute,...readOptions(value)}); },
         } : {}),
         click: (value={}) => call({action: 'click', selector,...clickOptions(value,true)}),

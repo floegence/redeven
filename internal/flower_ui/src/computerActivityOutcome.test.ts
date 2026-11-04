@@ -58,3 +58,14 @@ it('keeps an undispatched action distinct from confirmed input and ordinary read
   expect(isPresentedToolFailure(interrupted)).toBe(false);
   expect(computerObservationInterruption({...interrupted,payload:{error:{code:'EFFECT_OUTCOME_UNKNOWN'}}})).toBeUndefined();
 });
+
+it('keeps a confirmed input separate from its failed content lookup, including history summaries',()=>{
+ for(const code of ['ELEMENT_NOT_FOUND','AMBIGUOUS_ELEMENT','TARGET_CAPABILITY_UNAVAILABLE']){
+  const chips=[{kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'},{kind:'computer_failed_read',label:'read',value:'read'}];
+  expect(computerObservationInterruption(item({chips,payload:{error:{code}}}))).toBe('read_failed');
+  expect(computerObservationInterruption(item({chips}))).toBe('read_failed');
+  expect(isPresentedToolFailure(item({chips:chips.slice(1),payload:{error:{code}}}))).toBe(true);
+  expect(isPresentedToolFailure(item({chips,payload:{error:{code:'SCRIPT_FAILED'}}}))).toBe(true);
+  expect(isPresentedToolFailure(item({chips,field_summary:{uncertain_effect:true,fields:[]},payload:{error:{code}}}))).toBe(true);
+ }
+});

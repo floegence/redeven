@@ -503,7 +503,7 @@ export class BrowserComputerPage {
         const actions = ['read'];
         // AX roles do not enumerate browser input support. Generic pointer
         // and editing operations are discovered through target capabilities.
-        const output = { ref, child_refs: [], role, platform_role: role, frame_id: frame.frame.id, ...boundedField('name', node.name?.value || ''), states, actions, actions_scope:'declared_only' };
+        const output = { ref, child_refs: [], role, platform_role: role, ...this.sourceIdentity(entry), ...boundedField('name', node.name?.value || ''), states, actions, actions_scope:'declared_only' };
         if (node.description?.value) Object.assign(output, boundedField('description', node.description.value));
         if (node.value?.value !== undefined) Object.assign(output, boundedField('value', String(node.value.value)));
         if (boundsByNode.has(node.backendDOMNodeId)) output.bounds = boundsByNode.get(node.backendDOMNodeId);
@@ -541,6 +541,10 @@ export class BrowserComputerPage {
       }
     }
     return { semantic_schema_version: 2, document_id: `${this.prefix}:${this.revision}`, nodes, truncated: total > nodes.length, total, execution_mode: 'background' };
+  }
+
+  sourceIdentity(entry) {
+    return {frame_id:entry.frame.frame.id, frame_document_id:`${this.prefix}:${entry.frame.frame.id}:${entry.document.revision}`};
   }
 
   retainReference(entry) {
@@ -630,7 +634,15 @@ export class BrowserComputerPage {
             allowed.add(id); pending.push(...(source.get(id)?.childIds || []));
           }
         }
-        for (const node of nodes) {
+        // CDP's flat array is not reading order. Follow only source child edges;
+        // ignored ancestors still carry the order of their exposed descendants.
+        const pending = nodes.filter(node => !source.has(node.parentId)).map(node=>node.nodeId).reverse();
+        const visited = new Set();
+        while (pending.length) {
+          const node=source.get(pending.pop());
+          if(!node||visited.has(node.nodeId))continue;
+          visited.add(node.nodeId);
+          pending.push(...(node.childIds||[]).slice().reverse());
           if (node.ignored || !node.backendDOMNodeId || (allowed && !allowed.has(node.nodeId))) continue;
           const role = node.role?.value || '';
           const name = node.name?.value || '';
@@ -689,7 +701,7 @@ export class BrowserComputerPage {
 
   async query(selector, {limit=50,cursor} = {}) {
     const matches = await this.resolve(selector,true);
-    const items = matches.map(({ref,role,name,name_truncated})=>({ref,role,name,...(name_truncated?{name_truncated:true}:{})}));
+    const items = matches.map(entry=>{const {ref,role,name,name_truncated}=entry;return {ref,role,name,...this.sourceIdentity(entry),...(name_truncated?{name_truncated:true}:{})};});
     return this.collectionPage(selector, items, matches, {limit,cursor}, 'items', matches.map(({ref,role,nameIdentity})=>[ref,role,nameIdentity]));
   }
 
@@ -730,7 +742,7 @@ export class BrowserComputerPage {
       if (id!==element.axNodeId && ['table','grid','treegrid'].includes(role)) return;
       if (!node.ignored && role==='row' && node.backendDOMNodeId) {
         const entry=this.rememberNode(element.frame,node,false);
-        row={ref:entry.ref,cells:[]}; rows.push(row); entries.push(entry);
+        row={ref:entry.ref,...this.sourceIdentity(entry),cells:[]}; rows.push(row); entries.push(entry);
       }
       if (row && !node.ignored && ['cell','gridcell','columnheader','rowheader'].includes(role)) {
         const full=node.name?.value || '';
@@ -738,7 +750,7 @@ export class BrowserComputerPage {
         const text=Array.from(full).slice(0,2000).join('');
         const entry=node.backendDOMNodeId?this.rememberNode(element.frame,node,false):undefined;
         if(entry)cellsByRef.set(entry.ref,entry);
-        const cell={...(entry?{ref:entry.ref}:{}),role:role==='gridcell'?'cell':role,text,...(text!==full?{text_truncated:true}:{})};
+        const cell={...(entry?{ref:entry.ref,...this.sourceIdentity(entry)}:{}),role:role==='gridcell'?'cell':role,text,...(text!==full?{text_truncated:true}:{})};
         // A single pathological row must never exceed the page budget.
         if (row.cells.length<200 && Buffer.byteLength(JSON.stringify(row))+Buffer.byteLength(JSON.stringify(cell))<44000) row.cells.push(cell);
         else row.cells_truncated=true;
@@ -756,7 +768,7 @@ export class BrowserComputerPage {
     return page;
   }
 
-  async attribute(element, name, summary = false) {
+  async attribute(element, name) {
     const {node} = await element.frame.session.send('DOM.describeNode',{backendNodeId:element.backendNodeId});
     const attributes=node.attributes || [];
     const ownAttributes = new Map();
@@ -770,19 +782,16 @@ export class BrowserComputerPage {
     if (value !== null && ['href','src','action','formaction','poster','cite','data','xlink:href'].includes(name.toLowerCase())) {
       try {
         const url=new URL(value,element.frame.frame.url);
-        if (summary) {
-          if (!['http:','https:'].includes(url.protocol)) value=null;
-          else { url.username='';url.password='';url.search='';url.hash='';value=url.href; }
-        } else if (url.username || url.password) {
+        if (url.username || url.password) {
           url.username='';url.password='';value=value.startsWith('//')?url.href.slice(url.protocol.length):url.href;
           redacted=['url_credentials'];
         }
-      } catch { if(summary)value=null; }
+      } catch { /* Preserve exact non-URL source values. */ }
     }
     if (value !== null && Array.from(value).length > 2000) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
       diagnostic: {phase:'read', method:'locator.attribute', expected:'attribute_max_2000', recovery:'choose_supported_read'},
     });
-    return {attribute:name,value,...(redacted?{redacted}:{}),...(summary?{value_kind:'link_summary'}:{})};
+    return {attribute:name,value,...(redacted?{redacted}:{})};
   }
 
   async text(element) {
@@ -795,7 +804,7 @@ export class BrowserComputerPage {
       if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
         diagnostic: {phase:'read', method:'locator.text', expected:'html_element', recovery:'choose_supported_read'},
       });
-      return {...result,url:redactedNavigationURL(result.url),frame_id:element.frame.frame.id,document_id:this.prefix+':'+element.document.revision,ref:element.ref};
+      return {...result,url:redactedNavigationURL(result.url),...this.sourceIdentity(element),document_id:this.prefix+':'+this.revision,ref:element.ref};
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }
   }
 
@@ -893,7 +902,7 @@ export class BrowserComputerPage {
     const {quads=[]}=await session.send('DOM.getContentQuads',{backendNodeId:element.backendNodeId});
     const {cssLayoutViewport:viewport}=await session.send('Page.getLayoutMetrics');
     if(!Array.isArray(quads)||quads.some(q=>!Array.isArray(q)||q.length!==8||!q.every(Number.isFinite)))throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-    return {source:'browser_layout',ref:element.ref,frame_id:element.frame.frame.id,document_id:this.prefix+':'+this.revision,
+    return {source:'browser_layout',ref:element.ref,...this.sourceIdentity(element),document_id:this.prefix+':'+this.revision,
       coordinate_space:'session_css_pixels',quads,viewport,
       ...(point?{tested_point:point,hit_target:point.x>=0&&point.y>=0&&point.x<viewport.clientWidth&&point.y<viewport.clientHeight&&await this.receivesPoint(element,point.x,point.y)}:{})};
   }
@@ -1318,11 +1327,11 @@ export class BrowserComputerPage {
     if(args.action==='set_value')return this.setControlValue(element,args.value);
     if(args.action==='perform_action')throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
     if (args.action === 'table') return this.table(element,args);
-    if (args.action === 'attribute') return this.attribute(element,args.attribute,args.summary);
+    if (args.action === 'attribute') return {...await this.attribute(element,args.attribute),...this.sourceIdentity(element),document_id:this.prefix+':'+this.revision,ref:element.ref};
     if (args.action === 'text') return this.text(element);
     if (args.action === 'read') {
       const observed = await this.observe({ root_ref: element.ref, limit: 1 });
-      return { semantic_schema_version: 2, node: observed.nodes[0] };
+      return { semantic_schema_version: 2, node: observed.nodes[0],...this.sourceIdentity(element),document_id:observed.document_id,ref:element.ref };
     }
     if (['click', 'fill'].includes(args.action) && !element) throw new Error('INVALID_REQUEST');
     if (args.action === 'fill' && !['textbox', 'searchbox', 'combobox'].includes(element.role)) throw new Error('INVALID_REQUEST');
