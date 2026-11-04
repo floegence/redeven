@@ -3,7 +3,7 @@ type: Protocol Contract
 title: Computer semantic snapshots
 tags: [ai, computer-use, accessibility, protocol]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -50,7 +50,7 @@ this inventory. Unknown `other` remains reference-only, never a wildcard. Invali
 canonical selectors return safe field/expected/recovery diagnostics before dispatch.
 Browser references are opaque bounded hashes of controller, document revision,
 frame, native node identity, role and complete-name digest. The existing reference table remains their sole
-owner; no second alias registry exists.
+owner; no second alias registry exists. At most 2,000 records remain in access order; successful resolution and returned source refs refresh retention. Retired document records stay bounded in that same table so known replacement still rejects as stale. A missing record means reference_not_retained, not proof that a node changed. It never triggers automatic resolution or replay.
 
 Browser nodes report actions_scope:declared_only instead of guessing click/fill
 support from roles or focusability. The listed actions are not an input allowlist;

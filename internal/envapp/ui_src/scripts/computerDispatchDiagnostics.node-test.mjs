@@ -30,7 +30,7 @@ test('moving geometry reports the rejected stability predicate and supports expl
   }finally{await browser.close();}
 });
 
-for(const operation of ['navigate','click','key']){
+for(const operation of ['click','key']){
   test(operation+' preflight invalidation cannot dispatch or change the page',async()=>{
     const {BrowserObservationInvalidated}=await import('./computerBrowserPage.mjs');
     const browser=await chromium.launch({headless:true});

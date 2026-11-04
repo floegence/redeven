@@ -59,7 +59,7 @@ for (const boundary of ['before_preparation', 'hit_test', 'after_pointer_move', 
       session.send = async (method, params = {}) => {
         if (boundary === 'before_preparation' && method === 'Runtime.callFunctionOn' && params.functionDeclaration.includes('getClientRects'))
           return {exceptionDetails:{text:'private exception'}};
-        if (boundary === 'hit_test' && method === 'Runtime.callFunctionOn' && params.functionDeclaration.startsWith('function(hit)'))
+        if (boundary === 'hit_test' && method === 'Runtime.callFunctionOn' && params.functionDeclaration.startsWith('function(hit,'))
           return {exceptionDetails:{text:'private exception'}};
         if (boundary === 'release' && method === 'Input.dispatchMouseEvent' && params.type === 'mouseReleased') throw new Error('lost reply');
         const result = await send(method, params);

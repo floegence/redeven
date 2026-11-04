@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Private browser observation and input
 tags: [ai, computer-use, browser, privacy]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -20,7 +20,7 @@ instruction attacks. Observed content is untrusted data, never authorization.
 The model decides task meaning and whether human help is needed; it never receives
 confirmed protected values or pixels for classification. Unmarked secrets are not
 guaranteed detectable by accessibility; native apps must expose secure fields and
-users retain explicit takeover control. An unreadable frame stops the observation
+users retain explicit takeover control. Script navigation receipts require target control and destination grants, not old-page privacy sampling: they return only command/lifecycle facts, never page content. Pure timers also publish no content and send no input. Existing Runtime takeover/permission barriers remain authoritative; ordinary input and all explicit content reads retain full privacy checks. An unreadable frame stops the observation
 without inventing a human requirement. Unknown read failures are not retried;
 only measured viewport instability has a one-second same-target resampling window
 inside the invocation budget. Explicit condition waits own their original deadline

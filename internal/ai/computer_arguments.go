@@ -143,7 +143,7 @@ func computerActionabilityFacts(value any) map[string]any {
 		}
 	}
 	if checks := toAnySlice(raw["failed_checks"]); len(checks) > 0 && len(checks) <= 8 {
-		filtered := []string{}
+		filtered := []any{}
 		for _, check := range checks {
 			if text, ok := check.(string); ok && slices.Contains([]string{"connected", "rendered", "visible", "enabled", "editable", "receives", "layout_stable"}, text) {
 				filtered = append(filtered, text)

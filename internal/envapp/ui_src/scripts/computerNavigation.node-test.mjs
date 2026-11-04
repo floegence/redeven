@@ -34,11 +34,12 @@ test('confirmed navigation failures preserve the page without replaying the comm
           const execute = (tool_name, args = {}) => controller.execute({ tool_name, args, allowed_origins: [origin], script_operation: true });
           await execute('computer.observe');
           assert.ok(controller.page.references.size > 0);
+          const oldRefs=[...controller.page.references.keys()];
           const result = await execute('browser.navigate', { url: `${origin}/failed` });
           assert.equal(result.error, 'NAVIGATION_FAILED', JSON.stringify(result));
           assert.deepEqual(result.result, { action_executed: true, navigation_stage: 'response', network_error: reason.startsWith('ERR_') ? reason : 'NETWORK_ERROR' });
           assert.equal(controller.page.invalid, false);
-          assert.equal(controller.page.references.size, 0);
+          for(const ref of oldRefs)await assert.rejects(controller.page.resolve({ref}),/STALE_REFERENCE/);
           assert.equal(result.screenshot, undefined);
           await page.waitForFunction(() => globalThis.document.readyState === 'complete' && globalThis.location.protocol === 'chrome-error:');
           const observed = await execute('computer.observe');
@@ -154,7 +155,7 @@ test('script navigation publishes only its receipt without a post-navigation pag
   assert.equal(response.result.observation_invalidated,true);
   assert.equal(response.safety.safe_to_send_to_model, false);
   assert.equal(response.screenshot, undefined);
-  assert.equal(safetyReads, 1);
+  assert.equal(safetyReads, 0);
   assert.equal(navigations, 1);
   const read = await controller.execute({ tool_name: 'computer.observe', script_operation: true, full_access: true });
   assert.equal(read.error, 'TARGET_OBSERVATION_UNAVAILABLE');

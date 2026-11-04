@@ -3,7 +3,7 @@ type: Browser Integration Contract
 title: Managed browsers and authorized Chrome tabs
 tags: [ai, browser-use, chrome, profiles]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -25,7 +25,7 @@ One maintenance worker probes once/minute; release requires ten minutes with zer
 Shutdown cancels maintenance, closes owned groups independently of helper responsiveness, then escalates bounded graceful→terminate→kill. Remove receipts only after confirmed cleanup; retain/return failure, including disable/recovery. A profile kernel lock lasts for owner lifetime. Atomic receipts bind PID/birth, executable, profile and owner PID/birth. Next explicit start may reclaim a verified obsolete owner; ambiguous/live/invalid identities fail. Never scan/kill Chrome by executable name. Spawn-before-receipt and uncatchable-kill-without-restart cleanup are not guaranteed. Receipts prove cleanup identity, not authority/history/replay. Only isolated protocol fixtures may use helper launch; production stays Runtime-managed.
 
 ## Input and observation
-Semantic clicks check visible/enabled/stable geometry and actual hit target, including parent overlays. Preparation is not input completion: blocked clicks return action_executed:false and fresh-observation demand after viewport change. Bounded waits sample rendered CSS; labels use safe observed titles, never discovery as account identity.
+Semantic clicks check visible/enabled/stable geometry and actual hit target, including parent overlays. Text targets require the fixed point inside the exact source text quad and the actual hit on its containing element, including Shadow DOM/frame coordinates; no parent action or alternate point is substituted. Preparation is not input completion: blocked clicks return action_executed:false and fresh-observation demand after viewport change. Bounded waits sample rendered CSS; labels use safe observed titles, never discovery as account identity.
 
 Same-document capture may settle read-only for <=1s within budget; check before/after capture. Persistent motion returns capture/viewport_unstable without pixels. Cancellation/document change/privacy latch wins; never replay input. Frame inventory owns document identity: child navigation/removal revokes its subtree; root replacement/cancel/handback revokes all. Image/snapshot revisions stay page-wide; ref reads recheck document after DOM/AX.
 

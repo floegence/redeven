@@ -37,6 +37,7 @@ const (
 	ErrorCodeAmbiguousElement             ErrorCode = "AMBIGUOUS_ELEMENT"
 	ErrorCodeStaleReference               ErrorCode = "STALE_REFERENCE"
 	ErrorCodeElementNotFound              ErrorCode = "ELEMENT_NOT_FOUND"
+	ErrorCodeElementNotActionable         ErrorCode = "ELEMENT_NOT_ACTIONABLE"
 	ErrorCodeConditionTimeout             ErrorCode = "CONDITION_TIMEOUT"
 	ErrorCodeTargetCapabilityUnavailable  ErrorCode = "TARGET_CAPABILITY_UNAVAILABLE"
 	ErrorCodeCommandFailed                ErrorCode = "COMMAND_FAILED"

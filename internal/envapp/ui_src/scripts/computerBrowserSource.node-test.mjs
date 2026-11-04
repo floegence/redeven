@@ -301,7 +301,10 @@ test('source ownership releases AI navigation restrictions only for user browsin
     const returned = await execute('computer.screenshot', {}, { recovery_observation: true, allowed_origins: [origin] });
     assert.equal(returned.error, undefined);
     assert.equal(returned.safety.safe_to_send_to_model, true);
-    assert.equal((await execute('browser.navigate', { url: origin })).result.code, 'TAKEOVER_REQUIRED', 'AI still needs its current explicit origin grant');
+    const destinationDenied = await execute('browser.navigate', { url: origin });
+    assert.equal(destinationDenied.error, 'TARGET_PERMISSION_REQUIRED', 'Navigation still needs its explicit destination grant');
+    assert.equal(destinationDenied.result.action_executed, false);
+    assert.equal(destinationDenied.result.required_navigation_url, new URL(origin).href);
     await assert.rejects(page.goto(origin + '/blocked'), /ERR_BLOCKED_BY_CLIENT/u);
   } finally {
     await owner?.dispose();

@@ -145,7 +145,7 @@ export class BrowserComputerPage {
 
   invalidate(frameIDs, event = 'document_inventory') {
     this.revision++;
-    if (frameIDs === undefined) { for (const record of this.observedFrames.values()) record.invalidation = {frame_id:record.frame.id,event}; this.references.clear(); this.observedFrames.clear(); }
+    if (frameIDs === undefined) { for (const record of this.observedFrames.values()) record.invalidation = {frame_id:record.frame.id,event}; this.observedFrames.clear(); }
     else {
       const removed = new Set(frameIDs);
       // Reuse the observation inventory for frame ancestry and document
@@ -154,7 +154,6 @@ export class BrowserComputerPage {
         size = removed.size;
         for (const [id, record] of this.observedFrames) if (removed.has(record.frame.parentId)) removed.add(id);
       }
-      for (const [ref, entry] of this.references) if (removed.has(entry.frame.frame.id)) this.references.delete(ref);
       for (const id of removed) { const record=this.observedFrames.get(id); if(record)record.invalidation={frame_id:id,event}; this.observedFrames.delete(id); }
     }
     this.changed();
@@ -411,7 +410,8 @@ export class BrowserComputerPage {
   observationIdentity(rootRef) {
     if (!rootRef) return {revision:this.revision,documents:new Map(this.observedFrames),routes:new Map([...this.observedFrames].map(([id,r])=>[id,r.route??0]))};
     const entry = this.references.get(rootRef);
-    if (!entry || this.observedFrames.get(entry.frame.frame.id) !== entry.document) throw new Error('STALE_REFERENCE');
+    if (!entry) throw this.referenceUnavailable();
+    if (this.observedFrames.get(entry.frame.frame.id) !== entry.document) throw new Error('STALE_REFERENCE');
     const documents = new Map();
     let document = entry.document;
     while (document && !documents.has(document.frame.id)) {
@@ -543,6 +543,18 @@ export class BrowserComputerPage {
     return { semantic_schema_version: 2, document_id: `${this.prefix}:${this.revision}`, nodes, truncated: total > nodes.length, total, execution_mode: 'background' };
   }
 
+  retainReference(entry) {
+    // Access order is mechanical retention, never target substitution.
+    this.references.delete(entry.ref);
+    if (this.references.size >= 2000) this.references.delete(this.references.keys().next().value);
+    this.references.set(entry.ref, entry);
+    return entry;
+  }
+
+  referenceUnavailable() {
+    return Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), {observationStage:'semantic_read',observationReason:'reference_not_retained'});
+  }
+
   rememberNode(frame, node, retain = true) {
     // Opaque refs stay in the existing controller/document reference table.
     const document = this.observedFrames.get(frame.frame.id);
@@ -554,9 +566,7 @@ export class BrowserComputerPage {
     if (existing && (existing.document !== document || existing.backendNodeId!==node.backendDOMNodeId)) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
     const entry = { ref, frame, document, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', ...boundedField('name', node.name?.value || ''), nameIdentity: fullNameIdentity };
     if (!retain) return entry;
-    if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
-    this.references.set(ref, entry);
-    return entry;
+    return this.retainReference(entry);
   }
 
   rememberDOMNode(frame,node) {
@@ -564,8 +574,7 @@ export class BrowserComputerPage {
     if(!document||!node.backendNodeId)throw new Error('STALE_REFERENCE');
     const ref='d'+createHash('sha256').update(JSON.stringify([this.prefix,document.revision,frame.frame.id,node.backendNodeId,node.nodeType,node.nodeName])).digest('base64url').slice(0,16);
     const entry={ref,frame,document,backendNodeId:node.backendNodeId,nodeType:node.nodeType,nodeName:node.nodeName,role:'other',sourceDOM:true};
-    if(this.references.size>=2000&&!this.references.has(ref))this.references.delete(this.references.keys().next().value);
-    this.references.set(ref,entry);return entry;
+    return this.retainReference(entry);
   }
 
   rememberAXSource(frame,node,anchor) {
@@ -574,8 +583,7 @@ export class BrowserComputerPage {
     const ref='a'+createHash('sha256').update(JSON.stringify([this.prefix,document.revision,frame.frame.id,node.nodeId])).digest('base64url').slice(0,16);
     const entry={ref,frame,document,sourceAX:true,axNodeId:node.nodeId,parentAXNodeId:node.parentId,
       backendNodeId:node.backendDOMNodeId,privacyBackendNodeId:node.backendDOMNodeId??anchor.privacyBackendNodeId??anchor.backendNodeId};
-    if(this.references.size>=2000&&!this.references.has(ref))this.references.delete(this.references.keys().next().value);
-    this.references.set(ref,entry);return entry;
+    return this.retainReference(entry);
   }
 
   async readAXSource(entry) {
@@ -594,7 +602,8 @@ export class BrowserComputerPage {
     const matches = [];
     if (typeof selector.ref === 'string') {
       entry = this.references.get(selector.ref);
-      if (!entry || entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
+      if (!entry) throw this.referenceUnavailable();
+      if (entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
       if (selector.name !== undefined && typeof selector.name === 'string' && selector.exact === true && entry.nameIdentity !== nameIdentity(selector.name)) throw new Error('STALE_REFERENCE');
     } else {
       const roles = selector.roles || [selector.role];
@@ -642,6 +651,7 @@ export class BrowserComputerPage {
       await this.readAXSource(entry);
     }else await this.validateIdentity(entry, sample && typeof selector.ref !== 'string');
     if (sample && root) await this.resolve({ref:selector.root_ref});
+    if (this.references.has(entry.ref)) this.retainReference(entry);
     return collect ? [entry] : entry;
   }
 
@@ -700,8 +710,7 @@ export class BrowserComputerPage {
     }
     if (end === offset && offset < items.length) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
     for (const entry of entries.slice(offset,end)) {
-      if (this.references.size>=2000 && !this.references.has(entry.ref)) this.references.delete(this.references.keys().next().value);
-      this.references.set(entry.ref,entry);
+      this.retainReference(entry);
     }
     return {document_id:this.prefix+':'+this.revision, scope:'loaded_accessibility_tree', total:items.length,
       [key]:items.slice(offset,end), truncated:end<items.length, ...(end<items.length?{next_cursor:fingerprint+':'+end}:{})};
@@ -986,10 +995,28 @@ export class BrowserComputerPage {
         objects.push(object.objectId);
       }
       checkpoint = 'target_ancestry';
-      const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
+      let textPoint=false;
+      if(element.nodeType===3){
+        const {quads}=await session.send('DOM.getContentQuads',{backendNodeId:element.backendNodeId});
+        if(!Array.isArray(quads)||quads.some(q=>q.length!==8||!q.every(Number.isFinite)))throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+        textPoint=quads.some(q=>{
+          const crosses=[0,2,4,6].map(i=>{const j=(i+2)%8;return (q[j]-q[i])*(y-q[i+1])-(q[j+1]-q[i+1])*(x-q[i]);});
+          return crosses.some(n=>n!==0)&&(crosses.every(n=>n>=0)||crosses.every(n=>n<=0));
+        });
+      }
+      const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] },{value:textPoint}], returnByValue: true,
         // CDP may resolve a generated box as CSSPseudoElement, not a Node.
         // Its originating element owns input; overlays still fail ancestry.
-        functionDeclaration: 'function(hit){const target=this.nodeType===9?this.documentElement:this;const owner=typeof CSSPseudoElement!=="undefined"&&hit instanceof CSSPseudoElement?hit.element:hit;for(let p=owner;p;p=p.parentElement||(p.getRootNode() instanceof ShadowRoot?p.getRootNode().host:null))if(p===target)return true;return false;}' }, value => typeof value === 'boolean');
+        functionDeclaration: `function(hit,textPoint){
+          const target=this.nodeType===9?this.documentElement:this;
+          const owner=typeof CSSPseudoElement!=="undefined"&&hit instanceof CSSPseudoElement?hit.element:hit;
+          // Text is painted by its containing element. The requested source
+          // text quad must contain this exact session-space point; the actual
+          // hit must be its owner, with no overlay or alternate target search.
+          if(target.nodeType===3)return textPoint&&owner===target.parentElement;
+          for(let p=owner;p;p=p.parentElement||(p.getRootNode() instanceof ShadowRoot?p.getRootNode().host:null))if(p===target)return true;
+          return false;
+        }` }, value => typeof value === 'boolean');
       if (!result) return false;
       // An OOPIF session cannot see an overlay in its embedding document.
       // Validate the same point through each embedding session before input.
@@ -1245,10 +1272,13 @@ export class BrowserComputerPage {
   }
 
   async inputSequence(args){
-    await this.preparePage();
+    const timingOnly=args.events.every(event=>event.type==='wait');
+    const revision=timingOnly?undefined:this.revision;
+    if(!timingOnly)await this.preparePage();
     const held=new Set(), bits={Alt:1,Control:2,Meta:4,Shift:8};
     for(const event of args.events){
-      if(event.type==='wait'){await this.delay(event.duration_ms,this.revision);continue;}
+      if(revision!==undefined&&revision!==this.revision)throw new Error('STALE_REFERENCE');
+      if(event.type==='wait'){await this.delay(event.duration_ms,revision);continue;}
       if(event.type==='keyDown'||event.type==='keyUp'){
         let key=validateBrowserAction({action:'key',key:event.key},this.privateInput).key;
         if(bits[key.key]){if(event.type==='keyDown')held.add(key.key);else held.delete(key.key);}

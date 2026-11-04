@@ -346,3 +346,31 @@ func TestComputerInvalidatedWaitPreservesDeadlineFacts(t *testing.T) {
 		}
 	}
 }
+
+func TestComputerActionabilityProjectionIsIdempotent(t *testing.T) {
+	raw := map[string]any{"stage": "hit_or_layout", "receives": false, "layout_stable": true, "failed_checks": []any{"receives", "private_text"}}
+	first := computerActionabilityFacts(raw)
+	second := computerActionabilityFacts(first)
+	if !reflect.DeepEqual(first, second) || len(toAnySlice(second["failed_checks"])) != 1 {
+		t.Fatalf("actionability projection changed facts: first=%#v second=%#v", first, second)
+	}
+}
+
+func TestComputerUnretainedReferencePreservesFinalReason(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		return computerObservationFailure(inner, map[string]any{"action_executed": false, "observation_stage": "semantic_read", "reason": "reference_not_retained"}, "fixture")
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.ref('unretained').click();")
+	facts := result.Result.(map[string]any)
+	if err == nil || facts["reason"] != "reference_not_retained" || facts["script_error"] != "TARGET_OBSERVATION_UNAVAILABLE" || facts["failed_operation_phase"] != "not_dispatched" || len(toAnySlice(facts["completed_actions"])) != 0 || facts["context_reset"] != true {
+		t.Fatalf("unretained reference lost its factual boundary: %+v %v", result, err)
+	}
+}
+
+func TestComputerScriptErrorCodesPreserveActionAndArgumentCauses(t *testing.T) {
+	for cause, expected := range map[string]string{"ELEMENT_NOT_ACTIONABLE": "ELEMENT_NOT_ACTIONABLE", "SCRIPT_ARGUMENT_ERROR": "INVALID_ARGUMENTS"} {
+		if got := string(computerScriptErrorCode(cause)); got != expected {
+			t.Fatalf("%s projected as %s, want %s", cause, got, expected)
+		}
+	}
+}

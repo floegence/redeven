@@ -85,9 +85,13 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   await cancellation;
   const navigationResult = await navigation;
   assert.notEqual(navigationResult.safety?.reason_codes?.includes('user_control'), true);
-  await pages[1].waitForLoadState('load');
+  // The previous document can still be loaded while the canceled request
+  // commits. Synchronize the fixture with its exact destination, not that
+  // previous load state; the tool itself must not retry navigation.
+  await pages[1].waitForURL(origin + '/pending', { waitUntil: 'load' });
   assert.equal((await tool('source-1', 'computer.observe')).safety.level, 'routine', 'Drained navigation keeps same-target observation available');
-  assert.equal((await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true })).error, undefined);
+  const recoveredScreenshot = await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true });
+  assert.equal(recoveredScreenshot.error, undefined, JSON.stringify(recoveredScreenshot));
 
   host.privacy('source-0', true);
   const privateResult = await tool('source-0', 'computer.observe');

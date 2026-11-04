@@ -65,7 +65,7 @@ export class BrowserComputerController {
           if (!this.page.identityCurrent(identity)) throw this.page.identityFailure(identity);
           continue;
         }
-        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage, protocolDiagnostic: error.protocolDiagnostic || adapterFailure(stage, 'internal_error').protocolDiagnostic });
+        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage, ...(error.observationReason === 'reference_not_retained' ? {observationReason:error.observationReason} : {protocolDiagnostic: error.protocolDiagnostic || adapterFailure(stage, 'internal_error').protocolDiagnostic}) });
       }
     }
   }
@@ -168,6 +168,8 @@ export class BrowserComputerController {
     if (page.fullAccess || (request.tool_name === 'browser.navigate' && page.allowsURL(args.url))) page.requiredURL = undefined;
     page.privateInput = privateInput;
     const initialEffects = page.effectCount;
+    const navigationReceipt=request.script_operation===true&&['browser.navigate','browser.back','browser.reload'].includes(request.tool_name);
+    const timingOnly=request.script_operation===true&&request.tool_name==='computer.action'&&args.action==='input_sequence'&&Array.isArray(args.events)&&args.events.every(event=>event.type==='wait');
     page.uncertainEffect = false;
     page.effectStage = undefined;
     const dispatched = () => this.actionCompleted || request.tool_name.startsWith('browser.') && page.effectCount > initialEffects;
@@ -189,9 +191,16 @@ export class BrowserComputerController {
           validateBrowserAction(args, false);
           return await this.waitForCondition(request, args);
         }
-        await this.readObservation(() => page.beginObservation(), 'frame_inventory');
-        const before = await this.readObservation(() => page.safety({ authorizedNavigation: request.tool_name === 'browser.navigate' && page.allowsURL(args.url) }), 'safety_scan');
-        if (before.level === 'takeover') return this.pause(before, false);
+        // Navigation receipts and pure timers read no old-page content and
+        // edit no protected fields. Authority/control checks remain mandatory;
+        // content reads and ordinary input retain full privacy scans.
+        if(page.invalid||page.guardFailure||page.stopped||page.operationCancelled||page.requiredOrigin||page.requiredURL)throw new Error('TARGET_CONNECTION_REQUIRED');
+        if(timingOnly)validateBrowserAction(args,false);
+        if(!navigationReceipt&&!timingOnly){
+          await this.readObservation(() => page.beginObservation(), 'frame_inventory');
+          const before = await this.readObservation(() => page.safety({ authorizedNavigation: request.tool_name === 'browser.navigate' && page.allowsURL(args.url) }), 'safety_scan');
+          if (before.level === 'takeover') return this.pause(before, false);
+        }
       }
       if (!privateInput && page.openedPages.length) return await this.targetChange(false);
       let result = {}, read;
@@ -253,7 +262,7 @@ export class BrowserComputerController {
             const receipt = {action_executed:dispatched(), needs_observation:true, observation_invalidated:true, execution_mode:'background'};
             for (const key of ['mechanism','completed_events','input_dispatched','preparation_executed','scroll_progress','point','preparation'])
               if (result[key] !== undefined) receipt[key] = result[key];
-            return {[inputReceipt]:true, result:receipt, safety:{level:'routine',reason_codes:[],safe_to_capture:false,safe_to_send_to_model:false}};
+            return {...(!timingOnly?{[inputReceipt]:true}:{}), result:receipt, safety:{level:'routine',reason_codes:[],safe_to_capture:false,safe_to_send_to_model:false}};
           }
         }
       }
@@ -279,7 +288,7 @@ export class BrowserComputerController {
       result: { action_executed: dispatched(), needs_observation: true, observation_stage: 'semantic_read' } };
     if (error.message === 'TARGET_OBSERVATION_UNAVAILABLE') return {
       error: 'TARGET_OBSERVATION_UNAVAILABLE',
-      result: { action_executed: dispatched(), needs_observation: true, observation_stage: error.observationStage, ...(error.protocolDiagnostic ? {diagnostic:error.protocolDiagnostic} : {}), ...(error.observationReason === 'viewport_unstable' ? {reason:'viewport_unstable'} : {}) },
+      result: { action_executed: dispatched(), needs_observation: true, observation_stage: error.observationStage, ...(error.protocolDiagnostic ? {diagnostic:error.protocolDiagnostic} : {}), ...(['viewport_unstable','reference_not_retained'].includes(error.observationReason) ? {reason:error.observationReason} : {}) },
     };
     if (page.openedPages.length) return await this.targetChange(dispatched());
     if (error instanceof BrowserObservationInvalidated) return {

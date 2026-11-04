@@ -299,8 +299,11 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 			facts["invalidation"] = detail
 		}
 	}
-	if facts["observation_invalidated"] == true && computerCallMutates(call) && !executed && payload["preparation_executed"] != true && len(computerInputProgress(payload["input_progress"])) == 0 {
+	if (facts["observation_invalidated"] == true || stage == "semantic_read" && payload["reason"] == "reference_not_retained") && computerCallMutates(call) && !executed && payload["preparation_executed"] != true && len(computerInputProgress(payload["input_progress"])) == 0 {
 		facts["dispatch_status"] = "not_dispatched"
+	}
+	if stage == "semantic_read" && payload["reason"] == "reference_not_retained" {
+		facts["reason"] = "reference_not_retained"
 	}
 	if stage == "capture" && payload["reason"] == "viewport_unstable" {
 		facts["reason"] = "viewport_unstable"

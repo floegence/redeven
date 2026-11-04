@@ -90,11 +90,7 @@ test('redirect requires a fresh exact approval and recovers without takeover or 
     assert.equal(blocked.result.action_executed, true);
     assert.equal(destinationLoads, 0);
     await native.waitForLoadState('load');
-    let approved = await execute(destinationURL, [destinationURL]);
-    if (approved.result.observation_invalidated) {
-      assert.equal(approved.result.action_executed, false, 'never repeat an executed action');
-      approved = await execute(destinationURL, [destinationURL]);
-    }
+    const approved = await execute(destinationURL, [destinationURL]);
     assert.equal(approved.result.action_executed, true, JSON.stringify(approved));
     assert.equal(approved.error, undefined, JSON.stringify(approved));
     assert.equal(native.url(), destinationURL);

@@ -795,6 +795,8 @@ func computerScriptErrorCode(code string) aitools.ErrorCode {
 		return aitools.ErrorCodeStaleReference
 	case "ELEMENT_NOT_FOUND":
 		return aitools.ErrorCodeElementNotFound
+	case "ELEMENT_NOT_ACTIONABLE":
+		return aitools.ErrorCodeElementNotActionable
 	case "CONDITION_TIMEOUT":
 		return aitools.ErrorCodeConditionTimeout
 	case "TARGET_CAPABILITY_UNAVAILABLE":
@@ -809,7 +811,7 @@ func computerScriptErrorCode(code string) aitools.ErrorCode {
 		return aitools.ErrorCodeNavigationFailed
 	case "NAVIGATION_TIMEOUT":
 		return aitools.ErrorCodeNavigationTimeout
-	case "INVALID_REQUEST", "INVALID_COMPUTER_ARGUMENTS":
+	case "INVALID_REQUEST", "INVALID_COMPUTER_ARGUMENTS", "SCRIPT_ARGUMENT_ERROR":
 		return aitools.ErrorCodeInvalidArguments
 	case "TARGET_ACTION_FAILED":
 		return aitools.ErrorCodeTargetActionFailed
