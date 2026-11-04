@@ -3,6 +3,7 @@ import { createSignal, type Component } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ActivityRailIconProps } from '@floegence/floe-webapp-core/icons';
+import { FlowerIcon } from './FlowerIcon';
 import {
   ActivityBarCodespacesIcon, ActivityBarContainersIcon, ActivityBarFolderIcon,
   ActivityBarHostApplicationsIcon, ActivityBarMonitorIcon, ActivityBarPortsIcon,
@@ -17,10 +18,40 @@ const cases: Array<[string, Component<ActivityRailIconProps>]> = [
   ['monitor', ActivityBarMonitorIcon], ['code', ActivityBarCodespacesIcon],
   ['globe', ActivityBarPortsIcon], ['applications', ActivityBarHostApplicationsIcon],
   ['containers', ActivityBarContainersIcon], ['switch', ActivityBarSwitchIcon],
-  ['settings', ActivityBarSettingsIcon], ['flower', ActivityBarFlowerIcon],
+  ['settings', ActivityBarSettingsIcon],
   ['connections', ActivityBarTessivenIcon], ['launchpad', ActivityBarPluginsIcon],
 ];
 describe('Activity Bar published Floe adapters', () => {
+  it('reuses all five original Flower petals through selection without resizing or remounting', () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const [active, setActive] = createSignal(false);
+    disposers.push(render(() => <>
+      <ActivityBarFlowerIcon active={active()} class="activity-icon" size={20} />
+      <FlowerIcon />
+    </>, host));
+    const [svg, brand] = host.querySelectorAll('svg');
+    const artwork = (icon: SVGSVGElement) => [...icon.querySelectorAll('path')].map(path => [path.getAttribute('d'), path.getAttribute('transform')]);
+    const petals = [...svg.querySelectorAll('path')];
+    expect(petals).toHaveLength(5);
+    expect(artwork(svg)).toEqual(artwork(brand));
+    expect(svg.querySelector('.redeven-flower-icon-center')?.getAttribute('r')).toBe('3');
+    expect(svg.getAttribute('width')).toBe('20');
+    expect(svg.getAttribute('height')).toBe('20');
+    expect(svg.classList.contains('activity-icon')).toBe(true);
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(svg.getAttribute('data-flower-variant')).toBe('navigation');
+    expect(svg.getAttribute('data-flower-active')).toBe('false');
+    setActive(true);
+    expect(svg.getAttribute('data-flower-active')).toBe('true');
+    expect(svg.getAttribute('data-floe-rail-active')).toBe('true');
+    expect([...svg.querySelectorAll('path')]).toEqual(petals);
+    expect(artwork(svg)).toEqual(artwork(brand));
+    expect(svg.getAttribute('width')).toBe('20');
+    setActive(false);
+    expect(svg.getAttribute('data-flower-active')).toBe('false');
+    expect(brand.hasAttribute('data-flower-variant')).toBe(false);
+    expect(brand.hasAttribute('data-flower-active')).toBe(false);
+  });
   it.each(cases)('keeps %s selection reactive in the shared rounded frame', (identity, Icon) => {
     const host = document.createElement('div'); document.body.append(host);
     const [active, setActive] = createSignal(false);

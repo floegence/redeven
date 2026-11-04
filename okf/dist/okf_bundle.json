@@ -31074,15 +31074,15 @@
         "title": "Shared surface material",
         "type": "UI Contract"
       },
-      "body_length": 2356,
+      "body_length": 2639,
       "summary": "Published Floe owns material and motion. Env App/Welcome select soft-neumorphic roles while business content stays flat. Preserve input, portals, widget identity and hot interaction ownership. Resolve conflicts at the product override source without copying shadow logic or introducing another theme/dependency owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Configuration and ownership\nBoth first-party renderers set `theme.defaultSurfaceStyle` to `soft-neumorphic`. The [published dependency contract](../architecture/env-app-upstream-web-dependencies.md) owns exact package versions and registry requirements.\n\n## Activity icon states\nPublished Floe owns the 24-unit rounded rail family, 1.5-unit strokes, 13% idle faces and filled selected silhouettes. Desktop Activity Bar and mobile tabs pass their real active or expanded state; hover changes ink without selecting. Monitoring remains a rounded pulse with a soft area and Switch Environment keeps slender opposing arrows. Web Services remains a globe. Plugin launcher disclosure fills while open without changing the selected page; environment switching is momentary.\n\nRedeven's adapters consume the published icons subpath. Only the Flower silhouette is product-owned and uses Floe's shared renderer; Workbench brand artwork remains separate. Transparent detail masks reveal each theme's actual surface, and forced colors use system navigation ink. Verify live selection, disclosure, mobile editor retention and icon contrast; never replace these with static SVG-only checks.\n\n## Product presentation\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls, Dialogs, and FloatingWindows use their released component treatment. Hover must preserve the selected fill and text.\n\nThe plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.",
-          "char_count": 1514
+          "body": "## Configuration and ownership\nBoth first-party renderers set `theme.defaultSurfaceStyle` to `soft-neumorphic`. The [published dependency contract](../architecture/env-app-upstream-web-dependencies.md) owns exact package versions and registry requirements.\n\n## Activity icon states\nPublished Floe owns the 24-unit rounded rail family, 1.5-unit strokes, 13% idle faces and filled selected silhouettes. Desktop Activity Bar and mobile tabs pass their real active or expanded state; hover changes ink without selecting. Monitoring remains a rounded pulse with a soft area and Switch Environment keeps slender opposing arrows. Web Services remains a globe. Plugin launcher disclosure fills while open without changing the selected page; environment switching is momentary.\n\nRedeven's adapters consume the published icons subpath. Flower reuses the product's canonical five-petal artwork: each petal meets beneath the yellow center. Its navigation variant follows the host's size and active state, with outlined idle petals and selected ink-filled petals separated by visible surface-colored seams. Geometry remains stable through selection; ordinary brand and Workbench artwork retain their existing treatment. Shared icon detail masks reveal each theme's actual surface, and forced colors use system navigation ink. Verify live selection, disclosure, mobile editor retention, petal-seam contrast and icon contrast; never replace these with static SVG-only checks.\n\n## Product presentation\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls, Dialogs, and FloatingWindows use their released component treatment. Hover must preserve the selected fill and text.\n\nThe plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.",
+          "char_count": 1797
         },
         {
           "id": "boundaries",
@@ -32052,5 +32052,5 @@
       ]
     }
   ],
-  "source_sha256": "d20a386697472b0db28048e67db10ebb3e3046c862059f48cd5766093601a69e"
+  "source_sha256": "24ce72d707bba38a11f7a18226b41d96daba5e2b41a0472429a590e16d08ebc0"
 }

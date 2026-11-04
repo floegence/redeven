@@ -1249,7 +1249,13 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       await vi.waitFor(() => {
         expect(button(identity).getAttribute('aria-pressed'), identity).toBe('true');
         expect(glyph(identity).getAttribute('data-floe-rail-active'), identity).toBe('true');
-        expect(glyph(identity).querySelector('[data-floe-rail-part="solid"]'), identity).toBeTruthy();
+        if (identity === 'flower') {
+          expect(glyph(identity).getAttribute('data-flower-active')).toBe('true');
+          expect(glyph(identity).querySelectorAll('path')).toHaveLength(5);
+          expect(getComputedStyle(glyph(identity).querySelector('path')!).fill).toBe(getComputedStyle(glyph(identity)).color);
+        } else {
+          expect(glyph(identity).querySelector('[data-floe-rail-part="solid"]'), identity).toBeTruthy();
+        }
       });
       expect(glyph(identity).getBoundingClientRect().width).toBe(20);
       expect(rail.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
@@ -1281,6 +1287,11 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       await userEvent.click(tab);
       await vi.waitFor(() => expect(tab.getAttribute('aria-selected')).toBe('true'));
       expect(glyph(identity).getAttribute('data-floe-rail-active')).toBe('true');
+      if (identity === 'flower') {
+        expect(glyph(identity).querySelectorAll('path')).toHaveLength(5);
+        expect(glyph(identity).getAttribute('data-flower-active')).toBe('true');
+        expect(glyph(identity).getBoundingClientRect().width).toBe(24);
+      }
       expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(editor);
     }
   });

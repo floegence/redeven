@@ -1,4 +1,4 @@
-import { createUniqueId, type Component } from 'solid-js';
+import { createUniqueId, splitProps, type Component, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import './flower-icon.css';
 
@@ -11,7 +11,14 @@ import './flower-icon.css';
  * translucent petals and gradient center. Compact light-theme hosts can
  * strengthen the outline through --flower-icon-petal-stroke.
  */
-export const FlowerIcon: Component<{ class?: string }> = (props) => {
+interface FlowerIconProps extends Omit<JSX.SvgSVGAttributes<SVGSVGElement>, 'children'> {
+  size?: number | string;
+  variant?: 'navigation';
+  active?: boolean;
+}
+
+export const FlowerIcon: Component<FlowerIconProps> = (props) => {
+  const [local, svgProps] = splitProps(props, ['class', 'size', 'variant', 'active']);
   const uid = createUniqueId();
   const petalAngles = [0, 72, 144, 216, 288];
   const petalPath =
@@ -22,7 +29,12 @@ export const FlowerIcon: Component<{ class?: string }> = (props) => {
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      class={cn('redeven-flower-icon', props.class)}
+      width={local.size}
+      height={local.size}
+      {...svgProps}
+      class={cn('redeven-flower-icon', local.class)}
+      data-flower-variant={local.variant}
+      data-flower-active={local.variant === 'navigation' ? Boolean(local.active) : undefined}
     >
       <defs>
         <radialGradient id={`${uid}-c`} cx="50%" cy="45%" r="50%">
