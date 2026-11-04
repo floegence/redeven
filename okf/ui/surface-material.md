@@ -24,6 +24,13 @@ Ordinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls
 
 The plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.
 
+## Flower composer and disclosures
+The expanded composer consumes Floe field fill, edge and panel radius with one border-only focus boundary. Dedicated pages have a more generous editing inset; compact companions retain their existing height and editor identity. Floating model, permission, reasoning, More, reference, command, Goal, context and conversation controls consume published material and presence. Exiting panels become inert and hidden from accessibility immediately, while Floe finishes the visual exit; reopening reverses that exit. Context menus retain their deliberate first-frame appearance.
+
+Model and permission menus have one surface-owned lifetime, independent of inline/More toolbar placement. Published anchored layers own positioning and boundary clamping for model, permission, reasoning and More; animated children do not own geometry. Moving an open control into More retains its editor and focus. Hover context disclosures retain their content, scroll and expansion while hidden, with shared presence controlling paint.
+
+Cached Activity pages retain their last visible transcript gutter and toolbar allocation while hidden. Restoring a page must not resize the composer for a zero-width hidden measurement; saved thread-rail width is applied before the first visible layout.
+
 # Boundaries
 
 Use restrained static depth and short functional control motion. The progress disclosure remains clickable; failure and confirmation use static attention. Existing Workbench activation, wheel, text-selection, and preview/commit contracts remain authoritative.
@@ -34,3 +41,5 @@ Use restrained static depth and short functional control motion. The progress di
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Source.
 
 - `redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx` - Source.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.polish.browser.test.tsx` - Hidden-page geometry, shared material, focus, responsive layouts, reversal and reduced-motion acceptance.

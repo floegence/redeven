@@ -187,7 +187,8 @@ it('accepts a newer live view when an older confirmation returns and ignores dis
   await userEvent.keyboard('{Escape}');
   expect(document.activeElement).toBe(trigger);
   await new Promise(resolve => requestAnimationFrame(resolve));
-  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.surface.querySelector('.flower-goal-popup:not([inert])')).toBeNull();
+  await waitFor(() => !f.surface.querySelector('.flower-goal-popup'));
   expect(document.activeElement).toBe(trigger);
 });
 
@@ -202,7 +203,8 @@ it('does not reopen on a late conflict or silently advance the preserved draft b
   const conflict = response({ ...input, text: 'Remote conflict' }, 5, true);
   pending.resolve({ ...conflict, current: { ...conflict.current, view_version: 30 } });
   await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Remote conflict');
-  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.surface.querySelector('.flower-goal-popup:not([inert])')).toBeNull();
+  await waitFor(() => !f.surface.querySelector('.flower-goal-popup'));
   expect(f.coordinator.read('thread-1').value.goal_edit).toMatchObject({ text: 'Keep my edit', version: 2 });
 });
 
@@ -372,12 +374,14 @@ it('automatically hides a completed Goal and closes its editor without losing a 
   edit(f.input(), 'Keep this unsaved objective');
   f.publish({ version: 3, text: 'Current work', status: 'completed', actor: 'model' });
   await waitFor(() => f.surface.querySelector('.flower-goal-tag') === null);
-  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.surface.querySelector('.flower-goal-popup:not([inert])')).toBeNull();
+  await waitFor(() => !f.surface.querySelector('.flower-goal-popup'));
   expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Keep this unsaved objective');
   expect(f.manageGoal).not.toHaveBeenCalled();
   f.publish({ version: 4, text: 'New objective', status: 'active', actor: 'user' });
   await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'New objective');
-  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.surface.querySelector('.flower-goal-popup:not([inert])')).toBeNull();
+  await waitFor(() => !f.surface.querySelector('.flower-goal-popup'));
 });
 
 it('supports keyboard draft tabs and returns focus without modifying the draft', async () => {
@@ -402,7 +406,8 @@ it('invalidates confirmation on reconnection without reopening or losing a draft
   await waitFor(() => !f.surface.querySelector('.flower-goal-popup'), 10000);
   pending.resolve(f.view());
   await new Promise(resolve => requestAnimationFrame(resolve));
-  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.surface.querySelector('.flower-goal-popup:not([inert])')).toBeNull();
+  await waitFor(() => !f.surface.querySelector('.flower-goal-popup'));
   expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Retained across reconnect');
 });
 

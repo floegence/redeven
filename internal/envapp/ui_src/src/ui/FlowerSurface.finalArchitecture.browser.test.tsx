@@ -1198,10 +1198,10 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => runtime.querySelector('.flower-permission-trigger')
       ?.getAttribute('data-permission-type') === 'full_access');
     (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector(
+    await waitFor(() => document.querySelector(
       '[data-permission-type="approval_required"].flower-permission-menu-item',
     ) !== null);
-    (runtime.querySelector(
+    (document.querySelector(
       '[data-permission-type="approval_required"].flower-permission-menu-item',
     ) as HTMLButtonElement).click();
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;

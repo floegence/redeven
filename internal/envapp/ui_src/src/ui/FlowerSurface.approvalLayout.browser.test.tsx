@@ -313,17 +313,17 @@ it.each([
     expect(trigger.querySelector('.flower-permission-icon')!.getBoundingClientRect().width).toBeGreaterThan(0);
   }
   await userEvent.click(trigger);
-  const menu = fixture.mount.querySelector<HTMLElement>('.flower-permission-menu')!;
+  const menu = document.querySelector<HTMLElement>('.flower-permission-menu')!;
   await expect.poll(() => menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   const bounds = menu.getBoundingClientRect();
   expect(bounds.left).toBeGreaterThanOrEqual(0);
   expect(bounds.right).toBeLessThanOrEqual(width);
   await userEvent.keyboard('{Escape}');
   await expect.poll(() => document.activeElement).toBe(trigger);
-  expect(fixture.mount.querySelector('.flower-permission-menu')).toBeNull();
+  expect(document.querySelector('.flower-permission-menu:not([inert])')).toBeNull();
   await userEvent.keyboard('{Enter}');
-  await waitFor(() => Boolean(fixture.mount.querySelector('.flower-permission-menu')));
-  await userEvent.click(fixture.mount.querySelector('[role=option][data-permission-type=full_access]')!);
+  await waitFor(() => Boolean(document.querySelector('.flower-permission-menu')));
+  await userEvent.click(document.querySelector('[role=option][data-permission-type=full_access]')!);
   await expect.poll(() => trigger.dataset.permissionType).toBe('full_access');
   expect(fixture.surfaceAdapter.setThreadPermissionType).toHaveBeenCalledExactlyOnceWith('approval-layout', 'full_access');
   expect(fixture.surfaceAdapter.submitApproval).not.toHaveBeenCalled();
@@ -345,7 +345,7 @@ it.each([true, false])('compacts the approval permission selector as its contain
     expect(trigger.title).toContain(label.textContent);
     if (narrow) await expect.poll(() => trigger.offsetWidth).toBe(trigger.offsetHeight);
     await userEvent.click(trigger);
-    await waitFor(() => Boolean(fixture.mount.querySelector('.flower-permission-menu')));
+    await waitFor(() => Boolean(document.querySelector('.flower-permission-menu')));
     await userEvent.keyboard('{Escape}');
     await expect.poll(() => document.activeElement).toBe(trigger);
     expectFooterInside(fixture.mount);
@@ -365,7 +365,7 @@ it('keeps the compact permission control steady and shows its saving indicator',
   const trigger = fixture.mount.querySelector<HTMLButtonElement>('button.flower-permission-trigger')!;
   const width = trigger.offsetWidth;
   await userEvent.click(trigger);
-  await userEvent.click(fixture.mount.querySelector('[role=option][data-permission-type=full_access]')!);
+  await userEvent.click(document.querySelector('[role=option][data-permission-type=full_access]')!);
   await expect.poll(() => trigger.disabled).toBe(true);
   const indicator = trigger.querySelector<HTMLElement>('.flower-permission-saving-dot')!;
   expect(getComputedStyle(indicator).visibility).toBe('visible');

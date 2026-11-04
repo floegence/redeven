@@ -29,7 +29,7 @@ it.each(['ready', 'unavailable'] as const)('preserves the selected model and men
   });
   expect(document.querySelector('.flower-model-menu-status')?.textContent ?? '').not.toMatch(/checking|seconds|failed/iu);
   expect(search.value).toBe('Agent');
-  expect(document.activeElement).toBe(search);
+  await waitFor(() => document.activeElement === search);
   expect(trigger.textContent).toContain('Current provider / Agent');
   expect(trigger.querySelector('[class*="animate-spin"]')).toBeNull();
   expect(document.querySelector<HTMLButtonElement>('.flower-model-menu-item')?.disabled).toBe(state === 'unavailable');
@@ -57,7 +57,7 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   expect(menu.querySelector('.flower-model-menu-copy')?.textContent).toBe('agent-q8');
   expect(menu.textContent).toContain('Local models');
   const input = menu.querySelector<HTMLInputElement>('input')!;
-  expect(document.activeElement).toBe(input);
+  await waitFor(() => document.activeElement === input);
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
   expect(document.activeElement).toBe([...menu.querySelectorAll('.flower-model-menu-item')].at(-1));
   input.value = 'Local models / agent'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -76,7 +76,7 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(32);
   [...menu.querySelectorAll('button')].find((button) => button.textContent?.includes('Manage models'))!.click();
   await waitFor(() => Boolean(document.querySelector('.flower-settings-surface')));
-  expect(document.querySelector('.flower-model-menu')).toBeNull();
+  await waitFor(() => !document.querySelector('.flower-model-menu'));
   expect(snapshot.model_profile.current_model_id).toBe('local/agent-q8');
 });
 

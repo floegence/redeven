@@ -37,7 +37,7 @@ describe('Reasoning control semantics', () => {
     expect(trigger.textContent).toBe('默认');
     expect(trigger.title).toBe('使用模型默认推理配置');
     trigger.click();
-    expect(Array.from(root.querySelectorAll('[role="menuitemradio"]')).map((item) => item.textContent)).toEqual(['默认', '关闭', '低', '高', '最高']);
+    expect(Array.from(document.querySelectorAll('[role="menuitemradio"]')).map((item) => item.textContent)).toEqual(['默认', '关闭', '低', '高', '最高']);
     expect(root.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
   });
 
@@ -46,17 +46,18 @@ describe('Reasoning control semantics', () => {
     const trigger = root.querySelector<HTMLButtonElement>('button')!;
     trigger.focus();
     await userEvent.keyboard('{Enter}');
+    await expect.element(page.getByRole('menuitemradio', { name: 'Default', exact: true })).toHaveFocus();
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
     expect(trigger.textContent).toBe('High');
     expect(document.activeElement).toBe(trigger);
     await userEvent.keyboard('{Enter}{Escape}');
-    expect(root.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]:not([inert])')).toBeNull();
     expect(document.activeElement).toBe(trigger);
     const next = document.createElement('button');
     next.textContent = 'Next';
     root.append(next);
     await userEvent.keyboard('{Enter}{Tab}');
-    expect(root.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]:not([inert])')).toBeNull();
     expect(document.activeElement).toBe(next);
   });
 
@@ -83,7 +84,7 @@ describe('Reasoning control semantics', () => {
     const trigger = root.querySelector<HTMLButtonElement>('button')!;
     expect(trigger.textContent).toBe('2048 tokens');
     trigger.click();
-    Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')).find((item) => item.textContent === 'Off')!.click();
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')).find((item) => item.textContent === 'Off')!.click();
     expect(change).toHaveBeenLastCalledWith({ level: 'off' });
     expect(trigger.textContent).toBe('Off');
   });
@@ -94,7 +95,7 @@ describe('Reasoning control semantics', () => {
     expect(trigger.textContent).toBe('Default');
     expect(change).not.toHaveBeenCalled();
     trigger.click();
-    const options = () => Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    const options = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
     expect(options().map((item) => item.textContent)).toEqual(['Default', 'Off', 'Low', 'High', 'Max']);
     expect(options().find((item) => item.getAttribute('aria-checked') === 'true')?.textContent).toBe('Default');
     options().find((item) => item.textContent === 'High')!.click();
@@ -130,7 +131,7 @@ it('offers explicit On only for a declared toggle and preserves Default', () => 
   const change = mount({ kind: 'toggle', supported_levels: ['on'], disable_supported: true });
   const trigger = root.querySelector<HTMLButtonElement>('button')!;
   trigger.click();
-  const options = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+  const options = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
   expect(options.map((item) => item.textContent)).toEqual(['Default', 'Off', 'On']);
   options[2].click();
   expect(change).toHaveBeenLastCalledWith({ level: 'on', budget_tokens: undefined });

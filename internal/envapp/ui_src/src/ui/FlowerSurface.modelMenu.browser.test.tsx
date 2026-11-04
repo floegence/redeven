@@ -99,11 +99,13 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
         surface.querySelector<HTMLButtonElement>('.flower-composer-more-button')!.click();
         await waitFor(() => Boolean(document.querySelector(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')));
       }
-      if (!document.querySelector('.flower-model-menu')) document.querySelector<HTMLButtonElement>(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')!.click();
-      await waitFor(() => Boolean(document.querySelector('.flower-model-menu')));
-      const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
+      if (!document.querySelector('.flower-model-menu:not([inert])')) document.querySelector<HTMLButtonElement>(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')!.click();
+      await waitFor(() => Boolean(document.querySelector('.flower-model-menu:not([inert])')));
+      const menu = document.querySelector<HTMLElement>('.flower-model-menu:not([inert])')!;
+      await Promise.all(menu.getAnimations().map(animation => animation.finished));
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const bounds = menu.getBoundingClientRect();
-      expect(bounds.width).toBeLessThanOrEqual(272);
+      expect(bounds.width).toBeLessThanOrEqual(320);
       expect(bounds.height).toBeLessThanOrEqual(320);
       expect(bounds.left).toBeGreaterThanOrEqual(0);
       expect(bounds.right).toBeLessThanOrEqual(width);
@@ -117,8 +119,8 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
       expect(headingBounds.right).toBeLessThanOrEqual(searchBounds.left);
       expect(searchBounds.right).toBeLessThanOrEqual(close.getBoundingClientRect().left);
       expect(searchBounds.width).toBeGreaterThanOrEqual(96);
-      expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeLessThanOrEqual(10);
-      expect(Number.parseFloat(getComputedStyle(search).fontSize)).toBeLessThanOrEqual(10);
+      expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeLessThanOrEqual(12);
+      expect(Number.parseFloat(getComputedStyle(search).fontSize)).toBeLessThanOrEqual(12);
       expectSingleLineButtonLabels(menu.querySelector('.flower-model-menu-footer')!);
       expect(menu.querySelectorAll('.flower-model-menu-group')).toHaveLength(4);
       expect(menu.querySelector('.flower-model-menu-meta, [data-web-search]')).toBeNull();
@@ -128,8 +130,8 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
       for (const row of rows) {
         const bounds = row.getBoundingClientRect();
         expect(bounds.height).toBeGreaterThanOrEqual(24);
-        expect(bounds.height).toBeLessThanOrEqual(26);
-        expect(Number.parseFloat(getComputedStyle(row.querySelector('.flower-model-menu-name')!).fontSize)).toBeLessThanOrEqual(10);
+        expect(bounds.height).toBeLessThanOrEqual(32);
+        expect(Number.parseFloat(getComputedStyle(row.querySelector('.flower-model-menu-name')!).fontSize)).toBeLessThanOrEqual(12);
         for (const child of row.querySelectorAll('.flower-model-menu-icon, .flower-model-menu-name, .flower-model-menu-check')) {
           const rect = child.getBoundingClientRect();
           expect(Math.abs(rect.top + rect.height / 2 - (bounds.top + bounds.height / 2))).toBeLessThanOrEqual(1);
@@ -154,11 +156,11 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
   expect(getComputedStyle(selected).outlineStyle).toBe('solid');
   expect(Number.parseFloat(getComputedStyle(selected).outlineWidth)).toBeGreaterThanOrEqual(2);
   await userEvent.keyboard('{Escape}');
-  expect(document.querySelector('.flower-model-menu')).toBeNull();
+  await waitFor(() => !document.querySelector('.flower-model-menu'));
   expect(document.activeElement).toBe(activeTrigger);
   activeTrigger.click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu-close')));
   document.querySelector<HTMLButtonElement>('.flower-model-menu-close')!.click();
   await waitFor(() => document.activeElement === activeTrigger);
-  expect(document.querySelector('.flower-model-menu')).toBeNull();
+  await waitFor(() => !document.querySelector('.flower-model-menu'));
 });

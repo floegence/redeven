@@ -106,6 +106,7 @@ export function FlowerContextMenu(props: Readonly<{
         role="menu"
         tabIndex={-1}
         class="flower-thread-context-menu"
+        data-floe-surface="floating"
         aria-label={props.label}
         onFocusOut={(event) => {
           const next = event.relatedTarget;

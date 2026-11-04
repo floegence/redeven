@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
-import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { SurfaceFloatingLayer, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, X } from 'lucide-solid';
 import type { FlowerContextSourceRow } from './flowerContextPresentation';
 
@@ -52,6 +52,7 @@ export function FlowerComposerContextIndicator(props: {
   onCleanup(cancelDismiss);
   let container: HTMLDivElement | undefined;
   let panel: HTMLDivElement | undefined;
+  const presence = createFloatingPresence({ open: tooltipOpen, element: () => panel });
   const [layout, setLayout] = createSignal({ position: { x: 0, y: 0 }, size: { width: 320, height: 420 } });
   const containsFocus = () => !!(container?.contains(document.activeElement) || panel?.contains(document.activeElement));
   const containsPointer = () => !!(container?.matches(':hover') || panel?.matches(':hover'));
@@ -61,9 +62,17 @@ export function FlowerComposerContextIndicator(props: {
       if (!containsFocus() && !containsPointer()) setTooltipOpen(false);
     }, 150);
   };
-  const handleFocusOut = () => queueMicrotask(() => {
-    if (!containsFocus() && (document.activeElement !== document.body || !containsPointer())) setTooltipOpen(false);
-  });
+  let focusOutFrame = 0;
+  const handleFocusOut = () => {
+    cancelAnimationFrame(focusOutFrame);
+    // Keyed disclosure moves restore focus in a microtask. Decide dismissal
+    // after that restoration, before making the retained panel inert.
+    focusOutFrame = requestAnimationFrame(() => {
+      focusOutFrame = 0;
+      if (!containsFocus() && (document.activeElement !== document.body || !containsPointer())) setTooltipOpen(false);
+    });
+  };
+  onCleanup(() => cancelAnimationFrame(focusOutFrame));
   const close = () => { cancelDismiss(); trigger?.focus({ preventScroll: true }); setTooltipOpen(false); };
   const activate = () => {
     trigger?.focus({ preventScroll: true });
@@ -84,7 +93,7 @@ export function FlowerComposerContextIndicator(props: {
     const placement = props.placement;
     const measure = () => {
       const rect = trigger!.getBoundingClientRect();
-      const { width, height } = panel!.getBoundingClientRect();
+      const { width, height } = panel!.parentElement!.getBoundingClientRect();
       const below = Math.max(rect.bottom, trigger!.closest('.flower-subagent-detail-overview')?.getBoundingClientRect().bottom ?? rect.bottom);
       setLayout({ size: { width, height }, position: {
         x: placement === 'below-start' ? rect.left : rect.right - width,
@@ -171,7 +180,11 @@ export function FlowerComposerContextIndicator(props: {
         aria-modal="false"
         tabIndex={-1}
         aria-label={labels().label}
-        class="flower-composer-context-tooltip"
+        class="flower-composer-context-tooltip floe-floating-presence floe-floating-menu"
+        data-floe-surface="floating"
+        data-floating-presence={presence.state()}
+        style={{ visibility: presence.mounted() ? 'visible' : 'hidden' }}
+        inert={!tooltipOpen()}
         data-open={tooltipOpen() ? 'true' : undefined}
         aria-hidden={tooltipOpen() ? undefined : 'true'}
       >

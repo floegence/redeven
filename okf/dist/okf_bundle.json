@@ -26797,7 +26797,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "companion",
           "composer",
@@ -26808,15 +26808,15 @@
         "title": "Flower companion composer and motion",
         "type": "UI Contract"
       },
-      "body_length": 2065,
+      "body_length": 2272,
       "summary": "One native textarea survives collapsed/expanded Flower with draft, selection, focus and IME intact. Redeven owns content; Floe shell geometry/motion. Expanded text sits above bottom toolbar/More; phase-driven close/reversal never remounts or adds lifecycle timers.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Settings recovery stays inside the collapsed row, with a reachable Retry and unchanged height. It replaces compact summary copy until recovery; active Stop remains available. The published shell cannot clip recovery outside its bounds. Expanded recovery uses the existing floating notice stack.\n\n## Retained editor and explicit entry\nThe same ordinary editor moves between compact/detail presentations. Specialized decisions retain separate controls; input/approval/work priority follows [presence](flower-companion-presence.md), never converts a decision/status entry into an editor.\n\n## Editor layout and growth\nToolbar left stays empty; permission/model/reasoning remain in More during loading/errors. Recovery/guidance sit above the editor. Short input leaves no blank space beneath the toolbar; multiline growth moves it without replacing the editor. Dedicated pages retain complete starter suggestions.\n\n## Motion and surface treatment\nOne shell grows upward/outward in width and height, preserving bottom edge, border, background and clipping. Close dissolves detail before compact layout; reversal follows current phase. Exit keeps fixed coordinates and Activity height, without origin flashes. Published forced-color and focus indicators remain. Collapsed content uses only its compact composer inset; transcript/activity gutters apply to expanded content and cannot push the entry icon away from the left edge.",
-          "char_count": 1420
+          "body": "Settings recovery stays inside the collapsed row, with a reachable Retry and unchanged height. It replaces compact summary copy until recovery; active Stop remains available. The published shell cannot clip recovery outside its bounds. Expanded recovery uses the existing floating notice stack.\n\n## Retained editor and explicit entry\nThe same ordinary editor moves between compact/detail presentations. Specialized decisions retain separate controls; input/approval/work priority follows [presence](flower-companion-presence.md), never converts a decision/status entry into an editor.\n\n## Editor layout and growth\nToolbar left stays empty; permission/model/reasoning remain in More during loading/errors. Recovery/guidance sit above the editor. Short input leaves no blank space beneath the toolbar; multiline growth moves it without replacing the editor. Dedicated pages retain complete starter suggestions.\n\n## Motion and surface treatment\nOne shell grows upward/outward in width and height, preserving bottom edge, border, background and clipping. Close dissolves detail before compact layout; reversal follows current phase. Exit keeps fixed coordinates and Activity height, without origin flashes. Published forced-color and focus indicators remain. Composer disclosures follow [shared surface material](surface-material.md): portaled nested menus retain More ownership, Escape returns focus one level at a time, and exits stop accepting input immediately. Collapsed content uses only its compact composer inset; transcript/activity gutters apply to expanded content and cannot push the entry icon away from the left edge.",
+          "char_count": 1627
         },
         {
           "id": "boundaries",
@@ -26851,6 +26851,12 @@
           "path": "ui/flower-companion-presence.md",
           "concept_id": "ui.flower-companion-presence",
           "title": "Flower companion presence"
+        },
+        {
+          "label": "shared surface material",
+          "path": "ui/surface-material.md",
+          "concept_id": "ui.surface-material",
+          "title": "Shared surface material"
         }
       ],
       "backlinks": [
@@ -31074,15 +31080,15 @@
         "title": "Shared surface material",
         "type": "UI Contract"
       },
-      "body_length": 2639,
+      "body_length": 4132,
       "summary": "Published Floe owns material and motion. Env App/Welcome select soft-neumorphic roles while business content stays flat. Preserve input, portals, widget identity and hot interaction ownership. Resolve conflicts at the product override source without copying shadow logic or introducing another theme/dependency owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Configuration and ownership\nBoth first-party renderers set `theme.defaultSurfaceStyle` to `soft-neumorphic`. The [published dependency contract](../architecture/env-app-upstream-web-dependencies.md) owns exact package versions and registry requirements.\n\n## Activity icon states\nPublished Floe owns the 24-unit rounded rail family, 1.5-unit strokes, 13% idle faces and filled selected silhouettes. Desktop Activity Bar and mobile tabs pass their real active or expanded state; hover changes ink without selecting. Monitoring remains a rounded pulse with a soft area and Switch Environment keeps slender opposing arrows. Web Services remains a globe. Plugin launcher disclosure fills while open without changing the selected page; environment switching is momentary.\n\nRedeven's adapters consume the published icons subpath. Flower reuses the product's canonical five-petal artwork: each petal meets beneath the yellow center. Its navigation variant follows the host's size and active state, with outlined idle petals and selected ink-filled petals separated by visible surface-colored seams. Geometry remains stable through selection; ordinary brand and Workbench artwork retain their existing treatment. Shared icon detail masks reveal each theme's actual surface, and forced colors use system navigation ink. Verify live selection, disclosure, mobile editor retention, petal-seam contrast and icon contrast; never replace these with static SVG-only checks.\n\n## Product presentation\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls, Dialogs, and FloatingWindows use their released component treatment. Hover must preserve the selected fill and text.\n\nThe plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.",
-          "char_count": 1797
+          "body": "## Configuration and ownership\nBoth first-party renderers set `theme.defaultSurfaceStyle` to `soft-neumorphic`. The [published dependency contract](../architecture/env-app-upstream-web-dependencies.md) owns exact package versions and registry requirements.\n\n## Activity icon states\nPublished Floe owns the 24-unit rounded rail family, 1.5-unit strokes, 13% idle faces and filled selected silhouettes. Desktop Activity Bar and mobile tabs pass their real active or expanded state; hover changes ink without selecting. Monitoring remains a rounded pulse with a soft area and Switch Environment keeps slender opposing arrows. Web Services remains a globe. Plugin launcher disclosure fills while open without changing the selected page; environment switching is momentary.\n\nRedeven's adapters consume the published icons subpath. Flower reuses the product's canonical five-petal artwork: each petal meets beneath the yellow center. Its navigation variant follows the host's size and active state, with outlined idle petals and selected ink-filled petals separated by visible surface-colored seams. Geometry remains stable through selection; ordinary brand and Workbench artwork retain their existing treatment. Shared icon detail masks reveal each theme's actual surface, and forced colors use system navigation ink. Verify live selection, disclosure, mobile editor retention, petal-seam contrast and icon contrast; never replace these with static SVG-only checks.\n\n## Product presentation\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls, Dialogs, and FloatingWindows use their released component treatment. Hover must preserve the selected fill and text.\n\nThe plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.\n\n## Flower composer and disclosures\nThe expanded composer consumes Floe field fill, edge and panel radius with one border-only focus boundary. Dedicated pages have a more generous editing inset; compact companions retain their existing height and editor identity. Floating model, permission, reasoning, More, reference, command, Goal, context and conversation controls consume published material and presence. Exiting panels become inert and hidden from accessibility immediately, while Floe finishes the visual exit; reopening reverses that exit. Context menus retain their deliberate first-frame appearance.\n\nModel and permission menus have one surface-owned lifetime, independent of inline/More toolbar placement. Published anchored layers own positioning and boundary clamping for model, permission, reasoning and More; animated children do not own geometry. Moving an open control into More retains its editor and focus. Hover context disclosures retain their content, scroll and expansion while hidden, with shared presence controlling paint.\n\nCached Activity pages retain their last visible transcript gutter and toolbar allocation while hidden. Restoring a page must not resize the composer for a zero-width hidden measurement; saved thread-rail width is applied before the first visible layout.",
+          "char_count": 3101
         },
         {
           "id": "boundaries",
@@ -31107,6 +31113,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx:0:source.",
           "source": "redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.polish.browser.test.tsx:0:hidden-page geometry, shared material, focus, responsive layouts, reversal and reduced-motion acceptance.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.polish.browser.test.tsx",
+          "description": "Hidden-page geometry, shared material, focus, responsive layouts, reversal and reduced-motion acceptance."
         }
       ],
       "snippet": "Published Floe owns material and motion. Env App/Welcome select soft-neumorphic roles while business content stays flat. Preserve input, portals, widget identity and hot interaction ownership. Resolve conflicts at the product override sourc",
@@ -31129,6 +31140,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower companion composer and motion",
+          "path": "ui/flower-companion-composer.md",
+          "concept_id": "ui.flower-companion-composer",
+          "title": "Flower companion composer and motion"
         },
         {
           "label": "Flower message appearance",
@@ -32052,5 +32069,5 @@
       ]
     }
   ],
-  "source_sha256": "0f7491ddae171bc13d59fbd74c772cc0acc8638a4af1b5d4b233c1c8b9b48507"
+  "source_sha256": "5ae2e9fb1c4c1d7548acb5695396ce3af6e326b0fad82ecda81eea6fd978fa06"
 }

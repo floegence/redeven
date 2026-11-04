@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasoningControlMessages';
 import { cn } from '@floegence/floe-webapp-core';
+import { SurfaceAnchoredLayer, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Refresh } from '@floegence/floe-webapp-core/icons';
 
 import type {
@@ -27,6 +28,7 @@ export type FlowerReasoningControlProps = Readonly<{
   readOnly?: boolean;
   resettable?: boolean;
   resetLabel?: string;
+  onMenuElement?: (element: HTMLDivElement | undefined) => void;
   onChange?: (selection: FlowerReasoningSelection | undefined) => void;
 }>;
 
@@ -56,6 +58,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
   let rootRef: HTMLDivElement | undefined;
   let menuRef: HTMLDivElement | undefined;
   const [menuOpen, setMenuOpen] = createSignal(false);
+  const presence = createFloatingPresence({ open: menuOpen, element: () => menuRef });
   const capability = createMemo(() => props.capability ?? null);
   const visible = createMemo(() => reasoningCapabilityHasPresentation(capability()));
   const effectiveSelection = createMemo(() => effectiveFlowerReasoningSelection(capability(), props.selection));
@@ -119,12 +122,12 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
   createEffect(() => {
     if (!menuOpen()) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (rootRef && event.target instanceof Node && rootRef.contains(event.target)) return;
+      if (event.target instanceof Node && (rootRef?.contains(event.target) || menuRef?.contains(event.target))) return;
       setMenuOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' || event.key === 'Tab') {
-        if (event.key === 'Escape') event.preventDefault();
+        if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); }
         setMenuOpen(false);
         triggerRef?.focus();
         return;
@@ -141,7 +144,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
       }
     };
     const onFocusIn = (event: FocusEvent) => {
-      if (rootRef && event.target instanceof Node && rootRef.contains(event.target)) return;
+      if (event.target instanceof Node && (rootRef?.contains(event.target) || menuRef?.contains(event.target))) return;
       setMenuOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -153,6 +156,8 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
       document.removeEventListener('focusin', onFocusIn, true);
     });
   });
+
+  onCleanup(() => props.onMenuElement?.(undefined));
 
   return (
     <Show when={visible()}>
@@ -238,43 +243,57 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
               onClick={() => {
                 const next = !menuOpen();
                 setMenuOpen(next);
-                if (next) queueMicrotask(() => focusableMenuItems()[0]?.focus());
+                if (next) queueMicrotask(() => requestAnimationFrame(() => {
+                  if (menuOpen() && document.activeElement === triggerRef) focusableMenuItems()[0]?.focus({ preventScroll: true });
+                }));
               }}
             >
               <span>{chipText()}</span>
               <ChevronDown class="flower-reasoning-badge-icon" />
             </button>
-            <Show when={menuOpen()}>
-              <div ref={menuRef} class={cn('flower-reasoning-menu', segmentMode() && 'flower-reasoning-menu-segment')} role="menu" aria-label={label()}>
-                <Show when={levels().length > 1}>
-                  <For each={levels()}>
-                    {(level) => (
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        class={cn('flower-reasoning-menu-item', selectedLevel() === level && 'flower-reasoning-menu-item-active')}
-                        title={level === 'default' ? copy().defaultHint : undefined}
-                        aria-checked={selectedLevel() === level}
-                        onClick={() => emitLevel(level)}
-                      >
-                        {levelLabel(level)}
-                      </button>
-                    )}
-                  </For>
-                </Show>
-                <Show when={budgetVisible()}>
-                  <input
-                    class="flower-reasoning-menu-budget"
-                    type="number"
-                    min={capability()?.min_budget_tokens}
-                    max={capability()?.max_budget_tokens}
-                    value={selectedBudget() ?? ''}
-                    placeholder={budgetPlaceholder(capability()!, copy().tokenUnit)}
-                    onChange={(event) => emitBudget(event.currentTarget.value)}
-                    aria-label={copy().budgetLabel.replace('{label}', label())}
-                  />
-                </Show>
-              </div>
+            <Show when={presence.mounted()}>
+              <SurfaceAnchoredLayer anchor={triggerRef} gap={8} class="flower-reasoning-menu-layer"
+                style={{ 'z-index': 'calc(var(--flower-layer-subagent-dropdown, 120) + 2)' }}
+                onAnchorDisconnect={() => setMenuOpen(false)} data-flower-floating-layer="true">
+                <div
+                  ref={element => { menuRef = element; props.onMenuElement?.(element); }}
+                  data-floe-surface="floating"
+                  data-floating-presence={presence.state()}
+                  aria-hidden={presence.exiting() ? 'true' : undefined}
+                  inert={presence.exiting()}
+                  class="flower-reasoning-menu floe-floating-presence floe-floating-menu"
+                  role="menu" aria-label={label()}
+                >
+                  <Show when={levels().length > 1}>
+                    <For each={levels()}>
+                      {(level) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          class={cn('flower-reasoning-menu-item', selectedLevel() === level && 'flower-reasoning-menu-item-active')}
+                          title={level === 'default' ? copy().defaultHint : undefined}
+                          aria-checked={selectedLevel() === level}
+                          onClick={() => emitLevel(level)}
+                        >
+                          {levelLabel(level)}
+                        </button>
+                      )}
+                    </For>
+                  </Show>
+                  <Show when={budgetVisible()}>
+                    <input
+                      class="flower-reasoning-menu-budget"
+                      type="number"
+                      min={capability()?.min_budget_tokens}
+                      max={capability()?.max_budget_tokens}
+                      value={selectedBudget() ?? ''}
+                      placeholder={budgetPlaceholder(capability()!, copy().tokenUnit)}
+                      onChange={(event) => emitBudget(event.currentTarget.value)}
+                      aria-label={copy().budgetLabel.replace('{label}', label())}
+                    />
+                  </Show>
+                </div>
+              </SurfaceAnchoredLayer>
             </Show>
           </Show>
         </Show>

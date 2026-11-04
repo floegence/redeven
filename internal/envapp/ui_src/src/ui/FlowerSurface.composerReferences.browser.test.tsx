@@ -60,6 +60,8 @@ describe('Flower composer reference browser interaction', () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
     const menu = document.querySelector('.flower-composer-reference-menu') as HTMLElement;
+    await waitFor(() => menu.dataset.floatingPresence === 'open');
+    await Promise.all(menu.getAnimations().map(animation => animation.finished));
     // Env App themes do not define this optional Flower-local token. The menu
     // still needs the shared theme border instead of dropping the declaration.
     menu.style.setProperty('--flower-chat-surface-border', 'initial');

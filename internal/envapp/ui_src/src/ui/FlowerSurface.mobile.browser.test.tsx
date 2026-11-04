@@ -61,23 +61,24 @@ describe('Flower mobile navigation', () => {
     const panel = document.querySelector<HTMLElement>('[data-flower-composer-more-panel]')!;
     const permission = panel.querySelector<HTMLButtonElement>('.flower-permission-trigger')!;
     expect(permission).not.toBeNull();
+    await Promise.all(panel.getAnimations().map(animation => animation.finished));
     expect(permission.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     const label = permission.querySelector<HTMLElement>('.flower-permission-label')!;
     expect(label.clientWidth).toBeGreaterThan(0);
     expect(label.scrollWidth).toBe(label.clientWidth);
     await userEvent.click(permission);
-    const menu = panel.querySelector<HTMLElement>('.flower-permission-menu')!;
+    const menu = document.querySelector<HTMLElement>('.flower-permission-menu')!;
     const bounds = menu.getBoundingClientRect();
     expect(bounds.left).toBeGreaterThanOrEqual(0);
     expect(bounds.right).toBeLessThanOrEqual(width);
     expect(bounds.top).toBeGreaterThanOrEqual(0);
     await userEvent.keyboard('{Escape}');
-    await vi.waitFor(() => expect(panel.querySelector('.flower-permission-menu')).toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('.flower-permission-menu')).toBeNull());
     expect(panel.isConnected).toBe(true);
     await vi.waitFor(() => expect(document.activeElement).toBe(permission));
     await userEvent.keyboard('{Enter}');
-    await vi.waitFor(() => expect(panel.querySelector('.flower-permission-menu')).not.toBeNull());
-    await userEvent.click(panel.querySelector<HTMLButtonElement>('.flower-permission-menu [data-permission-type="full_access"]')!);
+    await vi.waitFor(() => expect(document.querySelector('.flower-permission-menu')).not.toBeNull());
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-permission-menu [data-permission-type="full_access"]')!);
     expect(testAdapter.saveDefaultPermission).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(permission.getAttribute('data-permission-type')).toBe('full_access'));
     await userEvent.keyboard('{Escape}');
@@ -109,7 +110,7 @@ describe('Flower mobile navigation', () => {
     const panel = document.querySelector<HTMLElement>('[data-flower-composer-more-panel]')!;
     const permission = panel.querySelector<HTMLButtonElement>('.flower-permission-trigger')!;
     await userEvent.click(permission);
-    const menu = panel.querySelector<HTMLElement>('.flower-permission-menu')!;
+    const menu = document.querySelector<HTMLElement>('.flower-permission-menu')!;
     expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
     expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(393);
     await userEvent.click(menu.querySelector<HTMLButtonElement>('[data-permission-type="full_access"]')!);
@@ -122,7 +123,7 @@ describe('Flower mobile navigation', () => {
     expect(permission.getAttribute('data-permission-type')).toBe(outcome === 'saved' ? 'full_access' : 'approval_required');
     expect(editor.value).toBe('Keep the thread draft');
     await userEvent.click(runtime.querySelector<HTMLElement>('.flower-chat-header-identity')!);
-    expect(document.querySelector('[data-flower-composer-more-panel]')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('[data-flower-composer-more-panel]')).toBeNull());
     expect(runtime.querySelector('.flower-composer-controls-inline .flower-permission-selector')).toBeNull();
   });
 

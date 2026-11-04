@@ -73,7 +73,7 @@ describe('Flower reasoning settings authority', () => {
     await revealModelControls(surface);
     await waitFor(() => control(surface)?.textContent?.includes('Default') === true);
     control(surface)!.querySelector('button')!.click();
-    const items = Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    const items = Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-reasoning-menu:not([inert]) [role="menuitemradio"]'));
     expect(items.map((item) => item.textContent?.trim())).toEqual(labels);
     items.find((item) => item.textContent?.trim() === choice)!.click();
     expect(drafts.read('__new_thread__').value.reasoning_selection).toEqual({ level });
@@ -133,7 +133,7 @@ describe('Flower reasoning settings authority', () => {
     expect(base.setThreadReasoningSelection).not.toHaveBeenCalled();
     const choose = (text: string) => {
       control(surface)!.querySelector('button')!.click();
-      Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'))
+      Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-reasoning-menu:not([inert]) [role="menuitemradio"]'))
         .find((item) => item.textContent === text)!.click();
     };
     choose('High');
@@ -195,7 +195,7 @@ describe('Flower reasoning settings authority', () => {
       await waitFor(() => base.loadThread.mock.calls.length > mount);
       expect(control(surface)?.textContent).toContain('Off');
       control(surface)!.querySelector('button')!.click();
-      Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'))
+      Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-reasoning-menu:not([inert]) [role="menuitemradio"]'))
         .find((item) => item.textContent?.trim() === 'Off')!.click();
       expect(control(surface)?.textContent).toContain('Off');
       disposeRenderedSurface(surface);
@@ -229,7 +229,7 @@ describe('Flower reasoning settings authority', () => {
     let surface = renderSurfaceWithDraftCoordinator(configured, drafts);
     await waitFor(() => Boolean(control(surface)?.querySelector('button')));
     control(surface)!.querySelector('button')!.click();
-    const off = Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'))
+    const off = Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-reasoning-menu:not([inert]) [role="menuitemradio"]'))
       .find((item) => item.textContent?.trim() === 'Off');
     expect(off).toBeDefined();
     off!.click();

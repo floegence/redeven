@@ -130,7 +130,8 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
   return (
     <div
       data-flower-thread-switcher
-      class="flex max-h-[min(70vh,30rem)] min-h-0 w-full flex-col overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground shadow-lg"
+      data-floe-surface="floating"
+      class="flex max-h-[min(70vh,30rem)] min-h-0 w-full flex-col overflow-hidden rounded-[var(--floe-radius-panel)] border border-border/70 bg-popover text-popover-foreground"
       aria-label={props.copy.label}
       onKeyDown={onKeyDown}
     >
@@ -141,7 +142,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
             ref={searchRef}
             type="search"
             role="combobox"
-            class="h-8 w-full cursor-text rounded-md border border-input bg-background px-2.5 pl-8 text-xs text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground"
+            class="h-8 w-full cursor-text rounded-[var(--floe-radius-control)] border border-input bg-[var(--floe-field-fill)] px-2.5 pl-8 text-xs text-foreground outline-none transition-[border-color] placeholder:text-muted-foreground"
             value={props.query}
             placeholder={props.copy.searchPlaceholder}
             aria-label={props.copy.searchPlaceholder}

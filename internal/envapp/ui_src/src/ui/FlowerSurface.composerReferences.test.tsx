@@ -275,7 +275,8 @@ describe('Flower composer references', () => {
     (runtime.querySelector('[role="option"]') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-composer-reference-chip') !== null);
 
-    expect(runtime.querySelector('[role="listbox"]')).toBeNull();
+    expect(runtime.querySelector('[role="listbox"]:not([aria-hidden="true"])')).toBeNull();
+    await waitFor(() => runtime.querySelector('[role="listbox"]') === null);
     expect(textarea.closest('.flower-composer')?.getAttribute('aria-busy')).not.toBe('true');
     expect(textarea.readOnly).toBe(false);
     expect(textarea.value).toBe('');
@@ -309,7 +310,8 @@ describe('Flower composer references', () => {
 
     listing.resolve([{ name: 'main.ts', path: '/workspace/main.ts', isDirectory: false, modifiedAt: 1 }]);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(runtime.querySelector('[role="listbox"]')).toBeNull();
+    expect(runtime.querySelector('[role="listbox"]:not([aria-hidden="true"])')).toBeNull();
+    await waitFor(() => runtime.querySelector('[role="listbox"]') === null);
     expect(launchTurn).not.toHaveBeenCalled();
   });
 
@@ -330,7 +332,8 @@ describe('Flower composer references', () => {
 
     listing.resolve([{ name: 'main.ts', path: '/workspace/main.ts', isDirectory: false, modifiedAt: 1 }]);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(runtime.querySelector('[role="listbox"]')).toBeNull();
+    expect(runtime.querySelector('[role="listbox"]:not([aria-hidden="true"])')).toBeNull();
+    await waitFor(() => runtime.querySelector('[role="listbox"]') === null);
     expect(document.activeElement).toBe(attachment);
   });
 

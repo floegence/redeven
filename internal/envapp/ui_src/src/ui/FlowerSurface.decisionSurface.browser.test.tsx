@@ -1199,19 +1199,19 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
     const permissionTrigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
     permissionTrigger.click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
-    const selectedPermission = runtime.querySelector('.flower-permission-menu-item-active') as HTMLButtonElement;
+    await waitFor(() => Boolean(document.querySelector('.flower-permission-menu')));
+    const selectedPermission = document.querySelector('.flower-permission-menu-item-active') as HTMLButtonElement;
     expect(getComputedStyle(selectedPermission).borderLeftWidth).toBe('0px');
     approvalVisible = true;
     live.publish(liveBootstrap(approvalThread, 22).current);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')), 2000);
-    expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
+    expect(document.querySelector('.flower-permission-menu:not([inert])')).toBeNull();
     const allow = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
       .find((button) => button.textContent?.trim() === 'Allow once')!;
     allow.click();
     await waitFor(() => submitApproval.mock.calls.length === 1);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
-    expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
+    expect(document.querySelector('.flower-permission-menu:not([inert])')).toBeNull();
     expect(runtime.querySelector('.flower-model-menu')).toBeNull();
     expect(runtime.querySelector('[data-flower-composer-more-panel="true"]')).toBeNull();
     expect(runtime.querySelector('[data-directory-picker="true"]')).toBeNull();
@@ -1248,8 +1248,8 @@ describe('Flower bottom decision surface', () => {
     expect(runtime.querySelector('.flower-reasoning-segment-static')).not.toBeNull();
     expect(runtime.querySelector('button.flower-reasoning-segment-button')).toBeNull();
     trigger().click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
-    const option = runtime.querySelector<HTMLButtonElement>('.flower-permission-menu-item[data-permission-type="full_access"]')!;
+    await waitFor(() => Boolean(document.querySelector('.flower-permission-menu')));
+    const option = document.querySelector<HTMLButtonElement>('.flower-permission-menu-item[data-permission-type="full_access"]')!;
     option.click();
     option.click();
     await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
@@ -1257,7 +1257,7 @@ describe('Flower bottom decision surface', () => {
     expect(trigger().disabled).toBe(true);
     expect(trigger().getAttribute('data-permission-type')).toBe('full_access');
     trigger().click();
-    expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
+    expect(document.querySelector('.flower-permission-menu:not([inert])')).toBeNull();
     if (outcome === 'saved') response.resolve(liveBootstrap({ ...runningThread, permission_type: 'full_access', settings_revision: 11 }, 21));
     else response.reject(new Error('Permission save failed'));
     await waitFor(() => !trigger().disabled);
@@ -1294,8 +1294,8 @@ describe('Flower bottom decision surface', () => {
       && runtime.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
     (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
-    (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(document.querySelector('.flower-permission-menu')));
+    (document.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
     interactionVisible = true;
     live.publish(current);
     await waitFor(() => Boolean(runtime.querySelector('.flower-decision-surface')), 2000);

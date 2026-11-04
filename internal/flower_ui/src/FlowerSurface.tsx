@@ -7,7 +7,7 @@ import { FlowerTaskFiles } from './FlowerTaskFiles';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 import { createActivityFieldReader } from './activityFieldReader';
 import { createHistoryHandoffQueue } from './historyHandoffQueue';
-import { createThreadRailResize, loadThreadRailWidth, saveThreadRailWidth, THREAD_RAIL_WIDTH_DEFAULT, THREAD_RAIL_WIDTH_MIN, THREAD_RAIL_WIDTH_MAX } from './threadRailResize';
+import { createThreadRailResize, loadThreadRailWidth, saveThreadRailWidth, THREAD_RAIL_WIDTH_MIN, THREAD_RAIL_WIDTH_MAX } from './threadRailResize';
 import { createHistoryBodyLoader, createHistoryBodyVisibility, HISTORY_BODY_CONCURRENCY, HISTORY_BODY_VIEWPORT_MARGIN_PX } from './historyBodyLoader';
 import { createFlowerThreadBaseline } from './threadBaseline';
 import { loadFlowerThreadList } from './threadListLoad';
@@ -457,9 +457,6 @@ const FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX = 'flower-composer-reference-optio
 const FLOWER_COMPOSER_REFERENCE_MENU_FALLBACK_HEIGHT = 240;
 const FLOWER_COMPOSER_REFERENCE_MENU_GAP = 6;
 const FLOWER_COMPOSER_REFERENCE_VIEWPORT_MARGIN = 8;
-const FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH = 352;
-const FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT = 44;
-const FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME = 12;
 const FLOWER_TERMINAL_THREAD_STATUSES = new Set<FlowerThreadStatus>(['idle', 'failed', 'success', 'canceled', 'read_only']);
 const FLOWER_ACTIVE_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
 const FLOWER_SURFACE_LAYER = {
@@ -749,7 +746,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const embeddedThreads = new Map<string, string>();
   const mobileInteraction = useMobileLayout();
   const [surfaceElement, setSurfaceElement] = createSignal<HTMLElement>();
-  const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
+  const [threadRailWidth, setThreadRailWidth] = createSignal(loadThreadRailWidth());
   const sidebarPresentation = createAdaptiveSidebar({
     container: surfaceElement,
     sidebarWidth: threadRailWidth,
@@ -966,7 +963,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [attachmentDragActive, setAttachmentDragActive] = createSignal(false);
   const [longTextPreparing, setLongTextPreparing] = createSignal(false);
   let cancelActiveLongTextSubmission: (() => void) | null = null;
-  const [composerMorePanelPosition, setComposerMorePanelPosition] = createSignal<FlowerFloatingPoint>({ x: 8, y: 8 });
   const [composerControlLayout, setComposerControlLayout] = createSignal<FlowerComposerControlLayout>({
     availableWidth: null,
     itemWidths: {},
@@ -1215,17 +1211,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [modelQuery, setModelQuery] = createSignal('');
   const [modelMenuExpanded, setModelMenuExpanded] = createSignal(false);
   let modelSearchRef: HTMLInputElement | undefined;
-  const [modelMenuPosition, setModelMenuPosition] = createSignal({ x: 0, y: 0 });
-  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 272, height: 320 });
-  const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(320);
-  let modelTriggerRef: HTMLButtonElement | undefined;
+  const [modelTrigger, setModelTrigger] = createSignal<HTMLButtonElement>();
   let modelMenuRef: HTMLDivElement | undefined;
-  let permissionTriggerRef: HTMLButtonElement | undefined;
+  const [permissionTrigger, setPermissionTrigger] = createSignal<HTMLButtonElement>();
   let permissionMenuRef: HTMLDivElement | undefined;
+  let reasoningMenuRef: HTMLDivElement | undefined;
   let composerControlsViewportRef: HTMLDivElement | undefined;
   let composerControlsMeasureRef: HTMLDivElement | undefined;
   let composerMoreButtonRef: HTMLButtonElement | undefined;
   let composerMorePanelRef: HTMLDivElement | undefined;
+  const modelMenuPresence = createFloatingPresence({ open: modelMenuOpen, element: () => modelMenuRef });
+  const permissionMenuPresence = createFloatingPresence({ open: permissionMenuOpen, element: () => permissionMenuRef });
+  const composerMorePresence = createFloatingPresence({ open: composerMoreOpen, element: () => composerMorePanelRef });
   let subagentTriggerRef: HTMLElement | undefined;
   let subagentDropdownRef: HTMLDivElement | undefined;
   // Floe retains the anchored panel through both enter and exit transitions.
@@ -1235,6 +1232,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let headerRenameTriggerRef: HTMLButtonElement | undefined;
   let threadSwitcherTriggerRef: HTMLButtonElement | undefined;
   let threadSwitcherRef: HTMLDivElement | undefined;
+  let threadSwitcherPanelRef: HTMLDivElement | undefined;
+  const threadSwitcherPresence = createFloatingPresence({ open: threadSwitcherOpen, element: () => threadSwitcherPanelRef });
   const preparingBodyReads = new Map<string, AbortController>();
   const subagentPreparingBodyReads = new Map<string, AbortController>();
   let cancelSelectionCommit: (() => void) | undefined;
@@ -1317,7 +1316,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let copiedMessageResetTimer: number | undefined;
   let copiedApprovalResetTimer: number | undefined;
   let activityClockTimer: number | undefined;
-  let composerMorePanelPositionFrame = 0;
   let composerReferenceMenuPositionFrame = 0;
   let composerSelectionFrame = 0;
   let presentedSelectionFrame = 0;
@@ -1479,6 +1477,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     onViewportResize: viewport => {
       // Reuse the viewport's resize delivery; streamed rows never measure or
       // rewrite the horizontal layout of the status/composer column.
+      // Cached Activity pages have no box while hidden. That is not a change
+      // to scrollbar allocation; retain the last visible measurement.
+      if (viewport.getClientRects().length === 0) return;
       const gutter = viewport.offsetWidth - viewport.clientWidth;
       if (gutter === transcriptGutter) return;
       transcriptGutter = gutter;
@@ -2506,18 +2507,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const closePermissionMenu = (restoreFocus = false) => {
     setPermissionMenuOpen(false);
-    if (restoreFocus) queueMicrotask(() => permissionTriggerRef?.focus());
+    if (restoreFocus) queueMicrotask(() => { if (!permissionMenuOpen()) permissionTrigger()?.focus({ preventScroll: true }); });
   };
   const closeModelMenu = (restoreFocus = false) => {
     setModelMenuOpen(false);
-    if (restoreFocus) queueMicrotask(() => modelTriggerRef?.focus());
+    if (restoreFocus) queueMicrotask(() => { if (!modelMenuOpen()) modelTrigger()?.focus({ preventScroll: true }); });
   };
   const openModelMenu = () => {
     if (!composerModelInteractive() || modelPatchPending()) return;
-    setModelQuery(''); setModelMenuExpanded(false);
+    if (!modelMenuPresence.mounted()) { setModelQuery(''); setModelMenuExpanded(false); }
     setModelMenuOpen(true);
-    queueMicrotask(() => modelSearchRef?.focus());
   };
+  createEffect(() => {
+    if (!modelMenuOpen() || modelMenuPresence.state() !== 'open') return;
+    void modelTrigger();
+    const previousFocus = document.activeElement;
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (modelMenuOpen() && (!active || active === document.body || active === previousFocus || active === modelTrigger()) && !modelMenuRef?.contains(active)) {
+        modelSearchRef?.focus({ preventScroll: true });
+      }
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
   const modelErrorMessage = (error: unknown) => (
     (error instanceof FlowerRequestDeadlineError ? copy().settings.dialog.catalog.settingsSaveTimedOut : error instanceof FlowerReadDeadlineError ? copy().chat.syncTimeout : getErrorMessage(error)) || copy().settings.autoSave.saveFailed
   );
@@ -2544,7 +2556,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (composerOverflowControlIDs().includes('permission')) setComposerMoreOpen(true);
     setPermissionMenuIndexForType(permissionType);
     setPermissionMenuOpen(true);
-    queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
+    queueMicrotask(() => requestAnimationFrame(() => { if (permissionMenuOpen()) focusPermissionMenuItem(permissionMenuActiveIndex()); }));
   };
   createEffect(() => {
     const suspended = surfaceReadOnly() || !settingsReady();
@@ -3065,8 +3077,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const closeThreadSwitcher = (restoreFocus = false) => {
     setThreadSwitcherOpen(false);
     setThreadSwitcherQuery('');
-    if (restoreFocus) queueMicrotask(() => threadSwitcherTriggerRef?.focus());
+    if (restoreFocus) queueMicrotask(() => { if (!threadSwitcherOpen()) threadSwitcherTriggerRef?.focus({ preventScroll: true }); });
   };
+  createEffect(() => {
+    if (!threadSwitcherOpen() || threadSwitcherPresence.state() !== 'open') return;
+    const frame = requestAnimationFrame(() => {
+      if (document.activeElement === threadSwitcherTriggerRef || document.activeElement === document.body) {
+        threadSwitcherPanelRef?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+      }
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
   createEffect(() => {
     if (!threadSwitcherOpen()) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -3101,43 +3122,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
-      if (permissionTriggerRef?.contains(target) || permissionMenuRef?.contains(target)) return;
+      if (permissionTrigger()?.contains(target) || permissionMenuRef?.contains(target)) return;
       closePermissionMenu(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
       closePermissionMenu(true);
     };
-    // Measure in the menu's local coordinates so projected Workbench scale stays owned by Floe.
-    const measureMenu = () => {
-      const menu = permissionMenuRef;
-      if (!menu || !surfaceRef) return;
-      const bounds = menu.getBoundingClientRect();
-      const scale = menu.offsetWidth > 0 ? bounds.width / menu.offsetWidth : 1;
-      const surface = surfaceRef.getBoundingClientRect();
-      const viewport = window.visualViewport;
-      const top = Math.max(surface.top, viewport?.offsetTop ?? 0);
-      const left = Math.max(surface.left, viewport?.offsetLeft ?? 0) + 8;
-      const right = Math.min(surface.right, (viewport?.offsetLeft ?? 0) + (viewport?.width ?? window.innerWidth)) - 8;
-      const priorShift = Number.parseFloat(menu.style.getPropertyValue('--flower-permission-menu-shift-x')) || 0;
-      const originalLeft = bounds.left - priorShift * scale;
-      const shift = Math.max(left, Math.min(originalLeft, right - bounds.width)) - originalLeft;
-      menu.style.setProperty('--flower-permission-menu-shift-x', `${shift / (scale || 1)}px`);
-      menu.style.setProperty('--flower-permission-menu-available-height', `${Math.max(0, (bounds.bottom - top) / (scale || 1) - 8)}px`);
-    };
-    const observer = new ResizeObserver(measureMenu);
-    if (surfaceRef) observer.observe(surfaceRef);
-    if (permissionTriggerRef) observer.observe(permissionTriggerRef);
-    const frame = requestAnimationFrame(measureMenu);
-    window.addEventListener('resize', measureMenu);
-    window.visualViewport?.addEventListener('resize', measureMenu);
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown, true);
     onCleanup(() => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      window.removeEventListener('resize', measureMenu);
-      window.visualViewport?.removeEventListener('resize', measureMenu);
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
     });
@@ -3155,7 +3151,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
-      if (modelTriggerRef?.contains(target) || modelMenuRef?.contains(target)) return;
+      if (modelTrigger()?.contains(target) || modelMenuRef?.contains(target)) return;
       closeModelMenu(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -3439,6 +3435,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!same) setComposerControlLayout(next);
   };
   const measureComposerControls = () => {
+    // Hidden cached pages have no layout box. Keep their last visible toolbar
+    // allocation; a visible zero-width box must still move controls into More.
+    if ((composerControlLayout().availableWidth ?? 0) > 0
+      && composerControlsViewportRef?.getClientRects().length === 0) return;
     const viewportWidth = Math.ceil(
       composerControlsViewportRef?.getBoundingClientRect().width
         || composerControlsViewportRef?.clientWidth
@@ -3494,78 +3494,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleComposerControlMeasure();
   });
   createEffect(() => {
-    if (composerOverflowControlIDs().length === 0) setComposerMoreOpen(false);
-  });
-  const cancelComposerMorePanelPosition = () => {
-    if (!composerMorePanelPositionFrame) return;
-    cancelTranscriptAnimationFrame(composerMorePanelPositionFrame);
-    composerMorePanelPositionFrame = 0;
-  };
-  const composerMorePanelEstimatedSize = (): Readonly<{ width: number; height: number }> => ({
-    width: FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH,
-    height: FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME
-      + composerOverflowControlIDs().length * FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT,
-  });
-  const scheduleComposerMorePanelPosition = () => {
-    cancelComposerMorePanelPosition();
-    composerMorePanelPositionFrame = requestTranscriptAnimationFrame(() => {
-      composerMorePanelPositionFrame = 0;
-      const anchor = composerMoreButtonRef;
-      if (!anchor) return;
-      const rect = anchor.getBoundingClientRect();
-      const estimated = composerMorePanelEstimatedSize();
-      setComposerMorePanelPosition({
-        x: rect.right - estimated.width,
-        y: rect.top - estimated.height - 8,
-      });
-    });
-  };
-  createEffect(() => {
-    if (!modelMenuOpen()) return;
-    const measureMenu = () => {
-      const anchor = modelTriggerRef;
-      const menu = modelMenuRef;
-      if (!anchor || !menu) return;
-      setModelMenuAvailableHeight(Math.max(0, (surfaceRef?.clientHeight || window.innerHeight) - 16));
-      const rect = anchor.getBoundingClientRect();
-      const size = menu.getBoundingClientRect();
-      setModelMenuSize(previous => previous.width === size.width && previous.height === size.height
-        ? previous : { width: size.width, height: size.height });
-      setModelMenuPosition(previous => {
-        const next = { x: rect.left, y: rect.top - size.height - 8 };
-        return previous.x === next.x && previous.y === next.y ? previous : next;
-      });
-    };
-    const observer = new ResizeObserver(measureMenu);
-    if (surfaceRef) observer.observe(surfaceRef);
-    if (modelTriggerRef) observer.observe(modelTriggerRef);
-    if (modelMenuRef) observer.observe(modelMenuRef);
-    const frame = requestAnimationFrame(measureMenu);
-    window.addEventListener('resize', measureMenu);
-    window.visualViewport?.addEventListener('resize', measureMenu);
-    window.addEventListener('scroll', measureMenu, true);
-    onCleanup(() => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      window.removeEventListener('resize', measureMenu);
-      window.visualViewport?.removeEventListener('resize', measureMenu);
-      window.removeEventListener('scroll', measureMenu, true);
-    });
-  });
-  createEffect(() => {
-    if (!composerMoreOpen()) {
-      cancelComposerMorePanelPosition();
-      return;
-    }
-    void composerOverflowControlIDs().join('|');
-    scheduleComposerMorePanelPosition();
-    window.addEventListener('resize', scheduleComposerMorePanelPosition);
-    window.addEventListener('scroll', scheduleComposerMorePanelPosition, true);
-    onCleanup(() => {
-      cancelComposerMorePanelPosition();
-      window.removeEventListener('resize', scheduleComposerMorePanelPosition);
-      window.removeEventListener('scroll', scheduleComposerMorePanelPosition, true);
-    });
+    const overflow = composerOverflowControlIDs();
+    if (overflow.length === 0) setComposerMoreOpen(false);
+    else if ((modelMenuOpen() && overflow.includes('model_reasoning'))
+      || (permissionMenuOpen() && overflow.includes('permission'))) setComposerMoreOpen(true);
   });
   const closeComposerMore = (restoreFocus: boolean) => {
     const closingPanel = composerMorePanelRef;
@@ -3584,10 +3516,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   createEffect(() => {
-    if (!composerMoreOpen()) return;
-    queueMicrotask(() => {
+    if (!composerMoreOpen() || composerMorePresence.state() !== 'open') return;
+    const focusFrame = requestAnimationFrame(() => {
       const panel = composerMorePanelRef;
-      if (!panel || !composerMoreOpen()) return;
+      if (!panel || !composerMoreOpen() || modelMenuOpen() || permissionMenuOpen()) return;
       const target = panel.querySelector<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ) ?? panel;
@@ -3595,24 +3527,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target)) return;
+      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target) || permissionMenuRef?.contains(target) || reasoningMenuRef?.contains(target)) return;
       closeComposerMore(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (permissionMenuOpen() || modelMenuOpen()) return;
+      if (permissionMenuOpen() || modelMenuOpen() || (reasoningMenuRef?.isConnected && !reasoningMenuRef.inert)) return;
       event.preventDefault();
       closeComposerMore(true);
     };
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target as Node | null;
-      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target)) return;
+      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target) || permissionMenuRef?.contains(target) || reasoningMenuRef?.contains(target)) return;
       closeComposerMore(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('focusin', onFocusIn, true);
     onCleanup(() => {
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('focusin', onFocusIn, true);
@@ -5206,7 +5139,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
 
   onMount(() => {
-    setThreadRailWidth(loadThreadRailWidth());
     const adapter = props.adapter;
     const unsubscribe = adapter.subscribeModelDirectory?.(directory => { if (preferenceAdapterCurrent(adapter)) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } });
     onCleanup(() => unsubscribe?.());
@@ -7686,7 +7618,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const measure = () => {
       if (!goalTriggerRef || !goalPanelRef) return;
       const anchor = goalTriggerRef.getBoundingClientRect();
-      const panel = goalPanelRef.getBoundingClientRect();
+      const panel = goalPanelRef.parentElement!.getBoundingClientRect();
       setGoalPopupSize(previous => previous.width === panel.width && previous.height === panel.height ? previous : { width: panel.width, height: panel.height });
       setGoalPopupPosition(previous => previous.x === anchor.right - panel.width && previous.y === anchor.top - panel.height - 8 ? previous : { x: anchor.right - panel.width, y: anchor.top - panel.height - 8 });
     };
@@ -8306,7 +8238,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           )}
         >
           <button
-            ref={permissionTriggerRef}
+            ref={setPermissionTrigger}
             type="button"
             class={cn('flower-permission-trigger', !interactive() && 'flower-permission-trigger-readonly')}
             data-permission-type={composerPermissionType()}
@@ -8329,51 +8261,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <span class="flower-permission-label">{permissionLabel()}</span>
             <span class="flower-permission-saving-dot" aria-hidden="true" style={{ visibility: permissionPatchPending() ? 'visible' : 'hidden' }} />
           </button>
-        </Show>
-        <Show when={permissionMenuOpen()}>
-          <div
-            id="flower-composer-permission-menu"
-            ref={permissionMenuRef}
-            class="flower-permission-menu"
-            data-floe-local-interaction-surface="true"
-            role="listbox"
-            aria-label={copy().chat.permissionSelectorLabel}
-            aria-activedescendant={permissionOptionID(FLOWER_PERMISSION_TYPES[permissionMenuActiveIndex()] ?? composerPermissionType() ?? 'readonly')}
-            onKeyDown={handlePermissionMenuKeyDown}
-          >
-            <For each={FLOWER_PERMISSION_TYPES}>
-              {(permissionType, index) => {
-                const itemCopy = createMemo(() => copy().settings.permissionTypes[permissionType]);
-                const selected = createMemo(() => composerPermissionType() === permissionType);
-                return (
-                  <div class="flower-permission-menu-entry">
-                    <button
-                      id={permissionOptionID(permissionType)}
-                      type="button"
-                      role="option"
-                      tabIndex={permissionMenuActiveIndex() === index() ? 0 : -1}
-                      data-permission-type={permissionType}
-                      aria-selected={selected()}
-                      aria-describedby={`${permissionOptionID(permissionType)}-description`}
-                      class={cn('flower-permission-menu-item', selected() && 'flower-permission-menu-item-active')}
-                      onMouseEnter={() => setPermissionMenuActiveIndex(index())}
-                      onFocus={() => setPermissionMenuActiveIndex(index())}
-                      onClick={() => void updateComposerPermissionType(permissionType)}
-                    >
-                      <span class="flower-permission-menu-row">
-                        <Shield class="flower-permission-menu-icon" />
-                        <span class="flower-permission-menu-label">{itemCopy().label}</span>
-                        <Show when={selected()}>
-                          <Check class="flower-permission-menu-check" aria-hidden="true" />
-                        </Show>
-                      </span>
-                    </button>
-                    <span id={`${permissionOptionID(permissionType)}-description`} class="flower-permission-menu-description">{itemCopy().description}</span>
-                  </div>
-                );
-              }}
-            </For>
-          </div>
         </Show>
       </div>
     );
@@ -9756,7 +9643,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const anchor = composerRef?.closest<HTMLElement>('.flower-composer');
       const rect = anchor?.getBoundingClientRect();
       if (!rect) return;
-      const measuredHeight = composerReferenceMenuRef?.getBoundingClientRect().height;
+      const measuredHeight = composerReferenceMenuRef?.parentElement?.getBoundingClientRect().height;
       const height = measuredHeight && measuredHeight > 0
         ? measuredHeight
         : composerReferenceMenuHeight();
@@ -13435,55 +13322,110 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
+  const permissionMenu = () => (
+    <Show when={permissionMenuPresence.mounted()}>
+      <SurfaceAnchoredLayer anchor={permissionTrigger()} gap={8} class="flower-permission-menu-layer"
+        style={{ 'z-index': 'calc(var(--flower-layer-subagent-dropdown, 120) + 2)' }}
+        onAnchorDisconnect={() => closePermissionMenu(false)} data-flower-floating-layer="true">
+        <div
+          id="flower-composer-permission-menu"
+          ref={permissionMenuRef}
+          class="flower-permission-menu floe-floating-presence floe-floating-menu"
+          data-floe-surface="floating"
+          data-floating-presence={permissionMenuPresence.state()}
+          aria-hidden={permissionMenuPresence.exiting() ? 'true' : undefined}
+          inert={permissionMenuPresence.exiting()}
+          data-floe-local-interaction-surface="true"
+          role="listbox"
+          aria-label={copy().chat.permissionSelectorLabel}
+          aria-activedescendant={permissionOptionID(FLOWER_PERMISSION_TYPES[permissionMenuActiveIndex()] ?? composerPermissionType() ?? 'readonly')}
+          onKeyDown={handlePermissionMenuKeyDown}
+        >
+          <For each={FLOWER_PERMISSION_TYPES}>
+            {(permissionType, index) => {
+              const itemCopy = createMemo(() => copy().settings.permissionTypes[permissionType]);
+              const selected = createMemo(() => composerPermissionType() === permissionType);
+              return (
+                <div class="flower-permission-menu-entry">
+                  <button
+                    id={permissionOptionID(permissionType)}
+                    type="button"
+                    role="option"
+                    tabIndex={permissionMenuActiveIndex() === index() ? 0 : -1}
+                    data-permission-type={permissionType}
+                    aria-selected={selected()}
+                    aria-describedby={`${permissionOptionID(permissionType)}-description`}
+                    class={cn('flower-permission-menu-item', selected() && 'flower-permission-menu-item-active')}
+                    onMouseEnter={() => setPermissionMenuActiveIndex(index())}
+                    onFocus={() => setPermissionMenuActiveIndex(index())}
+                    onClick={() => void updateComposerPermissionType(permissionType)}
+                  >
+                    <span class="flower-permission-menu-row">
+                      <Shield class="flower-permission-menu-icon" />
+                      <span class="flower-permission-menu-label">{itemCopy().label}</span>
+                      <Show when={selected()}>
+                        <Check class="flower-permission-menu-check" aria-hidden="true" />
+                      </Show>
+                    </span>
+                  </button>
+                  <span id={`${permissionOptionID(permissionType)}-description`} class="flower-permission-menu-description">{itemCopy().description}</span>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      </SurfaceAnchoredLayer>
+    </Show>
+  );
+
   const modelMenu = () => (
-    <Show when={modelMenuOpen()}>
-      <SurfaceFloatingLayer
-        owner={modelTriggerRef}
-        position={modelMenuPosition()}
-        estimatedSize={modelMenuSize()}
-        class="flower-model-menu-layer"
-        style={{ '--flower-model-menu-available-height': `${modelMenuAvailableHeight()}px` } as JSX.CSSProperties}
-        data-flower-floating-layer="true"
-      >
-      <div
-        ref={modelMenuRef}
-        class="flower-model-menu"
-        role="dialog"
-        aria-label={copy().settings.dialog.catalog.search}
-        onKeyDown={handleModelMenuKeyDown}
-      >
-        <div class="flower-model-menu-header">
-          <span class="flower-model-menu-heading" title={copy().settings.selectModelPlaceholder}>{copy().settings.selectModelPlaceholder}</span>
-          <div class="flower-model-menu-search-field">
-            <Input ref={modelSearchRef} class="flower-model-menu-search" leftIcon={<Search class="flower-model-menu-search-icon" aria-hidden="true" />} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
+    <Show when={modelMenuPresence.mounted()}>
+      <SurfaceAnchoredLayer anchor={modelTrigger()} gap={8}
+        class="flower-model-menu-layer" style={{ 'z-index': 'calc(var(--flower-layer-subagent-dropdown, 120) + 2)' }} onAnchorDisconnect={() => closeModelMenu(false)}
+        data-flower-floating-layer="true">
+        <div
+          ref={modelMenuRef}
+          class="flower-model-menu floe-floating-presence floe-floating-menu"
+          data-floe-surface="floating"
+          data-floating-presence={modelMenuPresence.state()}
+          aria-hidden={modelMenuPresence.exiting() ? 'true' : undefined}
+          inert={modelMenuPresence.exiting()}
+          role="dialog"
+          aria-label={copy().settings.dialog.catalog.search}
+          onKeyDown={handleModelMenuKeyDown}
+        >
+          <div class="flower-model-menu-header">
+            <span class="flower-model-menu-heading" title={copy().settings.selectModelPlaceholder}>{copy().settings.selectModelPlaceholder}</span>
+            <div class="flower-model-menu-search-field">
+              <Input ref={modelSearchRef} class="flower-model-menu-search" leftIcon={<Search class="flower-model-menu-search-icon" aria-hidden="true" />} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
+            </div>
+            <button type="button" class="flower-model-menu-close" aria-label={copy().settings.closeModelSelection} title={copy().settings.closeModelSelection} onClick={() => closeModelMenu(true)}><X aria-hidden="true" /></button>
           </div>
-          <button type="button" class="flower-model-menu-close" aria-label={copy().settings.closeModelSelection} title={copy().settings.closeModelSelection} onClick={() => closeModelMenu(true)}><X aria-hidden="true" /></button>
-        </div>
-        <div class="flower-model-menu-list" role="listbox" aria-label={copy().settings.dialog.catalog.search}>
-          <Show when={menuModelOptions().models.length} fallback={<p class="flower-model-menu-empty">{copy().settings.dialog.catalog.empty}</p>}>
-            <For each={groupedModelOptions()}>{(group, index) => (
-              <div class={cn('flower-model-menu-group', index() > 0 && 'flower-model-menu-group-separated')} data-model-source-group={group.source} role="group" aria-label={group.label}>
-                <div class="flower-model-menu-group-label">{group.label}</div>
-                <For each={group.options}>{modelMenuItem}</For>
-              </div>
-            )}</For>
+          <div class="flower-model-menu-list" role="listbox" aria-label={copy().settings.dialog.catalog.search}>
+            <Show when={menuModelOptions().models.length} fallback={<p class="flower-model-menu-empty">{copy().settings.dialog.catalog.empty}</p>}>
+              <For each={groupedModelOptions()}>{(group, index) => (
+                <div class={cn('flower-model-menu-group', index() > 0 && 'flower-model-menu-group-separated')} data-model-source-group={group.source} role="group" aria-label={group.label}>
+                  <div class="flower-model-menu-group-label">{group.label}</div>
+                  <For each={group.options}>{modelMenuItem}</For>
+                </div>
+              )}</For>
+            </Show>
+          </div>
+          <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
+            <Button class="flower-model-menu-expand" size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
           </Show>
+          <Show when={modelAvailabilityChecking() || modelDirectory()?.error || selectedModelNeedsAttention()}>
+            <p class={modelAvailabilityChecking() ? "flower-visually-hidden" : "flower-model-menu-status"} role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking
+              : modelDirectory()?.error === 'directory_timeout' ? copy().chat.modelsCheckTimedOut
+              : modelDirectory()?.error ? copy().chat.modelsCheckFailed : selectedModelAvailabilityMessage()}</p>
+          </Show>
+          <div class="flower-model-menu-footer">
+            <Button class="flower-model-menu-action" size="xs" variant="ghost" icon={Refresh} loading={modelAvailabilityChecking()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
+            <Button class="flower-model-menu-action flower-model-menu-manage" size="xs" variant="ghost" icon={Settings} onClick={() => { closeModelMenu(false); openSettings(); }}>{copy().settings.dialog.catalog.manage}</Button>
+          </div>
+          {modelSourceStatusRow('menu')}
         </div>
-        <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
-          <Button class="flower-model-menu-expand" size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
-        </Show>
-        <Show when={modelAvailabilityChecking() || modelDirectory()?.error || selectedModelNeedsAttention()}>
-          <p class={modelAvailabilityChecking() ? "flower-visually-hidden" : "flower-model-menu-status"} role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking
-            : modelDirectory()?.error === 'directory_timeout' ? copy().chat.modelsCheckTimedOut
-            : modelDirectory()?.error ? copy().chat.modelsCheckFailed : selectedModelAvailabilityMessage()}</p>
-        </Show>
-        <div class="flower-model-menu-footer">
-          <Button class="flower-model-menu-action" size="xs" variant="ghost" icon={Refresh} loading={modelAvailabilityChecking()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
-          <Button class="flower-model-menu-action flower-model-menu-manage" size="xs" variant="ghost" icon={Settings} onClick={() => { closeModelMenu(false); openSettings(); }}>{copy().settings.dialog.catalog.manage}</Button>
-        </div>
-        {modelSourceStatusRow('menu')}
-      </div>
-      </SurfaceFloatingLayer>
+      </SurfaceAnchoredLayer>
     </Show>
   );
 
@@ -13527,7 +13469,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-model-pending={modelPatchPending() ? 'true' : 'false'}
       >
         <button
-          ref={modelTriggerRef}
+          ref={setModelTrigger}
           type="button"
           class="flower-model-reasoning-model-trigger"
           disabled={!composerModelInteractive() || modelPatchPending()}
@@ -13548,7 +13490,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
           <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
         </button>
-        {modelMenu()}
         <Show when={composerReasoningVisible() || composerReasoningLoading()}>
           <span class="flower-model-reasoning-divider" aria-hidden="true" />
           <Show when={!composerReasoningLoading()} fallback={
@@ -13559,6 +13500,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <FlowerReasoningControl
               copy={copy().reasoningControl}
               compact
+              onMenuElement={element => { reasoningMenuRef = element; }}
               variant="segment"
               capability={selectedReasoningCapability()}
               selection={composerReasoningSelection()}
@@ -13654,17 +13596,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const composerMorePanel = () => (
-    <Show when={composerMoreOpen() && composerOverflowControlIDs().length > 0}>
-      <SurfaceFloatingLayer
-        owner={composerMoreButtonRef}
-        position={composerMorePanelPosition()}
-        estimatedSize={composerMorePanelEstimatedSize()}
+    <Show when={composerMorePresence.mounted() && composerOverflowControlIDs().length > 0}>
+      <SurfaceAnchoredLayer
+        anchor={composerMoreButtonRef}
+        gap={8}
+        onAnchorDisconnect={() => closeComposerMore(false)}
+        style={{ 'z-index': 'var(--flower-layer-subagent-dropdown, 120)' }}
         class="flower-composer-more-layer"
         data-flower-floating-layer="true"
       >
         <div
           ref={composerMorePanelRef}
-          class="flower-composer-more-panel"
+          class="flower-composer-more-panel floe-floating-presence floe-floating-menu"
+          data-floe-surface="floating"
+          data-floating-presence={composerMorePresence.state()}
+          aria-hidden={composerMorePresence.exiting() ? 'true' : undefined}
+          inert={composerMorePresence.exiting()}
           role="dialog"
           aria-label={copy().chat.composerMoreLabel}
           tabIndex={-1}
@@ -13679,7 +13626,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             )}
           </For>
         </div>
-      </SurfaceFloatingLayer>
+      </SurfaceAnchoredLayer>
     </Show>
   );
 
@@ -13736,8 +13683,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
+  const composerReferencePresence = createFloatingPresence({ open: composerReferenceMenuVisible, element: () => composerReferenceMenuRef });
   const composerReferenceMenu = () => (
-    <Show when={composerReferenceMenuVisible()}>
+    <Show when={composerReferencePresence.mounted()}>
       <SurfaceFloatingLayer
         owner={composerRef}
         position={composerReferenceMenuPosition()}
@@ -13751,7 +13699,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div
           ref={composerReferenceMenuRef}
           id={FLOWER_COMPOSER_REFERENCE_MENU_ID}
-          class="flower-composer-reference-menu"
+          class="flower-composer-reference-menu floe-floating-presence floe-floating-menu"
+          data-floe-surface="floating"
+          data-floating-presence={composerReferencePresence.state()}
+          aria-hidden={composerReferencePresence.exiting() ? 'true' : undefined}
+          inert={composerReferencePresence.exiting()}
           style={{ '--flower-composer-reference-width': `${composerReferenceMenuWidth()}px` } as JSX.CSSProperties}
           role="listbox"
           aria-label={copy().chat.composerReferencesLabel}
@@ -13879,9 +13831,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <ChevronDown class="flower-companion-thread-trigger-chevron h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Show>
       </button>
-      <Show when={threadSwitcherOpen() && props.companionCopy}>
+      <Show when={threadSwitcherPresence.mounted() && props.companionCopy}>
         {(switcherCopy) => (
-          <div class="flower-companion-thread-switcher-popover">
+          <div ref={threadSwitcherPanelRef} class="flower-companion-thread-switcher-popover floe-floating-presence floe-floating-menu"
+            data-floating-presence={threadSwitcherPresence.state()}
+            aria-hidden={threadSwitcherPresence.exiting() ? 'true' : undefined} inert={threadSwitcherPresence.exiting()}>
             <FlowerThreadSwitcher
               items={companionThreadItems()}
               activeThreadID={activeThreadID()}
@@ -13999,6 +13953,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
+  const goalPresence = createFloatingPresence({ open: goalPopupOpen, element: () => goalPanelRef });
+  let composerCommandMenuRef: HTMLDivElement | undefined;
+  const commandPresence = createFloatingPresence({ open: composerCommandMenuVisible, element: () => composerCommandMenuRef });
   const goalControls = () => (
     <Show when={selectedGoal()?.status !== 'completed' && (selectedGoal()?.text || goalEditor())}>
       <button ref={goalTriggerRef} type="button" class="flower-goal-tag" aria-label={copy().chat.goalTitle}
@@ -14007,9 +13964,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <FlowerGoalIcon size={13} strokeWidth={1.65} aria-hidden="true" />{copy().chat.goalTitle}
         <Show when={selectedGoal()?.reviewing}><span class="flower-visually-hidden" role="status">{copy().chat.goalReviewing}</span></Show>
       </button>
-      <Show when={goalPopupOpen()}>
+      <Show when={goalPresence.mounted()}>
         <SurfaceFloatingLayer owner={goalTriggerRef} position={goalPopupPosition()} estimatedSize={goalPopupSize()} class="flower-goal-layer" data-flower-floating-layer="true">
-          <div ref={goalPanelRef} role="dialog" aria-label={copy().chat.goalTitle} class="flower-goal-popup" data-floe-surface="floating">
+          <div ref={goalPanelRef} role="dialog" aria-label={copy().chat.goalTitle} class="flower-goal-popup floe-floating-presence floe-floating-menu" data-floe-surface="floating"
+            data-floating-presence={goalPresence.state()} aria-hidden={goalPresence.exiting() ? 'true' : undefined} inert={goalPresence.exiting()}>
             <div class="flower-goal-popup-header"><span class="flower-goal-popup-title"><FlowerGoalIcon size={15} strokeWidth={1.65} aria-hidden="true" />{copy().chat.goalTitle}</span>
               <div class="flower-goal-popup-controls">
                 <button type="button" aria-label={copy().chat.goalDelete} title={copy().chat.goalDelete} disabled={goalPopupLoad() !== 'ready' || goalCurrentVersionSeen() === undefined || !selectedGoal()?.text || goalPending() || goalComposing() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('delete', '')}><Trash class="h-3.5 w-3.5" /></button>
@@ -14130,11 +14088,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <div class="flower-composer-anchor">
               <Show when={bottomActionMode() !== 'approval'}>
                 {composerReferenceMenu()}
-                <Show when={composerCommandMenuVisible()}>
+                <Show when={commandPresence.mounted()}>
                   <div
                     id={FLOWER_COMPOSER_COMMAND_MENU_ID}
                     data-floe-surface="floating"
-                    class="flower-composer-command-menu"
+                    class="flower-composer-command-menu floe-floating-presence floe-floating-menu"
+                    ref={composerCommandMenuRef}
+                    data-floating-presence={commandPresence.state()}
+                    aria-hidden={commandPresence.exiting() ? 'true' : undefined}
+                    inert={commandPresence.exiting()}
                     role="listbox"
                     aria-label={copy().chat.commandMenuLabel}
                     aria-activedescendant={flowerComposerCommandOptionID(composerCommandSuggested())}
@@ -15146,6 +15108,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         '--flower-thread-drawer-width': navigationOverlay() && !mobileNavigation() ? `${threadRailWidth()}px` : undefined,
       }}
     >
+      {modelMenu()}
+      {permissionMenu()}
       <Show when={!initialConversationPending()} fallback={warmupPanel(true)}>
       <Show when={!settingsDialogPresent()}><div hidden inert aria-hidden="true"><SettingsContent /></div></Show>
       <DialogPlacementProvider mode="global">

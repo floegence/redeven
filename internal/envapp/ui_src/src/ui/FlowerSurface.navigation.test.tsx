@@ -653,8 +653,8 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => runtime.querySelector('[data-permission-type="full_access"]') !== null);
     (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('[data-permission-type="approval_required"].flower-permission-menu-item') !== null);
-    (runtime.querySelector('[data-permission-type="approval_required"].flower-permission-menu-item') as HTMLButtonElement).click();
+    await waitFor(() => document.querySelector('[data-permission-type="approval_required"].flower-permission-menu-item') !== null);
+    (document.querySelector('[data-permission-type="approval_required"].flower-permission-menu-item') as HTMLButtonElement).click();
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'use an explicit approval override';

@@ -1509,7 +1509,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-top: 0.5rem;
+  margin-top: 0.625rem;
   overflow: visible;
 }
 
@@ -1653,12 +1653,10 @@
   display: grid;
   width: 100%;
   gap: 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-plane-float);
   padding: 0.35rem;
-  box-shadow:
-    0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
 }
 
 .flower-composer-more-row {
@@ -1882,9 +1880,9 @@
   width: min(32rem, 100%);
   margin: 0 auto;
   gap: 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 74%, transparent);
-  border-radius: 0.875rem;
-  background: var(--card);
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-plane-float);
   padding: 0.35rem;
 }
 
@@ -1902,16 +1900,11 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 1px solid color-mix(
-    in srgb,
-    var(--flower-chat-surface-border, var(--border)) 88%,
-    var(--foreground) 12%
-  );
-  border-radius: 8px;
-  background: var(--popover, var(--flower-chat-surface-elevated, var(--background)));
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-plane-float);
   padding: 0.25rem;
   color: var(--foreground);
-  box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
   backdrop-filter: none;
 }
 
@@ -2212,6 +2205,7 @@
     0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
+/* Keep disclosures mounted; Floe owns the reversible visual presence. */
 .flower-composer-context-tooltip {
   box-sizing: border-box;
   position: relative;
@@ -2221,26 +2215,15 @@
   overscroll-behavior: contain;
   pointer-events: none;
   scrollbar-width: thin;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
-  border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--popover, var(--flower-chat-surface-elevated)) 96%, var(--background) 4%);
-  padding: 0.625rem;
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-plane-float);
+  padding: 0.75rem;
   color: var(--popover-foreground, var(--foreground));
-  box-shadow:
-    0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
-  visibility: hidden;
-  opacity: 0;
-  transform: translateY(0.2rem);
-  transition:
-    opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
 }
 
 .flower-composer-context-tooltip[data-open='true'] {
   pointer-events: auto;
-  visibility: visible;
-  opacity: 1;
-  transform: translateY(0);
-  transition-delay: 0s;
 }
 
 
@@ -2376,31 +2359,19 @@
 }
 
 .flower-permission-menu {
-  position: absolute;
-  bottom: calc(100% + 0.45rem);
-  left: 0;
-  z-index: 5;
   display: grid;
   width: min(16rem, 84vw);
-  max-height: min(22rem, var(--flower-permission-menu-available-height, 50dvh));
-  transform: translateX(var(--flower-permission-menu-shift-x, 0px));
+  max-height: min(22rem, var(--floe-anchored-layer-max-height, 50dvh));
   overflow-y: auto;
   overscroll-behavior: contain;
   gap: 0.125rem;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-plane-float);
   padding: 0.25rem;
-  box-shadow:
-    0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
 }
 
-.flower-composer-more-control .flower-permission-menu {
-  right: 0;
-  left: auto;
-}
-
-.flower-permission-menu-entry { position: relative; min-width: 0; border-radius: .375rem; }
+.flower-permission-menu-entry { position: relative; min-width: 0; border-radius: var(--floe-radius-control); }
 .flower-permission-menu-item::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
 
 .flower-permission-menu-item {
@@ -2412,10 +2383,10 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 0.125rem;
   border: 0;
-  border-radius: 0.375rem;
+  border-radius: var(--floe-radius-control);
   background: transparent;
   color: var(--foreground);
-  padding: 0.25rem 0.375rem;
+  padding: 0.5rem 0.625rem;
   line-height: 1.125rem;
   text-align: left;
   transition:
@@ -2453,13 +2424,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--floe-type-caption);
+  font-size: var(--floe-type-supporting);
   font-weight: 500;
 }
 
 .flower-permission-menu-description {
   display: block;
-  padding: 0 .375rem .25rem;
+  padding: 0 0.625rem 0.5rem;
   white-space: normal;
   overflow-wrap: anywhere;
   color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 8%);
@@ -2552,7 +2523,7 @@
   display: inline-flex;
   min-width: 0;
   max-width: min(17rem, 52vw);
-  height: 1.5rem;
+  height: var(--floe-control-height-sm);
   flex: 0 1 auto;
   align-items: stretch;
   overflow: visible;
@@ -2582,7 +2553,7 @@
   justify-content: center;
   gap: 0.25rem;
   border: 0;
-  border-radius: 0.25rem;
+  border-radius: var(--floe-radius-control);
   background: transparent;
   color: inherit;
   padding: 0 0.35rem 0 0.5rem;
@@ -2628,31 +2599,28 @@
 }
 
 .flower-model-menu-layer {
-  width: min(17rem, calc(100% - 1rem));
+  width: min(20rem, calc(100% - 1rem));
 }
 
 .flower-model-menu {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: min(20rem, 64vh, var(--flower-model-menu-available-height, 20rem));
+  max-height: min(20rem, 64vh, var(--floe-anchored-layer-max-height, 20rem));
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  border-radius: 0.5rem;
-  background: var(--popover, var(--background));
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-plane-float);
   color: var(--popover-foreground, var(--foreground));
-  font-size: 0.625rem;
-  box-shadow:
-    0 2px 6px -2px color-mix(in srgb, var(--redeven-surface-shadow-source) 12%, transparent),
-    0 18px 48px -12px color-mix(in srgb, var(--redeven-surface-shadow-source) 24%, transparent);
+  font-size: var(--floe-type-supporting);
 }
 
 .flower-model-menu-header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.375rem;
+  gap: 0.5rem;
+  padding: 0.625rem;
 }
 .flower-model-menu-heading {
   min-width: 0;
@@ -2683,16 +2651,15 @@
 .flower-model-menu-close:hover { background: var(--muted); color: var(--foreground); }
 .flower-model-menu-close:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .flower-model-menu-search {
-  --floe-input-focus-color: color-mix(in srgb, var(--ring) 38%, var(--border));
-  height: 1.5rem;
-  border: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
-  border-radius: 0.25rem;
-  background: color-mix(in srgb, var(--muted) 48%, var(--popover, var(--background)));
+  height: var(--floe-control-height-sm);
+  border: 1px solid var(--floe-field-edge);
+  border-radius: var(--floe-radius-control);
+  background: var(--floe-field-fill);
   padding-inline-start: 1.75rem;
   box-shadow: none;
 }
 @media (pointer: fine) {
-  .flower-model-menu-search { font-size: 0.625rem; }
+  .flower-model-menu-search { font-size: var(--floe-type-supporting); }
 }
 .flower-model-menu-search-icon { width: 0.75rem; height: 0.75rem; }
 .flower-model-menu-list {
@@ -2701,7 +2668,7 @@
   flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 0 0.25rem 0.25rem;
+  padding: 0.375rem;
   overscroll-behavior: contain;
   scroll-padding-block: 0.5rem;
 }
@@ -2739,24 +2706,24 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 1.5rem;
+  min-height: var(--floe-row-height);
   cursor: pointer;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.5rem;
   border: 1px solid transparent;
-  border-radius: 0.25rem;
+  border-radius: var(--floe-radius-control);
   background: transparent;
   color: var(--foreground);
-  padding: 0.125rem 0.25rem;
-  line-height: 0.875rem;
+  padding: 0.25rem 0.5rem;
+  line-height: var(--floe-line-control);
   text-align: start;
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.flower-model-menu-item:hover { background: color-mix(in srgb, var(--primary) 4%, transparent); }
+.flower-model-menu-item:hover { background: var(--floe-state-hover); }
 .flower-model-menu-item-active {
-  border-color: color-mix(in srgb, var(--primary) 12%, transparent);
-  background: color-mix(in srgb, var(--primary) 6%, var(--popover, var(--background)));
+  border-color: transparent;
+  background: var(--floe-state-selected);
 }
 .flower-model-menu-item-active:hover { background: color-mix(in srgb, var(--primary) 9%, var(--popover, var(--background))); }
 .flower-model-menu-item-active .flower-model-menu-name { font-weight: 600; }
@@ -2785,7 +2752,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.625rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 500;
 }
 .flower-model-menu-unavailable {
@@ -2821,10 +2788,10 @@
   min-width: 0;
   overflow: hidden;
   color: var(--muted-foreground);
-  padding: 0.25rem 0.3125rem 0.125rem;
+  padding: 0.5rem 0.625rem 0.25rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.5625rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   letter-spacing: 0.025em;
   line-height: 0.75rem;
@@ -3081,38 +3048,27 @@
 }
 
 .flower-reasoning-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.375rem);
-  z-index: 40;
   display: grid;
   min-width: 7rem;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
-  box-shadow:
-    0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-plane-float);
   padding: 0.25rem;
-}
-
-.flower-reasoning-menu-segment {
-  right: 0;
-  bottom: calc(100% + 0.45rem);
 }
 
 .flower-reasoning-menu-item {
   display: flex;
-  height: 1.75rem;
+  height: var(--floe-row-height);
   cursor: pointer;
   align-items: center;
   justify-content: flex-start;
   border: 0;
-  border-radius: 0.4375rem;
+  border-radius: var(--floe-radius-control);
   background: transparent;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   padding: 0 0.55rem;
-  font-size: var(--floe-type-caption);
+  font-size: var(--floe-type-supporting);
   font-weight: 500;
   line-height: 1;
   text-align: left;
@@ -8313,9 +8269,8 @@ button.flower-composer-context-source:focus-visible,
   padding: var(--floe-gap-inline);
   border: 1px solid var(--floe-line);
   border-radius: var(--floe-radius-control);
-  background: var(--popover, var(--flower-chat-surface-elevated, var(--card)));
+  background: var(--floe-plane-float);
   color: var(--popover-foreground, var(--foreground));
-  box-shadow: var(--floe-elevation-float);
 }
 
 .flower-thread-menu-item {
@@ -8500,9 +8455,9 @@ button.flower-composer-context-source:focus-visible,
 
 /* The companion owns the collapsed outline; only an open editor paints its own surface. */
 .flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer {
-  border: 1px solid var(--input);
-  border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--background) 50%, var(--card));
+  border: 1px solid var(--floe-field-edge);
+  border-radius: var(--floe-radius-panel);
+  background: var(--floe-field-fill);
 }
 
 .flower-approval-surface .flower-approval-operation {
@@ -9035,6 +8990,11 @@ button.flower-composer-context-source:focus-visible,
 .flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer[data-flower-bottom-mode='chat'] {
   min-height: 5.25rem;
   padding: 0.625rem;
+}
+
+.flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] {
+  min-height: 6rem;
+  padding: 0.875rem;
 }
 
 .flower-decision-surface[data-flower-bottom-mode='input_request'] textarea,
@@ -12352,7 +12312,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-goal-tag[data-goal-status='completed'] > svg { color: var(--muted-foreground); }
 .flower-goal-tag:focus-visible, .flower-goal-history summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .flower-goal-layer { width: min(22rem, calc(100vw - 1.5rem)); max-width: 100%; }
-.flower-goal-popup { width: 100%; display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; border: 0; border-radius: 0.875rem; background: var(--popover, var(--background)); color: var(--foreground); box-shadow: 0 4px 12px -4px var(--redeven-shadow-color), 0 16px 40px -8px var(--redeven-shadow-color); }
+.flower-goal-popup { width: 100%; display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; border: 0; border-radius: var(--floe-radius-panel); background: var(--floe-plane-float); color: var(--foreground); }
 .flower-goal-popup-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: 0.75rem; font-weight: 600; }
 .flower-goal-popup-title { display: inline-flex; align-items: center; gap: 0.4rem; }
 .flower-goal-popup-title > svg { color: var(--muted-foreground); }
