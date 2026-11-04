@@ -310,3 +310,28 @@ func computerObservationStage(stage string) string {
 		return "unknown"
 	}
 }
+
+// Connection facts describe the failed stage, without classifying retry safety.
+type computerConnectionError struct {
+	cause      error
+	diagnostic map[string]any
+}
+
+func (e *computerConnectionError) Error() string { return e.cause.Error() }
+func (e *computerConnectionError) Unwrap() error { return e.cause }
+func computerConnectionDiagnostic(raw map[string]any) map[string]any {
+	phase, reason := anyToString(raw["phase"]), anyToString(raw["reason"])
+	if phase != "tab_lookup" && phase != "tab_restore" && phase != "debugger_attach" && phase != "binding_validation" {
+		return nil
+	}
+	switch reason {
+	case "unknown", "cancelled", "timed_out", "restored_document_changed", "restored_document_unavailable", "restored_document_failed", "restored_tab_closed":
+	default:
+		reason = "unknown"
+	}
+	out := map[string]any{"phase": phase, "reason": reason}
+	if n, ok := raw["elapsed_ms"].(float64); ok && n >= 0 && n <= 60000 {
+		out["elapsed_ms"] = n
+	}
+	return out
+}

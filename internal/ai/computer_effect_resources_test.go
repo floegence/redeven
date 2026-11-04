@@ -85,7 +85,7 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 					t.Fatalf("normal dispatch: %+v %d %d", result, dispatches, handlers)
 				}
 			} else {
-				if !result.IsError || !strings.Contains(result.Text, wantCode) || !strings.Contains(result.Text, "Tool execution has not started") || dispatches != 0 || handlers != 0 || len(executor.calls) != 0 {
+				if !result.IsError || result.Structured["error"].(map[string]any)["code"] != wantCode || !strings.Contains(result.Text, "Tool execution has not started") || dispatches != 0 || handlers != 0 || len(executor.calls) != 0 {
 					t.Fatalf("failure reached execution or lost facts: %+v dispatches=%d handlers=%d effects=%+v", result, dispatches, handlers, executor.calls)
 				}
 				if strings.Contains(result.Text, "computer.targets") || strings.Contains(result.Text, "computer.select_target:") {

@@ -34,7 +34,7 @@ test('canceled restoration releases listeners and never repeats the reload', asy
   const f = fixture(), abort = new AbortController();
   const restored = restoreDiscardedTab(f.browser, { id: 7, discarded: true }, abort.signal);
   await new Promise(resolve => setImmediate(resolve));
-  abort.abort(); await assert.rejects(restored, /restoration_cancelled/);
+  abort.abort(); await assert.rejects(restored, {connectionReason:'cancelled'});
   f.ready();
   assert.equal(f.reloads(), 1);
   assert.equal(f.browser.webNavigation.onDOMContentLoaded.listeners.size, 0);
@@ -49,7 +49,7 @@ test('cancellation settles even while the native reload reply is pending', async
   const restored = restoreDiscardedTab(f.browser, { id: 7, discarded: true }, abort.signal);
   await new Promise(resolve => setImmediate(resolve));
   abort.abort();
-  await assert.rejects(restored, /restoration_cancelled/);
+  await assert.rejects(restored, {connectionReason:'cancelled'});
   assert.equal(f.browser.webNavigation.onDOMContentLoaded.listeners.size, 0);
   finishReload();
 });
@@ -61,7 +61,7 @@ test('failed and removed restored documents fail without replay or activation', 
     await new Promise(resolve => setImmediate(resolve));
     if (failure === 'navigation') f.browser.webNavigation.onErrorOccurred.emit({ tabId: 7, frameId: 0 });
     else f.browser.tabs.onRemoved.emit(7);
-    await assert.rejects(restored, failure === 'navigation' ? /restored_document_failed/ : /restored_tab_closed/);
+    await assert.rejects(restored, {connectionReason:failure === 'navigation'?'restored_document_failed':'restored_tab_closed'});
     assert.equal(f.reloads(), 1);
     assert.equal(f.browser.webNavigation.onDOMContentLoaded.listeners.size, 0);
   }

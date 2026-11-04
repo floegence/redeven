@@ -24,6 +24,8 @@ facts and preserve URL query/fragment while removing credentials. Password/OTP
 subtrees, including closed shadow roots, retain the privacy boundary. Source data
 never grants iframe, filesystem, clipboard or application authority.
 
+Browser AX child_refs retain ignored and DOM-less records as read-only refs in the existing owner; source reads validate AX/document identity without actionability. DOM-less records retain an ancestor privacy anchor and cannot authorize input. All declared child IDs must resolve or the read fails explicitly, never reports a false empty list.
+
 No separate source store is introduced. Ref retention is bounded; read returned
 refs before requesting distant pages. Source changes, detached DOM nodes and
 replaced windows reject stale refs. A missing source fact is never synthesized.

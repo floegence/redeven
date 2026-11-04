@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -18,12 +17,11 @@ type computerAuthorizedCandidateKey struct{}
 type computerAuthorizedNavigationKey struct{}
 
 func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) (resources []fltools.ResourceRef, resourceErr error) {
-	// Floret renders resource extraction failures as text, before dispatch. Keep
-	// the stable classification and execution boundary in that text.
+	// Publish typed preparation facts before dispatch; the engine owns Activity.
 	defer func() {
 		if resourceErr != nil {
 			failure := aitools.ClassifyError(resourceErr)
-			resourceErr = fmt.Errorf("%s: %w Tool execution has not started; no action was executed.", failure.Code, resourceErr)
+			resourceErr = &fltools.PreparationError{Code: string(failure.Code), Message: failure.Message + " Tool execution has not started; no action was executed.", Cause: resourceErr}
 		}
 	}()
 	if inv.Name == "computer.targets" {

@@ -30,3 +30,5 @@ A launch or installation acknowledgement cannot resume a task. Unreadable status
 - `redeven:internal/ai/computer_extension_diagnostics.go` - Source.
 - `redeven:internal/ai/computer_extension_onboarding.go` - Source.
 - `redeven:internal/ai/computer_extension_diagnostics_test.go` - Tests.
+
+Connection failure carries stage, known reason or unknown, elapsed time and binding when available; extension tab lookup/restoration/debugger attachment/validation facts survive transport. Source closure reports explicit removal, owner close, browser disconnect or host shutdown, without treating a read failure as closure. Resource preparation uses published Floret PreparationError with execution.started:false before handler/authorization; retired registry targets classify TARGET_UNAVAILABLE. None authorizes replay.

@@ -40,7 +40,7 @@ Text layout uses Range rectangles; elements/documents use native geometry. Unsup
 ## Bounded reads/input
 Validate whole operation before virtual focus/scroll/input. Diagnostics contain phase/field/expected/recovery, not secrets/page errors. Keys are characters/documented names with Alt/Control/Meta/Shift; physical Equal invalid. Primitive computer.wait defaults zero, no settling promise; legacy waitFor retains state.
 
-query(limit,cursor) reads authorized loaded AX/allowlisted attributes with total/truncation/document/cursor. Content change invalidates cursor; store only returned refs. Page<=200 items/48KiB; virtual unloaded rows unvisited. href retains relative/query/fragment, redacts credentials; linkSummary is normalized, non-actionable and query/fragment-free. Long fields use source reads.
+query(limit,cursor) reads authorized loaded AX/allowlisted attributes with total/truncation/document/cursor. Content change invalidates cursor; store only returned refs. Page<=200 items/48KiB; virtual unloaded rows unvisited. href retains relative/query/fragment, redacts credentials; legacy linkSummary is explicitly lossy and absent from default examples. Long fields use source reads.
 
 rows requires unique table/grid, excludes nested tables, returns header/data/cell roles/source refs. Page<=200 rows/48KiB; row<=200 cells/44KiB; cell<=2000 Unicode characters. cells_truncated/text_truncated disclose loss; incomplete rows prove no exact total. Cursor binds full cell content. count=loaded matches; attribute=string|null. Native rejects browser-only before dispatch.
 

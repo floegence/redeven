@@ -78,6 +78,15 @@ func TestComputerSelectionKeepsBindingWhenInitialObservationFails(t *testing.T) 
 				if kind == "browser.managed" && mode == "success" && payload["observation_status"] != "current" {
 					t.Fatalf("initial snapshot lost freshness: %#v", payload)
 				}
+				if mode == "success" {
+					tree := payload["observation"].(map[string]any)
+					for _, raw := range tree["nodes"].([]any) {
+						node := raw.(map[string]any)
+						if node["platform_role"] == nil || node["canonical_role"] != nil || node["role"] != computerCanonicalRole(anyToString(node["platform_role"])) {
+							t.Fatalf("inconsistent selection role: %#v", node)
+						}
+					}
+				}
 				if mode == "private" && payload["text"] != nil {
 					t.Fatal("private observation escaped")
 				}

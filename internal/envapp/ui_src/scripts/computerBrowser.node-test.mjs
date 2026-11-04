@@ -75,7 +75,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     assert.ok(bounded.nodes[0].child_refs.includes(bounded.nodes[1].ref));
     const perform = async (args) => send('computer.action', args, { script_operation: true });
     const text = await perform({action:'text',selector:{role:'region',name:'Metrics'}});
-    assert.deepEqual({text:text.result.text,truncated:text.result.truncated,scope:text.result.scope},{text:'Revenue 42',truncated:false,scope:'rendered_element'});
+    assert.deepEqual({text:text.result.text,truncated:text.result.truncated,scope:text.result.scope},{text:'Revenue 42',truncated:false,scope:'element'});
     assert.ok(tree.nodes.some(node => node.role === 'RootWebArea'));
     assert.ok(tree.nodes.some(node => node.role === 'StaticText'));
     for (const node of tree.nodes.filter(node => ['RootWebArea', 'StaticText'].includes(node.role))) {
@@ -697,7 +697,7 @@ test('text capability checks retain explicit node scope across documents and SVG
       }
       const root = nodes.find(node => node.role === 'RootWebArea');
       const text = await page.text(await page.resolve({role:'main', root_ref:root.ref}));
-      assert.deepEqual(text, {text:'Visible',truncated:false,scope:'rendered_element'});
+      assert.deepEqual(text, {text:'Visible',truncated:false,scope:'element',source:'browser_dom',property:'innerText'});
     } finally { page.close(); }
   } finally { await browser.close(); }
 });

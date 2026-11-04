@@ -1,6 +1,7 @@
 // Restore only the explicitly selected discarded tab. A debugger attachment can
 // turn discarded=false without loading its document, so capture the native fact
 // before attachment and wait for the new top-level document's own lifecycle.
+const restorationError=reason=>Object.assign(new Error('tab restoration failed'),{connectionReason:reason});
 export async function restoreDiscardedTab(browser, tab, signal) {
   if (!tab.discarded) return;
   signal.throwIfAborted();
@@ -19,12 +20,12 @@ export async function restoreDiscardedTab(browser, tab, signal) {
       if (event.tabId !== tab.id || event.frameId !== 0 || !event.documentId || event.documentId === prior?.documentId) return;
       void browser.webNavigation.getFrame({ tabId: tab.id, frameId: 0 }).then(frame => {
         if (frame?.documentId === event.documentId && frame.documentLifecycle === 'active' && !frame.errorOccurred) finish();
-        else finish(new Error('restored_document_changed'));
-      }, () => finish(new Error('restored_document_unavailable')));
+        else finish(restorationError('restored_document_changed'));
+      }, () => finish(restorationError('restored_document_unavailable')));
     };
-    const failed = event => { if (event.tabId === tab.id && event.frameId === 0) finish(new Error('restored_document_failed')); };
-    const removed = id => { if (id === tab.id) finish(new Error('restored_tab_closed')); };
-    const cancelled = () => finish(new Error('restoration_cancelled'));
+    const failed = event => { if (event.tabId === tab.id && event.frameId === 0) finish(restorationError('restored_document_failed')); };
+    const removed = id => { if (id === tab.id) finish(restorationError('restored_tab_closed')); };
+    const cancelled = () => finish(restorationError(signal.aborted?'cancelled':'timed_out'));
     browser.webNavigation.onDOMContentLoaded.addListener(ready);
     browser.webNavigation.onErrorOccurred.addListener(failed);
     browser.tabs.onRemoved.addListener(removed);

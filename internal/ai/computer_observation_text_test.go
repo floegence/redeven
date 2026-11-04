@@ -148,7 +148,7 @@ func TestComputerObservationTextEscapingAndRoundtrip(t *testing.T) {
 	}
 }
 
-func TestComputerObservationTextDiffRecordsAndReorder(t *testing.T) {
+func TestComputerObservationTextSelfContainedRecordsAndReorder(t *testing.T) {
 	nodes := []any{map[string]any{"ref": "root", "role": "dialog", "name": strings.Repeat("context ", 80), "frame_id": "f", "child_refs": []any{"a", "b"}}, map[string]any{"ref": "a", "parent_ref": "root", "role": "textbox", "name": "A", "value": "old", "frame_id": "f"}, map[string]any{"ref": "b", "parent_ref": "root", "role": "button", "name": "B", "frame_id": "f"}}
 	tree := map[string]any{"document_id": "doc", "truncated": false, "nodes": nodes}
 	var output computerObservationOutput
@@ -156,12 +156,12 @@ func TestComputerObservationTextDiffRecordsAndReorder(t *testing.T) {
 	delete(nodes[1].(map[string]any), "value")
 	nodes[1].(map[string]any)["states"] = map[string]any{"busy": false}
 	diff := output.render(tree, "all", false).(map[string]any)
-	if diff["format"] != "diff" {
-		t.Fatalf("expected sparse diff: %+v", diff)
+	if diff["format"] != "full" {
+		t.Fatalf("expected self-contained view: %+v", diff)
 	}
 	decoded := decodeObservationText(t, diff["tree"].(string))
-	node := decoded[0].(map[string]any)
-	if len(decoded) != 1 || node["parent_ref"] != "root" || node["frame_id"] != "f" || node["value"] != nil {
+	node := decoded[1].(map[string]any)
+	if len(decoded) != 3 || node["parent_ref"] != "root" || node["frame_id"] != "f" || node["value"] != nil {
 		t.Fatalf("diff lost complete replacement facts: %+v", decoded)
 	}
 	tree["nodes"] = []any{nodes[0], nodes[2], nodes[1]}
@@ -386,7 +386,7 @@ func TestComputerObservationTextNativeCoverageAndRemovals(t *testing.T) {
 	}
 	tree["nodes"] = tree["nodes"].([]any)[:1]
 	diff := out.render(tree, "native", false).(map[string]any)
-	if diff["format"] != "diff" || diff["tree"] != "" || len(diff["removed_refs"].([]string)) != 1 || diff["removed_refs"].([]string)[0] != "save" {
+	if diff["format"] != "full" || diff["tree"] == "" || diff["removed_refs"] != nil {
 		t.Fatalf("removal diff: %+v", diff)
 	}
 	tree["truncated"] = true

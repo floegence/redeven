@@ -59,6 +59,12 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	if event.Type != "source_closed" {
 		return
 	}
+	reason := "unknown"
+	switch event.Reason {
+	case "browser_disconnected", "explicit_remove", "source_closed", "host_shutdown":
+		reason = event.Reason
+	}
+	slog.Info("browser source closed", "target_id", event.Target, "binding", event.Binding, "reason", reason)
 	r.mu.Lock()
 	// The configured base executor also owns installation paths. Retain that
 	// configuration after its physical page closes, with readiness revoked.

@@ -108,7 +108,7 @@ test('ref validation fails if its owning document changes during the read', asyn
 });
 
 test('unsupported known options name the exact field without exposing arbitrary keys', async () => {
-  for(const [key,field] of [['full','full'],['private-secret-key','arguments']]) {
+  for(const [key,field] of [['timeout_ms','timeout_ms'],['private-secret-key','arguments']]) {
     const script=await createComputerScript();
     try {
       await assert.rejects(script.execute(`await ui.ref('r').snapshot({${JSON.stringify(key)}:true})`,async()=>assert.fail('invalid dispatch')),error=>{

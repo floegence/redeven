@@ -2,74 +2,30 @@ package ai
 
 import (
 	"encoding/json"
-	"reflect"
 )
 
-// Only the last emitted, bounded tree is retained by the Turn's script process.
-// Guest code always reads a full tree; this projection reduces model output.
-type computerObservationOutput struct {
-	scope          string
-	snapshot       map[string]any
-	unchangedReads int
-}
+// Every emitted observation is self-contained. The guest selects the scope and
+// representation; presentation does not choose an implicit diff or reading policy.
+type computerObservationOutput struct{}
 
-func (o *computerObservationOutput) render(value any, scope string, full bool) any {
+func (*computerObservationOutput) render(value any, _ string, full bool) any {
 	body, err := json.Marshal(value)
 	if err != nil || len(body) > 524288 {
-		*o = computerObservationOutput{}
 		return value
 	}
 	decoded, err := decodeToolJSON(body)
 	current, ok := decoded.(map[string]any)
 	if err != nil || !ok || current == nil {
-		*o = computerObservationOutput{}
 		return value
 	}
 	if !full && current["semantic_schema_version"] == nil {
 		if _, valid := computerObservationNodes(current); !valid {
-			*o = computerObservationOutput{}
 			return value
 		}
 		current = compactComputerObservation(current)
 	}
-	nodes, valid := computerObservationNodes(current)
-	previous, previousValid := computerObservationNodes(o.snapshot)
-	document, _ := current["document_id"].(string)
 	output := cloneAnyMap(current)
 	output["format"] = "full"
-	if !full && valid && previousValid && document != "" && document == o.snapshot["document_id"] && scope == o.scope && current["detail"] == o.snapshot["detail"] && current["truncated"] == false && o.snapshot["truncated"] == false && computerObservationDiffOrder(o.snapshot, current) {
-		changed, removed := []any{}, []string{}
-		for _, node := range current["nodes"].([]any) {
-			ref := node.(map[string]any)["ref"].(string)
-			if !reflect.DeepEqual(previous[ref], node) {
-				changed = append(changed, node)
-			}
-		}
-		for _, node := range o.snapshot["nodes"].([]any) {
-			ref := node.(map[string]any)["ref"].(string)
-			if _, exists := nodes[ref]; !exists {
-				removed = append(removed, ref)
-			}
-		}
-		output["format"], output["nodes"], output["removed_refs"] = "diff", changed, removed
-		output["unchanged"] = len(nodes) - len(changed)
-		// A large change is clearer and cheaper as a complete snapshot.
-		complete := cloneAnyMap(current)
-		complete["format"] = "full"
-		if computerObservationEncodedSize(output) >= computerObservationEncodedSize(complete) {
-			output = cloneAnyMap(current)
-			output["format"] = "full"
-		}
-	}
-	if valid && previousValid && document != "" && scope == o.scope && reflect.DeepEqual(current, o.snapshot) {
-		o.unchangedReads++
-		if o.unchangedReads >= 2 {
-			output["advisory"] = computerObservationAdvisory
-		}
-	} else {
-		o.unchangedReads = 0
-	}
-	o.scope, o.snapshot = scope, current
 	return computerObservationPresentation(output)
 }
 

@@ -27,7 +27,7 @@ Name, description and string value have a 2,000 Unicode code-point budget.
 name_truncated, description_truncated and value_truncated are true only when
 the adapter omitted part of that field; snapshot truncated continues to describe
 omitted nodes. Runtime validates these flags and preserves them in compact,
-detailed, diff and single-node output. A detailed read does not remove field limits.
+detailed and single-node output; model-facing selection, snapshot and node use canonical role while preserving platform_role. A detailed read does not remove field limits.
 Browser query items also carry name_truncated when needed.
 
 References compare the full native name through a bounded SHA-256 digest, never

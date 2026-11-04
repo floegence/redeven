@@ -7,7 +7,7 @@ export const argumentFailure = (field, expected) => Object.assign(new Error('INV
 export function validateBrowserAction(args, privateInput = false) {
   const fields = {
     key: ['key', 'selector'], fill: ['text', 'selector'], type: ['text'],
-    click: ['selector','button','modifiers','click_count','duration_ms'], pointer_click: ['x','y','button','modifiers','click_count','duration_ms'], double_click: ['x','y'], hover:['selector','x','y'],
+    click: ['selector','button','modifiers','click_count','duration_ms','point','scroll_into_view','stability_timeout_ms'], pointer_click: ['x','y','button','modifiers','click_count','duration_ms'], double_click: ['x','y'], hover:['selector','x','y','point','scroll_into_view','stability_timeout_ms'], geometry:['selector','point'],
     set_files:['selector','files'],source:['selector','source','field','limit','cursor'], capabilities:[], selection:['selector'], select_text:['selector','text','prefix','suffix','selection_type'], select_range:['selector','start','end','direction'], select_all:['selector'], replace_selection:['selector','text'], copy:['selector'],cut:['selector'],paste:['selector','text','html'],clipboard:['operation','items'],input_sequence:['events'],set_value:['selector','value'],perform_action:['selector','name'],
     scroll: ['selector', 'x', 'y', 'delta_x', 'delta_y'],
     drag: ['from_x', 'from_y', 'to_x', 'to_y', 'duration_ms','button','modifiers'],
@@ -19,7 +19,7 @@ export function validateBrowserAction(args, privateInput = false) {
   const image = ['coordinate_space', 'frame', 'document_id'];
   if (Object.keys(args).some(key => !['action', 'target', 'description', ...allowed, ...image].includes(key))) throw argumentFailure('arguments', 'documented_fields');
   if (image.some(key => args[key] !== undefined) && (!['pointer_click', 'double_click', 'scroll', 'drag','hover'].includes(args.action) || args.selector || !['image_pixels','model_pixels'].includes(args.coordinate_space) || typeof args.frame !== 'string' || typeof args.document_id !== 'string')) throw argumentFailure('coordinate_space', 'image_pixels_with_frame');
-  if (['click', 'fill', 'read', 'query', 'table', 'attribute', 'text', 'wait','source','selection','select_text','select_range','select_all','replace_selection'].includes(args.action) && !args.selector) throw argumentFailure('selector', 'documented_selector');
+  if (['click', 'fill', 'read', 'query', 'table', 'attribute', 'text', 'wait','geometry','source','selection','select_text','select_range','select_all','replace_selection'].includes(args.action) && !args.selector) throw argumentFailure('selector', 'documented_selector');
   if (args.selector !== undefined) {
     const s = args.selector;
     if (!s || Array.isArray(s) || typeof s !== 'object' || Object.keys(s).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key)) ||
@@ -33,6 +33,9 @@ export function validateBrowserAction(args, privateInput = false) {
   if(args.modifiers!==undefined&&(!Array.isArray(args.modifiers)||args.modifiers.some(x=>!['Alt','Control','Meta','Shift'].includes(x))))throw argumentFailure('arguments','documented_fields');
   if(args.click_count!==undefined&&(!Number.isInteger(args.click_count)||args.click_count<1||args.click_count>3))throw argumentFailure('arguments','documented_fields');
   if(args.duration_ms!==undefined&&(!Number.isInteger(args.duration_ms)||args.duration_ms<0||args.duration_ms>5000))throw argumentFailure('duration_ms','integer_0_5000');
+  if(args.point!==undefined&&(!args.selector||!args.point||Object.keys(args.point).some(k=>!['x','y'].includes(k))||!Number.isFinite(args.point.x)||!Number.isFinite(args.point.y)||args.point.x<0||args.point.y<0))throw argumentFailure('coordinates','nonnegative_coordinates');
+  if(args.scroll_into_view!==undefined&&typeof args.scroll_into_view!=='boolean')throw argumentFailure('arguments','boolean');
+  if(args.stability_timeout_ms!==undefined&&(!Number.isInteger(args.stability_timeout_ms)||args.stability_timeout_ms<0||args.stability_timeout_ms>5000))throw argumentFailure('arguments','integer_0_5000');
   switch (args.action) {
     case 'key':
       try { return { key: browserKey(args.key, privateInput) }; }
@@ -112,7 +115,7 @@ export function validateBrowserAction(args, privateInput = false) {
       for(const key of ['text','html'])if(args[key]!==undefined&&(typeof args[key]!=='string'||Buffer.byteLength(args[key])>65536))throw argumentFailure('text','text_max_20000');
       break;
     case 'capabilities': case 'selection': case 'select_all': case 'copy': case 'cut':
-    case 'click': case 'read': case 'text': break;
+    case 'geometry': case 'click': case 'read': case 'text': break;
     default: throw argumentFailure('action', 'supported_action');
   }
   return {};

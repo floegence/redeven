@@ -103,17 +103,17 @@ export async function createComputerBrowserHost(options) {
       void work.then(browser => browser.on('disconnected', () => {
         connections.delete(endpoint);
         directories.delete(endpoint);
-        for (const source of sources.values()) if (source.descriptor.endpoint === endpoint) retire(source);
+        for (const source of sources.values()) if (source.descriptor.endpoint === endpoint) retire(source,'browser_disconnected');
         nativeDirectories.delete(endpoint); reconcileNative();
       }), () => { if (connections.get(endpoint) === work) { connections.delete(endpoint); directories.delete(endpoint); nativeDirectories.delete(endpoint); reconcileNative(); } });
     }
     return connections.get(endpoint);
   };
-  const retire = source => {
+  const retire = (source, reason='explicit_remove') => {
     if (sources.get(source.id) !== source) return source.retiring;
     sources.delete(source.id);
     source.owner.source.off('close', source.onClose);
-    options.onSourceClosed?.(source.id, source.descriptor.binding);
+    options.onSourceClosed?.(source.id, source.descriptor.binding, reason);
     source.retiring = source.owner.dispose().finally(() => {
       if (nativeSources.get(source.key) === source.id) nativeSources.delete(source.key);
       if (retirements.get(source.id) === source.retiring) retirements.delete(source.id);
@@ -193,7 +193,7 @@ export async function createComputerBrowserHost(options) {
         owner.dispose = async () => { stopDownloads(); await dispose(); };
       }
       const source = { id, key, descriptor: { ...descriptor }, owner, onClose: undefined, retiring: undefined, busy: false };
-      source.onClose = () => { void retire(source); };
+      source.onClose = () => { void retire(source,'source_closed'); };
       owner.source.on('close', source.onClose);
       sources.set(id, source);
       return id;
@@ -287,7 +287,7 @@ export async function createComputerBrowserHost(options) {
     async close() {
       closed = true;
       await Promise.allSettled([...pending.values()].map(item => item.work));
-      const draining = [...sources.values()].map(source => retire(source));
+      const draining = [...sources.values()].map(source => retire(source,'host_shutdown'));
       const results = await Promise.allSettled(draining);
       await Promise.allSettled([...connections.values()].map(async work => (await work).close()));
       connections.clear(); nativeDirectories.clear(); privateTargets.clear();

@@ -152,5 +152,36 @@ func computerActionabilityFacts(value any) map[string]any {
 			out["bounds"] = bounds
 		}
 	}
+	if point, ok := raw["tested_point"].(map[string]any); ok {
+		x, xOK := point["x"].(float64)
+		y, yOK := point["y"].(float64)
+		if xOK && yOK && !math.IsNaN(x) && !math.IsNaN(y) && !math.IsInf(x, 0) && !math.IsInf(y, 0) {
+			out["tested_point"] = map[string]any{"x": x, "y": y}
+		}
+	}
+	if raw["coordinate_space"] == "session_css_pixels" {
+		out["coordinate_space"] = raw["coordinate_space"]
+	}
+	if preparation, ok := raw["preparation"].(map[string]any); ok {
+		facts := map[string]any{}
+		if value, ok := preparation["scroll_into_view"].(bool); ok {
+			facts["scroll_into_view"] = value
+		}
+		for _, key := range []string{"stability_timeout_ms", "elapsed_ms"} {
+			if n, ok := preparation[key].(float64); ok && n >= 0 && n <= 60000 {
+				facts[key] = n
+			}
+		}
+		out["preparation"] = facts
+	}
+	if viewport, ok := raw["viewport"].(map[string]any); ok {
+		facts := map[string]any{}
+		for _, key := range []string{"pageX", "pageY", "clientWidth", "clientHeight"} {
+			if n, ok := viewport[key].(float64); ok && !math.IsNaN(n) && !math.IsInf(n, 0) {
+				facts[key] = n
+			}
+		}
+		out["viewport"] = facts
+	}
 	return out
 }

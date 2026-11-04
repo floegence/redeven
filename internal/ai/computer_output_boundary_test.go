@@ -269,7 +269,7 @@ func TestComputerScriptCompilationErrorKeepsNamespace(t *testing.T) {
 
 func TestComputerActionabilityFinalOutput(t *testing.T) {
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
-		result, err, _ := computerBrowserFailure(inner, false, "ELEMENT_NOT_ACTIONABLE", map[string]any{"action_executed": false, "actionability": map[string]any{"stage": "precondition", "connected": true, "visible": true, "enabled": false, "node_type": float64(1), "bounds": []any{float64(2), float64(3), float64(20), float64(10)}, "private_text": "must stay private"}}, "fixture")
+		result, err, _ := computerBrowserFailure(inner, false, "ELEMENT_NOT_ACTIONABLE", map[string]any{"action_executed": false, "actionability": map[string]any{"stage": "precondition", "connected": true, "visible": true, "enabled": false, "node_type": float64(1), "bounds": []any{float64(2), float64(3), float64(20), float64(10)}, "tested_point": map[string]any{"x": float64(30), "y": float64(40)}, "viewport": map[string]any{"clientWidth": float64(800), "clientHeight": float64(600)}, "preparation": map[string]any{"scroll_into_view": false, "stability_timeout_ms": float64(0)}, "private_text": "must stay private"}}, "fixture")
 		return result, err
 	})
 	result, err := executeTestScript(t.Context(), runtime, call, "await ui.getByRole('button',{name:'Disabled'}).click();")
@@ -277,7 +277,7 @@ func TestComputerActionabilityFinalOutput(t *testing.T) {
 		t.Fatal("disabled click accepted")
 	}
 	facts, _ := result.Result.(map[string]any)["actionability"].(map[string]any)
-	if facts["enabled"] != false || facts["stage"] != "precondition" || facts["private_text"] != nil || len(toAnySlice(facts["bounds"])) != 4 {
+	if facts["enabled"] != false || facts["stage"] != "precondition" || facts["private_text"] != nil || len(toAnySlice(facts["bounds"])) != 4 || facts["tested_point"] == nil || facts["preparation"] == nil {
 		t.Fatalf("actionability facts lost or leaked: %#v", facts)
 	}
 }

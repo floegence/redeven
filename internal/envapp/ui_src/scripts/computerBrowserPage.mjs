@@ -512,7 +512,27 @@ export class BrowserComputerPage {
     this.references.set(ref,entry);return entry;
   }
 
-  async resolve(selector, collect = false, sample = false) {
+  rememberAXSource(frame,node,anchor) {
+    const document=this.observedFrames.get(frame.frame.id);
+    if(!document||document.session!==frame.session||!node.nodeId)throw new Error('STALE_REFERENCE');
+    const ref='a'+createHash('sha256').update(JSON.stringify([this.prefix,document.revision,frame.frame.id,node.nodeId])).digest('base64url').slice(0,16);
+    const entry={ref,frame,document,sourceAX:true,axNodeId:node.nodeId,parentAXNodeId:node.parentId,
+      backendNodeId:node.backendDOMNodeId,privacyBackendNodeId:node.backendDOMNodeId??anchor.privacyBackendNodeId??anchor.backendNodeId};
+    if(this.references.size>=2000&&!this.references.has(ref))this.references.delete(this.references.keys().next().value);
+    this.references.set(ref,entry);return entry;
+  }
+
+  async readAXSource(entry) {
+    let nodes;
+    if(entry.backendNodeId)({nodes}=await entry.frame.session.send('Accessibility.getPartialAXTree',{backendNodeId:entry.backendNodeId,fetchRelatives:true}));
+    else if(entry.parentAXNodeId)({nodes}=await entry.frame.session.send('Accessibility.getChildAXNodes',{id:entry.parentAXNodeId,frameId:entry.frame.frame.id}));
+    else throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
+    const node=nodes.find(n=>n.nodeId===entry.axNodeId);
+    if(!node||entry.document!==this.observedFrames.get(entry.frame.frame.id))throw new Error('STALE_REFERENCE');
+    return {node,nodes};
+  }
+
+  async resolve(selector, collect = false, sample = false, source = false) {
     if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
     let entry, root;
     const matches = [];
@@ -561,7 +581,10 @@ export class BrowserComputerPage {
       if (collect) return matches;
       if (!entry) throw new Error('ELEMENT_NOT_FOUND');
     }
-    await this.validateIdentity(entry, sample && typeof selector.ref !== 'string');
+    if(entry.sourceAX){
+      if(!source)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
+      await this.readAXSource(entry);
+    }else await this.validateIdentity(entry, sample && typeof selector.ref !== 'string');
     if (sample && root) await this.resolve({ref:selector.root_ref});
     return collect ? [entry] : entry;
   }
@@ -698,7 +721,7 @@ export class BrowserComputerPage {
     const {object} = await session.send('DOM.resolveNode', {backendNodeId:element.backendNodeId, executionContextId});
     try {
       const result = await evaluate(session, 'Runtime.callFunctionOn', {objectId:object.objectId, returnByValue:true,
-        functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.getClientRects().length&&getComputedStyle(this).visibility!=="hidden"?this.innerText||"":"";let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"rendered_element"};text+=character;}return {text,truncated:false,scope:"rendered_element"};}'}, value => value?.unsupported === true || (typeof value?.text === 'string' && typeof value.truncated === 'boolean' && value.scope === 'rendered_element'));
+        functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.innerText;let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"element",source:"browser_dom",property:"innerText"};text+=character;}return {text,truncated:false,scope:"element",source:"browser_dom",property:"innerText"};}'}, value => value?.unsupported === true || (typeof value?.text === 'string' && typeof value.truncated === 'boolean' && value.scope === 'element' && value.property === 'innerText'));
       if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
         diagnostic: {phase:'read', method:'locator.text', expected:'html_element', recovery:'choose_supported_read'},
       });
@@ -795,22 +818,40 @@ export class BrowserComputerPage {
   actionabilityFailure(state, stage) {
     return Object.assign(new Error('ELEMENT_NOT_ACTIONABLE'), {actionability:{stage,...state}});
   }
-  async actionable(element, action = 'fill') {
-    const hitTest = action !== 'fill';
-    const allowed = state => state.connected && (hitTest ? state.rendered : state.visible) && (action === 'hover' || state.enabled) && (hitTest || state.editable);
-    const before = await this.elementState(element);
-    if (!allowed(before)) throw this.actionabilityFailure(before,'precondition');
-    if (!hitTest) return;
-    await this.effect(() => element.frame.session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }), 'preparation');
-    let previous = await this.elementState(element);
-    const deadline = Date.now() + 1000;
+  async geometry(element, point) {
+    const session=element.frame.session;
+    const {quads=[]}=await session.send('DOM.getContentQuads',{backendNodeId:element.backendNodeId});
+    const {cssLayoutViewport:viewport}=await session.send('Page.getLayoutMetrics');
+    if(!Array.isArray(quads)||quads.some(q=>!Array.isArray(q)||q.length!==8||!q.every(Number.isFinite)))throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+    return {source:'browser_layout',ref:element.ref,frame_id:element.frame.frame.id,document_id:this.prefix+':'+this.revision,
+      coordinate_space:'session_css_pixels',quads,viewport,
+      ...(point?{tested_point:point,hit_target:point.x>=0&&point.y>=0&&point.x<viewport.clientWidth&&point.y<viewport.clientHeight&&await this.receivesPoint(element,point.x,point.y)}:{})};
+  }
+
+  async actionable(element, action = 'fill', options = {}) {
+    const hitTest=action!=='fill';
+    const allowed=state=>state.connected&&(hitTest?state.rendered:state.visible)&&(action==='hover'||state.enabled)&&(hitTest||state.editable);
+    const before=await this.elementState(element);
+    if(!allowed(before))throw this.actionabilityFailure(before,'precondition');
+    if(!hitTest)return;
+    const preparation={scroll_into_view:options.scroll_into_view??true,stability_timeout_ms:options.stability_timeout_ms??1000};
+    const started=performance.now();
+    if(preparation.scroll_into_view)await this.effect(()=>element.frame.session.send('DOM.scrollIntoViewIfNeeded',{backendNodeId:element.backendNodeId}),'preparation');
+    const deadline=performance.now()+preparation.stability_timeout_ms;
+    let previous,facts;
     do {
-      await this.delay(32);
-      const current = await this.elementState(element);
-      if (allowed(current) && current.receives && previous.bounds && current.bounds.every((value, index) => Math.abs(value - previous.bounds[index]) < 0.5)) return;
-      previous = current;
-    } while (Date.now() < deadline);
-    throw this.actionabilityFailure(previous,'hit_or_layout');
+      const state=await this.elementState(element),layout=await this.geometry(element),q=layout.quads[0];
+      const point=options.point??(q?{x:(q[0]+q[2]+q[4]+q[6])/4,y:(q[1]+q[3]+q[5]+q[7])/4}:undefined);
+      const inside=Boolean(point)&&point.x>=0&&point.y>=0&&point.x<layout.viewport.clientWidth&&point.y<layout.viewport.clientHeight;
+      const receives=inside&&await this.receivesPoint(element,point.x,point.y);
+      const stable=preparation.stability_timeout_ms===0||previous&&JSON.stringify(previous)===JSON.stringify(layout.quads);
+      facts={...state,receives,tested_point:point,coordinate_space:layout.coordinate_space,viewport:layout.viewport,preparation:{...preparation,elapsed_ms:Math.round(performance.now()-started)}};
+      if(allowed(state)&&receives&&stable){await this.validateIdentity(element);return {point,preparation:facts.preparation};}
+      previous=layout.quads;
+      if(performance.now()>=deadline)break;
+      await this.delay(Math.min(32,Math.max(0,deadline-performance.now())));
+    }while(performance.now()<=deadline);
+    throw this.actionabilityFailure(facts,'hit_or_layout');
   }
 
   async scrollPoint(element) {
@@ -825,10 +866,6 @@ export class BrowserComputerPage {
         functionDeclaration: `async function(){
           const root=this.nodeType===9, element=root?this.documentElement:this;
           if(!element?.isConnected||!element.getBoundingClientRect)return null;
-          for(let p=element;p;p=p.parentElement||p.getRootNode()?.host){
-            const style=getComputedStyle(p);
-            if(style.visibility==='hidden'||style.display==='none'||Number(style.opacity)===0)return null;
-          }
           const v=visualViewport, width=innerWidth, height=innerHeight;
           let left=v?.offsetLeft||0,top=v?.offsetTop||0,right=left+(v?.width||width),bottom=top+(v?.height||height);
           if(!root){
@@ -1166,12 +1203,13 @@ export class BrowserComputerPage {
   async action(args) {
     if (this.invalid) throw new Error('TARGET_CONNECTION_REQUIRED');
     const validated = validateBrowserAction(args, this.privateInput);
-    if (args.action === 'capabilities') return {source:'browser',reads:['ax','dom','selection','query','table','text','attribute'],actions:['hover','click','select_text','select_range','select_all','replace_selection','copy','cut','paste','fill','key','drag','scroll','set_value','set_files','input_sequence','clipboard'],background:true,conditions:{clipboard:'full_access_and_browser_permission',set_value:'supported_html_controls',perform_action:'unsupported',clipboard_scope:'system',source:'authorized_frames_only'}};
+    if (args.action === 'capabilities') return {source:'browser',reads:['ax','dom','selection','query','table','text','attribute','geometry'],actions:['hover','click','select_text','select_range','select_all','replace_selection','copy','cut','paste','fill','key','drag','scroll','set_value','set_files','input_sequence','clipboard'],background:true,conditions:{clipboard:'full_access_and_browser_permission',set_value:'supported_html_controls',perform_action:'unsupported',clipboard_scope:'system',source:'authorized_frames_only'}};
     if(args.action==='clipboard')return browserClipboard(this,args);
     if(args.action==='input_sequence')return this.inputSequence(args);
     if (args.action === 'query') return this.query(args.selector,args);
-    const element = args.selector ? await this.resolve(args.selector) : undefined;
+    const element = args.selector ? await this.resolve(args.selector,false,false,args.action==='source') : undefined;
     if(args.action==='source')return browserSource(this,element,args);
+    if(args.action==='geometry')return this.geometry(element,args.point);
     if(['selection','select_text','select_range','select_all','replace_selection'].includes(args.action))return browserSelection(this,element,args);
     if(args.action==='paste')return browserPaste(this,element,args);
     if(['copy','cut'].includes(args.action))return browserEditCommand(this,element,args);
@@ -1202,25 +1240,23 @@ export class BrowserComputerPage {
       await this.editText(element, args.text, true);
     } else if (args.action === 'click' || args.action === 'pointer_click' || args.action === 'double_click' || args.action === 'hover') {
       let x = args.x, y = args.y;
-      let target = this.transport;
+      let target = this.transport,pointerPreparation;
       if (element) {
         target = element.frame.session;
-        await this.actionable(element, args.action);
-        const { quads } = await target.send('DOM.getContentQuads', { backendNodeId: element.backendNodeId });
-        if (!quads?.length) throw new Error('ELEMENT_NOT_FOUND');
-        x = (quads[0][0] + quads[0][2] + quads[0][4] + quads[0][6]) / 4;
-        y = (quads[0][1] + quads[0][3] + quads[0][5] + quads[0][7]) / 4;
-        if (!await this.receivesPoint(element, x, y)) throw new Error('ELEMENT_NOT_ACTIONABLE');
+        const prepared=await this.actionable(element,args.action,args);
+        ({x,y}=prepared.point);
+        pointerPreparation=prepared.preparation;
       }
       if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) throw new Error('INVALID_REQUEST');
       const button=args.button??'left',modifiers=(args.modifiers??[]).reduce((mask,key)=>mask|({Alt:1,Control:2,Meta:4,Shift:8}[key]),0);
       await this.input(target,'Input.dispatchMouseEvent',{type:'mouseMoved',x,y,modifiers});
-      if(args.action==='hover')return {action_executed:true,mechanism:'browser_input',execution_mode:'background'};
+      if(args.action==='hover')return {action_executed:true,input_dispatched:true,mechanism:'browser_input',execution_mode:'background',point:{x,y},preparation:pointerPreparation};
       for (let clickCount = 1; clickCount <= (args.click_count??(args.action === 'double_click' ? 2 : 1)); clickCount++) {
         await this.input(target, 'Input.dispatchMouseEvent', { type: 'mousePressed', button, modifiers, clickCount, x, y });
         if(args.duration_ms)await this.delay(args.duration_ms,this.revision);
         await this.input(target, 'Input.dispatchMouseEvent', { type: 'mouseReleased', button, modifiers, clickCount, x, y });
       }
+      return {action_executed:true,input_dispatched:true,mechanism:'browser_input',execution_mode:'background',point:{x,y},preparation:pointerPreparation};
     } else if (args.action === 'type') {
       if (typeof args.text !== 'string' || args.text.length > 20000) throw new Error('INVALID_REQUEST');
       await this.editText(undefined, args.text, false);

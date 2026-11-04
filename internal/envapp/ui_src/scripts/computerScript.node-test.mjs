@@ -327,3 +327,13 @@ test('unresolved guest promises report no progress without inventing host work',
     assert.deepEqual(actions, ['pointer_click']);
   } finally { script.dispose(); }
 });
+
+test('pointer geometry and preparation are explicit guest choices',async()=>{
+  const script=await createComputerScript();const calls=[];
+  try{
+    await script.execute("const target=ui.ref('r'); log(await target.geometry({point:{x:30,y:20}})); await target.click({point:{x:30,y:20},scroll_into_view:false,stability_timeout_ms:0}); await target.hover({scroll_into_view:false});",async op=>{calls.push(op);return {};});
+    assert.deepEqual(calls.map(c=>c.action),['geometry','click','hover']);assert.deepEqual(calls[0].point,calls[1].point);assert.equal(calls[1].scroll_into_view,false);assert.equal(calls[1].stability_timeout_ms,0);
+  }finally{script.dispose();}
+  const native=await createComputerScript({browser:false});
+  try{await assert.rejects(native.execute("await ui.ref('r').click({point:{x:3,y:4}})",async()=>assert.fail('unsupported native point must not silently dispatch')));}finally{native.dispose();}
+});

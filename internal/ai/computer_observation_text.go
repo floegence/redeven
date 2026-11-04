@@ -2,13 +2,11 @@ package ai
 
 import (
 	"encoding/json"
-	"slices"
 	"strings"
 )
 
 const computerObservationTextBudget = 32 << 10
 const computerObservationRecovery = "Read a narrower root_ref; source() enumerates complete AX/DOM fields and paged child refs; rows/query/text read selected content. full:true requests structured details."
-const computerObservationAdvisory = "This bounded observation is unchanged from the previous sample. It does not establish unchanged content outside this scope or application readiness."
 
 // Product presentation never replaces validated semantic authority or guest reads.
 func compactComputerObservation(current map[string]any) map[string]any {
@@ -47,7 +45,7 @@ func compactComputerObservation(current map[string]any) map[string]any {
 	nodes := make([]any, 0, len(ordered))
 	for _, node := range ordered {
 		item := map[string]any{}
-		for _, key := range []string{"ref", "parent_ref", "role", "name", "value", "description", "frame_id", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
+		for _, key := range []string{"ref", "parent_ref", "role", "platform_role", "name", "value", "description", "frame_id", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
 			if v, ok := node[key]; ok {
 				item[key] = v
 			}
@@ -84,10 +82,9 @@ func compactComputerObservation(current map[string]any) map[string]any {
 		return out
 	}
 	// Charge the final JSON-escaped tree string, including metadata. Reserve
-	// truncation markers and repeated-read advice. Linear work, no token guesses.
+	// truncation markers. Linear work, no token guesses.
 	reserve := project(0)
 	reserve["format"] = "full"
-	reserve["advisory"] = computerObservationAdvisory
 	if focus := anyToString(current["focus_ref"]); focus != "" {
 		reserve["focus_ref"] = focus
 	}
@@ -246,21 +243,3 @@ func computerObservationEncodedSize(value map[string]any) int {
 }
 
 // Sparse replacement records cannot establish added/reordered sibling positions.
-func computerObservationDiffOrder(previous, current map[string]any) bool {
-	before, after := []string{}, []string{}
-	currentNodes, _ := computerObservationNodes(current)
-	for _, raw := range toAnySlice(previous["nodes"]) {
-		n := raw.(map[string]any)
-		ref := anyToString(n["ref"])
-		if next, ok := currentNodes[ref]; ok {
-			if n["parent_ref"] != next.(map[string]any)["parent_ref"] {
-				return false
-			}
-			before = append(before, ref)
-		}
-	}
-	for _, raw := range toAnySlice(current["nodes"]) {
-		after = append(after, anyToString(raw.(map[string]any)["ref"]))
-	}
-	return slices.Equal(before, after)
-}

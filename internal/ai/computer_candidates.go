@@ -595,6 +595,10 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 		if errors.As(err, &application) {
 			return toolExecutionOutput{Payload: map[string]any{"selected": false, "action_executed": true, "state": application.state, "candidates": application.candidates, "next_step": "The application was opened. Select a returned window candidate when permitted; if none exists, discover again or report that no accessible window is available. Do not repeat the launch."}}, application.cause
 		}
+		var connectionFailure *computerConnectionError
+		if errors.As(err, &connectionFailure) {
+			return toolExecutionOutput{Payload: map[string]any{"selected": false, "connection_diagnostic": connectionFailure.diagnostic}}, err
+		}
 		return nil, err
 	}
 	// Selection is already committed. Observe through the same Runtime gate and
@@ -615,6 +619,24 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	}
 	payload["target_id"], payload["target_kind"], payload["selected"] = target.ID, target.Kind, true
 	payload["tool_contract"] = computerTargetContract(target)
+	if observation, ok := payload["observation"].(map[string]any); ok {
+		observation = cloneAnyMap(observation)
+		nodes := []any{}
+		for _, raw := range toAnySlice(observation["nodes"]) {
+			node, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			node = cloneAnyMap(node)
+			if role := node["canonical_role"]; role != nil {
+				node["role"] = role
+				delete(node, "canonical_role")
+			}
+			nodes = append(nodes, node)
+		}
+		observation["nodes"] = nodes
+		payload["observation"] = observation
+	}
 	if applicationOpened {
 		payload["action_executed"] = true
 	}

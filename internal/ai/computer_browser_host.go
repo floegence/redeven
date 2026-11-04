@@ -85,6 +85,7 @@ func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*brow
 }
 
 type browserHostEvent struct {
+	Reason  string `json:"reason,omitempty"`
 	Binding string `json:"binding,omitempty"`
 	Type    string `json:"type"`
 	Target  string `json:"target,omitempty"`

@@ -129,7 +129,7 @@ test('real browser evaluation failures retain facts, never input and allow expli
     let send = controller.transport.send.bind(controller.transport);
     const cases = [
       {stage:'safety_scan',method:'Runtime.evaluate',match:p=>p.expression?.includes('secretChanged()'),tool:'computer.observe'},
-      {stage:'semantic_read',method:'Runtime.callFunctionOn',match:p=>p.functionDeclaration?.includes('rendered_element'),tool:'computer.action',args:{action:'text',selector:{role:'region',name:'Report'}}},
+      {stage:'semantic_read',method:'Runtime.callFunctionOn',match:p=>p.functionDeclaration?.includes('property:"innerText"'),tool:'computer.action',args:{action:'text',selector:{role:'region',name:'Report'}}},
       {stage:'capture',method:'Runtime.evaluate',match:p=>p.expression?.includes('innerWidth-document'),tool:'computer.screenshot'},
       {stage:'metadata',method:'Runtime.evaluate',match:p=>p.expression==='document.title',tool:'computer.observe'},
     ];

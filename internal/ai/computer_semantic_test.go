@@ -265,7 +265,7 @@ func TestComputerSemanticScriptDispatchesPortableSelector(t *testing.T) {
 	}
 }
 
-func TestComputerSemanticStateDiffAndDocumentReset(t *testing.T) {
+func TestComputerSemanticStateViewsAreSelfContained(t *testing.T) {
 	var output computerObservationOutput
 	tree := semanticTestTree()
 	first, _ := normalizeComputerObservation(tree)
@@ -276,7 +276,7 @@ func TestComputerSemanticStateDiffAndDocumentReset(t *testing.T) {
 	field["states"] = map[string]any{"busy": true, "invalid": false}
 	second, _ := normalizeComputerObservation(tree)
 	diff := output.render(second, "", false).(map[string]any)
-	if diff["format"] != "diff" || len(diff["nodes"].([]any)) != 1 || diff["nodes"].([]any)[0].(map[string]any)["states"].(map[string]any)["busy"] != true {
+	if diff["format"] != "full" || len(diff["nodes"].([]any)) != 2 || diff["nodes"].([]any)[1].(map[string]any)["states"].(map[string]any)["busy"] != true {
 		t.Fatalf("state diff lost: %v", diff)
 	}
 	tree["document_id"] = "fixture:2"

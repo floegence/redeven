@@ -66,7 +66,7 @@ func (r *ComputerUseRuntime) scriptProcess(key computerScriptKey) (*computerScri
 	arguments := []string{"--max-old-space-size=128", helper}
 	target, err := r.registry.ResolveTarget(context.Background(), key.target)
 	if err != nil {
-		return nil, err
+		return nil, computerScriptTargetResolutionFailure(err, key.target)
 	}
 	if strings.HasPrefix(target.Kind, "browser.") {
 		arguments = append(arguments, "--browser-target")
@@ -150,7 +150,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	key := computerScriptKey{call.ThreadID, call.TurnID, call.TargetID}
 	target, targetErr := r.registry.ResolveTarget(ctx, call.TargetID)
 	if targetErr != nil {
-		return TargetToolResult{}, targetErr
+		return TargetToolResult{Result: map[string]any{"execution_started": false, "action_executed": false}}, computerScriptTargetResolutionFailure(targetErr, call.TargetID)
 	}
 	r.releaseScripts(func(other computerScriptKey) bool { return other.thread == key.thread && other != key })
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -658,7 +658,7 @@ func computerOperationMutates(op map[string]any) bool {
 		return op["operation"] == "write"
 	}
 	switch anyToString(op["action"]) {
-	case "capabilities", "source", "selection", "observe", "snapshot", "read", "text", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor", "read_download":
+	case "geometry", "capabilities", "source", "selection", "observe", "snapshot", "read", "text", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor", "read_download":
 		return false
 	default:
 		return true
@@ -705,7 +705,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 			call.ToolName = "computer.scroll"
 			delete(args, "action")
 		}
-	case "capabilities", "source", "selection", "hover", "select_text", "select_range", "select_all", "replace_selection", "copy", "cut", "paste", "set_files", "set_value", "perform_action", "clipboard", "input_sequence", "read", "text", "query", "table", "attribute", "click", "fill", "key", "wait", "pointer_click", "drag":
+	case "geometry", "capabilities", "source", "selection", "hover", "select_text", "select_range", "select_all", "replace_selection", "copy", "cut", "paste", "set_files", "set_value", "perform_action", "clipboard", "input_sequence", "read", "text", "query", "table", "attribute", "click", "fill", "key", "wait", "pointer_click", "drag":
 	default:
 		return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
 	}
@@ -757,4 +757,11 @@ func computerScriptErrorCode(code string) aitools.ErrorCode {
 
 func (e *computerScriptExecutionError) Error() string {
 	return "Computer script stopped before completion (" + e.code + ")"
+}
+
+func computerScriptTargetResolutionFailure(err error, target string) error {
+	if errors.Is(err, errTargetNotRegistered) || errors.Is(err, errTargetAmbiguous) {
+		return &targetToolPolicyError{code: "target_unavailable", tool: "computer.exec", target: target, targetState: "unavailable"}
+	}
+	return err
 }

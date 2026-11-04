@@ -49,15 +49,15 @@ func TestComputerContractCurrentIdentityAndFailureFacts(t *testing.T) {
 	}
 }
 
-func TestComputerContractRepeatedObservationAdvisoryResets(t *testing.T) {
+func TestComputerContractRepeatedObservationStaysSelfContained(t *testing.T) {
 	var out computerObservationOutput
 	tree, _ := normalizeComputerObservation(semanticTestTree())
 	out.render(tree, "scope", false)
 	if out.render(tree, "scope", false).(map[string]any)["advisory"] != nil {
 		t.Fatal("warned on first repeated read")
 	}
-	if out.render(tree, "scope", false).(map[string]any)["advisory"] == nil {
-		t.Fatal("missing bounded repeated-read advice")
+	if out.render(tree, "scope", false).(map[string]any)["advisory"] != nil {
+		t.Fatal("repeated read introduced policy advice")
 	}
 	if out.render(tree, "other", false).(map[string]any)["advisory"] != nil {
 		t.Fatal("scope change retained advice")

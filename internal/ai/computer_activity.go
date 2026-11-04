@@ -41,6 +41,9 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			}
 		}
 	}
+	if diagnostic, ok := payload["connection_diagnostic"].(map[string]any); ok {
+		add("connection_diagnostic", "", toolDetailValue(diagnostic), fltools.StructuredActivityRowFormatCode)
+	}
 	for _, key := range []string{"reason", "stage", "target_state", "observation_stage"} {
 		if value := computerDiagnosticValue(key, payload[key]); value != "" {
 			add(key, "", value, fltools.StructuredActivityRowFormatText)
@@ -115,8 +118,8 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 				}
 			}
 		}
-		if payload["completed"] == false {
-			add("", "completed_actions", strings.Join(extractStringSlice(payload["completed_actions"]), "\n"), fltools.StructuredActivityRowFormatCode)
+		if _, present := payload["completed_actions"]; present {
+			add("", "completed_actions", computerCompletedActionsText(payload["completed_actions"]), fltools.StructuredActivityRowFormatCode)
 		}
 	} else {
 		observation := payload
@@ -176,8 +179,8 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			}
 			add("", "", strings.Join(parts, " "), fltools.StructuredActivityRowFormatCode)
 		}
-		if payload["completed"] == false {
-			add("", "completed_actions", strings.Join(extractStringSlice(payload["completed_actions"]), "\n"), fltools.StructuredActivityRowFormatCode)
+		if _, present := payload["completed_actions"]; present {
+			add("", "completed_actions", computerCompletedActionsText(payload["completed_actions"]), fltools.StructuredActivityRowFormatCode)
 		}
 		if readBoolField(observation, "truncated") {
 			omitted = true
@@ -187,6 +190,14 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 		rows[len(rows)-1].Truncated = true
 	}
 	return rows
+}
+
+func computerCompletedActionsText(value any) string {
+	actions := extractStringSlice(value)
+	if len(actions) == 0 {
+		return "[]"
+	}
+	return strings.Join(actions, "\n")
 }
 
 func nonemptyComputerText(values ...string) []string {

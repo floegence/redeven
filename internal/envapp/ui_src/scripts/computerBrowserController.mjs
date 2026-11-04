@@ -243,7 +243,7 @@ export class BrowserComputerController {
           ? imageCoordinates(operation, this.frameAnchor, await this.readObservation(() => viewportGeometry(this.transport), 'capture'), `${page.prefix}:${page.revision}`, request.target_id) : operation;
         // Every semantic read uses the same error/observation boundary.
         // Invalid inputs remain rejections; read failures never retire a source.
-        if (['read','text','query','table','attribute','source','selection','capabilities'].includes(mapped.action) || mapped.action==='clipboard'&&mapped.operation!=='write') read = () => page.action(mapped);
+        if (['read','text','query','table','attribute','source','geometry','selection','capabilities'].includes(mapped.action) || mapped.action==='clipboard'&&mapped.operation!=='write') read = () => page.action(mapped);
         else {
           result = await page.action(mapped);
           this.actionCompleted = page.effectCount > initialEffects;
@@ -251,7 +251,7 @@ export class BrowserComputerController {
             // Closed delivery facts survive document replacement. No title,
             // URL, page values or arbitrary adapter fields cross this boundary.
             const receipt = {action_executed:dispatched(), needs_observation:true, observation_invalidated:true, execution_mode:'background'};
-            for (const key of ['mechanism','completed_events','input_dispatched','preparation_executed','scroll_progress'])
+            for (const key of ['mechanism','completed_events','input_dispatched','preparation_executed','scroll_progress','point','preparation'])
               if (result[key] !== undefined) receipt[key] = result[key];
             return {[inputReceipt]:true, result:receipt, safety:{level:'routine',reason_codes:[],safe_to_capture:false,safe_to_send_to_model:false}};
           }

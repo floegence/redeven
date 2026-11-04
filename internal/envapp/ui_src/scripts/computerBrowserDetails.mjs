@@ -40,9 +40,12 @@ export async function withDOM(page,element,fn,args=[],mutates=false){
 export async function browserSource(page,element,args){
   const source=args.source??'ax',document_id=page.prefix+':'+page.revision;
   const metadata={source:source==='ax'?'browser_accessibility':'browser_dom',document_id,ref:element.ref};
+  if(source==='dom'&&!element.backendNodeId)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
+  const privacyElement=element.backendNodeId?element:{...element,backendNodeId:element.privacyBackendNodeId};
+  if(!privacyElement.backendNodeId)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
   // Explicit source access includes hidden descendants; protect credentials in
   // that exact subtree before reading attributes or values, including shadow DOM.
-  await withDOM(page,element,function(){
+  await withDOM(page,privacyElement,function(){
     const roots=[this];
     for(let i=0;i<roots.length;i++){
       const root=roots[i];
@@ -54,7 +57,7 @@ export async function browserSource(page,element,args){
     }
     return {checked:true};
   });
-  const sourceNode=(await element.frame.session.send('DOM.describeNode',{backendNodeId:element.backendNodeId,depth:['textContent','innerText'].includes(args.field)?-1:0,pierce:true})).node;
+  const sourceNode=(await element.frame.session.send('DOM.describeNode',{backendNodeId:privacyElement.backendNodeId,depth:['textContent','innerText'].includes(args.field)?-1:0,pierce:true})).node;
   const check=[sourceNode];let visited=0;
   while(check.length){
     if(++visited>100000)throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
@@ -65,13 +68,23 @@ export async function browserSource(page,element,args){
   }
   let values;
   if(source==='ax'){
-    const {nodes}=await element.frame.session.send('Accessibility.getPartialAXTree',{backendNodeId:element.backendNodeId,fetchRelatives:true});
-    const node=nodes.find(node=>node.backendDOMNodeId===element.backendNodeId);
+    let node,nodes;
+    if(element.sourceAX)({node,nodes}=await page.readAXSource(element));
+    else {
+      ({nodes}=await element.frame.session.send('Accessibility.getPartialAXTree',{backendNodeId:element.backendNodeId,fetchRelatives:true}));
+      node=nodes.find(n=>n.backendDOMNodeId===element.backendNodeId);
+    }
     if(!node)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
     values={...node};
-    values.child_refs=(node.childIds??[]).map(id=>nodes.find(n=>n.nodeId===id)).filter(n=>n?.backendDOMNodeId);
+    if(args.field==='child_refs'){
+      const children=node.childIds?.length?(await element.frame.session.send('Accessibility.getChildAXNodes',{id:node.nodeId,frameId:element.frame.frame.id})).nodes:[];
+      const byID=new Map(children.map(n=>[n.nodeId,n]));
+      values.child_refs=(node.childIds??[]).map(id=>{
+        const child=byID.get(id);if(!child)throw new Error('TARGET_OBSERVATION_UNAVAILABLE');return child;
+      });
+    }else values.child_refs=[];
     metadata.child_source='ax';
-    const parent=nodes.find(n=>n.nodeId===node.parentId);if(parent?.backendDOMNodeId)values.parent_ref=page.rememberNode(element.frame,parent).ref;
+    const parent=nodes.find(n=>n.nodeId===node.parentId);if(parent)values.parent_ref=page.rememberAXSource(element.frame,parent,element).ref;
   }else{
     const {node}=await element.frame.session.send('DOM.describeNode',{backendNodeId:element.backendNodeId,depth:1,pierce:true});
     values={nodeName:node.nodeName,nodeType:node.nodeType,nodeValue:node.nodeValue,childNodeCount:node.childNodeCount??0};
@@ -107,7 +120,7 @@ export async function browserSource(page,element,args){
     const hash=createHash('sha256').update(JSON.stringify([identity,children.map(n=>[n.backendDOMNodeId??n.backendNodeId,n.nodeId??n.nodeName])])).digest('hex');
     let offset=0;if(args.cursor!==undefined){const parts=args.cursor.split(':');if(parts.length!==2||parts[0]!==hash||!/^\d+$/u.test(parts[1]))throw new Error('STALE_REFERENCE');offset=Number(parts[1]);if(!Number.isSafeInteger(offset)||offset>children.length)throw new Error('STALE_REFERENCE');}
     const end=Math.min(children.length,offset+Math.min(args.limit??100,200));
-    const items=children.slice(offset,end).map(n=>source==='ax'?page.rememberNode(element.frame,n).ref:page.rememberDOMNode(element.frame,n).ref);
+    const items=children.slice(offset,end).map(n=>source==='ax'?page.rememberAXSource(element.frame,n,element).ref:page.rememberDOMNode(element.frame,n).ref);
     return {...metadata,field:args.field,available:true,items,offset,total:children.length,unit:'items',truncated:end<children.length,...(end<children.length?{next_cursor:hash+':'+end}:{})};
   }
   return sourcePage(values[args.field],[document_id,element.ref,source,args.field],args,{...metadata,field:args.field,available:true});

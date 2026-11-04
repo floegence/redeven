@@ -439,8 +439,9 @@ func (c *computerExtensionClient) call(ctx context.Context, kind string, argumen
 		return raw, nil
 	}
 	var result struct {
-		Result json.RawMessage `json:"result"`
-		Error  string          `json:"error"`
+		Result     json.RawMessage `json:"result"`
+		Error      string          `json:"error"`
+		Diagnostic map[string]any  `json:"connection_diagnostic"`
 	}
 	if json.Unmarshal(raw, &result) != nil {
 		_ = c.conn.Close()
@@ -457,7 +458,7 @@ func (c *computerExtensionClient) call(ctx context.Context, kind string, argumen
 			}
 			return nil, failure
 		}
-		return nil, errors.New("extension command rejected")
+		return nil, &computerConnectionError{cause: errors.New("extension command rejected"), diagnostic: computerConnectionDiagnostic(result.Diagnostic)}
 	}
 	return result.Result, nil
 }
@@ -621,12 +622,21 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 			transition("source_available")
 			return
 		}
-		reason := "failed"
+		reason := "unknown"
 		if errors.Is(resultErr, context.Canceled) {
 			reason = "cancelled"
 		} else if errors.Is(resultErr, context.DeadlineExceeded) {
 			reason = "timed_out"
 		}
+		detail := map[string]any{"phase": stage, "reason": reason, "elapsed_ms": time.Since(started).Milliseconds()}
+		if generation != "" {
+			detail["binding"] = generation
+		}
+		var connectionFailure *computerConnectionError
+		if errors.As(resultErr, &connectionFailure) && connectionFailure.diagnostic != nil {
+			detail["extension"] = connectionFailure.diagnostic
+		}
+		resultErr = &computerConnectionError{cause: resultErr, diagnostic: detail}
 		slog.Warn("browser source connection failed", "stage", stage, "reason", reason, "target_id", targetID, "binding", generation, "request", traceID, "duration_ms", time.Since(started).Milliseconds())
 	}()
 	r.mu.RLock()

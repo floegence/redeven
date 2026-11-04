@@ -6,7 +6,7 @@ import { getQuickJS } from 'quickjs-emscripten';
 // Explicit arity includes optional/default parameters; function.length cannot.
 export const computerScriptMethods = Object.freeze({
   ui: {capabilities:[0,0],hover:[2,3],input:[1,1],clipboard:[1,2],budget:[0,0],observe:[0,1],snapshot:[0,1],screenshot:[0,0],help:[0,1],type:[1,1],doubleClick:[2,2],scroll:[1,2],scrollAt:[3,4],getByRole:[1,2],ref:[1,1],click:[2,3],drag:[4,6],key:[1,1],assert:[1,2]},
-  locator: {setFiles:[1,1],source:[0,1],hover:[0,0],selection:[0,0],selectText:[1,2],selectRange:[2,3],selectAll:[0,0],replaceSelection:[1,1],copy:[0,0],cut:[0,0],paste:[0,1],setValue:[1,1],performAction:[1,1],node:[0,0],snapshot:[0,1],read:[0,0],text:[0,0],query:[0,1],count:[0,0],rows:[0,1],attribute:[1,1],linkSummary:[0,0],getAttribute:[1,1],click:[0,1],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
+  locator: {geometry:[0,1],setFiles:[1,1],source:[0,1],hover:[0,1],selection:[0,0],selectText:[1,2],selectRange:[2,3],selectAll:[0,0],replaceSelection:[1,1],copy:[0,0],cut:[0,0],paste:[0,1],setValue:[1,1],performAction:[1,1],node:[0,0],snapshot:[0,1],read:[0,0],text:[0,0],query:[0,1],count:[0,0],rows:[0,1],attribute:[1,1],linkSummary:[0,0],getAttribute:[1,1],click:[0,1],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
   browser: {navigate:[1,2],back:[0,1],reload:[0,1],saveDownload:[1,1],readDownload:[1,2],downloadCursor:[0,0],waitForDownload:[0,1]},
   image: {hover:[2,2],click:[2,3],doubleClick:[2,2],drag:[4,5],scroll:[3,4]},
   downloadCursor: {wait:[0,1]},
@@ -162,8 +162,16 @@ export async function createComputerScript({ browser = true } = {}) {
         if(value.wait_until!==undefined&&!['commit','domcontentloaded','load'].includes(value.wait_until))invalid('wait_until','navigation_lifecycle');
         return value;
       };
-      const clickOptions = (value={}) => {
-        options(value,['button','modifiers','click_count','duration_ms']);
+      const pointerOptions = (value={}) => {
+        if(!(${browser ? 'true' : 'false'})&&['point','scroll_into_view','stability_timeout_ms'].some(k=>value[k]!==undefined))invalid();
+        if(value.point!==undefined){options(value.point,['x','y']);number(value.point.x);number(value.point.y);if(value.point.x<0||value.point.y<0)invalid();}
+        if(value.scroll_into_view!==undefined&&typeof value.scroll_into_view!=='boolean')invalid();
+        if(value.stability_timeout_ms!==undefined&&(!Number.isInteger(value.stability_timeout_ms)||value.stability_timeout_ms<0||value.stability_timeout_ms>5000))invalid();
+        return value;
+      };
+      const clickOptions = (value={},locator=false) => {
+        options(value,['button','modifiers','click_count','duration_ms',...(locator?['point','scroll_into_view','stability_timeout_ms']:[])]);
+        pointerOptions(value);
         if(value.button!==undefined&&!['left','right','middle'].includes(value.button))invalid();
         if(value.modifiers!==undefined&&(!Array.isArray(value.modifiers)||value.modifiers.some(v=>!['Alt','Control','Meta','Shift'].includes(v))))invalid();
         for(const [key,min,max] of [['click_count',1,3],['duration_ms',0,5000]])if(value[key]!==undefined&&(!Number.isInteger(value[key])||value[key]<min||value[key]>max))invalid();
@@ -191,7 +199,7 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const locator = (selector) => expose('locator',{
         source:(value={})=>call({action:'source',selector,...sourceOptions(value)}),
-        hover:()=>call({action:'hover',selector}),
+        hover:(value={})=>{options(value,['point','scroll_into_view','stability_timeout_ms']);return call({action:'hover',selector,...pointerOptions(value)});},
         selection:()=>call({action:'selection',selector}),
         selectText:(text,value={})=>{options(value,['prefix','suffix','selection_type']);for(const key of ['prefix','suffix'])if(value[key]!==undefined)string(value[key]);if(value.selection_type!==undefined&&!['text','cursor_before','cursor_after'].includes(value.selection_type))invalid();return call({action:'select_text',selector,text:string(text),...value});},
         selectRange:(start,end,value={})=>{options(value,['direction']);if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start)invalid();return call({action:'select_range',selector,start,end,...value});},
@@ -204,12 +212,13 @@ export async function createComputerScript({ browser = true } = {}) {
         performAction:(name)=>call({action:'perform_action',selector,name:string(name)}),
         node: async () => canonicalNode((await call({action:'read',selector})).node),
         snapshot: async (value={}) => {
-          options(value,['limit','emit']); observeOptions(value);
+          observeOptions(value);
           const {node} = await call({action:'read',selector});
           return snapshot({...value,root_ref:node.ref});
         },
         read: () => call({action: 'read', selector}),
         ...(${browser ? 'true' : 'false'} ? {
+          geometry:(value={})=>{options(value,['point']);return call({action:'geometry',selector,...pointerOptions(value)});},
           setFiles:(files)=>{if(!Array.isArray(files)||!files.length||files.length>16)invalid();return call({action:'set_files',selector,files});},
           text: () => call({action:'text',selector}),
           query: (value={}) => call({action:'query',selector,...pageOptions(value)}),
@@ -219,7 +228,7 @@ export async function createComputerScript({ browser = true } = {}) {
           linkSummary: async () => ({url:await attribute(selector,'href',true),redacted:true}),
           getAttribute: (attribute) => { string(attribute,'attribute'); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute}); },
         } : {}),
-        click: (value={}) => call({action: 'click', selector,...clickOptions(value)}),
+        click: (value={}) => call({action: 'click', selector,...clickOptions(value,true)}),
         fill: (text) => call({action: 'fill', selector, text: string(text)}),
         press: (key) => call({action: 'key', selector, key: string(key,'key')}),
         scroll: (delta_y, delta_x = 0) => call({action: 'scroll', selector, delta_y: number(delta_y), delta_x: number(delta_x)}),

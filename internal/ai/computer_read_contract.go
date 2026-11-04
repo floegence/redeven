@@ -19,7 +19,7 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 		operation = "screenshot"
 	case "computer.action":
 		switch action, _ := args["action"].(string); action {
-		case "capabilities", "source", "selection", "read", "text", "query", "table", "attribute", "wait":
+		case "geometry", "capabilities", "source", "selection", "read", "text", "query", "table", "attribute", "wait":
 			operation = action
 		}
 	}
@@ -51,6 +51,24 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 	}
 	boolField := func(p map[string]any, key string) bool { _, ok := p[key].(bool); return ok }
 	switch operation {
+	case "geometry":
+		quads, ok := p["quads"].([]any)
+		if !ok || p["source"] != "browser_layout" || !stringField(p, "ref", true) || !stringField(p, "document_id", true) || p["coordinate_space"] != "session_css_pixels" {
+			return false
+		}
+		for _, raw := range quads {
+			q, ok := raw.([]any)
+			if !ok || len(q) != 8 {
+				return false
+			}
+			for _, v := range q {
+				n, ok := v.(float64)
+				if !ok || math.IsNaN(n) || math.IsInf(n, 0) {
+					return false
+				}
+			}
+		}
+		return true
 	case "capabilities":
 		return stringField(p, "source", true) && computerStringArray(p["reads"]) && computerStringArray(p["actions"])
 	case "selection":

@@ -15,7 +15,7 @@ const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
 let closing;
 const host = await createComputerBrowserHost({
   extensionTransport: id => extensions.get(id),
-  onSourceClosed: (target, binding) => emit({ type: 'source_closed', target, binding }),
+  onSourceClosed: (target, binding, reason) => emit({ type: 'source_closed', target, binding, reason }),
   onSourceFault: (target, binding) => emit({ type: 'source_fault', target, binding }),
   onSourcePopup: (target, tab_id) => emit({ type: 'source_popup', target, tab_id }),
 });

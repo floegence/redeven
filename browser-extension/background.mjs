@@ -195,7 +195,9 @@ async function disconnect() {
   await Promise.allSettled([...retired.values()].map(task => task.finished));
   notifyConnectionChanged();
 }
-async function attach(tabId, selection, signal) {
+async function attach(tabId, selection, signal, task) {
+  const phase=value=>{task.connectionPhase=value;};
+  phase('tab_lookup');
   if (lineageUnavailable) throw new Error('browser directory unavailable');
   if (!Number.isSafeInteger(tabId) || tabId < 0) throw new Error('invalid tab');
   const tab = await chrome.tabs.get(tabId);
@@ -205,11 +207,13 @@ async function attach(tabId, selection, signal) {
     if (selection && (publicTabURL(current.url) !== selection.tab_url || (current.title || '').slice(0, 512) !== selection.tab_title || current.pendingUrl && publicTabURL(current.pendingUrl) !== selection.tab_url)) throw new Error('refresh tab selection');
   };
   validateSelection(tab);
+  phase('tab_restore');
   await restoreDiscardedTab(chrome, tab, signal);
   signal.throwIfAborted();
   let created = false;
   let binding;
   if (!bindings.has(tabId)) {
+    phase('debugger_attach');
     try { await chrome.debugger.attach({ tabId }, '1.3'); }
     catch (error) {
       const currentURL = tab.url || tab.pendingUrl || '';
@@ -222,6 +226,7 @@ async function attach(tabId, selection, signal) {
   binding = bindings.get(tabId);
   try {
     signal.throwIfAborted();
+    phase('binding_validation');
     if (tab.frozen) await chrome.debugger.sendCommand({ tabId }, 'Page.setWebLifecycleState', { state: 'active' });
     validateSelection(await chrome.tabs.get(tabId));
     await rememberNativeTargets();
@@ -281,7 +286,7 @@ async function execute(message, task) {
     case 'bind': {
       await nativeTab(args);
       if (!args.native_target_id && (typeof args.tab_url !== 'string' || !args.tab_url || typeof args.tab_title !== 'string')) throw new Error('select a current tab');
-      const result = await attach(Number(args.tab_id), args.tab_url ? args : undefined, task.abort.signal);
+      const result = await attach(Number(args.tab_id), args.tab_url ? args : undefined, task.abort.signal, task);
       if (task.cancelled) { if (result.created && bindings.get(Number(result.tab_id))?.id === result.binding) await unbind(Number(result.tab_id)); throw new Error('cancelled'); }
       return result;
     }
@@ -390,14 +395,15 @@ async function connect(name, label, remember = false) {
       return;
     }
     if (requests.has(message.id) || requests.size >= 64) { void disconnectPort(); return; }
-    const task = { cancelled: false, abort: new AbortController() }; requests.set(message.id, task);
+    const task = { cancelled: false, abort: new AbortController(), started:performance.now() }; requests.set(message.id, task);
     task.finished = (async () => {
       let response;
       try { response = { id: message.id, result: await execute(message, task) }; }
       catch (error) {
         const code = String(error.message).split(':')[0];
         response = { id: message.id, error: ['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE', 'ELEMENT_NOT_ACTIONABLE'].includes(code) ? code : 'EXTENSION_COMMAND_FAILED',
-          ...(task.protocolCode === undefined ? {} : {protocol_code:task.protocolCode}) };
+          ...(task.protocolCode === undefined ? {} : {protocol_code:task.protocolCode}),
+          ...(task.connectionPhase?{connection_diagnostic:{phase:task.connectionPhase,reason:error.connectionReason??'unknown',elapsed_ms:Math.round(performance.now()-task.started)}}:{}) };
       }
       // Retire before sending: the Runtime can issue another request as soon
       // as it receives the reply. Never race a later .finally callback.

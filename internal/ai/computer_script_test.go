@@ -121,7 +121,7 @@ func TestComputerScriptObservationOutput(t *testing.T) {
 		t.Fatalf("lost page identity: %+v", first)
 	}
 	unchanged := execute(`const state = await ui.observe(); ui.assert(state.observation.nodes.length === 3);`)["observation"].(map[string]any)
-	if unchanged["format"] != "diff" || len(unchanged["nodes"].([]any)) != 0 {
+	if unchanged["format"] != "full" || len(unchanged["nodes"].([]any)) != 3 {
 		t.Fatalf("repeated tree: %+v", unchanged)
 	}
 	observation["nodes"].([]any)[1].(map[string]any)["value"] = "after"
@@ -131,7 +131,7 @@ func TestComputerScriptObservationOutput(t *testing.T) {
 		t.Fatalf("local read leaked a tree: %+v", local)
 	}
 	changed := execute(`await ui.observe();`)["observation"].(map[string]any)
-	if changed["format"] != "diff" || len(changed["nodes"].([]any)) != 1 || len(changed["removed_refs"].([]string)) != 1 {
+	if changed["format"] != "full" || len(changed["nodes"].([]any)) != 2 || changed["removed_refs"] != nil {
 		t.Fatalf("local read advanced the published baseline: %+v", changed)
 	}
 	for _, scenario := range []string{"full", "document", "subtree", "truncated"} {
