@@ -63,6 +63,30 @@ it.each([1280, 390])('keeps controls close to the composer bottom at %ipx', asyn
   expect(gap).toBeGreaterThanOrEqual(7);
   expect(gap).toBeLessThanOrEqual(10);
 });
+it.each([1280, 820, 390])('nests the bottom controls concentrically inside the composer at %ipx', async width => {
+  const host = await mount(width);
+  const composer = host.querySelector<HTMLElement>('.flower-composer')!;
+  const outer = composer.getBoundingClientRect();
+  const radius = Number.parseFloat(getComputedStyle(composer).borderBottomRightRadius);
+  const send = composer.querySelector<HTMLElement>('.flower-composer-submit')!;
+  const sendBounds = send.getBoundingClientRect();
+  expect(Math.abs(outer.right - radius - (sendBounds.left + sendBounds.width / 2))).toBeLessThan(1);
+  expect(Math.abs(outer.bottom - radius - (sendBounds.top + sendBounds.height / 2))).toBeLessThan(1);
+  expect(Math.abs((outer.right - sendBounds.right) - (outer.bottom - sendBounds.bottom))).toBeLessThan(1);
+  const permission = composer.querySelector<HTMLElement>('.flower-composer-controls-inline .flower-permission-trigger');
+  if (width >= 820) {
+    expect(permission).not.toBeNull();
+    const bounds = permission!.getBoundingClientRect();
+    const innerRadius = Math.min(Number.parseFloat(getComputedStyle(permission!).borderBottomLeftRadius), bounds.height / 2, bounds.width / 2);
+    expect(Math.abs(outer.left + radius - (bounds.left + innerRadius))).toBeLessThan(1);
+    expect(Math.abs(outer.bottom - radius - (bounds.bottom - innerRadius))).toBeLessThan(1);
+    expect(Math.abs(bounds.left - outer.left - (outer.bottom - bounds.bottom))).toBeLessThan(1);
+    expect(bounds.height).toBe(sendBounds.height);
+    await userEvent.click(permission!);
+    expect(permission!.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON());
+    await userEvent.keyboard('{Escape}');
+  }
+});
 it('keeps the page stationary through repeated permission opens and gives each mode a distinct icon', async () => {
   const host = await mount();
   const composer = host.querySelector<HTMLElement>('.flower-composer')!;
@@ -114,13 +138,19 @@ it.each(['paper', 'porcelain-dark'])('keeps surrounding pixels stable while the 
   const editor = host.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
   await userEvent.fill(editor, 'Preserve the writing surface. 保留草稿与选择。');
   for (let i = 0; i < 10; i++) await frame();
-  const capture = commands as unknown as { capturePermissionOpening: () => Promise<{ baseline: string; frames: string[] }> };
+  const capture = commands as unknown as { capturePermissionOpening: () => Promise<{ frames: { maxChannelDelta: number; changedPixelRatio: number }[] }> };
   const evidence = await capture.capturePermissionOpening();
   expect(evidence.frames.length).toBeGreaterThan(1);
-  expect(new Set(evidence.frames)).toEqual(new Set([evidence.baseline]));
+  for (const [index, sample] of evidence.frames.entries()) {
+    // Bound Chromium's antialias rounding to two of 255 levels in fewer than
+    // 0.1% of pixels. Page-wide color changes and visible movement still fail.
+    expect(sample.maxChannelDelta, `opening frame ${index}`).toBeLessThanOrEqual(2);
+    expect(sample.changedPixelRatio, `opening frame ${index}`).toBeLessThan(0.001);
+  }
   await page.screenshot({ path: `__screenshots__/flower-permission-stable-${theme}.png` });
   await userEvent.keyboard('{Escape}');
   await waitFor(() => !document.querySelector('.flower-permission-menu'));
+  await page.screenshot({ element: host.querySelector<HTMLElement>('.flower-composer')!, path: `__screenshots__/flower-composer-aligned-${theme}.png` });
   await page.viewport(390, 850);
   for (let i = 0; i < 5; i++) await frame();
   await page.screenshot({ element: host.querySelector<HTMLElement>('.flower-composer')!, path: `__screenshots__/flower-composer-compact-${theme}.png` });

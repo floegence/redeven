@@ -9019,9 +9019,39 @@ button.flower-composer-context-source:focus-visible,
   --floe-input-focus-color: var(--floe-field-edge);
 }
 
+.flower-surface[data-flower-presentation='full'] .flower-composer {
+  --flower-composer-control-size: 2rem;
+  --flower-composer-control-inset: 0.5rem;
+  /* The outer arc and the nested controls share a center, including the border. */
+  border-radius: calc(var(--flower-composer-control-size) / 2 + var(--flower-composer-control-inset) + 1px);
+}
+
 .flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] {
   min-height: 5.5rem;
   padding: 0.875rem 0.875rem 0.5rem;
+}
+
+.flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] .flower-composer-footer {
+  align-items: center;
+  margin-inline: calc(var(--flower-composer-control-inset) - 0.875rem);
+}
+
+.flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] .flower-permission-trigger {
+  height: var(--flower-composer-control-size);
+  border-radius: 9999px;
+  padding-inline: 0.625rem;
+}
+
+.flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] .flower-composer-submit {
+  width: var(--flower-composer-control-size);
+  height: var(--flower-composer-control-size);
+  flex-basis: var(--flower-composer-control-size);
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .flower-surface[data-flower-presentation='full'] .flower-composer {
+    --flower-composer-control-size: 44px;
+  }
 }
 
 .flower-decision-surface[data-flower-bottom-mode='input_request'] textarea,

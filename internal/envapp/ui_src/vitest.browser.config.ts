@@ -134,12 +134,23 @@ export default mergeConfig(viteConfig, defineConfig({
           const transcript = await frame.locator('.flower-chat-transcript').boundingBox();
           if (!header || !transcript) throw new Error('Flower reading surface is unavailable');
           const regions = [header, { ...transcript, height: Math.min(200, transcript.height) }];
-          const paint = (png: ReturnType<typeof PNG.sync.read>) => regions.map(region => hashPngRegion(png, region)).join(':');
+          const pixels = (png: ReturnType<typeof PNG.sync.read>) => {
+            const rows: Buffer[] = [];
+            for (const region of regions) {
+              const left = Math.max(0, Math.floor(region.x));
+              const right = Math.min(png.width, Math.ceil(region.x + region.width));
+              for (let y = Math.max(0, Math.floor(region.y)); y < Math.min(png.height, Math.ceil(region.y + region.height)); y++) {
+                rows.push(png.data.subarray((y * png.width + left) * 4, (y * png.width + right) * 4));
+              }
+            }
+            return Buffer.concat(rows);
+          };
           // Flush the mounted surface; screencast may initially return a cached
           // compositor frame from before the fixture's layout/theme settled.
           await page.screenshot({ scale: 'css' });
           const cdp = await page.context().newCDPSession(page);
-          const frames: string[] = [];
+          let baseline: Buffer | undefined;
+          const frames: { maxChannelDelta: number; changedPixelRatio: number }[] = [];
           let firstFrame!: () => void;
           let initialTimeout: ReturnType<typeof setTimeout> | undefined;
           const initialFrame = new Promise<void>((resolve, reject) => {
@@ -147,15 +158,24 @@ export default mergeConfig(viteConfig, defineConfig({
             initialTimeout = setTimeout(() => reject(new Error('No initial screencast frame')), 5000);
           });
           cdp.on('Page.screencastFrame', event => {
-            frames.push(paint(PNG.sync.read(Buffer.from(event.data, 'base64'))));
+            const current = pixels(PNG.sync.read(Buffer.from(event.data, 'base64')));
+            baseline ??= current;
+            let maxChannelDelta = 0;
+            let changedPixels = 0;
+            for (let i = 0; i < current.length; i += 4) {
+              let delta = 0;
+              for (let channel = 0; channel < 4; channel++) delta = Math.max(delta, Math.abs(current[i + channel] - baseline[i + channel]));
+              if (delta > 0) changedPixels++;
+              maxChannelDelta = Math.max(maxChannelDelta, delta);
+            }
+            frames.push({ maxChannelDelta, changedPixelRatio: changedPixels / (current.length / 4) });
             firstFrame();
             void cdp.send('Page.screencastFrameAck', { sessionId: event.sessionId });
           });
           let openingStart = 0;
           try {
             await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
-            // Use one capture pipeline: screenshot and screencast can differ by
-            // one color level at antialiased edges before any interaction.
+            // Establish the baseline before clicking, then inspect every frame.
             await initialFrame;
             clearTimeout(initialTimeout);
             openingStart = frames.length;
@@ -169,7 +189,7 @@ export default mergeConfig(viteConfig, defineConfig({
             await cdp.send('Page.stopScreencast');
             await cdp.detach();
           }
-          return { baseline: frames[0], frames: frames.slice(openingStart) };
+          return { frames: frames.slice(openingStart) };
         },
         resizeTerminalSidebar: async ({ page }, delta: number) => {
           const frame = await terminalPanelFrame(page);
