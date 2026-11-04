@@ -26,7 +26,7 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 	payload, _ := result.Result.(map[string]any)
 	// An invalidation is not an action receipt when delivery was not confirmed.
 	// This also stops partial preparation/input without inventing completion.
-	if payload["observation_invalidated"] == true && payload["action_executed"] != true {
+	if payload["observation_invalidated"] == true && payload["action_executed"] != true && (payload["reason"] == "document_changed" || payload["reason"] == "candidate_changed") {
 		return false
 	}
 	if operation == "" {

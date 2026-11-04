@@ -128,3 +128,22 @@ func TestComputerIncompleteInvalidatedInputKeepsPreparationAndPartialProgress(t 
 		})
 	}
 }
+
+func TestComputerExplicitDelayReceiptIsCompletedWithoutInventingInput(t *testing.T) {
+	rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		if c.ToolName == "computer.observe" {
+			return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"observation": semanticTestTree()}}, nil
+		}
+		return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"action_executed": false, "observation_invalidated": true, "needs_observation": true, "mechanism": "browser_input_sequence", "completed_events": 1}, Safety: &InteractionSafetyDecision{Level: "routine"}}, nil
+	})
+	target, _ := rt.registry.ResolveTarget(t.Context(), call.TargetID)
+	target.Kind = "browser.connected"
+	if err := rt.registry.Update(target); err != nil {
+		t.Fatal(err)
+	}
+	result, err := executeTestScript(t.Context(), rt, call, "await ui.input([{type:'wait',duration_ms:100}]);await ui.snapshot({emit:false});")
+	p := result.Result.(map[string]any)
+	if err != nil || p["completed"] != true || p["action_executed"] != false || !reflect.DeepEqual(p["completed_actions"], []string{"input_sequence", "snapshot"}) {
+		t.Fatalf("delay mistaken for undispatched input: %v %v", err, p)
+	}
+}

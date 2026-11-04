@@ -283,6 +283,7 @@ export class BrowserComputerController {
     };
     if (page.openedPages.length) return await this.targetChange(dispatched());
     if (error instanceof BrowserObservationInvalidated) return {
+      error: 'TARGET_OBSERVATION_UNAVAILABLE',
       result: { observation_invalidated: true, reason:error.observationReason, observation_stage:error.observationStage || 'semantic_read', ...(error.invalidation?{invalidation:error.invalidation}:{}), ...(error.waitFacts?{wait:error.waitFacts}:{}), ...(error.protocolDiagnostic?{diagnostic:error.protocolDiagnostic}:{}), action_executed: dispatched(), execution_mode: 'background' },
       safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false },
     };

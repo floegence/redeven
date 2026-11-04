@@ -50,6 +50,7 @@ for (const operation of reads) {
     const invalidated = fixture(page => { page.revision++; return { invalid: true }; });
     const result = await invalidated.run(operation);
     assert.equal(result.result.observation_invalidated, true);
+    assert.equal(result.error, 'TARGET_OBSERVATION_UNAVAILABLE');
     assert.equal(result.safety.safe_to_send_to_model, false);
     assert.equal(result.result.invalid, undefined);
     assert.equal(invalidated.facts().calls, 1);
