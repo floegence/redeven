@@ -87,6 +87,24 @@ await session.run(async () => {
     await page.getByRole('tab', { name: 'quarterly-report.csv' }).click(); await gridReady();
     assert.ok(await page.locator('.flower-delimited-canvas').evaluate((element, previous) => element === previous, originalGrid));
     assert.equal(await page.getByRole('button', { name: 'Actual size', exact: true }).textContent(), '110%');
+    const previewWindow = page.locator('.flower-attachment-preview-window');
+    const geometry = page.locator('[data-floe-geometry-surface="floating-window"]').first();
+    const initialRect = await geometry.boundingBox();
+    const csvTab = page.getByRole('tab', { name: 'quarterly-report.csv' });
+    const textTab = page.getByRole('tab', { name: 'review-notes.txt' });
+    const from = await csvTab.boundingBox(); const to = await textTab.boundingBox();
+    await page.mouse.move(from.x + 18, from.y + from.height / 2); await page.mouse.down();
+    await page.mouse.move(to.x + to.width - 5, to.y + to.height / 2, { steps: 8 }); await page.mouse.up();
+    await page.waitForFunction(() => document.querySelector('[role="tab"]')?.textContent.includes('review-notes.txt'));
+    assert.equal(await csvTab.getAttribute('aria-selected'), 'true');
+    assert.equal(await csvTab.evaluate(element => getComputedStyle(element).userSelect), 'none');
+    assert.equal(await page.evaluate(() => String(window.getSelection())), '');
+    assert.deepEqual(await geometry.boundingBox(), initialRect);
+    assert.ok(await page.locator('.flower-delimited-canvas').evaluate((element, previous) => element === previous, originalGrid));
+    const titleContent = await previewWindow.locator('[data-floe-floating-window-title-content]').boundingBox();
+    const x = titleContent.x + titleContent.width - 16; const y = titleContent.y + titleContent.height / 2;
+    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 20, y + 40, { steps: 6 }); await page.mouse.up();
+    await page.waitForFunction(y => document.querySelector('[data-floe-geometry-surface="floating-window"]').getBoundingClientRect().y > y + 20, initialRect.y);
     await page.screenshot({ path: path.join(output, 'attachment-tabs-csv.png') });
     await page.getByRole('button', { name: 'Source', exact: true }).click();
     await page.getByRole('tab', { name: 'review-notes.txt' }).click();
@@ -97,7 +115,7 @@ await session.run(async () => {
     assert.match(await page.locator('pre').textContent(), /00123/);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('.flower-attachment-preview-window'));
-    report.checks.push('file:// multi-file header tabs, retained CSV canvas/zoom/source, independent text, close-to-single and Escape');
+    report.checks.push('file:// sortable multi-file header tabs, whitespace window drag, retained CSV canvas/zoom/source, independent text, close-to-single and Escape');
 
     await open('encoded.csv', 'text/csv', [0xc4, 0xe3, 0xba, 0xc3, 44, 48, 48, 49]);
     await page.getByRole('combobox', { name: 'Encoding' }).selectOption('gb18030'); await gridReady(); await find('你好');

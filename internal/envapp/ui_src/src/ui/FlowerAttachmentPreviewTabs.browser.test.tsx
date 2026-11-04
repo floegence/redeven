@@ -23,6 +23,10 @@ it('retains attachment content across tabs, deduplicates files and returns to a 
   setSource(b); await expect.poll(() => document.querySelectorAll('[role="tab"]').length).toBe(2);
   await userEvent.click(page.getByRole('tab', { name: 'notes.txt' }));
   expect(document.querySelector('[data-attachment-preview-document="a"] .flower-attachment-preview-text')).toBe(original);
+  const activeTab = document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!; activeTab.focus();
+  await userEvent.keyboard('{Alt>}{Shift>}{ArrowRight}{/Shift}{/Alt}');
+  expect(document.querySelector('[role="tab"]')?.textContent).toContain('other.txt');
+  expect(document.querySelector('[data-attachment-preview-document="a"] .flower-attachment-preview-text')).toBe(original);
   setSource({ ...a }); expect(loadA).toHaveBeenCalledTimes(1); expect(loadB).toHaveBeenCalledTimes(1);
   await userEvent.click(page.getByRole('button', { name: 'Close other.txt', exact: true }));
   await expect.poll(() => document.querySelector('[role="tablist"]')).toBeNull();

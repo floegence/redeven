@@ -39,7 +39,7 @@ export interface FilePreviewActionsProps extends Pick<
   | 'onDownload'
 > {
   compact?: boolean;
-  presentation?: 'icons' | 'menu';
+  presentation?: 'icons' | 'menu' | 'header';
   contentElement?: HTMLDivElement;
 }
 
@@ -190,7 +190,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
   ];
   const visibleActions = createMemo(() => actions.filter((action) => !action.visible || action.visible()));
   const menuItems = createMemo<FloatingContextMenuItem[]>(() =>
-    visibleActions().map((action) => ({
+    visibleActions().filter(action => props.presentation !== 'header' || action.id !== 'flower').map((action) => ({
       id: action.id,
       kind: 'action',
       label: action.label(),
@@ -218,7 +218,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
         }] : []}
       />
       <Show
-        when={props.presentation === 'menu'}
+        when={props.presentation === 'menu' || props.presentation === 'header'}
         fallback={
           <For each={visibleActions()}>
             {(action) => (
@@ -236,6 +236,13 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
           </For>
         }
       >
+        <Show when={props.presentation === 'header' && props.onAskFlower}>
+          <button type="button" class={buttonClass()} disabled={!props.item || props.loading}
+            aria-label={i18n.t('filePreview.askFlower')} title={i18n.t('filePreview.askFlower')}
+            onClick={() => props.onAskFlower?.(readSelection())}>
+            <FlowerNavigationIcon class="size-5" />
+          </button>
+        </Show>
         <button
           ref={trigger}
           type="button"

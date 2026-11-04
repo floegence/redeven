@@ -128,7 +128,7 @@
     "vitest": "^4.1.12",
     "@silurus/ooxml": "0.89.7",
     "docx-preview": "0.3.6",
-    "@floegence/floe-webapp-core": "0.89.1",
+    "@floegence/floe-webapp-core": "0.90.0",
     "lucide-solid": "1.17.0",
     "qrcode-generator": "^2.0.4",
     "thinking-orbs": "0.3.1",
@@ -136,7 +136,7 @@
     "katex": "0.18.10"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.89.1",
+    "@floegence/floe-webapp-boot": "0.90.0",
     "@floegence/flowersec-core": "5.11.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz",
     "builder-util-runtime": "^9.7.0",

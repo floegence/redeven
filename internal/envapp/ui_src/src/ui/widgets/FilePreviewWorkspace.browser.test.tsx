@@ -66,9 +66,13 @@ it.each(['light', 'dark'] as const)('keeps actual preview nodes, independent dra
 it('retains HTML iframe state through switching, close cancellation and rapid reopen', async () => {
   await page.viewport(1280, 900); const workspace = mount();
   await workspace.openPreview(file('page.html')); await expect.poll(() => document.querySelector('iframe.html-preview-frame')).toBeTruthy();
-  const frame = document.querySelector('iframe.html-preview-frame');
-  await workspace.openPreview(file('notes.md')); workspace.select('/workspace/page.html');
+  const frame = document.querySelector<HTMLIFrameElement>('iframe.html-preview-frame')!;
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const loaded = vi.fn(); frame.addEventListener('load', loaded);
+  await workspace.openPreview(file('notes.md'));
+  workspace.reorder(['/workspace/notes.md', '/workspace/page.html']); workspace.select('/workspace/page.html');
   expect(document.querySelector('iframe.html-preview-frame')).toBe(frame); expect(transport.read).toHaveBeenCalledTimes(2);
+  await new Promise(resolve => setTimeout(resolve, 150)); expect(loaded).not.toHaveBeenCalled();
   await page.screenshot({ element: document.querySelector('[data-floe-floating-window-surface]')!, path: '__screenshots__/file-preview-tabs-porcelain.png' });
   workspace.requestClose(); await workspace.openPreview(file('fresh.md'));
   await expect.poll(() => workspace.entries().length).toBe(1); expect(workspace.activeId()).toBe('/workspace/fresh.md'); expect(workspace.open()).toBe(true);
@@ -95,11 +99,13 @@ it('keeps active actions tied to their document and recovers one failed tab with
   await expect.poll(() => workspace.activeController().error()).toBeNull();
   const two = document.querySelector('[data-preview-document="/workspace/two.md"]');
   expect(two?.querySelector('.file-markdown-body')).toBeTruthy();
-  await userEvent.click(page.getByRole('button', { name: 'Copy path', exact: true }));
+  await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+  await userEvent.click(page.getByRole('menuitem', { name: 'Copy path', exact: true }));
   expect(transport.copy).toHaveBeenLastCalledWith('/workspace/two.md');
   await userEvent.click(page.getByRole('tab', { name: 'one.md' }));
   await expect.poll(() => workspace.activeController()).toBe(first);
-  await userEvent.click(page.getByRole('button', { name: 'Copy path', exact: true }));
+  await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+  await userEvent.click(page.getByRole('menuitem', { name: 'Copy path', exact: true }));
   expect(transport.copy).toHaveBeenLastCalledWith('/workspace/one.md');
   expect(transport.read).toHaveBeenCalledTimes(3);
   for (const tab of document.querySelectorAll('[role="tab"]')) {
@@ -139,4 +145,28 @@ it('preserves the CSV source mode when switching to another file and back', asyn
   expect(document.querySelector('[data-spreadsheet-format="csv"]')).toBe(preview);
   await expect.element(page.getByRole('button', { name: 'Source', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(transport.read).toHaveBeenCalledTimes(2);
+});
+
+it('reorders tabs without losing drafts and keeps only Flower and More beside window controls', async () => {
+  await page.viewport(1280, 900); const workspace = mount();
+  for (const name of ['first.md', 'second.md', 'third.md']) await workspace.openPreview(file(name));
+  workspace.select('/workspace/first.md');
+  const first = workspace.active()!; first.controller.beginEditing(); first.controller.updateDraft('Retained while sorting');
+  const panel = document.querySelector('[data-preview-document="/workspace/first.md"]');
+  const tab = document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!;
+  expect(getComputedStyle(tab).userSelect).toBe('none');
+  tab.focus(); await userEvent.keyboard('{Alt>}{Shift>}{ArrowRight}{/Shift}{/Alt}');
+  expect(workspace.entries().map(entry => entry.id)).toEqual(['/workspace/second.md', '/workspace/first.md', '/workspace/third.md']);
+  expect(workspace.active()).toBe(first);
+  expect(document.querySelector('[data-preview-document="/workspace/first.md"]')).toBe(panel);
+  expect(first.controller.draftText()).toBe('Retained while sorting');
+  const header = document.querySelector('[data-floe-floating-window-titlebar]')!;
+  expect(header.querySelector('[aria-label="Copy path"]')).toBeNull();
+  expect(header.querySelector('[aria-label="Download file"]')).toBeNull();
+  await expect.element(page.getByRole('button', { name: 'Ask Flower', exact: true })).toBeVisible();
+  await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+  await expect.element(page.getByRole('menuitem', { name: 'Save file', exact: true })).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  expect(workspace.open()).toBe(true);
+  await page.screenshot({ element: document.querySelector<HTMLElement>('[data-floe-floating-window-surface]')!, path: '__screenshots__/preview-header-polish.png' });
 });

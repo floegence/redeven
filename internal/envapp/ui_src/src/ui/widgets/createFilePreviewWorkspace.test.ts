@@ -98,3 +98,20 @@ it('isolates failed reads and recovers only the retried document', async () => {
   await failed.retry(); expect(failed.error()).toBeNull(); expect(failed.text()).toBe('Original content');
   expect(good.text()).toBe('Original content'); expect(workspace.activeId()).toBe('/workspace/good.txt');
 });
+
+it('reorders retained documents without changing selection or dirty state and rejects stale orders', async () => {
+  const workspace = mount();
+  for (const name of ['a.txt', 'b.txt', 'c.txt']) await workspace.openPreview(file(name));
+  const a = workspace.entries()[0];
+  a.controller.beginEditing(); a.controller.updateDraft('Keep draft');
+  workspace.reorder(['/workspace/c.txt', '/workspace/a.txt', '/workspace/b.txt']);
+  expect(workspace.entries()[1]).toBe(a);
+  expect(workspace.activeId()).toBe('/workspace/c.txt');
+  expect(a.controller.draftText()).toBe('Keep draft');
+  expect(read).toHaveBeenCalledTimes(3);
+  workspace.reorder(['/workspace/b.txt']);
+  expect(workspace.entries()).toHaveLength(3);
+  workspace.requestClose('/workspace/a.txt');
+  workspace.reorder(['/workspace/a.txt', '/workspace/b.txt', '/workspace/c.txt']);
+  expect(workspace.entries()[1]).toBe(a);
+});

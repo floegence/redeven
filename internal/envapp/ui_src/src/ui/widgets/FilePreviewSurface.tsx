@@ -33,7 +33,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       title={title()}
       headerActions={(
         <Show when={!isMobile()}>
-          <FilePreviewActions {...props} compact contentElement={contentElement()} />
+          <FilePreviewActions {...props} compact presentation="header" contentElement={contentElement()} />
         </Show>
       )}
       stackId="file-preview"

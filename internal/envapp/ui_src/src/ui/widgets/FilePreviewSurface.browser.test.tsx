@@ -78,7 +78,11 @@ describe('File preview titlebar', () => {
       expect(actions).toBeTruthy();
       expect(root.querySelector('.redeven-file-preview-toolbar')).toBeNull();
       expect(root.textContent).not.toContain('/workspace/review.md');
-      expect(root.querySelectorAll('button[aria-label="Download file"]')).toHaveLength(1);
+      expect(root.querySelectorAll('button[aria-label="Download file"]')).toHaveLength(0);
+      const chooseAction = async (name: string) => {
+        await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+        await userEvent.click(page.getByRole('menuitem', { name, exact: true }));
+      };
       const title = titlebar.querySelector<HTMLElement>('h2 > span')!;
       const controls = titlebar.querySelector<HTMLElement>('[data-floe-floating-window-control="maximize"]')!;
       const assertLayout = () => {
@@ -91,9 +95,9 @@ describe('File preview titlebar', () => {
       const body = root.querySelector<HTMLElement>('.redeven-file-preview')!;
       expect(Math.abs(body.getBoundingClientRect().top - titlebar.getBoundingClientRect().bottom)).toBeLessThan(1);
       const originalRect = root.getBoundingClientRect().toJSON();
-      await userEvent.click(actions.querySelector<HTMLButtonElement>('button[aria-label="Copy path"]')!);
+      await chooseAction('Copy path');
       expect(onCopyPath).toHaveBeenCalledOnce();
-      expect(actions.querySelector('button[aria-label="Path copied"]')).toBeTruthy();
+      expect(actions.querySelector('button[title="Path copied"]')).toBeTruthy();
       const paragraph = root.querySelector('.file-markdown-body p')!;
       const range = document.createRange();
       range.selectNodeContents(paragraph);
@@ -122,12 +126,14 @@ describe('File preview titlebar', () => {
       expect(root.getBoundingClientRect().toJSON()).toEqual(originalRect);
       actions.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       expect(root.getBoundingClientRect().toJSON()).toEqual(originalRect);
-      await userEvent.click(actions.querySelector<HTMLButtonElement>('button[aria-label="Edit file"]')!);
-      expect(actions.querySelector('button[aria-label="Save file"]')).toBeTruthy();
-      expect(actions.querySelector('button[aria-label="Discard changes"]')).toBeTruthy();
+      await chooseAction('Edit file');
+      await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+      await expect.element(page.getByRole('menuitem', { name: 'Save file', exact: true })).toBeVisible();
+      await expect.element(page.getByRole('menuitem', { name: 'Discard changes', exact: true })).toBeVisible();
+      await userEvent.keyboard('{Escape}');
       assertLayout();
-      await userEvent.click(actions.querySelector<HTMLButtonElement>('button[aria-label="Discard changes"]')!);
-      await userEvent.click(actions.querySelector<HTMLButtonElement>('button[aria-label="Download file"]')!);
+      await chooseAction('Discard changes');
+      await chooseAction('Download file');
       expect(onDownload).toHaveBeenCalledOnce();
     } finally {
       dispose();

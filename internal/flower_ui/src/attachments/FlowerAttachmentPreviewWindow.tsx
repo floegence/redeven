@@ -175,9 +175,14 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
       if (document.activeElement === document.body) document.getElementById(panelId(remaining[0].id))?.focus({ preventScroll: true });
     });
   };
+  // Keep DOM order independent from tab order so embedded viewers never reload.
+  const panels = createMemo<FlowerAttachmentPreviewSource[]>(previous => {
+    const current = sources();
+    return [...previous.filter(source => current.includes(source)), ...current.filter(source => !previous.includes(source))];
+  }, []);
   const RetainedPanels = () => {
     onCleanup(() => { if (!props.source) setSources([]); });
-    return <For each={sources()}>{source => <div class="h-full min-h-0" data-attachment-preview-document={source.id}
+    return <For each={panels()}>{source => <div class="h-full min-h-0" data-attachment-preview-document={source.id}
       tabIndex={-1} role={sources().length > 1 ? 'tabpanel' : undefined} id={panelId(source.id)} aria-labelledby={sources().length > 1 ? tabId(source.id) : undefined} aria-label={source.name}
       hidden={activeId() !== source.id} inert={activeId() !== source.id}>
       <AttachmentPreviewPanel {...props} source={source} open={!!props.source} />
@@ -190,7 +195,7 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
       })));
   return <FloatingWindow open={!!props.source} onOpenChange={open => { if (!open) props.onClose(); }} title={active()?.name}
     titleContent={multiple() ? <WindowTabs ariaLabel={props.copy.preview}
-      items={tabItems()} activeId={activeId()} onChange={setActiveId} onClose={closeTab}
+      items={tabItems()} activeId={activeId()} onChange={setActiveId} onReorder={ids => setSources(current => ids.map(id => current.find(source => source.id === id)!))} onClose={closeTab}
       labels={{ scrollLeft: props.copy.previousTab, scrollRight: props.copy.nextTab }} /> : undefined}
     class={cn('flower-attachment-preview-window', 'shadow-[0_28px_72px_-42px_var(--redeven-shadow-color)]')}
     defaultSize={sizing.defaultSize} minSize={sizing.minSize} resizable draggable zIndex={props.zIndex ?? 164}>

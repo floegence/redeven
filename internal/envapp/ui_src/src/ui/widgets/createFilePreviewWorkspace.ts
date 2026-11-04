@@ -65,6 +65,14 @@ export function createFilePreviewWorkspace(params: Parameters<typeof createFileP
       }
     });
   };
+  const reorder = (ids: string[]) => {
+    if (!open() || pendingClose()) return;
+    const current = entries();
+    if (ids.length !== current.length || new Set(ids).size !== ids.length) return;
+    const byId = new Map(current.map(entry => [entry.id, entry]));
+    if (ids.some(id => !byId.has(id))) return;
+    setEntries(ids.map(id => byId.get(id)!));
+  };
   const requestClose = (id?: string) => {
     if (!open()) return;
     const targets = id ? entries().filter(entry => entry.id === id) : entries();
@@ -96,6 +104,6 @@ export function createFilePreviewWorkspace(params: Parameters<typeof createFileP
     await loading;
   };
   onCleanup(() => { for (const dispose of disposers.values()) dispose(); disposers.clear(); presentations.clear(); });
-  return { entries, activeId, active, activeController, open, openPreview, select, requestClose, pendingClose, pendingDirty, pendingSaving, confirmClose, cancelClose: () => setPendingClose(null), retainEntry };
+  return { entries, activeId, active, activeController, open, openPreview, select, reorder, requestClose, pendingClose, pendingDirty, pendingSaving, confirmClose, cancelClose: () => setPendingClose(null), retainEntry };
 }
 export type FilePreviewWorkspace = ReturnType<typeof createFilePreviewWorkspace>;

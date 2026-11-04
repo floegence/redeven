@@ -9,7 +9,7 @@ import { PreviewWindow } from './PreviewWindow';
 import { WindowModal } from './WindowModal';
 import { ConfirmDialog } from '../primitives/EnvAppModal';
 import type { FilePreviewController } from './createFilePreviewController';
-import type { FilePreviewWorkspace } from './createFilePreviewWorkspace';
+import type { FilePreviewEntry, FilePreviewWorkspace } from './createFilePreviewWorkspace';
 import type { FilePreviewSurfaceProps } from './FilePreviewSurface';
 import { dirnameAbsolute } from '../utils/askFlowerPath';
 import { useNotification } from '@floegence/floe-webapp-core';
@@ -152,6 +152,11 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
   const tabId = (id: string) => tabPrefix + '-tab-' + encodeURIComponent(id);
   const panelId = (id: string) => tabPrefix + '-panel-' + encodeURIComponent(id);
   const multiple = createMemo(() => workspace.entries().length > 1);
+  // Moving a retained iframe DOM node reloads it. Tab order must not move panels.
+  const panels = createMemo<FilePreviewEntry[]>(previous => {
+    const current = workspace.entries();
+    return [...previous.filter(entry => current.includes(entry)), ...current.filter(entry => !previous.includes(entry))];
+  }, []);
   const title = () => workspace.active()?.item.name ?? i18n.t('filePreview.previewWindowTitle');
   const closeTab = (id: string) => {
     const focusedTab = document.activeElement?.closest('[role="tab"]');
@@ -180,12 +185,12 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
     ariaLabel={i18n.t('filePreview.previewWindowTitle')}
     labels={{ scrollLeft: i18n.t('filePreview.previousTab'), scrollRight: i18n.t('filePreview.nextTab') }}
     items={tabItems()}
-    activeId={workspace.activeId()} onChange={workspace.select} onClose={closeTab}
+    activeId={workspace.activeId()} onChange={workspace.select} onReorder={workspace.reorder} onClose={closeTab}
   /> : undefined);
   return <PreviewWindow open={workspace.open()} onOpenChange={open => { if (!open) workspace.requestClose(); }}
     title={title()} titleContent={tabs()} stackId="file-preview" persistenceKey="file-preview" surfaceRef={setSurface}
     headerActions={<div ref={setActionsHost} class="flex items-center" />}>
-    <For each={workspace.entries()}>{entry => {
+    <For each={panels()}>{entry => {
       const SessionSurface: Component<FilePreviewSurfaceProps> = panel => {
         const [content, setContent] = createSignal<HTMLDivElement>();
         const release = workspace.retainEntry(entry); onCleanup(release);
@@ -195,7 +200,7 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
         });
         return <>
           <Show when={actionsHost()}>{host => <Portal mount={host()}><div style={{ display: workspace.activeId() === entry.id && !layout.isMobile() ? undefined : 'none' }}>
-            <FilePreviewActions {...panel} active={workspace.activeId() === entry.id && workspace.open()} compact contentElement={content()} />
+            <FilePreviewActions {...panel} active={workspace.activeId() === entry.id && workspace.open()} compact presentation="header" contentElement={content()} />
           </div></Portal>}</Show>
           <div data-preview-document={entry.id} role={multiple() ? 'tabpanel' : undefined} id={panelId(entry.id)} aria-labelledby={multiple() ? tabId(entry.id) : undefined} aria-label={entry.item.name}
             class="h-full min-h-0 flex-1" hidden={workspace.activeId() !== entry.id} inert={workspace.activeId() !== entry.id}>

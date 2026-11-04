@@ -135,7 +135,8 @@ describe('HTML file page preview', () => {
     controller.updateSelection('Unrelated selection update');
     expect(document.querySelector('iframe')).toBe(originalFrame);
 
-    await userEvent.click(page.getByRole('button', { name: 'Edit file', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Edit file', exact: true }));
     await vi.waitFor(() => expect(document.querySelector('.monaco-editor')).toBeTruthy(), { timeout: 10_000 });
     await vi.waitFor(() => expect(document.querySelector('.monaco-editor .view-lines')?.textContent).toMatch(/Preview\sreport/), { timeout: 10_000 });
     expect(document.querySelector('iframe.html-preview-frame')).toBeNull();
@@ -145,10 +146,12 @@ describe('HTML file page preview', () => {
     const savedSource = controller.draftText();
     expect(savedSource).toContain('<h1>Saved report</h1>');
     expect(savedSource).not.toContain('Preview report');
-    await userEvent.click(page.getByRole('button', { name: 'Save file', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Save file', exact: true }));
     await vi.waitFor(() => expect(writeFile).toHaveBeenCalledOnce());
     expect(writeFile.mock.calls[0]).toEqual([{ path: file.path, content: savedSource, encoding: 'utf8', createDirs: false }]);
-    await userEvent.click(page.getByRole('button', { name: 'Discard changes', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Discard changes', exact: true }));
     await vi.waitFor(() => expect(document.querySelector('iframe.html-preview-frame')).toBeTruthy());
     expect((await htmlCommands.inspectHtmlFilePreview()).heading).toBe('Saved report');
   }, 20_000);
