@@ -65,7 +65,7 @@ import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack, useContext } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Eye, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, ShieldCheck, Terminal, Trash, Unlock, Workflow, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Eye, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Pencil, Plus, Refresh, Search, Send, Settings, Shield, ShieldCheck, Terminal, Trash, Unlock, Workflow, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -14528,10 +14528,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </div>
                 <div class="flower-composer-footer">
                     <div class="flower-model-stack">
-                      {composerControls()}
-                    </div>
-                    <div class="flower-composer-actions">
-                <div class="flower-composer-tool-cluster">
                         <Show when={composerAttachmentEditingAllowed()}>
                           <button
                             ref={attachmentPickerButtonRef}
@@ -14546,11 +14542,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               attachmentPickerRef?.click();
                             }}
                           >
-                            <Paperclip class="h-4 w-4" aria-hidden="true" />
+                            <Plus aria-hidden="true" />
                           </button>
                         </Show>
+                      {composerControls()}
+                    </div>
+                    <div class="flower-composer-actions">
                   {composerMoreButton()}
-                </div>
                 {composerMorePanel()}
                       <Show when={selectedContextUsage() ?? (selectedThread()?.model_context ? {} : undefined)}>
                         {(contextUsage) => (

@@ -1560,13 +1560,6 @@
   gap: 0.5rem;
 }
 
-.flower-composer-tool-cluster {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0;
-}
-
 .flower-composer-controls-viewport {
   position: relative;
   display: flex;
@@ -2302,19 +2295,27 @@
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: color 120ms ease;
+}
+
+.flower-permission-selector .flower-permission-trigger,
+.flower-permission-selector .flower-permission-trigger:focus-visible {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .flower-permission-trigger:hover,
 .flower-permission-trigger:focus-visible,
 .flower-permission-trigger[aria-expanded='true'] {
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
   color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
   outline: none;
 }
 
-.flower-permission-trigger:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+.flower-permission-trigger:focus-visible .flower-permission-label {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 .flower-permission-trigger:disabled,
@@ -2339,7 +2340,6 @@
 .flower-permission-trigger[data-permission-type='full_access']:hover,
 .flower-permission-trigger[data-permission-type='full_access']:focus-visible,
 .flower-permission-trigger[data-permission-type='full_access'][aria-expanded='true'] {
-  background: color-mix(in srgb, var(--redeven-status-warning) 18%, transparent);
   color: var(--redeven-status-warning-foreground);
 }
 
@@ -9036,12 +9036,6 @@ button.flower-composer-context-source:focus-visible,
   margin-inline: calc(var(--flower-composer-control-inset) - 0.875rem);
 }
 
-.flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] .flower-permission-trigger {
-  height: var(--flower-composer-control-size);
-  border-radius: 9999px;
-  padding-inline: 0.625rem;
-}
-
 .flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] .flower-composer-submit {
   width: var(--flower-composer-control-size);
   height: var(--flower-composer-control-size);
@@ -9535,6 +9529,7 @@ button.flower-attachment-preview-trigger:disabled {
   width: 2rem;
   height: 2rem;
   flex: 0 0 2rem;
+  border-radius: 50%;
 }
 
 .flower-attachment-icon-button:hover,
@@ -9552,10 +9547,14 @@ button.flower-attachment-preview-trigger:disabled {
   opacity: 0.45;
 }
 
-.flower-attachment-icon-button > svg,
-.flower-composer-attachment-button > svg {
+.flower-attachment-icon-button > svg {
   width: 1rem;
   height: 1rem;
+}
+
+.flower-composer-attachment-button > svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .flower-attachment-item .flower-attachment-remove {

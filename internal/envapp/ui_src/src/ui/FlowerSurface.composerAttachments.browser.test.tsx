@@ -89,6 +89,12 @@ describe('Flower composer attachment browser presentation', () => {
     const transfer = new DataTransfer();
     transfer.items.add(file);
     const picker = runtime.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const openPicker = vi.spyOn(picker, 'click').mockImplementation(() => {});
+    const upload = runtime.querySelector<HTMLButtonElement>('.flower-composer-attachment-button')!;
+    await waitFor(() => !upload.disabled);
+    await userEvent.click(upload);
+    expect(openPicker).toHaveBeenCalledOnce();
+    openPicker.mockRestore();
     Object.defineProperty(picker, 'files', { configurable: true, value: transfer.files });
     picker.dispatchEvent(new Event('change', { bubbles: true }));
     await waitFor(() => Boolean(runtime.querySelector('[data-attachment-status="staged_ready"]')));

@@ -158,7 +158,15 @@ export default mergeConfig(viteConfig, defineConfig({
             initialTimeout = setTimeout(() => reject(new Error('No initial screencast frame')), 5000);
           });
           cdp.on('Page.screencastFrame', event => {
-            const current = pixels(PNG.sync.read(Buffer.from(event.data, 'base64')));
+            const png = PNG.sync.read(Buffer.from(event.data, 'base64'));
+            // The marker is outside the sampled reading regions. Seeing it
+            // confirms this is a fresh compositor frame, not the cached frame
+            // returned when screencast starts.
+            if (!baseline && (png.data[0] !== 17 || png.data[1] !== 241 || png.data[2] !== 83)) {
+              void cdp.send('Page.screencastFrameAck', { sessionId: event.sessionId });
+              return;
+            }
+            const current = pixels(png);
             baseline ??= current;
             let maxChannelDelta = 0;
             let changedPixels = 0;
@@ -175,6 +183,12 @@ export default mergeConfig(viteConfig, defineConfig({
           let openingStart = 0;
           try {
             await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
+            await page.evaluate(() => {
+              const marker = document.createElement('div');
+              marker.id = 'flower-permission-capture-marker';
+              marker.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;background:rgb(17,241,83);z-index:2147483647;pointer-events:none';
+              document.body.appendChild(marker);
+            });
             // Establish the baseline before clicking, then inspect every frame.
             await initialFrame;
             clearTimeout(initialTimeout);
@@ -188,6 +202,7 @@ export default mergeConfig(viteConfig, defineConfig({
             clearTimeout(initialTimeout);
             await cdp.send('Page.stopScreencast');
             await cdp.detach();
+            await page.evaluate(() => document.getElementById('flower-permission-capture-marker')?.remove());
           }
           return { frames: frames.slice(openingStart) };
         },

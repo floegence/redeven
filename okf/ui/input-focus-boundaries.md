@@ -14,7 +14,7 @@ Published Floe owns focus presentation; Redeven supplies layout, semantic state 
 ## One visible boundary
 Ordinary inputs, textareas, and native selects consume Floe's default rule. Focus never changes border width, padding, or dimensions.
 
-Buttons, links, checkboxes, and switches retain their distinct keyboard focus indicators; a button inside an input boundary follows the upstream compound-control treatment.
+Buttons, links, checkboxes, and switches retain their distinct keyboard focus indicators; buttons inside an input boundary follow the upstream compound-control treatment. Flower's lightweight permission trigger deliberately stays transparent and marks keyboard focus with a label underline instead of a filled capsule.
 
 ## Published ownership
 Desktop Welcome, Env App, and Flower consume the same released Floe dependency. Product selectors may define normal and hover appearance without duplicating Floe's focus rules. Flower's persistent chat composer maps the published `--floe-input-focus-color` token to its existing field edge, keeping focus handoffs and thread switches visually quiet, including forced colors. Approval and input-request fields retain their ordinary focus behavior. It does not copy CSS rules or load the full renderer stylesheet into that document.

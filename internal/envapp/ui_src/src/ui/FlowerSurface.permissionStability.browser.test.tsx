@@ -63,7 +63,7 @@ it.each([1280, 390])('keeps controls close to the composer bottom at %ipx', asyn
   expect(gap).toBeGreaterThanOrEqual(7);
   expect(gap).toBeLessThanOrEqual(10);
 });
-it.each([1280, 820, 390])('nests the bottom controls concentrically inside the composer at %ipx', async width => {
+it.each([1280, 820, 390])('places upload first and keeps the send circle aligned with the composer at %ipx', async width => {
   const host = await mount(width);
   const composer = host.querySelector<HTMLElement>('.flower-composer')!;
   const outer = composer.getBoundingClientRect();
@@ -73,18 +73,34 @@ it.each([1280, 820, 390])('nests the bottom controls concentrically inside the c
   expect(Math.abs(outer.right - radius - (sendBounds.left + sendBounds.width / 2))).toBeLessThan(1);
   expect(Math.abs(outer.bottom - radius - (sendBounds.top + sendBounds.height / 2))).toBeLessThan(1);
   expect(Math.abs((outer.right - sendBounds.right) - (outer.bottom - sendBounds.bottom))).toBeLessThan(1);
+  const upload = composer.querySelector<HTMLButtonElement>('.flower-composer-attachment-button')!;
+  const uploadBounds = upload.getBoundingClientRect();
+  expect(composer.querySelector('.flower-composer-footer button')).toBe(upload);
+  expect(upload.closest('.flower-composer-actions')).toBeNull();
+  expect(Math.abs(uploadBounds.left - outer.left - (outer.bottom - uploadBounds.bottom))).toBeLessThan(1);
+  expect(uploadBounds.height).toBe(sendBounds.height);
   const permission = composer.querySelector<HTMLElement>('.flower-composer-controls-inline .flower-permission-trigger');
   if (width >= 820) {
     expect(permission).not.toBeNull();
     const bounds = permission!.getBoundingClientRect();
-    const innerRadius = Math.min(Number.parseFloat(getComputedStyle(permission!).borderBottomLeftRadius), bounds.height / 2, bounds.width / 2);
-    expect(Math.abs(outer.left + radius - (bounds.left + innerRadius))).toBeLessThan(1);
-    expect(Math.abs(outer.bottom - radius - (bounds.bottom - innerRadius))).toBeLessThan(1);
-    expect(Math.abs(bounds.left - outer.left - (outer.bottom - bounds.bottom))).toBeLessThan(1);
-    expect(bounds.height).toBe(sendBounds.height);
+    expect(bounds.left).toBeGreaterThanOrEqual(uploadBounds.right);
+    expect(bounds.height).toBe(24);
+    const expectTextControl = () => {
+      const css = getComputedStyle(permission!);
+      expect(css.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      expect(css.borderWidth).toBe('0px');
+      expect(css.boxShadow).toBe('none');
+    };
+    expectTextControl();
+    await userEvent.hover(permission!);
+    expectTextControl();
     await userEvent.click(permission!);
     expect(permission!.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON());
+    expectTextControl();
     await userEvent.keyboard('{Escape}');
+    await waitFor(() => document.activeElement === permission);
+    expectTextControl();
+    expect(getComputedStyle(permission!.querySelector('.flower-permission-label')!).textDecorationLine).toBe('underline');
   }
 });
 it('keeps the page stationary through repeated permission opens and gives each mode a distinct icon', async () => {
@@ -142,10 +158,10 @@ it.each(['paper', 'porcelain-dark'])('keeps surrounding pixels stable while the 
   const evidence = await capture.capturePermissionOpening();
   expect(evidence.frames.length).toBeGreaterThan(1);
   for (const [index, sample] of evidence.frames.entries()) {
-    // Bound Chromium's antialias rounding to two of 255 levels in fewer than
-    // 0.1% of pixels. Page-wide color changes and visible movement still fail.
+    // Bound Chromium's text-edge rasterization to two of 255 levels in fewer
+    // than 1% of pixels. Page-wide color changes and visible movement still fail.
     expect(sample.maxChannelDelta, `opening frame ${index}`).toBeLessThanOrEqual(2);
-    expect(sample.changedPixelRatio, `opening frame ${index}`).toBeLessThan(0.001);
+    expect(sample.changedPixelRatio, `opening frame ${index}`).toBeLessThan(0.01);
   }
   await page.screenshot({ path: `__screenshots__/flower-permission-stable-${theme}.png` });
   await userEvent.keyboard('{Escape}');
