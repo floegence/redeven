@@ -94,7 +94,12 @@ await session.run(async () => {
     const textTab = page.getByRole('tab', { name: 'review-notes.txt' });
     const from = await csvTab.boundingBox(); const to = await textTab.boundingBox();
     await page.mouse.move(from.x + 18, from.y + from.height / 2); await page.mouse.down();
-    await page.mouse.move(to.x + to.width - 5, to.y + to.height / 2, { steps: 8 }); await page.mouse.up();
+    await page.mouse.move(to.x + to.width - 5, to.y + to.height / 2, { steps: 8 });
+    assert.equal(await csvTab.getAttribute('data-floe-tab-motion'), 'dragging');
+    assert.deepEqual(await csvTab.evaluate(element => { const style = getComputedStyle(element); return { opacity: style.opacity, outline: style.outlineStyle, border: style.borderTopColor }; }), { opacity: '1', outline: 'none', border: 'rgba(0, 0, 0, 0)' });
+    await page.screenshot({ path: path.join(output, 'attachment-tabs-dragging.png') });
+    await page.mouse.up();
+    await page.waitForFunction(() => !document.querySelector('[data-floe-tab-motion]'));
     await page.waitForFunction(() => document.querySelector('[role="tab"]')?.textContent.includes('review-notes.txt'));
     assert.equal(await csvTab.getAttribute('aria-selected'), 'true');
     assert.equal(await csvTab.evaluate(element => getComputedStyle(element).userSelect), 'none');

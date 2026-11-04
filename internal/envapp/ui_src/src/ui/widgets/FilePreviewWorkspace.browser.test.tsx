@@ -1,7 +1,7 @@
 import '../../index.css';
 import { builtInShellThemePresets, FloeConfigProvider, LayoutProvider, ThemeProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FilePreviewContext } from './FilePreviewContext';
 import { FilePreviewHost } from './FilePreviewHost';
@@ -169,4 +169,30 @@ it('reorders tabs without losing drafts and keeps only Flower and More beside wi
   await userEvent.keyboard('{Escape}');
   expect(workspace.open()).toBe(true);
   await page.screenshot({ element: document.querySelector<HTMLElement>('[data-floe-floating-window-surface]')!, path: '__screenshots__/preview-header-polish.png' });
+});
+
+it.each(['light', 'dark'] as const)('keeps refined pointer sorting and blank header dragging coherent in %s', async mode => {
+  await page.viewport(1280, 1000); const workspace = mount(mode);
+  for (const name of ['first.md', 'second.md', 'third.md']) await workspace.openPreview(file(name));
+  workspace.select('/workspace/first.md');
+  const controller = workspace.activeController(); controller.beginEditing(); controller.updateDraft('Draft survives native pointer sorting');
+  const panel = document.querySelector('[data-preview-document="/workspace/first.md"]');
+  type Rect = { y: number; x: number; width: number; height: number };
+  const result = await (commands as unknown as { inspectPreviewTabMotion(): Promise<{
+    during: { phase: string; opacity: string; outline: string; border: string; transform: string };
+    initial: Rect; windowDuring: Rect; windowAfterBlank: Rect; windowAfterControl: Rect;
+    orderBefore: string[]; orderDuring: string[]; orderCanceled: string[]; orderAfter: string[];
+  }> }).inspectPreviewTabMotion();
+  expect(result.during).toMatchObject({ phase: 'dragging', opacity: '1', outline: 'none', border: 'rgba(0, 0, 0, 0)' });
+  expect(result.during.transform).not.toBe('none');
+  expect(result.orderDuring).toEqual(result.orderBefore); expect(result.orderCanceled).toEqual(result.orderBefore);
+  expect(result.orderAfter).toEqual(['/workspace/second.md', '/workspace/third.md', '/workspace/first.md']);
+  expect(result.windowDuring).toEqual(result.initial);
+  expect(result.windowAfterBlank.y - result.initial.y).toBeGreaterThan(20);
+  expect(result.windowAfterControl).toEqual(result.windowAfterBlank);
+  expect(workspace.open()).toBe(true); expect(workspace.activeController()).toBe(controller);
+  expect(controller.draftText()).toBe('Draft survives native pointer sorting');
+  expect(document.querySelector('[data-preview-document="/workspace/first.md"]')).toBe(panel);
+  expect(String(window.getSelection())).toBe('');
+  await page.screenshot({ element: document.querySelector<HTMLElement>('[data-floe-floating-window-surface]')!, path: '__screenshots__/preview-header-motion-' + mode + '.png' });
 });

@@ -128,6 +128,44 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        inspectPreviewTabMotion: async ({ page }) => {
+          const frame = await frameForSelector(page, '[data-preview-document]');
+          const root = frame.locator('[data-floe-geometry-surface="floating-window"]');
+          await frame.waitForFunction(() => document.querySelector('[data-floating-presence]')?.getAttribute('data-floating-presence') === 'open');
+          const initial = await root.boundingBox();
+          const tabs = root.getByRole('tab');
+          const held = tabs.filter({ hasText: 'first.md' });
+          const target = tabs.filter({ hasText: 'third.md' });
+          const from = (await held.boundingBox())!; const to = (await target.boundingBox())!;
+          const orderBefore = await tabs.evaluateAll(elements => elements.map(element => element.getAttribute('data-floe-tab-id')));
+          const move = async () => {
+            await page.mouse.move(from.x + 18, from.y + from.height / 2); await page.mouse.down();
+            await page.mouse.move(to.x + to.width - 10, to.y + to.height / 2, { steps: 10 });
+          };
+          await move();
+          const during = await held.evaluate(element => {
+            const style = getComputedStyle(element);
+            return { phase: element.getAttribute('data-floe-tab-motion'), opacity: style.opacity, outline: style.outlineStyle, border: style.borderTopColor, transform: style.transform };
+          });
+          const orderDuring = await tabs.evaluateAll(elements => elements.map(element => element.getAttribute('data-floe-tab-id')));
+          const windowDuring = await root.boundingBox();
+          await page.keyboard.press('Escape'); await page.mouse.up();
+          await frame.waitForFunction(() => !document.querySelector('[data-floe-tab-motion]'));
+          const orderCanceled = await tabs.evaluateAll(elements => elements.map(element => element.getAttribute('data-floe-tab-id')));
+          await move(); await page.mouse.up();
+          await frame.waitForFunction(() => !document.querySelector('[data-floe-tab-motion]'));
+          const orderAfter = await tabs.evaluateAll(elements => elements.map(element => element.getAttribute('data-floe-tab-id')));
+          const feedback = root.locator('[data-floe-floating-window-header-actions] [data-floe-status-indicator]:visible');
+          const blank = (await feedback.boundingBox())!;
+          await page.mouse.move(blank.x + blank.width / 2, blank.y + blank.height / 2); await page.mouse.down();
+          await page.mouse.move(blank.x + blank.width / 2, blank.y + blank.height / 2 + 28, { steps: 6 }); await page.mouse.up();
+          const windowAfterBlank = await root.boundingBox();
+          const flower = root.getByRole('button', { name: 'Ask Flower', exact: true });
+          const flowerRect = (await flower.boundingBox())!;
+          await page.mouse.move(flowerRect.x + flowerRect.width / 2, flowerRect.y + flowerRect.height / 2); await page.mouse.down();
+          await page.mouse.move(flowerRect.x + flowerRect.width / 2, flowerRect.y + flowerRect.height / 2 + 15, { steps: 3 }); await page.mouse.up();
+          return { during, initial, windowDuring, windowAfterBlank, windowAfterControl: await root.boundingBox(), orderBefore, orderDuring, orderCanceled, orderAfter };
+        },
         capturePermissionOpening: async ({ page }) => {
           const frame = await frameForSelector(page, '.flower-permission-trigger');
           const header = await frame.locator('.flower-chat-header').boundingBox();
