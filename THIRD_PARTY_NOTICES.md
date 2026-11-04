@@ -3043,9 +3043,9 @@ SOFTWARE.
 | @exodus/bytes | 1.15.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.0 |  |
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @exodus/bytes | 1.16.0 | MIT | Env App UI | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.16.0 |  |
-| @floegence/floe-webapp-boot | 0.90.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.90.1 |  |
-| @floegence/floe-webapp-core | 0.90.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.90.1 |  |
-| @floegence/floe-webapp-protocol | 0.90.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.90.1 |  |
+| @floegence/floe-webapp-boot | 0.90.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.90.2 |  |
+| @floegence/floe-webapp-core | 0.90.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.90.2 |  |
+| @floegence/floe-webapp-protocol | 0.90.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.90.2 |  |
 | @floegence/floebrowser | 0.1.28 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.28 |  |
 | @floegence/floeterm-terminal-web | 0.20.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.20.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.20.0 package. |
 | @floegence/flowersec-core | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.11.1 |  |
@@ -7405,7 +7405,7 @@ libavoid-js is maintained by Vladyslav Hnatiuk.
 
 Corresponding source, build scripts, and license are included at
 `dist/licenses/libavoid-sources.tar.gz` in the exact published Floe package:
-https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.90.1.tgz
+https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.90.2.tgz
 The source revisions are
 https://github.com/Aksem/libavoid-js/tree/5062a42fbd82fff562afeebcbb7b1ed45eed8e75
 and https://github.com/Aksem/adaptagrams/tree/0ab3467b4ed3523bb3e404a0dd7da7647d9eb13d.
@@ -7926,7 +7926,7 @@ That's all there is to it!
 Floe supplies the standalone browser artifact of @aiden0z/pptx-renderer 1.3.0 under Apache-2.0. Its embedded mtx-decompressor 1.4.2 remains MPL-2.0; that license applies to the covered files and does not replace Redeven's license. The renderer is used without source changes. System fonts are not redistributed.
 
 The exact unmodified MPL source and original notices are included under dist/licenses/pptx/ in the published Floe package:
-https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.90.1.tgz
+https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.90.2.tgz
 Corresponding source: https://github.com/ChristopherVR/mtx-decompressor/archive/refs/tags/v1.4.2.tar.gz
 Source archive SHA-256: e4edf429b1614a8f7366a55cffe58b35c58e784f0d4719d209cc3aa28ef3d970
 

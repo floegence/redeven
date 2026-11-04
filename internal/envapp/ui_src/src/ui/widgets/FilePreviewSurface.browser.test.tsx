@@ -124,7 +124,7 @@ describe('File preview titlebar', () => {
       await userEvent.click(actions.querySelector<HTMLButtonElement>('button[aria-label="Ask Flower"]')!);
       expect(onAskFlower).toHaveBeenLastCalledWith('Selected preview paragraph.');
       expect(root.getBoundingClientRect().toJSON()).toEqual(originalRect);
-      actions.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      actions.querySelector<HTMLButtonElement>('button[aria-label="Ask Flower"]')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       expect(root.getBoundingClientRect().toJSON()).toEqual(originalRect);
       await chooseAction('Edit file');
       await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
