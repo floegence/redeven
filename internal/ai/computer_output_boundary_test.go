@@ -277,7 +277,7 @@ func TestComputerActionabilityFinalOutput(t *testing.T) {
 		t.Fatal("disabled click accepted")
 	}
 	facts, _ := result.Result.(map[string]any)["actionability"].(map[string]any)
-	if facts["enabled"] != false || facts["stage"] != "precondition" || facts["private_text"] != nil || len(toAnySlice(facts["bounds"])) != 4 || facts["tested_point"] == nil || facts["preparation"] == nil || facts["layout_stable"] != false || len(toAnySlice(facts["previous_quads"])) != 1 || facts["sample_interval_ms"] != float64(32) {
+	if facts["enabled"] != false || facts["stage"] != "precondition" || facts["private_text"] != nil || len(toAnySlice(facts["bounds"])) != 4 || facts["tested_point"] == nil || facts["preparation"] == nil || facts["layout_stable"] != false || len(toAnySlice(facts["previous_quads"])) != 1 || facts["sample_interval_ms"] != float64(32) || !reflect.DeepEqual(toAnySlice(facts["failed_checks"]), []any{"layout_stable"}) {
 		t.Fatalf("actionability facts lost or leaked: %#v", facts)
 	}
 }
