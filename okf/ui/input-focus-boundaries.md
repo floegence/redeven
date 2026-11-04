@@ -16,6 +16,8 @@ Ordinary inputs, textareas, and native selects consume Floe's default rule. Focu
 
 Buttons, links, checkboxes, and switches retain their distinct keyboard focus indicators; buttons inside an input boundary follow the upstream compound-control treatment. Flower's lightweight permission trigger deliberately stays transparent and marks keyboard focus with a label underline instead of a filled capsule.
 
+Flower's transcript viewport retains keyboard focus for scrolling and its context menu, but paints no outer focus outline or shadow: the clipped scroll boundary must not turn Floe's generic focus ring into a horizontal line above the composer. This exemption belongs only to the transcript viewport; its interactive descendants retain their keyboard indicators.
+
 ## Published ownership
 Desktop Welcome, Env App, and Flower consume the same released Floe dependency. Product selectors may define normal and hover appearance without duplicating Floe's focus rules. Flower's persistent chat composer maps the published `--floe-input-focus-color` token to its existing field edge, keeping focus handoffs and thread switches visually quiet, including forced colors. Approval and input-request fields retain their ordinary focus behavior. It does not copy CSS rules or load the full renderer stylesheet into that document.
 
@@ -27,3 +29,4 @@ Third-party frames, separate application views, and editor-internal input carrie
 
 - `redeven:internal/envapp/ui_src/package.json` - Source.
 - `redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerStability.browser.test.tsx` - Transcript focus paint, keyboard scrolling and context-menu return.

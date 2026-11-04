@@ -14528,23 +14528,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </div>
                 <div class="flower-composer-footer">
                     <div class="flower-model-stack">
-                        <Show when={composerAttachmentEditingAllowed()}>
-                          <button
-                            ref={attachmentPickerButtonRef}
-                            type="button"
-                            class="flower-composer-attachment-button"
-                            aria-label={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
-                            title={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
-                            disabled={!composerCanAddAttachments()}
-                            onClick={() => {
-                              attachmentPickerSessionKey = currentComposerSessionKey();
-                              attachmentReselectTarget = null;
-                              attachmentPickerRef?.click();
-                            }}
-                          >
-                            <Plus aria-hidden="true" />
-                          </button>
-                        </Show>
+                      {/* Readiness changes interactivity, never the toolbar's attachment entry. */}
+                      <button
+                        ref={attachmentPickerButtonRef}
+                        type="button"
+                        class="flower-composer-attachment-button"
+                        aria-label={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
+                        title={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
+                        disabled={!composerCanAddAttachments()}
+                        onClick={() => {
+                          attachmentPickerSessionKey = currentComposerSessionKey();
+                          attachmentReselectTarget = null;
+                          attachmentPickerRef?.click();
+                        }}
+                      >
+                        <Plus aria-hidden="true" />
+                      </button>
                       {composerControls()}
                     </div>
                     <div class="flower-composer-actions">

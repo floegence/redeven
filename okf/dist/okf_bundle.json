@@ -27076,7 +27076,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "accessibility",
           "attachments",
@@ -27087,15 +27087,15 @@
         "title": "Flower composer attachments",
         "type": "UI Contract"
       },
-      "body_length": 2587,
+      "body_length": 3262,
       "summary": "One Flower controller owns attachment select/paste/drop/retry/remove/preview/send. Hosts authenticate staging; Redeven owns bytes/unadmitted commands, Floret admitted history. Large text converts only after successful staging, retaining IME and source on failure.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Text above 50,000 Unicode code points converts only after successful staging.\n\nSelection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.\n\nAll file types remain selectable and sendable regardless of model modalities or tool support. Upload limits and transport readiness remain authoritative; presentation routes never mark staged files incompatible. Model changes, revision changes and capability refreshes preserve staged readiness without uploading again. The model menu does not pre-judge attachment support or poll each model for attachment compatibility. Desktop IPC and Env App preview loaders accept canonical opaque bytes; preview availability does not decide whether a file can be sent. Models receive native content when supported or an honest attachment manifest and choose how to process it.\n\n## Connection-local editing\nEnv App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.\n\n## Queued content\nExecution leaves select/paste/drop/reference controls usable. Users may add/remove/send resources; staged copies survive queue removal and canonical bytes remain immutable.\n\n## Canonical Presentation\nPreviews use authenticated `loadMessageAttachment`: Env App prepares local credentials; Desktop uses scoped Runtime IPC GET with bounded canonical-MIME bytes. Chromium coverage includes 320 CSS pixels without horizontal overflow.",
-          "char_count": 1793
+          "body": "The chat toolbar always retains its leftmost Plus attachment button. Thread-detail loads, model-capability refreshes and temporary editing restrictions disable it without removing its DOM node or shifting the toolbar. Every editable conversation can select attachments once its transport and capability are ready; read-only and unavailable states keep the same visible, disabled entry. Drafts and staged files remain scoped to their conversation.\n\nText above 50,000 Unicode code points converts only after successful staging.\n\nSelection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.\n\nAll file types remain selectable and sendable regardless of model modalities or tool support. Upload limits and transport readiness remain authoritative; presentation routes never mark staged files incompatible. Model changes, revision changes and capability refreshes preserve staged readiness without uploading again. The model menu does not pre-judge attachment support or poll each model for attachment compatibility. Desktop IPC and Env App preview loaders accept canonical opaque bytes; preview availability does not decide whether a file can be sent. Models receive native content when supported or an honest attachment manifest and choose how to process it.\n\n## Connection-local editing\nEnv App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.\n\n## Queued content\nExecution leaves select/paste/drop/reference controls usable. Users may add/remove/send resources; staged copies survive queue removal and canonical bytes remain immutable.\n\n## Canonical Presentation\nPreviews use authenticated `loadMessageAttachment`: Env App prepares local credentials; Desktop uses scoped Runtime IPC GET with bounded canonical-MIME bytes. Chromium coverage includes 320 CSS pixels without horizontal overflow.",
+          "char_count": 2241
         },
         {
           "id": "boundaries",
@@ -27115,6 +27115,11 @@
           "id": "redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx:0:source.",
           "source": "redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerStability.browser.test.tsx:0:delayed thread/model navigation, persistent button identity, upload and draft isolation across desktop, mobile and companion layouts.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerStability.browser.test.tsx",
+          "description": "Delayed thread/model navigation, persistent button identity, upload and draft isolation across desktop, mobile and companion layouts."
         }
       ],
       "snippet": "One Flower controller owns attachment select/paste/drop/retry/remove/preview/send. Hosts authenticate staging; Redeven owns bytes/unadmitted commands, Floret admitted history. Large text converts only after successful staging, retaining IME",
@@ -30223,15 +30228,15 @@
         "title": "Input focus boundaries",
         "type": "UI Contract"
       },
-      "body_length": 1807,
+      "body_length": 2331,
       "summary": "Published Floe owns focus presentation; Redeven supplies layout, semantic state and explicit compound-input boundaries. Ordinary fields change border color only, preserving geometry/shadows; the persistent Flower chat composer keeps its border unchanged. Fix conflicting styles at their owner with source/browser checks; no fallback stylesheet.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## One visible boundary\nOrdinary inputs, textareas, and native selects consume Floe's default rule. Focus never changes border width, padding, or dimensions.\n\nButtons, links, checkboxes, and switches retain their distinct keyboard focus indicators; buttons inside an input boundary follow the upstream compound-control treatment. Flower's lightweight permission trigger deliberately stays transparent and marks keyboard focus with a label underline instead of a filled capsule.\n\n## Published ownership\nDesktop Welcome, Env App, and Flower consume the same released Floe dependency. Product selectors may define normal and hover appearance without duplicating Floe's focus rules. Flower's persistent chat composer maps the published `--floe-input-focus-color` token to its existing field edge, keeping focus handoffs and thread switches visually quiet, including forced colors. Approval and input-request fields retain their ordinary focus behavior. It does not copy CSS rules or load the full renderer stylesheet into that document.",
-          "char_count": 1032
+          "body": "## One visible boundary\nOrdinary inputs, textareas, and native selects consume Floe's default rule. Focus never changes border width, padding, or dimensions.\n\nButtons, links, checkboxes, and switches retain their distinct keyboard focus indicators; buttons inside an input boundary follow the upstream compound-control treatment. Flower's lightweight permission trigger deliberately stays transparent and marks keyboard focus with a label underline instead of a filled capsule.\n\nFlower's transcript viewport retains keyboard focus for scrolling and its context menu, but paints no outer focus outline or shadow: the clipped scroll boundary must not turn Floe's generic focus ring into a horizontal line above the composer. This exemption belongs only to the transcript viewport; its interactive descendants retain their keyboard indicators.\n\n## Published ownership\nDesktop Welcome, Env App, and Flower consume the same released Floe dependency. Product selectors may define normal and hover appearance without duplicating Floe's focus rules. Flower's persistent chat composer maps the published `--floe-input-focus-color` token to its existing field edge, keeping focus handoffs and thread switches visually quiet, including forced colors. Approval and input-request fields retain their ordinary focus behavior. It does not copy CSS rules or load the full renderer stylesheet into that document.",
+          "char_count": 1395
         },
         {
           "id": "boundaries",
@@ -30251,6 +30256,11 @@
           "id": "redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx:0:tests.",
           "source": "redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx",
           "description": "Tests."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerStability.browser.test.tsx:0:transcript focus paint, keyboard scrolling and context-menu return.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerStability.browser.test.tsx",
+          "description": "Transcript focus paint, keyboard scrolling and context-menu return."
         }
       ],
       "snippet": "Published Floe owns focus presentation; Redeven supplies layout, semantic state and explicit compound-input boundaries. Ordinary fields change border color only, preserving geometry/shadows; the persistent Flower chat composer keeps its bor",
@@ -32185,5 +32195,5 @@
       ]
     }
   ],
-  "source_sha256": "2b3fb6151deced4058d9523b08145ea3b2c2db9d259973450506461a72c15653"
+  "source_sha256": "ecc73bcf82fc26ca18a2204f6162451fe854d7862ac2f590ce993d31771c0b4b"
 }

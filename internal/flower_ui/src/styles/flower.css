@@ -3430,6 +3430,13 @@
   scrollbar-gutter: stable;
 }
 
+/* This is the keyboard-scroll/context-menu owner, not an interactive field.
+   An outer focus ring is clipped by the chat layout into a stray divider. */
+.flower-chat-transcript:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .flower-transcript-stack {
   display: flex;
   width: min(100%, var(--flower-chat-text-column-width));
