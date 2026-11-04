@@ -4173,7 +4173,7 @@
               "evidence",
               "testing"
             ],
-            "summary": "Historical runs support [qualification](computer-use-qualification.md) only for their declared scope; canonical results remain authoritative.",
+            "summary": "Historical runs support [qualification](computer-use-qualification.md) only for their declared platform, provider and build scope. Canonical results and independently observed effects establish execution. Original model, measurement and transport failures remain distinct from subsequent passing runs; no result certifies arbitrary applications.",
             "section_count": 2
           },
           {
@@ -4187,7 +4187,7 @@
               "evidence",
               "testing"
             ],
-            "summary": "Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels.",
+            "summary": "Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels. Each result keeps its original platform, source identity, acceptance boundary and unresolved limitations.",
             "section_count": 2
           },
           {
@@ -8107,8 +8107,8 @@
         "title": "Computer use provider qualification evidence",
         "type": "Verification Evidence"
       },
-      "body_length": 3434,
-      "summary": "Historical runs support [qualification](computer-use-qualification.md) only for their declared scope; canonical results remain authoritative.",
+      "body_length": 3638,
+      "summary": "Historical runs support [qualification](computer-use-qualification.md) only for their declared platform, provider and build scope. Canonical results and independently observed effects establish execution. Original model, measurement and transport failures remain distinct from subsequent passing runs; no result certifies arbitrary applications.",
       "sections": [
         {
           "id": "contract",
@@ -8125,7 +8125,7 @@
           "char_count": 120
         }
       ],
-      "snippet": "Historical runs support [qualification](computer-use-qualification.md) only for their declared scope; canonical results remain authoritative.",
+      "snippet": "Historical runs support [qualification](computer-use-qualification.md) only for their declared platform, provider and build scope. Canonical results and independently observed effects establish execution. Original model, measurement and tra",
       "links": [
         {
           "label": "historical platform evidence",
@@ -8302,8 +8302,8 @@
         "title": "Computer use qualification evidence",
         "type": "Verification Evidence"
       },
-      "body_length": 7257,
-      "summary": "Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels.",
+      "body_length": 7363,
+      "summary": "Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels. Each result keeps its original platform, source identity, acceptance boundary and unresolved limitations.",
       "sections": [
         {
           "id": "contract",
@@ -8320,7 +8320,7 @@
           "char_count": 83
         }
       ],
-      "snippet": "Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels.",
+      "snippet": "Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels. Each ",
       "links": [
         {
           "label": "drag",
@@ -22323,7 +22323,7 @@
         "title": "ReDevPlugin 3.15 performance qualification",
         "type": "Validation Report"
       },
-      "body_length": 8173,
+      "body_length": 8162,
       "summary": "ReDevPlugin 3.15.0 improves measured warm execution and Redeven restores only\ninitially visible plugin placements. Opened surfaces retain their independent\nslots, drafts, selection and pending work when hidden. This is conditional lazy\nopening, not a concurrency cap or iframe reuse. Platform mechanisms and release\nownership remain in [the host boundary](../architecture/redevplugin-boundary.md).",
       "sections": [
         {
@@ -22341,8 +22341,8 @@
           "char_count": 2669
         },
         {
-          "id": "acceptance-boundaries",
-          "title": "Acceptance boundaries",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
           "body": "Plugin component tests cover first reveal, document visibility, hide while\nopening, unopened close/disposal, context/retry, unknown outcomes and sibling\nretirement. Production resource and UI fixtures verify inputs, native undo,\nselection, close veto, focus, fresh origins and zero final frames. Runtime\nqualification uses finite fuel/deadlines, memory bounds, cancellation and\nrevocation. Linux sealed static PIE/clone3/seccomp and macOS hardened workloads\npass upstream. Product Docker lifecycle, published source consumption and live\nauthor execution pass. An isolated native Desktop build also starts its local\nenvironment and Plugin Center. Its exact bundled hardened runtime executes the\ncurrent published author Worker successfully through production Integration;\nthis does not certify the separate full Desktop I/O workflow.\n\nBoth independent product endurance runs complete. The candidate browser passes\n100 unique-origin churn cycles and 30 minutes with 357 input/visibility/selection\nchecks, native undo, close veto and sibling-preserving retirement; final live\nframes, page/HTTP errors and observed guest long tasks are all zero. Input plus\nswitch P95 is 22.83 ms (baseline 23.02 ms). Candidate process-tree RSS during the\nsoak is 1,065.02 MiB initially and 502.25 MiB at the last live sample; it is\n505.95 MiB after frame cleanup. RSS includes shared pages and retained browser\nallocations, so this is bounded-duration evidence rather than proof of no leak.\n\nCandidate Worker endurance completes 30m4.40s: 359 batches, 1,436 correct calls,\n359 expected application rejections, three normal gateway renewals and successful\nIntegration close. The host and runtime exit. Observed host/runtime process-tree\nRSS is 71.55 MiB initially, 63.78 MiB finally and 78.13 MiB at peak. The baseline\nalso completes 30 minutes (1,432 correct calls, 358 expected rejections). Author\nguests differ in these endurance runs; they are correctness/lifetime checks,\nnot a paired throughput or memory-performance comparison.\n\nThe broad browser suite has a pre-existing Monokai hover-contrast failure:\n4.3187 versus 4.5 in unchanged Floe 0.87.2 Button styles. The threshold remains\nunchanged; the same 27/28 result is reproduced with published ReDevPlugin 3.14\nand the same Floe 0.87.2. Full legacy Desktop I/O smoke is not certified: its old SDK fixture\nfails compilation, and a current-SDK experiment reaches explicit loopback\nconnector denial. Redeven has no private-network approval adapter; 3.14 has the\nsame restriction. The Linux trusted-bridge readiness probe also receives 401.\nDo not add permissive networking or claim these runs passed. Any private-network\nfeature requires a separate product-policy/UI design on the released upstream\nconnection contract.\n\nNo Store pool, persistent native cache, wider SQLite pool or four-surface cap is\nintroduced: measurements do not justify their complexity. Production phase\ntracing is not shipped as a new public contract. This qualification does not\nclaim arbitrary native-library, shell, WASI or browser-sandbox escape support.",
           "char_count": 3067
@@ -32012,5 +32012,5 @@
       ]
     }
   ],
-  "source_sha256": "1fc3e1f17d13e363b7ef5d4b782c5c143d1a7ef84344e607bc8c6cf2005d6fa5"
+  "source_sha256": "b329a1e5880c1455597ed5b4da8cf4747e18e7ab523157dd3e4ad8a5ec023ff0"
 }

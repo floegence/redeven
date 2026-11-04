@@ -69,7 +69,7 @@ Both feature and main 13-stage gates, Quick CI and v3.15.0 public completion
 passed. Release manifest SHA256 is
 335563f292c5302b21a8cb93cf151b2882bc408f28792285d4c88c1deb572d5c.
 
-# Acceptance boundaries
+# Boundaries
 
 Plugin component tests cover first reveal, document visibility, hide while
 opening, unopened close/disposal, context/retry, unknown outcomes and sibling

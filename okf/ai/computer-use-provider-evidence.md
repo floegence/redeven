@@ -8,7 +8,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Historical runs support [qualification](computer-use-qualification.md) only for their declared scope; canonical results remain authoritative.
+Historical runs support [qualification](computer-use-qualification.md) only for their declared platform, provider and build scope. Canonical results and independently observed effects establish execution. Original model, measurement and transport failures remain distinct from subsequent passing runs; no result certifies arbitrary applications.
 
 # Contract
 

@@ -8,7 +8,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels.
+Historical runs follow [the acceptance contract](computer-use-qualification.md). Worktree passes do not replace exact-main checks, certify arbitrary applications or erase failures. Retained diagnostics exclude private text and pixels. Each result keeps its original platform, source identity, acceptance boundary and unresolved limitations.
 
 # Contract
 
