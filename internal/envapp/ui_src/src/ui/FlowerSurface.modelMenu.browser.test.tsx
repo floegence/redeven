@@ -158,6 +158,10 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
   await userEvent.keyboard('{Escape}');
   await waitFor(() => !document.querySelector('.flower-model-menu'));
   expect(document.activeElement).toBe(activeTrigger);
+  const moreLayer = activeTrigger.closest<HTMLElement>('.flower-composer-more-layer');
+  expect(moreLayer, 'narrow-screen trigger retains its current anchored surface').not.toBeNull();
+  expect(getComputedStyle(moreLayer!).visibility).toBe('visible');
+  expect(moreLayer!.inert).toBe(false);
   activeTrigger.click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu-close')));
   document.querySelector<HTMLButtonElement>('.flower-model-menu-close')!.click();

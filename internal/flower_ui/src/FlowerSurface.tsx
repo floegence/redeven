@@ -1222,7 +1222,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let reasoningMenuRef: HTMLDivElement | undefined;
   let composerControlsViewportRef: HTMLDivElement | undefined;
   let composerControlsMeasureRef: HTMLDivElement | undefined;
-  let composerMoreButtonRef: HTMLButtonElement | undefined;
+  const [composerMoreTrigger, setComposerMoreTrigger] = createSignal<HTMLButtonElement>();
   let composerMorePanelRef: HTMLDivElement | undefined;
   const modelMenuPresence = createFloatingPresence({ open: modelMenuOpen, element: () => modelMenuRef });
   const permissionMenuPresence = createFloatingPresence({ open: permissionMenuOpen, element: () => permissionMenuRef });
@@ -3513,9 +3513,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         // Restore after responsive controls settle; a newer focus choice wins.
         window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
           const active = document.activeElement;
-          if (!composerMoreOpen() && composerMoreButtonRef?.isConnected
+          if (!composerMoreOpen() && composerMoreTrigger()?.isConnected
             && (!active || active === document.body || closingPanel?.contains(active))) {
-            composerMoreButtonRef.focus({ preventScroll: true });
+            composerMoreTrigger()!.focus({ preventScroll: true });
           }
         }));
       });
@@ -3533,7 +3533,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target) || permissionMenuRef?.contains(target) || reasoningMenuRef?.contains(target)) return;
+      if (composerMoreTrigger()?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target) || permissionMenuRef?.contains(target) || reasoningMenuRef?.contains(target)) return;
       closeComposerMore(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -3544,7 +3544,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target as Node | null;
-      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target) || permissionMenuRef?.contains(target) || reasoningMenuRef?.contains(target)) return;
+      if (composerMoreTrigger()?.contains(target) || composerMorePanelRef?.contains(target) || modelMenuRef?.contains(target) || permissionMenuRef?.contains(target) || reasoningMenuRef?.contains(target)) return;
       closeComposerMore(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -13617,7 +13617,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerMorePanel = () => (
     <Show when={composerMorePresence.mounted() && composerOverflowControlIDs().length > 0}>
       <SurfaceAnchoredLayer
-        anchor={composerMoreButtonRef}
+        anchor={composerMoreTrigger()}
         gap={8}
         onAnchorDisconnect={() => closeComposerMore(false)}
         style={{ 'z-index': 'var(--flower-layer-subagent-dropdown, 120)' }}
@@ -13653,7 +13653,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <Show when={composerOverflowControlIDs().length > 0}>
       <div class="flower-composer-more-anchor">
         <button
-          ref={composerMoreButtonRef}
+          ref={setComposerMoreTrigger}
           type="button"
           class="flower-composer-more-button"
           aria-label={copy().chat.composerMoreLabel}
