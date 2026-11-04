@@ -102,11 +102,11 @@ not a paired throughput or memory-performance comparison.
 
 The original expanded acceptance exposed Monokai hover contrast of 4.3187
 against the unchanged 4.5 threshold in Floe 0.87.2. The owning Floe repository
-fixed the foreground color and published 0.87.3; Redeven consumes 0.89.1, which
+fixed the foreground color and published 0.87.3; Redeven consumes 0.90.0, which
 includes the fix. The upstream matrix passes all 168 cases across 28 themes,
 two variants and three engines. Monokai hover is now 4.6178. The product's
 28-theme comparison and connection/management/Workbench checks also pass: all
-154 browser cases are requalified on 0.89.1 after retaining concurrent main
+154 browser cases are requalified on 0.90.0 after retaining concurrent main
 changes. Single-line action geometry uses exact 16-pixel layout and scroll
 heights before and after selection, avoiding transformed viewport rounding.
 
@@ -124,9 +124,16 @@ Native revocation acceptance then exposed a platform defect: cancellation
 closed the underlying TCP socket before explicit revocation, so the second close
 returned an erroneous unknown mutation outcome despite closed resources. This
 has deterministic TCP/UDP regressions and a fix whose focused tests, full
-performance, stress and property gates pass. Coordinated 3.15.1 publication and
-downstream native requalification remain pending after transient registry
-failures. It is not yet a complete Desktop I/O pass. Failure evidence is retained.
+performance, stress and property gates pass. The 3.15.1 exact-main gate and Quick CI passed, but its immutable release
+failed isolated Linux source-package qualification: the runaway fuel test could
+reach its independent deadline before exhausting fuel. Version 3.15.2 gives that
+test an explicit small fuel budget and asserts the typed budget failure without
+changing production policy. Under a 0.1 CPU quota, the original test fails and
+ten corrected runs pass; all 186 Linux runtime tests pass. The complete
+3.15.2 feature gate passes all 13 stages, with first-attempt qualified performance,
+64 revoke acknowledgements at 1 ms P95 against 500 ms, and hardened macOS
+execution. Public release completion and downstream native requalification are
+still pending. It is not yet a complete Desktop I/O pass; failure evidence is retained.
 
 No Store pool, persistent native cache, wider SQLite pool or four-surface cap is
 introduced: measurements do not justify their complexity. Production phase
