@@ -3,12 +3,93 @@ package managedwebservice
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
+
+type progressImageClient struct {
+	catalogDockerEngineClient
+	failure error
+}
+
+func (c progressImageClient) PullImageWithProgress(ctx context.Context, engine containerengine.Engine, ref string, sink containerengine.ImagePullProgressSink) (containerengine.EngineImageResult, error) {
+	if err := sink(ctx, containerengine.ImagePullProgress{Phase: "pulling", DownloadedBytes: 1_000_000, Output: "layer: Downloading 1MB/2MB token=private-value"}); err != nil {
+		return containerengine.EngineImageResult{}, err
+	}
+	return containerengine.EngineImageResult{Engine: engine, Image: containerengine.ImageInput{Reference: ref}, Completed: c.failure == nil}, c.failure
+}
+
+func newImagePullTestReporter(t *testing.T) (*operationReporter, *pfregistry.Registry) {
+	t.Helper()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := pfregistry.ManagedOperation{OperationID: "pull", ServiceID: "service", RequestID: "request", RequestFingerprint: "fingerprint", Action: "update", State: "running", Stage: "pulling", ProgressTotal: 7}
+	if err := registry.CreateManagedOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	reporter := newOperationReporter(&Manager{registry: registry, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}, &operation, nil)
+	t.Cleanup(func() { reporter.Close(); _ = registry.Close() })
+	return reporter, registry
+}
+
+func TestManagedImagePullPersistsCommandOutputAndTerminalState(t *testing.T) {
+	for _, tc := range []struct {
+		state   string
+		failure error
+	}{
+		{"succeeded", nil}, {"failed", containerengine.ErrImageNotFound}, {"cancelled", context.Canceled},
+	} {
+		t.Run(tc.state, func(t *testing.T) {
+			reporter, registry := newImagePullTestReporter(t)
+			reporter.secretValues = []string{"private-value"}
+			adapter, err := containerengine.NewAdapter(progressImageClient{failure: tc.failure})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = pullManagedImage(withOperationReporter(context.Background(), reporter), adapter, "example.invalid/image:1", 1, 1, reporter.Progress)
+			if (err != nil) != (tc.failure != nil) {
+				t.Fatalf("pull error=%v", err)
+			}
+			op, err := registry.GetManagedOperation(context.Background(), "pull")
+			if err != nil {
+				t.Fatal(err)
+			}
+			detail := op.ProgressDetail
+			if detail == nil || len(detail.Commands) != 1 || detail.Commands[0].Display != "docker pull example.invalid/image:1" || detail.Commands[0].State != tc.state || len(detail.Output) != 1 || detail.Transfer.DownloadedBytes != 1_000_000 {
+				t.Fatalf("incomplete persisted pull: %+v", detail)
+			}
+			if strings.Contains(detail.Output[0].Text, "private-value") {
+				t.Fatal("unredacted output")
+			}
+		})
+	}
+}
+
+func TestManagedTransferRateSurvivesSparseUpdatesAndStopsOnExtraction(t *testing.T) {
+	now := time.Unix(100, 0)
+	reporter := managedTransferProgressReporter{now: func() time.Time { return now }}
+	item := pfregistry.ManagedOperationTransferProgress{Phase: "pulling"}
+	reporter.observe(item)
+	now = now.Add(4 * time.Second)
+	item.DownloadedBytes = 4_000_000
+	got, _ := reporter.observe(item)
+	if got.BytesPerSecond != 1_000_000 {
+		t.Fatalf("sparse rate=%d", got.BytesPerSecond)
+	}
+	now = now.Add(4 * time.Second)
+	item.Phase = "extracting"
+	got, _ = reporter.observe(item)
+	if got.BytesPerSecond != 0 || got.DownloadedBytes != 4_000_000 {
+		t.Fatalf("stale rate=%+v", got)
+	}
+}
 
 func TestManagedTransferProgressReporterSeparatesLayersBytesAndSmoothsRate(t *testing.T) {
 	t.Parallel()

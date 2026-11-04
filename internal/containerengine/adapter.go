@@ -222,6 +222,8 @@ type EngineImageResult struct {
 }
 
 type ImagePullProgress struct {
+	// Output is local diagnostic evidence; consumers must redact it before persistence.
+	Output          string `json:"-"`
 	Phase           string `json:"phase"`
 	DownloadedBytes int64  `json:"downloaded_bytes,omitempty"`
 	TotalBytes      int64  `json:"total_bytes,omitempty"`

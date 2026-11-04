@@ -14,7 +14,14 @@ func pullManagedImage(ctx context.Context, adapter *containerengine.Adapter, ima
 		return containerengine.ImagePullResponse{}, managedImagePullError(containerengine.ErrEngineUnavailable)
 	}
 	reporter := managedTransferProgressReporter{now: time.Now}
+	output := reporterFromContext(ctx)
+	commandID := output.StartCommand("image-pull", "docker pull "+imageRef)
+	state := "failed"
+	defer func() { output.FinishCommand(commandID, state) }()
 	pulled, err := adapter.PullImageWithProgress(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: imageRef}, func(_ context.Context, item containerengine.ImagePullProgress) error {
+		if item.Output != "" {
+			output.Output(commandID, "stdout", item.Output)
+		}
 		transfer, emit := reporter.observe(pfregistry.ManagedOperationTransferProgress{
 			Phase: item.Phase, ArtifactReference: imageRef, ArtifactIndex: artifactIndex, ArtifactTotal: artifactTotal,
 			DownloadedBytes: item.DownloadedBytes, TotalBytes: item.TotalBytes,
@@ -26,11 +33,15 @@ func pullManagedImage(ctx context.Context, adapter *containerengine.Adapter, ima
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			state = "cancelled"
+		}
 		return containerengine.ImagePullResponse{}, managedImagePullError(err)
 	}
 	if !pulled.Completed {
 		return containerengine.ImagePullResponse{}, managedImagePullError(nil)
 	}
+	state = "succeeded"
 	return pulled, nil
 }
 

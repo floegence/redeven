@@ -20,6 +20,9 @@ Unavailable Open retains its ordinary icon and native disabled state. Focusable 
 ## Review and focus
 One drawer shows conclusion, compact resources and recommended actions. New known inventory may replace old inspection; unknown preserves facts. Older/unknown targets retain stop-first then explicit update. Originally stopped services remain stopped after update.
 
+## Execution feedback
+Execution details keep one bounded command/output viewport. Downloaded bytes remain visible when the total is unknown; unknown totals keep the byte bar indeterminate. Speed is shown once measured bytes are available, while fully cached pulls show zero transfer. Layer counts remain separate. New output does not expand the panel or move a reader away from earlier lines.
+
 # Boundaries
 
 The renderer maps existing backend status and capabilities to short localized labels and semantic icons.
@@ -32,3 +35,4 @@ The shell retains only collection and loading-presentation styles; management an
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Product presentation.
 - `redeven:internal/envapp/ui_src/src/ui/pages/WebServiceCollection.browser.test.tsx` - Disabled Open tooltip keyboard/touch behavior.
+- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx` - Desktop/narrow, light/dark, localized fixed-height output and real-Docker-recorded transfer fixture.

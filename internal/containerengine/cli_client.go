@@ -288,13 +288,17 @@ func (c *CLIClient) PullImageWithProgress(ctx context.Context, engine Engine, im
 	if err := sink(ctx, initial); err != nil {
 		return EngineImageResult{}, err
 	}
+	// Select the non-streaming path before execution; never replay a started pull.
+	if !c.canStreamImagePull() {
+		return c.PullImage(ctx, engine, imageRef)
+	}
 
 	tracker := newImagePullProgressTracker(engine, sink)
 	tracker.cached, tracker.cachedLayers = cached, cachedLayers
 	tracker.last = initial
 	pullCtx, cancel := context.WithTimeout(ctx, c.imagePullTimeout())
 	defer cancel()
-	err := c.stream(pullCtx, engine, []string{"pull", imageRef}, func(lineCtx context.Context, raw []byte) error {
+	err := c.streamImagePull(pullCtx, engine, []string{"pull", imageRef}, func(lineCtx context.Context, raw []byte) error {
 		return tracker.consume(lineCtx, string(raw))
 	})
 	if err != nil {
@@ -303,9 +307,6 @@ func (c *CLIClient) PullImageWithProgress(ctx context.Context, engine Engine, im
 				return EngineImageResult{}, ctx.Err()
 			}
 			return EngineImageResult{}, fmt.Errorf("%w: %s", ErrEngineTimeout, engine)
-		}
-		if errors.Is(err, ErrLogsFollowUnsupported) {
-			return c.PullImage(ctx, engine, imageRef)
 		}
 		return EngineImageResult{}, err
 	}
@@ -331,6 +332,7 @@ type imagePullProgressTracker struct {
 }
 
 type imagePullLayerProgress struct {
+	output     string
 	state      string
 	downloaded int64
 	total      int64
@@ -341,7 +343,7 @@ func newImagePullProgressTracker(engine Engine, sink ImagePullProgressSink) *ima
 }
 
 func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) error {
-	line := strings.TrimSpace(raw)
+	line := cleanImagePullLine(raw)
 	if line == "" {
 		return nil
 	}
@@ -359,11 +361,18 @@ func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) erro
 	if id, state, ok := parsePullLayerState(line); ok {
 		t.observedTransfer = true
 		layer := t.layers[id]
-		layer.state = state
-		if downloaded, total := parsePullLayerBytes(line); total > 0 {
-			layer.downloaded, layer.total = downloaded, total
+		if layer.output == line {
+			return nil
 		}
-		if state == "complete" && layer.total > 0 {
+		layer.output = line
+		layer.state = state
+		// Extraction reports uncompressed bytes, never network transfer bytes.
+		if state == "downloading" {
+			if downloaded, total := parsePullLayerBytes(line); total > 0 {
+				layer.downloaded, layer.total = max(layer.downloaded, downloaded), total
+			}
+		}
+		if (state == "complete" || state == "downloaded") && layer.total > 0 {
 			layer.downloaded = layer.total
 		}
 		t.layers[id] = layer
@@ -372,6 +381,7 @@ func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) erro
 		t.cached = true
 	}
 	snapshot := t.snapshot(phase)
+	snapshot.Output = line
 	if snapshot == t.last {
 		return nil
 	}
@@ -382,7 +392,7 @@ func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) erro
 func (t *imagePullProgressTracker) completedCount() int64 {
 	var completed int64
 	for _, layer := range t.layers {
-		if layer.state == "complete" {
+		if layer.state == "complete" || layer.state == "cached" {
 			completed++
 		}
 	}
@@ -398,6 +408,9 @@ func (t *imagePullProgressTracker) snapshot(phase string) ImagePullProgress {
 	progress := ImagePullProgress{Phase: phase, CompletedLayers: t.completedCount(), TotalLayers: t.totalCount()}
 	allLayerBytesKnown := len(t.layers) > 0
 	for _, layer := range t.layers {
+		if layer.state == "cached" {
+			continue
+		}
 		if layer.total <= 0 {
 			allLayerBytesKnown = false
 			continue
@@ -406,7 +419,16 @@ func (t *imagePullProgressTracker) snapshot(phase string) ImagePullProgress {
 		progress.TotalBytes += layer.total
 	}
 	if !allLayerBytesKnown {
-		progress.DownloadedBytes, progress.TotalBytes = 0, 0
+		progress.TotalBytes = 0
+	}
+	if len(t.layers) > 0 && progress.CompletedLayers == progress.TotalLayers {
+		allCached := true
+		for _, layer := range t.layers {
+			allCached = allCached && layer.state == "cached"
+		}
+		if allCached {
+			progress.Phase = "cached"
+		}
 	}
 	return progress
 }
@@ -431,20 +453,12 @@ func (c *CLIClient) pinnedCachedImageLayers(ctx context.Context, engine Engine, 
 }
 
 func parsePullLayerBytes(line string) (int64, int64) {
-	fields := strings.Fields(strings.TrimSpace(line))
-	for index := range fields {
-		for width := 1; width <= 5 && index+width <= len(fields); width++ {
-			candidate := strings.Trim(strings.Join(fields[index:index+width], ""), "[]()")
-			if !strings.Contains(candidate, "/") {
-				continue
-			}
-			downloaded, total := parsePairBytes(candidate)
-			if total > 0 {
-				return min(downloaded, total), total
-			}
-		}
+	pair := imagePullBytePair.FindStringSubmatch(line)
+	if len(pair) != 3 {
+		return 0, 0
 	}
-	return 0, 0
+	downloaded, total := parseBytes(pair[1]), parseBytes(pair[2])
+	return min(downloaded, total), total
 }
 
 func parsePodmanPullLayerState(line string) (string, string, bool) {
@@ -456,7 +470,7 @@ func parsePodmanPullLayerState(line string) (string, string, bool) {
 	if id == "" || len(id) > 128 || hasControl(id) || strings.ContainsAny(id, "/\\") {
 		return "", "", false
 	}
-	state := "active"
+	state := "downloading"
 	for _, field := range fields[3:] {
 		if strings.EqualFold(strings.Trim(field, "|"), "done") {
 			state = "complete"
@@ -479,15 +493,20 @@ func parsePullLayerState(line string) (string, string, bool) {
 		return "", "", false
 	}
 	status := strings.ToLower(strings.TrimSpace(parts[1]))
-	state := "active"
-	for _, marker := range []string{"pull complete", "already exists", "download complete", "skipped: already exists", "done"} {
+	if strings.Contains(status, "already exists") {
+		return id, "cached", true
+	}
+	if strings.Contains(status, "download complete") {
+		return id, "downloaded", true
+	}
+	for _, marker := range []string{"pull complete", "done"} {
 		if strings.Contains(status, marker) {
 			return id, "complete", true
 		}
 	}
 	for _, marker := range []string{"pulling fs layer", "waiting", "downloading", "extracting", "copying blob"} {
 		if strings.Contains(status, marker) {
-			return id, state, true
+			return id, marker, true
 		}
 	}
 	return "", "", false
@@ -861,6 +880,9 @@ func classifyCommandFailure(args []string, cause error, stderr ...[]byte) error 
 		}
 	}
 	if commandHasAction(args, "pull") {
+		if strings.Contains(detail, "failed to resolve reference") && strings.Contains(detail, ": not found") {
+			return ErrImageNotFound
+		}
 		for _, marker := range []string{"no space left on device", "insufficient storage", "not enough space"} {
 			if strings.Contains(detail, marker) {
 				return ErrInsufficientStorage

@@ -40,12 +40,14 @@ func (r *managedTransferProgressReporter) observeWithForce(item pfregistry.Manag
 	if len(r.samples) > 0 && item.DownloadedBytes < r.samples[len(r.samples)-1].bytes {
 		r.samples = nil
 	}
-	if len(r.samples) == 0 || item.DownloadedBytes != r.samples[len(r.samples)-1].bytes {
+	if len(r.samples) == 0 || now.After(r.samples[len(r.samples)-1].at) {
 		r.samples = append(r.samples, managedTransferRateSample{at: now, bytes: item.DownloadedBytes})
+	} else {
+		r.samples[len(r.samples)-1].bytes = item.DownloadedBytes
 	}
 	cutoff := now.Add(-managedTransferRateWindow)
 	first := 0
-	for first+1 < len(r.samples) && r.samples[first].at.Before(cutoff) {
+	for first+1 < len(r.samples) && !r.samples[first+1].at.After(cutoff) {
 		first++
 	}
 	r.samples = r.samples[first:]

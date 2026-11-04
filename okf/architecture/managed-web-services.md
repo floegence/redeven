@@ -19,6 +19,9 @@ Redeven owns instances/resources/bindings/operations/forwards; verified template
 ## Host release application
 Update installs/verifies, resolves final installed metadata into one digest, replaces the process and health-checks before commit. Launch/journal/registry share the final digest; enriched trust creates no false pending changes. Originally stopped services return to stopped after verification. Failure retains rollback/recovery.
 
+## Image pull feedback
+Container pulls publish the executed command and ordered output through the existing operation reporter, including success, failure and cancellation. The reporter owns redaction and the 400-line/128-KiB output bound. Transfer rate derives from observed downloaded bytes over a short time window, retains the previous sample across sparse updates and decays when subsequent observations show no download. Layer completion is independent of byte progress.
+
 # Boundaries
 
 No built-in service identities, copy, assets, commands or application-specific adoption logic live here. Never auto-upgrade releases, infer ownership from engine state, move application data or exceed typed template credential policy.
@@ -27,3 +30,4 @@ No built-in service identities, copy, assets, commands or application-specific a
 
 - `redeven:internal/managedwebservice/host_update_identity_test.go` - Reproduces stale digest; verifies running/stopped intent.
 - `redeven:internal/managedwebservice/host_update_native_test.go` - Real process replacement, health, persisted identity, ready Open and cleanup. Install boundary is deterministic; no live npm qualification.
+- `redeven:internal/managedwebservice/image_pull_docker_integration_test.go` - Opt-in `REDEVEN_IMAGE_PULL_DOCKER_TEST=1` starts a task-owned Docker-in-Docker daemon and throttled local registry with two unique layers. Verifies measured bytes/rate, persisted command/output, pinned cache and missing-image errors; removes only its daemon and volumes. Requires cached `docker:29-dind` and Desktop host networking. `REDEVEN_IMAGE_PULL_EVIDENCE` optionally exports the running operation for UI qualification.

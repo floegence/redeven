@@ -7,6 +7,7 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { I18nProvider } from '../i18n';
 import { ManagedServiceRow, type ManagedService } from './EnvPortForwardsPage';
 import type { ManagedOperation } from './managedServiceOperationController';
+import realImagePull from './__fixtures__/managed-image-pull.json';
 
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ env_id: () => 'operation-acceptance' }) }));
 vi.mock('@floegence/floe-webapp-protocol', () => ({ useProtocol: () => ({ session: () => null }) }));
@@ -51,12 +52,13 @@ it.each([
     progress_detail: { schema_version: 2, stage_started_at_unix_ms: Date.now() - 10000, transfer: { artifact_reference: 'node-v24.19.0-darwin-arm64.tar.gz', downloaded_bytes: 26000000, total_bytes: 52000000, bytes_per_second: 5200000 } },
   });
   const [expanded, setExpanded] = createSignal(true);
+  const [deployment, setDeployment] = createSignal<ManagedService['deployment']>('host');
   const opened = vi.fn();
   function Surface() {
     const palette = useTheme();
     palette.selectShellTheme(theme === 'classic-dark' ? 'dark' : 'light', theme);
     return <I18nProvider><div class="web-services-list">
-      <ManagedServiceRow service={base} operation={operation()} operationExpanded={expanded()} busy={false} canOpen canManage onOpen={opened} onOpenResource={() => undefined} onAction={() => undefined} onOperationExpandedChange={(_, value) => setExpanded(value)} onLogs={() => undefined} onUninstall={() => undefined} />
+      <ManagedServiceRow service={{ ...base, deployment: deployment() }} operation={operation()} operationExpanded={expanded()} busy={false} canOpen canManage onOpen={opened} onOpenResource={() => undefined} onAction={() => undefined} onOperationExpandedChange={(_, value) => setExpanded(value)} onLogs={() => undefined} onUninstall={() => undefined} />
       <div data-testid="neighbor">Example workspace</div>
     </div></I18nProvider>;
   }
@@ -87,6 +89,29 @@ it.each([
   setOperation(value => ({ ...value, progress_detail: { ...value.progress_detail!, transfer: { ...value.progress_detail!.transfer!, downloaded_bytes: 36000000 } } }));
   await settle();
   expect(panel.querySelector('[data-floe-surface-part="progress-fill"]')).toBe(fill);
+  // Recorded through the real Docker CLI, managed reporter and SQLite boundary.
+  setDeployment('container');
+  setOperation({ ...realImagePull, operation_id: 'update', service_id: base.service_id } as ManagedOperation);
+  await settle();
+  const facts = host.querySelector('.service-operation-transfer-facts')!;
+  expect(facts.textContent).toContain('6.29 MB / 6.29 MB');
+  expect(facts.textContent).toContain('/s');
+  expect(facts.textContent).toContain('1 / 2');
+  expect(output.textContent).toContain('docker pull');
+  expect(output.textContent).toContain('Downloading');
+  expect(output.textContent).not.toContain(String.fromCharCode(27));
+  expect(panel.clientHeight).toBe(before.height);
+  expect(neighbor.getBoundingClientRect().top).toBe(before.next);
+  await page.screenshot({ path: '__screenshots__/image-pull-' + width + '-' + theme + '.png', element: host });
+  setOperation(value => ({ ...value, progress_detail: { ...value.progress_detail!, transfer: { ...value.progress_detail!.transfer!, total_bytes: undefined } } }));
+  await settle();
+  expect(facts.querySelector('dd')?.textContent).toBe('6.29 MB');
+  expect(facts.textContent).toContain('/s');
+  setOperation(value => ({ ...value, progress_detail: { ...value.progress_detail!, transfer: { phase: 'cached', downloaded_bytes: 0, bytes_per_second: 0, completed_layers: 2, total_layers: 2 } } }));
+  await settle();
+  expect(facts.querySelector('dd')?.textContent).toBe('0 B');
+  expect(facts.textContent).toContain('0 B/s');
+  expect(panel.clientHeight).toBe(before.height);
   const lines = Array.from({ length: 80 }, (_, index) => ({ sequence: index + 1, command_id: 'install', stream: 'stdout' as const, text: 'Verified package output ' + (index + 1) }));
   setOperation(value => ({ ...value, stage: 'installing', progress_current: 4, progress_detail: { ...value.progress_detail!, commands: Array.from({length: 20}, (_, index) => ({ command_id: 'command-' + index, display: '<managed-node> <managed-npm-cli> install @example/dashboard@2.0.0 --prefix <managed-install-root>', state: 'succeeded' as const })), output: lines } }));
   await settle();

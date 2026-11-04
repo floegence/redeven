@@ -478,7 +478,7 @@ func TestCLIClientPullImageReportsPodmanBytesAndLayers(t *testing.T) {
 	}
 }
 
-func TestImagePullProgressOmitsBytesUntilEveryObservedLayerHasTotal(t *testing.T) {
+func TestImagePullProgressPreservesDownloadedBytesWithUnknownLayerTotals(t *testing.T) {
 	t.Parallel()
 
 	var progress []ImagePullProgress
@@ -496,8 +496,27 @@ func TestImagePullProgressOmitsBytesUntilEveryObservedLayerHasTotal(t *testing.T
 		}
 	}
 	last := progress[len(progress)-1]
-	if last.DownloadedBytes != 0 || last.TotalBytes != 0 || last.TotalLayers != 2 {
-		t.Fatalf("partial byte totals must remain indeterminate: %+v", last)
+	if last.DownloadedBytes != 1_000_000 || last.TotalBytes != 0 || last.TotalLayers != 2 {
+		t.Fatalf("observed bytes must survive an unknown total: %+v", last)
+	}
+}
+
+func TestImagePullProgressDoesNotCountExtractionAsDownload(t *testing.T) {
+	t.Parallel()
+	tracker := newImagePullProgressTracker(EngineDocker, func(context.Context, ImagePullProgress) error { return nil })
+	for _, line := range []string{
+		"cached: Already exists",
+		"download: Downloading 1MB/2MB",
+		"download: Download complete",
+		"download: Extracting 4MB/8MB",
+	} {
+		if err := tracker.consume(context.Background(), line); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := tracker.snapshot("extracting")
+	if got.DownloadedBytes != 2_000_000 || got.TotalBytes != 2_000_000 || got.CompletedLayers != 1 || got.TotalLayers != 2 {
+		t.Fatalf("extraction must not inflate transfer or complete the layer: %+v", got)
 	}
 }
 
@@ -683,6 +702,7 @@ func TestCommandFailureClassificationReturnsStableImagePullErrors(t *testing.T) 
 		{name: "registry network", stderr: "TLS handshake timeout", want: ErrImageRegistryUnavailable},
 		{name: "registry EOF", stderr: "Head https://registry.example/v2/image: EOF", want: ErrImageRegistryUnavailable},
 		{name: "manifest missing", stderr: "manifest unknown: manifest unknown", want: ErrImageNotFound},
+		{name: "containerd missing", stderr: "failed to resolve reference example.invalid/image:latest: not found", want: ErrImageNotFound},
 		{name: "repository missing", stderr: "pull access denied for repository does not exist", want: ErrImageNotFound},
 		{name: "access denied", stderr: "unauthorized: authentication required", want: ErrImageAccessDenied},
 		{name: "rate limited", stderr: "toomanyrequests: You have reached your pull rate limit", want: ErrImageRateLimited},

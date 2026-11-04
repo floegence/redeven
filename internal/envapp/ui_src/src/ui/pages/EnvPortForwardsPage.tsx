@@ -1166,8 +1166,8 @@ function ManagedOperationDisclosure(props: Readonly<{
                   <LinearProgress value={progress().current} max={progress().total || 100} indeterminate={progress().total === 0 && !terminal()} size="sm" />
                 </div>
                 <dl class="service-operation-transfer-facts">
-                  <div><dt>{i18n.t('webServices.managed.operationDownloaded')}</dt><dd>{(item().total_bytes ?? 0) > 0 ? formatManagedBytes(item().downloaded_bytes) + ' / ' + formatManagedBytes(item().total_bytes) : item().phase === 'cached' ? formatManagedBytes(0) : '—'}</dd></div>
-                  <div><dt>{i18n.t('webServices.managed.operationSpeed')}</dt><dd>{(item().bytes_per_second ?? 0) > 0 || item().phase === 'cached' ? formatManagedBytes(item().bytes_per_second) + '/s' : '—'}</dd></div>
+                  <div><dt>{i18n.t('webServices.managed.operationDownloaded')}</dt><dd>{(item().total_bytes ?? 0) > 0 ? formatManagedBytes(item().downloaded_bytes) + ' / ' + formatManagedBytes(item().total_bytes) : (item().downloaded_bytes ?? 0) > 0 || item().phase === 'cached' ? formatManagedBytes(item().downloaded_bytes) : '—'}</dd></div>
+                  <Show when={(item().bytes_per_second ?? 0) > 0 || (item().downloaded_bytes ?? 0) > 0 || item().phase === 'cached'}><div><dt>{i18n.t('webServices.managed.operationSpeed')}</dt><dd>{formatManagedBytes(item().bytes_per_second) + '/s'}</dd></div></Show>
                   <Show when={!hostTransfer()}><div><dt>{i18n.t('webServices.managed.operationLayers')}</dt><dd>{(item().total_layers ?? 0) > 0 ? (item().completed_layers ?? 0) + ' / ' + (item().total_layers ?? 0) : '—'}</dd></div></Show>
                 </dl>
               </div>

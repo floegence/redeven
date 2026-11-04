@@ -12372,7 +12372,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "architecture",
           "containers",
@@ -12382,15 +12382,15 @@
         "title": "Container runtime execution",
         "type": "Architecture Contract"
       },
-      "body_length": 949,
+      "body_length": 2269,
       "summary": "containerengine owns Docker/Podman discovery and execution. Each request binds engine, endpoint and canonical resource. Observe engines independently without probing inactive contexts or changing global selection. Failures stay explicit, never empty success or fallback; resource mutations retain their own admission owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Execution ownership\nEvery request binds `(engine, endpoint_id, resource kind, canonical identity)`.\n\nObservation failures are returned as errors and must never be converted into an empty project or a successful removal.",
-          "char_count": 222
+          "body": "## Execution ownership\nEvery request binds `(engine, endpoint_id, resource kind, canonical identity)`.\n\nObservation failures are returned as errors and must never be converted into an empty project or a successful removal.\n\n## Image pull observation\nDocker/Podman pulls retain CLI endpoint selection and credential helpers. On Unix the dedicated pull runner supplies terminal output so Docker emits transfer counters; both output streams are read continuously with bounded lines and terminal controls removed. Ordinary command/log runners keep their existing behavior. Windows retains combined pipe output and reports only counters actually supplied by its CLI. Cancellation terminates the task process group; an executed pull is never replayed as a non-streaming fallback.\n\nDownloaded bytes sum observed compressed download counters even while another layer's size is unknown. Total bytes remain unknown until every noncached layer supplies a total. Cached layers contribute no transfer bytes; extraction counters never replace download counters, and download completion does not imply extraction completion. Repeated terminal redraws for unchanged layers are suppressed. Error classification retains bounded trailing evidence, including containerd's unresolved-reference not-found response.",
+          "char_count": 1292
         },
         {
           "id": "boundaries",
@@ -12410,6 +12410,16 @@
           "id": "redeven:internal/containerengine/runtime_detection_test.go:0:tests.",
           "source": "redeven:internal/containerengine/runtime_detection_test.go",
           "description": "Tests."
+        },
+        {
+          "id": "redeven:internal/containerengine/image_pull_stream_unix_test.go:0:terminal output, cancellation, and late failure evidence.",
+          "source": "redeven:internal/containerengine/image_pull_stream_unix_test.go",
+          "description": "Terminal output, cancellation, and late failure evidence."
+        },
+        {
+          "id": "redeven:internal/containerengine/cli_client_test.go:0:mixed unknown/cached layers and download/extraction accounting.",
+          "source": "redeven:internal/containerengine/cli_client_test.go",
+          "description": "Mixed unknown/cached layers and download/extraction accounting."
         }
       ],
       "snippet": "containerengine owns Docker/Podman discovery and execution. Each request binds engine, endpoint and canonical resource. Observe engines independently without probing inactive contexts or changing global selection. Failures stay explicit, ne",
@@ -15297,15 +15307,15 @@
         "title": "Managed Web Services",
         "type": "Runtime Contract"
       },
-      "body_length": 2259,
+      "body_length": 3242,
       "summary": "Redeven owns instances/resources/bindings/operations/forwards; verified templates define behavior. One engine serves Host/Container/Compose lifecycle. Registry and exact resource identity authorize actions; invalid provenance, ownership, permission or health never adopts unknown resources.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Load published redeven-service-templates before Registry/Manager. Recommendations default new installs; explicit compatible releases override and later catalogs never change installed identity. Failed creation removes only verified new containers, preserving data/workspace for review.\n- RuntimeBinding v2/SHA-256 binds Host paths, Container name or Compose project/root. [Opening](managed-web-service-opening.md) separates entrance failure from health.\n- ServiceView actions/status/primary action own presentation; old errors cannot disable healthy instances. [Recovery](service-management-recovery.md) owns explicit actions.\n- portforward_registry_v2 schema 6 preserves v1 lineage: template/configuration/release/binding/digest, workspace/resources, desired/observed state, protected Forward/artifact/failures; no template snapshots/revisions/duplicate deployment. Schema 2 added ordinary-forward paths; managed open-session follows [session policy](web-service-browser-sessions.md).\n\n## Host release application\nUpdate installs/verifies, resolves final installed metadata into one digest, replaces the process and health-checks before commit. Launch/journal/registry share the final digest; enriched trust creates no false pending changes. Originally stopped services return to stopped after verification. Failure retains rollback/recovery.",
-          "char_count": 1345
+          "body": "- Load published redeven-service-templates before Registry/Manager. Recommendations default new installs; explicit compatible releases override and later catalogs never change installed identity. Failed creation removes only verified new containers, preserving data/workspace for review.\n- RuntimeBinding v2/SHA-256 binds Host paths, Container name or Compose project/root. [Opening](managed-web-service-opening.md) separates entrance failure from health.\n- ServiceView actions/status/primary action own presentation; old errors cannot disable healthy instances. [Recovery](service-management-recovery.md) owns explicit actions.\n- portforward_registry_v2 schema 6 preserves v1 lineage: template/configuration/release/binding/digest, workspace/resources, desired/observed state, protected Forward/artifact/failures; no template snapshots/revisions/duplicate deployment. Schema 2 added ordinary-forward paths; managed open-session follows [session policy](web-service-browser-sessions.md).\n\n## Host release application\nUpdate installs/verifies, resolves final installed metadata into one digest, replaces the process and health-checks before commit. Launch/journal/registry share the final digest; enriched trust creates no false pending changes. Originally stopped services return to stopped after verification. Failure retains rollback/recovery.\n\n## Image pull feedback\nContainer pulls publish the executed command and ordered output through the existing operation reporter, including success, failure and cancellation. The reporter owns redaction and the 400-line/128-KiB output bound. Transfer rate derives from observed downloaded bytes over a short time window, retains the previous sample across sparse updates and decays when subsequent observations show no download. Layer completion is independent of byte progress.",
+          "char_count": 1823
         },
         {
           "id": "boundaries",
@@ -15325,6 +15335,11 @@
           "id": "redeven:internal/managedwebservice/host_update_native_test.go:0:real process replacement, health, persisted identity, ready open and cleanup. install boundary is deterministic; no live npm qualification.",
           "source": "redeven:internal/managedwebservice/host_update_native_test.go",
           "description": "Real process replacement, health, persisted identity, ready Open and cleanup. Install boundary is deterministic; no live npm qualification."
+        },
+        {
+          "id": "redeven:internal/managedwebservice/image_pull_docker_integration_test.go:0:opt-in `redeven_image_pull_docker_test=1` starts a task-owned docker-in-docker daemon and throttled local registry with two unique layers. verifies measured bytes/rate, persisted command/output, pinned cache and missing-image errors; removes only its daemon and volumes. requires cached `docker:29-dind` and desktop host networking. `redeven_image_pull_evidence` optionally exports the running operation for ui qualification.",
+          "source": "redeven:internal/managedwebservice/image_pull_docker_integration_test.go",
+          "description": "Opt-in `REDEVEN_IMAGE_PULL_DOCKER_TEST=1` starts a task-owned Docker-in-Docker daemon and throttled local registry with two unique layers. Verifies measured bytes/rate, persisted command/output, pinned cache and missing-image errors; removes only its daemon and volumes. Requires cached `docker:29-dind` and Desktop host networking. `REDEVEN_IMAGE_PULL_EVIDENCE` optionally exports the running operation for UI qualification."
         }
       ],
       "snippet": "Redeven owns instances/resources/bindings/operations/forwards; verified templates define behavior. One engine serves Host/Container/Compose lifecycle. Registry and exact resource identity authorize actions; invalid provenance, ownership, pe",
@@ -18132,15 +18147,15 @@
         "title": "Web Services interface",
         "type": "UI Contract"
       },
-      "body_length": 1708,
+      "body_length": 2294,
       "summary": "Activity/Workbench share service list/drawer: identity, state, action, facts. Retain narrow/localized/large-text usability. Historical failure never replaces current state; failed checks preserve facts and authorized recovery. Resource cache grants no lifecycle or route authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Collection\nCentered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/asynchronous-layout-stability.md); narrow/localized text wraps.\n\n## Opening restrictions\nUnavailable Open retains its ordinary icon and native disabled state. Focusable wrapper exposes reason on keyboard/touch/hover; active work names action/stage. When backend offers executable Start, it is primary within existing permissions.\n\n## Review and focus\nOne drawer shows conclusion, compact resources and recommended actions. New known inventory may replace old inspection; unknown preserves facts. Older/unknown targets retain stop-first then explicit update. Originally stopped services remain stopped after update.",
-          "char_count": 779
+          "body": "## Collection\nCentered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/asynchronous-layout-stability.md); narrow/localized text wraps.\n\n## Opening restrictions\nUnavailable Open retains its ordinary icon and native disabled state. Focusable wrapper exposes reason on keyboard/touch/hover; active work names action/stage. When backend offers executable Start, it is primary within existing permissions.\n\n## Review and focus\nOne drawer shows conclusion, compact resources and recommended actions. New known inventory may replace old inspection; unknown preserves facts. Older/unknown targets retain stop-first then explicit update. Originally stopped services remain stopped after update.\n\n## Execution feedback\nExecution details keep one bounded command/output viewport. Downloaded bytes remain visible when the total is unknown; unknown totals keep the byte bar indeterminate. Speed is shown once measured bytes are available, while fully cached pulls show zero transfer. Layer counts remain separate. New output does not expand the panel or move a reader away from earlier lines.",
+          "char_count": 1173
         },
         {
           "id": "boundaries",
@@ -18160,6 +18175,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/WebServiceCollection.browser.test.tsx:0:disabled open tooltip keyboard/touch behavior.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/WebServiceCollection.browser.test.tsx",
           "description": "Disabled Open tooltip keyboard/touch behavior."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx:0:desktop/narrow, light/dark, localized fixed-height output and real-docker-recorded transfer fixture.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx",
+          "description": "Desktop/narrow, light/dark, localized fixed-height output and real-Docker-recorded transfer fixture."
         }
       ],
       "snippet": "Activity/Workbench share service list/drawer: identity, state, action, facts. Retain narrow/localized/large-text usability. Historical failure never replaces current state; failed checks preserve facts and authorized recovery. Resource cach",
@@ -32012,5 +32032,5 @@
       ]
     }
   ],
-  "source_sha256": "b329a1e5880c1455597ed5b4da8cf4747e18e7ab523157dd3e4ad8a5ec023ff0"
+  "source_sha256": "5155eb2ebad748312ef45ba8ebbd0de1055d38d0b68cc87d56778e0949bb9f53"
 }

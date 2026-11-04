@@ -1,0 +1,183 @@
+{
+  "operation_id": "pull",
+  "service_id": "service",
+  "request_id": "request",
+  "action": "update",
+  "state": "running",
+  "stage": "pulling",
+  "progress_current": 2,
+  "progress_total": 7,
+  "progress_detail": {
+    "schema_version": 2,
+    "stage_started_at_unix_ms": 1793762950030,
+    "updated_at_unix_ms": 1793762952850,
+    "transfer": {
+      "phase": "extracting",
+      "artifact_reference": "host.docker.internal:60658/pull-fixture@sha256:676a9887d57244932454a3ff4781aebeaf3cebbed85de7309efa595d93a3faf7",
+      "artifact_index": 1,
+      "artifact_total": 1,
+      "downloaded_bytes": 6293000,
+      "total_bytes": 6293000,
+      "bytes_per_second": 2231405,
+      "completed_layers": 1,
+      "total_layers": 2
+    },
+    "commands": [
+      {
+        "command_id": "image-pull",
+        "display": "docker pull host.docker.internal:60658/pull-fixture@sha256:676a9887d57244932454a3ff4781aebeaf3cebbed85de7309efa595d93a3faf7",
+        "state": "running",
+        "started_at_unix_ms": 1793762950010
+      }
+    ],
+    "output": [
+      {
+        "sequence": 1,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "host.docker.internal:60658/pull-fixture@sha256:676a9887d57244932454a3ff4781aebeaf3cebbed85de7309efa595d93a3faf7: Pulling from pull-fixture"
+      },
+      {
+        "sequence": 2,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Pulling fs layer"
+      },
+      {
+        "sequence": 3,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Pulling fs layer"
+      },
+      {
+        "sequence": 4,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [============\u003e                                      ]  1.049MB/4.195MB"
+      },
+      {
+        "sequence": 5,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Downloading [========================\u003e                          ]  1.049MB/2.098MB"
+      },
+      {
+        "sequence": 6,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [============\u003e                                      ]  1.049MB/4.195MB"
+      },
+      {
+        "sequence": 7,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Downloading [========================\u003e                          ]  1.049MB/2.098MB"
+      },
+      {
+        "sequence": 8,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [============\u003e                                      ]  1.049MB/4.195MB"
+      },
+      {
+        "sequence": 9,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Downloading [========================\u003e                          ]  1.049MB/2.098MB"
+      },
+      {
+        "sequence": 10,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [============\u003e                                      ]  1.049MB/4.195MB"
+      },
+      {
+        "sequence": 11,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Downloading [========================\u003e                          ]  1.049MB/2.098MB"
+      },
+      {
+        "sequence": 12,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [============\u003e                                      ]  1.049MB/4.195MB"
+      },
+      {
+        "sequence": 13,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Downloading [========================\u003e                          ]  1.049MB/2.098MB"
+      },
+      {
+        "sequence": 14,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [============\u003e                                      ]  1.049MB/4.195MB"
+      },
+      {
+        "sequence": 15,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Downloading [========================\u003e                          ]  1.049MB/2.098MB"
+      },
+      {
+        "sequence": 16,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [========================\u003e                          ]  2.097MB/4.195MB"
+      },
+      {
+        "sequence": 17,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Downloading [==================================================\u003e]  2.098MB/2.098MB"
+      },
+      {
+        "sequence": 18,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [========================\u003e                          ]  2.097MB/4.195MB"
+      },
+      {
+        "sequence": 19,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Download complete"
+      },
+      {
+        "sequence": 20,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "4336d0638f2b: Pull complete"
+      },
+      {
+        "sequence": 21,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [========================\u003e                          ]  2.097MB/4.195MB"
+      },
+      {
+        "sequence": 22,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Downloading [=====================================\u003e             ]  3.146MB/4.195MB"
+      },
+      {
+        "sequence": 23,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Download complete"
+      },
+      {
+        "sequence": 24,
+        "command_id": "image-pull",
+        "stream": "stdout",
+        "text": "056052e3054c: Extracting 1 s"
+      }
+    ]
+  },
+  "cancel_requested": false,
+  "created_at_unix_ms": 1793762950010,
+  "updated_at_unix_ms": 1793762952850
+}
