@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildDesktopSSHReleaseAssetURL,
   buildDesktopSSHReleaseSourceCacheKey,
+  isDesktopSSHReleaseSourceCacheKey,
   DesktopReleaseAssetError,
   desktopSSHReleasePackageName,
   ensureDesktopSSHReleaseArchive,
@@ -94,6 +95,15 @@ function sha256(value: Buffer): string {
 }
 
 describe('sshReleaseAssets', () => {
+  it('recognizes only release source cache namespaces', () => {
+    for (const url of [RELEASE_FIXTURE_BASE_URL, 'https://mirror.example.invalid/releases', `https://example.invalid/${'long-path-'.repeat(10)}`]) {
+      expect(isDesktopSSHReleaseSourceCacheKey(buildDesktopSSHReleaseSourceCacheKey(url))).toBe(true);
+    }
+    for (const name of ['build-toolchains', 'build-cache', 'source-build-cache', 'redevplugin-manifests', 'another-cache', '../source-0123456789abcdef', 'source-0123456789abcdef-extra']) {
+      expect(isDesktopSSHReleaseSourceCacheKey(name)).toBe(false);
+    }
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

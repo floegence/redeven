@@ -865,7 +865,7 @@ describe('runtimePackageCache', () => {
 	  it('prunes old release tags and temporary files', async () => {
     const userDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-package-prune-'));
     const cacheRoot = runtimePackageCacheRoot(userDataRoot);
-    const sourceRoot = path.join(cacheRoot, 'source-key');
+    const sourceRoot = path.join(cacheRoot, buildDesktopSSHReleaseSourceCacheKey('https://mirror.example.invalid/releases'));
     const currentArchive = path.join(sourceRoot, 'v1.2.3', 'linux_amd64', 'redeven_linux_amd64.tar.gz');
     const oldArchive = path.join(sourceRoot, 'v1.2.2', 'linux_amd64', 'redeven_linux_amd64.tar.gz');
     const tempArchive = path.join(sourceRoot, 'v1.2.3', 'linux_amd64', '.redeven_linux_amd64.tar.gz.1234.abcdef.tmp');
@@ -898,7 +898,7 @@ describe('runtimePackageCache', () => {
   it('can leave temporary files alone while pruning stale release tags during package preparation', async () => {
     const userDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-package-prune-'));
     const cacheRoot = runtimePackageCacheRoot(userDataRoot);
-    const sourceRoot = path.join(cacheRoot, 'source-key');
+    const sourceRoot = path.join(cacheRoot, buildDesktopSSHReleaseSourceCacheKey('https://mirror.example.invalid/releases'));
     const oldArchive = path.join(sourceRoot, 'v1.2.2', 'linux_amd64', 'redeven_linux_amd64.tar.gz');
     const activeTempArchive = path.join(sourceRoot, 'v1.2.3', 'linux_amd64', '.redeven_linux_amd64.tar.gz.1234.abcdef.tmp');
     try {
@@ -921,6 +921,57 @@ describe('runtimePackageCache', () => {
       await expect(fs.readFile(activeTempArchive, 'utf8')).resolves.toBe('tmp');
     } finally {
       await fs.rm(userDataRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each([true, false])('preserves other cache owners during release pruning (temporary cleanup: %s)', async (includeTemporaryEntries) => {
+    const cacheRoot = await mkCacheRoot();
+    const ownedFiles = [
+      'build-toolchains/.zig-download-active/archive.tar.xz',
+      'build-toolchains/.zig-extract-active/zig',
+      'build-toolchains/.probe-active/probe.o',
+      'build-toolchains/zig-pinned/zig',
+      'build-toolchains/wrappers-pinned/cc',
+      'build-cache/runtime-target/release/redevplugin-runtime',
+      'source-build-cache/package/runtime-package.tar.gz',
+      'redevplugin-manifests/v3.15.0/platform-release-manifest.json',
+      'another-cache/active-build/input',
+    ];
+    try {
+      for (const relative of ownedFiles) {
+        const file = path.join(cacheRoot, relative);
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await fs.writeFile(file, relative);
+      }
+
+      await pruneDesktopRuntimePackageCache({ cacheRoot, activeReleaseTag: 'v1.2.3', includeTemporaryEntries });
+
+      for (const relative of ownedFiles) {
+        await expect(fs.readFile(path.join(cacheRoot, relative), 'utf8')).resolves.toBe(relative);
+      }
+    } finally {
+      await fs.rm(path.dirname(cacheRoot), { recursive: true, force: true });
+    }
+  });
+
+  it('keeps an open toolchain download readable when another package request prunes the cache', async () => {
+    const cacheRoot = await mkCacheRoot();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    const archive = Buffer.from('linux-amd64-runtime');
+    installFetchMock(new Map([[platform.release_package_name, archive]]));
+    const download = path.join(cacheRoot, 'build-toolchains', '.zig-download-active', 'archive.tar.xz');
+    await fs.mkdir(path.dirname(download), { recursive: true });
+    const handle = await fs.open(download, 'wx');
+    try {
+      await handle.write('first download chunk');
+      const result = await preparePackage({ cacheRoot, platform });
+      expect(result.archiveData).toEqual(archive);
+      await handle.write('final download chunk');
+      await handle.close();
+      await expect(fs.readFile(download, 'utf8')).resolves.toBe('first download chunkfinal download chunk');
+    } finally {
+      await handle.close().catch(() => undefined);
+      await fs.rm(path.dirname(cacheRoot), { recursive: true, force: true });
     }
   });
 });

@@ -199,6 +199,12 @@ export function buildDesktopSSHReleaseSourceCacheKey(rawReleaseBaseURL: string):
   return `${slug}-${digest}`;
 }
 
+export function isDesktopSSHReleaseSourceCacheKey(name: string): boolean {
+  // This namespace belongs to release assets. Other Runtime cache owners may
+  // keep active downloads and reusable build inputs beside it.
+  return /^[a-z0-9][a-z0-9-]{0,47}-[a-f0-9]{16}$/u.test(name);
+}
+
 function parseDesktopSSHReleaseSHA256Map(sumsText: string): ReadonlyMap<string, string> {
   const sha256ByAssetName = new Map<string, string>();
   for (const rawLine of String(sumsText ?? '').split(/\r?\n/u)) {

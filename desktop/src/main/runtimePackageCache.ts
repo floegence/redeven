@@ -11,6 +11,7 @@ import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS,
   buildDesktopSSHReleaseSourceCacheKey,
+  isDesktopSSHReleaseSourceCacheKey,
   desktopSSHReleasePackageName,
   DesktopReleaseAssetError,
   fetchDesktopReleaseAssetBuffer,
@@ -1067,15 +1068,12 @@ export async function pruneDesktopRuntimePackageCache(policy: DesktopRuntimePack
 
   const sourceEntries = await readDirectoryIfPresent(policy.cacheRoot);
   await Promise.all(sourceEntries.map(async (sourceEntry) => {
-    if (sourceEntry.name === SOURCE_RUNTIME_CACHE_DIR || sourceEntry.name === REDEVPLUGIN_MANIFEST_CACHE_DIR) {
-      return;
-    }
     const sourcePath = path.join(policy.cacheRoot, sourceEntry.name);
     if (includeTemporaryEntries && isRuntimePackageCacheTemporaryName(sourceEntry.name)) {
       await fs.rm(sourcePath, { recursive: true, force: true });
       return;
     }
-    if (!sourceEntry.isDirectory()) {
+    if (!sourceEntry.isDirectory() || !isDesktopSSHReleaseSourceCacheKey(sourceEntry.name)) {
       return;
     }
     const releaseEntries = await readDirectoryIfPresent(sourcePath);
