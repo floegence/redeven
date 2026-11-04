@@ -50,7 +50,7 @@ try {
       else if (['action', 'surface', 'listbox', 'directory', 'launcher'].includes(kind)) await page.locator('#anchor').click();
       else await page.locator('main > div button').first().click();
       const selector = { action: '.redeven-action-popover-surface', surface: '[role=dialog]', hover: '[role=dialog]', tooltip: '[role=tooltip]', listbox: '[data-redeven-anchored-listbox]', endpoints: '.redeven-endpoints-surface', theme: '.redeven-theme-picker', ssh: '[data-redeven-anchored-listbox]', dropdown: '[role=menu]', select: '.floe-floating-menu', 'flower-context': '.flower-thread-context-menu', capabilities: '.floe-floating-menu', 'preview-select': '.floe-floating-menu', 'preview-panel': '[data-spreadsheet-panel]', compaction: '.flower-compaction-divider-tooltip', 'frame-rate': '.floe-floating-menu' }[kind];
-      const surface = page.locator(kind === 'kimi-endpoint' ? '.floe-floating-menu' : kind === 'directory' ? '[data-floe-dialog-panel]' : kind === 'launcher' ? '[data-floe-geometry-surface="floating-window"]' : selector).first();
+      const surface = page.locator(kind === 'kimi-endpoint' ? '.floe-floating-menu' : kind === 'directory' ? '[data-floe-dialog-panel]' : kind === 'launcher' ? '.flower-turn-launcher-window' : selector).first();
       try { await surface.waitFor({ state: 'visible', timeout: 5000 }); } catch (error) { await writeFile(`${output}/failure.html`, await page.content()); await page.screenshot({ path: `${output}/failure.png` }); throw error; }
       const opening = await surface.evaluate(async (el, reducedMotion) => {
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -74,7 +74,8 @@ try {
       if (reducedMotion === 'no-preference') {
         assert.ok(opening.timing.some(t => t.property === 'opacity'), `${label}: opacity entrance runs`);
         assert.ok(opening.start.opacity < opening.middle.opacity && opening.middle.opacity < 1, `${label}: visible fade progression`);
-        if (kind !== 'tooltip' && kind !== 'compaction') assert.ok(opening.start.scale < 1, `${label}: shared subtle scale`);
+        if (!['tooltip', 'compaction', 'launcher'].includes(kind)) assert.ok(opening.start.scale < 1, `${label}: shared subtle scale`);
+        if (kind === 'launcher') assert.ok(opening.start.y !== opening.end.y, `${label}: shared window translation preserves text scale`);
         if (opening.start.position) {
           for (const key of ['x', 'y', 'width', 'height']) assert.equal(opening.start.position[key], opening.middle.position[key], `${label}: positioning ignores animated transforms (${key})`);
         }
