@@ -102,10 +102,13 @@ not a paired throughput or memory-performance comparison.
 
 The original expanded acceptance exposed Monokai hover contrast of 4.3187
 against the unchanged 4.5 threshold in Floe 0.87.2. The owning Floe repository
-fixed the foreground color and published 0.87.3; Redeven consumes 0.87.4, which
+fixed the foreground color and published 0.87.3; Redeven consumes 0.88.0, which
 includes the fix. The upstream matrix passes all 168 cases across 28 themes,
 two variants and three engines. Monokai hover is now 4.6178. The product's
-28-theme comparison and connection/management/Workbench checks also pass.
+28-theme comparison and connection/management/Workbench checks also pass: all
+154 browser cases are requalified on 0.88.0 after retaining concurrent main
+changes. Single-line action geometry uses exact 16-pixel layout and scroll
+heights before and after selection, avoiding transformed viewport rounding.
 
 The legacy Desktop fixture now uses the published Worker SDK and explicit
 reviewed connection contracts. The product adapter and localized review UI
