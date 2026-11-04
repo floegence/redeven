@@ -7,7 +7,7 @@ import type {
 
 type JsonRecord = Record<string, unknown>;
 
-const REASONING_LEVELS = new Set<FlowerReasoningLevel>(['default', 'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const REASONING_LEVELS = new Set<FlowerReasoningLevel>(['default', 'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
 function recordValue(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;

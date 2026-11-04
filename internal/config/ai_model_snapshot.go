@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -71,6 +72,41 @@ func ValidateModelCatalogSnapshot(models []AIProviderModel) error {
 			return errors.New("invalid model catalog identity or capability")
 		}
 		seen[m.ModelName] = true
+		if m.CapabilitySource != "" && m.CapabilitySource != "openai_models" {
+			return errors.New("invalid model capability source")
+		}
+		if m.CapabilitySource != "" && len(m.CapabilityFields) == 0 {
+			return errors.New("missing model capability fields")
+		}
+		fields := map[string]bool{}
+		for _, field := range m.CapabilityFields {
+			if m.CapabilitySource != "openai_models" || fields[field] || !slices.Contains([]string{"context_window", "max_output_tokens", "input_modalities", "supports_tools", "reasoning_capability"}, field) {
+				return errors.New("invalid model capability fields")
+			}
+			switch field {
+			case "context_window":
+				if m.ContextWindow <= 0 {
+					return errors.New("missing reported context window")
+				}
+			case "max_output_tokens":
+				if m.MaxOutputTokens <= 0 {
+					return errors.New("missing reported output limit")
+				}
+			case "input_modalities":
+				if m.InputModalities == nil {
+					return errors.New("missing reported input modalities")
+				}
+			case "supports_tools":
+				if m.SupportsTools == nil {
+					return errors.New("missing reported tool capability")
+				}
+			case "reasoning_capability":
+				if m.ReasoningCapability.IsZero() {
+					return errors.New("missing reported reasoning capability")
+				}
+			}
+			fields[field] = true
+		}
 		if err := validateAIInputModalities(m.InputModalities); err != nil {
 			return err
 		}

@@ -160,3 +160,12 @@ it('clears an explicit budget and removes it when selecting an exclusive effort'
   expect(change.mock.calls.at(-1)?.[0]).toEqual({ level: 'high' });
   expect(root.querySelector('input')).toBeNull();
 });
+
+it('offers advertised Ultra without adding it to ordinary model capabilities', async () => {
+  const change = mount({ kind: 'effort', supported_levels: ['low', 'ultra'] });
+  const trigger = root.querySelector<HTMLButtonElement>('button')!;
+  trigger.click();
+  await userEvent.click(page.getByRole('menuitemradio', { name: 'Ultra', exact: true }));
+  expect(change).toHaveBeenLastCalledWith({ level: 'ultra' });
+  expect(trigger.textContent).toBe('Ultra');
+});

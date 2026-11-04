@@ -80,6 +80,7 @@ func cloneAIModels(models []AIProviderModel) []AIProviderModel {
 			value := *out[i].ReasoningCapability.DefaultEnabled
 			out[i].ReasoningCapability.DefaultEnabled = &value
 		}
+		out[i].CapabilityFields = slices.Clone(out[i].CapabilityFields)
 		out[i].InputModalities = slices.Clone(out[i].InputModalities)
 		out[i].ReasoningCapability.ResponseReasoningFields = slices.Clone(out[i].ReasoningCapability.ResponseReasoningFields)
 		out[i].ReasoningCapability.HistoryReplayRequirements = slices.Clone(out[i].ReasoningCapability.HistoryReplayRequirements)
@@ -211,6 +212,41 @@ func (p AIProvider) CatalogModels() []AIProviderModel {
 func (p AIProvider) WithDiscoveredModels(models []AIProviderModel) AIProvider {
 	p.discoveredModels = cloneAIModels(models)
 	for i, discovered := range p.discoveredModels {
+		if discovered.CapabilitySource == "openai_models" && (p.Type == "openai" || p.Type == "openai_compatible") && p.EffectiveAuthMethod() != AIAuthChatGPT {
+			// Explicit serving facts belong to this endpoint. Legacy identity-only
+			// snapshots still receive current reviewed defaults below.
+			if reviewed, known := AIModelCatalogEntry(p.Type, discovered.EffectiveWireModelName()); known {
+				reviewed.ModelName = discovered.ModelName
+				reviewed.CapabilitySource, reviewed.CapabilityFields = discovered.CapabilitySource, slices.Clone(discovered.CapabilityFields)
+				if discovered.DisplayName != "" {
+					reviewed.DisplayName = discovered.DisplayName
+				}
+				for _, field := range discovered.CapabilityFields {
+					switch field {
+					case "context_window":
+						reviewed.ContextWindow = discovered.ContextWindow
+					case "max_output_tokens":
+						reviewed.MaxOutputTokens = discovered.MaxOutputTokens
+					case "input_modalities":
+						reviewed.InputModalities = discovered.InputModalities
+					case "supports_tools":
+						reviewed.SupportsTools = discovered.SupportsTools
+					case "reasoning_capability":
+						reviewed.ReasoningCapability = discovered.ReasoningCapability
+					}
+				}
+				if reviewed.ContextWindow > 0 && reviewed.MaxOutputTokens > reviewed.ContextWindow {
+					reviewed.MaxOutputTokens = reviewed.ContextWindow
+				}
+				if discovered.Status == "unsupported" || reviewed.SupportsTools != nil && !*reviewed.SupportsTools {
+					reviewed.Status = "unsupported"
+				}
+				p.discoveredModels[i] = reviewed
+			} else {
+				p.discoveredModels[i] = applyAIModelOverride(discovered, discovered)
+			}
+			continue
+		}
 		reviewed, known := AIModelCatalogEntry(p.Type, discovered.EffectiveWireModelName())
 		if !known {
 			if AIProviderUsesCatalog(p.Type) && discovered.Status != "unsupported" && (discovered.SupportsTools == nil || *discovered.SupportsTools) {

@@ -1321,6 +1321,7 @@
     "high": "High",
     "xhigh": "XHigh",
     "max": "Max",
+    "ultra": "Ultra",
     "label": "Reasoning",
     "defaultLabel": "Default reasoning",
     "reset": "Reset reasoning",

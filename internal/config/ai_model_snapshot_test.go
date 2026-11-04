@@ -214,3 +214,38 @@ func TestWireOverrideUsesActualTargetCapabilities(t *testing.T) {
 		}
 	}
 }
+
+func TestGatewaySnapshotRefreshesOnlyInheritedDefaults(t *testing.T) {
+	reviewed := AIProviderCatalog("openai")[0]
+	cached := AIProviderModel{ModelName: reviewed.ModelName, ContextWindow: 32000, MaxOutputTokens: 512, InputModalities: []string{"text"}, CapabilitySource: "openai_models", CapabilityFields: []string{"context_window"}}
+	p := AIProvider{Type: "openai", ModelSelection: &AIModelSelection{SelectedModels: []string{cached.ModelName}}}.WithDiscoveredModels([]AIProviderModel{cached})
+	got := p.EffectiveModels()
+	if len(got) != 1 || got[0].ContextWindow != 32000 || got[0].MaxOutputTokens != 32000 || !reflect.DeepEqual(got[0].InputModalities, reviewed.InputModalities) || !reflect.DeepEqual(got[0].ReasoningCapability, reviewed.ReasoningCapability) {
+		t.Fatalf("inherited defaults pinned by old snapshot: %+v", got)
+	}
+	cached.CapabilityFields[0] = "input_modalities"
+	if p.CatalogModels()[0].CapabilityFields[0] != "context_window" {
+		t.Fatal("snapshot retained mutable provenance")
+	}
+	p.ModelSelection.ModelOverrides = []AIProviderModel{{ModelName: reviewed.ModelName, ContextWindow: 16000, MaxOutputTokens: 1024}}
+	got = p.EffectiveModels()
+	if len(got) != 1 || got[0].ContextWindow != 16000 || got[0].MaxOutputTokens != 1024 {
+		t.Fatalf("user intent changed: %+v", got)
+	}
+}
+
+func TestGatewaySnapshotRejectsInvalidFieldProvenance(t *testing.T) {
+	for _, m := range []AIProviderModel{
+		{ModelName: "a", CapabilitySource: "invented"},
+		{ModelName: "a", CapabilitySource: "openai_models"},
+		{ModelName: "a", CapabilitySource: "openai_models", CapabilityFields: []string{"context_window"}},
+		{ModelName: "a", CapabilitySource: "openai_models", CapabilityFields: []string{"supports_tools"}},
+		{ModelName: "a", CapabilityFields: []string{"context_window"}},
+		{ModelName: "a", CapabilitySource: "openai_models", CapabilityFields: []string{"context_window", "context_window"}},
+		{ModelName: "a", CapabilitySource: "openai_models", CapabilityFields: []string{"invented"}},
+	} {
+		if err := ValidateModelCatalogSnapshot([]AIProviderModel{m}); err == nil {
+			t.Fatal("invalid field provenance accepted")
+		}
+	}
+}

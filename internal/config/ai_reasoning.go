@@ -24,6 +24,7 @@ const (
 	AIReasoningLevelHigh    = flconfig.ReasoningLevelHigh
 	AIReasoningLevelXHigh   = flconfig.ReasoningLevelXHigh
 	AIReasoningLevelMax     = flconfig.ReasoningLevelMax
+	AIReasoningLevelUltra   = flconfig.ReasoningLevelUltra
 )
 
 type AIReasoningCapability struct {
@@ -54,12 +55,7 @@ func NormalizeAIReasoningSelection(in AIReasoningSelection) AIReasoningSelection
 }
 
 func ValidateAIReasoningLevel(level AIReasoningLevel) bool {
-	switch NormalizeAIReasoningSelection(AIReasoningSelection{Level: level}).Level {
-	case "", AIReasoningLevelDefault, AIReasoningLevelOff, AIReasoningLevelOn, AIReasoningLevelMinimal, AIReasoningLevelLow, AIReasoningLevelMedium, AIReasoningLevelHigh, AIReasoningLevelXHigh, AIReasoningLevelMax:
-		return true
-	default:
-		return false
-	}
+	return flconfig.ValidateReasoningLevel(level)
 }
 
 func (c AIReasoningCapability) Normalize() AIReasoningCapability {

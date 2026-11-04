@@ -34,7 +34,7 @@ function equalValue(a: unknown, b: unknown): boolean {
 const overrideKeys = ['web_search_enabled', 'supports_tools', 'wire_model_name', 'context_window', 'max_output_tokens', 'effective_context_window_percent', 'input_modalities', 'reasoning_capability', 'default_reasoning_selection'] as const;
 
 function serializeFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
-  const { model_digest: _digest, quantization: _quantization, status: _status, unavailable: _unavailable, web_search: _search, ...intent } = cloneFlowerModel(model);
+  const { capability_source: _source, model_digest: _digest, quantization: _quantization, status: _status, unavailable: _unavailable, web_search: _search, ...intent } = cloneFlowerModel(model);
   return intent;
 }
 

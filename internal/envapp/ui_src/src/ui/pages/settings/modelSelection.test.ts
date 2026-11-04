@@ -272,3 +272,17 @@ it('preserves explicit DeepSeek fetch independently of disabled search',()=>{
  expect(saved.web_fetch).toEqual({source:'deepseek'});expect(saved.web_search?.enabled).toBe(false);
  expect(serializeFlowerProvider({...saved,web_fetch:undefined}).web_fetch).toBeUndefined();
 });
+
+it('retains gateway capabilities and sparse intent across discovery, serialization and reopening', () => {
+  const entry: FlowerProviderModel = { capability_source: 'openai_models', model_name: 'auto%2Fagent', wire_model_name: 'auto/agent', context_window: 922000, max_output_tokens: 128000, supports_tools: true, input_modalities: ['text', 'image'], reasoning_capability: { kind: 'effort', wire_shape: 'openai_responses_reasoning_effort', supported_levels: ['low', 'ultra'] } };
+  const provider: FlowerProviderDraft = { id: 'gateway', type: 'openai', models: [], model_selection: { selected_models: [entry.model_name] } };
+  const refreshed = applyFlowerModelDiscovery(provider, [entry]);
+  expect(refreshed.models).toEqual([entry]);
+  const saved = serializeFlowerProvider(refreshed);
+  expect(saved.model_selection).toMatchObject({ selected_models: [entry.model_name], model_overrides: [], custom_models: [] });
+  expect(resolveFlowerProviderModels(saved, [entry])).toEqual([entry]);
+  const manual = { ...refreshed, models: [{ ...entry, context_window: 32000, max_output_tokens: 4096 }] };
+  const overridden = serializeFlowerProvider(manual);
+  expect(overridden.model_selection?.model_overrides).toEqual([{ model_name: entry.model_name, context_window: 32000, max_output_tokens: 4096 }]);
+  expect(resolveFlowerProviderModels(overridden, [entry])[0]).toMatchObject({ context_window: 32000, max_output_tokens: 4096, input_modalities: ['text', 'image'], reasoning_capability: { supported_levels: ['low', 'ultra'] } });
+});

@@ -981,6 +981,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           const selectionDisabled = createMemo(() => Boolean(preset().unavailable && !enabled()));
                           const activeModel = () => store.draft!.models.find((m) => cleanModelName(m.model_name) === modelName());
                           const model = () => activeModel() ?? preset();
+                          const declaredModel = () => flowerProviderModelCatalog(store.draft!).find(entry => entry.model_name === modelName() || (entry.wire_model_name || entry.model_name) === (model().wire_model_name || modelName()));
                           const modelNote = () => {
                             const value = preset();
                             return copy().modelNote('note_key' in value ? value.note_key as Parameters<FlowerProviderDialogCopy['modelNote']>[0] : undefined);
@@ -1021,7 +1022,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                       <span class="flower-provider-model-meta">{copy().imageInput}</span>
                                     </Show>
                                     <Show when={!flowerModelSupportsImage(model().input_modalities)}>
-                                      <span class="flower-provider-model-meta">{copy().text}</span>
+                                      <span class="flower-provider-model-meta">{model().input_modalities ? copy().text : copy().catalog.inputUnknown}</span>
                                     </Show>
                                   </div>
                                   <Show when={modelNote()}>
@@ -1056,6 +1057,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     <div>
                                       <FlowerFieldLabel hint={flowerModelNeedsConfiguration(model()) ? copy().required : undefined}>{copy().contextWindow}</FlowerFieldLabel>
                                       <Input type="number" aria-label={copy().contextWindow} aria-invalid={flowerModelNeedsConfiguration(model()) && !((model().context_window ?? 0) > 0)} min="1" value={model().context_window ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { context_window: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
+                                      <Show when={declaredModel()?.capability_source === 'openai_models' && declaredModel()?.context_window && (model().context_window ?? 0) > declaredModel()!.context_window!}>
+                                        <p role="status" class="mt-1 text-xs text-warning" data-flower-capacity-warning>{copy().catalog.contextOverrideWarning.replace('{count}', formatFlowerTokenCount(declaredModel()?.context_window))}</p>
+                                      </Show>
                                     </div>
                                     <div>
                                       <FlowerFieldLabel hint={flowerModelNeedsConfiguration(model()) ? copy().required : undefined}>{copy().maxOutput}</FlowerFieldLabel>
@@ -1064,6 +1068,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     <div>
                                       <FlowerFieldLabel>{copy().effectiveContextPercent}</FlowerFieldLabel>
                                       <Input type="number" value={model().effective_context_window_percent ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { effective_context_window_percent: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
+                                      <Show when={model().context_window}>
+                                        <p class="mt-1 text-xs text-muted-foreground" data-flower-input-budget>{copy().catalog.usableInput.replace('{count}', formatFlowerTokenCount(Math.max(1, Math.floor((model().context_window ?? 0) * (model().effective_context_window_percent || 95) / 100))))}</p>
+                                      </Show>
                                     </div>
                                     <Show when={preset().status === 'needs_configuration' || model().status === 'needs_configuration' || model().supports_tools !== undefined || model().reasoning_capability?.fixture === 'manual_provider_capability'}>
                                       <ManualModelCapabilities model={model()} type={store.draft!.type} baseURL={store.draft!.base_url || defaultBaseURLForFlowerProviderType(store.draft!.type)} copy={copy().catalog} onChange={patch => { if (modelIndex() >= 0) updateModel(modelIndex(), patch); }} />

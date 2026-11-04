@@ -1537,6 +1537,7 @@
       "high": "Élevé",
       "xhigh": "Très élevé",
       "max": "Maximal",
+      "ultra": "Ultra",
       "label": "Raisonnement",
       "defaultLabel": "Raisonnement par défaut",
       "reset": "Réinitialiser le raisonnement",

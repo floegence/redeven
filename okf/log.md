@@ -36,3 +36,8 @@ Concepts own current contracts and original qualification outcomes; Git retains 
   contracts, and consume Floret Activity source fidelity with visible transformations.
 
 - 2026-11-04: [ReDevPlugin target build toolchain](operations/redevplugin-cross-build.md) prepares pinned cross-C tools, verifies real static PIE linkage and qualifies Desktop source updates, cancellation and cache identity while retaining known upstream revocation failures.
+
+- 2026-11-04: Preserve declared OpenAI-compatible gateway capabilities through
+  discovery, cached resolution and restart using published Floret v7.107.0.
+  Document field provenance, capability-gated Ultra, sparse manual overrides,
+  unknown input display and endpoint-window warnings.

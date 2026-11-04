@@ -1537,6 +1537,7 @@
       "high": "높음",
       "xhigh": "매우 높음",
       "max": "최대",
+      "ultra": "울트라",
       "label": "추론",
       "defaultLabel": "기본 추론 설정",
       "reset": "추론 설정 초기화",

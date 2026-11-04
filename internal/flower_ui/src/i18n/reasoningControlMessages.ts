@@ -1,6 +1,6 @@
 export const reasoningControlEnUS = {
   default: 'Default', off: 'Off', on: 'On', minimal: 'Min', low: 'Low', medium: 'Med',
-  high: 'High', xhigh: 'XHigh', max: 'Max',
+  high: 'High', xhigh: 'XHigh', max: 'Max', ultra: 'Ultra',
   label: 'Reasoning', defaultLabel: 'Default reasoning', reset: 'Reset reasoning',
   defaultHint: 'Use the model’s default reasoning configuration',
   alwaysOn: 'Always on', modelControlled: 'Model controlled',

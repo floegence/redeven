@@ -60,7 +60,7 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
           </div>
           <Show when={activeModel()}>{model =>
             <dl class="flower-settings-model-metadata" style={{ '--flower-settings-model-stat-count': 1 + Number(!!model().context_window) + Number(!!model().max_output_tokens) + Number(reasoningCapabilitySupportsControl(model().reasoning_capability)) }}>
-              <div class="flower-settings-model-stat"><dt>{copy().inputCapabilities}</dt><dd class="flower-settings-model-capabilities"><span>{copy().text}</span><Show when={flowerModelSupportsImage(model().input_modalities)}><span>{copy().imageInput}</span></Show></dd></div>
+              <div class="flower-settings-model-stat"><dt>{copy().inputCapabilities}</dt><dd class="flower-settings-model-capabilities"><span>{model().input_modalities ? copy().text : copy().dialog.catalog.inputUnknown}</span><Show when={flowerModelSupportsImage(model().input_modalities)}><span>{copy().imageInput}</span></Show></dd></div>
               <Show when={model().context_window}><div class="flower-settings-model-stat"><dt>{copy().dialog.contextWindow}</dt><dd>{formatFlowerTokenCount(model().context_window)}</dd></div></Show>
               <Show when={model().max_output_tokens}><div class="flower-settings-model-stat"><dt>{copy().dialog.maxOutput}</dt><dd>{formatFlowerTokenCount(model().max_output_tokens)}</dd></div></Show>
               <Show when={reasoningCapabilitySupportsControl(model().reasoning_capability)}>
@@ -154,7 +154,7 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
                             </div>
                             <Show when={(model.display_name || model.wire_model_name) && (model.display_name || model.wire_model_name) !== model.model_name}><code class="flower-settings-provider-model-id">{model.model_name}</code></Show>
                           </th>
-                          <td>{copy().text}<Show when={flowerModelSupportsImage(model.input_modalities)}>{' · '}{copy().imageInput}</Show></td>
+                          <td>{model.input_modalities ? copy().text : copy().dialog.catalog.inputUnknown}<Show when={flowerModelSupportsImage(model.input_modalities)}>{' · '}{copy().imageInput}</Show></td>
                           <td class="flower-settings-provider-token-cell">{model.context_window ? formatFlowerTokenCount(model.context_window) : '—'}</td>
                           <td class="flower-settings-provider-token-cell">{model.max_output_tokens ? formatFlowerTokenCount(model.max_output_tokens) : '—'}</td>
                           <td><span class="flower-settings-provider-model-search" data-web-search={model.web_search?.status ?? 'pending'}>{flowerWebSearchLabel(model.web_search, copy().dialog.catalog)}</span></td>

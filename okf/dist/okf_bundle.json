@@ -10678,7 +10678,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-30",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "ai",
           "models",
@@ -10688,22 +10688,22 @@
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 2776,
+      "body_length": 3845,
       "summary": "Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. OpenRouter/Ollama discover on addition; manual refresh remains available.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.\n\nFlower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 17rem width, 20rem height cap, 24px minimum rows, 10px labels and 9px provider headings. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.\n\nThe shared Flower UI owns provider brand rendering in Desktop and Env App. Settings, provider dialogs and model selectors use unchanged, pinned theSVG assets recorded in assets/flower_provider_icons.json; checksums and licenses are verified by the third-party notice generator. Monochrome marks use the foreground color through an alpha mask, while color marks retain their original SVG bytes. Both Kimi connection types share Kimi; the legacy chatglm type displays Z.ai; custom OpenAI-compatible endpoints use the OpenAI protocol mark without asserting endpoint ownership. No host-specific SVG paths or runtime CDN requests are used.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.\n\nA selected platform whose catalog is unavailable shows the localized model-check failure and recovery action, never the first-use setup welcome. Preserve draft and selection; explicit model-menu refresh recovers from an authoritative directory response.\n\n`LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.",
-          "char_count": 2186
+          "body": "Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Identity-only unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nOpenAI-compatible inventories use Floret's public `ParseOpenAIModelMetadata`.\nExplicit endpoint limits, modalities, tool declarations and reasoning efforts\nsurvive atomic snapshots and restart. Field provenance separates endpoint facts\nfrom inherited reviewed defaults, so old snapshots still refresh shipped defaults\nand partial declarations override only reported fields. Full unknown wire IDs\nremain intact; complete serving facts enable only explicitly selected models.\nA reasoning boolean never invents effort controls; advertised Ultra remains\ncapability-gated. Conflicting metadata rejects the complete refresh and preserves\nthe previous snapshot. ChatGPT, Google, Ollama and OpenRouter retain their own\ninventory contracts.\n\nSettings retain sparse user overrides, show unknown input capabilities, expose\nthe usable input budget and warn when a window override exceeds the endpoint's\nreported limit. Reset restores endpoint facts. Refresh never silently changes\nsaved selection or manual settings.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.\n\nFlower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 17rem width, 20rem height cap, 24px minimum rows, 10px labels and 9px provider headings. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.\n\nThe shared Flower UI owns provider brand rendering in Desktop and Env App. Settings, provider dialogs and model selectors use unchanged, pinned theSVG assets recorded in assets/flower_provider_icons.json; checksums and licenses are verified by the third-party notice generator. Monochrome marks use the foreground color through an alpha mask, while color marks retain their original SVG bytes. Both Kimi connection types share Kimi; the legacy chatglm type displays Z.ai; custom OpenAI-compatible endpoints use the OpenAI protocol mark without asserting endpoint ownership. No host-specific SVG paths or runtime CDN requests are used.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.\n\nA selected platform whose catalog is unavailable shows the localized model-check failure and recovery action, never the first-use setup welcome. Preserve draft and selection; explicit model-menu refresh recovers from an authoritative directory response.\n\n`LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.",
+          "char_count": 3206
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Desktop/Env consume Runtime's authorized inventory. No Floret dependency, execution/storage change, schema migration or conversation store is added.",
-          "char_count": 148
+          "body": "Desktop/Env consume Runtime's authorized inventory. Floret owns provider-neutral gateway metadata parsing. Redeven consumes its published release; no conversation schema or storage change is added.",
+          "char_count": 197
         }
       ],
       "snippet": "Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. OpenRouter/Ollama discover on addition; manual refresh re",
@@ -11510,7 +11510,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-24",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "ai",
           "credentials",
@@ -11520,15 +11520,15 @@
         "title": "Provider configuration validation",
         "type": "AI Configuration Contract"
       },
-      "body_length": 2239,
+      "body_length": 2285,
       "summary": "Redeven owns configuration, credentials and Flower readiness across every settings entrypoint and provider-bundle save. Floret's public runtime contract is unchanged. Invalid saves preserve configuration and credentials; authentication/network failures remain execution errors.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Readiness and saving\nAll settings entrypoints and provider-bundle saves enforce the same completeness rules. Readiness reflects actual stored secrets and selected catalog membership. Ollama and custom compatible endpoints may run without a key. Unknown discovered models need explicit capabilities.\n\n| Field | Rule |\n| --- | --- |\n| API key | Required for local providers except Ollama/custom compatible. Desktop and Redeven AI sources retain separate session authority. |\n| Base URL | Optional adapter default for OpenAI/Anthropic/Gemini; explicit HTTP(S) otherwise. |\n| Display name | Optional; derive from provider type/identity. |\n| Models | Explicit named list or selected_models, including empty selection. Legacy exclusion profiles require review. Preserve unavailable selections without inventing capacity. |\n| Limits | Published defaults may supply omitted limits. Explicit compatible/OpenRouter/xAI/Groq/Ollama models and custom catalog entries require context. Unknown discoveries require context, output and tools capability; reviewed models retain optional output limits. |\n| Brave key | New or stored key required when Brave search is enabled. |\n\n## Kimi Code\nThe kimi_code provider uses its own subscription key and official China/global coding endpoint. Admit only six reviewed model/wire identities, capacity ceilings and reasoning levels. An explicit 1M override is user intent, not entitlement evidence. Preparation rejects unknown IDs, thinking-off and response-ID continuation before dispatch.",
-          "char_count": 1517
+          "body": "## Readiness and saving\nAll settings entrypoints and provider-bundle saves enforce the same completeness rules. Readiness reflects actual stored secrets and selected catalog membership. Ollama and custom compatible endpoints may run without a key. Unknown discovered models need complete endpoint declarations or explicit capability configuration.\n\n| Field | Rule |\n| --- | --- |\n| API key | Required for local providers except Ollama/custom compatible. Desktop and Redeven AI sources retain separate session authority. |\n| Base URL | Optional adapter default for OpenAI/Anthropic/Gemini; explicit HTTP(S) otherwise. |\n| Display name | Optional; derive from provider type/identity. |\n| Models | Explicit named list or selected_models, including empty selection. Legacy exclusion profiles require review. Preserve unavailable selections without inventing capacity. |\n| Limits | Published defaults may supply omitted limits. Explicit compatible/OpenRouter/xAI/Groq/Ollama models and custom catalog entries require context. Unknown discoveries require context, output and tools capability; reviewed models retain optional output limits. |\n| Brave key | New or stored key required when Brave search is enabled. |\n\n## Kimi Code\nThe kimi_code provider uses its own subscription key and official China/global coding endpoint. Admit only six reviewed model/wire identities, capacity ceilings and reasoning levels. An explicit 1M override is user intent, not entitlement evidence. Preparation rejects unknown IDs, thinking-off and response-ID continuation before dispatch.",
+          "char_count": 1563
         },
         {
           "id": "boundaries",
@@ -32200,5 +32200,5 @@
       ]
     }
   ],
-  "source_sha256": "192d6f7b3bc727fc500767b98bca660c3cade143e12103076b93d565083ca3d7"
+  "source_sha256": "8645d39246eccfafa55b388602e1c4fb04443bbf01bf9b7a0ffbd50a43a389e1"
 }

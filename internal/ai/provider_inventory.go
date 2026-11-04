@@ -2,12 +2,16 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -44,7 +48,7 @@ func discoverProviderInventory(ctx context.Context, in ModelCatalogRequest, clie
 	}
 	out := []config.AIProviderModel{}
 	seen := map[string]bool{}
-	add := func(id, name string, contextWindow, output int) error {
+	add := func(id, name string, contextWindow, output int, metadata *flprovider.OpenAIModelMetadata) error {
 		if strings.TrimSpace(id) == "" || seen[id] {
 			return errors.New("invalid or duplicate model catalog identity")
 		}
@@ -64,6 +68,11 @@ func discoverProviderInventory(ctx context.Context, in ModelCatalogRequest, clie
 		}
 		if output > 0 {
 			m.MaxOutputTokens = output
+		}
+		if metadata != nil {
+			if err := applyInventoryMetadata(&m, *metadata, in.Type, base); err != nil {
+				return err
+			}
 		}
 		out = append(out, m)
 		return nil
@@ -100,12 +109,9 @@ func discoverProviderInventory(ctx context.Context, in ModelCatalogRequest, clie
 			}
 		}
 		var response struct {
-			Data []struct {
-				ID   string `json:"id"`
-				Name string `json:"display_name"`
-			} `json:"data"`
-			HasMore *bool  `json:"has_more"`
-			LastID  string `json:"last_id"`
+			Data    []json.RawMessage `json:"data"`
+			HasMore *bool             `json:"has_more"`
+			LastID  string            `json:"last_id"`
 			Models  []struct {
 				Name        string   `json:"name"`
 				DisplayName string   `json:"displayName"`
@@ -132,7 +138,7 @@ func discoverProviderInventory(ctx context.Context, in ModelCatalogRequest, clie
 				if m.Context <= 0 || m.Output <= 0 {
 					return nil, errors.New("incomplete generation model capability")
 				}
-				if err = add(strings.TrimPrefix(m.Name, "models/"), m.DisplayName, m.Context, m.Output); err != nil {
+				if err = add(strings.TrimPrefix(m.Name, "models/"), m.DisplayName, m.Context, m.Output, nil); err != nil {
 					return nil, err
 				}
 			}
@@ -144,17 +150,34 @@ func discoverProviderInventory(ctx context.Context, in ModelCatalogRequest, clie
 			if response.Data == nil || in.Type == "anthropic" && response.HasMore == nil {
 				return nil, errors.New("model catalog omitted complete inventory")
 			}
-			for _, m := range response.Data {
-				if err = add(m.ID, m.Name, 0, 0); err != nil {
+			lastID := ""
+			for _, raw := range response.Data {
+				var m struct {
+					ID   string `json:"id"`
+					Name string `json:"display_name"`
+				}
+				var metadata *flprovider.OpenAIModelMetadata
+				if in.Type == "openai" || in.Type == "openai_compatible" {
+					parsed, parseErr := flprovider.ParseOpenAIModelMetadata(raw)
+					if parseErr != nil {
+						return nil, parseErr
+					}
+					metadata = &parsed
+					m.ID, m.Name = parsed.ID, parsed.DisplayName
+				} else if err = json.Unmarshal(raw, &m); err != nil {
+					return nil, errors.New("invalid model catalog object")
+				}
+				if err = add(m.ID, m.Name, 0, 0, metadata); err != nil {
 					return nil, err
 				}
+				lastID = m.ID
 			}
 			if response.HasMore == nil || !*response.HasMore {
 				return out, nil
 			}
 			cursor = response.LastID
 			if cursor == "" && len(response.Data) > 0 {
-				cursor = response.Data[len(response.Data)-1].ID
+				cursor = lastID
 			}
 			if cursor == "" {
 				return nil, errors.New("model catalog omitted pagination cursor")
@@ -165,4 +188,63 @@ func discoverProviderInventory(ctx context.Context, in ModelCatalogRequest, clie
 		}
 	}
 	return nil, errors.New("model catalog pagination incomplete")
+}
+
+// Protocol and settings decisions stay in the host; Floret parses serving facts.
+func applyInventoryMetadata(model *config.AIProviderModel, metadata flprovider.OpenAIModelMetadata, kind, base string) error {
+	if metadata.ContextWindow == 0 && metadata.MaxInputTokens == 0 && metadata.MaxOutputTokens == 0 && metadata.InputModalities == nil && metadata.SupportsTools == nil && metadata.Reasoning.IsZero() {
+		return nil
+	}
+	model.CapabilitySource = "openai_models"
+	window := metadata.ContextWindow
+	if metadata.MaxInputTokens > 0 && (window == 0 || metadata.MaxInputTokens < window) {
+		window = metadata.MaxInputTokens
+	}
+	if window > int64(int(^uint(0)>>1)) || metadata.MaxOutputTokens > int64(int(^uint(0)>>1)) {
+		return errors.New("model token limit exceeds supported range")
+	}
+	if window > 0 {
+		model.ContextWindow = int(window)
+		model.CapabilityFields = append(model.CapabilityFields, "context_window")
+	}
+	if metadata.MaxOutputTokens > 0 {
+		model.MaxOutputTokens = int(metadata.MaxOutputTokens)
+		model.CapabilityFields = append(model.CapabilityFields, "max_output_tokens")
+	}
+	if model.ContextWindow > 0 && model.MaxOutputTokens > model.ContextWindow {
+		model.MaxOutputTokens = model.ContextWindow
+	}
+	if metadata.InputModalities != nil {
+		model.InputModalities = catalogInputModalities(metadata.InputModalities)
+		model.CapabilityFields = append(model.CapabilityFields, "input_modalities")
+		if !slices.Contains(metadata.InputModalities, "text") {
+			model.Status = "unsupported"
+		}
+	}
+	if metadata.SupportsTools != nil {
+		model.SupportsTools = metadata.SupportsTools
+		model.CapabilityFields = append(model.CapabilityFields, "supports_tools")
+		if !*metadata.SupportsTools {
+			model.Status = "unsupported"
+		}
+	}
+	if !metadata.Reasoning.IsZero() {
+		shape := "openai_chat_reasoning_effort"
+		if kind == "openai" {
+			shape = "openai_responses_reasoning_effort"
+		}
+		capability := config.AIReasoningCapability{Kind: metadata.Reasoning.Kind, WireShape: shape, DisableSupported: metadata.Reasoning.DisableSupported, SourceURLs: []string{base + "/models"}, SourceCheckedAt: time.Now().UTC().Format("2006-01-02"), Fixture: "openai_models"}
+		for _, level := range metadata.Reasoning.SupportedLevels {
+			capability.SupportedLevels = append(capability.SupportedLevels, string(level))
+		}
+		if err := capability.Validate(); err != nil {
+			return fmt.Errorf("invalid discovered reasoning capability: %w", err)
+		}
+		model.ReasoningCapability = capability
+		model.CapabilityFields = append(model.CapabilityFields, "reasoning_capability")
+	}
+	if model.Status == "needs_configuration" && model.ContextWindow > 0 && model.MaxOutputTokens > 0 && model.SupportsTools != nil && *model.SupportsTools {
+		model.Status = ""
+	}
+	return nil
 }

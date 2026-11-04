@@ -1537,6 +1537,7 @@
       "high": "Hoch",
       "xhigh": "Sehr hoch",
       "max": "Maximal",
+      "ultra": "Ultra",
       "label": "Denken",
       "defaultLabel": "Standard-Denkeinstellung",
       "reset": "Denkeinstellung zurücksetzen",

@@ -18,7 +18,7 @@ export type FlowerProviderType =
 export type FlowerWebSearchSource = 'native' | 'brave';
 export type FlowerWebSearchPolicy = Readonly<{ editable: boolean; default_enabled: boolean; default_model_enabled: boolean; default_fetch_source: 'direct' | 'deepseek'; enabled: boolean; source: FlowerWebSearchSource; supported_sources: readonly FlowerWebSearchSource[] }>;
 
-export type FlowerReasoningLevel = 'default' | 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type FlowerReasoningLevel = 'default' | 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 export type FlowerReasoningSelection = Readonly<{
   level?: FlowerReasoningLevel;
@@ -47,6 +47,7 @@ export type FlowerReasoningCapability = Readonly<{
 export type FlowerWebSearchAvailability = Readonly<{ status: 'available' | 'unavailable'; reason: string; recommended_enabled?: boolean; model_enabled?: boolean }>;
 
 export type FlowerProviderModel = Readonly<{
+  capability_source?: string;
   supports_tools?: boolean;
   model_digest?: string;
   quantization?: string;

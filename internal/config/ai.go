@@ -160,9 +160,12 @@ type AIProviderWebSearch struct {
 }
 
 type AIProviderModel struct {
-	WebSearchEnabled *bool  `json:"web_search_enabled,omitempty"`
-	PlatformProtocol string `json:"-"`
-	SupportsTools    *bool  `json:"supports_tools,omitempty"`
+	// CapabilitySource identifies explicit serving facts, never user selection.
+	CapabilitySource string   `json:"capability_source,omitempty"`
+	CapabilityFields []string `json:"capability_fields,omitempty"`
+	WebSearchEnabled *bool    `json:"web_search_enabled,omitempty"`
+	PlatformProtocol string   `json:"-"`
+	SupportsTools    *bool    `json:"supports_tools,omitempty"`
 	// Discovery metadata is presentation-only and is never selection authority.
 	ModelDigest                   string                `json:"model_digest,omitempty"`
 	Quantization                  string                `json:"quantization,omitempty"`

@@ -3,7 +3,7 @@ type: AI Configuration Contract
 title: Provider configuration validation
 tags: [ai, providers, credentials, settings]
 lifecycle: contract
-reviewed_at: "2026-10-24"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -12,7 +12,7 @@ Redeven owns configuration, credentials and Flower readiness across every settin
 # Contract
 
 ## Readiness and saving
-All settings entrypoints and provider-bundle saves enforce the same completeness rules. Readiness reflects actual stored secrets and selected catalog membership. Ollama and custom compatible endpoints may run without a key. Unknown discovered models need explicit capabilities.
+All settings entrypoints and provider-bundle saves enforce the same completeness rules. Readiness reflects actual stored secrets and selected catalog membership. Ollama and custom compatible endpoints may run without a key. Unknown discovered models need complete endpoint declarations or explicit capability configuration.
 
 | Field | Rule |
 | --- | --- |

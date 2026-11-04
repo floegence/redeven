@@ -3,7 +3,7 @@ type: AI Configuration Contract
 title: Model directory and selection
 tags: [ai, models, providers, settings]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -11,7 +11,23 @@ Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; 
 
 # Contract
 
-Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.
+Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Identity-only unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.
+
+OpenAI-compatible inventories use Floret's public `ParseOpenAIModelMetadata`.
+Explicit endpoint limits, modalities, tool declarations and reasoning efforts
+survive atomic snapshots and restart. Field provenance separates endpoint facts
+from inherited reviewed defaults, so old snapshots still refresh shipped defaults
+and partial declarations override only reported fields. Full unknown wire IDs
+remain intact; complete serving facts enable only explicitly selected models.
+A reasoning boolean never invents effort controls; advertised Ultra remains
+capability-gated. Conflicting metadata rejects the complete refresh and preserves
+the previous snapshot. ChatGPT, Google, Ollama and OpenRouter retain their own
+inventory contracts.
+
+Settings retain sparse user overrides, show unknown input capabilities, expose
+the usable input budget and warn when a window override exceeds the endpoint's
+reported limit. Reset restores endpoint facts. Refresh never silently changes
+saved selection or manual settings.
 
 Profiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.
 
@@ -27,7 +43,7 @@ A selected platform whose catalog is unavailable shows the localized model-check
 
 # Boundaries
 
-Desktop/Env consume Runtime's authorized inventory. No Floret dependency, execution/storage change, schema migration or conversation store is added.
+Desktop/Env consume Runtime's authorized inventory. Floret owns provider-neutral gateway metadata parsing. Redeven consumes its published release; no conversation schema or storage change is added.
 
 # Evidence
 

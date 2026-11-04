@@ -89,7 +89,7 @@ export function FlowerModelSelectionDialog(props: Readonly<{
                 <Show when={name !== model.model_name}><code class="flower-model-selection-id">{model.model_name}</code></Show>
               </div>
               <dl class="flower-model-selection-metadata">
-                <div><dt>{props.copy.inputCapabilities}</dt><dd>{props.copy.text}<Show when={flowerModelSupportsImage(model.input_modalities)}>{' · '}{props.copy.imageInput}</Show></dd></div>
+                <div><dt>{props.copy.inputCapabilities}</dt><dd>{model.input_modalities ? props.copy.text : props.copy.dialog.catalog.inputUnknown}<Show when={flowerModelSupportsImage(model.input_modalities)}>{' · '}{props.copy.imageInput}</Show></dd></div>
                 <Show when={model.context_window}><div><dt>{props.copy.dialog.contextWindow}</dt><dd>{formatFlowerTokenCount(model.context_window)}</dd></div></Show>
                 <Show when={model.max_output_tokens}><div><dt>{props.copy.dialog.maxOutput}</dt><dd>{formatFlowerTokenCount(model.max_output_tokens)}</dd></div></Show>
               </dl>

@@ -386,3 +386,36 @@ func TestApplyChatReasoningExplicitOnForBooleanProviders(t *testing.T) {
 		})
 	}
 }
+
+func TestGatewayDeclaredUltraEffortReachesBothWireProtocols(t *testing.T) {
+	for _, shape := range []string{"openai_responses_reasoning_effort", "openai_chat_reasoning_effort"} {
+		t.Run(shape, func(t *testing.T) {
+			cap := config.AIReasoningCapability{Kind: "effort", WireShape: shape, SupportedLevels: []string{"low", "ultra"}, SourceURLs: []string{"https://example.test/v1/models"}, SourceCheckedAt: "2026-11-04", Fixture: "openai_models"}
+			controls := ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelUltra}, ReasoningCapability: cap}
+			var payload string
+			if shape == "openai_responses_reasoning_effort" {
+				params := oresponses.ResponseNewParams{Model: "auto/agent", Input: oresponses.ResponseNewParamsInputUnion{OfString: openai.String("hello")}}
+				if err := applyResponsesReasoning(&params, controls); err != nil {
+					t.Fatal(err)
+				}
+				payload = mustMarshalPayload(t, params)
+				if !strings.Contains(payload, `"reasoning":{"effort":"ultra"}`) {
+					t.Fatal(payload)
+				}
+			} else {
+				params := openai.ChatCompletionNewParams{Model: "auto/agent", Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")}}
+				if err := applyChatReasoning(&params, controls); err != nil {
+					t.Fatal(err)
+				}
+				payload = mustMarshalPayload(t, params)
+				if !strings.Contains(payload, `"reasoning_effort":"ultra"`) {
+					t.Fatal(payload)
+				}
+			}
+			cap.SupportedLevels = []string{"low"}
+			if err := config.ValidateAIReasoningSelection(cap, controls.ReasoningSelection); err == nil {
+				t.Fatal("unadvertised ultra accepted")
+			}
+		})
+	}
+}
