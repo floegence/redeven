@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-04: Bind Flower turn kinds to the selected published Floret API and qualify completed host-work history through Service, JSON, frontend cache, live updates and browser reopening.
+
 Concepts own current contracts and original qualification outcomes; Git retains change history.
 
 - 2026-11-04: [Flower Goals](ai/flower-goals.md) share the editor's first line box and clear converted native command text; browser and Desktop acceptance measure entry/typing/exit geometry and localized placeholders.

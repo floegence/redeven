@@ -195,6 +195,16 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 	if !finalActivity {
 		t.Fatal("original terminal activity was lost")
 	}
+	if mode == "automatic" {
+		detail, err := svc.GetFlowerThreadHistory(ctx, meta, thread.ThreadID, FlowerHistoryRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(detail.Current.Turns) != 2 || detail.Current.Turns[1].Kind != flruntime.TurnKindHostWorkContinuation {
+			t.Fatalf("missing canonical completion continuation: %+v", detail.Current.Turns)
+		}
+		assertFlowerHostWorkFixture(t, detail)
+	}
 	expectedCalls := int32(3)
 	if mode == "large_sync" {
 		expectedCalls = 2

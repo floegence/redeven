@@ -3730,6 +3730,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         settings_state: acceptance.settingsState,
       } : {}),
       error: getErrorMessage(error),
+      ...(error instanceof FlowerTurnPresentationError ? { error_code: error.code, contract_field: error.field, contract_reason: error.reason } : {}),
     });
   };
 

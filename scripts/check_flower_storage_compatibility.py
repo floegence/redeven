@@ -56,6 +56,16 @@ def main():
     assert set(manifest['files']) == {'history.sqlite', 'producer_test.go.txt'}, correction
     for name, expected in manifest['files'].items():
         assert sha((correction / name).read_bytes()) == expected, f'{correction}: historical correction writer changed'
+    completed = ROOT / 'internal/ai/testdata/host-work-completed-v7.106.2'
+    manifest = json.loads((completed / 'manifest.json').read_text())
+    assert manifest['writer_version'] == 'v7.106.2', completed
+    assert manifest['writer_commit'] == '13e1f54bd91e82d07009c4947c71dfdaf8246e32', completed
+    assert manifest['module_sum'] == 'h1:WbjhyDjAvKRFo1VlrLhFd12/5FKfiTJZ86yemcwk+PE=', completed
+    assert {'completed_host_work_continuation', 'fork', 'nested_fork'} == set(manifest['scenarios']), completed
+    assert manifest['thread_ids'] == ['completed-host-work', 'completed-fork', 'completed-nested'], completed
+    assert set(manifest['files']) == {'history.sqlite', 'producer_test.go.txt', 'producer.go.mod', 'producer.go.sum'}, completed
+    for name, expected in manifest['files'].items():
+        assert sha((completed / name).read_bytes()) == expected, f'{completed}: historical completed host-work writer changed'
     frozen = ROOT / 'internal/ai/pendinginputlegacy'
     for file in frozen.glob('*.go'):
         if file.name.endswith('_test.go'):
@@ -66,7 +76,7 @@ def main():
     migration = (ROOT / 'internal/ai/pending_input_migration.go').read_text()
     for retired_dependency in ('session.Meta', 'decodeStrictJSON', 'normalizeAskFlowerContextActionEnvelope', 'normalizeToolTargetPolicy', 'floretContextProjectionForInput', 'floretTurnInputWithUploadLoader'):
         assert retired_dependency not in migration, f'migration depends on mutable decoder: {retired_dependency}'
-    print(f'Flower compatibility source checks passed ({len(manifests)} product, {len(compaction)} compaction and 1 correction writer fixtures).')
+    print(f'Flower compatibility source checks passed ({len(manifests)} product, {len(compaction)} compaction, 1 correction and 1 completed host-work writer fixtures).')
 
 
 if __name__ == '__main__':

@@ -12,6 +12,8 @@ Floret owns turn outcome and timing. Terminal turns fold eligible process rows o
 # Contract
 
 ## Facts and eligibility
+Turn kind uses the [published-module consumer contract](../ai/flower-upgrade-compatibility.md#turn-kind-consumer-contract). Host-work completion is a distinct canonical turn with no new user message; preserve its final answer, identity and timing through loading, paging and observation. Detail and live failures record safe field/reason diagnostics without rejected values or content.
+
 Validated facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Typed structure determines eligibility; summaries, prompts and time heuristics cannot trigger folds. Unknown prose stays visible.
 
 Headers show lifecycle and total elapsed time including waits; terminal descriptions retain processing/wait durations. Show <=two nonzero units and subsecond copy. Thinking-only work keeps its own disclosure without a whole-turn toggle. Interleaved answers default open; settled question/answer receipts fold with process rows, retaining nested choices and viewport-contained decoration without folded rail/gap. Counts require complete boundaries/membership/events; otherwise omit. [Sequences](flower-tool-sequences.md) fold independently on either side.

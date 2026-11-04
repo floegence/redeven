@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   FlowerRuntimeCurrentItem,
+  FlowerRuntimeCurrentView,
   FlowerSubagentDetail,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
 import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
+import hostWorkDetail from './testdata/hostWorkCompletedDetail.json';
 
 const baseSummary: FlowerSubagentSummary = {
   parent_thread_id: 'parent-1',
@@ -48,6 +50,17 @@ function detail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDe
 }
 
 describe('projectSubagentDetailThread', () => {
+  it('retains the complete completed host-work conversation in a subagent detail', () => {
+    const current = hostWorkDetail.current as unknown as FlowerRuntimeCurrentView;
+    const projected = projectSubagentDetailThread(detail({
+      summary: { ...baseSummary, thread_id: current.thread_id, status: 'completed' }, current,
+    }))!;
+    expect(projected.turns?.map(turn => turn.kind)).toEqual([undefined, 'host_work_continuation']);
+    expect(projected.messages.filter(message => message.role === 'user')).toHaveLength(1);
+    expect(projected.messages.find(message => message.id === 'answer-running')?.content).toBe('Command is running.');
+    expect(projected.messages.find(message => message.id === 'answer-completed')?.content).toBe('COMPLETE_7319 received.');
+    expect(projected.status).toBe('success');
+  });
   it('shares equal complete context and preserves omitted updates without leaking across children', () => {
     const decoration = { decoration_id: 'child-compaction', kind: 'context_compaction' as const, ordinal: 1,
       anchor: { target_kind: 'message' as const, message_id: 'assistant-turn-1', edge: 'after' as const },

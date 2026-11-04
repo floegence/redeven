@@ -1,0 +1,244 @@
+{
+  "current": {
+    "activity": "idle",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 0
+    },
+    "goal": {
+      "actor": "",
+      "status": "absent",
+      "version": 0
+    },
+    "items": [
+      {
+        "canonical_ordinal": 2,
+        "created_at": "2026-11-04T00:00:00Z",
+        "id": "user-request",
+        "kind": "user",
+        "ordinal": 1,
+        "run_id": "run-request",
+        "text": "Run the command and report its completion.",
+        "turn_id": "turn-request"
+      },
+      {
+        "activity": {
+          "ended_at_unix_ms": 2000,
+          "item_id": "host-work-final:completion",
+          "kind": "tool",
+          "needs_attention": false,
+          "requires_approval": false,
+          "severity": "",
+          "started_at_unix_ms": 2000,
+          "status": "success",
+          "tool_id": "exec-one",
+          "tool_name": "terminal.exec"
+        },
+        "activity_summary": {
+          "fields": [
+            {
+              "count": 2,
+              "kind": "array",
+              "path": "/chips"
+            },
+            {
+              "bytes": 20,
+              "kind": "string",
+              "path": "/label"
+            },
+            {
+              "bytes": 40,
+              "kind": "string",
+              "path": "/payload/command"
+            },
+            {
+              "kind": "scalar",
+              "path": "/payload/duration_ms",
+              "value": 10
+            },
+            {
+              "bytes": 13,
+              "kind": "string",
+              "path": "/payload/execution_location"
+            },
+            {
+              "kind": "scalar",
+              "path": "/payload/exit_code",
+              "value": 0
+            },
+            {
+              "kind": "scalar",
+              "path": "/payload/first_seq",
+              "value": 1
+            },
+            {
+              "kind": "scalar",
+              "path": "/payload/last_seq",
+              "value": 1
+            },
+            {
+              "kind": "scalar",
+              "path": "/payload/latest_seq",
+              "value": 1
+            },
+            {
+              "bytes": 4,
+              "kind": "string",
+              "path": "/payload/operation"
+            },
+            {
+              "bytes": 20,
+              "kind": "string",
+              "path": "/payload/output"
+            },
+            {
+              "bytes": 27,
+              "kind": "string",
+              "path": "/payload/process_id"
+            },
+            {
+              "bytes": 7,
+              "kind": "string",
+              "path": "/payload/status"
+            },
+            {
+              "kind": "scalar",
+              "path": "/payload/total_bytes",
+              "value": 20
+            },
+            {
+              "bytes": 8,
+              "kind": "string",
+              "path": "/renderer"
+            }
+          ],
+          "label": "Run terminal fixture",
+          "renderer": "terminal",
+          "values": {
+            "/chips": [
+              {
+                "kind": "tool",
+                "label": "shell",
+                "tone": "neutral"
+              },
+              {
+                "kind": "process",
+                "label": "process",
+                "tone": "quiet",
+                "value": "tp_fixture"
+              }
+            ],
+            "/payload/execution_location": "local_runtime",
+            "/payload/operation": "exec",
+            "/payload/process_id": "tp_fixture",
+            "/payload/status": "success"
+          },
+          "version": "canonical:fixture"
+        },
+        "canonical_ordinal": 7,
+        "created_at": "2026-11-04T00:00:00Z",
+        "id": "tool-command",
+        "kind": "tool",
+        "ordinal": 2,
+        "run_id": "run-request",
+        "turn_id": "turn-request"
+      },
+      {
+        "canonical_ordinal": 17,
+        "created_at": "2026-11-04T00:00:00Z",
+        "id": "answer-running",
+        "kind": "assistant",
+        "ordinal": 3,
+        "output_ended_at": "2026-11-04T00:00:00Z",
+        "output_started_at": "2026-11-04T00:00:00Z",
+        "run_id": "run-request",
+        "text": "Command is running.",
+        "turn_id": "turn-request"
+      },
+      {
+        "canonical_ordinal": 26,
+        "created_at": "2026-11-04T00:00:00Z",
+        "id": "answer-completed",
+        "kind": "assistant",
+        "ordinal": 4,
+        "output_ended_at": "2026-11-04T00:00:00Z",
+        "output_started_at": "2026-11-04T00:00:00Z",
+        "run_id": "run-completion",
+        "text": "COMPLETE_7319 received.",
+        "turn_id": "turn-completion"
+      }
+    ],
+    "last_outcome": "completed",
+    "parent_events": {
+      "events": [],
+      "leaf_id": "terminal-completion",
+      "thread_id": "host-work-thread"
+    },
+    "queue_count": 0,
+    "run_id": "run-completion",
+    "thread_id": "host-work-thread",
+    "turn_id": "turn-completion",
+    "turn_kind": "host_work_continuation",
+    "turns": [
+      {
+        "elapsed_ms": 1000,
+        "ended_at": "2026-11-04T00:00:01Z",
+        "final_boundary_complete": true,
+        "final_item_ids": [
+          "answer-running"
+        ],
+        "outcome": "completed",
+        "run_id": "run-request",
+        "started_at": "2026-11-04T00:00:00Z",
+        "turn_id": "turn-request",
+        "waiting_ms": 0,
+        "work_duration_ms": 1000
+      },
+      {
+        "elapsed_ms": 1000,
+        "ended_at": "2026-11-04T00:00:03Z",
+        "final_boundary_complete": true,
+        "final_item_ids": [
+          "answer-completed"
+        ],
+        "kind": "host_work_continuation",
+        "outcome": "completed",
+        "run_id": "run-completion",
+        "started_at": "2026-11-04T00:00:02Z",
+        "turn_id": "turn-completion",
+        "waiting_ms": 0,
+        "work_duration_ms": 1000
+      }
+    ],
+    "view_version": 1
+  },
+  "thread": {
+    "created_at_unix_ms": 1,
+    "model_id": "openai/gpt-5-mini",
+    "permission_type": "full_access",
+    "read_status": {
+      "is_unread": false,
+      "read_state": {
+        "last_seen_activity_revision": 4000
+      },
+      "snapshot": {
+        "activity_revision": 4000
+      }
+    },
+    "run_status": "success",
+    "settings_revision": 1,
+    "thread_id": "host-work-thread",
+    "title": "terminal completion",
+    "title_generation": 1,
+    "title_status": "ready",
+    "updated_at_unix_ms": 4000,
+    "working_dir": "/fixture"
+  },
+  "window": {
+    "first_item_id": "user-request",
+    "has_after": false,
+    "has_before": false,
+    "last_item_id": "answer-completed",
+    "leaf_id": "terminal-completion"
+  }
+}

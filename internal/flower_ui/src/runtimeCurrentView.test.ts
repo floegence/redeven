@@ -1,3 +1,4 @@
+import { FLOWER_TURN_KINDS } from './contracts/flowerTurnKind.generated';
 import { describe, expect, it } from 'vitest';
 import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot, FlowerToolCallPreview } from './contracts/flowerSurfaceContracts';
 import { buildFlowerTimelineEntries } from './flowerTimelineProjection';
@@ -941,6 +942,30 @@ describe('canonical turn facts', () => {
       { turn_id: 'old', run_id: 'old-run', started_at: '2026-10-11T12:00:00Z', ended_at: '2026-10-11T12:00:05Z', outcome: 'interrupted', elapsed_ms: 5000, waiting_ms: 0, work_duration_ms: 5000, final_item_ids: [], final_boundary_complete: false },
       { turn_id: 'new', run_id: 'new-run', started_at: '2026-10-11T12:00:10Z', ended_at: '2026-10-11T12:00:20Z', outcome: 'completed', elapsed_ms: 10000, waiting_ms: 2000, work_duration_ms: 8000, final_item_ids: ['final-a', 'final-b'], final_boundary_complete: true },
     ],
+  });
+  it.each(FLOWER_TURN_KINDS)('accepts the published %s kind on current and historical turns', kind => {
+    const source = current();
+    const result = applyFlowerRuntimeCurrentView(summary(), { ...source, turn_kind: kind,
+      turns: source.turns!.map(turn => ({ ...turn, kind })) });
+    expect(result.current_execution?.turn_kind).toBe(kind);
+    expect(result.turns?.every(turn => turn.kind === kind)).toBe(true);
+  });
+  it.each(['private-future-kind', '', null, 42])('rejects unsupported current and historical kinds safely: %s', kind => {
+    const source = current();
+    for (const invalid of [{ ...source, turn_kind: kind }, { ...source, turns: source.turns!.map(turn => ({ ...turn, kind })) }]) {
+      expect(() => applyFlowerRuntimeCurrentView(summary(), invalid as unknown as FlowerRuntimeCurrentView))
+        .toThrow(expect.objectContaining({ code: 'flower_turn_presentation_error', field: 'kind', reason: 'unsupported_value' }));
+    }
+  });
+  it('preserves a completed host-work continuation with its own final answer', () => {
+    const source = current();
+    const continuation = { ...source, turn_kind: 'host_work_continuation', turns: [source.turns![0],
+      { ...source.turns![1], kind: 'host_work_continuation' }] } satisfies FlowerRuntimeCurrentView;
+    const result = applyFlowerRuntimeCurrentView(summary(), continuation);
+    expect(result.turns).toEqual(continuation.turns);
+    expect(result.current_execution?.turn_kind).toBe('host_work_continuation');
+    expect(result.messages.map(message => message.id)).toEqual(['old-text', 'final-a', 'final-b']);
+    expect(result.messages.every(message => message.role === 'assistant')).toBe(true);
   });
   it('preserves historical interruption and all explicit final segments', () => {
     const source = current();

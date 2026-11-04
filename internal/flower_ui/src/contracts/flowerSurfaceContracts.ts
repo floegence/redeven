@@ -1,3 +1,4 @@
+import type { FlowerTurnKind } from './flowerTurnKind.generated';
 import type { ContextActionContextItem } from '../contextActionWire';
 import type { DirectoryFavorites } from '@floegence/floe-webapp-core/ui';
 export type FlowerProviderType =
@@ -824,7 +825,7 @@ export type FlowerThreadSnapshot = Readonly<{
   status: FlowerThreadStatus;
   active_run_id?: string;
   // Detail-only projection of the accepted canonical current, including terminal identity.
-  current_execution?: Readonly<{ turn_id: string; run_id: string; status: FlowerThreadStatus; turn_kind?: 'context_compaction' | 'goal_continuation' }>;
+  current_execution?: Readonly<{ turn_id: string; run_id: string; status: FlowerThreadStatus; turn_kind?: FlowerTurnKind }>;
   run_progress?: FlowerRunProgress | null;
   approval_pending?: boolean;
   approval_pending_count?: number;
@@ -1096,7 +1097,7 @@ export type FlowerThreadCancellation = Readonly<{
 export type FlowerRuntimeTurn = Readonly<{
   turn_id: string;
   run_id: string;
-  kind?: 'context_compaction' | 'goal_continuation';
+  kind?: FlowerTurnKind;
   started_at: string;
   ended_at?: string;
   outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
@@ -1122,7 +1123,7 @@ export type FlowerRuntimeCurrentView = Readonly<{
   goal?: FlowerGoal;
   parent_events?: FlowerParentEventPage;
   turns?: readonly FlowerRuntimeTurn[] | null;
-  turn_kind?: 'context_compaction' | 'goal_continuation';
+  turn_kind?: FlowerTurnKind;
   cancellation?: FlowerThreadCancellation;
   restored_inputs?: readonly FlowerRestoredInput[];
   thread_id: string;

@@ -1,3 +1,5 @@
+import { createThreadCache } from './threadCache';
+import hostWorkDetail from './testdata/hostWorkCompletedDetail.json';
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -1172,5 +1174,26 @@ describe.each(['root', 'child', 'live root', 'live child'] as const)('history se
   ])('rejects malformed or ambiguous proof metadata: %j', async patch => {
     const window = { leaf_id: 'leaf', has_before: false, has_after: false, sequence_gaps: [proof], ...patch };
     await expect(readWindow(window as FlowerHistoryWindow)).rejects.toThrow('invalid history sequence gaps');
+  });
+});
+
+
+describe('published completed host-work history', () => {
+  it('loads the complete real Service response through history, detail, and cache', async () => {
+    for (const history of [false, true]) {
+      const transport = { loadThread: vi.fn(async () => structuredClone(hostWorkDetail)),
+        ...(history ? { loadHistory: vi.fn(async () => structuredClone(hostWorkDetail)) } : {}) };
+      const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions(transport));
+      const loaded = await adapter.loadThread(hostWorkDetail.thread.thread_id, new AbortController().signal);
+      expect(loaded.current?.turn_kind).toBe('host_work_continuation');
+      expect(loaded.thread.turns).toEqual(hostWorkDetail.current.turns);
+      const cache = createThreadCache().receiveCurrent({ thread: loaded.thread, version: loaded.current!.view_version }, { current: loaded.current }).cache;
+      expect(cache.views.get(loaded.thread.thread_id)?.thread.turns).toEqual(hostWorkDetail.current.turns);
+      expect(loaded.thread.messages.filter(message => message.role === 'user')).toHaveLength(1);
+      expect(loaded.thread.messages.find(message => message.id === 'answer-completed')).toMatchObject({
+        content: 'COMPLETE_7319 received.', turn_id: 'turn-completion', run_id: 'run-completion',
+      });
+      if (history) expect(transport.loadThread).not.toHaveBeenCalled();
+    }
   });
 });

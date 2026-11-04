@@ -1,3 +1,4 @@
+import { isFlowerTurnKind } from './contracts/flowerTurnKind.generated';
 import { mapFlowerActivitySummary } from './flowerLiveMapper';
 import { validateParentEventPage } from './parentEventPage';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
@@ -472,6 +473,7 @@ export function projectFlowerRuntimeComponents(
   context: FlowerRuntimeContext = {},
   changed?: Readonly<{ interactions?: unknown; queue?: unknown; goal?: unknown; parent_events?: unknown; restored_inputs?: unknown }>,
 ): FlowerThreadSnapshot {
+  if (current.turn_kind !== undefined && !isFlowerTurnKind(current.turn_kind)) throw new FlowerTurnPresentationError('kind', 'unsupported_value');
   const threadID = trim(current.thread_id);
   if (!threadID || threadID !== base.thread_id) {
     throw new Error('Flower contract error: current thread_id does not match the selected thread.');
@@ -558,8 +560,8 @@ export function projectFlowerRuntimeComponents(
 /** Safe contract diagnostics never include conversation content or identities. */
 export class FlowerTurnPresentationError extends Error {
   readonly code = 'flower_turn_presentation_error';
-  constructor(readonly field: 'turn' | 'final_item_ids' | 'intermediate_item_ids',
-    readonly reason: 'invalid' | 'missing_item' | 'duplicate_item' | 'wrong_kind' | 'empty_content' | 'execution_mismatch' | 'out_of_order') {
+  constructor(readonly field: 'turn' | 'kind' | 'final_item_ids' | 'intermediate_item_ids',
+    readonly reason: 'invalid' | 'unsupported_value' | 'missing_item' | 'duplicate_item' | 'wrong_kind' | 'empty_content' | 'execution_mismatch' | 'out_of_order') {
     super('Flower contract error: invalid canonical turn presentation.');
     this.name = 'FlowerTurnPresentationError';
   }
@@ -592,7 +594,7 @@ export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
     const start = Date.parse(turn.started_at);
     const end = turn.ended_at === undefined ? undefined : Date.parse(turn.ended_at);
     if (!Number.isFinite(start) || end !== undefined && (!Number.isFinite(end) || end < start)) failure();
-    if (turn.kind !== undefined && turn.kind !== 'context_compaction' && turn.kind !== 'goal_continuation') failure();
+    if (turn.kind !== undefined && !isFlowerTurnKind(turn.kind)) failure('kind', 'unsupported_value');
     if (turn.outcome !== undefined && !['completed', 'failed', 'cancelled', 'interrupted'].includes(turn.outcome)) failure();
     if ((turn.outcome === undefined) !== (end === undefined)) failure();
     if (![turn.elapsed_ms, turn.waiting_ms, turn.work_duration_ms].every((value) => Number.isSafeInteger(value) && value >= 0)

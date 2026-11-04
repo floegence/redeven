@@ -1,0 +1,51 @@
+package fixture
+
+import (
+ "context"
+ "os"
+ "path/filepath"
+ "testing"
+ "time"
+
+ "github.com/floegence/floret/v7/config"
+ "github.com/floegence/floret/v7/florettest"
+ "github.com/floegence/floret/v7/identity"
+ "github.com/floegence/floret/v7/provider"
+ "github.com/floegence/floret/v7/runtime"
+ "github.com/floegence/floret/v7/storage"
+ "github.com/floegence/floret/v7/tools"
+)
+
+func TestWriteCompletedHostWork(t *testing.T) {
+ path := filepath.Join(os.Getenv("FLORET_FIXTURE_DIR"),"history.sqlite")
+ if _,err := os.Stat(path); !os.IsNotExist(err) { t.Fatal("fixture destination must be new") }
+ gateway := florettest.NewScriptedGateway(provider.Identity{Provider:"test",Model:"host-work",StateCompatibilityKey:"host-work"},provider.Capabilities{Reasoning:provider.ReasoningUnsupported},
+  florettest.Step{Events:[]provider.Event{{Type:provider.EventToolCalls,ToolCalls:[]provider.ToolCall{{ID:"command",Name:"command",Args:"{}"}}},{Type:provider.EventDone,Reason:"tool_calls"}}},
+  florettest.Step{Events:[]provider.Event{{Type:provider.EventDelta,Text:"The command is running."},{Type:provider.EventDone,Reason:"stop"}}},
+  florettest.Step{Events:[]provider.Event{{Type:provider.EventDelta,Text:"Completed host work retained: 7319."},{Type:provider.EventDone,Reason:"stop"}}})
+ var service runtime.ThreadService
+ var binding runtime.BindHostWorkInput
+ tool := tools.Define[struct{}](tools.Definition{Name:"command",InputSchema:tools.StrictObject(nil,nil),Effects:[]tools.Effect{tools.EffectWrite},Permission:tools.PermissionSpec{Mode:tools.PermissionAllow}},nil,nil,func(ctx context.Context,inv tools.Invocation[struct{}])(tools.Result,error){
+  binding.WorkID="work-1"
+  if err:=service.(runtime.ThreadHostWorkService).BindHostWork(ctx,binding);err!=nil{return tools.Result{},err}
+  return tools.Result{Text:"running work-1"},nil
+ })
+ agent,err:=runtime.NewAgent(config.AgentConfig{Profile:config.AgentProfile{ID:"fixture",Name:"Fixture"},SystemPrompt:"Inspect.",Context:config.ContextPolicy{ContextWindowTokens:config.DefaultContextWindowTokens}},gateway,runtime.WithAgentTools(tool),runtime.WithAgentEffectAuthorization(runtime.EffectAuthorizationGateFunc(func(ctx context.Context,req runtime.EffectAuthorizationRequest,effect runtime.AuthorizedEffect)(runtime.EffectDispatchResult,error){
+  binding=runtime.BindHostWorkInput{EffectAttemptID:req.EffectAttemptID,ThreadID:req.ThreadID,TurnID:req.TurnID,RunID:req.RunID,ToolCallID:req.ToolCallID}
+  return effect(ctx,runtime.EffectAuthorizationProof{EffectAttemptID:req.EffectAttemptID,RequestFingerprint:req.RequestFingerprint,ThreadID:req.ThreadID,TurnID:req.TurnID,RunID:req.RunID,ToolCallID:req.ToolCallID,PolicyRevision:"fixture",AuditReference:"fixture",AuditHash:"fixture",AuthorizedAt:time.Now().UTC()})
+ })))
+ if err!=nil{t.Fatal(err)}
+ ids:=florettest.NewIDSource(florettest.IDSourceOptions{ThreadIDs:[]identity.ThreadID{"completed-host-work","completed-fork","completed-nested"},TurnIDs:[]identity.TurnID{"request-turn","completion-turn"},RunIDs:[]identity.RunID{"request-run","completion-run"}})
+ host,err:=runtime.Open(t.Context(),runtime.Options{Storage:storage.SQLite(path),IDSource:ids});if err!=nil{t.Fatal(err)}
+ service,err=host.ThreadService(runtime.AgentFactoryFunc(func(context.Context,runtime.AgentRequest)(*runtime.Agent,error){return agent,nil}));if err!=nil{t.Fatal(err)}
+ created,err:=service.Create(t.Context(),runtime.CreateThreadInput{RequestKey:"create"});if err!=nil{t.Fatal(err)}
+ if _,err=service.Send(t.Context(),runtime.SendInput{ThreadID:created.ThreadID,RequestKey:"request",Input:runtime.UserInput{Text:"Run the command and report completion."}});err!=nil{t.Fatal(err)}
+ wait:=func(count int){t.Helper();ctx,cancel:=context.WithTimeout(t.Context(),5*time.Second);defer cancel();for{view,err:=service.View(ctx,created.ThreadID);if err!=nil{t.Fatal(err)};if view.Failure!=nil{t.Fatalf("failed: %+v",view.Failure)};if view.Activity==runtime.ThreadActivityIdle&&len(gateway.Requests())==count{return};select{case<-ctx.Done():t.Fatal(ctx.Err());case<-time.After(time.Millisecond):}}}
+ wait(2)
+ output:="sealed synthetic output 7319"
+ if err=service.(runtime.ThreadHostWorkService).CompleteHostWork(t.Context(),runtime.CompleteHostWorkInput{ThreadID:created.ThreadID,WorkID:"work-1",Notice:"Command completed: 7319",Output:&output,Notify:true});err!=nil{t.Fatal(err)}
+ wait(3)
+ fork,err:=service.Fork(t.Context(),runtime.ForkThreadInput{SourceThreadID:created.ThreadID,RequestKey:"fork"});if err!=nil{t.Fatal(err)}
+ if _,err=service.Fork(t.Context(),runtime.ForkThreadInput{SourceThreadID:fork.ThreadID,RequestKey:"nested"});err!=nil{t.Fatal(err)}
+ if err=host.Shutdown(context.Background());err!=nil{t.Fatal(err)}
+}

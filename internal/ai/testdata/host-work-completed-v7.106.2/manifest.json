@@ -1,0 +1,22 @@
+{
+  "writer_version": "v7.106.2",
+  "writer_commit": "13e1f54bd91e82d07009c4947c71dfdaf8246e32",
+  "module_sum": "h1:WbjhyDjAvKRFo1VlrLhFd12/5FKfiTJZ86yemcwk+PE=",
+  "go_version": "go version go1.27.3 darwin/arm64",
+  "scenarios": [
+    "completed_host_work_continuation",
+    "fork",
+    "nested_fork"
+  ],
+  "thread_ids": [
+    "completed-host-work",
+    "completed-fork",
+    "completed-nested"
+  ],
+  "files": {
+    "history.sqlite": "a2df4dc3872dee8a3f2daf8df78c05e31b07131880fe688d00b846b4f7fc5fef",
+    "producer.go.mod": "c4899945a08a71b6d8623dcc9ab27ed9726db37354e3199b11267fc680eda8a1",
+    "producer.go.sum": "e3b7e50f91480ddc46f2f2a7e97239b348f0f4cdfad92739a2d492435841a897",
+    "producer_test.go.txt": "b8c64a74096fb6f6eb4b50ca1f06fe3699f60e6de0c9da249100761081a6592a"
+  }
+}

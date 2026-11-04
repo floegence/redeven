@@ -22,6 +22,33 @@ history through the public runtime and Redeven DTO. Browser acceptance exercises
 the same serialized Activity contract. Compatibility checks must cover legal
 status values, attention/counts, bounded final presentation, and rendered history;
 API symbol compatibility and database-open success alone are insufficient.
+The immutable [v7.106.2 completed fixture](../../internal/ai/testdata/host-work-completed-v7.106.2/manifest.json)
+retains its exact published writer, frozen module files and checksums.
+`TestFlowerReleasedCompletedHostWorkHistory` qualifies completed history, forks,
+nested forks, explicit continuation, rejected completed-turn Retry and restart
+through public product APIs without startup replay.
+
+# Turn-kind consumer contract
+
+The selected published Floret module owns `runtime.TurnKind`. Generate the
+shared TypeScript type and predicate with
+`GOWORK=off go run ./internal/cmd/flower-turn-contract`; `--check` compares the
+committed output with public Go export data. The ordinary Go contract test and dependency
+boundary reject drift, including additive upstream values. Ordinary turns omit
+kind; compaction, Goal continuation and host-work continuation retain theirs.
+Never drop a valid kind or synthesize a user request to make history load.
+
+`TestTerminalCompletionAutomaticallyContinuesAndRetainsOutput/automatic`
+recreates the complete canonical current through the real Service, published
+Floret, a fake provider and an actual short-lived terminal process, then repeats
+the read after restart. Its reviewed synthetic
+[detail fixture](../../internal/flower_ui/src/testdata/hostWorkCompletedDetail.json)
+normalizes identities/timing and includes the required catalog metadata.
+Regenerate only after review with `UPDATE_FLOWER_HOST_WORK_FIXTURE=1`.
+The same serialized current passes the real frontend adapter, indexed cache,
+new-turn live delta/reconnect and browser reopening; preserve both final answers
+and one admitted user message. Unknown kinds and malformed references remain
+errors. Activity-only checks do not qualify a complete conversation response.
 
 # Boundaries
 

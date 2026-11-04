@@ -1,3 +1,4 @@
+import hostWorkDetail from './testdata/hostWorkCompletedDetail.json';
 import boundedPreview from './testdata/boundedWhitespaceCurrentView.json';
 import { describe, expect, it, vi } from 'vitest';
 import { createRuntimeThreadRecord } from './runtimeThreadRecord';
@@ -693,4 +694,33 @@ it('retains exact cached whitespace extents when a live body grows alongside can
     items: [{ kind: 'body', item_id: item.id, body: { ...item.body, bytes: item.body.bytes + 100 } }] });
   expect(record.item(item.id)?.body?.preview_bytes).toBe(1280);
   expect(record.version).toBe(2);
+});
+
+
+it('admits a new host-work turn atomically through a live delta and reconnect baseline', () => {
+  const completed = hostWorkDetail.current as unknown as FlowerRuntimeCurrentView;
+  const first = completed.turns![0];
+  const baseline: FlowerRuntimeCurrentView = { ...completed, turn_kind: undefined, turn_id: first.turn_id, run_id: first.run_id,
+    turns: [first], items: completed.items!.slice(0, -1) };
+  const initial = applyFlowerRuntimeCurrentView({ ...fixture().initial, thread_id: completed.thread_id }, baseline);
+  const record = createRuntimeThreadRecord(baseline, initial);
+  const final = completed.items!.at(-1)!;
+  const update: FlowerRuntimeUpdate = { thread_id: completed.thread_id, turn_id: completed.turn_id!, run_id: completed.run_id!,
+    base_version: 1, view_version: 2, facts: { activity: 'idle', attention: {}, queue_count: 0,
+      turn_kind: 'host_work_continuation', last_outcome: 'completed' },
+    items: [{ kind: 'add', item_id: final.id, item: final }], turns: { value: completed.turns! } };
+  record.apply(initial, update);
+  const accepted = record.initializeThread();
+  expect(accepted.turns).toEqual(completed.turns);
+  expect(accepted.current_execution?.turn_kind).toBe('host_work_continuation');
+  expect(accepted.messages.filter(message => message.role === 'user')).toHaveLength(1);
+  expect(accepted.messages.at(-1)?.content).toBe('COMPLETE_7319 received.');
+  const reconnect = { ...completed, view_version: 2 };
+  const restored = createRuntimeThreadRecord(reconnect, applyFlowerRuntimeCurrentView(accepted, reconnect), record);
+  expect(restored.initializeThread().messages.map(message => message.id)).toEqual(accepted.messages.map(message => message.id));
+  expect(restored.initializeThread().turns).toEqual(completed.turns);
+  expect(() => record.apply(accepted, { ...update, base_version: 2, view_version: 3, items: [],
+    turns: { value: [{ ...completed.turns![1], final_item_ids: ['private-missing-final'] }] } })).toThrow(/canonical turn presentation/);
+  expect(record.version).toBe(2);
+  expect(record.initializeThread().turns).toEqual(completed.turns);
 });

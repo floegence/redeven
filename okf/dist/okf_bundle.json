@@ -3890,7 +3890,7 @@
               "release"
             ],
             "summary": "Immutable fixtures come from locked released Redeven writers; current tests copy and verify them. Supported history must remain readable and continue after upgrade. Preserve source/module digests and public write paths. Fixture drift or upgrade failure blocks integration; database open alone is insufficient.",
-            "section_count": 2
+            "section_count": 3
           },
           {
             "concept_id": "ai.flower-attachment-resources",
@@ -10252,15 +10252,22 @@
         "title": "Flower historical writer acceptance",
         "type": "Compatibility Contract"
       },
-      "body_length": 1607,
+      "body_length": 3376,
       "summary": "Immutable fixtures come from locked released Redeven writers; current tests copy and verify them. Supported history must remain readable and continue after upgrade. Preserve source/module digests and public write paths. Fixture drift or upgrade failure blocks integration; database open alone is insufficient.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The compatibility baseline is Redeven `10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a` with published Floret `v7.5.0`.\n\nThe manifest binds the archive, every stored file and producer by SHA-256 and records source commit, Floret version, Go toolchain, scenario names and canonical IDs needed by assertions.\n\nQualification uses fake providers and copied synthetic data; production startup never resumes a user's task automatically.\n\nThe released Floret v7.102.0 host-work fixture also qualifies unknown-outcome\nhistory through the public runtime and Redeven DTO. Browser acceptance exercises\nthe same serialized Activity contract. Compatibility checks must cover legal\nstatus values, attention/counts, bounded final presentation, and rendered history;\nAPI symbol compatibility and database-open success alone are insufficient.",
-          "char_count": 818
+          "body": "The compatibility baseline is Redeven `10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a` with published Floret `v7.5.0`.\n\nThe manifest binds the archive, every stored file and producer by SHA-256 and records source commit, Floret version, Go toolchain, scenario names and canonical IDs needed by assertions.\n\nQualification uses fake providers and copied synthetic data; production startup never resumes a user's task automatically.\n\nThe released Floret v7.102.0 host-work fixture also qualifies unknown-outcome\nhistory through the public runtime and Redeven DTO. Browser acceptance exercises\nthe same serialized Activity contract. Compatibility checks must cover legal\nstatus values, attention/counts, bounded final presentation, and rendered history;\nAPI symbol compatibility and database-open success alone are insufficient.\nThe immutable [v7.106.2 completed fixture](../../internal/ai/testdata/host-work-completed-v7.106.2/manifest.json)\nretains its exact published writer, frozen module files and checksums.\n`TestFlowerReleasedCompletedHostWorkHistory` qualifies completed history, forks,\nnested forks, explicit continuation, rejected completed-turn Retry and restart\nthrough public product APIs without startup replay.",
+          "char_count": 1215
+        },
+        {
+          "id": "turn-kind-consumer-contract",
+          "title": "Turn-kind consumer contract",
+          "level": 1,
+          "body": "The selected published Floret module owns `runtime.TurnKind`. Generate the\nshared TypeScript type and predicate with\n`GOWORK=off go run ./internal/cmd/flower-turn-contract`; `--check` compares the\ncommitted output with public Go export data. The ordinary Go contract test and dependency\nboundary reject drift, including additive upstream values. Ordinary turns omit\nkind; compaction, Goal continuation and host-work continuation retain theirs.\nNever drop a valid kind or synthesize a user request to make history load.\n\n`TestTerminalCompletionAutomaticallyContinuesAndRetainsOutput/automatic`\nrecreates the complete canonical current through the real Service, published\nFloret, a fake provider and an actual short-lived terminal process, then repeats\nthe read after restart. Its reviewed synthetic\n[detail fixture](../../internal/flower_ui/src/testdata/hostWorkCompletedDetail.json)\nnormalizes identities/timing and includes the required catalog metadata.\nRegenerate only after review with `UPDATE_FLOWER_HOST_WORK_FIXTURE=1`.\nThe same serialized current passes the real frontend adapter, indexed cache,\nnew-turn live delta/reconnect and browser reopening; preserve both final answers\nand one admitted user message. Unknown kinds and malformed references remain\nerrors. Activity-only checks do not qualify a complete conversation response.",
+          "char_count": 1339
         },
         {
           "id": "boundaries",
@@ -10300,6 +10307,12 @@
           "path": "ui/flower-failure-recovery.md",
           "concept_id": "ui.flower-failure-recovery",
           "title": "Flower failure recovery"
+        },
+        {
+          "label": "Flower turn status and process disclosure",
+          "path": "ui/flower-turn-process-disclosure.md",
+          "concept_id": "ui.flower-turn-process-disclosure",
+          "title": "Flower turn status and process disclosure"
         }
       ]
     },
@@ -29846,15 +29859,15 @@
         "title": "Flower turn status and process disclosure",
         "type": "UI Contract"
       },
-      "body_length": 6747,
+      "body_length": 7134,
       "summary": "Floret owns turn outcome and timing. Terminal turns fold eligible process rows once; pending controls, uncertain effects and inspected work remain visible. Explicit choices persist, user messages/finals stay mounted, and settled question/answer receipts reopen with complete content.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Facts and eligibility\nValidated facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Typed structure determines eligibility; summaries, prompts and time heuristics cannot trigger folds. Unknown prose stays visible.\n\nHeaders show lifecycle and total elapsed time including waits; terminal descriptions retain processing/wait durations. Show \u003c=two nonzero units and subsecond copy. Thinking-only work keeps its own disclosure without a whole-turn toggle. Interleaved answers default open; settled question/answer receipts fold with process rows, retaining nested choices and viewport-contained decoration without folded rail/gap. Counts require complete boundaries/membership/events; otherwise omit. [Sequences](flower-tool-sequences.md) fold independently on either side.\n\n## Ownership\nFrom canonical admission, running/preparing/retrying/finalizing/waiting turns show a non-interactive header before provider output. Announce status politely, never elapsed ticks. Exact outcome/end enables the toggle and one automatic fold of confirmed process/intermediate rows, including latest failed/canceled/interrupted turns. Final/trailing partial output remains.\n\nFocus, selection, gestures, open details/thinking and away-from-tail reading protect inspected work permanently against later observations. Capture an unaffected visible anchor when automatic folding starts. Explicit choices survive paging/reconnect/regrouping. Newly classified inspected rows stay until the next explicit toggle without opening siblings; only disclosure/navigation reopens groups. Retained folded bodies are inert with offsets/choices intact. Main/embedded/child views share rendering, not scroll owners.\n\n## Placement and motion\nAnchor the header after its loaded request or before the first loaded response, independently of fold membership. Keep request/header mounted during arrival. Intermediate membership spans same-turn runs; Engine owns supersession. Goals keep turn ownership; finals are run-scoped. Retained prefixes preserve confirmed facts; windows replace overlapping classification. Partial windows never fetch history for presentation. Prepending the beginning moves the header while retaining choice/focus; anchor visibility does not own disclosure.\n\nEligibility changes no header geometry. One-line status/time/detail slots use tabular digits, bounded widths and narrow overflow handling. Following folds align actual bottom before paint, without stale absolute offsets, synthetic trailing space or competing growth motion. Long-to-short content ends at zero with final visible. Finals remain mounted during the 260 ms fold; reduced motion is immediate. Manual/paused reading retains anchors and necessary insertion room, excluded from distance-to-latest. Input cancels follow; settlement cannot reclaim it.\n\nFresh visible live labels fade 0.68→1 over 180 ms; later changes 0.88→1 over 160 ms. The complete current label stays readable: no clipping, blank frames, overlapping text or character queue. Fast completion joins the active transition. One JSX text owner survives wrapper-to-button changes with node/timing intact; at most one bounded opacity animation. Accessibility, controls and geometry update immediately; ticks never restart motion. History/restoration/reconnect/urgent states/reduced motion are immediate. Hide, interaction or reduced motion settles animation.\n\nWhen a turn ends while prose waits on an inner sequence, outer motion owns release and preserves nested geometry; interrupted inner folds transfer painted opacity/transform. Manual reversal retains choice/preferences. Canonical Path orders dialogue/receipts, never timestamps; preserve final segments and secret redaction.\n\n## Elapsed time\nCurrent-view server samples establish a browser monotonic anchor across same-turn waits/continuations. Missing sample means status-only: queue/browser wall time is not authority. Newer samples reanchor after sleep/reconnect; delayed samples cannot move live time backward. Canonical terminal time wins. Keep samples in bounded detail cache, out of summaries/wire fields/storage/events.\n\nOnly visible active headers subscribe to Surface's existing one-second clock. Offscreen/hidden/disconnected/terminal headers unsubscribe. Ticks change only the time label, never projections/counts/folding/network demand. Reconnect pauses ticking until existing transport confirmation; add no poll/request/payload/write.\n\n## Outcome\nTerminal labels use 13px/20px text and decorative 16px Floe warning/circled-stop/circled-alert for failure/cancel/interruption. Quiet color, first-row wrap alignment and localized labels preserve accessibility; diagnostics/recovery receive no duplicate outcome labels.",
-          "char_count": 4806
+          "body": "## Facts and eligibility\nTurn kind uses the [published-module consumer contract](../ai/flower-upgrade-compatibility.md#turn-kind-consumer-contract). Host-work completion is a distinct canonical turn with no new user message; preserve its final answer, identity and timing through loading, paging and observation. Detail and live failures record safe field/reason diagnostics without rejected values or content.\n\nValidated facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Typed structure determines eligibility; summaries, prompts and time heuristics cannot trigger folds. Unknown prose stays visible.\n\nHeaders show lifecycle and total elapsed time including waits; terminal descriptions retain processing/wait durations. Show \u003c=two nonzero units and subsecond copy. Thinking-only work keeps its own disclosure without a whole-turn toggle. Interleaved answers default open; settled question/answer receipts fold with process rows, retaining nested choices and viewport-contained decoration without folded rail/gap. Counts require complete boundaries/membership/events; otherwise omit. [Sequences](flower-tool-sequences.md) fold independently on either side.\n\n## Ownership\nFrom canonical admission, running/preparing/retrying/finalizing/waiting turns show a non-interactive header before provider output. Announce status politely, never elapsed ticks. Exact outcome/end enables the toggle and one automatic fold of confirmed process/intermediate rows, including latest failed/canceled/interrupted turns. Final/trailing partial output remains.\n\nFocus, selection, gestures, open details/thinking and away-from-tail reading protect inspected work permanently against later observations. Capture an unaffected visible anchor when automatic folding starts. Explicit choices survive paging/reconnect/regrouping. Newly classified inspected rows stay until the next explicit toggle without opening siblings; only disclosure/navigation reopens groups. Retained folded bodies are inert with offsets/choices intact. Main/embedded/child views share rendering, not scroll owners.\n\n## Placement and motion\nAnchor the header after its loaded request or before the first loaded response, independently of fold membership. Keep request/header mounted during arrival. Intermediate membership spans same-turn runs; Engine owns supersession. Goals keep turn ownership; finals are run-scoped. Retained prefixes preserve confirmed facts; windows replace overlapping classification. Partial windows never fetch history for presentation. Prepending the beginning moves the header while retaining choice/focus; anchor visibility does not own disclosure.\n\nEligibility changes no header geometry. One-line status/time/detail slots use tabular digits, bounded widths and narrow overflow handling. Following folds align actual bottom before paint, without stale absolute offsets, synthetic trailing space or competing growth motion. Long-to-short content ends at zero with final visible. Finals remain mounted during the 260 ms fold; reduced motion is immediate. Manual/paused reading retains anchors and necessary insertion room, excluded from distance-to-latest. Input cancels follow; settlement cannot reclaim it.\n\nFresh visible live labels fade 0.68→1 over 180 ms; later changes 0.88→1 over 160 ms. The complete current label stays readable: no clipping, blank frames, overlapping text or character queue. Fast completion joins the active transition. One JSX text owner survives wrapper-to-button changes with node/timing intact; at most one bounded opacity animation. Accessibility, controls and geometry update immediately; ticks never restart motion. History/restoration/reconnect/urgent states/reduced motion are immediate. Hide, interaction or reduced motion settles animation.\n\nWhen a turn ends while prose waits on an inner sequence, outer motion owns release and preserves nested geometry; interrupted inner folds transfer painted opacity/transform. Manual reversal retains choice/preferences. Canonical Path orders dialogue/receipts, never timestamps; preserve final segments and secret redaction.\n\n## Elapsed time\nCurrent-view server samples establish a browser monotonic anchor across same-turn waits/continuations. Missing sample means status-only: queue/browser wall time is not authority. Newer samples reanchor after sleep/reconnect; delayed samples cannot move live time backward. Canonical terminal time wins. Keep samples in bounded detail cache, out of summaries/wire fields/storage/events.\n\nOnly visible active headers subscribe to Surface's existing one-second clock. Offscreen/hidden/disconnected/terminal headers unsubscribe. Ticks change only the time label, never projections/counts/folding/network demand. Reconnect pauses ticking until existing transport confirmation; add no poll/request/payload/write.\n\n## Outcome\nTerminal labels use 13px/20px text and decorative 16px Floe warning/circled-stop/circled-alert for failure/cancel/interruption. Quiet color, first-row wrap alignment and localized labels preserve accessibility; diagnostics/recovery receive no duplicate outcome labels.",
+          "char_count": 5193
         },
         {
           "id": "boundaries",
@@ -29893,6 +29906,12 @@
       ],
       "snippet": "Floret owns turn outcome and timing. Terminal turns fold eligible process rows once; pending controls, uncertain effects and inspected work remain visible. Explicit choices persist, user messages/finals stay mounted, and settled question/an",
       "links": [
+        {
+          "label": "published-module consumer contract",
+          "path": "ai/flower-upgrade-compatibility.md",
+          "concept_id": "ai.flower-upgrade-compatibility",
+          "title": "Flower historical writer acceptance"
+        },
         {
           "label": "Sequences",
           "path": "ui/flower-tool-sequences.md",
@@ -32200,5 +32219,5 @@
       ]
     }
   ],
-  "source_sha256": "8645d39246eccfafa55b388602e1c4fb04443bbf01bf9b7a0ffbd50a43a389e1"
+  "source_sha256": "ea3ee9b62f83e19cf74640f4f8fe4939f3447daac3fe3b953d49546b046e1636"
 }

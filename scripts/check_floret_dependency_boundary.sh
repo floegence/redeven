@@ -41,6 +41,9 @@ if rg -n --glob 'go.mod' --glob 'package.json' --glob '*lock*' \
   fail "published dependency manifests must not contain sibling wiring"
 fi
 
+echo "[INFO] checking consumer turn kinds against the published Floret API"
+GOWORK=off go run ./internal/cmd/flower-turn-contract --check
+
 echo "[INFO] checking public imports and storage ownership"
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
   'github\.com/floegence/floret(?:"$|/v[0-6](?:/|"$))' internal cmd; then
