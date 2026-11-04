@@ -11,6 +11,56 @@ import { createFlowerSequenceTokens, projectFlowerToolSequences } from './flower
 import { buildFlowerTimelineEntries, createFlowerTimelineProjection } from './flowerTimelineProjection';
 import type { FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 
+it('adopts equal-version observation membership without scanning or remounting retained history', () => createRoot(dispose => {
+  try {
+    const all = Array.from({ length: 600 }, (_, index) => ({ id: 'history-' + index, ordinal: index + 1, canonical_ordinal: index + 1,
+      kind: 'assistant' as const, turn_id: 'turn', run_id: 'run', text: 'Completed prose ' + index }));
+    const turn = { turn_id: 'turn', run_id: 'run', started_at: '2026-01-01T00:00:00Z', ended_at: '2026-01-01T00:00:01Z',
+      outcome: 'completed' as const, final_boundary_complete: true, elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000 };
+    const turns = (items: typeof all) => [{ ...turn, final_item_ids: items.map(item => item.id) }];
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 7, activity: 'idle', items: all, turns: turns(all),
+      window: { leaf_id: 'leaf', first_item_id: all[0].id, last_item_id: all.at(-1)!.id, has_before: false, has_after: false } };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'idle', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const receive = (cache: ReturnType<typeof createThreadCache>, next: FlowerRuntimeCurrentView) => cache.receiveCurrent({
+      version: 7, thread: applyFlowerRuntimeCurrentView(base, next),
+    }, { current: next });
+    let cache = receive(createThreadCache().select('thread'), current).cache;
+    const document = cache.runtimeDocument('thread');
+    const thread = cache.views.get('thread')!.thread, messages = thread.messages;
+    let renders = 0;
+    createComputed(() => { void thread.messages; renders++; });
+    const narrow = { ...current, items: all.slice(-2), turns: turns(all.slice(-2)), window: { ...current.window!, first_item_id: all.at(-2)!.id, has_before: true } };
+    cache = receive(cache, narrow).cache;
+    expect(cache.runtimeDocument('thread')).toBe(document);
+    expect(cache.runtimeItemIDs('thread')).toEqual(all.slice(-2).map(item => item.id));
+    const raw = readPresentationValue(messages), historical = raw[200];
+    let historicalReads = 0;
+    Object.defineProperty(raw, 200, { configurable: true, get() { historicalReads++; return historical; } });
+    try {
+      const expandedItems = [all[100], ...all.slice(-2)];
+      const expanded = { ...narrow, items: expandedItems, turns: turns(expandedItems), window: { ...narrow.window, first_item_id: all[100].id } };
+      const result = receive(cache, expanded);
+      cache = result.cache;
+      expect(result.runtimeState).toBe('accepted');
+      expect(cache.runtimeDocument('thread')).toBe(document);
+      expect(cache.runtimeItemIDs('thread')).toEqual(expanded.items.map(item => item.id));
+      expect(cache.readingItemIDs('thread')).toHaveLength(600);
+      const duplicate = receive(cache, structuredClone(expanded));
+      expect(duplicate.runtimeState).toBe('unchanged');
+      expect(duplicate.cache).toBe(cache);
+      expect(historicalReads).toBe(0);
+      expect(thread.messages).toBe(messages);
+      expect(renders).toBe(1);
+      cache.receiveUpdate({ thread_id: 'thread', base_version: 7, view_version: 8, facts: { activity: 'idle', queue_count: 0 },
+        items: [{ kind: 'replace', item_id: all[100].id, item: expanded.items[0] }] }, { installedInterest: true });
+      expect(cache.views.get('thread')!.version).toBe(8);
+      expect(thread.turns?.[0].final_item_ids).toEqual(all.map(item => item.id));
+    } finally { Object.defineProperty(raw, 200, { configurable: true, writable: true, value: historical }); }
+  } finally { dispose(); }
+}));
+
 it('keeps covered body responses inert for text, timeline and historical subscribers', () => createRoot(dispose => {
   try {
     const item = { id: 'one', kind: 'assistant' as const, ordinal: 2, turn_id: 'turn', run_id: 'run', text: '中文', live: true,

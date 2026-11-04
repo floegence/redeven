@@ -19,6 +19,11 @@ Floret supplies ThreadFactsSource, ThreadWindowSource and canonical body readers
 
 Root/child/command receipts share bounded windows containing canonical Summary in the same baseline. No separately sampled preparation/watermark. Authorized history POST installs interest on the ordered observer; item POST expands only published frozen-live/manifest/hash-verified locators. Recheck endpoint/user/namespace each read. Client locators grant no authority. Only Floret synthesizes historical zero-byte Activity defaults on explicit expansion.
 
+Published Floret v7.106.2 retires old-interest resident and deferred detail
+consistently, preserving ordered semantic components and accepted explicit
+baselines. The adapter consumes this owner contract without compensating diffs,
+extra subscriptions, canonical reads or observer persistence.
+
 Workspace facts preserve equal sidebar cache identity. Each observer has two cancellable slots: conversation and child. Off-window Computer assistance uses server-only canonical evidence, excluded from bounded response. [Live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md) own details. No schema/migration change.
 
 ## Model result and UI

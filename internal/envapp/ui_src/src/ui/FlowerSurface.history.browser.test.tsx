@@ -59,6 +59,47 @@ async function mount(tool = false, pending = false, options: { count?: number; t
 }
 
 describe('bounded Flower history', () => {
+  it('reobserves archived same-version members without losing DOM, drafts or live delivery', async () => {
+    const { root, history, push, body, full } = await mount();
+    await waitFor(() => root.textContent?.includes('Preview text expanded body!!') === true);
+    await waitFor(() => !root.querySelector('.flower-workspace-sync'));
+    const revision = history.mock.calls.at(-1)![1].reading_revision;
+    const old = fixture('old');
+    const latest = fixture('latest', true);
+    const current: FlowerRuntimeCurrentView = { thread_id: 'history', turn_id: 'turn', run_id: 'run', view_version: 7,
+      activity: 'idle', last_outcome: 'completed', turns: [], interactions: [], queue: [], items: [old, latest],
+      window: { leaf_id: 'leaf', first_item_id: 'old', last_item_id: 'latest', has_before: false, has_after: false } };
+    const baseline = (value: FlowerRuntimeCurrentView) => push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: revision, current: value });
+    baseline(current);
+    await waitFor(() => root.textContent?.includes('Older conversation') === true);
+    const row = root.querySelector('[data-flower-message-id="old"]')!;
+    const latestRow = root.querySelector('[data-flower-message-id="latest"]')!;
+    const editor = root.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    editor.value = 'Keep this draft'; editor.dispatchEvent(new Event('input', { bubbles: true }));
+    editor.focus(); editor.setSelectionRange(5, 9);
+    const reads = body.mock.calls.length, histories = history.mock.calls.length;
+    const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const top = viewport.scrollTop;
+    baseline({ ...current, items: [latest], window: { ...current.window!, first_item_id: 'latest', has_before: true } });
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    baseline(current);
+    baseline(structuredClone(current));
+    push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: revision,
+      update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8,
+        facts: { activity: 'idle', attention: {}, queue_count: 0, last_outcome: 'completed' },
+        items: [{ kind: 'replace', item_id: 'old', item: { ...old, text: 'Observed replacement arrived' } }] } });
+    await waitFor(() => row.textContent?.includes('Observed replacement arrived') === true);
+    expect(root.querySelector('[data-flower-message-id="old"]')).toBe(row);
+    expect(root.querySelector('[data-flower-message-id="latest"]')).toBe(latestRow);
+    expect(root.querySelector('.flower-composer textarea')).toBe(editor);
+    expect(editor.value).toBe('Keep this draft');
+    expect(document.activeElement).toBe(editor);
+    expect([editor.selectionStart, editor.selectionEnd]).toEqual([5, 9]);
+    expect(Math.abs(viewport.scrollTop - top)).toBeLessThanOrEqual(1);
+    expect(body).toHaveBeenCalledTimes(reads); expect(history).toHaveBeenCalledTimes(histories);
+    expect(full).not.toHaveBeenCalled();
+    expect(root.querySelector('.flower-workspace-sync')).toBeNull();
+  });
   it.each(['identity', 'offset', 'extent', 'empty'] as const)('keeps malformed body responses actionable without retry loops (%s)', async fault => {
     const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({
       ...input, thread_id: 'history', bytes: input.through_bytes, text: ' expanded body!!',

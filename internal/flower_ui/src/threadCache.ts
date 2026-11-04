@@ -328,10 +328,16 @@ function createCache(
       settingsState: 'stale',
     };
     const stored = views.get(id)?.view;
-    const enriched = stored ? retainThreadFileActivityTargets(view.thread, stored.thread) : undefined;
-    const navigationChanged = !!stored && enriched !== stored.thread;
+    const priorRuntime = views.get(id)?.runtime;
+    const native = options?.current && priorRuntime;
+    const enriched = stored ? native ? stored.thread : retainThreadFileActivityTargets(view.thread, stored.thread) : undefined;
+    const navigationChanged = !!stored && (native ? priorRuntime.enrichFileTargets(view.thread) : enriched !== stored.thread);
     const current = stored && navigationChanged ? { ...stored, thread: enriched! } : stored;
-    const classified = classifyThreadView(current, view);
+    const sameBaseline = Boolean(options?.current?.window && priorRuntime?.matchesBaseline(options.current));
+    // Display bounds include archived history. Only the installed observation
+    // can classify an equal-version authoritative window's actual membership.
+    const classified = options?.current?.window && current?.version === view.version
+      ? sameBaseline ? 'unchanged' : 'accepted' : classifyThreadView(current, view);
     if (classified === 'stale' && options?.current?.window && reads.has(id) && !options.installedBaseline) throw new FlowerLiveSyncError('History read was overtaken by a newer baseline.');
     const runtimeState = classified === 'unchanged' && options?.current?.window && reads.has(id) ? 'accepted' : classified;
     const activityState = classifyThreadActivity(current, view);
@@ -367,16 +373,22 @@ function createCache(
     };
     const activityThread = current && activityState !== 'accepted' ? current.thread : view.thread;
     const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
+    const mergedThread = { ...mergeThreadSettings(
+      mergeThreadActivity(mergeThreadActivity(runtimeView.thread, activityThread), view.thread),
+      settingsThread,
+    ), read_only_reason: settingsState === 'accepted' ? view.thread.read_only_reason : runtimeView.thread.read_only_reason };
     const mergedView: ThreadDetailView = {
       version: runtimeView.version,
       contentRevision,
-      thread: retainThreadPresentation(current?.thread, { ...mergeThreadSettings(
-        mergeThreadActivity(mergeThreadActivity(runtimeView.thread, activityThread), view.thread),
-        settingsThread,
-      ), read_only_reason: settingsState === 'accepted' ? view.thread.read_only_reason : runtimeView.thread.read_only_reason }),
+      // Native records own keyed message retention. Preparing their bounded
+      // input must not first index every archived presentation message.
+      thread: options?.current && priorRuntime ? mergedThread : retainThreadPresentation(current?.thread, mergedThread),
     };
-    const runtime = runtimeState === 'accepted' && options?.current
-      ? createRuntimeThreadRecord(options.current, { ...mergedView.thread, ...acceptedTitle }, views.get(id)?.runtime) : views.get(id)?.runtime;
+    const reuseRuntime = runtimeState === 'accepted' && options?.current && priorRuntime
+      && (sameBaseline || priorRuntime.adoptMembership(options.current));
+    const runtime = runtimeState === 'accepted' && options?.current && !reuseRuntime
+      ? createRuntimeThreadRecord(options.current, { ...mergedView.thread, ...acceptedTitle }, priorRuntime) : priorRuntime;
+    if (reuseRuntime) runtime?.syncMetadata({ ...mergedView.thread, ...acceptedTitle });
     const initializedView = runtimeState === 'accepted' && options?.current && runtime
       ? { ...mergedView, get version() { return runtime.version; }, thread: runtime.initializeThread() } : runtime ? { ...mergedView, get version() { return runtime.version; }, thread: runtime.syncAdjuncts(mergedView.thread as FlowerThreadSnapshot) } : mergedView;
     const next = new Map(views);

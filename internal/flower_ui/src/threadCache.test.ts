@@ -753,6 +753,37 @@ describe('ThreadCache native baseline reads', () => {
 });
 
 describe('bounded history windows', () => {
+  it('installs observed membership when retained history already has equal window bounds', () => {
+    const make = (ids: string[]): FlowerRuntimeCurrentView => ({ thread_id: 'a', turn_id: 'turn', run_id: 'run', view_version: 7,
+      activity: 'active', run_progress: { phase: 'streaming' }, items: ids.map(id => ({ id, kind: 'assistant' as const, text: id, ordinal: ['old', 'middle', 'tail'].indexOf(id) + 1,
+        canonical_ordinal: ['old', 'middle', 'tail'].indexOf(id) + 1, turn_id: 'turn', run_id: 'run' })),
+      window: { leaf_id: 'leaf', first_item_id: ids[0], last_item_id: ids.at(-1), has_before: ids[0] !== 'old', has_after: false } });
+    const project = (current: FlowerRuntimeCurrentView) => ({ ...thread('a', 7, ''), history_window: current.window,
+      messages: current.items!.map(item => ({ id: item.id, role: 'assistant' as const, content: item.text!, status: 'complete' as const, created_at_ms: 7 })) });
+    const full = make(['old', 'middle', 'tail']);
+    let cache = createThreadCache().receiveView({ thread: project(full), version: 7 }, { current: full }).cache;
+    const tail = make(['middle', 'tail']);
+    const release = cache.beginRuntimeRead('a');
+    cache = cache.receiveView({ thread: project(tail), version: 7 }, { current: tail }).cache;
+    release();
+    expect(cache.runtimeItemIDs('a')).toEqual(['middle', 'tail']);
+    expect(cache.views.get('a')!.thread.history_window).toEqual(full.window);
+    cache = cache.receiveCurrent({ thread: project(full), version: 7 }, { current: full }).cache;
+    expect(() => cache.receiveUpdate({ thread_id: 'a', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'replace', item_id: 'old', item: full.items![0] }] }, { installedInterest: true })).not.toThrow();
+    let failure: unknown;
+    try {
+      cache.receiveUpdate({ thread_id: 'a', turn_id: 'turn', run_id: 'run', base_version: 8, view_version: 9,
+        facts: { activity: 'active', queue_count: 0 }, items: [
+          { kind: 'replace', item_id: 'middle', item: { ...full.items![1], text: 'Must not leak' } },
+          { kind: 'replace', item_id: 'missing', item: { ...full.items![0], id: 'missing' } },
+        ] }, { installedInterest: true });
+    } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ flowerRuntimeDiagnostic: { operation: 'replace', baseVersion: 8, viewVersion: 9,
+      observedVersion: 8, observedCount: 3, archivedCount: 0, present: false, identityMatches: true } });
+    expect(cache.views.get('a')!.version).toBe(8);
+    expect(cache.runtimeItem('a', 'middle')!.text).toBe('middle');
+  });
   it('keeps the installed interest live while its replacement baseline is pending', () => {
     const current: FlowerRuntimeCurrentView = { thread_id: 'a', turn_id: 'turn', run_id: 'run', view_version: 7, activity: 'active',
       run_progress: { phase: 'streaming' }, items: [{ id: 'answer', kind: 'assistant', text: 'text', ordinal: 1, turn_id: 'turn', run_id: 'run', live: true }],
