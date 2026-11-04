@@ -20,6 +20,7 @@ const FilePreviewContextMock = createContext({} as any);
 const FileBrowserSurfaceContextMock = createContext({} as any);
 let floeRegistryComponents = (): any[] => [];
 let testFilesMenu = false;
+let testDesktopBridge = false;
 let testRealFlowerLauncher = false;
 const [assetRecoveryReason, setAssetRecoveryReason] = createSignal<DocumentAssetRecoveryReason>(null);
 
@@ -680,6 +681,8 @@ vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div /> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div /> }));
+vi.mock('./pages/EnvHostApplicationsPage', () => ({ EnvHostApplicationsPage: () => <div /> }));
+vi.mock('./pages/EnvContainersPage', () => ({ EnvContainersPage: () => <div /> }));
 vi.mock('./pages/EnvAIPage', () => ({
   EnvAIPage: (props: any) => {
     const mountID = `activity-flower-${++envAIPageMountSequence}`;
@@ -933,7 +936,7 @@ vi.mock('./utils/askFlowerPath', async (importOriginal) => ({
 vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), reloadCurrentPage: vi.fn() }));
 vi.mock('./services/desktopShellCommandPalette', () => ({ buildDesktopShellCommandPaletteEntries: () => [] }));
 vi.mock('./services/desktopShellBridge', () => ({
-  desktopShellBridgeAvailable: () => false,
+  desktopShellBridgeAvailable: () => testDesktopBridge,
   desktopShellServiceCanvasWindowOpenAvailable: () => false,
   desktopShellExternalURLOpenAvailable: () => false,
   openExternalURLInDesktopShell: vi.fn(async () => null),
@@ -1153,6 +1156,8 @@ afterEach(async () => {
   while (disposers.length > 0) disposers.pop()?.();
   document.body.replaceChildren();
   document.documentElement.removeAttribute('style');
+  document.documentElement.removeAttribute('data-floe-shell-theme');
+  document.documentElement.classList.remove('light', 'dark');
   document.getElementById(DESKTOP_WINDOW_CHROME_STYLE_ID)?.remove();
   delete document.documentElement.dataset.redevenDesktopWindowChromeMode;
   delete document.documentElement.dataset.redevenDesktopWindowControlsSide;
@@ -1166,6 +1171,7 @@ beforeEach(() => {
   setTerminalFooterPalette({ background: '#0d1117', foreground: '#c9d1d9' });
   vi.clearAllMocks();
   testFilesMenu = false;
+  testDesktopBridge = false;
   testRealFlowerLauncher = false;
   setAssetRecoveryReason(null);
   debugConsoleEnabled = false;
@@ -1224,6 +1230,61 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell Activity Flower browser integration', () => {
+  it('fills every built-in Activity icon from real navigation state and keeps environment switching momentary', async () => {
+    testDesktopBridge = true;
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+    document.documentElement.dataset.floeShellTheme = 'porcelain-light';
+    const rail = fixture.host.querySelector('[data-floe-shell-slot="activity-bar"]')!;
+    const glyph = (identity: string) => rail.querySelector<SVGSVGElement>('[data-floe-rail-icon="' + identity + '"]')!;
+    const button = (identity: string) => glyph(identity).closest('button')!;
+    const identities = ['flower', 'files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'containers', 'connections', 'settings'];
+    for (const identity of identities) {
+      const svg = glyph(identity);
+      expect(svg, identity).toBeTruthy();
+      expect(svg.getBoundingClientRect().width).toBe(20);
+      await userEvent.click(button(identity));
+      await vi.waitFor(() => {
+        expect(button(identity).getAttribute('aria-pressed'), identity).toBe('true');
+        expect(glyph(identity).getAttribute('data-floe-rail-active'), identity).toBe('true');
+        expect(glyph(identity).querySelector('[data-floe-rail-part="solid"]'), identity).toBeTruthy();
+      });
+      expect(glyph(identity).getBoundingClientRect().width).toBe(20);
+      expect(rail.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    }
+    const plugins = button('launchpad');
+    await userEvent.click(plugins);
+    await vi.waitFor(() => expect(plugins.getAttribute('aria-expanded')).toBe('true'));
+    expect(glyph('launchpad').getAttribute('data-floe-rail-active')).toBe('true');
+    expect(plugins.getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(plugins);
+    await vi.waitFor(() => expect(plugins.getAttribute('aria-expanded')).toBe('false'));
+    expect(glyph('launchpad').getAttribute('data-floe-rail-active')).toBe('false');
+    await userEvent.click(button('switch'));
+    await vi.waitFor(async () => expect((await import('./services/desktopShellBridge')).openConnectionCenter).toHaveBeenCalledOnce());
+    expect(button('settings').getAttribute('aria-pressed')).toBe('true');
+    expect(glyph('switch').getAttribute('data-floe-rail-active')).toBe('false');
+    await userEvent.click(button('files'));
+    await vi.waitFor(() => expect(button('files').getAttribute('aria-pressed')).toBe('true'));
+    await page.screenshot({ element: rail, path: '__screenshots__/activity-light-fill-porcelain.png' });
+  });
+
+  it('uses the same filled icons in mobile navigation while preserving the Flower editor', async () => {
+    await page.viewport(390, 844);
+    const fixture = await mountProductionMobileShell();
+    const glyph = (identity: string) => fixture.mobileTabBar.querySelector<SVGSVGElement>('[data-floe-rail-icon="' + identity + '"]')!;
+    const editor = fixture.textarea;
+    for (const identity of ['flower', 'files', 'terminal', 'flower']) {
+      const tab = glyph(identity).closest('button')!;
+      await userEvent.click(tab);
+      await vi.waitFor(() => expect(tab.getAttribute('aria-selected')).toBe('true'));
+      expect(glyph(identity).getAttribute('data-floe-rail-active')).toBe('true');
+      expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(editor);
+    }
+  });
+
   it.each([
     ['darwin', false, 1280],
     ['darwin', false, 1024],

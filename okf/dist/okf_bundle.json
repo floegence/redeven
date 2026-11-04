@@ -12891,7 +12891,7 @@
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.87.4 (Env App Core v0.87.4), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "body": "Pins: Floe Boot/Core/Protocol v0.88.0 (Env App Core v0.88.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
           "char_count": 1331
         },
         {
@@ -31058,7 +31058,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "desktop",
           "flower",
@@ -31069,15 +31069,15 @@
         "title": "Shared surface material",
         "type": "UI Contract"
       },
-      "body_length": 1351,
+      "body_length": 2356,
       "summary": "Published Floe owns material and motion. Env App/Welcome select soft-neumorphic roles while business content stays flat. Preserve input, portals, widget identity and hot interaction ownership. Resolve conflicts at the product override source without copying shadow logic or introducing another theme/dependency owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Configuration and ownership\nBoth first-party renderers set `theme.defaultSurfaceStyle` to `soft-neumorphic`. The [published dependency contract](../architecture/env-app-upstream-web-dependencies.md) owns exact package versions and registry requirements.\n\n## Product presentation\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls, Dialogs, and FloatingWindows use their released component treatment. Hover must preserve the selected fill and text.\n\nThe plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.",
-          "char_count": 593
+          "body": "## Configuration and ownership\nBoth first-party renderers set `theme.defaultSurfaceStyle` to `soft-neumorphic`. The [published dependency contract](../architecture/env-app-upstream-web-dependencies.md) owns exact package versions and registry requirements.\n\n## Activity icon states\nPublished Floe owns the 24-unit rounded rail family, 1.5-unit strokes, 13% idle faces and filled selected silhouettes. Desktop Activity Bar and mobile tabs pass their real active or expanded state; hover changes ink without selecting. Monitoring remains a rounded pulse with a soft area and Switch Environment keeps slender opposing arrows. Web Services remains a globe. Plugin launcher disclosure fills while open without changing the selected page; environment switching is momentary.\n\nRedeven's adapters consume the published icons subpath. Only the Flower silhouette is product-owned and uses Floe's shared renderer; Workbench brand artwork remains separate. Transparent detail masks reveal each theme's actual surface, and forced colors use system navigation ink. Verify live selection, disclosure, mobile editor retention and icon contrast; never replace these with static SVG-only checks.\n\n## Product presentation\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls, Dialogs, and FloatingWindows use their released component treatment. Hover must preserve the selected fill and text.\n\nThe plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.",
+          "char_count": 1514
         },
         {
           "id": "boundaries",
@@ -31096,6 +31096,11 @@
         {
           "id": "redeven:internal/envapp/ui_src/src/styles/redeven.css:0:source.",
           "source": "redeven:internal/envapp/ui_src/src/styles/redeven.css",
+          "description": "Source."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx:0:source.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx",
           "description": "Source."
         }
       ],
@@ -32042,5 +32047,5 @@
       ]
     }
   ],
-  "source_sha256": "4d5a9440d5bfc5e3894d2e4f633d49ab04b1835302eaf01bc562e1f2e0e2a64f"
+  "source_sha256": "89690c199d34b7902ca4b5f09ff0181f18dcfe4cf3388d7ecf68d179d7370e6b"
 }

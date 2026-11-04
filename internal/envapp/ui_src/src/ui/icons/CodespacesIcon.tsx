@@ -6,12 +6,10 @@ function CodespacesFoldedMark(props: {
   foldOpacity: string;
   slashFill: string;
   slashOpacity: string;
-  surface?: 'activity-bar';
   transform?: string;
 }) {
   return (
     <g
-      data-codespaces-icon-surface={props.surface}
       data-codespaces-icon-mark="folded-facets"
       transform={props.transform}
     >
@@ -35,18 +33,6 @@ function CodespacesFoldedMark(props: {
         fill-opacity={props.slashOpacity}
       />
     </g>
-  );
-}
-
-export function CodespacesActivityBarGlyph() {
-  return (
-    <CodespacesFoldedMark
-      foldFill="currentColor"
-      foldOpacity=".86"
-      slashFill="currentColor"
-      slashOpacity=".78"
-      surface="activity-bar"
-    />
   );
 }
 

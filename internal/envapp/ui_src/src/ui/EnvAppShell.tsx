@@ -4,7 +4,6 @@ import { prepareCenterPluginOrigin } from './services/pluginWebOrigin';
 import { createFlowerPageContextRegistry, flowerPageContextSnapshot, type FlowerPageContextRegistrar } from './flower/flowerPageContext';
 import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
-import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase, type AccessGateFeedback } from './EnvironmentAccessGate';
 import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
@@ -41,6 +40,9 @@ import {
 import type { WorkbenchCanvasWidgetPlacement, WorkbenchDockAction, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
 import {
   ActivityBarCodespacesIcon,
+  ActivityBarFlowerIcon,
+  ActivityBarTessivenIcon,
+  ActivityBarPluginsIcon,
   ActivityBarContainersIcon,
   ActivityBarHostApplicationsIcon,
   ActivityBarFolderIcon,
@@ -764,7 +766,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
   const [tessivenOpenRequest, setTessivenOpenRequest] = createSignal<TessivenOpenRequest | null>(null);
   const tessivenVisible = () => viewMode() === 'activity' && layout.sidebarActiveTab() === ENV_TESSIVEN_ACTIVITY_ID && isLocalMode();
-  const TessivenNavigationIcon = () => <TessivenIcon kind="tessiven"/>;
   const initialAccessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
   if (initialAccessResumeToken) {
     writeLocalAccessResumeToken(initialAccessResumeToken);
@@ -3979,26 +3980,26 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     list.push({
       id: 'ai',
       name: i18n.t('shell.nav.flower'),
-      icon: FlowerNavigationIcon,
+      icon: ActivityBarFlowerIcon,
       component: ActivityFlowerFullPageHost,
       sidebar: { order: 1, fullScreen: true },
     });
     list.push({
       id: ENV_TESSIVEN_ACTIVITY_ID,
       name: i18n.t('shell.tessivenLabel'),
-      icon: TessivenNavigationIcon,
+      icon: ActivityBarTessivenIcon,
       component: () => <EnvTessivenPage registerPageContext={registerPageContext(ENV_TESSIVEN_ACTIVITY_ID)} openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
       sidebar: { order: 97, fullScreen: true },
     });
     list.push({
       id: PLUGIN_CENTER_ACTIVITY_ID,
       name: i18n.t('uiCopy.plugin.centerTitle'),
-      icon: Grid3x3,
+      icon: ActivityBarPluginsIcon,
       component: () => renderPluginCenter(),
       sidebar: { order: 98, fullScreen: true },
     });
-    list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
-    list.push({ id: PENDING_ACTIVITY_PLUGIN_ID, name: i18n.t('uiCopy.plugin.continuity.loading'), icon: Grid3x3, component: ActivityPageLoading, sidebar: { order: 101, fullScreen: true } });
+    list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: ActivityBarSettingsIcon, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
+    list.push({ id: PENDING_ACTIVITY_PLUGIN_ID, name: i18n.t('uiCopy.plugin.continuity.loading'), icon: ActivityBarPluginsIcon, component: ActivityPageLoading, sidebar: { order: 101, fullScreen: true } });
     return list;
   });
 
@@ -4365,7 +4366,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     const items: ActivityBarItem[] = [];
     const pluginPanelItem: ActivityBarItem = {
       id: 'plugins',
-      icon: Grid3x3,
+      icon: ActivityBarPluginsIcon,
       label: i18n.t('uiCopy.plugin.panelTitle'),
       collapseBehavior: 'preserve',
       buttonRef: (trigger) => updatePluginPanel({ trigger }),
@@ -4384,7 +4385,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (canUseFlower()) {
       items.push({
         id: 'ai',
-        icon: FlowerNavigationIcon,
+        icon: ActivityBarFlowerIcon,
         label: i18n.t('shell.nav.flower'),
         collapseBehavior: 'preserve',
         buttonRef: (trigger) => { mobileFlowerTrigger = trigger; },
@@ -4438,7 +4439,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (isLocalMode()) {
       items.push({
         id: ENV_TESSIVEN_ACTIVITY_ID,
-        icon: TessivenNavigationIcon,
+        icon: ActivityBarTessivenIcon,
         label: i18n.t('shell.tessivenLabel'),
         collapseBehavior: 'preserve',
         onClick: () => openTessiven(),

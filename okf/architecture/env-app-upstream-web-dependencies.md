@@ -12,7 +12,7 @@ Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floet
 
 # Contract
 
-Pins: Floe Boot/Core/Protocol v0.87.4 (Env App Core v0.87.4), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.
+Pins: Floe Boot/Core/Protocol v0.88.0 (Env App Core v0.88.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.
 
 ## Mechanism
 
