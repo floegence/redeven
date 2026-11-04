@@ -13,7 +13,11 @@ const volatileDependencyDirectories = new Set(['.cache', '.vite', '.vite-temp'])
 // status, or an unchanged receipt when outputs/dependencies have been edited.
 export function treeDigest(root, { dependencies = false } = {}) {
   const digest = createHash('sha256');
-  const boundary = path.resolve(root);
+  // Managed checkout paths may have symlinked parents. Compare resolved link
+  // targets against that physical parent, while still opening the root itself
+  // with O_NOFOLLOW so an external dependency-root link cannot be admitted.
+  const absolute = path.resolve(root);
+  const boundary = path.join(realpathSync(path.dirname(absolute)), path.basename(absolute));
   function walk(file, name) {
     let fd;
     try { fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW); }

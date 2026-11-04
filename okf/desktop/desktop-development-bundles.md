@@ -16,6 +16,8 @@ scripts/dev_desktop.sh freezes HEAD/tracked/nonignored source; drift fails. Auth
 
 Development capture reads the exact Rust pin from `scripts/redevplugin_build_toolchain.json`, the same configuration used by Runtime preparation. Never parse a staging shell assignment for this value. Record the pin and installed compiler identities without auto-installing; absent compilers trigger normal preparation on a cache miss. Invalid pins fail with the configuration path, and a pin change during preparation invalidates the build.
 
+Resolve checkout parent aliases before comparing dependency link boundaries. Package-local links remain valid through a managed worktree alias; external links and symlinked dependency roots remain rejected.
+
 macOS samples enabled static HTTP/HTTPS proxies once unless explicit upper/lowercase HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (even empty), or REDEVEN_DEV_SYSTEM_PROXY=0. Preserve NO_PROXY, otherwise add loopback/compatible exclusions. PAC/SOCKS-only requires explicit policy. Never expose credentials/weaken TLS/integrity; remove only inferred env before launch.
 
 Official Node transfers retry three times,1/2s backoff for transport or HTTP408/429/500/502/503/504; permanent HTTP/cert failures stop. Distinguish CONNECT/origin/bytes, retain URL/policy; resume only owned partials and verify full checksum/delete failure. Cache requires fresh official checksum.

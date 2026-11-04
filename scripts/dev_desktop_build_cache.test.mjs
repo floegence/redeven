@@ -82,6 +82,20 @@ test('dependency digest checks bytes even when mtimes are restored and rejects e
   assert.throws(() => treeDigest(root, { dependencies: true }), /leaves its package/);
 });
 
+test('dependency boundaries accept aliased checkout parents and still reject external links', t => {
+  const f = fixture(t), root = path.join(f.root, 'desktop/dist');
+  symlinkSync('main.js', path.join(root, 'internal-link'));
+  const alias = path.join(path.dirname(f.root), 'checkout-alias');
+  symlinkSync(f.root, alias);
+  const aliasedRoot = path.join(alias, 'desktop/dist');
+  assert.equal(treeDigest(aliasedRoot, { dependencies: true }), treeDigest(root, { dependencies: true }));
+  symlinkSync(path.join(f.root, 'input.ts'), path.join(root, 'external-link'));
+  assert.throws(() => treeDigest(aliasedRoot, { dependencies: true }), /leaves its package/);
+  const dependencyRootLink = path.join(f.root, 'linked-dependencies');
+  symlinkSync(root, dependencyRootLink);
+  assert.throws(() => treeDigest(dependencyRootLink, { dependencies: true }), /leaves its package/);
+});
+
 test('first toolchain preparation is allowed but installed compiler changes are rejected', async () => {
   const { verifyBuildContexts } = await import('./dev_desktop_build_cache.mjs');
   const before = { source: 'original', tools: { rust: { version: '1.98.0', cargo: null, rustc: null } } };
@@ -156,7 +170,7 @@ test('parallel dependency verification matches serial bytes and rejects a broken
 
 
 test('build digest rejects a file swapped to a symlink before opening', t => {
-  const f = fixture(t), file = path.join(f.root, 'desktop/dist/main.js');
+  const f = fixture(t), file = fs.realpathSync(path.join(f.root, 'desktop/dist/main.js'));
   const original = fs.openSync;
   t.mock.method(fs, 'openSync', (name, ...args) => {
     if (name === file) {
