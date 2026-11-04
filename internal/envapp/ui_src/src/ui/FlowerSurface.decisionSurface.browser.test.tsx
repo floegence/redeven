@@ -1269,7 +1269,8 @@ describe('Flower bottom decision surface', () => {
       await userEvent.keyboard('{Tab}');
       trigger().focus();
       expect(getComputedStyle(trigger()).borderTopWidth).toBe('0px');
-      await expect.poll(() => getComputedStyle(trigger()).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(trigger()).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(trigger().querySelector('.flower-permission-label')!).textDecorationLine).toBe('underline');
     } else expect(flowerSurfaceNotifications().some((notice) => notice.tone === 'error')).toBe(true);
   });
 

@@ -9923,7 +9923,6 @@ button.flower-attachment-preview-trigger:disabled {
   grid-template-rows: auto minmax(0, 1fr);
   width: min(20rem, calc(100vw - 1.5rem));
   max-width: 100%;
-  --floe-floating-origin: var(--floe-anchored-layer-anchor-x) var(--floe-anchored-layer-anchor-y);
   max-height: min(26rem, var(--floe-anchored-layer-max-height, calc(100dvh - 5rem)));
   min-width: 0;
   overflow: hidden;

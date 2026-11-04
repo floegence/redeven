@@ -25,6 +25,14 @@ async function mount(width = 1280) {
   const client: ReturnType<typeof adapter> = {
     ...adapter(),
     loadSettings: vi.fn(async () => ({ ...settingsSnapshot(), defaults: { permission_type: 'full_access' as const } })),
+    loadAttachmentCapability: async () => ({ model_id: 'openai/gpt-5.2', revision: 'toolbar-test', enabled: true, supports_long_text: true,
+      max_attachments: 10, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+      routes: { 'image/png': 'attachment_manifest' as const, 'text/plain': 'attachment_manifest' as const },
+    }),
+    uploadAttachment: async input => ({ attachment_id: 'toolbar-upload', name: input.file.name, mime_type: input.file.type,
+      size_bytes: input.file.size, digest_sha256: 'a'.repeat(64), locator: 'attachment://v1/toolbar-upload/' + input.file.name,
+      source: input.source, capability_revision: input.capability_revision,
+    }),
     loadThread: vi.fn(async threadID => liveBootstrap(threads.get(threadID)!, revision)),
     setThreadPermissionType: vi.fn(async (threadID, permissionType) => {
       const current = threads.get(threadID)!;
@@ -120,6 +128,7 @@ it('keeps the page stationary through repeated permission opens and gives each m
   const beforeScroll = scroll();
   for (let cycle = 0; cycle < 3; cycle++) {
     const positions: { x: number; y: number; height: number }[] = [];
+    const motion: number[] = [];
     trigger.click();
     for (let i = 0; i < 16; i++) {
       await frame();
@@ -127,12 +136,16 @@ it('keeps the page stationary through repeated permission opens and gives each m
       const popup = panel?.querySelector<HTMLElement>('.flower-permission-menu');
       if (panel && popup && getComputedStyle(panel).visibility === 'visible' && Number(getComputedStyle(popup).opacity) > 0) {
         positions.push({ x: panel.offsetLeft, y: panel.offsetTop, height: panel.offsetHeight });
+        expect(panel.dataset.placement).toBe('above');
+        motion.push(new DOMMatrixReadOnly(getComputedStyle(popup).transform).m42);
       }
       expect(tracked.map(appearance), `opening frame ${i}`).toEqual(before);
       expect(scroll(), `scroll frame ${i}`).toEqual(beforeScroll);
       expect(host.querySelector('.flower-composer textarea')).toBe(editor);
     }
     expect(positions.length).toBeGreaterThan(1);
+    expect(motion.some(y => y > 0.1), 'popup rises from the composer').toBe(true);
+    expect(motion.every(y => y >= -0.01), 'no downward opening frame').toBe(true);
     for (const position of positions) expect(position, 'first painted popup position is already settled').toEqual(positions.at(-1));
     const menu = document.querySelector<HTMLElement>('.flower-permission-menu')!;
     expect(menu.contains(document.activeElement)).toBe(true);
@@ -142,6 +155,28 @@ it('keeps the page stationary through repeated permission opens and gives each m
     await waitFor(() => !menu.isConnected);
   }
   expect(editor.value).toBe('Retain this draft while choosing permissions.');
+});
+
+it('removes popup travel when reduced motion is requested', async () => {
+  const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+  await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+  try {
+    const host = await mount();
+    host.querySelector<HTMLButtonElement>('.flower-permission-trigger')!.click();
+    for (let i = 0; i < 12; i++) {
+      await frame();
+      const popup = document.querySelector<HTMLElement>('.flower-permission-menu');
+      if (!popup) continue;
+      const transform = new DOMMatrixReadOnly(getComputedStyle(popup).transform);
+      expect(transform.m41).toBe(0);
+      expect(transform.m42).toBe(0);
+      expect(transform.m11).toBe(1);
+    }
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => !document.querySelector('.flower-permission-menu'));
+  } finally {
+    await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  }
 });
 
 it.each(['paper', 'porcelain-dark'])('keeps surrounding pixels stable while the permission popup opens in %s', async theme => {
