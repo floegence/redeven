@@ -488,6 +488,15 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
   }
   const seenMessageIDs = new Set<string>();
   const positions = new Map<string, number>();
+  let lastPosition = -Infinity;
+  let ordered = true;
+  const appendEntry = (entry: FlowerTimelineEntry, ordinal?: number) => {
+    const position = ordinal ?? Infinity;
+    if (position < lastPosition) ordered = false;
+    lastPosition = position;
+    if (ordinal !== undefined) positions.set(entry.key, ordinal);
+    entries.push(entry);
+  };
   // Membership replacement is the structural boundary. Reuse each cached row
   // from raw source identity without reopening thousands of store proxies.
   // Newly projected rows still receive the reactive message owner for growth.
@@ -526,15 +535,12 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
       goalActivity ||= hasGoalActivity;
       projections.set(source, { facts, messageID, threadID, activeCursor, decorations: localDecorations, entries: messageEntries, goalActivity: hasGoalActivity });
     }
-    if (facts.canonical_ordinal !== undefined) {
-      for (const entry of messageEntries) {
-        const ordinal = entry.type === 'context_compaction' && entry.decoration.anchor.target_kind === 'message'
-          && entry.decoration.anchor.edge === 'after'
-          ? entry.decoration.compaction.canonical_ordinal : facts.canonical_ordinal;
-        positions.set(entry.key, ordinal);
-      }
+    for (const entry of messageEntries) {
+      const ordinal = facts.canonical_ordinal !== undefined && entry.type === 'context_compaction' && entry.decoration.anchor.target_kind === 'message'
+        && entry.decoration.anchor.edge === 'after'
+        ? entry.decoration.compaction.canonical_ordinal : facts.canonical_ordinal;
+      appendEntry(entry, ordinal);
     }
-    for (const entry of messageEntries) entries.push(entry);
   }
   // Canonical Path positions order messages, their anchored decorations and
   // receipts together. Uncommitted tail rows retain their original order.
@@ -543,12 +549,13 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
     if (seenEvents.has(event.id)) continue;
     seenEvents.add(event.id);
     const key = 'parent-event:' + event.id;
-    if (event.canonical_ordinal !== undefined) positions.set(key, event.canonical_ordinal);
     let projected = parentEventProjections.get(event);
     if (!projected) { projected = { type: 'parent_event', key, event }; parentEventProjections.set(event, projected); }
-    entries.push(projected);
+    appendEntry(projected, event.canonical_ordinal);
   }
-  entries.sort((left, right) => {
+  // Most runtime documents already have canonical order. Retain that order
+  // without a comparison sort; receipts/decorations still sort when required.
+  if (!ordered) entries.sort((left, right) => {
     const a = positions.get(left.key), b = positions.get(right.key);
     return a === undefined ? b === undefined ? 0 : 1 : b === undefined ? -1 : a - b;
   });

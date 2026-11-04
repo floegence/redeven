@@ -181,7 +181,7 @@ export function threadSummaryNeedsDetail(
 type CacheEntry = {
   view: ThreadDetailView;
   usedAt: number;
-  retainedBytes: number;
+  retainedBytes?: number;
   runtime?: RuntimeThreadRecord;
 };
 
@@ -246,12 +246,20 @@ function retainedBytes(...roots: unknown[]): number {
 }
 
 function pruneDetails(views: Map<string, CacheEntry>, selected: string | null, retained: ReadonlySet<string>, reads: BaselineReads) {
-  let bytes = [...views.values()].reduce((sum, entry) => sum + entry.retainedBytes, 0);
   const candidates = [...views].filter(([id]) => id !== selected && !retained.has(id) && !reads.has(id))
     .sort((a, b) => a[1].usedAt - b[1].usedAt);
-  for (const [id, entry] of candidates) {
+  // Displayed documents cannot be evicted. Census them only when there is
+  // an actual eviction candidate, not on every live observation baseline.
+  if (!candidates.length) return;
+  let bytes = 0;
+  for (const [id, entry] of views) {
+    const size = entry.retainedBytes ?? retainedBytes(entry.view.thread, entry.runtime?.readingState().records);
+    if (entry.retainedBytes === undefined) views.set(id, { ...entry, retainedBytes: size });
+    bytes += size;
+  }
+  for (const [id] of candidates) {
     if (views.size <= MAX_VIEWS && bytes <= MAX_DETAIL_BYTES) break;
-    views.delete(id); bytes -= entry.retainedBytes;
+    bytes -= views.get(id)!.retainedBytes!; views.delete(id);
   }
 }
 type BaselineReads = Map<string, { readers: number; updates: FlowerRuntimeUpdate[] }>;
@@ -374,7 +382,7 @@ function createCache(
     const next = new Map(views);
     // Live traffic is not a user visit. Background updates cannot displace
     // the displayed thread or outrank previously visited conversations.
-    next.set(id, { view: initializedView, runtime, retainedBytes: retainedBytes(initializedView.thread, runtime?.readingState().records ?? options?.current), usedAt: views.get(id)?.usedAt ?? (id === selectedId || retainedIDs.has(id) ? clock + 1 : 0) });
+    next.set(id, { view: initializedView, runtime, retainedBytes: undefined, usedAt: views.get(id)?.usedAt ?? (id === selectedId || retainedIDs.has(id) ? clock + 1 : 0) });
     pruneDetails(next, selectedId, retainedIDs, reads);
     const summary = new Map(summaries);
     const metadata = options?.preserveSummary && currentSummary
@@ -441,8 +449,7 @@ function createCache(
       const nextID = id == null || id.trim() === '' ? null : id.trim();
       const next = touch(nextID ?? '');
       const previous = selectedId ? next.get(selectedId) : undefined;
-      if (previous) next.set(selectedId!, { ...previous, retainedBytes: retainedBytes(previous.view.thread,
-        previous.runtime?.readingState().records) });
+      if (previous) next.set(selectedId!, { ...previous, retainedBytes: undefined });
       pruneDetails(next, nextID, retainedIDs, reads);
       return createCache(nextID, summaries, next, clock + 1, reads, retainedIDs);
     },
@@ -453,8 +460,7 @@ function createCache(
       const nextViews = new Map(views);
       for (const id of retainedIDs) {
         const entry = nextViews.get(id);
-        if (entry && !nextIDs.has(id)) nextViews.set(id, { ...entry, retainedBytes: retainedBytes(entry.view.thread,
-          entry.runtime?.readingState().records) });
+        if (entry && !nextIDs.has(id)) nextViews.set(id, { ...entry, retainedBytes: undefined });
       }
       for (const id of nextIDs) {
         const entry = nextViews.get(id);

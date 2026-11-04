@@ -7,6 +7,8 @@ Concepts own current contracts and original qualification outcomes; Git retains 
 ## 2026-11-03
 
 - [Tool sequence summaries](ui/flower-tool-sequences.md) omit thinking counts and use concise failure counts in every locale; expanded thinking remains available.
+- [Streaming stability](ui/flower-streaming-stability.md): avoid redundant canonical sorting and copying unchanged tool groups. [Live timeline](ui/flower-live-timeline.md) defers byte accounting until an eviction decision can change retained documents.
+
 - [Live timeline](ui/flower-live-timeline.md): keep Resync actionable after an unconfirmed Stop and qualify exit transitions against current presentation.
 
 - [Long-thread qualification](operations/flower-long-thread-gate.md): consume published Floret v7.103.1 canonical-read fixes and require successful terminal completion in addition to responsive timing.

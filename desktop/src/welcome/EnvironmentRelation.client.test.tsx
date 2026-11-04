@@ -1151,8 +1151,8 @@ describe('perspective ownership across navigation and removal', () => {
     expect(document.querySelector('[role=dialog]')).toBe(dialog);
     expect(dialog.textContent).toContain('Cloud workspace');
     expect(dialog.querySelector('[role=alert]')).not.toBeNull();
-    button(dialog, 'Close').click(); await new Promise(resolve => setTimeout(resolve, 250));
-    expect(document.querySelector('[role=dialog]')).toBeNull();
+    button(dialog, 'Close').click();
+    await vi.waitFor(() => expect(document.querySelector('[role=dialog]')).toBeNull());
   });
   it('keeps Flower context on its original owner and closes it when that owner disappears', async () => {
     const h = await mount();

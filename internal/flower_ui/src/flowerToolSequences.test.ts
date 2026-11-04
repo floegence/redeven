@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerActivityItem, FlowerParentEvent, FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
 import { projectFlowerToolSequences } from './flowerToolSequences';
@@ -61,8 +61,11 @@ describe('consecutive tool presentation', () => {
     const before = projectFlowerToolSequences(entries, 'thread', [], undefined, undefined, undefined, tokenize);
     expect(before.groups.size).toBe(600);
     labels = 0; append(600);
+    const slices = vi.spyOn(entries, 'slice');
     const after = projectFlowerToolSequences(entries, 'thread', [], before, undefined, undefined, tokenize);
     expect(labels).toBe(1);
+    expect(slices).toHaveBeenCalledTimes(1);
+    slices.mockRestore();
     expect(after.groups.size).toBe(601);
     for (const [key, group] of before.groups) expect(after.groups.get(key)).toBe(group);
     expect(after.groups.get('thinking-600')?.latestToolLabel).toBe('call-600');

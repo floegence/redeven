@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createFlowerThreadBaseline } from './threadBaseline';
 import type { FlowerThreadSnapshot, FlowerRuntimeCurrentView, FlowerRuntimeUpdate } from './contracts/flowerSurfaceContracts';
 import {
@@ -863,4 +863,19 @@ it('reaccounts a grown retained child before releasing its protection', () => {
   expect(cache.views.has('child')).toBe(false);
   expect(cache.views.has('selected')).toBe(true);
   expect(cache.summaries.has('child')).toBe(true);
+});
+
+
+it('defers a displayed-only cache census until another detail can be evicted', () => {
+  const ownKeys = vi.spyOn(Object, 'entries');
+  try {
+    let cache = createThreadCache().select('selected');
+    cache = receive(cache, view('selected', 1, 'first'));
+    cache = receive(cache, view('selected', 2, 'second'));
+    expect(ownKeys).not.toHaveBeenCalled();
+    cache = receive(cache, view('background', 1, 'x'.repeat(20 << 20)));
+    expect(ownKeys).toHaveBeenCalled();
+    expect(cache.views.has('selected')).toBe(true);
+    expect(cache.views.has('background')).toBe(false);
+  } finally { ownKeys.mockRestore(); }
 });

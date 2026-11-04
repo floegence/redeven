@@ -1,6 +1,6 @@
 import { createComputed, createMemo, createRoot, createSignal } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { createFlowerHistoryGapSubscriptions, createFlowerTurnEndSubscriptions, createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerProcessSubscriptions, createFlowerFinalItemSubscriptions, createFlowerThreadSubscription } from './flowerPresentationSubscriptions';
 import { projectFlowerTurnProcess } from './flowerTurnPresentation';
 import type { FlowerRuntimeTurn, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
@@ -21,6 +21,29 @@ it('publishes thread replacement while preserving local field updates and docume
     const second = { ...first, thread_id: 'second' };
     setDocument({ thread: second, rows: 1 });
     expect(thread()).toBe(second); expect(identityChanges).toBe(2); expect(statusChanges).toBe(3);
+  } finally { dispose(); }
+}));
+
+it('does not rescan absent row facts when an empty keyed projection stays empty', () => createRoot(dispose => {
+  try {
+    const [source, setSource] = createSignal<ReadonlyMap<string, boolean>>(new Map());
+    const subscribe = createFlowerKeyedSubscriptions(source);
+    const readers = Array.from({ length: 600 }, (_, i) => subscribe('row-' + i));
+    const empty = new Map<string, boolean>();
+    const get = vi.spyOn(empty, 'get');
+    setSource(empty);
+    expect(get).not.toHaveBeenCalled();
+    setSource(new Map([['row-300', true]]));
+    expect(readers[300]()).toBe(true);
+    const unchanged = new Map([['row-300', true]]);
+    const unchangedGet = vi.spyOn(unchanged, 'get');
+    setSource(unchanged);
+    expect(unchangedGet).not.toHaveBeenCalled();
+    expect(readers[300]()).toBe(true);
+    unchangedGet.mockRestore();
+    setSource(new Map());
+    expect(readers[300]()).toBeUndefined();
+    get.mockRestore();
   } finally { dispose(); }
 }));
 

@@ -230,13 +230,16 @@ export function projectFlowerHistorySections(entries: readonly FlowerTimelineEnt
     const entry = entries[first];
     // Keep the first mounted section through admission and history prepend;
     // subsequent chunks retain their own first-row identity as the turn grows.
-    const members = entries.slice(first, end + 1);
-    const priorKey = members.map(value => priorByEntry.get(value.key)).find(key => key && !used.has(key));
+    let priorKey: string | undefined;
+    for (let index = first; index <= end; index++) {
+      const candidate = priorByEntry.get(entries[index].key);
+      if (candidate && !used.has(candidate)) { priorKey = candidate; break; }
+    }
     const key = priorKey ?? JSON.stringify([threadID, entry.key]);
     used.add(key);
     const retained = prior.get(key);
-    result.push(retained && retained.entries.length === members.length && members.every((value, index) => value === retained.entries[index])
-      ? retained : { key, threadID, entries: members });
+    result.push(retained && retained.entries.length === end - first + 1 && retained.entries.every((value, index) => value === entries[first + index])
+      ? retained : { key, threadID, entries: entries.slice(first, end + 1) });
     first = end + 1;
   }
   return result;

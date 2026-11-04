@@ -21,11 +21,20 @@ export function createFlowerThreadSubscription<T extends FlowerThreadSnapshot | 
 export function createFlowerKeyedSubscriptions<T>(source: Accessor<ReadonlyMap<string, T>>, equals: (a: T | undefined, b: T | undefined) => boolean = Object.is, retainRemoved = false) {
   const listeners = new Map<string, { read: Accessor<T | undefined>; write: (value: T | undefined) => void; users: number }>();
   const current = createMemo(source);
+  let previous: ReadonlyMap<string, T> = new Map();
   createComputed(() => {
     const values = current();
     untrack(() => batch(() => {
-      for (const [key, listener] of listeners) if (!retainRemoved || values.has(key)) listener.write(values.get(key));
+      // Optional facts often cover only a few of thousands of mounted rows.
+      // Visit their source keys instead of broadcasting absence to every row.
+      if (values.size + previous.size < listeners.size) {
+        for (const [key, value] of values) if (!previous.has(key) || !Object.is(previous.get(key), value)) listeners.get(key)?.write(value);
+        if (!retainRemoved) for (const key of previous.keys()) if (!values.has(key)) listeners.get(key)?.write(undefined);
+      } else {
+        for (const [key, listener] of listeners) if (!retainRemoved || values.has(key)) listener.write(values.get(key));
+      }
     }));
+    previous = values;
   });
   return (key: string): Accessor<T | undefined> => {
     let listener = listeners.get(key);

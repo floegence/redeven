@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 
 import type {
@@ -72,6 +72,37 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('keeps an already canonical ordered document without sorting it again', () => {
+    const messages = Array.from({ length: 2400 }, (_, index) => ({ id: 'ordered-' + index, role: 'assistant' as const,
+      content: 'Retained answer', status: 'complete' as const, created_at_ms: 1, canonical_ordinal: index + 1 }));
+    const sorting = vi.spyOn(Array.prototype, 'sort');
+    let entries: ReturnType<typeof buildFlowerTimelineEntries>;
+    try {
+      entries = buildFlowerTimelineEntries(thread({ messages }));
+      expect(sorting.mock.contexts.filter(entries => Array.isArray(entries) && entries.length === messages.length)).toEqual([]);
+    } finally { sorting.mockRestore(); }
+    expect(entries!.map(entry => entry.key)).toEqual(messages.map(message => 'message:' + message.id));
+    expect(buildFlowerTimelineEntries(thread({ messages: [messages[2], messages[0], messages[1]] })).map(entry => entry.key))
+      .toEqual(messages.slice(0, 3).map(message => 'message:' + message.id));
+  });
+
+  it('keeps an uncommitted message and its after-decoration together in the tail', () => {
+    const value = thread({
+      messages: [
+        { id: 'tail', role: 'assistant', content: 'In progress', status: 'complete', created_at_ms: 1 },
+        { id: 'persisted', role: 'assistant', content: 'Earlier answer', status: 'complete', created_at_ms: 2, canonical_ordinal: 4 },
+      ],
+      timeline_decorations: [{
+        decoration_id: 'compact-tail', kind: 'context_compaction', ordinal: 0,
+        anchor: { target_kind: 'message', message_id: 'tail', edge: 'after' },
+        compaction: { operation_id: 'compact-tail', turn_id: 'turn', canonical_ordinal: 3, phase: 'complete', status: 'compacted', updated_at_ms: 3 },
+      }],
+    });
+    expect(buildFlowerTimelineEntries(value).map(entry => entry.key)).toEqual([
+      'message:persisted', 'message:tail', 'timeline-decoration:compact-tail',
+    ]);
+  });
+
   it('retains unrelated message and receipt identities when another history page adds decorations', () => {
     const messages: FlowerThreadSnapshot['messages'] = [
       { id: 'old', role: 'assistant', content: 'Earlier answer', status: 'complete', created_at_ms: 1, canonical_ordinal: 2 },

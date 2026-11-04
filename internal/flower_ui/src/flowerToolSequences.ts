@@ -239,7 +239,7 @@ export function projectFlowerToolSequences(
     .map((turn) => turn.turn_id));
   const publish = (group: FlowerToolSequence, nodes: readonly SequenceNode[]) => {
     groups.set(group.key, group);
-    group.entryKeys.slice(0, -1).forEach(key => continuingEntries.add(key));
+    for (let index = 0; index < group.entryKeys.length - 1; index++) continuingEntries.add(group.entryKeys[index]);
     nodes.forEach((node, nodeIndex) => {
       const priorMember = previous?.members.get(node.key);
       members.set(node.key, priorMember?.group === group ? priorMember
@@ -251,7 +251,7 @@ export function projectFlowerToolSequences(
     // Tokens retain document order, including multiple nodes in one entry.
     const firstEntry = entryPositions.get(nodes[0].entryKey) ?? 0;
     const lastEntry = entryPositions.get(nodes.at(-1)!.entryKey) ?? firstEntry;
-    const sourceEntries = entries.slice(firstEntry, lastEntry + 1);
+    const sourceLength = lastEntry - firstEntry + 1;
     const ordinal = (entry: FlowerTimelineEntry | undefined) => entry?.type === 'message' ? readPresentationValue(entry.message).canonical_ordinal
       : entry?.type === 'parent_event' ? entry.event.canonical_ordinal
         : entry?.type === 'context_compaction' ? entry.decoration.compaction.canonical_ordinal : undefined;
@@ -270,7 +270,7 @@ export function projectFlowerToolSequences(
     // Reuse settled summaries before counting and classifying every old group.
     if (prior && inputs && inputs.settled === settled && inputs.trailing === trailing
       && inputs.nodes.length === nodes.length && nodes.every((node, i) => node === inputs.nodes[i])
-      && inputs.entries.length === sourceEntries.length && sourceEntries.every((entry, i) => entry === inputs.entries[i])
+      && inputs.entries.length === sourceLength && inputs.entries.every((entry, i) => entry === entries[firstEntry + i])
       && prior.countsComplete === (countsComplete && !missingEvents) && prior.missingBefore === missingBefore && prior.missingAfter === missingAfter
       && prior.missingItemAfter === gap?.beforeID && prior.missingItemBefore === gap?.afterID
       && prior.firstCanonicalOrdinal === ordinal(entries[firstEntry]) && prior.lastCanonicalOrdinal === ordinal(entries[lastEntry])
@@ -278,6 +278,7 @@ export function projectFlowerToolSequences(
       publish(prior, nodes);
       return;
     }
+    const sourceEntries = entries.slice(firstEntry, lastEntry + 1);
     const tools = nodes.filter(node => node.kind === 'tool');
     const subagentEvents = nodes.filter(node => node.kind === 'subagent_event');
     const entryKeys = sourceEntries.map(entry => entry.key);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { projectFlowerHistorySections, projectFlowerTurnProcess, flowerDurationParts } from './flowerTurnPresentation';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerActivityItem, FlowerRuntimeTurn, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
@@ -375,6 +375,20 @@ describe('history layout sections', () => {
     expect(after[3].key).toBe(before[2].key);
     expect(after[3].entries).toEqual([...before[2].entries, expanded.at(-1)]);
     expect(projectFlowerHistorySections(expanded, { ...active, status: 'success' }, after)).toEqual(after);
+  });
+
+  it('allocates only the changed history partition while a long active turn grows', () => {
+    const rows = Array.from({ length: 2400 }, (_, i) => row(i));
+    const before = projectFlowerHistorySections(rows, active);
+    const expanded = [...rows, row(2400)];
+    const slicing = vi.spyOn(expanded, 'slice');
+    try {
+      const after = projectFlowerHistorySections(expanded, active, before);
+      expect(after.slice(0, before.length)).toEqual(before);
+      expect(after.every((section, i) => i === before.length || section === before[i])).toBe(true);
+      expect(after.at(-1)?.entries).toEqual([expanded.at(-1)]);
+      expect(slicing).toHaveBeenCalledTimes(1);
+    } finally { slicing.mockRestore(); }
   });
 
   it('preserves interleaved turn boundaries', () => {
