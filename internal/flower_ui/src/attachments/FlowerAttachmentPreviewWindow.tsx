@@ -1,12 +1,12 @@
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { Component } from 'solid-js';
 import type { FlowerTaskFilePreviewContentProps } from '../FlowerTaskFilePreview';
-import { lazy, Suspense, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, on, lazy, Suspense, Match, Show, Switch, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { isRichFilePreview } from '../preview/previewKinds';
 import type { TaskFilesCopy } from '../taskFilesCopy';
 const FlowerRichFilePreview = lazy(() => import('../preview/FlowerRichFilePreview').then(module => ({ default: module.FlowerRichFilePreview })));
 import { cn } from '@floegence/floe-webapp-core';
-import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { Button, FloatingWindow, WindowTabs } from '@floegence/floe-webapp-core/ui';
 
 export type FlowerAttachmentPreviewSource = Readonly<{
   id: string;
@@ -55,16 +55,17 @@ function previewKind(mimeType: string): 'image' | 'pdf' | 'text' | 'unsupported'
   return 'unsupported';
 }
 
-export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWindowProps> = (props) => {
-  const viewport = createMemo(currentViewportSize);
-  const sizing = createMemo(() => resolveSizing(viewport()));
+const AttachmentPreviewPanel: Component<FlowerAttachmentPreviewWindowProps & { source: FlowerAttachmentPreviewSource; open: boolean }> = (props) => {
   const [loading, setLoading] = createSignal(false);
+  const [revision, setRevision] = createSignal(0);
   const [error, setError] = createSignal('');
   const [resolvedMimeType, setResolvedMimeType] = createSignal('');
   const [objectURL, setObjectURL] = createSignal('');
   const [text, setText] = createSignal('');
   const [blob, setBlob] = createSignal<Blob>();
   let activeObjectURL = '';
+  let loadingController: AbortController | undefined;
+  createEffect(() => { if (!props.open) loadingController?.abort(); });
 
   const clearContent = () => {
     if (activeObjectURL) URL.revokeObjectURL(activeObjectURL);
@@ -78,12 +79,14 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
 
   createEffect(() => {
     const source = props.source;
+    revision();
     clearContent();
     if (!source) {
       setLoading(false);
       return;
     }
     const controller = new AbortController();
+    loadingController = controller;
     setLoading(true);
     void source.load(controller.signal).then(async (blob) => {
       if (controller.signal.aborted) return;
@@ -112,37 +115,23 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
   const kind = createMemo(() => previewKind(resolvedMimeType() || props.source?.mimeType || ''));
 
   return (
-    <Show when={props.source}>
-      <FloatingWindow
-        open
-        onOpenChange={(open) => {
-          if (!open) props.onClose();
-        }}
-        title={props.source!.name}
-        class={cn('flower-attachment-preview-window', 'shadow-[0_28px_72px_-42px_var(--redeven-shadow-color)]')}
-        defaultSize={sizing().defaultSize}
-        minSize={sizing().minSize}
-        resizable
-        draggable
-        zIndex={props.zIndex ?? 164}
-      >
         <div class="flower-attachment-preview-surface">
           <Show when={!loading()} fallback={<div class="flower-attachment-preview-state">{props.loadingLabel}</div>}>
-            <Show when={!error()} fallback={<div class="flower-attachment-preview-state flower-attachment-preview-error">{error()}</div>}>
+            <Show when={!error()} fallback={<div class="flower-attachment-preview-state flower-attachment-preview-error flex-col" role="alert"><span>{error()}</span><Button size="sm" variant="ghost" disabled={!props.open} onClick={() => setRevision(value => value + 1)}>{props.copy.retry}</Button></div>}>
               <Switch fallback={(
                 <div class="flower-attachment-preview-state">
-                  <FileItemIcon size={40} item={{ name: props.source!.name, type: 'file' }} class="size-10 shrink-0" />
+                  <FileItemIcon size={40} item={{ name: props.source.name, type: 'file' }} class="size-10 shrink-0" />
                   <span>{props.unavailableLabel}</span>
                 </div>
               )}>
-                <Match when={props.renderContent && blob() && isRichFilePreview(props.source!.name)}>
-                  <Show when={props.renderContent}>{Content => { const Renderer = Content(); return <Renderer name={props.source!.name} mime={resolvedMimeType()} blob={blob()!} />; }}</Show>
+                <Match when={props.renderContent && blob() && isRichFilePreview(props.source.name)}>
+                  <Show when={props.renderContent}>{Content => { const Renderer = Content(); return <Renderer name={props.source.name} mime={resolvedMimeType()} blob={blob()!} />; }}</Show>
                 </Match>
-                <Match when={blob() && isRichFilePreview(props.source!.name)}>
-                  <Suspense fallback={<div class="flower-attachment-preview-state">{props.loadingLabel}</div>}><FlowerRichFilePreview name={props.source!.name} mime={resolvedMimeType()} blob={blob()!} copy={props.copy} /></Suspense>
+                <Match when={blob() && isRichFilePreview(props.source.name)}>
+                  <Suspense fallback={<div class="flower-attachment-preview-state">{props.loadingLabel}</div>}><FlowerRichFilePreview name={props.source.name} mime={resolvedMimeType()} blob={blob()!} copy={props.copy} /></Suspense>
                 </Match>
                 <Match when={kind() === 'image' && objectURL()}>
-                  <img class="flower-attachment-preview-image" src={objectURL()} alt={props.source!.name} />
+                  <img class="flower-attachment-preview-image" src={objectURL()} alt={props.source.name} />
                 </Match>
                 <Match when={kind() === 'pdf' && objectURL()}>
                   <object class="flower-attachment-preview-document" data={objectURL()} type="application/pdf">
@@ -156,7 +145,55 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
             </Show>
           </Show>
         </div>
-      </FloatingWindow>
-    </Show>
+
   );
+};
+
+
+export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWindowProps> = (props) => {
+  const sizing = resolveSizing(currentViewportSize());
+  const tabPrefix = createUniqueId();
+  const tabId = (id: string) => tabPrefix + '-tab-' + encodeURIComponent(id);
+  const panelId = (id: string) => tabPrefix + '-panel-' + encodeURIComponent(id);
+  const [sources, setSources] = createSignal<FlowerAttachmentPreviewSource[]>([]);
+  const [activeId, setActiveId] = createSignal('');
+  const active = () => sources().find(source => source.id === activeId());
+  let closing = false;
+  createEffect(on(() => props.source, source => {
+    if (!source) { closing = true; return; }
+    if (closing) { setSources([]); closing = false; }
+    setSources(current => current.some(item => item.id === source.id) ? current : [...current, source]);
+    setActiveId(source.id);
+  }));
+  const closeTab = (id: string) => {
+    const current = sources();
+    if (current.length === 1) { props.onClose(); return; }
+    const remaining = current.filter(source => source.id !== id);
+    if (id === activeId()) setActiveId(remaining[Math.min(current.findIndex(source => source.id === id), remaining.length - 1)].id);
+    setSources(remaining);
+    if (remaining.length === 1) queueMicrotask(() => {
+      if (document.activeElement === document.body) document.getElementById(panelId(remaining[0].id))?.focus({ preventScroll: true });
+    });
+  };
+  const RetainedPanels = () => {
+    onCleanup(() => { if (!props.source) setSources([]); });
+    return <For each={sources()}>{source => <div class="h-full min-h-0" data-attachment-preview-document={source.id}
+      tabIndex={-1} role={sources().length > 1 ? 'tabpanel' : undefined} id={panelId(source.id)} aria-labelledby={sources().length > 1 ? tabId(source.id) : undefined} aria-label={source.name}
+      hidden={activeId() !== source.id} inert={activeId() !== source.id}>
+      <AttachmentPreviewPanel {...props} source={source} open={!!props.source} />
+    </div>}</For>;
+  };
+  const multiple = createMemo(() => sources().length > 1);
+  const tabItems = createMemo(() => sources().map(source => ({ id: source.id, domId: tabId(source.id), panelId: panelId(source.id), label: source.name, title: source.name,
+        closeLabel: props.copy.close + ' ' + source.name, closable: true,
+        icon: <FileItemIcon size={14} item={{ name: source.name, type: 'file' }} class="size-3.5" />,
+      })));
+  return <FloatingWindow open={!!props.source} onOpenChange={open => { if (!open) props.onClose(); }} title={active()?.name}
+    titleContent={multiple() ? <WindowTabs ariaLabel={props.copy.preview}
+      items={tabItems()} activeId={activeId()} onChange={setActiveId} onClose={closeTab}
+      labels={{ scrollLeft: props.copy.previousTab, scrollRight: props.copy.nextTab }} /> : undefined}
+    class={cn('flower-attachment-preview-window', 'shadow-[0_28px_72px_-42px_var(--redeven-shadow-color)]')}
+    defaultSize={sizing.defaultSize} minSize={sizing.minSize} resizable draggable zIndex={props.zIndex ?? 164}>
+    <RetainedPanels />
+  </FloatingWindow>;
 };

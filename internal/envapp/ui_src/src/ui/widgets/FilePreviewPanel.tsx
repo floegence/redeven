@@ -16,6 +16,7 @@ export interface FilePreviewPanelProps {
   surface?: FilePreviewSurface;
   allowLocalWheel?: boolean;
   showHeader?: boolean;
+  active?: boolean;
   contentRef?: (element: HTMLDivElement) => void;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
@@ -81,6 +82,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             surface={props.surface}
             allowLocalWheel={props.allowLocalWheel}
             showHeader={props.showHeader}
+            active={props.active}
             contentRef={props.contentRef}
             item={props.item}
             descriptor={props.descriptor}

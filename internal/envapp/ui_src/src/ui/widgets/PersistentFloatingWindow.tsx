@@ -414,6 +414,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
         open={props.open}
         onOpenChange={props.onOpenChange}
         title={props.title}
+        titleContent={props.titleContent}
         headerActions={props.headerActions}
         footer={props.footer}
         defaultPosition={persistedRect() ? { x: persistedRect()!.x, y: persistedRect()!.y } : props.defaultPosition}

@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { FilePreviewWorkspace } from './createFilePreviewWorkspace';
 import type { FilePreviewController } from './createFilePreviewController';
 
 export type FilePreviewReusePolicy =
@@ -16,6 +17,7 @@ export type FilePreviewOpenOptions = Readonly<{
 
 export type FilePreviewContextValue = Readonly<{
   controller: FilePreviewController;
+  workspace?: FilePreviewWorkspace;
   openPreview: (item: FileItem, options?: FilePreviewOpenOptions) => Promise<void>;
   closePreview: () => void;
   openHtmlLink?: (sourcePath: string, href: string, signal: AbortSignal) => Promise<void>;

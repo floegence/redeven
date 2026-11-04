@@ -1745,7 +1745,10 @@
     "syncedPreviewPending": "Synchronisierte Vorschau ausstehend",
     "syncedPreviewPendingDetail": "Ein anderes Fenster hat {target} geöffnet. Behalten Sie Ihren Entwurf oder wechseln Sie bewusst.",
     "openSyncedFile": "Synchronisierte Datei öffnen",
-    "keepCurrentDraft": "Aktuellen Entwurf behalten"
+    "keepCurrentDraft": "Aktuellen Entwurf behalten",
+    "closeTab": "{name} schließen",
+    "previousTab": "Vorherige Tabs",
+    "nextTab": "Nächste Tabs"
   },
   "files": {
     "title": "Dateien",
@@ -6758,7 +6761,9 @@
       "previousPage": "Vorherige Folie",
       "nextPage": "Nächste Folie",
       "presentationIncomplete": "Einige Inhalte oder externe Ressourcen konnten nicht angezeigt werden.",
-      "fitWindow": "An Fenster anpassen"
+      "fitWindow": "An Fenster anpassen",
+      "previousTab": "Vorherige Tabs",
+      "nextTab": "Nächste Tabs"
     }
   },
   "uiCopy": {

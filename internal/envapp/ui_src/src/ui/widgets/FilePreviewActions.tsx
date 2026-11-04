@@ -21,6 +21,7 @@ import type { FilePreviewContentProps } from './FilePreviewContent';
 
 export interface FilePreviewActionsProps extends Pick<
   FilePreviewContentProps,
+  | 'active'
   | 'item'
   | 'descriptor'
   | 'canEdit'
@@ -89,6 +90,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
     closeMenu();
   });
   createEffect(on(() => props.presentation, closeMenu));
+  createEffect(() => { if (props.active === false) closeMenu(); });
   onCleanup(() => {
     disposed = true;
     clearCopiedState();

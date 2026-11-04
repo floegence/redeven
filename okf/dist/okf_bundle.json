@@ -12874,7 +12874,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.",
-        "reviewed_at": "2026-11-03",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "architecture",
           "dependencies",
@@ -12891,7 +12891,7 @@
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.88.0 (Env App Core v0.88.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "body": "Pins: Floe Boot/Core/Protocol v0.89.1 (Env App Core v0.89.1), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
           "char_count": 1331
         },
         {
@@ -25579,7 +25579,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "files",
           "lifecycle",
@@ -25590,15 +25590,15 @@
         "title": "File preview dismissal",
         "type": "UI Contract"
       },
-      "body_length": 1409,
+      "body_length": 1582,
       "summary": "The preview owner cancels reads immediately; Floe owns exit presence. Accepted close retains document/title through motion and releases resources at unmount, without blank iframes, brighter intermediate surfaces, extra reads or delays. Disposal always cleans up and late responses cannot revive closed content.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Accepted close and resource release\nThe global preview host binds its controller's content lifetime to the mounted preview panel. Closed previews cannot start edits, retries, or resource probes.\n\nRapid reopen uses the same presence owner, and an older presentation release cannot clear a currently open or retained preview.\n\n## Responsiveness\nRetention stores only a constant-size presentation token and existing references.\n\nPixel sampling of a bright HTML page fading onto a dark background must show no brightness rebound. These measurements qualify the tested browser fixture; they do not substitute for packaged Desktop release qualification.",
-          "char_count": 650
+          "body": "## Accepted close and resource release\nThe global preview host binds each document controller's content lifetime to its retained panel. Switching tabs never closes the controller; accepted tab close retires only that document, while window close retains all presentation resources through the shared exit. Closed previews cannot start edits, retries, or resource probes.\n\nRapid reopen uses the same presence owner, and an older presentation release cannot clear a currently open or retained preview.\n\n## Responsiveness\nRetention stores only a constant-size presentation token and existing references.\n\nPixel sampling of a bright HTML page fading onto a dark background must show no brightness rebound. These measurements qualify the tested browser fixture; they do not substitute for packaged Desktop release qualification.",
+          "char_count": 823
         },
         {
           "id": "boundaries",
@@ -25917,7 +25917,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "files",
           "floating-windows",
@@ -25928,15 +25928,15 @@
         "title": "File preview window actions",
         "type": "UI Contract"
       },
-      "body_length": 2085,
+      "body_length": 4221,
       "summary": "Redeven owns file actions/drafts; Floe titlebar/window lifecycle. Compact actions precede window controls in Activity/Workbench, preserving permission/selection/download/discard policy. Close immediately fences pending work but keeps content visible through retirement.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Title bar and reading space\nActivity uses `FloatingWindow.headerActions` via product preview adapters. No separate path row; Copy still copies the full path with success feedback.\n\n## Workbench reading space and narrow widgets\nWorkbench exposes the full path through tooltip/Copy and begins content beneath its header, except existing sync notices. Keyboard/Escape/Tab/focus behavior cannot trigger canvas gestures or reclaim focus through the shell.\n\n## One action implementation\n`FilePreviewActions` owns availability/feedback. Header actions preserve reading selection; the product download builder keeps current file/draft mapping.\n\n## PDF drafts and persistence\nWritable PDFs expose Edit file. PDF.js saves full Unicode values; unsupported original fonts use `NeedAppearances` instead of embedded replacement fonts. Downloads always use the product manager, including conversation-file child previews; [conversation file ownership](../ai/flower-task-files.md#downloads) defines background lifetime and toolbar history.\n\n## Unavailable targets and recovery\nNavigation opens current filesystem objects; historical tool/diff/image snapshots retain original content. Failed targets offer Retry/Open parent. [Dismissal](file-preview-dismissal.md) owns resource lifetime and close semantics.",
-          "char_count": 1293
+          "body": "## Title bar and reading space\nActivity uses published Floe FloatingWindow.titleContent/WindowTabs for multiple documents and headerActions for the active document. One file keeps the ordinary title; two or more replace only the title area with scrollable, closable tabs. Tab selection never drags or maximizes the window. Arrow/Home/End navigation and Delete close remain local; long names truncate and full paths appear as tooltips. No separate path row; Copy still copies the active full path with success feedback.\n\nThe Activity preview workspace owns one controller and retained panel per normalized file path. Every filesystem entry point uses this owner; opening an existing path selects its tab without re-reading or discarding changes. Switching preserves editor drafts, renderer nodes, reading position and preview mode; inactive native audio/video pauses. Each tab retains its own actions, load/retry state and error. Close an inactive tab without changing the active one; closing the active tab selects the adjacent survivor. Last-tab close dismisses the window. Window close confirms all unsaved documents together, and cancellation leaves every draft intact. Saving blocks confirmed discard until it settles. Accepted dismissal fences pending reads and releases retained resources after Floe exit presence.\n\nFlower message/attachment floating previews retain their own source-identity tabs through the same upstream header component in both hosts. Source loaders remain independent, repeated opens select the existing source, and close/retirement aborts reads and releases object URLs. Failed attachment loads expose an independent Retry action. Snapshot inspectors and Workbench canvas widgets retain their separate ownership; modal conversation-file navigation retains its existing back-to-list flow.\n\n## Workbench reading space and narrow widgets\nWorkbench exposes the full path through tooltip/Copy and begins content beneath its header, except existing sync notices. Keyboard/Escape/Tab/focus behavior cannot trigger canvas gestures or reclaim focus through the shell.\n\n## One action implementation\n`FilePreviewActions` owns availability/feedback. Header actions preserve reading selection; the product download builder keeps current file/draft mapping.\n\n## PDF drafts and persistence\nWritable PDFs expose Edit file. PDF.js saves full Unicode values; unsupported original fonts use `NeedAppearances` instead of embedded replacement fonts. Downloads always use the product manager, including conversation-file child previews; [conversation file ownership](../ai/flower-task-files.md#downloads) defines background lifetime and toolbar history.\n\n## Unavailable targets and recovery\nNavigation opens current filesystem objects; historical tool/diff/image snapshots retain original content. Failed targets offer Retry/Open parent. [Dismissal](file-preview-dismissal.md) owns resource lifetime and close semantics.",
+          "char_count": 2927
         },
         {
           "id": "boundaries",
@@ -25947,6 +25947,21 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewWorkspace.browser.test.tsx:0:multi-document state, actions, keyboard, narrow header and csv-mode acceptance.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewWorkspace.browser.test.tsx",
+          "description": "Multi-document state, actions, keyboard, narrow header and CSV-mode acceptance."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerAttachmentPreviewTabs.browser.test.tsx:0:attachment identity, retry, cancellation and resource release.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerAttachmentPreviewTabs.browser.test.tsx",
+          "description": "Attachment identity, retry, cancellation and resource release."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-office-preview.mjs:0:real electron `file://` acceptance verifies header tabs, retained csv canvas/zoom/source state, close-to-single and escape.",
+          "source": "redeven:desktop/scripts/check-office-preview.mjs",
+          "description": "Real Electron `file://` acceptance verifies header tabs, retained CSV canvas/zoom/source state, close-to-single and Escape."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx:0:source.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx",
@@ -32069,5 +32084,5 @@
       ]
     }
   ],
-  "source_sha256": "e02e03bd8dfba51a567742c632fb2efb5bf91dfa9df74a2a2187e45413436ff9"
+  "source_sha256": "6d2a018c5b6b5540213a037a71f7ee06215ad90eb29f7fc3df4f94c60179a00f"
 }

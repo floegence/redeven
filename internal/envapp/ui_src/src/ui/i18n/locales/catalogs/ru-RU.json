@@ -1789,7 +1789,10 @@
     "syncedPreviewPendingDetail": "Другое окно открыло {target}. Сохраните черновик или явно переключитесь.",
     "openSyncedFile": "Открыть синхронизированный файл",
     "keepCurrentDraft": "Оставить текущий черновик",
-    "previewWindowTitle": "Предпросмотр файла"
+    "previewWindowTitle": "Предпросмотр файла",
+    "closeTab": "Закрыть {name}",
+    "previousTab": "Предыдущие вкладки",
+    "nextTab": "Следующие вкладки"
   },
   "files": {
     "title": "Файлы",
@@ -6877,7 +6880,9 @@
       "previousPage": "Предыдущий слайд",
       "nextPage": "Следующий слайд",
       "presentationIncomplete": "Не удалось отобразить часть содержимого или внешние ресурсы.",
-      "fitWindow": "По размеру окна"
+      "fitWindow": "По размеру окна",
+      "previousTab": "Предыдущие вкладки",
+      "nextTab": "Следующие вкладки"
     }
   },
   "uiCopy": {

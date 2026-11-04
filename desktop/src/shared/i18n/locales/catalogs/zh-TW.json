@@ -1864,7 +1864,9 @@
       "previousPage": "上一張投影片",
       "nextPage": "下一張投影片",
       "presentationIncomplete": "部分內容或外部資源無法顯示。",
-      "fitWindow": "符合視窗"
+      "fitWindow": "符合視窗",
+      "previousTab": "前面的分頁",
+      "nextTab": "後面的分頁"
     }
   },
   "common": {

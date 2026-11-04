@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview dismissal
 tags: [ui, files, preview, lifecycle, motion]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -12,7 +12,7 @@ The preview owner cancels reads immediately; Floe owns exit presence. Accepted c
 # Contract
 
 ## Accepted close and resource release
-The global preview host binds its controller's content lifetime to the mounted preview panel. Closed previews cannot start edits, retries, or resource probes.
+The global preview host binds each document controller's content lifetime to its retained panel. Switching tabs never closes the controller; accepted tab close retires only that document, while window close retains all presentation resources through the shared exit. Closed previews cannot start edits, retries, or resource probes.
 
 Rapid reopen uses the same presence owner, and an older presentation release cannot clear a currently open or retained preview.
 

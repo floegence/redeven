@@ -1864,7 +1864,9 @@
       "previousPage": "Vorherige Folie",
       "nextPage": "Nächste Folie",
       "presentationIncomplete": "Einige Inhalte oder externe Ressourcen konnten nicht angezeigt werden.",
-      "fitWindow": "An Fenster anpassen"
+      "fitWindow": "An Fenster anpassen",
+      "previousTab": "Vorherige Tabs",
+      "nextTab": "Nächste Tabs"
     }
   },
   "common": {

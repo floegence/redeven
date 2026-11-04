@@ -1864,7 +1864,9 @@
       "previousPage": "Diapositive précédente",
       "nextPage": "Diapositive suivante",
       "presentationIncomplete": "Certains contenus ou ressources externes n’ont pas pu être affichés.",
-      "fitWindow": "Adapter à la fenêtre"
+      "fitWindow": "Adapter à la fenêtre",
+      "previousTab": "Onglets précédents",
+      "nextTab": "Onglets suivants"
     }
   },
   "common": {

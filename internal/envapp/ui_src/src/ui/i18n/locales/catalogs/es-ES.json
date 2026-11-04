@@ -1745,7 +1745,10 @@
     "syncedPreviewPendingDetail": "Otra ventana abrió {target}. Conserva tu borrador o cambia explícitamente.",
     "openSyncedFile": "Abrir archivo sincronizado",
     "keepCurrentDraft": "Conservar borrador actual",
-    "previewWindowTitle": "Vista previa del archivo"
+    "previewWindowTitle": "Vista previa del archivo",
+    "closeTab": "Cerrar {name}",
+    "previousTab": "Pestañas anteriores",
+    "nextTab": "Pestañas siguientes"
   },
   "files": {
     "title": "Archivos",
@@ -6758,7 +6761,9 @@
       "previousPage": "Diapositiva anterior",
       "nextPage": "Diapositiva siguiente",
       "presentationIncomplete": "No se pudieron mostrar algunos contenidos o recursos externos.",
-      "fitWindow": "Ajustar a la ventana"
+      "fitWindow": "Ajustar a la ventana",
+      "previousTab": "Pestañas anteriores",
+      "nextTab": "Pestañas siguientes"
     }
   },
   "uiCopy": {

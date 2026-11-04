@@ -77,6 +77,28 @@ await session.run(async () => {
       await page.waitForFunction(() => !document.querySelector('.flower-delimited-preview'));
     }
     report.checks.push('file:// CSV task/attachment, literal strings, selection/keyboard copy dispatch, search, zoom, source, reopen, Escape');
+    await open('quarterly-report.csv', 'text/csv', csv, true); await gridReady();
+    const originalGrid = await page.locator('.flower-delimited-canvas').elementHandle();
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    await page.evaluate(bytes => window.officePreview.open({ name: 'review-notes.txt', mime: 'text/plain', bytes, attachment: true }), [...new TextEncoder().encode('Review notes retained in their own tab')]);
+    await page.getByRole('tab', { name: 'quarterly-report.csv' }).waitFor();
+    assert.equal(await page.locator('.flower-attachment-preview-window').count(), 1);
+    assert.equal(await page.getByRole('tab').count(), 2);
+    await page.getByRole('tab', { name: 'quarterly-report.csv' }).click(); await gridReady();
+    assert.ok(await page.locator('.flower-delimited-canvas').evaluate((element, previous) => element === previous, originalGrid));
+    assert.equal(await page.getByRole('button', { name: 'Actual size', exact: true }).textContent(), '110%');
+    await page.screenshot({ path: path.join(output, 'attachment-tabs-csv.png') });
+    await page.getByRole('button', { name: 'Source', exact: true }).click();
+    await page.getByRole('tab', { name: 'review-notes.txt' }).click();
+    await page.getByRole('tab', { name: 'quarterly-report.csv' }).click();
+    assert.equal(await page.getByRole('button', { name: 'Source', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: 'Close review-notes.txt', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('[role="tab"]').length === 0);
+    assert.match(await page.locator('pre').textContent(), /00123/);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.flower-attachment-preview-window'));
+    report.checks.push('file:// multi-file header tabs, retained CSV canvas/zoom/source, independent text, close-to-single and Escape');
+
     await open('encoded.csv', 'text/csv', [0xc4, 0xe3, 0xba, 0xc3, 44, 48, 48, 49]);
     await page.getByRole('combobox', { name: 'Encoding' }).selectOption('gb18030'); await gridReady(); await find('你好');
     await page.setViewportSize({ width: 390, height: 760 }); await gridReady();

@@ -1,4 +1,6 @@
 export const taskFilesEnUS = {
+  previousTab: 'Previous tabs',
+  nextTab: 'Next tabs',
   fitWindow: 'Fit to window',
   previewInfo: 'Preview information',
   worksheet: 'Worksheet',

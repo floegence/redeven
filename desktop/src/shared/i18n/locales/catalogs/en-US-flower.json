@@ -1648,6 +1648,8 @@
     "previousPage": "Previous slide",
     "nextPage": "Next slide",
     "presentationIncomplete": "Some content or external resources could not be displayed.",
-    "fitWindow": "Fit to window"
+    "fitWindow": "Fit to window",
+    "previousTab": "Previous tabs",
+    "nextTab": "Next tabs"
   }
 }

@@ -1745,7 +1745,10 @@
     "syncedPreviewPendingDetail": "另一个窗口已打开 {target}。请保留当前草稿，或明确切换过去。",
     "openSyncedFile": "打开同步文件",
     "keepCurrentDraft": "保留当前草稿",
-    "previewWindowTitle": "文件预览"
+    "previewWindowTitle": "文件预览",
+    "closeTab": "关闭 {name}",
+    "previousTab": "前面的标签页",
+    "nextTab": "后面的标签页"
   },
   "files": {
     "title": "文件",
@@ -6758,7 +6761,9 @@
       "previousPage": "上一张幻灯片",
       "nextPage": "下一张幻灯片",
       "presentationIncomplete": "部分内容或外部资源无法显示。",
-      "fitWindow": "适合窗口"
+      "fitWindow": "适合窗口",
+      "previousTab": "前面的标签页",
+      "nextTab": "后面的标签页"
     }
   },
   "uiCopy": {

@@ -168,7 +168,7 @@ import { NotesOverlay } from './notes/NotesOverlay';
 import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import type { RuntimeWorkbenchGitDiffTarget } from './workbench/runtimeWorkbenchLayout';
-import { createFilePreviewController } from './widgets/createFilePreviewController';
+import { createFilePreviewWorkspace } from './widgets/createFilePreviewWorkspace';
 import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';
 import { FilePreviewContext, type FilePreviewOpenOptions } from './widgets/FilePreviewContext';
 import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
@@ -734,7 +734,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     source: createRuntimeDownloadSource(() => protocol.session?.()),
     sink: resolveDownloadPlatformSink(),
   });
-  const filePreviewController = createFilePreviewController({
+  const filePreviewWorkspace = createFilePreviewWorkspace({
     client: () => protocol.session?.(),
     rpc: () => rpc,
     canWrite: () => Boolean(env()?.permissions?.can_write),
@@ -2647,7 +2647,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       return;
     }
 
-    await filePreviewController.openPreview(normalizedItem);
+    await filePreviewWorkspace.openPreview(normalizedItem);
   };
 
   const checkFileReadable = async (path: string, signal: AbortSignal) => {
@@ -4772,7 +4772,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         keybind: 'mod+s',
         icon: Files,
         execute: () => {
-          void filePreviewController.saveCurrent();
+          void filePreviewWorkspace.activeController().saveCurrent();
         },
       },
       {
@@ -4837,9 +4837,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
 
   const filePreviewContextValue = {
-    controller: filePreviewController,
+    get controller() { return filePreviewWorkspace.activeController(); },
+    workspace: filePreviewWorkspace,
     openPreview: async (item: FileItem, options?: FilePreviewOpenOptions) => openFilePreview(item, options),
-    closePreview: filePreviewController.closePreview,
+    closePreview: () => filePreviewWorkspace.requestClose(),
     openHtmlLink: (sourcePath: string, href: string, signal: AbortSignal) => openHtmlPreviewLink(href, dirnameAbsolute(sourcePath), signal, {
       adapter: { openMessageFile: openFlowerMessageFile, openMessageURL: openFlowerMessageURL },
       copy: {

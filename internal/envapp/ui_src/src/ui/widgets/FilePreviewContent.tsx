@@ -21,6 +21,7 @@ export interface FilePreviewContentProps {
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   showHeader?: boolean;
+  active?: boolean;
   text?: string;
   draftText?: string;
   editing?: boolean;

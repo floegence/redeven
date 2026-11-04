@@ -1745,7 +1745,10 @@
     "syncedPreviewPending": "同期プレビューが保留中",
     "syncedPreviewPendingDetail": "別のウィンドウで {target} が開かれました。ドラフトを保持するか、明示的に切り替えてください。",
     "openSyncedFile": "同期ファイルを開く",
-    "keepCurrentDraft": "現在のドラフトを保持"
+    "keepCurrentDraft": "現在のドラフトを保持",
+    "closeTab": "{name} を閉じる",
+    "previousTab": "前のタブ",
+    "nextTab": "次のタブ"
   },
   "files": {
     "title": "ファイル",
@@ -6758,7 +6761,9 @@
       "previousPage": "前のスライド",
       "nextPage": "次のスライド",
       "presentationIncomplete": "一部の内容や外部リソースを表示できません。",
-      "fitWindow": "ウィンドウに合わせる"
+      "fitWindow": "ウィンドウに合わせる",
+      "previousTab": "前のタブ",
+      "nextTab": "次のタブ"
     }
   },
   "uiCopy": {

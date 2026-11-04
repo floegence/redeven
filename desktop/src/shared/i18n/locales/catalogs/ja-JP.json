@@ -1864,7 +1864,9 @@
       "previousPage": "前のスライド",
       "nextPage": "次のスライド",
       "presentationIncomplete": "一部の内容や外部リソースを表示できません。",
-      "fitWindow": "ウィンドウに合わせる"
+      "fitWindow": "ウィンドウに合わせる",
+      "previousTab": "前のタブ",
+      "nextTab": "次のタブ"
     }
   },
   "common": {

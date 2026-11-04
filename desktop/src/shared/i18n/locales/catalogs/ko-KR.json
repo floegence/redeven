@@ -1864,7 +1864,9 @@
       "previousPage": "이전 슬라이드",
       "nextPage": "다음 슬라이드",
       "presentationIncomplete": "일부 콘텐츠 또는 외부 리소스를 표시할 수 없습니다.",
-      "fitWindow": "창에 맞추기"
+      "fitWindow": "창에 맞추기",
+      "previousTab": "이전 탭",
+      "nextTab": "다음 탭"
     }
   },
   "common": {

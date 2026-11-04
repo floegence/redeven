@@ -1745,7 +1745,10 @@
     "syncedPreviewPending": "동기화된 미리보기 대기 중",
     "syncedPreviewPendingDetail": "다른 창에서 {target}을(를) 열었습니다. 초안을 유지하거나 명시적으로 전환하세요.",
     "openSyncedFile": "동기화된 파일 열기",
-    "keepCurrentDraft": "현재 초안 유지"
+    "keepCurrentDraft": "현재 초안 유지",
+    "closeTab": "{name} 닫기",
+    "previousTab": "이전 탭",
+    "nextTab": "다음 탭"
   },
   "files": {
     "title": "파일",
@@ -6758,7 +6761,9 @@
       "previousPage": "이전 슬라이드",
       "nextPage": "다음 슬라이드",
       "presentationIncomplete": "일부 콘텐츠 또는 외부 리소스를 표시할 수 없습니다.",
-      "fitWindow": "창에 맞추기"
+      "fitWindow": "창에 맞추기",
+      "previousTab": "이전 탭",
+      "nextTab": "다음 탭"
     }
   },
   "uiCopy": {

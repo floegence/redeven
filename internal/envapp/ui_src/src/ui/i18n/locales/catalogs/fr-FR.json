@@ -1745,7 +1745,10 @@
     "syncedPreviewPendingDetail": "Une autre fenêtre a ouvert {target}. Gardez votre brouillon ou basculez explicitement.",
     "openSyncedFile": "Ouvrir le fichier synchronisé",
     "keepCurrentDraft": "Conserver le brouillon actuel",
-    "previewWindowTitle": "Apercu du fichier"
+    "previewWindowTitle": "Apercu du fichier",
+    "closeTab": "Fermer {name}",
+    "previousTab": "Onglets précédents",
+    "nextTab": "Onglets suivants"
   },
   "files": {
     "title": "Fichiers",
@@ -6758,7 +6761,9 @@
       "previousPage": "Diapositive précédente",
       "nextPage": "Diapositive suivante",
       "presentationIncomplete": "Certains contenus ou ressources externes n’ont pas pu être affichés.",
-      "fitWindow": "Adapter à la fenêtre"
+      "fitWindow": "Adapter à la fenêtre",
+      "previousTab": "Onglets précédents",
+      "nextTab": "Onglets suivants"
     }
   },
   "uiCopy": {

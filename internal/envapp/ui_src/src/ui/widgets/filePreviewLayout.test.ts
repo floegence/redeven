@@ -179,12 +179,15 @@ describe('file preview wiring', () => {
     expect(hostSrc).toContain('buildFilePreviewFlowerTurnLauncherIntent');
     expect(hostSrc).toContain('writeTextToClipboard');
 
-    expect(shellSrc).toContain("import { createFilePreviewController } from './widgets/createFilePreviewController';");
+    expect(shellSrc).toContain("import { createFilePreviewWorkspace } from './widgets/createFilePreviewWorkspace';");
+    expect(shellSrc).toContain('filePreviewWorkspace.openPreview(normalizedItem)');
+    expect(hostSrc).toContain('WindowTabs');
+    expect(hostSrc).toContain('workspace.retainEntry(entry)');
     expect(shellSrc).toContain("import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';");
     expect(shellSrc).toContain("import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';");
     expect(shellSrc).toContain("const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost')");
     expect(shellSrc).toContain("import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';");
-    expect(shellSrc).toContain('const filePreviewController = createFilePreviewController');
+    expect(shellSrc).toContain('const filePreviewWorkspace = createFilePreviewWorkspace');
     expect(shellSrc).toContain('const fileBrowserSurfaceController = createFileBrowserSurfaceController();');
     expect(shellSrc).toContain('const openFilePreview = (');
     expect(shellSrc).toContain("setWorkbenchFilePreviewActivation({");

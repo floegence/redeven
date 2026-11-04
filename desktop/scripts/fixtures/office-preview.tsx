@@ -14,7 +14,10 @@ const source = () => {
   return { id: value.name, name: value.name, mimeType: value.mime,
     load: async () => new Blob([new Uint8Array(value.bytes)], { type: value.mime }) };
 };
-render(() => <Show when={preview()} keyed>{value => value.attachment
-  ? <FlowerAttachmentPreviewWindow source={source()} copy={taskFilesEnUS} loadingLabel={taskFilesEnUS.loading} unavailableLabel={taskFilesEnUS.unsupported} onClose={window.officePreview.close} />
-  : <FlowerTaskFilePreview source={source()} copy={taskFilesEnUS} downloading={false} onClose={window.officePreview.close} />
-}</Show>, document.getElementById('root')!);
+render(() => <>
+  <FlowerAttachmentPreviewWindow source={preview()?.attachment ? source() : null} copy={taskFilesEnUS}
+    loadingLabel={taskFilesEnUS.loading} unavailableLabel={taskFilesEnUS.unsupported} onClose={window.officePreview.close} />
+  <Show when={preview() && !preview()!.attachment ? preview() : undefined} keyed>{() =>
+    <FlowerTaskFilePreview source={source()} copy={taskFilesEnUS} downloading={false} onClose={window.officePreview.close} />
+  }</Show>
+</>, document.getElementById('root')!);

@@ -1745,7 +1745,10 @@
     "syncedPreviewPendingDetail": "Outra janela abriu {target}. Mantenha seu rascunho ou alterne explicitamente.",
     "openSyncedFile": "Abrir arquivo sincronizado",
     "keepCurrentDraft": "Manter rascunho atual",
-    "previewWindowTitle": "Previa do arquivo"
+    "previewWindowTitle": "Previa do arquivo",
+    "closeTab": "Fechar {name}",
+    "previousTab": "Abas anteriores",
+    "nextTab": "Próximas abas"
   },
   "files": {
     "title": "Arquivos",
@@ -6758,7 +6761,9 @@
       "previousPage": "Slide anterior",
       "nextPage": "Próximo slide",
       "presentationIncomplete": "Alguns conteúdos ou recursos externos não puderam ser exibidos.",
-      "fitWindow": "Ajustar à janela"
+      "fitWindow": "Ajustar à janela",
+      "previousTab": "Abas anteriores",
+      "nextTab": "Próximas abas"
     }
   },
   "uiCopy": {

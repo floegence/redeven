@@ -1,6 +1,9 @@
 import { Show, createMemo, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { EnvAppFloatingWindowStackLayer } from '../utils/envAppFloatingWindowStack';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { X } from '@floegence/floe-webapp-core/icons';
+import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import { PersistentFloatingWindow, type PersistentFloatingWindowSurfaceRef } from './PersistentFloatingWindow';
 
@@ -13,6 +16,7 @@ export interface PreviewWindowProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title?: string;
+  titleContent?: JSX.Element;
   headerActions?: JSX.Element;
   description?: string;
   footer?: JSX.Element;
@@ -31,6 +35,7 @@ export interface PreviewWindowProps {
 
 export function PreviewWindow(props: PreviewWindowProps) {
   const layout = useLayout();
+  const i18n = useI18n();
   const isMobile = createMemo(() => layout.isMobile());
 
   return (
@@ -41,6 +46,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           open={props.open}
           onOpenChange={props.onOpenChange}
           title={props.title}
+          titleContent={props.titleContent}
           headerActions={props.headerActions}
           footer={props.footer}
           stackId={props.stackId}
@@ -63,6 +69,10 @@ export function PreviewWindow(props: PreviewWindowProps) {
         open={props.open}
         onOpenChange={props.onOpenChange}
         title={props.title}
+        header={props.titleContent ? <div class="flex min-h-10 shrink-0 items-center gap-2 border-b border-border px-2">
+          {props.titleContent}
+          <Button size="icon" variant="ghost" class="size-8 shrink-0" aria-label={i18n.t('common.actions.close')} onClick={() => props.onOpenChange(false)}><X class="size-4" /></Button>
+        </div> : undefined}
         bodyDescription={props.description}
         contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
         footer={props.footer}
