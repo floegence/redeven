@@ -538,6 +538,7 @@
         "previewUnavailable": "이 도구는 결과 미리보기를 제공하지 않았습니다.",
         "effectUncertain": "결과 미확인",
         "computerInputIncomplete": "입력이 일부 전송되었습니다. 계속하기 전에 상태를 확인하세요",
+        "computerNotDispatched": "작업을 보내기 전에 페이지가 변경되었습니다",
         "computerInputRejected": "잘못된 인수로 입력을 보내지 않았습니다",
         "computerPreparedOnly": "준비가 완료되었지만 입력은 보내지 않았습니다",
         "computerEffectConfirmed": "완료된 작업이 있습니다. 계속하기 전에 확인하세요",

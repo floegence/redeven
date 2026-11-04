@@ -51,3 +51,10 @@ it('presents an explicit output limit without hiding unrelated errors or uncerta
   }
   expect(isPresentedToolFailure(item({chips,field_summary:{uncertain_effect:true,fields:[]}}))).toBe(true);
 });
+
+it('keeps an undispatched action distinct from confirmed input and ordinary read interruption', () => {
+  const interrupted=item({payload:{error:diagnosis},chips:[{kind:'computer_failure_phase',label:'phase',value:'not_dispatched'}]});
+  expect(computerObservationInterruption(interrupted)).toBe('not_dispatched');
+  expect(isPresentedToolFailure(interrupted)).toBe(false);
+  expect(computerObservationInterruption({...interrupted,payload:{error:{code:'EFFECT_OUTCOME_UNKNOWN'}}})).toBeUndefined();
+});

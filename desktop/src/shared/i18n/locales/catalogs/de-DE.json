@@ -538,6 +538,7 @@
         "previewUnavailable": "Dieses Werkzeug hat keine Ergebnisvorschau bereitgestellt.",
         "effectUncertain": "Ergebnis unbestätigt",
         "computerInputIncomplete": "Eingabe teilweise gesendet; vor dem Fortfahren prüfen",
+        "computerNotDispatched": "Die Seite hat sich vor dem Senden der Aktion geändert",
         "computerInputRejected": "Ungültige Argumente; keine Eingabe gesendet",
         "computerPreparedOnly": "Vorbereitung abgeschlossen; keine Eingabe gesendet",
         "computerEffectConfirmed": "Eine Aktion wurde ausgeführt; vor dem Fortfahren prüfen",

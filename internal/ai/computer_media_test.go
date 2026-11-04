@@ -20,7 +20,7 @@ func computerFrameFixture(t *testing.T) ([]byte, TargetToolAttachment) {
 	}
 	body := b.Bytes()
 	hash := fmt.Sprintf("%x", sha256.Sum256(body))
-	return body, TargetToolAttachment{ResourceRef: "computer://target/" + hash, MIMEType: "image/png", SHA256: hash, SizeBytes: int64(len(body))}
+	return body, TargetToolAttachment{Name: "screenshot.png", ResourceRef: "computer://target/" + hash, MIMEType: "image/png", SHA256: hash, SizeBytes: int64(len(body))}
 }
 
 func TestComputerKeyframesRecoverAndRejectChangedContent(t *testing.T) {

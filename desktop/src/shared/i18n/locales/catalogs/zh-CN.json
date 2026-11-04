@@ -538,6 +538,7 @@
         "previewUnavailable": "此工具未提供结果预览。",
         "effectUncertain": "结果未确认",
         "computerInputIncomplete": "部分输入已发送，请先检查当前状态",
+        "computerNotDispatched": "操作尚未发送，页面已变化",
         "computerInputRejected": "参数无效，未发送输入",
         "computerPreparedOnly": "已完成准备，未发送输入",
         "computerEffectConfirmed": "已有操作完成，请先检查再继续",

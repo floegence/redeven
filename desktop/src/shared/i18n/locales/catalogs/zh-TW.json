@@ -538,6 +538,7 @@
         "previewUnavailable": "此工具未提供結果預覽。",
         "effectUncertain": "結果未確認",
         "computerInputIncomplete": "部分輸入已傳送，請先檢查目前狀態",
+        "computerNotDispatched": "操作尚未傳送，頁面已變更",
         "computerInputRejected": "參數無效，尚未傳送輸入",
         "computerPreparedOnly": "已完成準備，尚未傳送輸入",
         "computerEffectConfirmed": "已有操作完成，請先檢查再繼續",

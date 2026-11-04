@@ -603,7 +603,11 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			if stopped == nil {
 				completed = append(completed, anyToString(msg.Operation["action"]))
 				for _, image := range observed.Attachments {
-					outputOrder = append(outputOrder, map[string]any{"kind": "image", "index": len(emittedImages), "operation_index": operations - 1, "resource_ref": image.ResourceRef})
+					entry := map[string]any{"kind": "image", "index": len(emittedImages), "operation_index": operations - 1, "resource_ref": image.ResourceRef}
+					if payload, ok := observed.Result.(map[string]any); ok && payload["image"] != nil {
+						entry["image"] = payload["image"]
+					}
+					outputOrder = append(outputOrder, entry)
 					emittedImages = append(emittedImages, image)
 				}
 				result.Attachments = append(result.Attachments, observed.Attachments...)
@@ -797,6 +801,8 @@ func computerScriptErrorCode(code string) aitools.ErrorCode {
 		return aitools.ErrorCodeTargetCapabilityUnavailable
 	case "TARGET_PERMISSION_REQUIRED":
 		return aitools.ErrorCodeTargetPermissionRequired
+	case "TARGET_NOT_ALLOWED":
+		return aitools.ErrorCodeTargetNotAllowed
 	case "TARGET_OBSERVATION_UNAVAILABLE":
 		return aitools.ErrorCodeTargetObservationUnavailable
 	case "NAVIGATION_FAILED":

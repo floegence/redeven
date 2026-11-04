@@ -285,6 +285,7 @@
       "previewUnavailable": "This tool did not provide a result preview.",
       "effectUncertain": "Result unconfirmed",
       "computerInputIncomplete": "Input partially sent; inspect before continuing",
+      "computerNotDispatched": "Page changed before the action was sent",
       "computerInputRejected": "Invalid arguments; no input sent",
       "computerPreparedOnly": "Preparation completed; input not sent",
       "computerEffectConfirmed": "An action completed; inspect before continuing",

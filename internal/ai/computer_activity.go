@@ -321,7 +321,7 @@ func computerActivityFailurePhase(payload map[string]any) string {
 	if payload["effect_outcome_unknown"] == true {
 		return "unknown"
 	}
-	if phase := anyToString(payload["failed_operation_phase"]); slices.Contains([]string{"unknown", "partial_input", "effect_confirmed", "prepared", "validation"}, phase) {
+	if phase := anyToString(payload["failed_operation_phase"]); slices.Contains([]string{"unknown", "partial_input", "effect_confirmed", "prepared", "validation", "not_dispatched"}, phase) {
 		return phase
 	}
 	if payload["action_executed"] == true {
@@ -335,6 +335,9 @@ func computerActivityFailurePhase(payload map[string]any) string {
 	}
 	if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil && (diagnostic["phase"] == "validation" || diagnostic["phase"] == "execution") {
 		return "validation"
+	}
+	if payload["dispatch_status"] == "not_dispatched" {
+		return "not_dispatched"
 	}
 	return ""
 }

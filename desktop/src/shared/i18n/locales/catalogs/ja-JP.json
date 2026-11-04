@@ -538,6 +538,7 @@
         "previewUnavailable": "このツールは結果のプレビューを提供していません。",
         "effectUncertain": "結果未確認",
         "computerInputIncomplete": "入力は一部送信済みです。続行前に状態を確認してください",
+        "computerNotDispatched": "操作の送信前にページが変更されました",
         "computerInputRejected": "引数が無効です。入力は送信されていません",
         "computerPreparedOnly": "準備は完了しました。入力は送信されていません",
         "computerEffectConfirmed": "操作が完了しています。続行前に確認してください",

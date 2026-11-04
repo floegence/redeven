@@ -57,6 +57,9 @@ func computerOperationDiagnostic(value any) (out map[string]any) {
 			out["checkpoint"] = raw["checkpoint"]
 		}
 	}()
+	if raw["phase"] == "permission" && raw["method"] == "ui.key" && raw["reason"] == "clipboard_shortcut_requires_explicit_operation" {
+		return map[string]any{"phase": "permission", "method": "ui.key", "reason": raw["reason"]}
+	}
 	if raw["phase"] == "adapter" {
 		method, reason := anyToString(raw["method"]), anyToString(raw["reason"])
 		if !computerProtocolMethod.MatchString(method) && !slices.Contains([]string{"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata", "hit_test"}, method) || !slices.Contains([]string{"invalid_result", "internal_error"}, reason) {
@@ -134,9 +137,44 @@ func computerActionabilityFacts(value any) map[string]any {
 		return nil
 	}
 	out := map[string]any{"stage": stage}
-	for _, key := range []string{"connected", "visible", "rendered", "enabled", "readonly", "editable", "opacity_zero", "receives"} {
+	for _, key := range []string{"connected", "visible", "rendered", "enabled", "readonly", "editable", "opacity_zero", "receives", "layout_stable", "quads_truncated"} {
 		if v, ok := raw[key].(bool); ok {
 			out[key] = v
+		}
+	}
+	if checks := toAnySlice(raw["failed_checks"]); len(checks) > 0 && len(checks) <= 8 {
+		filtered := []string{}
+		for _, check := range checks {
+			if text, ok := check.(string); ok && slices.Contains([]string{"connected", "rendered", "visible", "enabled", "editable", "receives", "layout_stable"}, text) {
+				filtered = append(filtered, text)
+			}
+		}
+		out["failed_checks"] = filtered
+	}
+	if n, ok := raw["sample_interval_ms"].(float64); ok && n >= 0 && n <= 60000 {
+		out["sample_interval_ms"] = n
+	}
+	for _, key := range []string{"previous_quads", "current_quads"} {
+		quads := toAnySlice(raw[key])
+		if len(quads) > 8 {
+			continue
+		}
+		valid := quads != nil
+		for _, value := range quads {
+			quad := toAnySlice(value)
+			if len(quad) != 8 {
+				valid = false
+				break
+			}
+			for _, value := range quad {
+				n, ok := value.(float64)
+				if !ok || math.IsNaN(n) || math.IsInf(n, 0) {
+					valid = false
+				}
+			}
+		}
+		if valid {
+			out[key] = quads
 		}
 	}
 	if n := readInt64Field(raw, "node_type"); n >= 1 && n <= 12 {

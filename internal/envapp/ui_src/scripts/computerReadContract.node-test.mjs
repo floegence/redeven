@@ -84,3 +84,14 @@ test('known protocol method survives a failed read without an optional code', as
   assert.equal(f.facts().calls, 1);
   assert.equal(JSON.stringify(result).includes('private exception'), false);
 });
+
+test('clipboard shortcut rejection explains the explicit operation boundary without input', async () => {
+  // Exercise the key parser through the real page method, before any CDP input.
+  const {browserKey}=await import('./computerBrowserKeys.mjs');
+  const controller=new BrowserComputerController({send:async()=>({})});
+  Object.assign(controller.page,{beginObservation:async()=>{},safety:async()=>safe,releaseInput:async()=>{},action:async()=>browserKey('Meta+C')});
+  const result=await controller.execute({target_id:'fixture',tool_name:'computer.action',script_operation:true,full_access:true,args:{action:'key',key:'Meta+C'}});
+  assert.equal(result.error,'TARGET_NOT_ALLOWED');
+  assert.equal(result.result.action_executed,false);
+  assert.deepEqual(result.result.diagnostic,{phase:'permission',method:'ui.key',reason:'clipboard_shortcut_requires_explicit_operation'});
+});

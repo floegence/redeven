@@ -27,7 +27,7 @@ export function browserKey(value, privateInput = false) {
     if (!modifier) throw new Error('INVALID_REQUEST');
     modifiers |= modifier;
   }
-  if (!privateInput && (modifiers & 6) && ['c', 'x', 'v'].includes(key.toLowerCase())) throw new Error('TARGET_NOT_ALLOWED');
+  if (!privateInput && (modifiers & 6) && ['c', 'x', 'v'].includes(key.toLowerCase())) throw Object.assign(new Error('TARGET_NOT_ALLOWED'), {diagnostic:{phase:'permission',method:'ui.key',reason:'clipboard_shortcut_requires_explicit_operation'}});
   let definition = named[key];
   if (!definition && key.length === 1) {
     if (modifiers & 8) {

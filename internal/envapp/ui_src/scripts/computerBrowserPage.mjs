@@ -893,22 +893,24 @@ export class BrowserComputerPage {
     const hitTest=action!=='fill';
     const allowed=state=>state.connected&&(hitTest?state.rendered:state.visible)&&(action==='hover'||state.enabled)&&(hitTest||state.editable);
     const before=await this.elementState(element);
-    if(!allowed(before))throw this.actionabilityFailure(before,'precondition');
+    if(!allowed(before))throw this.actionabilityFailure({...before,failed_checks:['connected',hitTest?'rendered':'visible',...(action==='hover'?[]:['enabled']),...(hitTest?[]:['editable'])].filter(key=>!before[key])},'precondition');
     if(!hitTest)return;
     const preparation={scroll_into_view:options.scroll_into_view??true,stability_timeout_ms:options.stability_timeout_ms??1000};
     const started=performance.now();
     if(preparation.scroll_into_view)await this.effect(()=>element.frame.session.send('DOM.scrollIntoViewIfNeeded',{backendNodeId:element.backendNodeId}),'preparation');
     const deadline=performance.now()+preparation.stability_timeout_ms;
-    let previous,facts;
+    let previous,previousAt,facts;
     do {
       const state=await this.elementState(element),layout=await this.geometry(element),q=layout.quads[0];
       const point=options.point??(q?{x:(q[0]+q[2]+q[4]+q[6])/4,y:(q[1]+q[3]+q[5]+q[7])/4}:undefined);
       const inside=Boolean(point)&&point.x>=0&&point.y>=0&&point.x<layout.viewport.clientWidth&&point.y<layout.viewport.clientHeight;
       const receives=inside&&await this.receivesPoint(element,point.x,point.y);
-      const stable=preparation.stability_timeout_ms===0||previous&&JSON.stringify(previous)===JSON.stringify(layout.quads);
-      facts={...state,receives,tested_point:point,coordinate_space:layout.coordinate_space,viewport:layout.viewport,preparation:{...preparation,elapsed_ms:Math.round(performance.now()-started)}};
+      const sampledAt=performance.now();
+      const stable=preparation.stability_timeout_ms===0||Boolean(previous)&&JSON.stringify(previous)===JSON.stringify(layout.quads);
+      const checks={connected:state.connected,rendered:state.rendered,...(action==='hover'?{}:{enabled:state.enabled}),receives,layout_stable:stable};
+      facts={...state,...checks,failed_checks:Object.keys(checks).filter(key=>!checks[key]),quads_truncated:layout.quads.length>8||(previous?.length??0)>8,previous_quads:previous?.slice(0,8),current_quads:layout.quads.slice(0,8),...(previousAt===undefined?{}:{sample_interval_ms:Math.round(sampledAt-previousAt)}),tested_point:point,coordinate_space:layout.coordinate_space,viewport:layout.viewport,preparation:{...preparation,elapsed_ms:Math.round(performance.now()-started)}};
       if(allowed(state)&&receives&&stable){await this.validateIdentity(element);return {point,preparation:facts.preparation};}
-      previous=layout.quads;
+      previous=layout.quads;previousAt=sampledAt;
       if(performance.now()>=deadline)break;
       await this.delay(Math.min(32,Math.max(0,deadline-performance.now())));
     }while(performance.now()<=deadline);

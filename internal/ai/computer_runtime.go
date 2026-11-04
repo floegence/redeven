@@ -1,16 +1,19 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"image/png"
 	"log/slog"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/browserinstall"
 	"github.com/floegence/redeven/internal/logsafe"
 )
@@ -567,6 +570,20 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 				}
 			}
 		}
+	}
+	if err == nil && !call.liveFrame && call.ToolName == "computer.screenshot" && len(result.Attachments) == 1 {
+		attachment := result.Attachments[0]
+		descriptor := flruntime.MessageAttachment{ResourceRef: attachment.ResourceRef, Name: attachment.Name, MIMEType: attachment.MIMEType, SizeBytes: attachment.SizeBytes}
+		locator, locatorErr := descriptor.Locator()
+		dimensions, dimensionsErr := png.DecodeConfig(bytes.NewReader(result.frameBytes))
+		if locatorErr != nil || dimensionsErr != nil {
+			return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+		}
+		if payload == nil {
+			payload = map[string]any{}
+			result.Result = payload
+		}
+		payload["image"] = map[string]any{"locator": locator, "width": dimensions.Width, "height": dimensions.Height, "coordinate_space": "original_image_pixels"}
 	}
 	if call.recoveryObservation && err == nil {
 		if result.TargetID != call.TargetID || result.Safety == nil {

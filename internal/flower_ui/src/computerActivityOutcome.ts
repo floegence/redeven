@@ -2,7 +2,7 @@ import type { FlowerActivityItem } from './contracts/flowerSurfaceContracts';
 
 // Display semantics only. Canonical tool status and execution authority remain
 // unchanged. Neither message wording nor an unrelated later success is proof.
-export function computerObservationInterruption(item: FlowerActivityItem): 'unavailable' | 'effect_confirmed' | 'prepared' | 'partial_input' | 'budget' | 'output' | undefined {
+export function computerObservationInterruption(item: FlowerActivityItem): 'unavailable' | 'not_dispatched' | 'effect_confirmed' | 'prepared' | 'partial_input' | 'budget' | 'output' | undefined {
   if (item.status !== 'error' || !/^(computer|browser)\./u.test(item.tool_name ?? '')) return;
   const chips = item.chips ?? [];
   const phase = chips.find(chip => chip.kind === 'computer_failure_phase')?.value;
@@ -14,7 +14,7 @@ export function computerObservationInterruption(item: FlowerActivityItem): 'unav
   if ((code === undefined || ['TIMEOUT','SCRIPT_FAILED'].includes(String(code))) && chips.some(chip => chip.kind === 'computer_budget' && ['time','operations'].includes(chip.value ?? ''))) return 'budget';
   if (code !== undefined && code !== 'TARGET_OBSERVATION_UNAVAILABLE') return;
   if (code !== 'TARGET_OBSERVATION_UNAVAILABLE' && !chips.some(chip => chip.kind === 'computer_observation' && chip.value === 'unavailable')) return;
-  return phase === 'effect_confirmed' || phase === 'prepared' || phase === 'partial_input' ? phase : 'unavailable';
+  return phase === 'not_dispatched' ? phase : phase === 'effect_confirmed' || phase === 'prepared' || phase === 'partial_input' ? phase : 'unavailable';
 }
 
 export const isPresentedToolFailure = (item: FlowerActivityItem): boolean => item.status === 'error' && !computerObservationInterruption(item);

@@ -430,6 +430,16 @@ func normalizeComputerSemanticResult(result *TargetToolResult) error {
 		}
 		payload["observation"] = normalized
 	}
+	// Query items share the existing portable role vocabulary without discarding
+	// their source role, ref, names or collection identity.
+	if payload["scope"] == "loaded_accessibility_tree" {
+		for _, value := range toAnySlice(payload["items"]) {
+			if item, ok := value.(map[string]any); ok {
+				role := anyToString(item["role"])
+				item["platform_role"], item["role"] = role, computerCanonicalRole(role)
+			}
+		}
+	}
 	if value, exists := payload["node"]; exists {
 		version, ok := payload["semantic_schema_version"]
 		if !ok || (version != computerSemanticSchemaVersion && version != float64(computerSemanticSchemaVersion)) {

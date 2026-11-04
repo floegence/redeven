@@ -23,10 +23,15 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 			operation = action
 		}
 	}
+	payload, _ := result.Result.(map[string]any)
+	// An invalidation is not an action receipt when delivery was not confirmed.
+	// This also stops partial preparation/input without inventing completion.
+	if payload["observation_invalidated"] == true && payload["action_executed"] != true {
+		return false
+	}
 	if operation == "" {
 		return true
 	}
-	payload, _ := result.Result.(map[string]any)
 	// Target changes and takeovers have their own terminal control boundary.
 	if payload["target_changed"] == true {
 		return true

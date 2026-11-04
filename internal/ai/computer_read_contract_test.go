@@ -139,3 +139,26 @@ func TestComputerSourceReadRejectsIncompletePageContracts(t *testing.T) {
 		}
 	}
 }
+
+func TestComputerNoEffectInvalidationStopsBeforeContinuation(t *testing.T) {
+	for _, action := range []string{"navigate", "click", "key"} {
+		t.Run(action, func(t *testing.T) {
+			calls := 0
+			rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+				calls++
+				return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"action_executed": false, "observation_invalidated": true, "reason": "document_changed", "observation_stage": "safety_scan", "invalidation": map[string]any{"scope": "safety", "event": "document_inventory"}}, Safety: &InteractionSafetyDecision{Level: "routine"}}, nil
+			})
+			target, _ := rt.registry.ResolveTarget(t.Context(), call.TargetID)
+			target.Kind = "browser.connected"
+			if err := rt.registry.Update(target); err != nil {
+				t.Fatal(err)
+			}
+			codes := map[string]string{"navigate": "await browser.navigate('https://fixture.test');", "click": "await ui.click(10,10);", "key": "await ui.key('Enter');"}
+			result, err := executeTestScript(t.Context(), rt, call, codes[action]+" await ui.snapshot({emit:false}); log('CONTINUED');")
+			p := result.Result.(map[string]any)
+			if err == nil || calls != 1 || p["completed"] != false || len(p["completed_actions"].([]string)) != 0 || p["script_error"] != "TARGET_OBSERVATION_UNAVAILABLE" || p["action_executed"] != false || p["effect_outcome_unknown"] != false || p["failed_operation_phase"] != "not_dispatched" {
+				t.Fatalf("undispatched action completed or continued: err=%v calls=%d result=%+v", err, calls, p)
+			}
+		})
+	}
+}
