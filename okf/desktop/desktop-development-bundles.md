@@ -51,6 +51,7 @@ Prune generated packages only in selected profile; builders own in-progress dire
 
 # Evidence
 
+- November 4, 2026: fixed the stale shell-variable Rust-pin reader. An isolated macOS ARM64 session launched the real `dev_desktop.sh` through a managed checkout alias, rebuilt Desktop and published ReDevPlugin 3.15.0 resources, then restarted with verified cache reuse. Both real windows displayed the local Environment as Ready, both Runtime process identities were verified, and the same immutable bundle was reused. The supervised session passed cleanup with no remaining processes. Focused checks passed 39 cases including real Linux amd64/arm64 C/archive/Rust-link probes and offline/download failures; process ownership and all 12 signal/failure cleanup scenarios passed. Preserve the earlier alias-path failures as failed evidence; the final product launch and cache-reuse results are separate successful runs.
 - `redeven:scripts/dev_desktop.sh` - Source.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Tests.
 - `redeven:scripts/dev_desktop_gateways.test.mjs` - Tests.

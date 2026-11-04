@@ -18546,7 +18546,7 @@
         "title": "Desktop development sessions and bundles",
         "type": "Development Contract"
       },
-      "body_length": 6800,
+      "body_length": 7619,
       "summary": "Development launcher owns Desktop, local Runtime, saved Gateways and bundles. Launch exact current source and stop owned services together. Prune only verified inactive bundles, preserving user identity/data, unrelated services and recent/selected/live builds; incomplete inventory blocks pruning.",
       "sections": [
         {
@@ -32195,5 +32195,5 @@
       ]
     }
   ],
-  "source_sha256": "bdf89453ef8728d0d7e7fa9f7a842147a39d7e92df585eb90f7d8167c84af4a6"
+  "source_sha256": "29f0e755a0a044e1816b1cc0b72aca82bb6cd7d360bd5727464516de86bd2f4f"
 }
