@@ -4,7 +4,7 @@ import test from 'node:test';
 import { chromium } from 'playwright';
 import { BrowserComputerController } from './computerBrowserController.mjs';
 
-test('scoped collection pages reject changed contents and attributes are allowlisted', async () => {
+test('scoped collection pages reject changed contents and attributes preserve exact source values', async () => {
  const browser=await chromium.launch({headless:true});
  try {
   const tab=await browser.newPage(); await tab.setContent('<a href="https://user:pass@example.test/path?token=secret#private">Entry</a><button>One</button><button>Two</button><button>Three</button>');
@@ -13,7 +13,12 @@ test('scoped collection pages reject changed contents and attributes are allowli
   const first=await call({action:'query',selector:{role:'button'},limit:2}); assert.equal(first.result.total,3); assert.equal(first.result.items.length,2); assert.ok(first.result.next_cursor);
   const second=await call({action:'query',selector:{role:'button'},limit:2,cursor:first.result.next_cursor}); assert.equal(second.result.items[0].name,'Three'); assert.equal(second.result.truncated,false);
   const attr=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:'href'}); assert.equal(attr.result.value,'https://example.test/path?token=secret#private'); assert.deepEqual(attr.result.redacted,['url_credentials']);
-  const denied=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:'value'}); assert.equal(denied.error,'INVALID_REQUEST');
+  const missing=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:'value'}); assert.equal(missing.error,undefined); assert.equal(missing.result.value,null);
+  for(const href of ['../report?q=two#part','mailto:person@example.test','javascript:void(0)']){
+    await tab.locator('a').evaluate((el,value)=>el.setAttribute('href',value),href);
+    const source=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:'href'}); assert.equal(source.error,undefined); assert.equal(source.result.value,href);
+  }
+  const denied=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:''}); assert.equal(denied.error,'INVALID_REQUEST'); assert.equal(denied.result.diagnostic.expected,'attribute_name');
   await tab.locator('button').last().evaluate(el=>el.remove());
   const stale=await call({action:'query',selector:{role:'button'},cursor:first.result.next_cursor}); assert.equal(stale.error,'STALE_REFERENCE');
   controller.close();
