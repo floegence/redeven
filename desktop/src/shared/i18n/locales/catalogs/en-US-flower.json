@@ -289,7 +289,14 @@
       "computerEffectConfirmed": "An action completed; inspect before continuing",
       "computerObservationUnavailable": "Page could not be read",
       "computerActionObservedUnavailable": "Action performed; page could not be read",
-      "computerObservationDetails": "Technical details"
+      "computerObservationDetails": "Technical details",
+      "computerReadCompleted": "Read completed",
+      "computerReadScope": "Requested scope only; a current screenshot is separate.",
+      "computerContext": "Script context",
+      "computerContextReset": "Reset; previous variables and handles are unavailable.",
+      "computerFailedOperation": "Stopped operation (zero-based)",
+      "contentRedacted": "Credentials redacted in this display.",
+      "contentEncodingReplaced": "Invalid text bytes replaced for display."
     },
     "toolActivityDetailsPending": "Waiting for tool details",
     "toolActivityNoAdditionalDetails": "No additional details",

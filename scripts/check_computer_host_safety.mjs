@@ -67,8 +67,8 @@ try {
       assert.equal(result.safety.safe_to_send_to_model, false);
       assert.equal(result.result.action_executed, true, 'navigation already happened');
       for (const action of ['computer.screenshot', 'computer.type', 'browser.navigate']) {
-        const blocked = await send(`${name}-${action}`, action, { text: 'secret-should-not-be-typed', url: 'about:blank' });
-        assert.equal(blocked.safety?.level, 'takeover', name);
+        const blocked = await send(`${name}-${action}`, action, action === 'browser.navigate' ? {url:'about:blank'} : action === 'computer.type' ? {text:'secret-should-not-be-typed'} : {});
+        assert.equal(blocked.safety?.level, 'takeover', JSON.stringify({name,action,blocked}));
         assert.equal(Boolean(blocked.screenshot), false);
         assert.equal(blocked.result.action_executed, false, 'blocked action must not execute');
         assert.equal(JSON.stringify(blocked).includes('secret-should-not-be-typed'), false);

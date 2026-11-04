@@ -542,7 +542,14 @@
         "computerEffectConfirmed": "Eine Aktion wurde ausgeführt; vor dem Fortfahren prüfen",
         "computerObservationUnavailable": "Seite konnte nicht gelesen werden",
         "computerActionObservedUnavailable": "Aktion ausgeführt; Seite konnte nicht gelesen werden",
-        "computerObservationDetails": "Technische Details"
+        "computerObservationDetails": "Technische Details",
+        "computerReadCompleted": "Lesen abgeschlossen",
+        "computerReadScope": "Nur der angeforderte Bereich; ein aktueller Screenshot ist separat.",
+        "computerContext": "Skriptumgebung",
+        "computerContextReset": "Zurückgesetzt; vorherige Variablen und Handles sind ungültig.",
+        "computerFailedOperation": "Gestoppter Vorgang (ab 0)",
+        "contentRedacted": "Zugangsdaten in dieser Anzeige sind geschwärzt.",
+        "contentEncodingReplaced": "Ungültige Textbytes wurden für die Anzeige ersetzt."
       },
       "toolActivityDetailsPending": "Warten auf Tool-Details",
       "toolActivityNoAdditionalDetails": "Keine weiteren Details",

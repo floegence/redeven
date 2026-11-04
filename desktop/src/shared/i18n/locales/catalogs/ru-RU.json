@@ -549,7 +549,14 @@
         "computerEffectConfirmed": "Действие выполнено; проверьте результат перед продолжением",
         "computerObservationUnavailable": "Не удалось прочитать страницу",
         "computerActionObservedUnavailable": "Действие выполнено; не удалось прочитать страницу",
-        "computerObservationDetails": "Технические сведения"
+        "computerObservationDetails": "Технические сведения",
+        "computerReadCompleted": "Чтение завершено",
+        "computerReadScope": "Только запрошенная область; текущий снимок экрана предоставляется отдельно.",
+        "computerContext": "Контекст скрипта",
+        "computerContextReset": "Сброшен; прежние переменные и ссылки недоступны.",
+        "computerFailedOperation": "Остановленная операция (с нуля)",
+        "contentRedacted": "Учётные данные скрыты в этом представлении.",
+        "contentEncodingReplaced": "Недопустимые байты текста заменены для отображения."
       },
       "toolActivityDetailsPending": "Ожидание сведений об инструменте",
       "toolActivityNoAdditionalDetails": "Дополнительных сведений нет",

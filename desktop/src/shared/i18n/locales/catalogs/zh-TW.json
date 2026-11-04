@@ -542,7 +542,14 @@
         "computerEffectConfirmed": "已有操作完成，請先檢查再繼續",
         "computerObservationUnavailable": "暫時無法讀取頁面",
         "computerActionObservedUnavailable": "操作已執行，頁面尚未讀取",
-        "computerObservationDetails": "技術詳細資料"
+        "computerObservationDetails": "技術詳細資料",
+        "computerReadCompleted": "讀取已完成",
+        "computerReadScope": "僅表示請求範圍的讀取；不代表已有目前截圖。",
+        "computerContext": "指令碼環境",
+        "computerContextReset": "已重設；先前的變數與控制代碼已失效。",
+        "computerFailedOperation": "中斷操作（從 0 計數）",
+        "contentRedacted": "此顯示內容中的憑證已遮蔽。",
+        "contentEncodingReplaced": "無效文字位元組已替換後顯示。"
       },
       "toolActivityDetailsPending": "正在等待工具詳細資訊",
       "toolActivityNoAdditionalDetails": "沒有更多詳細資訊",

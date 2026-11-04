@@ -542,7 +542,14 @@
         "computerEffectConfirmed": "Une action a été effectuée ; vérifiez avant de continuer",
         "computerObservationUnavailable": "Impossible de lire la page",
         "computerActionObservedUnavailable": "Action effectuée ; impossible de lire la page",
-        "computerObservationDetails": "Détails techniques"
+        "computerObservationDetails": "Détails techniques",
+        "computerReadCompleted": "Lecture terminée",
+        "computerReadScope": "Portée demandée uniquement ; une capture actuelle est distincte.",
+        "computerContext": "Contexte du script",
+        "computerContextReset": "Réinitialisé ; les variables et références précédentes sont indisponibles.",
+        "computerFailedOperation": "Opération arrêtée (à partir de 0)",
+        "contentRedacted": "Les identifiants sensibles sont masqués dans cet affichage.",
+        "contentEncodingReplaced": "Les octets de texte invalides ont été remplacés pour l’affichage."
       },
       "toolActivityDetailsPending": "En attente des détails de l’outil",
       "toolActivityNoAdditionalDetails": "Aucun détail supplémentaire",

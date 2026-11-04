@@ -542,7 +542,14 @@
         "computerEffectConfirmed": "已有操作完成，请先检查再继续",
         "computerObservationUnavailable": "暂时无法读取页面",
         "computerActionObservedUnavailable": "操作已执行，页面暂未读取",
-        "computerObservationDetails": "技术详情"
+        "computerObservationDetails": "技术详情",
+        "computerReadCompleted": "读取已完成",
+        "computerReadScope": "仅表示请求范围的读取；不代表已有当前截图。",
+        "computerContext": "脚本环境",
+        "computerContextReset": "已重置；之前的变量和句柄已失效。",
+        "computerFailedOperation": "中断操作（从 0 计数）",
+        "contentRedacted": "此显示内容中的凭据已脱敏。",
+        "contentEncodingReplaced": "无效文本字节已替换后显示。"
       },
       "toolActivityDetailsPending": "正在等待工具详情",
       "toolActivityNoAdditionalDetails": "没有更多详情",
