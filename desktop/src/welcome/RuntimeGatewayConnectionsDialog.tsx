@@ -1,5 +1,5 @@
 import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import { Button, Dialog, StableText, KeyedFor } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog, StableText, Select } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 
 import type { GatewayAttachmentSnapshot } from '../shared/gatewayJoin';
@@ -29,7 +29,6 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   const member = () => members().find(item => item.gateway_id === selected());
   const text = props.i18n.t;
   let generation = 0;
-  let select: HTMLSelectElement | undefined;
   let confirm: HTMLButtonElement | undefined;
 
   const close = () => {
@@ -114,14 +113,10 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
         <Show when={members().length > 1 && !gatewayID()}>
           <label class="block space-y-2 text-sm">
             <span>{text('gatewayConnections.select')}</span>
-            <select ref={select} class="redeven-native-select"
-              value={selected()} disabled={busy()} onChange={event => {
-                setSelected(event.currentTarget.value);
-                setError('');
-              }}>
-              <option value="" disabled>{text('gatewayConnections.select')}</option>
-              <KeyedFor each={members()} by={item => item.gateway_id!}>{item => <option value={item().gateway_id}>{item().gateway_name || item().gateway_id}</option>}</KeyedFor>
-            </select>
+            <Select ariaLabel={text('gatewayConnections.select')}
+              placeholder={text('gatewayConnections.select')}
+              value={selected()} disabled={busy()} onChange={value => { setSelected(value); setError(''); }}
+              options={members().map(item => ({ value: item.gateway_id!, label: item.gateway_name || item.gateway_id! }))} />
           </label>
         </Show>
         <Show when={member()}>{item => (

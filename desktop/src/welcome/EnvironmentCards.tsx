@@ -12,7 +12,7 @@ import { environmentAccessPresentation } from './environmentAccessPresentation';
 import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useTheme } from '@floegence/floe-webapp-core';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel, KeyedFor } from '@floegence/floe-webapp-core/ui';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel, Select } from '@floegence/floe-webapp-core/ui';
 import { Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash, Link } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../internal/flower_ui/src';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
@@ -618,7 +618,7 @@ export function EnvironmentCardsPanel(
     const gatewayEntry = () => group().gateway_entries?.find(entry => entry.gateway_env_id === gatewayMember()?.attachment_id
       && entry.gateway_identity_fingerprint === gatewayMember()?.identity_fingerprint
       && entry.gateway_member?.runtime_public_id === gatewayMember()?.runtime_public_id) ?? group().primary_entry;
-    const gatewaySelector = <Show when={gatewayMembers().length > 1}><label class="mb-2 flex min-w-0 items-center gap-2 text-xs"><span class="shrink-0 text-muted-foreground">{props.i18n.t('gatewayConnections.tab')}</span><select class="min-w-0 flex-1 cursor-pointer rounded-md border border-border bg-background px-2 py-1 text-xs" aria-label={props.i18n.t('gatewayConnections.select')} value={gatewayMember()?.gateway_id} onChange={event => {setSelectedGateway(event.currentTarget.value);setActiveEnvironmentOverlayState(closedEnvironmentLibraryOverlayState());}}><KeyedFor each={gatewayMembers()} by={member => member.gateway_id}>{member => <option value={member().gateway_id}>{member().gateway_name || member().gateway_id}</option>}</KeyedFor></select></label></Show>;
+    const gatewaySelector = <Show when={gatewayMembers().length > 1}><div class="mb-2 flex min-w-0 items-center gap-2 text-xs"><span class="shrink-0 text-muted-foreground">{props.i18n.t('gatewayConnections.tab')}</span><div class="min-w-0 flex-1"><Select ariaLabel={props.i18n.t('gatewayConnections.select')} value={gatewayMember()?.gateway_id} onChange={value => { setSelectedGateway(value); setActiveEnvironmentOverlayState(closedEnvironmentLibraryOverlayState()); }} options={gatewayMembers().map(member => ({ value: member.gateway_id, label: member.gateway_name || member.gateway_id }))} /></div></div></Show>;
     const items = createMemo(() => memberIDs().map(ownerID => {
       if (ownerID === gatewayTabID()) return {id:ownerID, domId:tabID(ownerID), panelId:panelID(ownerID), label:props.i18n.t('environmentCenter.accessTabs.gateway'), fullName:props.i18n.t('gatewayConnections.tab'), icon:(
         <span class="redeven-owner-tab-icon" role="img" title={props.i18n.t('gatewayConnections.tab')} aria-label={props.i18n.t('environmentCenter.accessTabStatus', { name: props.i18n.t('gatewayConnections.tab'), status: props.i18n.t(`gatewayMembership.${gatewayMember()?.phase ?? 'not_joined'}`) })}>

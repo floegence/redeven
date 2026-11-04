@@ -1,4 +1,4 @@
-import { Show, createEffect, onCleanup, type JSX } from 'solid-js';
+import { createEffect, onCleanup, type JSX } from 'solid-js';
 import { type DesktopOverlayPlacement } from './desktopOverlayPosition';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 
@@ -163,42 +163,40 @@ export function DesktopPopover(props: DesktopPopoverProps) {
     >
       {props.children}
 
-      <Show when={props.open}>
-        <DesktopAnchoredOverlaySurface
-          open={props.open}
-          anchorRef={anchorRef}
-          placement={props.placement}
-          role="dialog"
-          ariaModal={false}
-          ariaLabel={props.popoverAriaLabel}
-          interactive
-          class={cn(
-            'redeven-desktop-overlay-surface z-[225] max-w-[min(21rem,calc(100vw-1rem))] rounded-md border border-border/80 bg-popover text-popover-foreground',
-            props.class,
-          )}
-          onOverlayRef={(element) => {
-            popoverRef = element;
-          }}
-          onMouseEnter={open}
-          onMouseLeave={(event) => {
-            if (containsTarget(event.relatedTarget)) {
-              return;
-            }
-            scheduleHide();
-          }}
-          onFocusIn={open}
-          onFocusOut={(event) => {
-            if (containsTarget(event.relatedTarget)) {
-              return;
-            }
-            scheduleHide();
-          }}
-        >
-          <>
-            {props.content}
-          </>
-        </DesktopAnchoredOverlaySurface>
-      </Show>
+      <DesktopAnchoredOverlaySurface
+        open={props.open}
+        anchorRef={anchorRef}
+        placement={props.placement}
+        role="dialog"
+        ariaModal={false}
+        ariaLabel={props.popoverAriaLabel}
+        interactive
+        class={cn(
+          'redeven-desktop-overlay-surface z-[225] max-w-[min(21rem,calc(100vw-1rem))] rounded-md border border-border/80 bg-popover text-popover-foreground',
+          props.class,
+        )}
+        onOverlayRef={(element) => {
+          popoverRef = element;
+        }}
+        onMouseEnter={open}
+        onMouseLeave={(event) => {
+          if (containsTarget(event.relatedTarget)) {
+            return;
+          }
+          scheduleHide();
+        }}
+        onFocusIn={open}
+        onFocusOut={(event) => {
+          if (containsTarget(event.relatedTarget)) {
+            return;
+          }
+          scheduleHide();
+        }}
+      >
+        <>
+          {props.content}
+        </>
+      </DesktopAnchoredOverlaySurface>
     </span>
   );
 }

@@ -14,7 +14,7 @@ const localGateway={connection_id:'local-gateway',display_name:'Office Gateway',
  created_at_ms:1,updated_at_ms:1,environments:[],endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}]};
 const output=fileURLToPath(new URL('../dist/gateway-runtime-connections/',import.meta.url));
 await mkdir(output,{recursive:true});
-const server=await createSSHSettingsPreviewServer(0);
+const server=await createSSHSettingsPreviewServer(0,['environment-settings.html']);
 await server.watcher.close();
 const browser=await chromium.launch({headless:true});
 const report={cases:[],layouts:[],errors:[]};
@@ -118,7 +118,8 @@ try {
     await card.getByRole('tab').nth(2).click();
     const panel=card.locator('[role="tabpanel"][aria-label="'+i18n.t('gatewayConnections.tab')+'"]');
     await panel.waitFor({state:'visible'});
-    await panel.getByRole('combobox').selectOption('service-1');
+    await panel.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Lab', exact: true }).click();
     await panel.getByText('https://lab.internal:7443',{exact:true}).waitFor();
     const toggle=panel.getByRole('button',{name:i18n.t('environmentAction.runtimeActions'),exact:true});
     await toggle.focus();await page.keyboard.press('Enter');const menu=page.getByRole('menu');await menu.waitFor();

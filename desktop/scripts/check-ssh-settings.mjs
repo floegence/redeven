@@ -218,7 +218,9 @@ try {
   assert.equal(await page.locator('#fixture-access-draft').inputValue(), '25000');
   await page.getByRole('tab', { name: 'Connection', exact: true }).click();
   await page.locator('.ssh-settings-disclosure').click();
-  await page.locator('#ssh-settings-bootstrap_strategy').selectOption('remote_install');
+  await page.locator('#ssh-settings-bootstrap_strategy').click();
+  const remoteInstallLabel = await page.locator('#ssh-settings-bootstrap_strategy').locator('..').locator('select option[value=remote_install]').textContent();
+  await page.getByRole('option', { name: remoteInstallLabel, exact: true }).click();
   await page.locator('#ssh-settings-runtime_root').fill('/srv/redeven');
   await page.locator('#ssh-settings-release_base_url').fill(`https://mirror.example.com/${'release/'.repeat(18)}`);
   await page.locator('#ssh-settings-connect_timeout_seconds').fill('0');

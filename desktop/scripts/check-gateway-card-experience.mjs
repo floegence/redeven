@@ -149,7 +149,9 @@ try {
     assert.ok(popoverBounds.y >= 0 && popoverBounds.y + popoverBounds.height <= 1050, 'Progress fits the viewport from its status-footer anchor');
     assert.equal(await trigger.locator('svg').count(), 1, 'Progress must retain one icon');
     assert.equal(await trigger.getAttribute('data-floe-progress-shimmer'), 'surface');
-    assert.notEqual(await popover.evaluate(el => getComputedStyle(el).animationName), 'none');
+    assert.equal(await popover.getAttribute('data-floating-presence'), 'open');
+    assert.equal(await popover.evaluate(el => getComputedStyle(el).transitionProperty.includes('opacity')), true,
+      'Progress uses the shared floating transition');
     const meter = popover.getByRole('progressbar');
     await meter.waitFor();
     assert.equal(await meter.getAttribute('aria-valuenow'), null, 'Observed service phases must not invent a percentage');
@@ -164,7 +166,7 @@ try {
     await popover.evaluate(async el => { await Promise.all(el.getAnimations().map(a => a.finished)); });
     await page.screenshot({ path: `${output}/progress-${width}.png`, animations: 'allow' });
     await page.keyboard.press('Escape');
-    await page.waitForFunction(() => document.querySelector('.redeven-gateway-action-popover-surface.redeven-action-popover-surface--closing'));
+    await page.waitForFunction(() => document.querySelector('.redeven-gateway-action-popover-surface[data-floating-presence="exiting"][inert][aria-hidden="true"]'));
     await popover.waitFor({ state: 'detached' });
     assert.equal(await trigger.getAttribute('data-floe-progress-shimmer'), 'surface');
     assert.equal(await trigger.evaluate(el => document.activeElement === el), true);

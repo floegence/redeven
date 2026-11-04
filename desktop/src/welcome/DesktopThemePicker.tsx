@@ -319,182 +319,181 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
         <Highlighter class="h-4 w-4" />
       </TopBarIconButton>
 
-      <Show when={open()}>
-        <DesktopAnchoredOverlaySurface
-          open={open()}
-          anchorRef={buttonRef}
-          placement="bottom"
-          role="dialog"
-          ariaModal={false}
-          ariaLabel={props.i18n.t(translationKey('shell.themePicker.title'))}
-          interactive
-          hideArrow
-          motion="menu"
-          class="redeven-theme-picker"
-          onOverlayRef={(element) => {
-            overlayRef = element;
-          }}
-          onFocusOut={(event) => {
-            const nextTarget = event.relatedTarget;
-            if (isReplacedPreset(event.target) || !(nextTarget instanceof Node)) return;
-            queueMicrotask(() => {
-              if (!open() || overlayRef?.contains(nextTarget) || isReplacedPreset(nextTarget)) {
-                return;
-              }
-              closePicker(false);
-            });
-          }}
-        >
-          <div id={dialogID} class="redeven-theme-picker__panel">
-            <div class="redeven-theme-picker__header">
-              <h2 class="redeven-theme-picker__title">
-                {props.i18n.t(translationKey('shell.themePicker.title'))}
-              </h2>
-            </div>
-
-            <div class="redeven-theme-picker__mode-section">
-              <div
-                role="radiogroup"
-                aria-label={props.i18n.t(translationKey('shell.themePicker.modeLabel'))}
-                class="redeven-theme-picker__mode-group"
-              >
-                <For each={THEME_SOURCE_OPTIONS}>
-                  {(source, index) => {
-                    const selected = () => props.snapshot.source === source;
-                    return (
-                      <button
-                        type="button"
-                        id={`${modeGroupID}-${source}`}
-                        role="radio"
-                        aria-checked={selected() ? 'true' : 'false'}
-                        tabIndex={selected() ? 0 : -1}
-                        class="redeven-theme-picker__mode"
-                        aria-disabled={Boolean(pending())}
-                        aria-busy={pending() === `mode-${source}`}
-                        onClick={() => selectSource(source)}
-                        onKeyDown={(event) => {
-                          const nextIndex = rovingRadioIndexForKey(event.key, index(), THEME_SOURCE_OPTIONS.length);
-                          if (nextIndex !== null) {
-                            event.preventDefault();
-                            const nextSource = THEME_SOURCE_OPTIONS[nextIndex]!;
-                            selectSource(nextSource);
-                            focusElementByID(`${modeGroupID}-${nextSource}`);
-                          } else if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            selectSource(source);
-                          }
-                        }}
-                      >
-                        <span class="redeven-theme-picker__spinner" aria-hidden="true" style={{ visibility: pending() === `mode-${source}` ? 'visible' : 'hidden' }} />
-                        {props.i18n.t(sourceLabelKey(source))}
-                      </button>
-                    );
-                  }}
-                </For>
-              </div>
-              <Show when={props.snapshot.source === 'system'}>
-                <p class="redeven-theme-picker__system-status">
-                  {props.i18n.t(translationKey(
-                    props.snapshot.resolvedTheme === 'light'
-                      ? 'shell.themePicker.systemResolvedLight'
-                      : 'shell.themePicker.systemResolvedDark',
-                  ))}
-                </p>
-              </Show>
-            </div>
-
-            <div class="redeven-theme-picker__themes-header">
-              <div id={`${themeGroupID}-label`} class="redeven-theme-picker__section-label">
-                {props.i18n.t(translationKey('shell.themePicker.themesLabel'))}
-              </div>
-              <span class="redeven-theme-picker__theme-count" role="status" aria-live="polite">
-                {pending() ? props.i18n.t(translationKey('shell.themePicker.switching')) : presets().length}
-              </span>
-            </div>
-
-            <div
-              ref={(element) => {
-                themeGridRef = element;
-              }}
-              role="radiogroup"
-              aria-labelledby={`${themeGroupID}-label`}
-              class="redeven-theme-picker__theme-scroll"
-              onFocusIn={() => setThemeGroupFocused(true)}
-              onFocusOut={(event) => {
-                if (isReplacedPreset(event.target)) return;
-                if (!(event.relatedTarget instanceof Node) || !themeGridRef?.contains(event.relatedTarget)) {
-                  setThemeGroupFocused(false);
-                }
-              }}
-            >
-              <div class="redeven-theme-picker__theme-grid">
-                <For each={presets()}>
-                  {(preset, index) => {
-                    const selected = () => preset.name === selectedPresetName();
-                    const optionID = `${themeGroupID}-${preset.name}`;
-                    return (
-                      <button
-                        type="button"
-                        id={optionID}
-                        data-desktop-theme-preset={preset.name}
-                        role="radio"
-                        aria-checked={selected() ? 'true' : 'false'}
-                        tabIndex={selected() ? 0 : -1}
-                        class="redeven-theme-picker__theme"
-                        aria-disabled={Boolean(pending())}
-                        aria-busy={pending() === preset.name}
-                        onClick={() => selectPreset(preset)}
-                        onKeyDown={(event) => {
-                          const nextIndex = rovingRadioIndexForKey(event.key, index(), presets().length);
-                          if (nextIndex !== null) {
-                            event.preventDefault();
-                            const nextPreset = presets()[nextIndex];
-                            if (nextPreset) {
-                              selectPreset(nextPreset);
-                              focusElementByID(`${themeGroupID}-${nextPreset.name}`);
-                            }
-                          } else if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            selectPreset(preset);
-                          }
-                        }}
-                      >
-                        <DesktopThemePreview preset={preset} />
-                        <span class="redeven-theme-picker__theme-footer">
-                          <span class="redeven-theme-picker__theme-name">
-                            {desktopThemePresetLabel(props.i18n, preset)}
-                          </span>
-                          <span class="redeven-theme-picker__check" aria-hidden="true">
-                            <Show when={pending() === preset.name} fallback={<Check class="h-3.5 w-3.5" />}>
-                              <span class="redeven-theme-picker__spinner" />
-                            </Show>
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  }}
-                </For>
-              </div>
-            </div>
-
-            <Show when={error()}>
-              <div class="redeven-theme-picker__error" role="alert">
-                {error()}
-              </div>
-            </Show>
-
-            <button
-              type="button"
-              class="redeven-theme-picker__close"
-              aria-label={props.i18n.t(translationKey('shell.themePicker.closeLabel'))}
-              title={props.i18n.t(translationKey('shell.themePicker.closeLabel'))}
-              onClick={() => closePicker(true)}
-            >
-              <X class="h-4 w-4" />
-            </button>
+      <DesktopAnchoredOverlaySurface
+        open={open()}
+        anchorRef={buttonRef}
+        placement="bottom"
+        role="dialog"
+        ariaModal={false}
+        ariaLabel={props.i18n.t(translationKey('shell.themePicker.title'))}
+        interactive
+        hideArrow
+        motion="menu"
+        zIndex={235}
+        class="redeven-theme-picker"
+        onOverlayRef={(element) => {
+          overlayRef = element;
+        }}
+        onFocusOut={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (isReplacedPreset(event.target) || !(nextTarget instanceof Node)) return;
+          queueMicrotask(() => {
+            if (!open() || overlayRef?.contains(nextTarget) || isReplacedPreset(nextTarget)) {
+              return;
+            }
+            closePicker(false);
+          });
+        }}
+      >
+        <div id={dialogID} class="redeven-theme-picker__panel">
+          <div class="redeven-theme-picker__header">
+            <h2 class="redeven-theme-picker__title">
+              {props.i18n.t(translationKey('shell.themePicker.title'))}
+            </h2>
           </div>
-        </DesktopAnchoredOverlaySurface>
-      </Show>
+
+          <div class="redeven-theme-picker__mode-section">
+            <div
+              role="radiogroup"
+              aria-label={props.i18n.t(translationKey('shell.themePicker.modeLabel'))}
+              class="redeven-theme-picker__mode-group"
+            >
+              <For each={THEME_SOURCE_OPTIONS}>
+                {(source, index) => {
+                  const selected = () => props.snapshot.source === source;
+                  return (
+                    <button
+                      type="button"
+                      id={`${modeGroupID}-${source}`}
+                      role="radio"
+                      aria-checked={selected() ? 'true' : 'false'}
+                      tabIndex={selected() ? 0 : -1}
+                      class="redeven-theme-picker__mode"
+                      aria-disabled={Boolean(pending())}
+                      aria-busy={pending() === `mode-${source}`}
+                      onClick={() => selectSource(source)}
+                      onKeyDown={(event) => {
+                        const nextIndex = rovingRadioIndexForKey(event.key, index(), THEME_SOURCE_OPTIONS.length);
+                        if (nextIndex !== null) {
+                          event.preventDefault();
+                          const nextSource = THEME_SOURCE_OPTIONS[nextIndex]!;
+                          selectSource(nextSource);
+                          focusElementByID(`${modeGroupID}-${nextSource}`);
+                        } else if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          selectSource(source);
+                        }
+                      }}
+                    >
+                      <span class="redeven-theme-picker__spinner" aria-hidden="true" style={{ visibility: pending() === `mode-${source}` ? 'visible' : 'hidden' }} />
+                      {props.i18n.t(sourceLabelKey(source))}
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+            <Show when={props.snapshot.source === 'system'}>
+              <p class="redeven-theme-picker__system-status">
+                {props.i18n.t(translationKey(
+                  props.snapshot.resolvedTheme === 'light'
+                    ? 'shell.themePicker.systemResolvedLight'
+                    : 'shell.themePicker.systemResolvedDark',
+                ))}
+              </p>
+            </Show>
+          </div>
+
+          <div class="redeven-theme-picker__themes-header">
+            <div id={`${themeGroupID}-label`} class="redeven-theme-picker__section-label">
+              {props.i18n.t(translationKey('shell.themePicker.themesLabel'))}
+            </div>
+            <span class="redeven-theme-picker__theme-count" role="status" aria-live="polite">
+              {pending() ? props.i18n.t(translationKey('shell.themePicker.switching')) : presets().length}
+            </span>
+          </div>
+
+          <div
+            ref={(element) => {
+              themeGridRef = element;
+            }}
+            role="radiogroup"
+            aria-labelledby={`${themeGroupID}-label`}
+            class="redeven-theme-picker__theme-scroll"
+            onFocusIn={() => setThemeGroupFocused(true)}
+            onFocusOut={(event) => {
+              if (isReplacedPreset(event.target)) return;
+              if (!(event.relatedTarget instanceof Node) || !themeGridRef?.contains(event.relatedTarget)) {
+                setThemeGroupFocused(false);
+              }
+            }}
+          >
+            <div class="redeven-theme-picker__theme-grid">
+              <For each={presets()}>
+                {(preset, index) => {
+                  const selected = () => preset.name === selectedPresetName();
+                  const optionID = `${themeGroupID}-${preset.name}`;
+                  return (
+                    <button
+                      type="button"
+                      id={optionID}
+                      data-desktop-theme-preset={preset.name}
+                      role="radio"
+                      aria-checked={selected() ? 'true' : 'false'}
+                      tabIndex={selected() ? 0 : -1}
+                      class="redeven-theme-picker__theme"
+                      aria-disabled={Boolean(pending())}
+                      aria-busy={pending() === preset.name}
+                      onClick={() => selectPreset(preset)}
+                      onKeyDown={(event) => {
+                        const nextIndex = rovingRadioIndexForKey(event.key, index(), presets().length);
+                        if (nextIndex !== null) {
+                          event.preventDefault();
+                          const nextPreset = presets()[nextIndex];
+                          if (nextPreset) {
+                            selectPreset(nextPreset);
+                            focusElementByID(`${themeGroupID}-${nextPreset.name}`);
+                          }
+                        } else if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          selectPreset(preset);
+                        }
+                      }}
+                    >
+                      <DesktopThemePreview preset={preset} />
+                      <span class="redeven-theme-picker__theme-footer">
+                        <span class="redeven-theme-picker__theme-name">
+                          {desktopThemePresetLabel(props.i18n, preset)}
+                        </span>
+                        <span class="redeven-theme-picker__check" aria-hidden="true">
+                          <Show when={pending() === preset.name} fallback={<Check class="h-3.5 w-3.5" />}>
+                            <span class="redeven-theme-picker__spinner" />
+                          </Show>
+                        </span>
+                      </span>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+
+          <Show when={error()}>
+            <div class="redeven-theme-picker__error" role="alert">
+              {error()}
+            </div>
+          </Show>
+
+          <button
+            type="button"
+            class="redeven-theme-picker__close"
+            aria-label={props.i18n.t(translationKey('shell.themePicker.closeLabel'))}
+            title={props.i18n.t(translationKey('shell.themePicker.closeLabel'))}
+            onClick={() => closePicker(true)}
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+      </DesktopAnchoredOverlaySurface>
     </>
   );
 }

@@ -1,6 +1,6 @@
-import { FeedbackIndicator, Button, Input, SegmentedControl, SettingsList, Switch } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button, Input, SegmentedControl, SettingsList, Switch, Select } from '@floegence/floe-webapp-core/ui';
 import { EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
-import { For, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import { DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS, type DesktopSSHBootstrapStrategy } from '../shared/desktopSSH';
@@ -358,28 +358,16 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
                       : 'connectionDialog.bootstrapHelp',
                 )}
               >
-                <select
+                <Select
                   id="ssh-settings-bootstrap_strategy"
-                  class="redeven-native-select"
                   value={props.state.bootstrap_strategy}
-                  onChange={(event) =>
-                    props.switchBootstrapStrategy(event.currentTarget.value as DesktopSSHBootstrapStrategy)
-                  }
-                >
-                  <For each={['auto', 'desktop_upload', 'remote_install'] as const}>
-                    {(strategy) => (
-                      <option value={strategy}>
-                        {t(
-                          strategy === 'auto'
-                            ? 'connectionDialog.automatic'
-                            : strategy === 'desktop_upload'
-                              ? 'connectionDialog.desktopUpload'
-                              : 'connectionDialog.remoteDownloadInstall',
-                        )}
-                      </option>
-                    )}
-                  </For>
-                </select>
+                  onChange={value => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
+                  options={(['auto', 'desktop_upload', 'remote_install'] as const).map(strategy => ({
+                    value: strategy,
+                    label: t(strategy === 'auto' ? 'connectionDialog.automatic'
+                      : strategy === 'desktop_upload' ? 'connectionDialog.desktopUpload' : 'connectionDialog.remoteDownloadInstall'),
+                  }))}
+                />
               </Field>
               <Field name="runtime_root" label={t('sshSettings.directory')} help={t('sshSettings.rootHelp')}>
                 <Input

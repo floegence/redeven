@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { Portal } from 'solid-js/web';
 import {
   desktopOverlayArrowClass,
@@ -17,17 +18,14 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   constrainToViewport?: boolean;
   allowMainAxisOverflow?: boolean;
   hideArrow?: boolean;
-  /** Floe's menu motion. Every anchored surface that is not a rich custom
-   * popover opts in, so an open menu moves the way the rest of the shell does
-   * instead of snapping into place. */
-  motion?: 'menu' | 'none';
+  zIndex?: number;
+  motion?: 'menu' | 'tooltip';
+  onExitComplete?: () => void;
   role?: JSX.HTMLAttributes<HTMLDivElement>['role'];
   ariaModal?: boolean;
   ariaLabel?: string;
   class?: string;
   interactive?: boolean;
-  inactive?: boolean;
-  positionFrozen?: boolean;
   onMouseEnter?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
   onMouseLeave?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
   onPointerDownCapture?: (event: PointerEvent) => void;
@@ -46,25 +44,22 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   const [position, setPosition] = createSignal<DesktopAnchoredOverlayPosition | null>(null);
   const [overlayElement, setOverlayElement] = createSignal<HTMLDivElement | undefined>();
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
-  // Floe's presence states drive the menu motion: `entering` holds the offset,
-  // scale and transparency for the frame the surface first paints, then `open`
-  // releases them along the declared transition. A surface stays in `entering`
-  // until it has a measured position, because an unpositioned panel is hidden
-  // and would otherwise finish its motion off screen.
-  const [presence, setPresence] = createSignal<'entering' | 'open'>('entering');
+  const presence = createFloatingPresence({
+    open: () => props.open,
+    element: overlayElement,
+    exitDurationMs: props.motion === 'tooltip' ? 90 : 160,
+  });
+  let wasMounted = props.open;
   createEffect(() => {
-    if (!props.open) {
-      setPresence('entering');
-      return;
-    }
-    if (!position()) return;
-    const frame = requestAnimationFrame(() => setPresence('open'));
-    onCleanup(() => cancelAnimationFrame(frame));
+    const mounted = presence.mounted();
+    // IMPORTANT: Only the current completed exit may release its session; reopening cancels it.
+    if (wasMounted && !mounted && !props.open) props.onExitComplete?.();
+    wasMounted = mounted;
   });
 
   let frame = 0;
   let followUpFrames = 0;
-  let overlayRef: HTMLDivElement | undefined;
+  let positionerRef: HTMLDivElement | undefined;
   let retainedAnchorRect: DOMRect | undefined;
   let pointerCaptureElement: HTMLDivElement | undefined;
 
@@ -89,10 +84,10 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   };
 
   const updatePosition = () => {
-    if (props.positionFrozen === true) {
+    if (presence.exiting()) {
       return;
     }
-    const currentOverlay = overlayElement() ?? overlayRef;
+    const currentOverlay = positionerRef;
     if (!currentOverlay || typeof window === 'undefined') {
       return;
     }
@@ -100,7 +95,8 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     if (props.anchorRef?.isConnected) retainedAnchorRect = props.anchorRef.getBoundingClientRect();
     const anchorRect = retainedAnchorRect;
     if (!anchorRect) return;
-    const overlayRect = currentOverlay.getBoundingClientRect();
+    const overlay = overlayElement();
+    if (!overlay) return;
     const viewport = window.visualViewport;
     const viewportWidth = viewport?.width ?? window.innerWidth;
     const viewportHeight = viewport?.height ?? window.innerHeight;
@@ -109,8 +105,8 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
 
     const nextPosition = resolveDesktopAnchoredOverlayPosition({
       anchorRect,
-      overlayWidth: overlayRect.width,
-      overlayHeight: overlayRect.height,
+      overlayWidth: overlay.offsetWidth,
+      overlayHeight: overlay.offsetHeight,
       viewportWidth,
       viewportHeight,
       preferredPlacement: props.placement,
@@ -144,16 +140,19 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   };
 
   createEffect(() => {
-    if (!props.open) {
+    if (!presence.mounted()) {
       clearFrame();
       setPosition(null);
       return;
     }
-    if (props.positionFrozen === true) {
+    if (presence.exiting()) {
       clearFrame();
       return;
     }
+    if (!overlayElement()) return;
 
+    // Establish the resolved starting pose before presence opens on the next frame.
+    updatePosition();
     schedulePositionSettlingUpdates();
 
     const handleViewportChange = () => schedulePositionUpdate();
@@ -163,7 +162,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
     const anchorEl = props.anchorRef;
-    const nextOverlayRef = overlayElement() ?? overlayRef;
+    const nextOverlayRef = positionerRef;
     const observer = typeof ResizeObserver === 'undefined' || !anchorEl || !nextOverlayRef
       ? null
       : new ResizeObserver(() => {
@@ -190,60 +189,82 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     clearFrame();
   });
 
+  // Position uses untransformed layout dimensions; only the inner surface moves.
   // IMPORTANT: Exiting or hidden surfaces must stop accepting keyboard and pointer input immediately.
   return (
-    <Portal>
-      <div
-        ref={(element) => {
-          clearPointerDownCapture();
-          overlayRef = element;
-          element.addEventListener('pointerdown', handlePointerDownCapture, true);
-          pointerCaptureElement = element;
-          setOverlayElement(element);
-          props.onOverlayRef?.(element);
-          if (element && props.open && props.positionFrozen !== true) {
-            updatePosition();
-            schedulePositionSettlingUpdates();
-          }
-        }}
-        inert={props.interactive !== true || !position()}
-        aria-hidden={props.inactive || !position() ? true : undefined}
-        role={props.role}
-        aria-modal={props.ariaModal}
-        aria-label={props.ariaLabel}
-        data-floe-surface="floating"
-        data-placement={resolvedPlacement()}
-        data-placement-lock={props.placementLock}
-        data-floating-presence={props.motion === 'menu' ? presence() : undefined}
-        class={cn(
-          'fixed',
-          props.interactive === true ? 'pointer-events-auto' : 'pointer-events-none',
-          props.motion === 'menu' && 'floe-floating-presence floe-floating-menu',
-          props.class,
-        )}
-        style={{
-          left: position() ? `${position()!.left}px` : '0px',
-          top: position() ? `${position()!.top}px` : '0px',
-          visibility: position() ? 'visible' : 'hidden',
-          ...(position()?.maxWidth !== undefined ? { maxWidth: `${position()!.maxWidth}px` } : {}),
-          ...(position()?.maxHeight !== undefined
-            ? { '--redeven-anchored-overlay-max-height': `${position()!.maxHeight}px` }
-            : {}),
-        }}
-        onMouseEnter={props.onMouseEnter}
-        onMouseLeave={props.onMouseLeave}
-        onKeyDown={props.onKeyDown}
-        onFocusIn={props.onFocusIn}
-        onFocusOut={props.onFocusOut}
-      >
-        {props.children}
-        {!props.hideArrow && (
+    <Show when={presence.mounted()}>
+      <Portal>
+        <div
+          ref={positionerRef}
+          data-redeven-overlay-positioner=""
+          class="fixed pointer-events-none"
+          style={{
+            'z-index': props.zIndex ?? 225,
+            width: 'max-content',
+            left: position() ? `${position()!.left}px` : '0px',
+            top: position() ? `${position()!.top}px` : '0px',
+            visibility: position() ? 'visible' : 'hidden',
+            ...(position()?.maxWidth !== undefined ? { maxWidth: `${position()!.maxWidth}px` } : {}),
+            ...(position()?.maxHeight !== undefined
+              ? { '--redeven-anchored-overlay-max-height': `${position()!.maxHeight}px` }
+              : {}),
+          }}
+        >
           <div
-            class={cn('redeven-anchored-overlay-arrow absolute h-0 w-0', desktopOverlayArrowClass(resolvedPlacement()))}
-            style={position() ? desktopOverlayArrowStyle(position()!) : undefined}
-          />
-        )}
-      </div>
-    </Portal>
+            ref={(element) => {
+              clearPointerDownCapture();
+              element.addEventListener('pointerdown', handlePointerDownCapture, true);
+              pointerCaptureElement = element;
+              setOverlayElement(element);
+              props.onOverlayRef?.(element);
+              onCleanup(() => {
+                clearPointerDownCapture();
+                props.onOverlayRef?.(undefined);
+              });
+              if (element && props.open) {
+                updatePosition();
+                schedulePositionSettlingUpdates();
+              }
+            }}
+            inert={!props.open || props.interactive !== true || !position()}
+            aria-hidden={!props.open || !position() ? true : undefined}
+            role={props.role}
+            aria-modal={props.ariaModal}
+            aria-label={props.ariaLabel}
+            data-floe-surface="floating"
+            data-placement={resolvedPlacement()}
+            data-placement-lock={props.placementLock}
+            data-floating-presence={presence.state()}
+            data-floating-side={resolvedPlacement()}
+            class={cn(
+              'relative floe-floating-presence',
+              props.open && props.interactive === true ? 'pointer-events-auto' : 'pointer-events-none',
+              props.motion === 'tooltip' ? 'floe-floating-tooltip' : 'floe-floating-menu',
+              props.class,
+            )}
+            style={{
+              '--floe-floating-origin': position()
+                ? (resolvedPlacement() === 'top' || resolvedPlacement() === 'bottom'
+                  ? `${position()!.arrowOffset}px ${resolvedPlacement() === 'top' ? 'bottom' : 'top'}`
+                  : `${resolvedPlacement() === 'left' ? 'right' : 'left'} ${position()!.arrowOffset}px`)
+                : undefined,
+            }}
+            onMouseEnter={props.onMouseEnter}
+            onMouseLeave={props.onMouseLeave}
+            onKeyDown={props.onKeyDown}
+            onFocusIn={props.onFocusIn}
+            onFocusOut={props.onFocusOut}
+          >
+            {props.children}
+            {!props.hideArrow && (
+              <div
+                class={cn('redeven-anchored-overlay-arrow absolute h-0 w-0', desktopOverlayArrowClass(resolvedPlacement()))}
+                style={position() ? desktopOverlayArrowStyle(position()!) : undefined}
+              />
+            )}
+          </div>
+        </div>
+      </Portal>
+    </Show>
   );
 }

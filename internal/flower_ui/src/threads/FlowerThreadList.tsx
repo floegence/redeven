@@ -1,4 +1,4 @@
-import { StableText, Input } from '@floegence/floe-webapp-core/ui';
+import { StableText, Input, createFloatingPresence, type FloatingPresenceState } from '@floegence/floe-webapp-core/ui';
 import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
@@ -193,6 +193,8 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
 };
 
 type FlowerThreadContextMenuProps = Readonly<{
+  presenceState: FloatingPresenceState;
+  onPanelRef: (element: HTMLDivElement | undefined) => void;
   item: FlowerThreadListItem;
   x: number;
   y: number;
@@ -247,6 +249,8 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
   };
   return (
     <FlowerContextMenu
+      presenceState={props.presenceState}
+      onPanelRef={props.onPanelRef}
       x={props.x}
       y={props.y}
       label={props.copy.contextMenuLabel(props.item.title.trim())}
@@ -419,6 +423,10 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     const item = itemByID().get(state.threadID);
     return item ? { ...state, item } : null;
   });
+  const [menuPanel, setMenuPanel] = createSignal<HTMLDivElement>();
+  const menuPresence = createFloatingPresence({ open: () => Boolean(menuPresentation()), element: menuPanel });
+  const presentedMenu = createMemo<ReturnType<typeof menuPresentation>>(previous => menuPresentation()
+    ?? (menuPresence.mounted() ? previous ?? null : null));
   const warmupRows = [0, 1, 2, 3, 4, 5] as const;
   const showLoadingSkeleton = createMemo(() => (props.warmup === true || props.loading === true) && props.items.length === 0);
   const showLoadError = createMemo(() => Boolean(props.error?.trim()) && !showLoadingSkeleton());
@@ -607,9 +615,11 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           </Show>
         </Show>
       </div>
-      <Show when={menuPresentation()}>
+      <Show when={menuPresence.mounted() && presentedMenu()}>
         {(state) => (
           <FlowerThreadContextMenu
+            presenceState={menuPresence.state()}
+            onPanelRef={setMenuPanel}
             item={state().item}
             workingDirectory={state().workingDirectory}
             directoryActions={props.directoryActions}

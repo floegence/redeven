@@ -16588,7 +16588,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "desktop",
           "flower",
@@ -16598,15 +16598,15 @@
         "title": "Desktop Welcome navigation",
         "type": "UI Contract"
       },
-      "body_length": 1564,
+      "body_length": 4538,
       "summary": "Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Visited pages retain state; readiness gates Flower requests, not navigation. Explicit Environment tab changes may animate cards, while refresh/return preserves headers and skips entrance replay.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Header, logo, sidebar and contextual actions select locally. Health/progress/snapshot updates cannot override navigation. Main captures navigation after asynchronous reads so stale destinations cannot publish newer revisions.\n- Selecting Environments, Redeven Cloud or Gateways renders immediately. Hiding/disposing cancels motion; return does not replay it. [Environment library](desktop-environment-library.md#library) retains card/state ownership.\n- Environments and Flower mount on first visit and remain mounted until disposal. Filesystem invalidation uses environment ID, Runtime start identity and session key, never health/probe timestamps.\n\n- Gateway management is an in-shell detail page. Returning to All Gateways restores list search, filter, scroll and focus. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns its sections, enrollment dialogs and recovery behavior; global navigation preserves the retained management context.",
-          "char_count": 971
+          "body": "- Header, logo, sidebar and contextual actions select locally. Health/progress/snapshot updates cannot override navigation. Main captures navigation after asynchronous reads so stale destinations cannot publish newer revisions.\n- Selecting Environments, Redeven Cloud or Gateways renders immediately. Hiding/disposing cancels motion; return does not replay it. [Environment library](desktop-environment-library.md#library) retains card/state ownership.\n- Environments and Flower mount on first visit and remain mounted until disposal. Filesystem invalidation uses environment ID, Runtime start identity and session key, never health/probe timestamps.\n\n- Gateway management is an in-shell detail page. Returning to All Gateways restores list search, filter, scroll and focus. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns its sections, enrollment dialogs and recovery behavior; global navigation preserves the retained management context.\n\n## Popup and dropdown ownership\n\nWelcome consumes published Floe presence and menu/tooltip CSS. Each surface has one presence owner; closing immediately revokes pointer/keyboard input and accessibility exposure, freezes its measured placement, and retains the DOM through the CSS exit. Reopening reverses the same panel and preserves drafts/selection. Only the inner surface transforms; placement reads untransformed layout dimensions. Resolved collision direction and the anchor point determine motion origin. Reduced motion uses Floe's immediate recipe.\n\n| Welcome entry points | Owner |\n| --- | --- |\n| Environment split actions | `DesktopAnchoredOverlaySurface` |\n| Runtime/Gateway progress, recovery, Cloud account/connection details, SSH loading details and directory help | `DesktopActionPopover` through the same surface |\n| Hover details and help | `DesktopPopover` / `DesktopTooltip`; tooltip uses the shorter Floe recipe |\n| Connection details and retained QR disclosure | `EndpointsPopover` through the same surface; QR expansion stays an internal disclosure |\n| Appearance picker | `DesktopThemePicker` through the same surface |\n| Language, container, official Cloud provider and SSH destination options | `DesktopAnchoredListbox` |\n| Saved Gateway/address pickers and Gateway object/connection actions | Published `Dropdown` |\n| Gateway member/leave target, Cloud route and SSH bootstrap strategy | Published `Select`, including native form state and accessible listbox semantics |\n| Embedded Flower model, permission, reasoning, thread switcher, subagent, goal, composer overflow/reference/command and context/compaction details | Existing Flower adapters consuming shared Floe presence |\n| Embedded Flower settings, extensions and browser connection selectors | Published `Select` / `Dropdown` |\n| Embedded Flower thread/transcript context menus | `FlowerContextMenu`; callers retain the current presentation through the shared exit |\n| Command palette, feedback disclosure, dialogs and drawers | Published Floe components retain their own presence and focus lifecycle |\n\nDo not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. No native visible select popup or local popup animation recipe remains in Welcome chrome/settings.",
+          "char_count": 3455
         },
         {
           "id": "boundaries",
@@ -16619,8 +16619,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:desktop/src/welcome/App.tsx` - Source.\n- `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.",
-          "char_count": 111
+          "body": "- `redeven:desktop/src/welcome/App.tsx` - Source.\n- `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.\n- `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.\n- `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.\n- `floe-webapp:scripts/check-select-motion-browser.mjs` - Select/Combobox/MultiSelect motion and collision checks in Chromium, WebKit and Firefox.",
+          "char_count": 601
         }
       ],
       "evidence": [
@@ -16633,6 +16633,21 @@
           "id": "redeven:desktop/src/main/desktopWelcomeState.ts:0:source.",
           "source": "redeven:desktop/src/main/desktopWelcomeState.ts",
           "description": "Source."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-welcome-popup-motion.mjs:0:browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.",
+          "source": "redeven:desktop/scripts/check-welcome-popup-motion.mjs",
+          "description": "Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx:0:exit input revocation, retained drafts and completion.",
+          "source": "redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx",
+          "description": "Exit input revocation, retained drafts and completion."
+        },
+        {
+          "id": "floe-webapp:scripts/check-select-motion-browser.mjs:0:select/combobox/multiselect motion and collision checks in chromium, webkit and firefox.",
+          "source": "floe-webapp:scripts/check-select-motion-browser.mjs",
+          "description": "Select/Combobox/MultiSelect motion and collision checks in Chromium, WebKit and Firefox."
         }
       ],
       "snippet": "Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Visited pages retain state; readiness gates Flower requests, not navigation. Explicit Environment tab changes may animate cards, while refresh/retur",
@@ -25672,5 +25687,5 @@
       ]
     }
   ],
-  "source_sha256": "488f9d5547698b5c5f3d54fa9c0964fc75456f070e037672b08f05e04410f278"
+  "source_sha256": "a7afb6a91a93af7047179a639bcaccfba282b18336b4ab014f24efd9a21ac2dc"
 }

@@ -977,7 +977,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
 }
 
 .redeven-endpoints-surface {
-  --endpoint-enter-offset: -0.3rem;
   width: min(22rem, calc(100vw - 1rem));
 }
 
@@ -987,25 +986,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
-}
-
-.redeven-endpoints-surface[data-placement='top'] {
-  --endpoint-enter-offset: 0.3rem;
-}
-
-.redeven-endpoints-surface--closing {
-  pointer-events: none;
-}
-
-.redeven-endpoints-surface > .redeven-anchored-overlay-arrow {
-  filter: drop-shadow(0 0 1px color-mix(in srgb, var(--border) 80%, transparent));
-  animation: redeven-endpoint-arrow-in 180ms ease both;
-  transition: opacity 100ms ease;
-}
-
-.redeven-endpoints-surface--closing > .redeven-anchored-overlay-arrow {
-  animation: none;
-  opacity: 0;
 }
 
 .redeven-endpoints-popover {
@@ -1019,27 +999,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
   border-radius: var(--floe-radius-panel);
   background: var(--popover);
   box-shadow: var(--floe-elevation-float);
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 180ms ease-out, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.redeven-endpoints-popover[data-state='entering'],
-.redeven-endpoints-popover[data-state='exiting'] {
-  opacity: 0;
-  transform: translateY(var(--endpoint-enter-offset));
-}
-
-.redeven-endpoints-popover[data-state='exiting'] {
-  transition-duration: 140ms;
-  transition-timing-function: ease-in;
-}
-
-@starting-style {
-  .redeven-endpoints-popover {
-    opacity: 0;
-    transform: translateY(var(--endpoint-enter-offset));
-  }
 }
 
 .redeven-endpoints-popover-header {
@@ -1142,11 +1101,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
 .redeven-endpoints-share-content {
   min-height: 0;
   overflow: hidden;
-}
-
-@keyframes redeven-endpoint-arrow-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 /* One reading edge and quiet separators for connection facts and access scope. */
@@ -1596,55 +1550,6 @@ html:not(.dark) .redeven-endpoint-qr-panel {
     0 0 0 2px var(--background),
     0 0 0 4px var(--ring);
 }
-
-/* ── Filters ── */
-
-/* A native select wearing Floe's field recipe: the shared edge, the 10px field
- * radius and the well fill, with the platform chevron replaced by the same
- * quiet mark the dropdown rows use. Focus changes the edge colour only, per
- * the input focus border contract. */
-.redeven-native-select {
-  width: 100%;
-  cursor: pointer;
-  appearance: none;
-  border: 1px solid var(--floe-field-edge);
-  border-radius: var(--floe-radius-field);
-  background-color: var(--floe-field-fill);
-  background-image: var(--redeven-select-chevron);
-  background-repeat: no-repeat;
-  background-position: right var(--floe-control-padding-md) center;
-  background-size: 0.875rem 0.875rem;
-  padding: 0 var(--floe-control-padding-lg) 0 var(--floe-control-padding-md);
-  min-height: var(--floe-control-height-md);
-  font-size: var(--floe-type-control);
-  line-height: var(--floe-line-control);
-  color: var(--foreground);
-  transition:
-    background-color var(--floe-duration-fast) var(--floe-ease-out),
-    border-color var(--floe-duration-fast) var(--floe-ease-out);
-}
-
-.redeven-native-select:hover:not(:disabled) {
-  border-color: var(--floe-field-edge-hover);
-}
-
-.redeven-native-select:focus-visible {
-  outline: none;
-  border-color: var(--ring);
-}
-
-.redeven-native-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-@media (forced-colors: active) {
-  .redeven-native-select {
-    appearance: auto;
-    background-image: none;
-  }
-}
-
 
 /* ── Header separator ── */
 
@@ -2337,9 +2242,6 @@ html:not(.dark) .redeven-header-separator {
   --redeven-action-popover-width: min(19rem, calc(100vw - 1rem));
   --redeven-action-popover-border: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 86%, var(--foreground) 14%);
   width: var(--redeven-action-popover-width);
-  opacity: 1;
-  animation: redeven-action-popover-enter 240ms var(--floe-ease-out) both;
-  transform-origin: var(--redeven-action-popover-origin, 50% 100%);
 }
 
 .redeven-action-popover-frame {
@@ -2368,35 +2270,6 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover-surface[data-placement='right'] > .redeven-anchored-overlay-arrow {
   filter: drop-shadow(-1px 0 0 var(--redeven-action-popover-border));
-}
-
-.redeven-action-popover-surface--closing {
-  animation: redeven-action-popover-exit var(--floe-duration-fast) var(--floe-ease-out) both;
-  pointer-events: none;
-}
-
-@keyframes redeven-action-popover-enter {
-  from {
-    opacity: 0;
-    transform: translateY(0.25rem);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes redeven-action-popover-exit {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(0.12rem);
-  }
 }
 
 .redeven-action-popover {
@@ -3678,7 +3551,6 @@ pre,
   color: var(--muted-foreground);
   font-size: var(--floe-type-caption);
   line-height: 1.65;
-  animation: redeven-action-popover-enter 180ms ease both;
 }
 
 .redeven-gateway-card__explanation p + p {
@@ -4111,12 +3983,6 @@ pre,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .redeven-action-popover-surface,
-  .redeven-action-popover-surface--closing {
-    animation-duration: 1ms;
-    transform: none;
-  }
-
   .redeven-environment-card,
   .redeven-split-action-toggle,
   .redeven-split-menu-item {
@@ -4513,8 +4379,7 @@ pre,
   .redeven-center-search input { min-height: 44px; font-size: max(16px, 1rem); }
   [role='dialog'] input:not([type='radio']),
   .ssh-settings-form input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
-  .ssh-settings-form select,
-  .redeven-native-select { min-height: 44px; font-size: 1rem; }
+  [data-floe-control='select'] { min-height: 44px; font-size: 1rem; }
 }
 
 /* Compact spacing preserves the existing owner surfaces and all action slots. */

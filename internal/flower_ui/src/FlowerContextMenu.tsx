@@ -1,10 +1,12 @@
 import type { JSX } from 'solid-js';
 import { createEffect, createMemo, onCleanup } from 'solid-js';
 import { useResizeObserver } from '@floegence/floe-webapp-core';
-import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { SurfaceFloatingLayer, type FloatingPresenceState } from '@floegence/floe-webapp-core/ui';
 
 /** Flower menus share projected placement and keyboard/focus ownership. */
 export function FlowerContextMenu(props: Readonly<{
+  presenceState: FloatingPresenceState;
+  onPanelRef: (element: HTMLDivElement | undefined) => void;
   x: number;
   y: number;
   label: string;
@@ -14,12 +16,13 @@ export function FlowerContextMenu(props: Readonly<{
 }>): JSX.Element {
   let menuRef: HTMLDivElement | undefined;
   let disposed = false;
+  const exiting = createMemo(() => props.presenceState === 'exiting');
   const contentSize = useResizeObserver(() => menuRef);
   const menuSize = createMemo(() => {
     if (!contentSize() || !menuRef) return undefined;
     // The upstream layer clamps in client coordinates, including projected
     // surface scale. Measure the complete border box instead of counting rows.
-    const { width, height } = menuRef.getBoundingClientRect();
+    const { width, height } = menuRef.parentElement!.getBoundingClientRect();
     return { width, height };
   });
   const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled):not([aria-disabled="true"])') ?? []);
@@ -43,6 +46,8 @@ export function FlowerContextMenu(props: Readonly<{
     return path.includes(node) || (event.target instanceof Node && node.contains(event.target));
   };
   createEffect(() => {
+    if (exiting()) return;
+    disposed = false;
     const onPointerDown = (event: PointerEvent) => {
       if (eventPathContains(event, menuRef)) return;
       props.onClose();
@@ -102,10 +107,17 @@ export function FlowerContextMenu(props: Readonly<{
       data-flower-floating-layer="true"
     >
       <div
-        ref={menuRef}
+        ref={element => {
+          menuRef = element;
+          props.onPanelRef(element);
+          onCleanup(() => props.onPanelRef(undefined));
+        }}
+        data-floating-presence={props.presenceState}
+        inert={exiting()}
+        aria-hidden={exiting() ? 'true' : undefined}
         role="menu"
         tabIndex={-1}
-        class="flower-thread-context-menu"
+        class="flower-thread-context-menu floe-floating-presence floe-floating-menu"
         data-floe-surface="floating"
         aria-label={props.label}
         onFocusOut={(event) => {

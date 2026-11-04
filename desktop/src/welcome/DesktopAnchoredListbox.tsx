@@ -1,4 +1,5 @@
-import { createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
+import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { Portal } from 'solid-js/web';
 
 export type DesktopAnchoredListboxPlacement = 'top' | 'bottom';
@@ -118,23 +119,10 @@ function readDesktopTitlebarTopInset(): number {
 
 export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
   const [geometry, setGeometry] = createSignal<DesktopAnchoredListboxGeometry | null>(null);
-  // Floe's menu motion, the same recipe the shell's own menus use: the panel
-  // holds its enter offset, scale and transparency for the first frame and then
-  // releases them along the declared transition. `entering` lasts until there is
-  // geometry to place the panel by — a hidden, unpositioned panel would otherwise
-  // finish its motion off screen and appear already settled.
-  const [presence, setPresence] = createSignal<'entering' | 'open'>('entering');
-  createEffect(() => {
-    if (!props.open) {
-      setPresence('entering');
-      return;
-    }
-    if (!geometry()) return;
-    const presenceFrame = requestAnimationFrame(() => setPresence('open'));
-    onCleanup(() => cancelAnimationFrame(presenceFrame));
-  });
+  const [overlayElement, setOverlayElement] = createSignal<HTMLDivElement>();
+  const presence = createFloatingPresence({ open: () => props.open, element: overlayElement });
   let frame = 0;
-  let overlayRef: HTMLDivElement | undefined;
+  let positionerRef: HTMLDivElement | undefined;
 
   const clearFrame = () => {
     if (!frame) {
@@ -145,7 +133,7 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
   };
 
   const updateGeometry = () => {
-    if (!props.anchorRef || !overlayRef || typeof window === 'undefined') {
+    if (presence.exiting() || !props.anchorRef || !positionerRef || typeof window === 'undefined') {
       return;
     }
     const viewport = window.visualViewport;
@@ -155,7 +143,7 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
     const viewportOffsetTop = viewport?.offsetTop ?? 0;
     const nextGeometry = resolveDesktopAnchoredListboxGeometry({
       anchorRect: props.anchorRef.getBoundingClientRect(),
-      overlayHeight: overlayRef.getBoundingClientRect().height,
+      overlayHeight: overlayElement()?.offsetHeight ?? 0,
       viewportWidth,
       viewportHeight,
       viewportTopInset: readDesktopTitlebarTopInset(),
@@ -179,12 +167,16 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
   };
 
   createEffect(() => {
-    if (!props.open) {
+    if (!presence.mounted()) {
       clearFrame();
       setGeometry(null);
       return;
     }
 
+    if (presence.exiting()) { clearFrame(); return; }
+    if (!overlayElement()) return;
+    // Measure the entering pose before the shared presence advances to open.
+    updateGeometry();
     scheduleGeometryUpdate();
 
     const handleViewportChange = () => scheduleGeometryUpdate();
@@ -194,10 +186,10 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
     const anchorEl = props.anchorRef;
-    const nextOverlayRef = overlayRef;
+    const nextOverlayRef = positionerRef;
     const observer = typeof ResizeObserver === 'undefined' || !anchorEl || !nextOverlayRef
       ? null
-      : new ResizeObserver(() => updateGeometry());
+      : new ResizeObserver(() => scheduleGeometryUpdate());
     if (observer && anchorEl && nextOverlayRef) {
       observer.observe(anchorEl);
       observer.observe(nextOverlayRef);
@@ -215,39 +207,49 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
 
   onCleanup(() => {
     clearFrame();
-    props.onOverlayRef?.(undefined);
   });
 
   return (
-    <Portal>
-      <div
-        id={props.id}
-        ref={(element) => {
-          overlayRef = element;
-          props.onOverlayRef?.(element);
-        }}
-        role={props.role}
-        data-redeven-anchored-listbox=""
-        data-placement={geometry()?.placement ?? 'bottom'}
-        data-floating-presence={presence()}
-        class={cn(
-          'floe-floating-presence floe-floating-menu fixed z-[240] flex flex-col overflow-hidden rounded-panel border border-[var(--floe-line)] bg-popover text-popover-foreground shadow-[var(--floe-elevation-float)]',
-          props.class,
-        )}
-        style={{
-          left: geometry() ? `${geometry()!.left}px` : '0px',
-          top: geometry() ? `${geometry()!.top}px` : '0px',
-          width: geometry()
-            ? `${geometry()!.width}px`
-            : props.anchorRef
-              ? `${Math.max(props.anchorRef.getBoundingClientRect().width, props.width ?? 0)}px`
-              : '0px',
-          'max-height': geometry() ? `${geometry()!.maxHeight}px` : `${props.maxHeight ?? DEFAULT_MAX_HEIGHT}px`,
-          visibility: props.open && geometry() ? 'visible' : 'hidden',
-        }}
-      >
-        {props.children}
-      </div>
-    </Portal>
+    <Show when={presence.mounted()}>
+      <Portal>
+        <div
+          ref={positionerRef}
+          data-redeven-overlay-positioner=""
+          class="fixed z-[240] pointer-events-none"
+          style={{
+            left: geometry() ? `${geometry()!.left}px` : '0px',
+            top: geometry() ? `${geometry()!.top}px` : '0px',
+            width: geometry() ? `${geometry()!.width}px` : `${Math.max(props.anchorRef?.getBoundingClientRect().width ?? 0, props.width ?? 0)}px`,
+            visibility: geometry() ? 'visible' : 'hidden',
+          }}
+        >
+          <div
+            id={props.id}
+            ref={(element) => {
+              setOverlayElement(element);
+              updateGeometry();
+              props.onOverlayRef?.(element);
+              onCleanup(() => props.onOverlayRef?.(undefined));
+            }}
+            role={props.role}
+            data-redeven-anchored-listbox=""
+            data-placement={geometry()?.placement ?? 'bottom'}
+            data-floating-presence={presence.state()}
+            data-floating-side={geometry()?.placement ?? 'bottom'}
+            inert={!props.open || !geometry()}
+            aria-hidden={!props.open || !geometry() ? true : undefined}
+            class={cn(
+              'floe-floating-presence floe-floating-menu relative pointer-events-auto flex flex-col overflow-hidden rounded-panel border border-[var(--floe-line)] bg-popover text-popover-foreground shadow-[var(--floe-elevation-float)]',
+              props.class,
+            )}
+            style={{
+              'max-height': geometry() ? `${geometry()!.maxHeight}px` : `${props.maxHeight ?? DEFAULT_MAX_HEIGHT}px`,
+            }}
+          >
+            {props.children}
+          </div>
+        </div>
+      </Portal>
+    </Show>
   );
 }

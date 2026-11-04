@@ -2350,72 +2350,70 @@ function DesktopLanguagePicker(props: Readonly<{
         <Globe class="h-4 w-4" />
       </TopBarIconButton>
 
-      <Show when={open()}>
-        <DesktopAnchoredListbox
-          id="redeven-desktop-language-options"
-          anchorRef={buttonRef}
-          class="min-w-72 p-1"
-          width={288}
-          maxHeight={360}
-          role="listbox"
-          open={open()}
-          onOverlayRef={(element) => {
-            listboxRef = element;
-          }}
-        >
-          <div class="min-h-0 flex-1 overflow-auto">
-            <For each={options()}>
-              {(option, index) => {
-                const selected = createMemo(() => props.snapshot.preference === option.preference);
-                const highlighted = createMemo(() => highlightedIndex() === index());
-                return (
-                  <button
-                    type="button"
-                    id={`redeven-desktop-language-option-${index()}`}
-                    role="option"
-                    tabIndex={-1}
-                    aria-selected={selected() ? 'true' : 'false'}
-                    class={cn(
-                      // Floe's menu row: a reserved leading mark slot so every
-                      // label starts on the same column, the row height token,
-                      // and a soft ink that the highlight lifts to full weight.
-                      'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left',
-                      'min-h-[calc(var(--floe-row-height)+0.375rem)]',
-                      'transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)]',
-                      highlighted()
-                        ? 'bg-[var(--floe-state-hover)] text-foreground'
-                        : 'text-[var(--floe-ink-soft)] hover:bg-[var(--floe-state-hover)] hover:text-foreground',
-                    )}
-                    title={`${option.label} - ${option.secondary}`}
-                    onClick={() => selectPreference(option.preference)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        selectPreference(option.preference);
-                      }
-                    }}
-                    onMouseEnter={() => setHighlightedIndex(index())}
-                    onMouseDown={(event) => {
+      <DesktopAnchoredListbox
+        id="redeven-desktop-language-options"
+        anchorRef={buttonRef}
+        class="min-w-72 p-1"
+        width={288}
+        maxHeight={360}
+        role="listbox"
+        open={open()}
+        onOverlayRef={(element) => {
+          listboxRef = element;
+        }}
+      >
+        <div class="min-h-0 flex-1 overflow-auto">
+          <For each={options()}>
+            {(option, index) => {
+              const selected = createMemo(() => props.snapshot.preference === option.preference);
+              const highlighted = createMemo(() => highlightedIndex() === index());
+              return (
+                <button
+                  type="button"
+                  id={`redeven-desktop-language-option-${index()}`}
+                  role="option"
+                  tabIndex={-1}
+                  aria-selected={selected() ? 'true' : 'false'}
+                  class={cn(
+                    // Floe's menu row: a reserved leading mark slot so every
+                    // label starts on the same column, the row height token,
+                    // and a soft ink that the highlight lifts to full weight.
+                    'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left',
+                    'min-h-[calc(var(--floe-row-height)+0.375rem)]',
+                    'transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)]',
+                    highlighted()
+                      ? 'bg-[var(--floe-state-hover)] text-foreground'
+                      : 'text-[var(--floe-ink-soft)] hover:bg-[var(--floe-state-hover)] hover:text-foreground',
+                  )}
+                  title={`${option.label} - ${option.secondary}`}
+                  onClick={() => selectPreference(option.preference)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       selectPreference(option.preference);
-                    }}
-                  >
-                    <span class="flex h-3.5 w-3.5 flex-none items-center justify-center">
-                      <Show when={selected()}>
-                        <Check class="h-3 w-3" />
-                      </Show>
-                    </span>
-                    <span class="min-w-0 flex-1">
-                      <span class="block truncate text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]">{option.label}</span>
-                      <span class="block truncate text-[length:var(--floe-type-caption)] leading-[var(--floe-line-caption,1rem)] text-[var(--floe-ink-quiet)]">{option.secondary}</span>
-                    </span>
-                  </button>
-                );
-              }}
-            </For>
-          </div>
-        </DesktopAnchoredListbox>
-      </Show>
+                    }
+                  }}
+                  onMouseEnter={() => setHighlightedIndex(index())}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    selectPreference(option.preference);
+                  }}
+                >
+                  <span class="flex h-3.5 w-3.5 flex-none items-center justify-center">
+                    <Show when={selected()}>
+                      <Check class="h-3 w-3" />
+                    </Show>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]">{option.label}</span>
+                    <span class="block truncate text-[length:var(--floe-type-caption)] leading-[var(--floe-line-caption,1rem)] text-[var(--floe-ink-quiet)]">{option.secondary}</span>
+                  </span>
+                </button>
+              );
+            }}
+          </For>
+        </div>
+      </DesktopAnchoredListbox>
     </>
   );
 }
@@ -8314,7 +8312,7 @@ export function EndpointsPopover(props: Readonly<{
   let anchorRef: HTMLButtonElement | undefined;
   const [popoverRef, setPopoverRef] = createSignal<HTMLDivElement>();
 
-  const presence = createFloatingPresence({ open: () => props.open, exitDurationMs: 140 });
+  const [popoverMounted, setPopoverMounted] = createSignal(false);
   const popoverID = createUniqueId();
   const close = () => {
     props.onOpenChange(false);
@@ -8323,7 +8321,7 @@ export function EndpointsPopover(props: Readonly<{
 
   const presentedSelection = createMemo<string>((previous) => props.open
     ? props.selectedEndpointID ?? ''
-    : presence.mounted() ? previous : '', '');
+    : popoverMounted() ? previous : '', '');
   const selectedEndpoint = createMemo(() => props.endpoints.filter(isShareableConnectionAddress)
     .find((endpoint) => endpoint.id === presentedSelection()) ?? null);
 
@@ -8353,7 +8351,7 @@ export function EndpointsPopover(props: Readonly<{
         aria-label={props.i18n.t('environmentCenter.showEndpoints')}
         aria-haspopup="dialog"
         aria-expanded={props.open}
-        aria-controls={presence.mounted() ? popoverID : undefined}
+        aria-controls={popoverMounted() ? popoverID : undefined}
         onClick={(e) => {
           e.stopPropagation();
           props.onOpenChange(!props.open);
@@ -8365,69 +8363,68 @@ export function EndpointsPopover(props: Readonly<{
           aria-hidden="true"
         />
       </button>
-      <Show when={presence.mounted()}>
-        <DesktopAnchoredOverlaySurface
-          open={presence.mounted()}
-          anchorRef={anchorRef}
-          placement="bottom"
-          role={props.open ? 'dialog' : undefined}
-          ariaModal={false}
-          ariaLabel={props.i18n.t('environmentCenter.environmentEndpoints')}
-          interactive={props.open} inactive={!props.open}
-          class={cn('redeven-endpoints-surface z-[225] text-popover-foreground', presence.exiting() && 'redeven-endpoints-surface--closing')}
-          onOverlayRef={(element) => {
-            setPopoverRef(element);
-          }}
+      <DesktopAnchoredOverlaySurface
+        open={props.open}
+        anchorRef={anchorRef}
+        placement="bottom"
+        role={props.open ? 'dialog' : undefined}
+        ariaModal={false}
+        ariaLabel={props.i18n.t('environmentCenter.environmentEndpoints')}
+        interactive={props.open}
+        class="redeven-endpoints-surface z-[225] text-popover-foreground"
+        onExitComplete={() => setPopoverMounted(false)}
+        onOverlayRef={(element) => {
+          setPopoverRef(element);
+          if (element) setPopoverMounted(true);
+        }}
+      >
+        <div
+          id={popoverID}
+          class="redeven-endpoints-popover"
+          inert={!props.open}
+          aria-hidden={!props.open}
         >
-          <div
-            id={popoverID}
-            class="redeven-endpoints-popover"
-            data-state={presence.state()}
-            inert={presence.exiting()}
-            aria-hidden={presence.exiting()}
-          >
-            <div class="redeven-endpoints-popover-header">
-              <span class="redeven-endpoints-popover-mark" aria-hidden="true">
-                <span class="redeven-endpoint-trigger-icon" style={cardFactIconMaskStyle(ICON_ENDPOINTS)} />
-              </span>
-              <div class="redeven-endpoints-popover-heading">
-                <span class="redeven-endpoints-popover-eyebrow">{props.i18n.t('environmentCenter.environmentEndpoints')}</span>
-                <span class="redeven-endpoints-popover-title">{props.environmentLabel}</span>
-              </div>
-              <button
-                type="button"
-                class="redeven-endpoints-popover-close"
-                aria-label={props.i18n.t('environmentCenter.closeEndpoints')}
-                onClick={close}
-              >
-                <X class="h-3 w-3" />
-              </button>
+          <div class="redeven-endpoints-popover-header">
+            <span class="redeven-endpoints-popover-mark" aria-hidden="true">
+              <span class="redeven-endpoint-trigger-icon" style={cardFactIconMaskStyle(ICON_ENDPOINTS)} />
+            </span>
+            <div class="redeven-endpoints-popover-heading">
+              <span class="redeven-endpoints-popover-eyebrow">{props.i18n.t('environmentCenter.environmentEndpoints')}</span>
+              <span class="redeven-endpoints-popover-title">{props.environmentLabel}</span>
             </div>
-            <div class="redeven-endpoints-popover-body">
-              <div class="redeven-endpoints-popover-list">
-                <EnvironmentConnectionRows environmentID={props.environmentID} rows={props.endpoints} i18n={props.i18n}
-                  selectedID={presentedSelection()} selectForShare={props.selectEndpointForQRCode}
-                  configureAddress={props.configureAddress ? target => { close(); props.configureAddress?.(target); } : undefined}
-                  openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
-              </div>
-              <div class="redeven-endpoints-share" data-expanded={Boolean(selectedEndpoint())}
-                inert={!selectedEndpoint()} aria-hidden={!selectedEndpoint()}>
-                <div class="redeven-endpoints-share-content">
-                  <Show when={presentedShare()}>
-                    {(endpoint) => (
-                      <EndpointQRCodePanel
-                        i18n={props.i18n}
-                        endpoint={endpoint()}
-                        copyEnvironmentValue={props.copyEnvironmentValue}
-                      />
-                    )}
-                  </Show>
-                </div>
+            <button
+              type="button"
+              class="redeven-endpoints-popover-close"
+              aria-label={props.i18n.t('environmentCenter.closeEndpoints')}
+              onClick={close}
+            >
+              <X class="h-3 w-3" />
+            </button>
+          </div>
+          <div class="redeven-endpoints-popover-body">
+            <div class="redeven-endpoints-popover-list">
+              <EnvironmentConnectionRows environmentID={props.environmentID} rows={props.endpoints} i18n={props.i18n}
+                selectedID={presentedSelection()} selectForShare={props.selectEndpointForQRCode}
+                configureAddress={props.configureAddress ? target => { close(); props.configureAddress?.(target); } : undefined}
+                openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
+            </div>
+            <div class="redeven-endpoints-share" data-expanded={Boolean(selectedEndpoint())}
+              inert={!selectedEndpoint()} aria-hidden={!selectedEndpoint()}>
+              <div class="redeven-endpoints-share-content">
+                <Show when={presentedShare()}>
+                  {(endpoint) => (
+                    <EndpointQRCodePanel
+                      i18n={props.i18n}
+                      endpoint={endpoint()}
+                      copyEnvironmentValue={props.copyEnvironmentValue}
+                    />
+                  )}
+                </Show>
               </div>
             </div>
           </div>
-        </DesktopAnchoredOverlaySurface>
-      </Show>
+        </div>
+      </DesktopAnchoredOverlaySurface>
     </>
   );
 }
@@ -10241,112 +10238,111 @@ export function EnvironmentSplitActionButton(
           <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
         </button>
       </Show>
-      <Show when={props.menuOpen && hasMenuActions()}>
-        <DesktopAnchoredOverlaySurface
-          open={props.menuOpen && hasMenuActions()}
-          anchorRef={rootRef}
-          placement="top"
-          role="menu"
-          onKeyDown={handleMenuKeyDown}
-          ariaLabel={props.presentation.menu_button_label}
-          interactive
-          hideArrow
-          class="redeven-split-menu z-[230]"
-          onOverlayRef={(element) => {
-            menuRef = element; setMenuLayerRoot(element);
-          }}
-        >
-          <KeyedFor each={menuGroups()} by={group => group.id}>
-            {(group, index) => <>
-                <Show when={index() > 0}>
-                  <div class="my-1 border-t border-border/60" role="separator" />
-                </Show>
-                <KeyedFor each={group().gatewayActions} by={action => action.id}>
-                  {(action) => (
+      <DesktopAnchoredOverlaySurface
+        open={props.menuOpen && hasMenuActions()}
+        anchorRef={rootRef}
+        placement="top"
+        role="menu"
+        onKeyDown={handleMenuKeyDown}
+        ariaLabel={props.presentation.menu_button_label}
+        interactive={props.menuOpen}
+        hideArrow
+        class="redeven-split-menu z-[230]"
+        zIndex={230}
+        onOverlayRef={(element) => {
+          menuRef = element; setMenuLayerRoot(element);
+        }}
+      >
+        <KeyedFor each={menuGroups()} by={group => group.id}>
+          {(group, index) => <>
+              <Show when={index() > 0}>
+                <div class="my-1 border-t border-border/60" role="separator" />
+              </Show>
+              <KeyedFor each={group().gatewayActions} by={action => action.id}>
+                {(action) => (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="redeven-split-menu-item"
+                    data-tone={action().tone ?? "primary"}
+                    disabled={action().disabled}
+                    onClick={() => {
+                      if (action().disabled) return;
+                      closeMenu();
+                      action().onRun();
+                    }}
+                  >
+                    <span class="redeven-split-menu-item-icon"><Link /></span>
+                    <span class="redeven-control-label">{action().label}</span>
+                  </button>
+                )}
+              </KeyedFor>
+              <KeyedFor each={group().actions} by={item => item.id}>
+                {(item) => {
+                  const icon = () => splitMenuIcon(item().action.intent);
+                  const tone = () => splitMenuItemToneData(item().action.intent);
+                  const disabledByOperation = () =>
+                    props.operationState.actionsDisabled && environmentActionUsesLifecycleOwner(item().action);
+                  const disabledReason = () => {
+                    if (!item().action.enabled) {
+                      return item().action.disabled_reason;
+                    }
+                    if (!disabledByOperation()) {
+                      return undefined;
+                    }
+                    const activeProgress = props.operationState.activeProgress;
+                    return activeProgress
+                      ? props.i18n.t('environmentAction.blockedByActiveOperation', {
+                          operation: localizedProgressTitle(props.i18n, activeProgress),
+                          action: item().label,
+                        })
+                      : props.i18n.t('environmentAction.waitForOperationAcceptance', {
+                          action: item().label,
+                        });
+                  };
+                  const disabled = () => !item().action.enabled || disabledByOperation();
+                  return (
                     <button
                       type="button"
                       role="menuitem"
                       class="redeven-split-menu-item"
-                      data-tone={action().tone ?? "primary"}
-                      disabled={action().disabled}
+                      data-tone={tone() || undefined}
+                      disabled={disabled()}
+                      title={disabledReason() ?? item().label}
+                      aria-describedby={
+                        disabled() && disabledReason() ? `${props.environmentID}-${item().id}-disabled-reason` : undefined
+                      }
                       onClick={() => {
-                        if (action().disabled) return;
+                        if (disabled()) {
+                          return;
+                        }
                         closeMenu();
-                        action().onRun();
+                        props.onRunAction(item().action);
                       }}
                     >
-                      <span class="redeven-split-menu-item-icon"><Link /></span>
-                      <span class="redeven-control-label">{action().label}</span>
-                    </button>
-                  )}
-                </KeyedFor>
-                <KeyedFor each={group().actions} by={item => item.id}>
-                  {(item) => {
-                    const icon = () => splitMenuIcon(item().action.intent);
-                    const tone = () => splitMenuItemToneData(item().action.intent);
-                    const disabledByOperation = () =>
-                      props.operationState.actionsDisabled && environmentActionUsesLifecycleOwner(item().action);
-                    const disabledReason = () => {
-                      if (!item().action.enabled) {
-                        return item().action.disabled_reason;
-                      }
-                      if (!disabledByOperation()) {
-                        return undefined;
-                      }
-                      const activeProgress = props.operationState.activeProgress;
-                      return activeProgress
-                        ? props.i18n.t('environmentAction.blockedByActiveOperation', {
-                            operation: localizedProgressTitle(props.i18n, activeProgress),
-                            action: item().label,
-                          })
-                        : props.i18n.t('environmentAction.waitForOperationAcceptance', {
-                            action: item().label,
-                          });
-                    };
-                    const disabled = () => !item().action.enabled || disabledByOperation();
-                    return (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        class="redeven-split-menu-item"
-                        data-tone={tone() || undefined}
-                        disabled={disabled()}
-                        title={disabledReason() ?? item().label}
-                        aria-describedby={
-                          disabled() && disabledReason() ? `${props.environmentID}-${item().id}-disabled-reason` : undefined
-                        }
-                        onClick={() => {
-                          if (disabled()) {
-                            return;
-                          }
-                          closeMenu();
-                          props.onRunAction(item().action);
+                      <Show when={icon()}>
+                        {(Icon) => {
+                          const MenuIcon = Icon();
+                          return (
+                            <span class="redeven-split-menu-item-icon">
+                              <MenuIcon />
+                            </span>
+                          );
                         }}
-                      >
-                        <Show when={icon()}>
-                          {(Icon) => {
-                            const MenuIcon = Icon();
-                            return (
-                              <span class="redeven-split-menu-item-icon">
-                                <MenuIcon />
-                              </span>
-                            );
-                          }}
-                        </Show>
-                        <span class="redeven-control-label">{item().label}</span>
-                        <Show when={disabled() && disabledReason()}>
-                          <span id={`${props.environmentID}-${item().id}-disabled-reason`} class="sr-only">
-                            {disabledReason()}
-                          </span>
-                        </Show>
-                      </button>
-                    );
-                  }}
-                </KeyedFor>
-            </>}
-          </KeyedFor>
-        </DesktopAnchoredOverlaySurface>
-      </Show>
+                      </Show>
+                      <span class="redeven-control-label">{item().label}</span>
+                      <Show when={disabled() && disabledReason()}>
+                        <span id={`${props.environmentID}-${item().id}-disabled-reason`} class="sr-only">
+                          {disabledReason()}
+                        </span>
+                      </Show>
+                    </button>
+                  );
+                }}
+              </KeyedFor>
+          </>}
+        </KeyedFor>
+      </DesktopAnchoredOverlaySurface>
     </div>
   );
 }
@@ -12875,97 +12871,95 @@ function ContainerPicker(props: Readonly<{
           </span>
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
-        <Show when={open() && !props.disabled}>
-          <DesktopAnchoredListbox
-            id="environment-container-picker-options"
-            anchorRef={buttonRef}
-            class="shadow-xl"
-            maxHeight={320}
-            role="listbox"
-            open={open() && !props.disabled}
-            onOverlayRef={(element) => {
-              listboxRef = element;
-            }}
-          >
-            <div class="border-b border-border/70 p-2">
-              <Input
-                value={query()}
-                onInput={(event) => {
-                  setQuery(event.currentTarget.value);
-                  setHighlightedIndex(0);
-                }}
-                placeholder={props.i18n.t('connectionDialog.filterContainers')}
-                size="sm"
-                class="w-full"
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    moveHighlight(1);
-                  } else if (event.key === 'ArrowUp') {
-                    event.preventDefault();
-                    moveHighlight(-1);
-                  }
-                }}
-              />
-            </div>
-            <div
-              class="min-h-0 flex-1 overflow-auto p-1"
-              onWheel={(event) => {
-                const el = event.currentTarget as HTMLElement;
-                event.stopPropagation();
-                if (el.scrollHeight > el.clientHeight) {
-                  el.scrollTop += event.deltaY;
+        <DesktopAnchoredListbox
+          id="environment-container-picker-options"
+          anchorRef={buttonRef}
+          class="shadow-xl"
+          maxHeight={320}
+          role="listbox"
+          open={open() && !props.disabled}
+          onOverlayRef={(element) => {
+            listboxRef = element;
+          }}
+        >
+          <div class="border-b border-border/70 p-2">
+            <Input
+              value={query()}
+              onInput={(event) => {
+                setQuery(event.currentTarget.value);
+                setHighlightedIndex(0);
+              }}
+              placeholder={props.i18n.t('connectionDialog.filterContainers')}
+              size="sm"
+              class="w-full"
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  moveHighlight(1);
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  moveHighlight(-1);
                 }
               }}
+            />
+          </div>
+          <div
+            class="min-h-0 flex-1 overflow-auto p-1"
+            onWheel={(event) => {
+              const el = event.currentTarget as HTMLElement;
+              event.stopPropagation();
+              if (el.scrollHeight > el.clientHeight) {
+                el.scrollTop += event.deltaY;
+              }
+            }}
+          >
+            <Show
+              when={filteredContainers().length > 0}
+              fallback={(
+                <div class="px-3 py-3 text-xs text-muted-foreground">
+                  {props.emptyMessage}
+                </div>
+              )}
             >
-              <Show
-                when={filteredContainers().length > 0}
-                fallback={(
-                  <div class="px-3 py-3 text-xs text-muted-foreground">
-                    {props.emptyMessage}
-                  </div>
-                )}
-              >
-                <For each={filteredContainers()}>
-                  {(container, index) => (
-                    <button
-                      type="button"
-                      id={`environment-container-option-${index()}`}
-                      class={cn(
-                        'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
-                        highlightedIndex() === index()
-                          ? 'bg-accent text-accent-foreground'
-                          : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                      )}
-                      role="option"
-                      tabIndex={-1}
-                      aria-selected={props.selectedContainerID === container.container_id ? 'true' : 'false'}
-                      onClick={() => selectContainer(container)}
-                      onMouseEnter={() => setHighlightedIndex(index())}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        selectContainer(container);
-                      }}
-                    >
-                      <span class="min-w-0">
-                        <span class="block truncate text-xs font-medium">{container.container_label}</span>
-                        <span class="block truncate font-mono text-[11px] text-muted-foreground">{container.container_id}</span>
-                        <Show when={container.image || container.status_text}>
-                          <span class="mt-1 block truncate text-[11px] text-muted-foreground">
-                            {[container.image, container.status_text].filter(Boolean).join(' · ')}
-                          </span>
-                        </Show>
-                      </span>
-                      <Show when={props.selectedContainerID === container.container_id}>
-                        <Check class="h-3.5 w-3.5 shrink-0" />
+              <For each={filteredContainers()}>
+                {(container, index) => (
+                  <button
+                    type="button"
+                    id={`environment-container-option-${index()}`}
+                    class={cn(
+                      'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                      highlightedIndex() === index()
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                    )}
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected={props.selectedContainerID === container.container_id ? 'true' : 'false'}
+                    onClick={() => selectContainer(container)}
+                    onMouseEnter={() => setHighlightedIndex(index())}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectContainer(container);
+                    }}
+                  >
+                    <span class="min-w-0">
+                      <span class="block truncate text-xs font-medium">{container.container_label}</span>
+                      <span class="block truncate font-mono text-[11px] text-muted-foreground">{container.container_id}</span>
+                      <Show when={container.image || container.status_text}>
+                        <span class="mt-1 block truncate text-[11px] text-muted-foreground">
+                          {[container.image, container.status_text].filter(Boolean).join(' · ')}
+                        </span>
                       </Show>
-                    </button>
-                  )}
-                </For>
-              </Show>
-            </div>
-          </DesktopAnchoredListbox>
-        </Show>
+                    </span>
+                    <Show when={props.selectedContainerID === container.container_id}>
+                      <Check class="h-3.5 w-3.5 shrink-0" />
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </Show>
+          </div>
+        </DesktopAnchoredListbox>
       </div>
       <Show when={props.fieldError}>
         <div class="text-[11px] text-destructive">{props.fieldError}</div>
@@ -14083,62 +14077,60 @@ function OfficialProviderPicker(props: Readonly<{
           </span>
           <ChevronDown class={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open() && 'rotate-180')} />
         </button>
-        <Show when={open()}>
-          <DesktopAnchoredListbox
-            id="control-plane-provider-options"
-            anchorRef={buttonRef}
-            class="p-1.5 shadow-2xl"
-            maxHeight={220}
-            role="listbox"
-            open={open()}
-            onOverlayRef={(element) => {
-              listboxRef = element;
-            }}
-          >
-            <div class="min-h-0 flex-1 overflow-auto">
-              <For each={props.options}>
-                {(option, index) => {
-                  const selected = createMemo(() => selectedProvider()?.cloud_origin === option.cloud_origin);
-                  const highlighted = createMemo(() => highlightedIndex() === index());
-                  return (
-                    <button
-                      type="button"
-                      id={`control-plane-provider-option-${index()}`}
-                      role="option"
-                      tabIndex={-1}
-                      aria-selected={selected() ? 'true' : 'false'}
-                      class={cn(
-                        'flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-all',
-                        highlighted()
-                          ? 'bg-accent text-accent-foreground shadow-sm'
-                          : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                      )}
-                      onClick={() => selectProvider(option)}
-                      onMouseEnter={() => setHighlightedIndex(index())}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        selectProvider(option);
-                      }}
-                    >
-                      <span class="flex min-w-0 items-center gap-3">
-                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <Globe class="h-4 w-4" />
-                        </span>
-                        <span class="min-w-0">
-                          <span class="block truncate text-[length:var(--floe-type-body)] font-semibold">{option.domain}</span>
-                          <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{option.cloud_origin}</span>
-                        </span>
+        <DesktopAnchoredListbox
+          id="control-plane-provider-options"
+          anchorRef={buttonRef}
+          class="p-1.5 shadow-2xl"
+          maxHeight={220}
+          role="listbox"
+          open={open()}
+          onOverlayRef={(element) => {
+            listboxRef = element;
+          }}
+        >
+          <div class="min-h-0 flex-1 overflow-auto">
+            <For each={props.options}>
+              {(option, index) => {
+                const selected = createMemo(() => selectedProvider()?.cloud_origin === option.cloud_origin);
+                const highlighted = createMemo(() => highlightedIndex() === index());
+                return (
+                  <button
+                    type="button"
+                    id={`control-plane-provider-option-${index()}`}
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected={selected() ? 'true' : 'false'}
+                    class={cn(
+                      'flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-all',
+                      highlighted()
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                    )}
+                    onClick={() => selectProvider(option)}
+                    onMouseEnter={() => setHighlightedIndex(index())}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectProvider(option);
+                    }}
+                  >
+                    <span class="flex min-w-0 items-center gap-3">
+                      <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Globe class="h-4 w-4" />
                       </span>
-                      <Show when={selected()}>
-                        <Check class="h-4 w-4 shrink-0" />
-                      </Show>
-                    </button>
-                  );
-                }}
-              </For>
-            </div>
-          </DesktopAnchoredListbox>
-        </Show>
+                      <span class="min-w-0">
+                        <span class="block truncate text-[length:var(--floe-type-body)] font-semibold">{option.domain}</span>
+                        <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{option.cloud_origin}</span>
+                      </span>
+                    </span>
+                    <Show when={selected()}>
+                      <Check class="h-4 w-4 shrink-0" />
+                    </Show>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </DesktopAnchoredListbox>
       </div>
     </Show>
   );

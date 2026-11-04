@@ -172,101 +172,99 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
         <FeedbackIndicator class={showFeedback() ? 'pointer-events-auto' : undefined} label={props.i18n.t('connectionDialog.sshConfigLoadFailed')} closeLabel={props.i18n.t('common.close')} restoreFocus={() => rootRef?.querySelector('input') ?? undefined} entries={showFeedback() ? [{ id: 'ssh-config', severity: 'error', summary: props.i18n.t('connectionDialog.sshConfigLoadFailed'), actions: <Button size="sm" variant="outline" onClick={props.onRetry}>{props.i18n.t('common.retry')}</Button> }] : []} />
         <Show when={props.loading}><Refresh class="pointer-events-none absolute inset-0 m-auto h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label={props.i18n.t('connectionDialog.sshConfigLoading')} /></Show>
       </div>
-      <Show when={open()}>
-        <DesktopAnchoredListbox
-          anchorRef={rootRef}
-          class="shadow-xl"
-          maxHeight={320}
-          open={open()}
-          onOverlayRef={(element) => {
-            overlayRef = element;
+      <DesktopAnchoredListbox
+        anchorRef={rootRef}
+        class="shadow-xl"
+        maxHeight={320}
+        open={open()}
+        onOverlayRef={(element) => {
+          overlayRef = element;
+        }}
+      >
+        <Show when={props.loading && props.hosts.length === 0}>
+          <div class="sr-only" role="status">
+            <Refresh class="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <span>{props.i18n.t('connectionDialog.sshConfigLoading')}</span>
+          </div>
+        </Show>
+        <Show when={props.loadError && !props.loading && props.hosts.length === 0}>
+          <div class="flex items-center justify-between gap-3 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] text-destructive" role="alert">
+            <span class="flex min-w-0 items-center gap-2">
+              <AlertCircle class="h-3.5 w-3.5 shrink-0" />
+              <span class="truncate">{props.i18n.t('connectionDialog.sshConfigLoadFailed')}</span>
+            </span>
+            <DesktopTooltip content={props.i18n.t('common.retry')} placement="top">
+              <button
+                type="button"
+                class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={props.i18n.t('common.retry')}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={props.onRetry}
+              >
+                <Refresh class="h-3.5 w-3.5" />
+              </button>
+            </DesktopTooltip>
+          </div>
+        </Show>
+        <div
+          id={optionsID()}
+          ref={optionsRef}
+          class="min-h-0 flex-1 overflow-auto p-1"
+          role="listbox"
+          onWheel={(event) => {
+            const el = event.currentTarget as HTMLElement;
+            event.stopPropagation();
+            if (el.scrollHeight > el.clientHeight) {
+              el.scrollTop += event.deltaY;
+            }
           }}
         >
-          <Show when={props.loading && props.hosts.length === 0}>
-            <div class="sr-only" role="status">
-              <Refresh class="h-3.5 w-3.5 shrink-0 animate-spin" />
-              <span>{props.i18n.t('connectionDialog.sshConfigLoading')}</span>
-            </div>
-          </Show>
-          <Show when={props.loadError && !props.loading && props.hosts.length === 0}>
-            <div class="flex items-center justify-between gap-3 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] text-destructive" role="alert">
-              <span class="flex min-w-0 items-center gap-2">
-                <AlertCircle class="h-3.5 w-3.5 shrink-0" />
-                <span class="truncate">{props.i18n.t('connectionDialog.sshConfigLoadFailed')}</span>
-              </span>
-              <DesktopTooltip content={props.i18n.t('common.retry')} placement="top">
+          <Show
+            when={filteredHosts().length > 0}
+            fallback={(
+              <Show when={showEmptyState()}>
+                <div class="px-3 py-3 text-xs text-muted-foreground" role="status">
+                  {emptyStateMessage()}
+                </div>
+              </Show>
+            )}
+          >
+            <For each={filteredHosts()}>
+              {(host, index) => (
                 <button
                   type="button"
-                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={props.i18n.t('common.retry')}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={props.onRetry}
+                  id={optionID(index())}
+                  class={cn(
+                    'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                    highlightedIndex() === index()
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                  )}
+                  role="option"
+                  tabIndex={-1}
+                  aria-selected={highlightedIndex() === index() ? 'true' : 'false'}
+                  onClick={() => selectHost(host)}
+                  onMouseEnter={() => setHighlightedIndex(index())}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    selectHost(host);
+                  }}
                 >
-                  <Refresh class="h-3.5 w-3.5" />
+                  <span class="min-w-0">
+                    <span class="block truncate font-mono text-xs">{host.alias}</span>
+                    <span class="block truncate text-[11px] text-muted-foreground">{sshConfigHostEndpointLabel(host)}</span>
+                  </span>
+                  <Show when={host.port !== null}>
+                    <Tag variant="neutral" tone="soft" size="sm" class="shrink-0 cursor-default whitespace-nowrap">
+                      {props.i18n.t('connectionDialog.sshPortTag', { port: host.port ?? '' })}
+                    </Tag>
+                  </Show>
                 </button>
-              </DesktopTooltip>
-            </div>
-          </Show>
-          <div
-            id={optionsID()}
-            ref={optionsRef}
-            class="min-h-0 flex-1 overflow-auto p-1"
-            role="listbox"
-            onWheel={(event) => {
-              const el = event.currentTarget as HTMLElement;
-              event.stopPropagation();
-              if (el.scrollHeight > el.clientHeight) {
-                el.scrollTop += event.deltaY;
-              }
-            }}
-          >
-            <Show
-              when={filteredHosts().length > 0}
-              fallback={(
-                <Show when={showEmptyState()}>
-                  <div class="px-3 py-3 text-xs text-muted-foreground" role="status">
-                    {emptyStateMessage()}
-                  </div>
-                </Show>
               )}
-            >
-              <For each={filteredHosts()}>
-                {(host, index) => (
-                  <button
-                    type="button"
-                    id={optionID(index())}
-                    class={cn(
-                      'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
-                      highlightedIndex() === index()
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                    )}
-                    role="option"
-                    tabIndex={-1}
-                    aria-selected={highlightedIndex() === index() ? 'true' : 'false'}
-                    onClick={() => selectHost(host)}
-                    onMouseEnter={() => setHighlightedIndex(index())}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      selectHost(host);
-                    }}
-                  >
-                    <span class="min-w-0">
-                      <span class="block truncate font-mono text-xs">{host.alias}</span>
-                      <span class="block truncate text-[11px] text-muted-foreground">{sshConfigHostEndpointLabel(host)}</span>
-                    </span>
-                    <Show when={host.port !== null}>
-                      <Tag variant="neutral" tone="soft" size="sm" class="shrink-0 cursor-default whitespace-nowrap">
-                        {props.i18n.t('connectionDialog.sshPortTag', { port: host.port ?? '' })}
-                      </Tag>
-                    </Show>
-                  </button>
-                )}
-              </For>
-            </Show>
-          </div>
-        </DesktopAnchoredListbox>
-      </Show>
+            </For>
+          </Show>
+        </div>
+      </DesktopAnchoredListbox>
     </div>
   );
 }

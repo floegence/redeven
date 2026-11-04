@@ -4785,6 +4785,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     restore: HTMLElement;
     selection: string;
   }> | null>(null);
+  const [transcriptMenuPanel, setTranscriptMenuPanel] = createSignal<HTMLDivElement>();
+  const transcriptMenuPresence = createFloatingPresence({ open: () => Boolean(transcriptMenu()), element: transcriptMenuPanel });
+  const presentedTranscriptMenu = createMemo<ReturnType<typeof transcriptMenu>>(previous => transcriptMenu()
+    ?? (transcriptMenuPresence.mounted() ? previous ?? null : null));
   const closeTranscriptMenu = (restoreFocus = true) => {
     const restore = transcriptMenu()?.restore;
     setTranscriptMenu(null);
@@ -15183,9 +15187,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </DialogPlacementProvider>
       </Show>
       </Show>
-      <Show when={transcriptMenu()}>
+      <Show when={transcriptMenuPresence.mounted() && presentedTranscriptMenu()}>
         {(menu) => (
           <FlowerContextMenu
+            presenceState={transcriptMenuPresence.state()}
+            onPanelRef={setTranscriptMenuPanel}
             x={menu().x}
             y={menu().y}
             label={copy().threadList.contextMenuLabel(menu().title)}

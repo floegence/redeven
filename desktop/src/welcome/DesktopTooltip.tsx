@@ -1,4 +1,4 @@
-import { Show, createSignal, onCleanup, type JSX } from 'solid-js';
+import { createSignal, onCleanup, type JSX } from 'solid-js';
 import { type DesktopOverlayPlacement } from './desktopOverlayPosition';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 
@@ -78,23 +78,23 @@ export function DesktopTooltip(props: DesktopTooltipProps) {
     >
       {props.children}
 
-      <Show when={visible()}>
-        <DesktopAnchoredOverlaySurface
-          open={visible()}
-          anchorRef={anchorRef}
-          placement={props.placement}
-          role="tooltip"
-          class={cn(
-            'z-[220] max-w-[min(24rem,calc(100vw-1rem))] rounded border border-border/80 bg-popover px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md',
-            'whitespace-normal break-words',
-            props.class,
-          )}
-        >
-          <>
-            {props.content}
-          </>
-        </DesktopAnchoredOverlaySurface>
-      </Show>
+      <DesktopAnchoredOverlaySurface
+        open={visible()}
+        anchorRef={anchorRef}
+        placement={props.placement}
+        role="tooltip"
+        motion="tooltip"
+        zIndex={220}
+        class={cn(
+          'z-[220] max-w-[min(24rem,calc(100vw-1rem))] rounded border border-border/80 bg-popover px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md',
+          'whitespace-normal break-words',
+          props.class,
+        )}
+      >
+        <>
+          {props.content}
+        </>
+      </DesktopAnchoredOverlaySurface>
     </span>
   );
 }

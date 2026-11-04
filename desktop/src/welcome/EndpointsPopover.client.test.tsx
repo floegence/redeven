@@ -59,7 +59,7 @@ describe('Environment connection popover', () => {
     expect(test.open()).toBe(true);
     group.querySelector<HTMLButtonElement>('[aria-label="Copy Environment URL"]')!.focus();
     await settle();
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('[role="tooltip"]')).toBeNull());
   });
 
   it('keeps multiple internal listeners in one disclosure without address actions', async () => {

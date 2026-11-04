@@ -14,7 +14,7 @@ const portProbe = net.createServer();
 await new Promise((resolve, reject) => { portProbe.once('error', reject); portProbe.listen(0, '127.0.0.1', resolve); });
 const port = portProbe.address().port;
 await new Promise((resolve, reject) => portProbe.close((error) => error ? reject(error) : resolve()));
-const server = await createSSHSettingsPreviewServer(port);
+const server = await createSSHSettingsPreviewServer(port, ['environment-endpoints.html']);
 // Acceptance measures one fixed source revision; development HMR must not replace an open panel.
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
@@ -51,7 +51,7 @@ try {
   }
   async function stableScreenshot(path) {
     await page.evaluate(() => document.fonts.ready);
-    await page.waitForFunction(() => [...document.querySelectorAll('[data-floe-dialog-panel], .redeven-endpoints-popover')]
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-floe-dialog-panel], .redeven-endpoints-surface')]
       .every(element => getComputedStyle(element).opacity === '1'));
     await page.screenshot({ path, animations: 'disabled' });
   }
@@ -317,9 +317,10 @@ try {
       await new Promise(resolve => {
         const tick = () => {
           const panel = document.querySelector('.redeven-endpoints-popover');
-          const bounds = panel?.getBoundingClientRect();
-          result.push(panel ? { opacity: Number(getComputedStyle(panel).opacity), width: bounds.width, height: bounds.height,
-            x: bounds.x, inert: panel.inert, state: panel.dataset.state } : null);
+          const surface = panel?.closest('[data-floating-presence]');
+          const bounds = surface?.parentElement.getBoundingClientRect();
+          result.push(panel ? { opacity: Number(getComputedStyle(surface).opacity), width: panel.offsetWidth, height: panel.offsetHeight,
+            x: bounds.x, inert: surface.inert, state: surface.dataset.floatingPresence } : null);
           if (performance.now() - started < duration) requestAnimationFrame(tick); else resolve();
         };
         requestAnimationFrame(tick);
@@ -381,13 +382,13 @@ try {
   for (const preset of builtInShellThemePresets) {
     await page.goto(new URL(`environment-endpoints.html?preset=${preset.name}`, report.url).href);
     await page.locator('[data-environment="gzcom"] [aria-haspopup="dialog"]').click();
-    await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-surface')).opacity === '1');
     assert.equal(await page.locator('.redeven-endpoints-popover').evaluate(el => el.scrollWidth > el.clientWidth), false);
   }
   for (const locale of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU']) {
     await page.goto(new URL(`environment-endpoints.html?locale=${locale}`, report.url).href);
     await page.locator('[data-environment="Network"] [aria-haspopup="dialog"]').click();
-    await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-surface')).opacity === '1');
     assert.equal(await page.locator('.redeven-endpoints-popover').evaluate(el => el.scrollWidth > el.clientWidth), false);
     await assertAddressHelp(page.locator('.redeven-endpoints-popover'));
     await page.keyboard.press('Escape'); await page.locator('.redeven-endpoints-popover').waitFor({ state: 'detached' });
@@ -519,7 +520,7 @@ try {
   await cardPage.evaluate(() => document.fonts.ready);
   for (let attempt = 0; attempt < 2; attempt++) {
     await card('gzcom').getByLabel('查看连接方式').click();
-    await cardPage.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
+    await cardPage.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-surface')).opacity === '1');
     await cardPage.getByRole('button', { name: /复制 SSH/ }).click();
     assert.equal(await cardPage.evaluate(() => navigator.clipboard.readText()), 'gzcom:22');
     if (attempt === 0) {
@@ -540,7 +541,7 @@ try {
   await cardPage.waitForFunction(() => !document.querySelector('.redeven-endpoints-popover'));
   // Exercise the real snapshot subscription, not only a directly mounted popover.
   await card('gzcom').getByLabel('查看连接方式').click();
-  await cardPage.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
+  await cardPage.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-surface')).opacity === '1');
   const compact = await cardPage.locator('.redeven-endpoints-popover').evaluate(panel => ({
     height: panel.getBoundingClientRect().height,
     fonts: [...panel.querySelectorAll('.redeven-card-endpoint-value')].map(el => getComputedStyle(el).fontFamily),
@@ -573,7 +574,7 @@ try {
         sameListener: panel.querySelector('.redeven-endpoint-listener') === listener && listener.open,
         sameRow: panel.querySelector('[data-endpoint-id="host"]') === host,
         focused: document.activeElement === copy, selected: selection.toString(), copied: copy.dataset.copied,
-        opacity: Number(getComputedStyle(panel).opacity), state: panel.dataset.state, elapsed: performance.now() - started });
+        opacity: Number(getComputedStyle(panel.closest('[data-floating-presence]')).opacity), state: panel.closest('[data-floating-presence]').dataset.floatingPresence, elapsed: performance.now() - started });
       await new Promise(resolve => setTimeout(resolve, 35));
     }
     return samples;

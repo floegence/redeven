@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Pure placement tests do not mount the client-only UI package.
+vi.mock('@floegence/floe-webapp-core/ui', () => ({ createFloatingPresence: vi.fn() }));
 
 import { resolveDesktopAnchoredListboxGeometry } from './DesktopAnchoredListbox';
 

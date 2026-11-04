@@ -68,7 +68,9 @@ describe('Desktop appearance interaction', () => {
     const view = mount(); preset('nord').click();
     await vi.waitFor(() => expect(view.onShellThemeChange).toHaveBeenCalled());
     document.querySelector<HTMLButtonElement>('.redeven-theme-picker__close')!.click();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    const exiting = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(exiting.dataset.floatingPresence).toBe('exiting');
+    expect(exiting.inert).toBe(true);
     view.reject(new Error('unavailable'));
     await vi.waitFor(() => expect(view.trigger.getAttribute('aria-busy')).toBe('false'));
     view.trigger.click();

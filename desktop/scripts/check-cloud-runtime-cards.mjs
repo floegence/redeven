@@ -433,7 +433,8 @@ app.whenReady().then(async()=>{
     const runtime = (await snapshot()).environments.find((entry) => entry.kind === 'local_environment');
     const lab = runtime.runtime_service.gateway_memberships.find((member) => member.gateway_name === 'Lab');
     assert.ok(lab);
-    await selector.selectOption(lab.gateway_id);
+    await selector.click();
+    await page.getByRole('option', { name: lab.gateway_name, exact: true }).click();
     await panel.getByRole('button', { name: 'Actions', exact: true }).click();
     const menu = page.getByRole('menu');
     await menu.waitFor();

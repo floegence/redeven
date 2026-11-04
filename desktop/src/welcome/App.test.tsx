@@ -1016,7 +1016,7 @@ describe('DesktopWelcomeShell', () => {
     expect(tooltipSrc).toContain('z-[220]');
     expect(anchoredSurfaceSrc).toContain("import { Portal } from 'solid-js/web';");
     expect(anchoredSurfaceSrc).toContain('<Portal>');
-    expect(anchoredSurfaceSrc).toContain("'fixed'");
+    expect(anchoredSurfaceSrc).toContain('class="fixed pointer-events-none"');
     expect(anchoredSurfaceSrc).not.toContain('animate-in fade-in zoom-in-95');
   });
 
@@ -1060,7 +1060,8 @@ describe('DesktopWelcomeShell', () => {
     );
     expect(listboxSrc).toContain("import { Portal } from 'solid-js/web';");
     expect(listboxSrc).toContain('<Portal>');
-    expect(listboxSrc).toContain("fixed z-[240] flex flex-col overflow-hidden");
+    expect(listboxSrc).toContain('fixed z-[240] pointer-events-none');
+    expect(listboxSrc).toContain('relative pointer-events-auto flex flex-col overflow-hidden');
     expect(listboxSrc).toContain('style={{');
     expect(listboxSrc).toContain('width?: number;');
     expect(listboxSrc).toContain('resolveDesktopAnchoredListboxGeometry');

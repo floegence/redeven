@@ -1,5 +1,5 @@
 import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import {Button, Dialog, KeyedFor} from '@floegence/floe-webapp-core/ui';
+import {Button, Dialog, Select} from '@floegence/floe-webapp-core/ui';
 import {createEffect, createMemo, createSignal, on, onCleanup, Show} from 'solid-js';
 import type {DesktopI18n} from '../shared/i18n';
 
@@ -127,11 +127,12 @@ export function RuntimeCloudConnections(props: Readonly<{
     <Show when={invalid()}><p role="alert" class="text-warning">{t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={props.available === false || busy()} onClick={() => { if (props.available !== false && !busy()) { generation++; setAuthorityRevoked(false); setSessionTarget(props.targetID); setSessionKey(storageKey()); loadStored(storageKey()); } }}>{t('interactionContinuity.revalidate')}</Button></Show>
     <p>{t('cloudRoute.impact')}</p>
     <label class="block space-y-2"><span>{t('cloudRoute.selected')}</span>
-     <select class="redeven-native-select" value={selected()} disabled={busy() || !!pending() || corrupt()} onChange={event => setSelected(event.currentTarget.value)}>
-      <Show when={selectionInvalid()}><option value={selected()} disabled>{t('cloudRoute.gatewayUnavailable')}</option></Show>
-      <option value="direct">{t('cloudRoute.direct')}</option>
-      <KeyedFor each={props.memberships} by={member => member.attachment_id}>{member => <option value={member().attachment_id}>{member().gateway_name || member().gateway_id}</option>}</KeyedFor>
-     </select>
+     <Select ariaLabel={t('cloudRoute.selected')} value={selected()} disabled={busy() || !!pending() || corrupt()}
+      onChange={setSelected} options={[
+       ...(selectionInvalid() ? [{ value: selected(), label: t('cloudRoute.gatewayUnavailable'), disabled: true }] : []),
+       { value: 'direct', label: t('cloudRoute.direct') },
+       ...props.memberships.map(member => ({ value: member.attachment_id, label: member.gateway_name || member.gateway_id })),
+      ]} />
     </label>
     <Show when={error()}><p role="alert" class="text-error">{error()}</p></Show>
     <Show when={operation()}><p role="status">{t(operation()?.state === 'awaiting_confirmation' ? 'cloudRoute.ready' : 'cloudRoute.committed')}</p></Show>

@@ -6,7 +6,7 @@ import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 
 const output = fileURLToPath(new URL('../dist/environment-access-menu-acceptance/', import.meta.url));
 await mkdir(output, { recursive: true });
-const server = await createSSHSettingsPreviewServer(0);
+const server = await createSSHSettingsPreviewServer(0, ['environment-settings.html']);
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], errors: [] };
@@ -59,12 +59,18 @@ try {
           const gateway = menu.getByRole('menuitem').nth(gatewayIndex);
           assert.equal(await gateway.evaluate(element => getComputedStyle(element).cursor), 'pointer');
           await gateway.focus();
-          await page.keyboard.press('Tab');
           const enabled = await menu.getByRole('menuitem').evaluateAll(elements => elements
             .filter(element => !element.disabled).map(element => element.textContent.trim()));
+          await page.keyboard.press('ArrowDown');
           assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()),
-            enabled[enabled.indexOf(i18n.t('gatewayJoin.menuAction')) + 1]);
+            enabled[(enabled.indexOf(i18n.t('gatewayJoin.menuAction')) + 1) % enabled.length]);
           await page.screenshot({ path: `${output}/${locale}-${width}-${connectionState}.png` });
+          await page.keyboard.press('Tab');
+          await menu.waitFor({ state: 'detached' });
+          assert.equal(await page.evaluate(() => Boolean(document.activeElement.closest('[role="menu"], [inert]'))), false,
+            'Tab dismisses the menu and transfers focus to an available control');
+          await toggle.click();
+          await menu.waitFor();
           await page.keyboard.press('Escape');
           await menu.waitFor({ state: 'detached' });
           assert.deepEqual(await page.evaluate(() => window.settingsFixture.requests), []);
