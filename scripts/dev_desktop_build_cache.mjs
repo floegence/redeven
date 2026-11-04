@@ -71,6 +71,25 @@ export function dependencyDigests(root) {
   })));
 }
 
+export function captureRustToolchain(root) {
+  // The unified build configuration owns the pin. Query without installing;
+  // staging prepares absent tools only when a rebuild is required.
+  const { rust: version } = JSON.parse(readFileSync(path.join(root, 'scripts/redevplugin_build_toolchain.json'), 'utf8'));
+  if (typeof version !== 'string' || !/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(version)) {
+    throw new Error('Invalid pinned plugin Rust toolchain in scripts/redevplugin_build_toolchain.json');
+  }
+  const tools = { version };
+  for (const name of ['cargo', 'rustc']) {
+    const found = spawnSync('rustup', ['which', '--toolchain', version, name], { cwd: root, encoding: 'utf8', env: { ...process.env, RUSTUP_AUTO_INSTALL: '0' } });
+    if (found.status !== 0) tools[name] = null;
+    else {
+      const file = found.stdout.trim();
+      tools[name] = [file, hash(readFileSync(file)), probe(root, file, ['--version'])];
+    }
+  }
+  return tools;
+}
+
 export async function captureBuildContext(root) {
   // Independent package reads overlap tool probes. Hash every byte and retain
   // deterministic ordering; never substitute timestamps or install receipts.
@@ -85,20 +104,9 @@ export async function captureBuildContext(root) {
     go: buildGoEnvironment(root),
     npm: probe(root, 'npm', ['--version']),
     rustup: probe(root, 'rustup', ['--version']),
+    rust: captureRustToolchain(root),
   };
-  // The staging script owns the pinned compiler; query without installing it.
-  const rustVersion = readFileSync(path.join(root, 'scripts/stage_redevplugin_release_artifacts.sh'), 'utf8').match(/^RUST_TOOLCHAIN="([^"]+)"$/mu)?.[1];
-  if (!rustVersion) throw new Error('Missing pinned plugin Rust toolchain');
   tools.branch = probe(root, 'git', ['rev-parse', '--abbrev-ref', 'HEAD']);
-  tools.rust = {};
-  for (const name of ['cargo', 'rustc']) {
-    const found = spawnSync('rustup', ['which', '--toolchain', rustVersion, name], { cwd: root, encoding: 'utf8', env: { ...process.env, RUSTUP_AUTO_INSTALL: '0' } });
-    if (found.status !== 0) tools.rust[name] = null;
-    else {
-      const file = found.stdout.trim();
-      tools.rust[name] = [file, hash(readFileSync(file)), probe(root, file, ['--version'])];
-    }
-  }
   if (process.platform === 'darwin') {
     tools.swift = probe(root, '/usr/bin/swift', ['--version']);
     tools.sdk = probe(root, '/usr/bin/xcrun', ['--show-sdk-path']);

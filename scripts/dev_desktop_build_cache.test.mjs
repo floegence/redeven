@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, symlinkSync, chmodSync, openSync, fstatSync, futimesSync, writeSync, closeSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import childProcess from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { treeDigest, lookupBuild, recordBuild, buildInputKey, dependencyDigests } from './dev_desktop_build_cache.mjs';
+import { treeDigest, lookupBuild, recordBuild, buildInputKey, dependencyDigests, captureRustToolchain } from './dev_desktop_build_cache.mjs';
 import { captureSourceBuildIdentity } from './source_build_identity.mjs';
 
 function fixture(t) {
@@ -83,11 +84,47 @@ test('dependency digest checks bytes even when mtimes are restored and rejects e
 
 test('first toolchain preparation is allowed but installed compiler changes are rejected', async () => {
   const { verifyBuildContexts } = await import('./dev_desktop_build_cache.mjs');
-  const before = { source: 'original', tools: { rust: { cargo: null, rustc: null } } };
-  const after = { source: 'original', tools: { rust: { cargo: ['cargo', 'hash'], rustc: ['rustc', 'hash'] } } };
+  const before = { source: 'original', tools: { rust: { version: '1.98.0', cargo: null, rustc: null } } };
+  const after = { source: 'original', tools: { rust: { version: '1.98.0', cargo: ['cargo', 'hash'], rustc: ['rustc', 'hash'] } } };
   assert.doesNotThrow(() => verifyBuildContexts(before, after));
   assert.throws(() => verifyBuildContexts(before, { ...after, source: 'changed' }), /Build inputs changed/);
   assert.throws(() => verifyBuildContexts(after, { ...after, tools: { rust: { cargo: ['changed'], rustc: ['rustc', 'hash'] } } }), /Build inputs changed/);
+  assert.throws(() => verifyBuildContexts(before, { ...after, tools: { rust: { ...after.tools.rust, version: '1.99.0' } } }), /Build inputs changed/);
+});
+
+for (const installed of [false, true]) test(`development capture reads the canonical Rust pin with tools ${installed ? 'installed' : 'absent'}`, t => {
+  const f = fixture(t);
+  const config = JSON.parse(readFileSync(new URL('./redevplugin_build_toolchain.json', import.meta.url), 'utf8'));
+  mkdirSync(path.join(f.root, 'scripts'));
+  const configPath = path.join(f.root, 'scripts/redevplugin_build_toolchain.json');
+  writeFileSync(configPath, JSON.stringify(config));
+  const calls = [];
+  t.mock.method(childProcess, 'spawnSync', (command, args, options) => {
+    calls.push([command, args]);
+    assert.equal(options.env.RUSTUP_AUTO_INSTALL, '0');
+    if (!installed) return { status: 1, stdout: '' };
+    const file = path.join(f.root, args.at(-1));
+    writeFileSync(file, args.at(-1));
+    return { status: 0, stdout: file + '\n' };
+  });
+  t.mock.method(childProcess, 'execFileSync', (file, args) => {
+    assert.deepEqual(args, ['--version']);
+    return `${path.basename(file)} ${config.rust}\n`;
+  });
+  syncBuiltinESMExports();
+  try {
+    const tools = captureRustToolchain(f.root);
+    assert.equal(tools.version, config.rust);
+    assert.deepEqual(calls, ['cargo', 'rustc'].map(name => ['rustup', ['which', '--toolchain', config.rust, name]]));
+    for (const name of ['cargo', 'rustc']) {
+      assert.deepEqual(tools[name], installed ? [path.join(f.root, name), createHash('sha256').update(name).digest('hex'), `${name} ${config.rust}`] : null);
+    }
+    writeFileSync(configPath, JSON.stringify({ ...config, rust: 'stable' }));
+    assert.throws(() => captureRustToolchain(f.root), /Invalid pinned plugin Rust toolchain.*redevplugin_build_toolchain\.json/u);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
 });
 
 test('Gateway cache key binds dirty source, dependencies and compression profile', t => {

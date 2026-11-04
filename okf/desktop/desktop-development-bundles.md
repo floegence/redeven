@@ -3,7 +3,7 @@ type: Development Contract
 title: Desktop development sessions and bundles
 tags: [desktop, development, storage, retention]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -13,6 +13,8 @@ Development launcher owns Desktop, local Runtime, saved Gateways and bundles. La
 
 ## Build identity and network
 scripts/dev_desktop.sh freezes HEAD/tracked/nonignored source; drift fails. Authored OKF/builders/Go embeds are inputs, generated OKF/ignored assets outputs. Reuse requires identical source/deps/tools/target/settings and verified Desktop/immutable Runtime. Missing/corrupt/incomplete output rebuilds; failure never launches old bytes. Only pinned Rust install may change tools. --rebuild forces; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls three JS packages once. Manifests select pnpm/npm and locks.
+
+Development capture reads the exact Rust pin from `scripts/redevplugin_build_toolchain.json`, the same configuration used by Runtime preparation. Never parse a staging shell assignment for this value. Record the pin and installed compiler identities without auto-installing; absent compilers trigger normal preparation on a cache miss. Invalid pins fail with the configuration path, and a pin change during preparation invalidates the build.
 
 macOS samples enabled static HTTP/HTTPS proxies once unless explicit upper/lowercase HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (even empty), or REDEVEN_DEV_SYSTEM_PROXY=0. Preserve NO_PROXY, otherwise add loopback/compatible exclusions. PAC/SOCKS-only requires explicit policy. Never expose credentials/weaken TLS/integrity; remove only inferred env before launch.
 
