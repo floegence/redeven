@@ -36,6 +36,14 @@ mkdir -p "$TEST_HOME"
 output=$(HOME="$TEST_HOME" "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
 state_root=$(printf '%s\n' "$output" | sed -n 's/^Development state root: //p' | head -n 1)
 instance_id=$(printf '%s\n' "$output" | sed -n 's/^Development instance identity: //p' | head -n 1)
+ln -s "$ROOT_DIR" "$TEST_ROOT/checkout-alias"
+alias_output=$(HOME="$TEST_HOME" "$TEST_ROOT/checkout-alias/scripts/dev_desktop.sh" --dry-run --stop-only)
+alias_state_root=$(printf '%s\n' "$alias_output" | sed -n 's/^Development state root: //p' | head -n 1)
+alias_instance_id=$(printf '%s\n' "$alias_output" | sed -n 's/^Development instance identity: //p' | head -n 1)
+if [ "$alias_state_root" != "$state_root" ] || [ "$alias_instance_id" != "$instance_id" ]; then
+  printf 'checkout aliases must retain the same physical build and development service owner\n' >&2
+  exit 1
+fi
 (
   cd "$ROOT_DIR/desktop"
   exec node -e 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000)' -- "--redeven-dev-instance=$instance_id"

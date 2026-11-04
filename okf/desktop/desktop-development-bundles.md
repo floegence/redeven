@@ -16,7 +16,7 @@ scripts/dev_desktop.sh freezes HEAD/tracked/nonignored source; drift fails. Auth
 
 Development capture reads the exact Rust pin from `scripts/redevplugin_build_toolchain.json`, the same configuration used by Runtime preparation. Never parse a staging shell assignment for this value. Record the pin and installed compiler identities without auto-installing; absent compilers trigger normal preparation on a cache miss. Invalid pins fail with the configuration path, and a pin change during preparation invalidates the build.
 
-Resolve checkout parent aliases before comparing dependency link boundaries. Package-local links remain valid through a managed worktree alias; external links and symlinked dependency roots remain rejected. The target toolchain CLI uses Node's main-module identity so an aliased entrypoint executes preparation instead of silently producing empty output.
+The launcher resolves its physical checkout before assigning profile/service ownership or invoking builders, so checkout aliases share one owner and never skip CLI preparation. Resolve checkout parent aliases before comparing dependency link boundaries. Package-local links remain valid through a managed worktree alias; external links and symlinked dependency roots remain rejected. The target toolchain CLI uses Node's main-module identity so an aliased entrypoint executes preparation instead of silently producing empty output.
 
 macOS samples enabled static HTTP/HTTPS proxies once unless explicit upper/lowercase HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (even empty), or REDEVEN_DEV_SYSTEM_PROXY=0. Preserve NO_PROXY, otherwise add loopback/compatible exclusions. PAC/SOCKS-only requires explicit policy. Never expose credentials/weaken TLS/integrity; remove only inferred env before launch.
 
