@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, cpSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, cpSync, readdirSync, symlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -16,6 +16,15 @@ test('target and cache admission reject invalid inputs without downloading', () 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /toolchain:unavailable.*Unsupported Runtime target/);
   assert.doesNotMatch(result.stderr, /downloading|Compiling/);
+});
+test('the toolchain CLI executes through a managed checkout alias', t => {
+  const temporary = mkdtempSync(path.join(os.tmpdir(), 'redeven-toolchain-alias-'));
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  const alias = path.join(temporary, 'checkout');
+  symlinkSync(root, alias, 'dir');
+  const result = spawnSync(process.execPath, [path.join(alias, 'scripts/prepare_redevplugin_build_toolchain.mjs'), '--goos', 'windows', '--goarch', 'amd64'], { encoding: 'utf8', timeout: 30_000 });
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /toolchain:unavailable.*Unsupported Runtime target/);
 });
 test('complete pinned build inputs bind the source identity', t => {
   const temporary = mkdtempSync(path.join(os.tmpdir(), 'redeven-toolchain-identity-'));

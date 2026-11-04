@@ -123,7 +123,7 @@ export async function prepareBuildToolchain({ goos, goarch, cacheRoot, offline =
   return { schema_version: 1, cargo, rustc, rust_target: rustTarget, identity, env: targetEnv };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   const cancel = () => cancellation.abort();
   process.once('SIGINT', cancel);
   process.once('SIGTERM', cancel);
