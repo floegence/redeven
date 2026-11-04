@@ -13,11 +13,11 @@ test('moving geometry reports the rejected stability predicate and supports expl
     const controller=new BrowserComputerController(await page.context().newCDPSession(page));await controller.page.initialize();
     // Guarantee distinct live layouts instead of depending on animation frames
     // advancing under concurrent headless test load. Hit testing stays real.
-    let position=0;const geometry=controller.page.geometry.bind(controller.page);
-    controller.page.geometry=async(...args)=>{await page.locator('button').evaluate((element,x)=>{element.style.transform='translateX('+x+'px)';},++position);return geometry(...args);};
+    const samples=[];let position=0;const geometry=controller.page.geometry.bind(controller.page);
+    controller.page.geometry=async(...args)=>{await page.locator('button').evaluate((element,x)=>{element.style.transform='translateX('+x+'px)';return element.getBoundingClientRect().x;},++position);const layout=await geometry(...args);samples.push(layout.quads);return layout;};
     const run=options=>controller.execute({target_id:'fixture',tool_name:'computer.action',script_operation:true,full_access:true,args:{action:'click',selector:{role:'button',name:'Moving'},...options}});
-    const rejected=await run({stability_timeout_ms:120,scroll_into_view:false});
-    assert.equal(rejected.error,'ELEMENT_NOT_ACTIONABLE',JSON.stringify(rejected));
+    const rejected=await run({stability_timeout_ms:500,scroll_into_view:false});
+    assert.equal(rejected.error,'ELEMENT_NOT_ACTIONABLE',JSON.stringify({rejected,samples}));
     assert.equal(rejected.result.actionability.layout_stable,false);
     assert.deepEqual(rejected.result.actionability.failed_checks,['layout_stable']);
     assert.equal(rejected.result.actionability.previous_quads[0].length,8);
