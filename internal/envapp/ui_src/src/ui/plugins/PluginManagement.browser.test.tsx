@@ -1356,7 +1356,9 @@ describe('plugin management browser geometry and interaction', () => {
     const actions = card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
     const initialHeight = primary.getBoundingClientRect().height;
     await expect.element(page.elementLocator(primary)).toHaveAccessibleName('查看运行时要求');
-    expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(16);
+    // Measure layout pixels; transformed ancestors introduce fractional viewport rounding.
+    expect(label.offsetHeight).toBe(16);
+    expect(label.scrollHeight).toBeLessThanOrEqual(16);
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
     expect(primary.getBoundingClientRect().width).toBeGreaterThan(actions.getBoundingClientRect().width * 0.7);
     expectNoHorizontalOverflow(actions);
@@ -1365,6 +1367,8 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     expect(card.getAttribute('aria-current')).toBe('true');
+    expect(label.offsetHeight).toBe(16);
+    expect(label.scrollHeight).toBeLessThanOrEqual(16);
     // Transformed ancestors can serialize the same CSS pixel height fractionally.
     expect(primary.getBoundingClientRect().height).toBeCloseTo(initialHeight, 2);
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
