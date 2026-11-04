@@ -34,6 +34,8 @@ export const FlowerActivityPreview: Component<{
         <Show when={results() && row().title}><div class="flower-activity-preview-title">{row().title}</div></Show>
         <Show when={results() && props.block.previewMeta && row().meta}><span class="flower-activity-preview-meta">{row().meta}</span></Show>
         <Show when={row().content}><p class="flower-activity-preview-text" data-format={row().format}>{row().content}</p></Show>
+        <Show when={row().redacted}><p class="flower-activity-detail-notice">{props.copy.toolActivity.contentRedacted}</p></Show>
+        <Show when={row().invalid_utf8_replaced}><p class="flower-activity-detail-notice">{props.copy.toolActivity.contentEncodingReplaced}</p></Show>
         <Show when={row().truncated}><p class="flower-activity-detail-notice">{props.copy.toolActivity.truncated}</p></Show>
       </div>}</Index>
     </div>

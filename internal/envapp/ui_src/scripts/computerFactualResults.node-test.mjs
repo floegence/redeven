@@ -36,7 +36,7 @@ test('nested wheel reports only the explicit measured element, never a guessed r
 
 test('pure input returns a receipt without a post-action metadata read',()=>fixture('<button>Act</button>',async({controller,call})=>{
   const inFrame=controller.page.inFrame.bind(controller.page);
-  controller.page.inFrame=(frame,expression,accepts)=>{if(expression==='document.title')throw new Error('metadata unavailable');return inFrame(frame,expression,accepts);};
+  controller.page.inFrame=(frame,expression,accepts)=>{if(expression==='({url:document.URL,title:document.title})')throw new Error('metadata unavailable');return inFrame(frame,expression,accepts);};
   const r=await call('computer.action',{action:'click',selector:{role:'button',name:'Act'}});
   assert.equal(r.error,undefined,JSON.stringify(r));
   assert.equal(r.result.action_executed,true);

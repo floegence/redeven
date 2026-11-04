@@ -24,6 +24,8 @@ export type FlowerActivityStructuredRow = Readonly<{
   format: 'text' | 'markdown' | 'code';
   language?: string;
   truncated?: boolean;
+  redacted?: boolean;
+  invalid_utf8_replaced?: boolean;
   target?: FlowerActivityTargetRef;
 }>;
 
@@ -641,7 +643,7 @@ function structuredRowsFromPayload(payload: Readonly<Record<string, unknown>> | 
     const content = typeof record.content === 'string' ? record.content : '';
     const format = typeof record.format === 'string' ? trimString(record.format) : 'text';
     if ((!title && !meta && !content) || (format !== 'text' && format !== 'markdown' && format !== 'code')) return [];
-    return [{ title, meta, content, format, ...(asRecord(record.target).path ? { target: record.target as FlowerActivityTargetRef } : {}), ...(typeof record.language === 'string' ? { language: record.language } : {}), ...(record.truncated === true ? { truncated: true } : {}) }];
+    return [{ title, meta, content, format, ...(asRecord(record.target).path ? { target: record.target as FlowerActivityTargetRef } : {}), ...(typeof record.language === 'string' ? { language: record.language } : {}), ...(record.truncated === true ? { truncated: true } : {}), ...(record.redacted===true?{redacted:true}:{}), ...(record.invalid_utf8_replaced===true?{invalid_utf8_replaced:true}:{}) }];
   });
 }
 
@@ -1579,6 +1581,14 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
       if (index >= 0) detailBlocks[index] = notice;
       else detailBlocks.push(notice);
     }
+  }
+  if(computer&&!active){
+    const facts: FlowerActivityDetailLine[]=[];
+    if(item.chips?.some(chip=>chip.kind==='computer_read'&&chip.value==='completed'))facts.push({label:words.computerReadCompleted,value:words.computerReadScope});
+    if(item.chips?.some(chip=>chip.kind==='computer_context'&&chip.value==='reset'))facts.push({label:words.computerContext,value:words.computerContextReset});
+    const failed=item.chips?.find(chip=>chip.kind==='computer_failed_operation')?.value;
+    if(failed!==undefined)facts.push({label:words.computerFailedOperation,value:failed});
+    if(facts.length)detailBlocks.push({kind:'structured',lines:facts});
   }
   if (computer && !active) {
     const phase = item.chips?.find(chip => chip.kind === 'computer_failure_phase')?.value;

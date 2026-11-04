@@ -78,3 +78,11 @@ it('explains a missing preview without claiming that the tool returned nothing',
   expect(JSON.stringify(presentation.detailBlocks)).toContain('did not provide a result preview');
   expect(JSON.stringify(presentation.detailBlocks)).not.toContain('No output');
 });
+
+it('shows credential and encoding transformations beside exact source text', () => {
+  const source = 'text.replace(/\\s+/g, " "); <div>A/B</div>';
+  const host = mount({ kind: 'structured_rows', section: 'results', rows: [{title:'',meta:'',content:source,format:'code',redacted:true,invalid_utf8_replaced:true}] });
+  expect(host.textContent).toContain(source);
+  expect(host.textContent).toContain('Credentials redacted');
+  expect(host.textContent).toContain('Invalid text bytes replaced');
+});

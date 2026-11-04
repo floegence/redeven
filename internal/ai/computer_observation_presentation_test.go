@@ -145,3 +145,41 @@ func TestComputerBudgetPresentationRetainsCanonicalFailure(t *testing.T) {
 		t.Fatalf("budget fact absent: %+v", activity)
 	}
 }
+
+func TestComputerNarrowReadHasSeparatePresentationFacts(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"text": "Source fact", "truncated": false, "scope": "element", "source": "browser_dom", "property": "innerText", "document_id": "sample", "frame_id": "frame", "ref": "ref"}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToSendToModel: true, SafeToCapture: true}}, nil
+	})
+	target, err := runtime.registry.ResolveTarget(t.Context(), call.TargetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.Kind, target.Ready, target.State = "browser.connected", true, "ready"
+	if err = runtime.registry.Update(target); err != nil {
+		t.Fatal(err)
+	}
+	result, err := executeTestScript(t.Context(), runtime, call, "const {text}=await ui.getByRole('main').text();log(text)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := result.Result.(map[string]any)
+	if payload["observation_status"] != "not_observed" || len(toAnySlice(payload["completed_reads"])) != 1 || payload["frame_geometry"] != nil {
+		t.Fatalf("read invented snapshot: %+v", payload)
+	}
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, chip := range activity.Chips {
+		if chip.Kind == "computer_observation" && chip.Value == "not_observed" {
+			t.Fatal("successful scoped read shown as unread")
+		}
+		if chip.Kind == "computer_read" && chip.Value == "completed" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("missing scoped read fact")
+	}
+}

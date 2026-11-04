@@ -292,6 +292,12 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 	}
 	if payload["observation_invalidated"] == true && (payload["reason"] == "document_changed" || payload["reason"] == "candidate_changed") {
 		facts["observation_invalidated"], facts["reason"] = true, payload["reason"]
+		if wait := computerWaitFacts(payload["wait"]); wait != nil {
+			facts["wait"] = wait
+		}
+		if detail := computerInvalidationFacts(payload["invalidation"]); detail != nil {
+			facts["invalidation"] = detail
+		}
 	}
 	if stage == "capture" && payload["reason"] == "viewport_unstable" {
 		facts["reason"] = "viewport_unstable"
@@ -332,6 +338,52 @@ func computerConnectionDiagnostic(raw map[string]any) map[string]any {
 	out := map[string]any{"phase": phase, "reason": reason}
 	if n, ok := raw["elapsed_ms"].(float64); ok && n >= 0 && n <= 60000 {
 		out["elapsed_ms"] = n
+	}
+	return out
+}
+
+// Lifecycle diagnostics are facts, never retry or permission authority.
+func computerInvalidationFacts(raw any) map[string]any {
+	p, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := map[string]any{}
+	if scope := anyToString(p["scope"]); scope == "content" || scope == "safety" {
+		out["scope"] = scope
+	}
+	switch event := anyToString(p["event"]); event {
+	case "Page.frameAttached", "Page.frameDetached", "Page.frameNavigated", "Page.navigatedWithinDocument", "DOM.documentUpdated", "document_inventory":
+		out["event"] = event
+	}
+	if id := anyToString(p["frame_id"]); id != "" && len(id) <= 200 {
+		out["frame_id"] = id
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// Preserve deadline measurements without inferring condition completion.
+func computerWaitFacts(raw any) map[string]any {
+	p, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	state := anyToString(p["requested_state"])
+	switch state {
+	case "visible", "hidden", "enabled", "text", "value":
+	default:
+		return nil
+	}
+	out := map[string]any{"requested_state": state}
+	for _, key := range []string{"timeout_ms", "elapsed_ms", "samples"} {
+		n, valid := computerNonnegativeInteger(p[key])
+		if !valid || (key == "timeout_ms" && n > 30000) {
+			return nil
+		}
+		out[key] = n
 	}
 	return out
 }

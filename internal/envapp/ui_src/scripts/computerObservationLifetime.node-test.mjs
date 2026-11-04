@@ -9,7 +9,7 @@ const safe = {level:'routine',safe_to_capture:true,safe_to_send_to_model:true};
 function fixture() {
   const controller = new BrowserComputerController({send:async()=>({frameTree:{frame:{url:'https://fixture.test'}}})});
   const page=controller.page;
-  Object.assign(page,{beginObservation:async()=>{},safety:async()=>safe,inFrame:async()=>'Original',
+  Object.assign(page,{beginObservation:async()=>{},safety:async()=>safe,inFrame:async()=>({url:'https://fixture.test',title:'Original'}),
     observe:async()=>({document_id:'original:0',nodes:[],truncated:false}),releaseInput:async()=>{}});
   return {controller,page,run:()=>controller.execute({tool_name:'computer.observe',script_operation:true,full_access:true})};
 }
@@ -27,11 +27,11 @@ for(const boundary of ['frame_inventory','entry_safety']) {
   });
 }
 
-test('wait discards a protocol-rejected sample only with independent lifecycle evidence',async()=>{
+test('wait preserves unknown protocol failure despite unscoped revision change',async()=>{
   const {controller,page}=fixture();let samples=0;
   page.conditionState=async()=>{samples++;if(samples===1){page.invalidate();throw Object.assign(new Error('opaque transport rejection'),{protocolDiagnostic:{phase:'protocol',method:'Page.createIsolatedWorld'}});}return {state:'visible'};};
   const result=await controller.execute({tool_name:'computer.action',script_operation:true,full_access:true,args:{action:'wait',selector:{role:'button'},timeout_ms:1000}});
-  assert.equal(result.result.state,'visible',JSON.stringify(result));assert.equal(samples,2);
+  assert.equal(result.error,'TARGET_OBSERVATION_UNAVAILABLE',JSON.stringify(result));assert.equal(samples,1);
 });
 
 test('wait entry protocol failure without lifecycle evidence stops once',async()=>{

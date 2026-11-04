@@ -5488,6 +5488,13 @@
         "computerInputIncomplete": "Entrada parcialmente enviada; verifique antes de continuar",
         "computerEffectConfirmed": "Uma ação foi concluída; verifique antes de continuar",
         "computerBudgetExhausted": "Limite do script atingido; o trabalho concluído foi preservado",
+        "computerReadCompleted": "Leitura concluída",
+        "computerReadScope": "Somente o escopo solicitado; uma captura atual é separada.",
+        "computerContext": "Contexto do script",
+        "computerContextReset": "Redefinido; variáveis e referências anteriores estão indisponíveis.",
+        "computerFailedOperation": "Operação interrompida (a partir de 0)",
+        "contentRedacted": "As credenciais foram ocultadas nesta exibição.",
+        "contentEncodingReplaced": "Bytes de texto inválidos foram substituídos para exibição.",
         "computerObservationUnavailable": "Não foi possível ler a página",
         "computerActionObservedUnavailable": "Ação executada; não foi possível ler a página",
         "computerObservationDetails": "Detalhes técnicos"

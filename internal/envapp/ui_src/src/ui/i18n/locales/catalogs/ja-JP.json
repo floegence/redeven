@@ -5488,6 +5488,13 @@
         "computerInputIncomplete": "入力は一部送信済みです。続行前に状態を確認してください",
         "computerEffectConfirmed": "操作が完了しています。続行前に確認してください",
         "computerBudgetExhausted": "スクリプトの実行上限に達しました。完了した作業は保持されています",
+        "computerReadCompleted": "読み取り完了",
+        "computerReadScope": "要求された範囲のみ。現在のスクリーンショットとは別です。",
+        "computerContext": "スクリプト環境",
+        "computerContextReset": "リセット済み。以前の変数とハンドルは使用できません。",
+        "computerFailedOperation": "停止した操作（0 始まり）",
+        "contentRedacted": "表示内の認証情報を伏せています。",
+        "contentEncodingReplaced": "無効なテキストバイトを置換して表示しています。",
         "computerObservationUnavailable": "ページを読み取れませんでした",
         "computerActionObservedUnavailable": "操作は実行されました。ページを読み取れませんでした",
         "computerObservationDetails": "技術的な詳細"

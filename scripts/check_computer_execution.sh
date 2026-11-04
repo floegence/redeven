@@ -25,6 +25,7 @@ REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test --test-concurrenc
   internal/envapp/ui_src/scripts/computerReadContract.node-test.mjs \
   internal/envapp/ui_src/scripts/computerObservationLifetime.node-test.mjs \
   internal/envapp/ui_src/scripts/computerSemanticSampling.node-test.mjs \
+  internal/envapp/ui_src/scripts/computerConsistency.node-test.mjs \
   internal/envapp/ui_src/scripts/computerTaskQualification.node-test.mjs \
   internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs \
   internal/envapp/ui_src/scripts/computerSourceFidelity.node-test.mjs \
@@ -35,12 +36,13 @@ REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test --test-concurrenc
   internal/envapp/ui_src/scripts/computerNativeURL.node-test.mjs \
   internal/envapp/ui_src/scripts/computerFileAcceptance.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtensionDirectory.node-test.mjs \
-  internal/envapp/ui_src/scripts/computerManagedSandbox.node-test.mjs \
   internal/envapp/ui_src/scripts/computerPopup.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtensionLifecycle.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtensionInstall.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtension.node-test.mjs \
   internal/envapp/ui_src/scripts/computerNativeMessaging.node-test.mjs
+# The managed sandbox fixture requires the Runtime-owned endpoint supplied by
+# TestManagedBrowserSandboxIntegration inside this qualification.
 node scripts/check_browser_qualification.mjs
 GOWORK=off go test ./internal/ai \
   -run '^TestComputerPartialErrorAndUnknownOutcome' -count=1

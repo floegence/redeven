@@ -397,6 +397,12 @@ func activityPayloadStructuredActivityRowMap(value fltools.StructuredActivityRow
 	if value.Truncated {
 		out["truncated"] = value.Truncated
 	}
+	if value.Redacted {
+		out["redacted"] = true
+	}
+	if value.InvalidUTF8Replaced {
+		out["invalid_utf8_replaced"] = true
+	}
 	return out
 }
 

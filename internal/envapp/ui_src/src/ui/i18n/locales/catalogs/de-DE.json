@@ -5488,6 +5488,13 @@
         "computerInputIncomplete": "Eingabe teilweise gesendet; vor dem Fortfahren prüfen",
         "computerEffectConfirmed": "Eine Aktion wurde ausgeführt; vor dem Fortfahren prüfen",
         "computerBudgetExhausted": "Skriptlimit erreicht; abgeschlossene Arbeit bleibt erhalten",
+        "computerReadCompleted": "Lesen abgeschlossen",
+        "computerReadScope": "Nur der angeforderte Bereich; ein aktueller Screenshot ist separat.",
+        "computerContext": "Skriptumgebung",
+        "computerContextReset": "Zurückgesetzt; vorherige Variablen und Handles sind ungültig.",
+        "computerFailedOperation": "Gestoppter Vorgang (ab 0)",
+        "contentRedacted": "Zugangsdaten in dieser Anzeige sind geschwärzt.",
+        "contentEncodingReplaced": "Ungültige Textbytes wurden für die Anzeige ersetzt.",
         "computerObservationUnavailable": "Seite konnte nicht gelesen werden",
         "computerActionObservedUnavailable": "Aktion ausgeführt; Seite konnte nicht gelesen werden",
         "computerObservationDetails": "Technische Details"

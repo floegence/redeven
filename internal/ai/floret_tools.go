@@ -1384,8 +1384,17 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			// Keep the category in bounded history summaries as well as detail.
 			// This is presentation evidence, never retry or success authority.
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_observation", Label: "observation", Value: "unavailable"})
-		} else if rawPayload["observation_status"] == "not_observed" {
+		} else if rawPayload["observation_status"] == "not_observed" && len(toAnySlice(rawPayload["completed_reads"])) == 0 {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_observation", Label: "observation", Value: "not_observed"})
+		}
+		if len(toAnySlice(rawPayload["completed_reads"])) > 0 {
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_read", Label: "read", Value: "completed"})
+		}
+		if rawPayload["context_reset"] == true {
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_context", Label: "context", Value: "reset"})
+		}
+		if index, ok := rawPayload["failed_operation_index"]; ok {
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_failed_operation", Label: "operation", Value: fmt.Sprint(index)})
 		}
 		if status != toolResultStatusSuccess && len(toAnySlice(rawPayload["completed_actions"])) > 0 {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "partial_execution", Label: "partial", Value: "true"})

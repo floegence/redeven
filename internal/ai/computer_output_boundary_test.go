@@ -281,3 +281,68 @@ func TestComputerActionabilityFinalOutput(t *testing.T) {
 		t.Fatalf("actionability facts lost or leaked: %#v", facts)
 	}
 }
+
+func TestComputerExplicitInvalidationCoversReadonlyLocators(t *testing.T) {
+	for _, expression := range []string{
+		"ui.getByRole('main').text({on_invalidated:'return'})",
+		"ui.getByRole('main').node({on_invalidated:'return'})",
+		"ui.getByRole('main').read({on_invalidated:'return'})",
+		"ui.getByRole('main').snapshot({on_invalidated:'return'})",
+		"ui.getByRole('main').source({on_invalidated:'return'})",
+		"ui.getByRole('main').geometry({on_invalidated:'return'})",
+		"ui.getByRole('main').query({on_invalidated:'return'})",
+		"ui.getByRole('main').count({on_invalidated:'return'})",
+		"ui.getByRole('table').rows({on_invalidated:'return'})",
+		"ui.getByRole('main').selection({on_invalidated:'return'})",
+		"ui.getByRole('link').attribute('title',{on_invalidated:'return'})",
+		"ui.getByRole('link').getAttribute('href',{on_invalidated:'return'})",
+		"ui.getByRole('link').linkSummary({on_invalidated:'return'})",
+		"ui.screenshot({on_invalidated:'return'})",
+	} {
+		t.Run(expression, func(t *testing.T) {
+			calls := 0
+			runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+				calls++
+				if strings.Contains(string(c.Arguments), "on_invalidated") {
+					t.Fatal("guest option leaked to adapter")
+				}
+				return TargetToolResult{Result: map[string]any{"action_executed": false, "observation_invalidated": true, "reason": "document_changed", "observation_stage": "semantic_read"}}, nil
+			})
+			target, err := runtime.registry.ResolveTarget(t.Context(), call.TargetID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target.Kind, target.Ready, target.State = "browser.connected", true, "ready"
+			if err = runtime.registry.Update(target); err != nil {
+				t.Fatal(err)
+			}
+			result, err := executeTestScript(t.Context(), runtime, call, "globalThis.saved=42;const result=await "+expression+";ui.assert(result.status==='invalidated');ui.assert(result.text===undefined);log(result);")
+			payload := result.Result.(map[string]any)
+			if err != nil || calls != 1 || payload["context_reset"] != false || payload["completed"] != true {
+				t.Fatalf("explicit data contract: %+v %v calls=%d", payload, err, calls)
+			}
+			if _, err = executeTestScript(t.Context(), runtime, call, "ui.assert(saved===42)"); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestComputerInvalidatedWaitPreservesDeadlineFacts(t *testing.T) {
+	want := map[string]any{"requested_state": "visible", "timeout_ms": float64(20), "elapsed_ms": float64(24), "samples": float64(2)}
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		return computerObservationFailure(inner, map[string]any{"action_executed": false, "observation_stage": "safety_scan", "observation_invalidated": true, "reason": "document_changed", "wait": want}, "fixture")
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.getByRole('button').waitFor({timeout_ms:20});")
+	payload := result.Result.(map[string]any)
+	if err == nil || !reflect.DeepEqual(payload["wait"], want) || payload["observation_stage"] != "safety_scan" {
+		t.Fatalf("lost deadline facts: %+v %v", payload, err)
+	}
+	for _, key := range []string{"requested_state", "timeout_ms", "elapsed_ms", "samples"} {
+		invalid := cloneAnyMap(want)
+		invalid[key] = "private content"
+		if computerWaitFacts(invalid) != nil {
+			t.Fatalf("accepted invalid %s", key)
+		}
+	}
+}

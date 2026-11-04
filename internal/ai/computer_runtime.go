@@ -531,11 +531,14 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	}
 	if err == nil && !takeoverResult(result, err) && !computerReadResultValid(call, result) {
 		stage := "semantic_read"
-		if call.ToolName == "computer.screenshot" {
+		if known := computerObservationStage(anyToString(payload["observation_stage"])); known != "unknown" {
+			stage = known
+		}
+		if call.ToolName == "computer.screenshot" && computerObservationStage(anyToString(payload["observation_stage"])) == "unknown" {
 			stage = "capture"
 		}
 		facts := map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": stage}
-		for _, key := range []string{"observation_invalidated", "reason", "diagnostic", "preparation_executed", "input_progress"} {
+		for _, key := range []string{"observation_invalidated", "reason", "invalidation", "wait", "diagnostic", "preparation_executed", "input_progress"} {
 			if value, ok := payload[key]; ok {
 				facts[key] = value
 			}

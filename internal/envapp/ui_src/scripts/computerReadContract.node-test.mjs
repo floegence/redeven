@@ -10,7 +10,7 @@ function fixture(action) {
   const page = controller.page;
   Object.assign(page, {
     beginObservation: async () => ({}), safety: async () => safe,
-    inFrame: async () => 'Fixture', releaseInput: async () => { releases++; },
+    inFrame: async () => ({url:'https://fixture.test/',title:'Fixture'}), releaseInput: async () => { releases++; },
     close: () => { closes++; },
     action: async () => { calls++; return action(page, calls); },
     conditionState: async () => { calls++; return action(page, calls); },

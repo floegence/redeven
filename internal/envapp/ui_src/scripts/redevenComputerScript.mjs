@@ -5,8 +5,8 @@ import { getQuickJS } from 'quickjs-emscripten';
 // objects. This process is disposable; the Runtime owns its lifetime and IPC.
 // Explicit arity includes optional/default parameters; function.length cannot.
 export const computerScriptMethods = Object.freeze({
-  ui: {capabilities:[0,0],hover:[2,3],input:[1,1],clipboard:[1,2],budget:[0,0],observe:[0,1],snapshot:[0,1],screenshot:[0,0],help:[0,1],type:[1,1],doubleClick:[2,2],scroll:[1,2],scrollAt:[3,4],getByRole:[1,2],ref:[1,1],click:[2,3],drag:[4,6],key:[1,1],assert:[1,2]},
-  locator: {geometry:[0,1],setFiles:[1,1],source:[0,1],hover:[0,1],selection:[0,0],selectText:[1,2],selectRange:[2,3],selectAll:[0,0],replaceSelection:[1,1],copy:[0,0],cut:[0,0],paste:[0,1],setValue:[1,1],performAction:[1,1],node:[0,0],snapshot:[0,1],read:[0,0],text:[0,0],query:[0,1],count:[0,0],rows:[0,1],attribute:[1,1],linkSummary:[0,0],getAttribute:[1,1],click:[0,1],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
+  ui: {capabilities:[0,0],hover:[2,3],input:[1,1],clipboard:[1,2],budget:[0,0],observe:[0,1],snapshot:[0,1],screenshot:[0,1],help:[0,1],type:[1,1],doubleClick:[2,2],scroll:[1,2],scrollAt:[3,4],getByRole:[1,2],ref:[1,1],click:[2,3],drag:[4,6],key:[1,1],assert:[1,2]},
+  locator: {geometry:[0,1],setFiles:[1,1],source:[0,1],hover:[0,1],selection:[0,1],selectText:[1,2],selectRange:[2,3],selectAll:[0,0],replaceSelection:[1,1],copy:[0,0],cut:[0,0],paste:[0,1],setValue:[1,1],performAction:[1,1],node:[0,1],snapshot:[0,1],read:[0,1],text:[0,1],query:[0,1],count:[0,1],rows:[0,1],attribute:[1,2],linkSummary:[0,1],getAttribute:[1,2],click:[0,1],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
   browser: {navigate:[1,2],back:[0,1],reload:[0,1],saveDownload:[1,1],readDownload:[1,2],downloadCursor:[0,0],waitForDownload:[0,1]},
   image: {hover:[2,2],click:[2,3],doubleClick:[2,2],drag:[4,5],scroll:[3,4]},
   downloadCursor: {wait:[0,1]},
@@ -126,9 +126,14 @@ export async function createComputerScript({ browser = true } = {}) {
         if (value.exact !== undefined && typeof value.exact !== 'boolean') invalid();
         return {canonical_role: role, ...value};
       };
+      const invalidationOptions = (value={}) => {
+        if(value.on_invalidated!==undefined&&!['throw','return'].includes(value.on_invalidated))invalid('on_invalidated','throw_or_return');
+        return value;
+      };
+      const readOptions = (value={}) => {options(value,['on_invalidated']);return invalidationOptions(value);};
       const observeOptions = (value) => {
         options(value, ['root_ref', 'limit', 'emit', 'full', 'screenshot', 'on_invalidated']);
-        if (value.on_invalidated !== undefined && !['throw','return'].includes(value.on_invalidated)) invalid('on_invalidated','throw_or_return');
+        invalidationOptions(value);
         if (value.root_ref !== undefined) string(value.root_ref,'root_ref');
         if (value.limit !== undefined && (!Number.isInteger(value.limit) || value.limit < 1 || value.limit > 1000)) invalid('limit','integer_1_1000');
         for (const key of ['emit', 'full', 'screenshot']) if (value[key] !== undefined && typeof value[key] !== 'boolean') invalid(key,'boolean');
@@ -147,15 +152,15 @@ export async function createComputerScript({ browser = true } = {}) {
         return {...observation, ...(result.url === undefined ? {} : {url:result.url}), ...(result.title === undefined ? {} : {title:result.title}), nodes:observation.nodes.map(canonicalNode)};
       };
       const pageOptions = (value) => {
-        options(value,['limit','cursor']);
+        options(value,['limit','cursor','on_invalidated']);invalidationOptions(value);
         if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>200)) invalid('limit','integer_1_200');
         if(value.cursor!==undefined) string(value.cursor,'cursor');
         return value;
       };
-      const attribute = async (selector, name, href = false) => {
+      const attribute = async (selector, name, href = false, value={}) => {
         string(name,'attribute');
         if(!['title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount',...(href?['href']:[])].includes(name)) invalid();
-        return (await call({action:'attribute',selector,attribute:name,...(href?{summary:true}:{})})).value;
+        const result=await call({action:'attribute',selector,attribute:name,...(href?{summary:true}:{}),...readOptions(value)});return result.status==='invalidated'?result:result.value;
       };
       const navigationOptions = (value={}) => {
         options(value,['wait_until','timeout_ms']); waitOptions(value.timeout_ms === undefined ? {} : {timeout_ms:value.timeout_ms});
@@ -178,14 +183,14 @@ export async function createComputerScript({ browser = true } = {}) {
         return value;
       };
       const sourceOptions = (value={}) => {
-        options(value,['source','field','limit','cursor','parameter']);
+        options(value,['source','field','limit','cursor','parameter','on_invalidated']);invalidationOptions(value);
         if(value.source!==undefined&&!['ax','dom'].includes(value.source))invalid();
         for(const key of ['field','cursor'])if(value[key]!==undefined)string(value[key],key);
         if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>12000))invalid();
         return value;
       };
-      const screenshot = async () => {
-        const result = await call({action:'screenshot'});
+      const screenshot = async (value={}) => {
+        const result = await call({action:'screenshot',...readOptions(value)});
         if (!result.frame_geometry) return result;
         // Capture scalar identities so guest mutation cannot retarget an image.
         const identity = {coordinate_space:result.frame_geometry?.model_image?'model_pixels':'image_pixels',frame:result.frame_geometry?.frame,document_id:result.frame_geometry?.document_id};
@@ -200,7 +205,7 @@ export async function createComputerScript({ browser = true } = {}) {
       const locator = (selector) => expose('locator',{
         source:(value={})=>call({action:'source',selector,...sourceOptions(value)}),
         hover:(value={})=>{options(value,['point','scroll_into_view','stability_timeout_ms']);return call({action:'hover',selector,...pointerOptions(value)});},
-        selection:()=>call({action:'selection',selector}),
+        selection:(value={})=>call({action:'selection',selector,...readOptions(value)}),
         selectText:(text,value={})=>{options(value,['prefix','suffix','selection_type']);for(const key of ['prefix','suffix'])if(value[key]!==undefined)string(value[key]);if(value.selection_type!==undefined&&!['text','cursor_before','cursor_after'].includes(value.selection_type))invalid();return call({action:'select_text',selector,text:string(text),...value});},
         selectRange:(start,end,value={})=>{options(value,['direction']);if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start)invalid();return call({action:'select_range',selector,start,end,...value});},
         selectAll:()=>call({action:'select_all',selector}),
@@ -210,23 +215,24 @@ export async function createComputerScript({ browser = true } = {}) {
         paste:(value={})=>{options(value,['text','html']);for(const key of Object.keys(value))string(value[key]);return call({action:'paste',selector,...value});},
         setValue:(value)=>call({action:'set_value',selector,value}),
         performAction:(name)=>call({action:'perform_action',selector,name:string(name)}),
-        node: async () => canonicalNode((await call({action:'read',selector})).node),
+        node: async (value={}) => {const result=await call({action:'read',selector,...readOptions(value)});return result.status==='invalidated'?result:canonicalNode(result.node);},
         snapshot: async (value={}) => {
           observeOptions(value);
-          const {node} = await call({action:'read',selector});
-          return snapshot({...value,root_ref:node.ref});
+          const result=await call({action:'read',selector,...(value.on_invalidated===undefined?{}:{on_invalidated:value.on_invalidated})});
+          if(result.status==='invalidated')return result;
+          return snapshot({...value,root_ref:result.node.ref});
         },
-        read: () => call({action: 'read', selector}),
+        read: (value={}) => call({action:'read',selector,...readOptions(value)}),
         ...(${browser ? 'true' : 'false'} ? {
-          geometry:(value={})=>{options(value,['point']);return call({action:'geometry',selector,...pointerOptions(value)});},
+          geometry:(value={})=>{options(value,['point','on_invalidated']);invalidationOptions(value);return call({action:'geometry',selector,...pointerOptions(value)});},
           setFiles:(files)=>{if(!Array.isArray(files)||!files.length||files.length>16)invalid();return call({action:'set_files',selector,files});},
-          text: () => call({action:'text',selector}),
+          text: (value={}) => call({action:'text',selector,...readOptions(value)}),
           query: (value={}) => call({action:'query',selector,...pageOptions(value)}),
-          count: async () => (await call({action:'query',selector,limit:1})).total,
+          count: async (value={}) => {const result=await call({action:'query',selector,limit:1,...readOptions(value)});return result.status==='invalidated'?result:result.total;},
           rows: (value={}) => call({action:'table',selector,...pageOptions(value)}),
-          attribute: (name) => attribute(selector,name),
-          linkSummary: async () => ({url:await attribute(selector,'href',true),redacted:true}),
-          getAttribute: (attribute) => { string(attribute,'attribute'); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute}); },
+          attribute: (name,value={}) => attribute(selector,name,false,value),
+          linkSummary: async (value={}) => {const result=await attribute(selector,'href',true,value);return result?.status==='invalidated'?result:{url:result,redacted:true};},
+          getAttribute: (attribute,value={}) => { string(attribute,'attribute'); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute,...readOptions(value)}); },
         } : {}),
         click: (value={}) => call({action: 'click', selector,...clickOptions(value,true)}),
         fill: (text) => call({action: 'fill', selector, text: string(text)}),

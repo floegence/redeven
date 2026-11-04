@@ -5488,6 +5488,13 @@
         "computerInputIncomplete": "Entrée partiellement envoyée ; vérifiez avant de continuer",
         "computerEffectConfirmed": "Une action a été effectuée ; vérifiez avant de continuer",
         "computerBudgetExhausted": "Limite du script atteinte ; le travail terminé est conservé",
+        "computerReadCompleted": "Lecture terminée",
+        "computerReadScope": "Portée demandée uniquement ; une capture actuelle est distincte.",
+        "computerContext": "Contexte du script",
+        "computerContextReset": "Réinitialisé ; les variables et références précédentes sont indisponibles.",
+        "computerFailedOperation": "Opération arrêtée (à partir de 0)",
+        "contentRedacted": "Les identifiants sensibles sont masqués dans cet affichage.",
+        "contentEncodingReplaced": "Les octets de texte invalides ont été remplacés pour l’affichage.",
         "computerObservationUnavailable": "Impossible de lire la page",
         "computerActionObservedUnavailable": "Action effectuée ; impossible de lire la page",
         "computerObservationDetails": "Détails techniques"

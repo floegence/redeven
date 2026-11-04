@@ -22,6 +22,7 @@ class EvaluationFixture extends EventEmitter {
         return {result:{type:'undefined'}};
       }
       if (!this.installed) return {exceptionDetails:{text:'private missing observer text'}};
+      if (args.expression === '({url:document.URL,title:document.title})') return {result:{value:{url:'https://fixture.invalid/',title:'Fixture'}}};
       if (args.expression.endsWith('.begin()')) return {result:{type:'undefined'}};
       return {result:{type:args.expression === 'document.title'?'string':'object',value:args.expression === 'document.title'?'Fixture':[]}};
     }
@@ -131,7 +132,7 @@ test('real browser evaluation failures retain facts, never input and allow expli
       {stage:'safety_scan',method:'Runtime.evaluate',match:p=>p.expression?.includes('secretChanged()'),tool:'computer.observe'},
       {stage:'semantic_read',method:'Runtime.callFunctionOn',match:p=>p.functionDeclaration?.includes('property:"innerText"'),tool:'computer.action',args:{action:'text',selector:{role:'region',name:'Report'}}},
       {stage:'capture',method:'Runtime.evaluate',match:p=>p.expression?.includes('innerWidth-document'),tool:'computer.screenshot'},
-      {stage:'metadata',method:'Runtime.evaluate',match:p=>p.expression==='document.title',tool:'computer.observe'},
+      {stage:'metadata',method:'Runtime.evaluate',match:p=>p.expression==='({url:document.URL,title:document.title})',tool:'computer.observe'},
     ];
     for (const item of cases) for (const reason of ['exception','invalid_result']) {
       let injections = 0, inputs = 0;

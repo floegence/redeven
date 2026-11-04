@@ -1,4 +1,12 @@
 export const toolActivityEnUS = {
+  "computerReadCompleted": "Read completed",
+  "computerReadScope": "Requested scope only; a current screenshot is separate.",
+  "computerContext": "Script context",
+  "computerContextReset": "Reset; previous variables and handles are unavailable.",
+  "computerFailedOperation": "Stopped operation (zero-based)",
+  "contentRedacted": "Credentials redacted in this display.",
+  "contentEncodingReplaced": "Invalid text bytes replaced for display.",
+
   "parentReportSubmit": "Report to parent task",
   "parentReportAccepted": "Accepted",
   "parentReportRecorded": "The report was recorded in the parent task.",

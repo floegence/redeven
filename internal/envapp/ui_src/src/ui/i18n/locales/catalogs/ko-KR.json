@@ -5488,6 +5488,13 @@
         "computerInputIncomplete": "입력이 일부 전송되었습니다. 계속하기 전에 상태를 확인하세요",
         "computerEffectConfirmed": "완료된 작업이 있습니다. 계속하기 전에 확인하세요",
         "computerBudgetExhausted": "스크립트 실행 한도에 도달했습니다. 완료된 작업은 유지됩니다",
+        "computerReadCompleted": "읽기 완료",
+        "computerReadScope": "요청한 범위만 읽었습니다. 현재 스크린샷과는 별개입니다.",
+        "computerContext": "스크립트 환경",
+        "computerContextReset": "초기화되었습니다. 이전 변수와 핸들을 사용할 수 없습니다.",
+        "computerFailedOperation": "중단된 작업(0부터 시작)",
+        "contentRedacted": "표시 내용의 인증 정보가 가려졌습니다.",
+        "contentEncodingReplaced": "유효하지 않은 텍스트 바이트를 대체하여 표시합니다.",
         "computerObservationUnavailable": "페이지를 읽을 수 없습니다",
         "computerActionObservedUnavailable": "작업이 실행되었지만 페이지를 읽을 수 없습니다",
         "computerObservationDetails": "기술 세부 정보"

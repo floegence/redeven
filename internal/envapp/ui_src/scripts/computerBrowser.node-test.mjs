@@ -535,8 +535,11 @@ test('a detached iframe invalidates a sampled view without inventing user takeov
     };
     const sample = await controller.execute({ tool_name: 'computer.screenshot', full_access: true });
     assert.equal(removed, true);
-    assert.equal(sample.error, 'TARGET_OBSERVATION_UNAVAILABLE');
-    assert.equal(sample.safety, undefined, JSON.stringify(sample));
+    assert.equal(sample.result.observation_invalidated, true);
+    assert.equal(sample.result.reason, 'document_changed');
+    assert.equal(sample.result.invalidation.scope, 'safety');
+    assert.equal(sample.result.invalidation.frame_id, child);
+    assert.equal(sample.safety.safe_to_send_to_model, false);
     assert.equal(sample.result.observation_stage, 'safety_scan');
     assert.equal(sample.result.action_executed, false);
     assert.equal(sample.screenshot, undefined);
@@ -697,7 +700,8 @@ test('text capability checks retain explicit node scope across documents and SVG
       }
       const root = nodes.find(node => node.role === 'RootWebArea');
       const text = await page.text(await page.resolve({role:'main', root_ref:root.ref}));
-      assert.deepEqual(text, {text:'Visible',truncated:false,scope:'element',source:'browser_dom',property:'innerText'});
+      assert.deepEqual({...text,ref:undefined,frame_id:undefined,document_id:undefined}, {text:'Visible',truncated:false,scope:'element',source:'browser_dom',property:'innerText',url:'about:blank',title:'',ref:undefined,frame_id:undefined,document_id:undefined});
+      assert.ok(text.ref && text.frame_id && text.document_id);
     } finally { page.close(); }
   } finally { await browser.close(); }
 });

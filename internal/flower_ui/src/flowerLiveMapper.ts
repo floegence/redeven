@@ -708,7 +708,7 @@ function sanitizeActivityPublicValue(value: unknown, path: string): unknown {
   return value;
 }
 
-const structuredActivityRowKeys = new Set(['title', 'meta', 'content', 'format', 'language', 'truncated', 'target']);
+const structuredActivityRowKeys = new Set(['title', 'meta', 'content', 'format', 'language', 'truncated', 'redacted', 'invalid_utf8_replaced', 'target']);
 const structuredActivityRowFormats = new Set(['text', 'markdown', 'code']);
 const structuredActivityRowLimit = 200;
 const webFetchActivityPayloadKeys = new Set([
@@ -808,6 +808,7 @@ function mapStructuredActivityRows(raw: unknown, field: string): readonly Readon
     const language = trim(row.language);
     if (language && !/^[a-zA-Z0-9_+#.-]{1,64}$/u.test(language)) throw new Error(`Flower contract error: ${field}[${index}].language is invalid.`);
     if (row.truncated !== undefined && typeof row.truncated !== 'boolean') throw new Error(`Flower contract error: ${field}[${index}].truncated must be a boolean.`);
+    for(const key of ['redacted','invalid_utf8_replaced'])if(row[key]!==undefined&&typeof row[key]!=='boolean')throw new Error('Flower contract error: transformation flag must be boolean.');
     const format = trim(row.format) || 'text';
     if (!structuredActivityRowFormats.has(format)) {
       throw new Error(`Flower contract error: activity_item.presentation.payload.${field}[${index}].format is unsupported.`);
@@ -824,6 +825,8 @@ function mapStructuredActivityRows(raw: unknown, field: string): readonly Readon
       ...(row.target !== undefined ? {target:mapActivityTargetRef(row.target,index)} : {}),
       ...(language ? { language } : {}),
       ...(row.truncated !== undefined ? { truncated: row.truncated as boolean } : {}),
+      ...(row.redacted===true?{redacted:true}:{}),
+      ...(row.invalid_utf8_replaced===true?{invalid_utf8_replaced:true}:{}),
       ...(title ? { title } : {}),
       ...(meta ? { meta } : {}),
       ...(content ? { content } : {}),

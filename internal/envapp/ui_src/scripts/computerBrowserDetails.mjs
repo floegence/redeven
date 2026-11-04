@@ -39,7 +39,7 @@ export async function withDOM(page,element,fn,args=[],mutates=false){
 
 export async function browserSource(page,element,args){
   const source=args.source??'ax',document_id=page.prefix+':'+page.revision;
-  const metadata={source:source==='ax'?'browser_accessibility':'browser_dom',document_id,ref:element.ref};
+  const metadata={source:source==='ax'?'browser_accessibility':'browser_dom',document_id,frame_id:element.frame.frame.id,ref:element.ref};
   if(source==='dom'&&!element.backendNodeId)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
   const privacyElement=element.backendNodeId?element:{...element,backendNodeId:element.privacyBackendNodeId};
   if(!privacyElement.backendNodeId)throw new Error('TARGET_CAPABILITY_UNAVAILABLE');

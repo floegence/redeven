@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Private browser observation and input
 tags: [ai, computer-use, browser, privacy]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -22,7 +22,10 @@ confirmed protected values or pixels for classification. Unmarked secrets are no
 guaranteed detectable by accessibility; native apps must expose secure fields and
 users retain explicit takeover control. An unreadable frame stops the observation
 without inventing a human requirement. Unknown read failures are not retried;
-only measured viewport instability has a bounded same-target resampling window.
+only measured viewport instability has a one-second same-target resampling window
+inside the invocation budget. Explicit condition waits own their original deadline
+through final publication and resample only typed identity invalidation. Failed
+wait samples retain elapsed time and sample count without claiming a condition result.
 
 See [guided connection](computer-use-browser-connection.md).
 

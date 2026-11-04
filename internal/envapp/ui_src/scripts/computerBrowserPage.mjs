@@ -49,7 +49,7 @@ export class BrowserNavigationError extends Error {
 // Typed evidence that a read sample lost its document or temporary candidate identity.
 // Only explicit condition waits may resample; never inferred from error text.
 export class BrowserObservationInvalidated extends Error {
-  constructor(reason = 'document_changed') { super('OBSERVATION_INVALIDATED'); this.observationReason = reason; }
+  constructor(reason = 'document_changed', invalidation, protocolDiagnostic) { super('OBSERVATION_INVALIDATED'); this.observationReason = reason; this.invalidation = invalidation; this.protocolDiagnostic = protocolDiagnostic; }
 }
 
 // Sensitive-field transitions are observed in a CDP isolated world, including
@@ -143,9 +143,9 @@ export class BrowserComputerPage {
   }
   allowsOrigin(origin) { return this.fullAccess || (origin !== 'null' && this.allowedOrigins.has(origin)); }
 
-  invalidate(frameIDs) {
+  invalidate(frameIDs, event = 'document_inventory') {
     this.revision++;
-    if (frameIDs === undefined) { this.references.clear(); this.observedFrames.clear(); }
+    if (frameIDs === undefined) { for (const record of this.observedFrames.values()) record.invalidation = {frame_id:record.frame.id,event}; this.references.clear(); this.observedFrames.clear(); }
     else {
       const removed = new Set(frameIDs);
       // Reuse the observation inventory for frame ancestry and document
@@ -155,12 +155,12 @@ export class BrowserComputerPage {
         for (const [id, record] of this.observedFrames) if (removed.has(record.frame.parentId)) removed.add(id);
       }
       for (const [ref, entry] of this.references) if (removed.has(entry.frame.frame.id)) this.references.delete(ref);
-      for (const id of removed) this.observedFrames.delete(id);
+      for (const id of removed) { const record=this.observedFrames.get(id); if(record)record.invalidation={frame_id:id,event}; this.observedFrames.delete(id); }
     }
     this.changed();
   }
-  invalidateSession(session) {
-    this.invalidate([...this.observedFrames].filter(([,record]) => record.session === session).map(([id]) => id));
+  invalidateSession(session, event) {
+    this.invalidate([...this.observedFrames].filter(([,record]) => record.session === session).map(([id]) => id), event);
   }
   changed() { for (const listener of this.listeners) listener(); }
   close() { this.invalid = true; this.invalidate(); }
@@ -183,10 +183,15 @@ export class BrowserComputerPage {
     };
     this.sessionDisposers.set(session, () => { for (const dispose of listeners) dispose(); });
     const ready = (async () => {
-      listen('Page.frameAttached', event => this.invalidate([event.frameId]));
-      listen('Page.frameDetached', event => this.invalidate([event.frameId]));
-      listen('Page.frameNavigated', event => this.invalidate(event.frame.parentId ? [event.frame.id] : session === this.transport ? undefined : [event.frame.id]));
-      listen('DOM.documentUpdated', () => this.invalidateSession(session));
+      listen('Page.frameAttached', event => this.invalidate([event.frameId], 'Page.frameAttached'));
+      listen('Page.frameDetached', event => this.invalidate([event.frameId], 'Page.frameDetached'));
+      listen('Page.frameNavigated', event => this.invalidate(event.frame.parentId ? [event.frame.id] : session === this.transport ? undefined : [event.frame.id], 'Page.frameNavigated'));
+      listen('Page.navigatedWithinDocument', event=>{
+        const record=this.observedFrames.get(event.frameId);
+        if(record){record.route=(record.route??0)+1;record.frame={...record.frame,url:event.url};}
+        this.changed();
+      });
+      listen('DOM.documentUpdated', () => this.invalidateSession(session, 'DOM.documentUpdated'));
       for (const event of ['DOM.childNodeRemoved', 'DOM.attributeModified', 'DOM.childNodeInserted', 'Accessibility.nodesUpdated', 'Page.lifecycleEvent']) listen(event, () => this.changed());
       listen('Page.windowOpen', event => {
         // Opening a page completes an action; choosing that page is the
@@ -281,20 +286,39 @@ export class BrowserComputerPage {
     }
     for (const frame of result) {
       const previous = this.observedFrames.get(frame.frame.id);
-      if (previous?.session === frame.session && previous.frame.loaderId === frame.frame.loaderId) continue;
+      if (previous?.ready && previous.session === frame.session && previous.frame.loaderId === frame.frame.loaderId) continue;
       if (previous) this.invalidate([frame.frame.id]);
-      const revision = this.revision;
-      const { executionContextId } = await protocolRead(frame.session, 'Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' }, value => Number.isInteger(value?.executionContextId));
-      await evaluate(frame.session, 'Runtime.evaluate', { contextId: executionContextId, expression: privacyObserverSource }, value => value === undefined);
-      if (revision !== this.revision) throw new BrowserObservationInvalidated();
-      this.observedFrames.set(frame.frame.id, {...frame, revision});
+      const record = {...frame, revision:this.revision, ready:false};
+      this.observedFrames.set(frame.frame.id,record);
+      try {
+        await this.readFrame(frame, async () => {
+          const {executionContextId} = await protocolRead(frame.session, 'Page.createIsolatedWorld', {frameId:frame.frame.id,worldName:'flower-observation'}, value=>Number.isInteger(value?.executionContextId));
+          await evaluate(frame.session,'Runtime.evaluate',{contextId:executionContextId,expression:privacyObserverSource},value=>value===undefined);
+        });
+        if(record.invalidation)throw new BrowserObservationInvalidated('document_changed',record.invalidation);
+        record.ready = true;
+      } catch(error) { if(this.observedFrames.get(frame.frame.id)===record)this.observedFrames.delete(frame.frame.id); throw error; }
     }
     return result;
   }
 
+  // Only a lifecycle change of the exact document being read classifies a
+  // protocol failure as invalidation. Unrelated frame churn is not evidence.
+  async readFrame(frame, read) {
+    const record=this.observedFrames.get(frame.frame.id);
+    try {
+      return await read();
+    } catch(error) {
+      if(record?.invalidation && error.protocolDiagnostic?.phase==='protocol')
+        throw new BrowserObservationInvalidated('document_changed',record.invalidation,error.protocolDiagnostic);
+      throw error;
+    }
+  }
   async inFrame(frame, expression, accepts) {
-    const { executionContextId } = await protocolRead(frame.session, 'Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' }, value => Number.isInteger(value?.executionContextId));
-    return evaluate(frame.session, 'Runtime.evaluate', { contextId: executionContextId, expression, returnByValue: true }, accepts);
+    return this.readFrame(frame,async()=>{
+      const {executionContextId}=await protocolRead(frame.session,'Page.createIsolatedWorld',{frameId:frame.frame.id,worldName:'flower-observation'},value=>Number.isInteger(value?.executionContextId));
+      return evaluate(frame.session,'Runtime.evaluate',{contextId:executionContextId,expression,returnByValue:true},accepts);
+    });
   }
 
   async beginObservation() {
@@ -367,14 +391,14 @@ export class BrowserComputerPage {
     if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (this.requiredOrigin) { reasons.add('site_permission'); requiredOrigin = this.requiredOrigin; }
     if (this.stopped) reasons.add('user_control');
-    if (!reasons.size && scanFailure instanceof BrowserObservationInvalidated) throw scanFailure;
+    if (!reasons.size && scanFailure instanceof BrowserObservationInvalidated) { scanFailure.observationStage='safety_scan'; scanFailure.invalidation={...scanFailure.invalidation,scope:'safety'}; throw scanFailure; }
     if (!reasons.size && scanFailure) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), {protocolDiagnostic:scanFailure.protocolDiagnostic});
-    if (!reasons.size && revision !== this.revision) throw new BrowserObservationInvalidated();
+    if (!reasons.size && revision !== this.revision) throw Object.assign(new BrowserObservationInvalidated('document_changed',{scope:'safety',event:'document_inventory'}),{observationStage:'safety_scan'});
     return { level: reasons.size ? 'takeover' : 'routine', reason_codes: [...reasons], safe_to_capture: !reasons.size, safe_to_send_to_model: !reasons.size, ...(requiredOrigin ? { required_origin: requiredOrigin } : {}) };
   }
 
   observationIdentity(rootRef) {
-    if (!rootRef) return {revision:this.revision};
+    if (!rootRef) return {revision:this.revision,documents:new Map(this.observedFrames),routes:new Map([...this.observedFrames].map(([id,r])=>[id,r.route??0]))};
     const entry = this.references.get(rootRef);
     if (!entry || this.observedFrames.get(entry.frame.frame.id) !== entry.document) throw new Error('STALE_REFERENCE');
     const documents = new Map();
@@ -383,12 +407,33 @@ export class BrowserComputerPage {
       documents.set(document.frame.id,document);
       document = this.observedFrames.get(document.frame.parentId);
     }
-    // Metadata belongs to the main document even for a child-scoped read.
+    // Keep the top-level document in the identity of child-scoped reads.
     for (const [id, record] of this.observedFrames) if (record.session === this.transport && !record.frame.parentId) documents.set(id,record);
-    return {documents};
+    return {documents,routes:new Map([...documents].map(([id,r])=>[id,r.route??0]))};
   }
   identityCurrent(identity) {
-    return identity.documents ? [...identity.documents].every(([id,record]) => this.observedFrames.get(id) === record) : identity.revision === this.revision;
+    return (identity.revision===undefined || identity.revision===this.revision) && [...identity.documents??[]].every(([id,record])=>this.observedFrames.get(id)===record);
+  }
+
+  scopeIdentity(identity, frameID) {
+    const documents=new Map();
+    let record=identity.documents.get(frameID);
+    if(!record)throw this.identityFailure(identity);
+    while(record&&!documents.has(record.frame.id)) {
+      documents.set(record.frame.id,record);
+      record=identity.documents.get(record.frame.parentId);
+    }
+    identity.documents=documents;
+    identity.routes=new Map([...identity.routes].filter(([id])=>documents.has(id)));
+    delete identity.revision;
+  }
+  identityFailure(identity) {
+    const changed=[...identity.documents??[]].find(([,record])=>record.invalidation);
+    return new BrowserObservationInvalidated('document_changed',{scope:'content',...(changed?changed[1].invalidation:{event:'document_inventory'})});
+  }
+  checkRoutes(identity) {
+    for(const [id,route] of identity.routes??[])if((this.observedFrames.get(id)?.route??0)!==route)
+      throw new BrowserObservationInvalidated('document_changed',{scope:'content',frame_id:id,event:'Page.navigatedWithinDocument'});
   }
 
   async observe({ limit = 200, root_ref } = {}) {
@@ -721,11 +766,11 @@ export class BrowserComputerPage {
     const {object} = await session.send('DOM.resolveNode', {backendNodeId:element.backendNodeId, executionContextId});
     try {
       const result = await evaluate(session, 'Runtime.callFunctionOn', {objectId:object.objectId, returnByValue:true,
-        functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.innerText;let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"element",source:"browser_dom",property:"innerText"};text+=character;}return {text,truncated:false,scope:"element",source:"browser_dom",property:"innerText"};}'}, value => value?.unsupported === true || (typeof value?.text === 'string' && typeof value.truncated === 'boolean' && value.scope === 'element' && value.property === 'innerText'));
+        functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.innerText,metadata={url:this.ownerDocument.URL,title:this.ownerDocument.title};let text="",count=0;for(const character of source){if(count++===12000)return {...metadata,text,truncated:true,scope:"element",source:"browser_dom",property:"innerText"};text+=character;}return {...metadata,text,truncated:false,scope:"element",source:"browser_dom",property:"innerText"};}'}, value => value?.unsupported === true || (typeof value?.text === 'string' && typeof value.truncated === 'boolean' && value.scope === 'element' && value.property === 'innerText'));
       if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
         diagnostic: {phase:'read', method:'locator.text', expected:'html_element', recovery:'choose_supported_read'},
       });
-      return result;
+      return {...result,url:redactedNavigationURL(result.url),frame_id:element.frame.frame.id,document_id:this.prefix+':'+element.document.revision,ref:element.ref};
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }
   }
 

@@ -2017,3 +2017,17 @@ it('shows a localized unknown outcome before expanding Activity details', () => 
   }), { statuses: { ...DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses, unknown: '结果未知' } });
   expect(presentation.meta).toBe('结果未知');
 });
+
+it('keeps completed reads, interpreter reset and zero-based failure position distinct', () => {
+ const result = presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'computer',status:'error',chips:[
+  {kind:'computer_read',label:'read',value:'completed'},
+  {kind:'computer_context',label:'context',value:'reset'},
+  {kind:'computer_failed_operation',label:'operation',value:'0'},
+ ],payload:{rows_provided:true}}));
+ expect(result.detailBlocks).toContainEqual({kind:'structured',lines:[
+  {label:toolActivityEnUS.computerReadCompleted,value:toolActivityEnUS.computerReadScope},
+  {label:toolActivityEnUS.computerContext,value:toolActivityEnUS.computerContextReset},
+  {label:toolActivityEnUS.computerFailedOperation,value:'0'},
+ ]});
+ expect(result.meta).not.toContain('No new page observation');
+});
