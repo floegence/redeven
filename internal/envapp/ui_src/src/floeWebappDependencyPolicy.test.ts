@@ -11,9 +11,9 @@ const FLOE_WEBAPP_DEPENDENCIES = [
 ] as const;
 
 const FLOE_WEBAPP_RELEASE_SET = {
-  '@floegence/floe-webapp-boot': '0.87.0',
-  '@floegence/floe-webapp-core': '0.87.0',
-  '@floegence/floe-webapp-protocol': '0.87.0',
+  '@floegence/floe-webapp-boot': '0.87.2',
+  '@floegence/floe-webapp-core': '0.87.2',
+  '@floegence/floe-webapp-protocol': '0.87.2',
 } as const;
 
 const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
@@ -158,9 +158,9 @@ describe('published npm dependency policy', () => {
       '@floegence/floeterm-terminal-web',
     ));
 
-    expect(version).toBe('0.19.2');
+    expect(version).toBe('0.20.0');
     expect(expectedTarballUrl('@floegence/floeterm-terminal-web', version)).toBe(
-      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.19.2.tgz',
+      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.20.0.tgz',
     );
 
     const previousReleaseMarkers = new Map([
@@ -178,7 +178,7 @@ describe('published npm dependency policy', () => {
       'node_modules/@floegence/floeterm-terminal-web/package.json',
     );
 
-    expect(packageManifest.version).toBe('0.19.2');
+    expect(packageManifest.version).toBe('0.20.0');
     expect(readInstalledFloetermDeclaration('dist/semantic/presentation.d.ts'))
       .toMatch(/windowRows\?: number/);
     expect(readInstalledFloetermDeclaration('dist/semantic/presentation.d.ts'))
