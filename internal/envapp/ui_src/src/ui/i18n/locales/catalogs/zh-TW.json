@@ -7358,6 +7358,31 @@
         "unknown": "上次執行結果未知",
         "failed": "上次執行失敗",
         "next": "下次執行：{time}"
+      },
+      "connections": {
+        "title": "連線",
+        "connector": "連接器",
+        "destination": "目標位址",
+        "scope": "範圍",
+        "environment": "環境",
+        "user": "目前使用者",
+        "methods": "HTTP 方法",
+        "privatePrefixes": "私有網路（選填）",
+        "privateHelp": "輸入明確的 CIDR 網段，以逗號分隔。存取公開位址時請留白。",
+        "expires": "連線到期時間",
+        "reviewExpires": "審核到期時間",
+        "review": "檢查連線",
+        "approve": "核准連線",
+        "revoke": "撤銷連線",
+        "fixed": "固定設定",
+        "unconfigured": "尚未設定",
+        "active": "有效",
+        "expired": "已到期",
+        "revoked": "已撤銷",
+        "stale": "需要重新審核",
+        "empty": "目前沒有連線。",
+        "failed": "操作失敗。請重新整理連線狀態並檢查設定。",
+        "unknown": "操作結果尚未確定。請先檢查重新整理後的狀態，再提出新的審核。"
       }
     },
     "pluginRuntime": {

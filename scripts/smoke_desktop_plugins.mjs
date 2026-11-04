@@ -1,4 +1,6 @@
 import fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -73,6 +75,10 @@ export function assertExtensionIOEvidence(evidence, { requireRevoke = true, requ
     || !/^[0-9a-f]{64}$/u.test(String(v9.http.sha256 ?? ''))) {
     throw new Error('v9 HTTP streaming evidence is incomplete');
   }
+  if (v9.http.request_bytes !== 1024 * 1024 || v9.http.requests_per_direction !== 64
+    || v9.http.upload_limit_enforced !== true || v9.http.download_limit_enforced !== true) {
+    throw new Error('v9 bounded HTTP request and quota evidence is incomplete');
+  }
   if (!Number.isInteger(v9.websocket?.messages) || v9.websocket.messages < 100) throw new Error('v9 WebSocket evidence is incomplete');
   if (!Number.isInteger(v9.tcp?.exchanges) || v9.tcp.exchanges < 100) throw new Error('v9 TCP evidence is incomplete');
   if (!Number.isInteger(v9.udp?.datagrams) || v9.udp.datagrams < 100) throw new Error('v9 UDP evidence is incomplete');
@@ -128,8 +134,9 @@ export function browserPages(browser) {
   return browser.contexts().flatMap((context) => context.pages());
 }
 
-export function isEnvAppPage(page) {
+export function isEnvAppPage(page, targetURL) {
   try {
+    if (targetURL && new URL(page.url()).origin !== new URL(targetURL).origin) return false;
     return new URL(page.url()).pathname.startsWith('/_redeven_proxy/env/');
   } catch {
     return false;
@@ -413,10 +420,10 @@ async function installUploadedSmokePlugin(page, sessionHeaders, config, pluginRe
   };
 }
 
-async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, pluginInstanceID) {
+async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, pluginInstanceID, guestOutcomes) {
   const plugin = enabledPlugins(catalog).find((candidate) => candidate.plugin_instance_id === pluginInstanceID) ?? enabledPlugins(catalog)[0];
   if (!plugin) throw new Error('v9 I/O revoke smoke requires an enabled plugin');
-  const holdRPCStart = pluginResponses.length;
+  const holdRPCStart = guestOutcomes.length;
   const holdButton = frame.locator('[data-redevplugin-action="hold-smoke"]');
   await holdButton.waitFor({ state: 'visible', timeout: 30_000 });
   await holdButton.click();
@@ -439,11 +446,8 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
     return state.http_active === 0 && state.ws_active === 0 && state.tcp_active === 0
       && state.http_closed > 0 && state.ws_closed > 0 && state.tcp_closed > 0 ? state : null;
   }, 60_000, 'v9 resource closure after revoke');
-  const holdOutcome = await waitFor(() => pluginResponses.slice(holdRPCStart).find((entry) => (
-    entry.pathname.endsWith('/plugins/rpc')
-      && entry.rpc_plugin_instance_id === plugin.plugin_instance_id
-      && entry.rpc_method === 'smoke.hold'
-  )) ?? null, 30_000, 'v9 hold RPC revocation');
+  const holdOutcome = await waitFor(() => guestOutcomes.slice(holdRPCStart).find((entry) =>
+    entry.method === 'smoke.hold') ?? null, 30_000, 'v9 hold RPC revocation');
   const disabled = await waitFor(async () => {
     const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
     if (response.status !== 200) return null;
@@ -456,9 +460,10 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
   }, sessionHeaders);
   pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/enable', ...enableResponse });
   if (enableResponse.status !== 200) throw new Error(`v9 I/O re-enable failed: ${JSON.stringify(enableResponse)}`);
+  await approveSmokeConnections(page, sessionHeaders, config, pluginResponses, plugin.plugin_instance_id);
   return {
     disabled: true,
-    pending_rpc_rejected: holdOutcome.status !== 200 || holdOutcome.body?.ok === false,
+    pending_rpc_rejected: holdOutcome.ok === false,
     http_closed: closed.http_closed > activeBefore.http_active,
     websocket_closed: closed.ws_closed > activeBefore.ws_active,
     tcp_closed: closed.tcp_closed > activeBefore.tcp_active,
@@ -494,6 +499,33 @@ async function verifyUninstall(page, sessionHeaders, catalog, pluginResponses) {
     delete_data: true,
     removed_from_catalog: true,
   };
+}
+
+async function approveSmokeConnections(page, sessionHeaders, config, pluginResponses, pluginInstanceID) {
+  const listed = successfulPluginResponse(await requestPluginJSON(page,
+    '/_redevplugin/api/plugins/connections/query', { plugin_instance_id: pluginInstanceID }, sessionHeaders), 'list smoke connections');
+  const revisions = new Map((listed.connections ?? []).map((item) => [item.connector_id, item.revision]));
+    // Use the released two-step connection contract. No fixed loopback target
+    // is admitted from package metadata, and no permission is inferred.
+    for (const [connector, scheme, port] of [
+      ['http', 'http', config.fixturePorts.http], ['ws', 'ws', config.fixturePorts.ws],
+      ['tcp', 'tcp', config.fixturePorts.tcp], ['udp', 'udp', config.fixturePorts.udp],
+    ]) {
+      const request = async (operation, body) => {
+        const pathname = '/_redevplugin/api/plugins/connections/' + operation;
+        const response = await requestPluginJSON(page, pathname, body, sessionHeaders);
+        pluginResponses.push({ method: 'POST', pathname, ...response });
+        if (response.status !== 200) throw new Error('Connection ' + operation + ' failed: ' + JSON.stringify(response));
+        return response.body?.data ?? response.body;
+      };
+      const review = await request('review', {
+        plugin_instance_id: pluginInstanceID, connector_id: 'smoke.' + connector,
+        destination: scheme + '://127.0.0.1:' + port + (connector === 'http' ? '/' : ''),
+        expected_revision: revisions.get('smoke.' + connector) ?? 0, private_prefixes: ['127.0.0.1/32'],
+        ...(connector === 'http' ? { http_methods: ['GET', 'POST'] } : {}),
+      });
+      await request('approve', { plugin_instance_id: pluginInstanceID, review_id: review.review.review_id });
+    }
 }
 
 async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses) {
@@ -554,6 +586,7 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
         revoke_epoch: Number(revisions?.revoke_epoch ?? installedCatalog.revoke_epoch),
       };
     }
+    await approveSmokeConnections(page, sessionHeaders, config, pluginResponses, installedCatalog.plugin_instance_id);
     const enabled = await waitFor(async () => {
       const response = await queryCatalog();
       if (response.status !== 200) return null;
@@ -592,6 +625,38 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
   return { performed: true, enabledCount: enabledPlugins(enabled).length };
 }
 
+export function createSmokeTransportGate(config, execute = promisify(execFile)) {
+  const target = config.linuxTarget;
+  const available = config.mode !== 'attach' && Boolean(target);
+  let paused = false;
+  const container = target?.container_id;
+  const pid = target?.local_ui_pid;
+  async function signal(name) {
+    await execute('docker', ['exec', container, 'sh', '-ceu',
+      'test "$(cat /proc/$1/comm)" = redeven; kill -' + name + ' "$1"', 'sh', String(pid)], { timeout: 10000 });
+  }
+  return {
+    available,
+    async pause() {
+      if (!available || paused) return;
+      assertIsolatedSmokeConfiguration(config);
+      if (!/^[0-9a-f]{64}$/u.test(container ?? '') || !Number.isInteger(pid) || pid <= 1) {
+        throw new Error('Transport gate requires the exact task-owned Linux host');
+      }
+      const { stdout } = await execute('docker', ['inspect', '--format', '{{.Name}}', container], { timeout: 10000 });
+      if (!stdout.trim().startsWith('/redeven-plugin-smoke-')) throw new Error('Transport gate refuses an unrelated container');
+      // Mark first: a lost STOP acknowledgement still requires a CONT attempt.
+      paused = true;
+      await signal('STOP');
+    },
+    async resume() {
+      if (!paused) return;
+      await signal('CONT');
+      paused = false;
+    },
+  };
+}
+
 async function runBrowserSmoke(config) {
   if (config.mode === 'attach') {
     assertAttachSmokeConfiguration(config);
@@ -609,14 +674,16 @@ async function runBrowserSmoke(config) {
     return connected;
   };
   const browser = await connectBrowser();
+  const transportGate = createSmokeTransportGate(config);
   try {
-    await runConnectedBrowserSmoke(config, browser, startedAt, connectBrowser);
+    await runConnectedBrowserSmoke(config, browser, startedAt, connectBrowser, transportGate);
   } finally {
-    await Promise.all([...browsers].map((connected) => connected.close().catch(() => {})));
+    try { await transportGate.resume(); }
+    finally { await Promise.all([...browsers].map((connected) => connected.close().catch(() => {}))); }
   }
 }
 
-async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBrowser) {
+async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBrowser, transportGate) {
   let phase = 'connect';
   const writeFailure = async (error) => {
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-failure.json`), JSON.stringify({
@@ -632,13 +699,14 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     30_000,
     'Desktop page',
   );
-  const existingEnvPage = browserPages(browser).find(isEnvAppPage) ?? null;
+  const existingEnvPage = browserPages(browser).find((candidate) => isEnvAppPage(candidate, config.externalLocalUIURL)) ?? null;
+  let opening;
   if (!existingEnvPage) {
     if (config.mode === 'attach') {
       throw new Error('attached Desktop has no open Env App target');
     }
     if (!config.externalLocalUIURL) throw new Error('isolated Desktop smoke requires an external Linux Local UI URL');
-    const launcherResult = await initialPage.evaluate(async (url) => {
+    opening = initialPage.evaluate(async (url) => {
       if (!window.redevenDesktopLauncher?.performAction) throw new Error('Desktop preload launcher bridge is unavailable');
       return window.redevenDesktopLauncher.performAction({
         kind: 'open_remote_environment',
@@ -647,14 +715,15 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         label: 'Linux I/O smoke',
       });
     }, config.externalLocalUIURL);
-    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-external-open.json`), `${JSON.stringify(launcherResult, null, 2)}\n`);
-    if (launcherResult?.ok === false) throw new Error(`external Linux Local UI open failed: ${JSON.stringify(launcherResult)}`);
-    browser = await reconnectBrowser();
+    // The launcher waits for app readiness, which may require the password
+    // form in the new window. Observe that window while the action is pending.
+    opening.catch(() => undefined);
   }
   let page;
   try {
     page = await waitFor(async () => {
-      return browserPages(browser).find(isEnvAppPage) ?? null;
+      browser = await reconnectBrowser();
+      return browserPages(browser).find((candidate) => isEnvAppPage(candidate, config.externalLocalUIURL)) ?? null;
     }, 60_000, 'Env App page');
   } catch (error) {
     const candidates = browserPages(browser).map((candidate) => ({
@@ -666,9 +735,26 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     );
     throw error;
   }
+  // Observe the product-issued credential for this active document only.
+  // Platform calls travel over encrypted session streams, not native fetch.
+  let activeSessionCredential;
+  const earlyErrors = [];
+  page.on("console", (message) => { if (message.type() === "error") earlyErrors.push(message.text()); });
+  page.on("pageerror", (error) => earlyErrors.push(error.message));
+  page.on("requestfailed", (request) => earlyErrors.push({ url: new URL(request.url()).origin + new URL(request.url()).pathname, error: request.failure() }));
+  page.on('request', (request) => void (async () => {
+    if (new URL(request.url()).pathname === '/api/local/plugin/session/ready') {
+      const headers = await request.allHeaders();
+      activeSessionCredential = headers['x-redeven-plugin-session'];
+    }
+  })());
+  // Observe acquisition before loading the same document generation.
+  // Credentials never enter persisted evidence.
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.bringToFront();
   if (config.externalLocalUIURL) {
     const accessPassword = page.locator('#redeven-access-password');
+    await waitFor(async () => await accessPassword.isVisible() || Boolean(activeSessionCredential), 30_000, 'Local UI access gate or authenticated session');
     let unlock = { status: 204, unlocked: true };
     if (await accessPassword.count() > 0) {
       await accessPassword.fill('smoke-password');
@@ -709,10 +795,14 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       panelTileKeys: await panelTiles.evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute('data-plugin-panel-tile'))),
     };
   };
-  const pluginRequestHeaders = new Map();
+  const guestOutcomes = [];
   const pluginRequests = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.text().startsWith('redevplugin-io-smoke:')) {
+      try { guestOutcomes.push(JSON.parse(message.text().slice('redevplugin-io-smoke:'.length))); }
+      catch { pageErrors.push('Invalid fixture outcome'); }
+    }
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('request', (request) => void (async () => {
@@ -725,7 +815,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         observation.rpc_method = body?.method;
       }
       pluginRequests.push(observation);
-      pluginRequestHeaders.set(pathname, await request.allHeaders());
+
     }
   })().catch((error) => pageErrors.push(`request observation failed: ${String(error)}`)));
   page.on('response', (response) => void (async () => {
@@ -764,16 +854,22 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-shell-failure.html`), await page.content()).catch(() => {});
     throw error;
   }
+  if (opening) {
+    await fs.writeFile(path.join(config.reportRoot, config.phase + '-early-diagnostics.json'), JSON.stringify({ url: page.url(), errors: earlyErrors, text: await page.locator('body').innerText() }, null, 2));
+    const launcherResult = await opening;
+    await fs.writeFile(path.join(config.reportRoot, config.phase + '-external-open.json'), JSON.stringify(launcherResult, null, 2));
+    if (launcherResult?.ok === false) throw new Error('external Linux Local UI open failed: ' + JSON.stringify(launcherResult));
+  }
   mark('shell_ready_ms');
+  await waitFor(() => activeSessionCredential, 30_000, 'connected plugin session');
   phase = 'panel_open';
-  const initialBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
-  if (config.mode === 'attach' && await initialBackdrop.count() > 0) {
-    const initialClose = initialBackdrop.locator(
+  const initialPanel = page.locator('#redeven-plugin-switcher').first();
+  if (config.mode === 'attach' && await initialPanel.count() > 0) {
+    const initialClose = initialPanel.locator(
       '[aria-label="Close plugins"], [aria-label="关闭插件"]',
     ).first();
-    if (await initialClose.count() > 0) await initialClose.click();
-    else await initialBackdrop.click({ position: { x: 2, y: 2 } });
-    await initialBackdrop.waitFor({ state: 'detached', timeout: 10_000 });
+    await initialClose.click();
+    await initialPanel.waitFor({ state: 'detached', timeout: 10_000 });
   }
   const activityMode = page.getByRole('tab', { name: 'Activity', exact: true });
   await activityMode.click();
@@ -782,20 +878,25 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   await visiblePluginTrigger().waitFor({ state: 'visible', timeout: 30_000 });
   if (config.mode === 'attach' && await visiblePluginTrigger().getAttribute('aria-expanded') === 'true') {
     await visiblePluginTrigger().click();
-    await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
+    await page.locator('#redeven-plugin-switcher').first().waitFor({ state: 'detached', timeout: 10_000 });
   }
   phase = 'panel_open';
   const firstPanelOpenStartedAt = performance.now();
-  await visiblePluginTrigger().click();
-  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
+  if (!await page.locator('#redeven-plugin-switcher').first().isVisible().catch(() => false)) await visiblePluginTrigger().click();
+  try {
+    await page.locator('#redeven-plugin-switcher').first().waitFor({ state: 'visible', timeout: 10_000 });
+  } catch (error) {
+    await page.screenshot({ path: path.join(config.reportRoot, config.phase + '-panel-failure.png') });
+    await fs.writeFile(path.join(config.reportRoot, config.phase + '-panel-failure.html'), await page.content());
+    throw error;
+  }
   const firstPanelOpenMS = Number((performance.now() - firstPanelOpenStartedAt).toFixed(1));
   phase = 'session_credentials';
-  const sessionHeaders = await waitFor(() => {
-    for (const headers of pluginRequestHeaders.values()) {
-      if (headers['x-redeven-plugin-session'] && headers['x-redevplugin-csrf']) return headers;
-    }
-    return null;
-  }, 30_000, 'plugin session credential');
+  const credential = await waitFor(() => activeSessionCredential, 30_000, 'active plugin session credential');
+  const sessionHeaders = {
+    'x-redeven-plugin-session': credential,
+    'x-redevplugin-csrf': 'redeven-env-v1',
+  };
   phase = 'plugin_bootstrap';
   let bootstrap;
   try {
@@ -820,7 +921,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     if (config.ioPackagePath) {
       try {
         if (!await pluginCenter.isVisible().catch(() => false)) {
-          await page.locator('[data-plugin-launcher-backdrop] [data-plugin-center-market-action]').click();
+          await page.locator('#redeven-plugin-switcher [data-plugin-center-market-action]').click();
           await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
         }
         await pluginCenterRefresh.click();
@@ -871,13 +972,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       throw error;
     }
     const activityPluginTrigger = page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first();
-    const pluginPanelBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
+    const pluginPanel = page.locator('#redeven-plugin-switcher').first();
     try {
-      if (!await pluginPanelBackdrop.isVisible().catch(() => false)) {
+      if (!await pluginPanel.isVisible().catch(() => false)) {
         await activityPluginTrigger.waitFor({ state: 'visible', timeout: 10_000 });
         await activityPluginTrigger.click();
       }
-      await pluginPanelBackdrop.waitFor({ state: 'visible', timeout: 10_000 });
+      await pluginPanel.waitFor({ state: 'visible', timeout: 10_000 });
     } catch (error) {
       await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-panel-after-install-failure.png`), fullPage: true }).catch(() => {});
       await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-after-install-failure.html`), await page.content()).catch(() => {});
@@ -887,8 +988,8 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
           ariaPressed: node.getAttribute('aria-pressed'),
           className: node.getAttribute('class'),
         })).catch(() => null),
-        backdropCount: await page.locator('[data-plugin-launcher-backdrop]').count(),
-        backdropVisible: await pluginPanelBackdrop.isVisible().catch(() => false),
+        panelCount: await page.locator('#redeven-plugin-switcher').count(),
+        panelVisible: await pluginPanel.isVisible().catch(() => false),
         motionStates: await page.locator('[data-plugin-panel-motion-state]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-plugin-panel-motion-state'))),
         workbenchSelected: await page.getByRole('tab', { name: 'Workbench', exact: true }).getAttribute('aria-selected'),
         inventorySnapshot: await inventorySnapshot(),
@@ -899,22 +1000,22 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   }
   phase = 'panel_close_reopen';
   const panelDismissal = {};
-  const closePanel = page.locator('[data-plugin-launcher-backdrop] [aria-label="Close plugins"], [data-plugin-launcher-backdrop] [aria-label="关闭插件"]').first();
+  const closePanel = page.locator('#redeven-plugin-switcher [aria-label="Close plugins"], #redeven-plugin-switcher [aria-label="关闭插件"]').first();
   await closePanel.click();
   try {
-    await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
+    await page.locator('#redeven-plugin-switcher').first().waitFor({ state: 'detached', timeout: 10_000 });
   } catch (error) {
-    const backdrops = page.locator('[data-plugin-launcher-backdrop]');
+    const panels = page.locator('#redeven-plugin-switcher');
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-close-diagnostics.json`), JSON.stringify({
       trigger: await visiblePluginTrigger().evaluate((node) => ({
         ariaExpanded: node.getAttribute('aria-expanded'),
         ariaPressed: node.getAttribute('aria-pressed'),
       })).catch(() => null),
-      backdrops: await Promise.all(Array.from({ length: await backdrops.count() }, async (_, index) => {
-        const backdrop = backdrops.nth(index);
-        const dialog = backdrop.locator('[role="dialog"]');
+      panels: await Promise.all(Array.from({ length: await panels.count() }, async (_, index) => {
+        const panel = panels.nth(index);
+        const dialog = panel;
         return {
-          visible: await backdrop.isVisible(),
+          visible: await panel.isVisible(),
           motionState: await dialog.getAttribute('data-plugin-panel-motion-state'),
           ariaModal: await dialog.getAttribute('aria-modal'),
           text: (await dialog.innerText().catch(() => '')).slice(0, 500),
@@ -925,31 +1026,28 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     }, null, 2)).catch(() => {});
     throw error;
   }
-  panelDismissal.close_button = { closed: true, backdrop_count: 0 };
+  panelDismissal.close_button = { closed: true, panel_count: 0 };
   await visiblePluginTrigger().click();
-  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
+  await page.locator('#redeven-plugin-switcher').first().waitFor({ state: 'visible', timeout: 10_000 });
   await page.keyboard.press('Escape');
-  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
-  panelDismissal.escape = { closed: true, backdrop_count: 0 };
+  await page.locator('#redeven-plugin-switcher').first().waitFor({ state: 'detached', timeout: 10_000 });
+  panelDismissal.escape = { closed: true, panel_count: 0 };
   await visiblePluginTrigger().click();
-  const backdrop = page.locator('[data-plugin-launcher-backdrop]').first();
-  await backdrop.waitFor({ state: 'visible', timeout: 10_000 });
-  await backdrop.click({ position: { x: 2, y: 2 } });
-  await backdrop.waitFor({ state: 'detached', timeout: 10_000 });
-  panelDismissal.backdrop = { closed: true, backdrop_count: 0 };
-  const catalogQueryCount = () => pluginRequests.filter(
-    (request) => request.pathname.endsWith('/plugins/catalog/query'),
-  ).length;
-  const catalogQueryCountBefore = catalogQueryCount();
+  const panel = page.locator('#redeven-plugin-switcher').first();
+  await panel.waitFor({ state: 'visible', timeout: 10_000 });
+  await activityMode.click();
+  await panel.waitFor({ state: 'detached', timeout: 10_000 });
+  panelDismissal.outside_pointer = { closed: true, panel_count: 0 };
+  await transportGate.pause();
   const panelReopenCycles = [];
   let expectedTileKeys = null;
   for (let index = 0; index < 5; index += 1) {
     const openStartedAt = performance.now();
     await visiblePluginTrigger().click();
-    const reopenedBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
-    await reopenedBackdrop.waitFor({ state: 'visible', timeout: 10_000 });
+    const reopenedPanel = page.locator('#redeven-plugin-switcher').first();
+    await reopenedPanel.waitFor({ state: 'visible', timeout: 10_000 });
     const openDurationMS = Number((performance.now() - openStartedAt).toFixed(1));
-    const installedTiles = reopenedBackdrop.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])');
+    const installedTiles = reopenedPanel.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])');
     try {
       await waitFor(async () => (
         await installedTiles.count() === bootstrap.enabledCount ? true : null
@@ -962,7 +1060,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         expectedEnabledCount: bootstrap.enabledCount,
         installedTileCount: await installedTiles.count(),
         tileKeys: await installedTiles.evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute('data-plugin-panel-tile'))),
-        panelText: (await reopenedBackdrop.innerText().catch(() => '')).slice(0, 4000),
+        panelText: (await reopenedPanel.innerText().catch(() => '')).slice(0, 4000),
         inventorySnapshot: await inventorySnapshot(),
         pluginResponses,
         pluginRequests,
@@ -973,7 +1071,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       }, null, 2)).catch(() => {});
       throw error;
     }
-    const panelText = await reopenedBackdrop.innerText();
+    const panelText = await reopenedPanel.innerText();
     if (/Loading plugins|正在加载插件/u.test(panelText)) {
       throw new Error(`Plugin Panel exposed a loading banner on reopen ${index + 1}`);
     }
@@ -998,73 +1096,59 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       tile_opacities: tileOpacities,
     });
     if (index < 4) {
-      const cycleClose = reopenedBackdrop.locator(
+      const cycleClose = reopenedPanel.locator(
         '[aria-label="Close plugins"], [aria-label="关闭插件"]',
       ).first();
       await cycleClose.click();
-      await reopenedBackdrop.waitFor({ state: 'detached', timeout: 10_000 });
+      await reopenedPanel.waitFor({ state: 'detached', timeout: 10_000 });
     }
   }
-  const catalogQueryCountAfter = catalogQueryCount();
-  if (catalogQueryCountAfter !== catalogQueryCountBefore) {
-    throw new Error(`Plugin Panel reopen triggered inventory refresh: ${catalogQueryCountBefore} -> ${catalogQueryCountAfter}`);
-  }
-  const inventoryRefreshCount = catalogQueryCountAfter - catalogQueryCountBefore;
-  const finalBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
-  await finalBackdrop.locator('[data-plugin-center-market-action]').click();
+  await transportGate.resume();
+  const finalPanel = page.locator('#redeven-plugin-switcher').first();
+  await finalPanel.locator('[data-plugin-center-market-action]').click();
   const pluginCenter = page.locator('[data-plugin-center-view]');
   const pluginCenterRefresh = pluginCenter.locator('[data-plugin-center-refresh]');
   await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
-  let releaseDelayedCatalogRequest;
-  let delayedCatalogRequestIntercepted = false;
-  const delayedCatalogRequestGate = new Promise((resolve) => {
-    releaseDelayedCatalogRequest = resolve;
-  });
-  await page.route('**/_redevplugin/api/plugins/catalog/query', async (route) => {
-    delayedCatalogRequestIntercepted = true;
-    await delayedCatalogRequestGate;
-    await route.continue();
-  }, { times: 1 });
-  await pluginCenterRefresh.click();
-  await waitFor(
-    () => delayedCatalogRequestIntercepted,
-    10_000,
-    'delayed background inventory refresh',
-  );
-  await waitFor(async () => (
-    await pluginCenterRefresh.isDisabled() ? true : null
-  ), 10_000, 'background refresh control pending');
-  let backgroundRefreshTileKeys;
-  try {
-    await visiblePluginTrigger().click();
-    const pendingRefreshBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
-    await pendingRefreshBackdrop.waitFor({ state: 'visible', timeout: 10_000 });
-    const pendingRefreshTiles = pendingRefreshBackdrop.locator(
-      '[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])',
-    );
+  let backgroundRefreshEvidence = { delayed: false, reason: 'attached target is not suspended' };
+  if (transportGate.available) {
+    await transportGate.pause();
+    await pluginCenterRefresh.click();
     await waitFor(async () => (
-      await pendingRefreshTiles.count() === bootstrap.enabledCount ? true : null
-    ), 10_000, 'Plugin Panel snapshot during background refresh');
-    const pendingRefreshText = await pendingRefreshBackdrop.innerText();
-    if (/Loading plugins|正在加载插件/u.test(pendingRefreshText)) {
-      throw new Error('Plugin Panel exposed a loading banner during a background refresh');
+      await pluginCenterRefresh.isDisabled() ? true : null
+    ), 10_000, 'background refresh control pending');
+    let backgroundRefreshTileKeys;
+    try {
+      await visiblePluginTrigger().click();
+      const pendingRefreshPanel = page.locator('#redeven-plugin-switcher').first();
+      await pendingRefreshPanel.waitFor({ state: 'visible', timeout: 10_000 });
+      const pendingRefreshTiles = pendingRefreshPanel.locator(
+        '[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])',
+      );
+      await waitFor(async () => (
+        await pendingRefreshTiles.count() === bootstrap.enabledCount ? true : null
+      ), 10_000, 'Plugin Panel snapshot during background refresh');
+      const pendingRefreshText = await pendingRefreshPanel.innerText();
+      if (/Loading plugins|正在加载插件/u.test(pendingRefreshText)) {
+        throw new Error('Plugin Panel exposed a loading banner during a background refresh');
+      }
+      backgroundRefreshTileKeys = await pendingRefreshTiles.evaluateAll((tiles) => tiles.map(
+        (tile) => tile.getAttribute('data-plugin-panel-tile'),
+      ));
+    } finally {
+      await transportGate.resume();
     }
-    backgroundRefreshTileKeys = await pendingRefreshTiles.evaluateAll((tiles) => tiles.map(
-      (tile) => tile.getAttribute('data-plugin-panel-tile'),
-    ));
-  } finally {
-    releaseDelayedCatalogRequest();
+    await waitFor(async () => (
+      !(await pluginCenterRefresh.isDisabled()) ? true : null
+    ), 30_000, 'background inventory refresh completion');
+    backgroundRefreshEvidence = {
+      delayed: true,
+      transport: 'task_owned_linux_host_suspended',
+      snapshot_visible_while_pending: true,
+      loading_text_visible: false,
+      background_refresh_tile_keys: backgroundRefreshTileKeys,
+    };
   }
-  await waitFor(async () => (
-    !(await pluginCenterRefresh.isDisabled()) ? true : null
-  ), 30_000, 'background inventory refresh completion');
-  const backgroundRefreshEvidence = {
-    delayed: true,
-    snapshot_visible_while_pending: true,
-    loading_text_visible: false,
-    background_refresh_tile_keys: backgroundRefreshTileKeys,
-  };
-  panelDismissal.final_reopen = { open: true, backdrop_count: 1, cycles: 5 };
+  panelDismissal.final_reopen = { open: true, panel_count: 1, cycles: 5 };
   mark('panel_ready_ms');
 
   phase = 'inventory';
@@ -1161,12 +1245,21 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       };
     }));
     const iconFallbackCount = await firstTile.locator('svg').count();
-    const iconRoute = pluginIconResponses.find((entry) => entry.status === 200);
+    const installedForIcon = installedPlugins(catalog).find((candidate) =>
+      candidate.plugin_id === 'dev.redeven.smoke.io') ?? installedPlugins(catalog)[0];
+    const iconPath = installedForIcon?.presentation?.icon?.path ?? installedForIcon?.manifest?.presentation?.icon?.path;
+    const iconEntry = installedForIcon?.package_entries?.find((entry) => entry.path === iconPath);
+    const iconDigest = iconEntry?.sha256?.replace(/^sha256:/u, '');
+    const renderedIconDigest = icon[0]?.src ? await page.evaluate(async (url) => {
+      const bytes = await (await fetch(url)).arrayBuffer();
+      return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+        .map((value) => value.toString(16).padStart(2, '0')).join('');
+    }, icon[0].src) : null;
     if (icon.length !== 1 || !icon[0]?.src?.startsWith('blob:') || !icon[0].complete
-      || icon[0].naturalWidth <= 0 || iconFallbackCount !== 0 || !iconRoute) {
+      || icon[0].naturalWidth <= 0 || iconFallbackCount !== 0 || !iconDigest || renderedIconDigest !== iconDigest) {
       throw new Error(`installed plugin icon is not locally preloaded: ${JSON.stringify({ icon, iconFallbackCount, pluginIconResponses })}`);
     }
-    const iconEvidence = { image: icon[0], fallback_count: iconFallbackCount, route: iconRoute };
+    const iconEvidence = { image: icon[0], fallback_count: iconFallbackCount, verified_package_sha256: iconDigest, rendered_sha256: renderedIconDigest };
     const tileBeforeOpen = {
       key: await firstTile.getAttribute('data-plugin-panel-tile'),
       text: (await firstTile.innerText()).trim(),
@@ -1205,9 +1298,8 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     let rpcEntry;
     try {
       rpcEntry = await waitFor(
-        () => pluginResponses.find((entry) => entry.pathname.endsWith('/plugins/rpc') && entry.status === 200
-          && entry.rpc_plugin_instance_id === v9Plugin?.plugin_instance_id && entry.rpc_method === 'smoke.run'),
-        30_000,
+        () => guestOutcomes.find((entry) => entry.method === 'smoke.run' && entry.ok === true),
+        180_000,
         'plugin RPC',
       );
     } catch (error) {
@@ -1224,6 +1316,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         }, sessionHeaders).catch((diagnosticError) => ({ error: String(diagnosticError) })),
       ]);
       await fs.writeFile(path.join(config.reportRoot, `${config.phase}-rpc-diagnostics.json`), `${JSON.stringify({
+        guestOutcomes,
         matchingRequests: pluginRequests.filter(matchesV9RPC),
         matchingResponses: pluginResponses.filter(matchesV9RPC),
         fixtureState,
@@ -1237,7 +1330,12 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       }, null, 2)}\n`);
       throw error;
     }
-    rpc = { ok: true, method: rpcEntry.body?.data?.method ?? 'observed_plugin_rpc', result: rpcEntry.body };
+    const renderedResult = JSON.parse(await frame.locator('#result').innerText());
+    if (JSON.stringify(renderedResult) !== JSON.stringify(rpcEntry.result)) {
+      throw new Error('Guest outcome does not match the rendered plugin result');
+    }
+    rpc = { ok: true, method: rpcEntry.method, source: 'guest_bridge_and_rendered_result',
+      result: { ok: true, data: { data: renderedResult } } };
     surface.icon = iconEvidence;
     mark('surface_ready_ms');
   }
@@ -1247,7 +1345,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   if (config.mode !== 'attach' && config.phase === 'initial' && config.ioPackagePath) {
     phase = 'disabled_revoke';
     const v9Plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_id === 'dev.redeven.smoke.io');
-    disabledUpdateIntent = await verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, v9Plugin?.plugin_instance_id);
+    disabledUpdateIntent = await verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, v9Plugin?.plugin_instance_id, guestOutcomes);
   } else if (config.mode !== 'attach' && config.phase === 'initial') {
     phase = 'disabled_update_intent';
     disabledUpdateIntent = await verifyDisabledUpdateIntent(page, sessionHeaders, catalog, pluginResponses);
@@ -1316,7 +1414,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     pids: config.pids,
     timings,
     first_panel_open: {
-      completed_before_session_credential_wait: true,
+      completed_after_session_ready: true,
       first_open_ms: firstPanelOpenMS,
     },
     bootstrap,
@@ -1327,9 +1425,9 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       needs_attention: await page.locator('[data-plugin-runtime-recovery]').count(),
       dismissal: panelDismissal,
       reopen_cycles: panelReopenCycles,
-      inventory_catalog_query_count_before: catalogQueryCountBefore,
-      inventory_catalog_query_count_after: catalogQueryCountAfter,
-      inventory_refresh_count: inventoryRefreshCount,
+      snapshot_independent_of_network: transportGate.available,
+      inventory_request_count: null,
+      inventory_observation: 'encrypted stream; request counts covered by inventory controller tests',
       background_refresh: backgroundRefreshEvidence,
       icon_responses: pluginIconResponses,
     },

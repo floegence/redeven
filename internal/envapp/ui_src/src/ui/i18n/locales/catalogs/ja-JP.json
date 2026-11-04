@@ -7358,6 +7358,31 @@
         "unknown": "前回の実行結果は不明です",
         "failed": "前回の実行に失敗しました",
         "next": "次回の実行：{time}"
+      },
+      "connections": {
+        "title": "接続",
+        "connector": "コネクター",
+        "destination": "接続先",
+        "scope": "適用範囲",
+        "environment": "環境",
+        "user": "現在のユーザー",
+        "methods": "HTTP メソッド",
+        "privatePrefixes": "プライベートネットワーク（任意）",
+        "privateHelp": "明示的な CIDR 範囲をコンマ区切りで入力します。公開アドレスの場合は空欄にします。",
+        "expires": "接続の有効期限",
+        "reviewExpires": "確認の有効期限",
+        "review": "接続を確認",
+        "approve": "接続を承認",
+        "revoke": "接続を取り消す",
+        "fixed": "固定",
+        "unconfigured": "未設定",
+        "active": "有効",
+        "expired": "期限切れ",
+        "revoked": "取り消し済み",
+        "stale": "再確認が必要",
+        "empty": "表示する接続はありません。",
+        "failed": "操作に失敗しました。接続状態を更新して設定を確認してください。",
+        "unknown": "操作結果を確認できません。新たな確認を始める前に更新後の状態を確認してください。"
       }
     },
     "pluginRuntime": {

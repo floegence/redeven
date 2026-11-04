@@ -7358,6 +7358,31 @@
         "unknown": "이전 실행 결과를 알 수 없음",
         "failed": "이전 실행 실패",
         "next": "다음 실행: {time}"
+      },
+      "connections": {
+        "title": "연결",
+        "connector": "커넥터",
+        "destination": "대상",
+        "scope": "범위",
+        "environment": "환경",
+        "user": "현재 사용자",
+        "methods": "HTTP 메서드",
+        "privatePrefixes": "사설 네트워크 (선택 사항)",
+        "privateHelp": "명시적인 CIDR 범위를 쉼표로 구분하여 입력하세요. 공용 대상은 비워 두세요.",
+        "expires": "연결 만료",
+        "reviewExpires": "검토 만료",
+        "review": "연결 검토",
+        "approve": "연결 승인",
+        "revoke": "연결 철회",
+        "fixed": "고정",
+        "unconfigured": "미설정",
+        "active": "활성",
+        "expired": "만료됨",
+        "revoked": "철회됨",
+        "stale": "재검토 필요",
+        "empty": "표시할 연결이 없습니다.",
+        "failed": "작업에 실패했습니다. 연결 상태를 새로 고치고 설정을 확인하세요.",
+        "unknown": "결과가 불확실합니다. 새 검토를 시작하기 전에 갱신된 상태를 확인하세요."
       }
     },
     "pluginRuntime": {

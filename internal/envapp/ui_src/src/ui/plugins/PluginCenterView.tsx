@@ -38,6 +38,7 @@ import { PluginIdentityHeader, PluginProcessStatusBadge } from './PluginPresenta
 import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 import { PluginRetainedDataDialog, type PluginRetainedDataAPI } from './PluginRetainedDataDialog';
+import { PluginConnectionsDialog, type PluginConnectionsAPI } from './PluginConnectionsDialog';
 import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
@@ -57,6 +58,8 @@ export type PluginCenterViewProps = {
   canRecoverPluginData?: boolean;
   pluginOwnerScope?: object | false;
   retainedDataAPI?: PluginRetainedDataAPI;
+  connectionsAPI?: PluginConnectionsAPI;
+  canManageConnections?: boolean;
   canOpenPluginSurfaces: boolean;
   runtimeRecovery?: PluginRuntimeRecoveryPresentation;
   runtimeRecoveryByInstanceID?: Readonly<Record<string, PluginRuntimeRecoveryPresentation>>;
@@ -133,6 +136,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setDataRecoveryTargetID(item.pluginInstanceID);
     setDataRecoveryOpen(true);
   };
+  const [connectionsKey, setConnectionsKey] = createSignal<string>();
+  const connectionItem = () => props.projection.items.find((item) => item.inventoryKey === connectionsKey());
   const [retainedDataDiscardItem, setRetainedDataDiscardItem] = createSignal<PluginInventoryItem>();
   const [retainedDataDiscardPending, setRetainedDataDiscardPending] = createSignal(false);
   const [retainedDataDiscardError, setRetainedDataDiscardError] = createSignal<string>();
@@ -944,6 +949,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               }}
               onReviewInstall={() => installItem(item)}
               onResolveRetainedData={() => requestRetainedDataDiscard(item)}
+              onConnections={props.connectionsAPI && item.networkConnectors?.length ? () => setConnectionsKey(item.inventoryKey) : undefined}
               onRestoreData={props.canRecoverPluginData && props.retainedDataAPI ? () => requestDataRecovery(item) : undefined}
               marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
               marketDetailLoading={marketDetailState()?.pluginID === item.pluginID && marketDetailState()?.loading === true}
@@ -953,6 +959,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           )}
         </Show>
       </div>
+      <Show when={props.connectionsAPI}>{(api) => (
+        <PluginConnectionsDialog open={Boolean(connectionsKey())} item={connectionItem()}
+          ownerScope={props.pluginOwnerScope} canManage={Boolean(props.canManageConnections)} api={api()}
+          onOpenChange={(open) => { if (!open) setConnectionsKey(undefined); }} />
+      )}</Show>
       <Show when={props.retainedDataAPI}>{(api) => (
         <PluginRetainedDataDialog
           open={dataRecoveryOpen()}
@@ -1588,6 +1599,7 @@ export function PluginCenterDetails(props: {
   onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
   onRestoreData?: () => void;
+  onConnections?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   let detailControls: HTMLDivElement | undefined;
@@ -1671,6 +1683,7 @@ export function PluginCenterDetails(props: {
               onReviewInstall={props.onReviewInstall}
               onResolveRetainedData={props.onResolveRetainedData}
               onRestoreData={props.onRestoreData}
+              onConnections={props.onConnections}
               />
             </div>
 
@@ -2211,6 +2224,7 @@ function PluginActions(props: {
   onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
   onRestoreData?: () => void;
+  onConnections?: () => void;
 }) {
   const i18n = useI18n();
   const presentation = () => presentPlugin(props.item);
@@ -2278,6 +2292,7 @@ function PluginActions(props: {
     return false;
   };
   const overflowItems = (): DropdownItem[] => [
+    ...(props.onConnections ? [{ id: 'connections', label: i18n.t('uiCopy.plugin.connections.title'), disabled: props.managementPending || commandPending() }] : []),
     ...(presentation().canOpenSurface ? [{ id: 'open', label: i18n.t('common.actions.open'), disabled: disabledOpen() }] : []),
     ...(presentation().canDisable ? [{ id: 'disable', label: i18n.t('uiCopy.plugin.disable'), disabled: disabledManagement() }] : []),
     ...(presentation().canCheckForUpdate ? [{ id: 'update', label: i18n.t('uiCopy.plugin.checkForUpdate'), disabled: disabledManagement() }] : []),
@@ -2299,6 +2314,8 @@ function PluginActions(props: {
       });
     } else if (action === 'update') {
       props.onExternalUpdate(item());
+    } else if (action === 'connections') {
+      props.onConnections?.();
     } else if (action === 'restore-data') {
       props.onRestoreData?.();
     } else if (action === 'uninstall') {

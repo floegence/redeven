@@ -156,6 +156,7 @@ function projectCatalogItem(
     publisher: installedPublisher || installed.publisher_id,
     version: installed.version,
     managementRevision: installed.management_revision,
+    networkConnectors: projectNetworkConnectors(installed),
     recoveryIdentity: {
       plugin_instance_id: installed.plugin_instance_id,
       active_fingerprint: installed.active_fingerprint,
@@ -235,6 +236,7 @@ function projectInstalledItem(
     publisher,
     version: installed.version,
     managementRevision: installed.management_revision,
+    networkConnectors: projectNetworkConnectors(installed),
     recoveryIdentity: {
       plugin_instance_id: installed.plugin_instance_id,
       active_fingerprint: installed.active_fingerprint,
@@ -577,4 +579,17 @@ function compareVersion(a: string, b: string): number {
     throw new TypeError('Plugin version is not canonical strict SemVer');
   }
   return compareSemVer(a, b);
+}
+
+// Project only the Host-verified installed declaration, never market copy.
+function projectNetworkConnectors(installed: ReDevPluginRecord): NonNullable<PluginInventoryItem['networkConnectors']> {
+  return (installed.manifest.network_access?.connectors ?? []).map((connector) => ({
+    connectorID: connector.connector_id,
+    transport: connector.transport,
+    configurable: connector.configurable === true,
+    httpMethods: [...new Set([
+      ...installed.manifest.methods.flatMap((method) => method.broker_access?.network ?? []),
+      ...installed.manifest.surfaces.flatMap((surface) => surface.web?.network ?? []),
+    ].filter((access) => access.connector_id === connector.connector_id).flatMap((access) => access.http_methods ?? []))].sort(),
+  }));
 }

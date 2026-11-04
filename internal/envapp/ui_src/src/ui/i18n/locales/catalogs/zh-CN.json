@@ -7358,6 +7358,31 @@
         "unknown": "上次运行结果未知",
         "failed": "上次运行失败",
         "next": "下次运行：{time}"
+      },
+      "connections": {
+        "title": "连接",
+        "connector": "连接器",
+        "destination": "目标地址",
+        "scope": "作用域",
+        "environment": "环境",
+        "user": "当前用户",
+        "methods": "HTTP 方法",
+        "privatePrefixes": "私有网络（可选）",
+        "privateHelp": "输入明确的 CIDR 网段，以逗号分隔。访问公共地址时留空。",
+        "expires": "连接到期时间",
+        "reviewExpires": "审批到期时间",
+        "review": "检查连接",
+        "approve": "批准连接",
+        "revoke": "撤销连接",
+        "fixed": "固定配置",
+        "unconfigured": "未配置",
+        "active": "有效",
+        "expired": "已过期",
+        "revoked": "已撤销",
+        "stale": "需要重新审批",
+        "empty": "暂无连接。",
+        "failed": "操作失败。请刷新连接状态并检查配置。",
+        "unknown": "操作结果尚不确定。请先检查刷新后的状态，再发起新的审批。"
       }
     },
     "pluginRuntime": {

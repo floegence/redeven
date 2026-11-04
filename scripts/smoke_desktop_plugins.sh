@@ -113,7 +113,8 @@ prepare_linux_target() {
   fi
   [[ -x "$runtime_cache/redevplugin-runtime" && -f "$runtime_cache/.redevplugin-release-artifacts-verified.json" ]] || { echo "published Linux runtime evidence was not produced" >&2; return 1; }
   "$ROOT_DIR/scripts/build_assets.sh" >/dev/null
-  docker run --rm --platform linux/arm64 -v "$ROOT_DIR:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src "golang:${go_version}-bookworm" bash -ceu 'CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/redeven ./cmd/redeven; CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/io-server ./scripts/fixtures/redevplugin_io_smoke_server'
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 GOWORK=off go build -trimpath -o "$LINUX_TARGET_ROOT/redeven" ./cmd/redeven
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 GOWORK=off go build -trimpath -o "$LINUX_TARGET_ROOT/io-server" ./scripts/fixtures/redevplugin_io_smoke_server
   REDEVPLUGIN_IO_SMOKE_HTTP_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_WS_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_TCP_PORT="$FIXTURE_TCP_PORT" \
@@ -145,7 +146,7 @@ prepare_linux_target() {
   node - "$LINUX_REPORT" "$LINUX_CONTAINER_ID" "$LINUX_UI_PORT" "$LINUX_INTERNAL_UI_PORT" "$FIXTURE_PORTS_JSON" "$runtime_version" <<'NODE'
 const fs = require('node:fs');
 const [file, containerID, localUIPort, internalLocalUIPort, ports, runtimeVersion] = process.argv.slice(2);
-fs.writeFileSync(file, `${JSON.stringify({schema_version: 1, os: 'linux', arch: 'arm64', container_id: containerID, local_ui_port: Number(localUIPort), internal_local_ui_port: Number(internalLocalUIPort), server_pid: 0, ports: JSON.parse(ports), runtime_version: runtimeVersion, state_root: '/state', target: 'linux/arm64', runtime_starts: [], local_ui_bridge_urls: []}, null, 2)}\n`);
+fs.writeFileSync(file, `${JSON.stringify({schema_version: 1, os: 'linux', arch: 'arm64', container_id: containerID, local_ui_port: Number(localUIPort), internal_local_ui_port: Number(internalLocalUIPort), server_pid: 0, ports: JSON.parse(ports), runtime_version: runtimeVersion, state_root: '/state', target: 'linux/arm64', runtime_starts: [], local_ui_urls: []}, null, 2)}\n`);
 NODE
   printf '%s\n' "$LINUX_CONTAINER_ID" >"$REPORT_ROOT/linux-container-id.txt"
   start_linux_redeven initial
@@ -155,7 +156,7 @@ NODE
 start_linux_redeven() {
   local phase=$1 deadline
   rm -f "$LINUX_TARGET_ROOT/report/startup.json"
-  docker exec "$LINUX_CONTAINER_ID" sh -ceu 'exec /linux/redeven run --mode desktop --presentation machine --state-root /state --local-ui-bind 127.0.0.1:'"$LINUX_INTERNAL_UI_PORT"' --password-file /linux/password --permission-policy execute_read_write --startup-report-file /linux/report/startup.json >> /linux/redeven.log 2>&1' &
+  docker exec "$LINUX_CONTAINER_ID" sh -ceu 'exec /linux/redeven run --mode desktop --presentation machine --state-root /state --local-ui-bind 0.0.0.0:'"$LINUX_UI_PORT"' --local-ui-protocol http --password-file /linux/password --permission-policy execute_read_write --startup-report-file /linux/report/startup.json >> /linux/redeven.log 2>&1' &
   LINUX_REDEVEN_EXEC_PID=$!
   deadline=$((SECONDS + 180))
   until [[ -s "$LINUX_TARGET_ROOT/report/startup.json" ]] && node -e 'const f=require("node:fs");const r=JSON.parse(f.readFileSync(process.argv[1]));process.exit(r.status==="ready"?0:1)' "$LINUX_TARGET_ROOT/report/startup.json"; do
@@ -178,14 +179,14 @@ NODE
 }
 
 start_fixture_server() {
-  local bridge_url deadline
-  bridge_url=$(node -e 'const f=require("node:fs");const r=JSON.parse(f.readFileSync(process.argv[1]));process.stdout.write(String(r.local_ui_bridge_url||""))' "$LINUX_TARGET_ROOT/report/startup.json")
-  [[ "$bridge_url" =~ ^http://127\.0\.0\.1:[0-9]+/$ ]] || { echo "Linux trusted Local UI bridge URL is invalid" >&2; return 1; }
+  local deadline
   rm -f "$LINUX_TARGET_ROOT/server.json" "$LINUX_TARGET_ROOT/server.pid"
+  # Exercise the public password-protected HTTP transport selected by Desktop.
+  # Private bridge artifacts cannot be consumed as external public sessions.
   docker exec "$LINUX_CONTAINER_ID" sh -ceu '
-    /linux/io-server -bind 0.0.0.0 -http-port "$1" -tcp-port "$2" -udp-port "$3" -local-ui-proxy-port "$4" -local-ui-target "$5" -local-ui-rewrite-authority "$6" -local-ui-trusted-bridge > /linux/server.json 2>> /linux/server.log &
+    /linux/io-server -bind 0.0.0.0 -http-port "$1" -tcp-port "$2" -udp-port "$3" > /linux/server.json 2>> /linux/server.log &
     echo $! > /linux/server.pid
-  ' sh "$FIXTURE_HTTP_PORT" "$FIXTURE_TCP_PORT" "$FIXTURE_UDP_PORT" "$LINUX_UI_PORT" "$bridge_url" "127.0.0.1:$LINUX_INTERNAL_UI_PORT"
+  ' sh "$FIXTURE_HTTP_PORT" "$FIXTURE_TCP_PORT" "$FIXTURE_UDP_PORT"
   LINUX_SERVER_PID=$(docker exec "$LINUX_CONTAINER_ID" sh -c 'cat /linux/server.pid')
   [[ "$LINUX_SERVER_PID" =~ ^[0-9]+$ && "$LINUX_SERVER_PID" -gt 1 ]] || { echo "Linux fixture server PID is invalid" >&2; return 1; }
   deadline=$((SECONDS + 60))
@@ -199,15 +200,15 @@ start_fixture_server() {
     sleep 0.25
   done
   FIXTURE_PORTS_JSON=$(<"$LINUX_TARGET_ROOT/server.json")
-  node -e 'const got=JSON.parse(process.argv[1]);const [proxy,http,tcp,udp]=process.argv.slice(2).map(Number);if(got.local_ui_proxy!==proxy||got.http!==http||got.ws!==http||got.tcp!==tcp||got.udp!==udp)process.exit(1)' "$FIXTURE_PORTS_JSON" "$LINUX_UI_PORT" "$FIXTURE_HTTP_PORT" "$FIXTURE_TCP_PORT" "$FIXTURE_UDP_PORT"
+  node -e 'const got=JSON.parse(process.argv[1]);const [proxy,http,tcp,udp]=process.argv.slice(2).map(Number);if(got.local_ui_proxy!==0||got.http!==http||got.ws!==http||got.tcp!==tcp||got.udp!==udp)process.exit(1)' "$FIXTURE_PORTS_JSON" "$LINUX_UI_PORT" "$FIXTURE_HTTP_PORT" "$FIXTURE_TCP_PORT" "$FIXTURE_UDP_PORT"
   printf '%s\n' "$FIXTURE_PORTS_JSON" >"$REPORT_ROOT/fixture-server.json"
-  node - "$LINUX_REPORT" "$LINUX_SERVER_PID" "$FIXTURE_PORTS_JSON" "$bridge_url" <<'NODE'
+  node - "$LINUX_REPORT" "$LINUX_SERVER_PID" "$FIXTURE_PORTS_JSON" "http://127.0.0.1:$LINUX_UI_PORT/" <<'NODE'
 const fs = require('node:fs');
 const [file, serverPID, ports, bridgeURL] = process.argv.slice(2);
 const report = JSON.parse(fs.readFileSync(file, 'utf8'));
 report.server_pid = Number(serverPID);
 report.ports = JSON.parse(ports);
-report.local_ui_bridge_urls.push(bridgeURL);
+report.local_ui_urls.push(bridgeURL);
 fs.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
 NODE
 }
@@ -223,7 +224,7 @@ linux_pid_active() {
 
 stop_linux_redeven() {
   [[ -n "$LINUX_CONTAINER_ID" && "$LINUX_RUNTIME_PID" =~ ^[0-9]+$ ]] || return 0
-  docker exec "$LINUX_CONTAINER_ID" sh -c 'kill -TERM "$1"' sh "$LINUX_RUNTIME_PID" >/dev/null 2>&1 || true
+  docker exec "$LINUX_CONTAINER_ID" sh -c 'kill -CONT "$1"; kill -TERM "$1"' sh "$LINUX_RUNTIME_PID" >/dev/null 2>&1 || true
   local deadline=$((SECONDS + 30))
   while linux_pid_active "$LINUX_RUNTIME_PID"; do
     if [[ "$SECONDS" -ge "$deadline" ]]; then
@@ -394,7 +395,7 @@ early_cleanup() {
 mkdir -p "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$REPORT_ROOT"
 trap early_cleanup EXIT INT TERM
 prepare_linux_target
-LOCAL_UI_PORT="$LINUX_UI_PORT"
+
 if [[ -n "$SEED_ROOT" ]]; then
   [[ -d "$SEED_ROOT/state" && -d "$SEED_ROOT/user-data" ]] || { echo "invalid task-owned smoke seed: $SEED_ROOT" >&2; exit 2; }
   case "$SEED_ROOT" in /tmp/redeven-plugin-*|/tmp/rdsmoke-*) ;; *) echo "smoke seed must be a task-owned /tmp state" >&2; exit 2;; esac
@@ -549,7 +550,7 @@ run_phase() {
   node - "$config" <<JSON
 const fs = require('node:fs');
 const file = process.argv[2];
-fs.writeFileSync(file, JSON.stringify({phase:"$phase",root:"$SMOKE_ROOT",stateRoot:"$STATE_ROOT",reusedTaskState:$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),seed:$seed_meta,userDataRoot:"$USER_DATA_ROOT",cacheRoot:"$CACHE_ROOT",tempRoot:"$TEMP_ROOT",reportRoot:"$REPORT_ROOT",playwrightRoot:"$ROOT_DIR/internal/envapp/ui_src/node_modules",localUIPort:$LOCAL_UI_PORT,cdpPort:$CDP_PORT,inspectorPort:$INSPECTOR_PORT,commit:"$commit",dependencies:$versions,pids:$pids,output:"$output",initialOutput:"$REPORT_ROOT/initial.json",externalLocalUIURL:"http://127.0.0.1:$LOCAL_UI_PORT/",ioPackagePath:"$LINUX_TARGET_ROOT/io-smoke.redevplugin",fixturePorts:$FIXTURE_PORTS_JSON,linuxTarget:JSON.parse(require('node:fs').readFileSync("$LINUX_REPORT"))}, null, 2)+"\n");
+fs.writeFileSync(file, JSON.stringify({phase:"$phase",root:"$SMOKE_ROOT",stateRoot:"$STATE_ROOT",reusedTaskState:$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),seed:$seed_meta,userDataRoot:"$USER_DATA_ROOT",cacheRoot:"$CACHE_ROOT",tempRoot:"$TEMP_ROOT",reportRoot:"$REPORT_ROOT",playwrightRoot:"$ROOT_DIR/internal/envapp/ui_src/node_modules",localUIPort:$LOCAL_UI_PORT,cdpPort:$CDP_PORT,inspectorPort:$INSPECTOR_PORT,commit:"$commit",dependencies:$versions,pids:$pids,output:"$output",initialOutput:"$REPORT_ROOT/initial.json",externalLocalUIURL:"http://127.0.0.1:$LINUX_UI_PORT/",ioPackagePath:"$LINUX_TARGET_ROOT/io-smoke.redevplugin",fixturePorts:$FIXTURE_PORTS_JSON,linuxTarget:JSON.parse(require('node:fs').readFileSync("$LINUX_REPORT"))}, null, 2)+"\n");
 JSON
   node "$ROOT_DIR/scripts/smoke_desktop_plugins.mjs" "$config"
   stop_owned

@@ -273,6 +273,7 @@ export type PluginInventoryItem = {
   version?: string;
   managementRevision?: number;
   installedPackage?: PluginPackageIdentity;
+  networkConnectors?: readonly { connectorID: string; transport: string; configurable: boolean; httpMethods: string[] }[];
   recoveryIdentity?: Pick<ReDevPluginRecord,
     'plugin_instance_id' | 'active_fingerprint' | 'installed_at' |
     'management_revision' | 'enable_state' | 'deleted_at'>;

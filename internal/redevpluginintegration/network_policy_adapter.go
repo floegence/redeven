@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/floegence/redevplugin/v3/pkg/connectivity"
 	"github.com/floegence/redevplugin/v3/pkg/host"
 )
 
@@ -26,6 +27,23 @@ func (adapter *networkPolicyAdapter) AuthorizeNetwork(_ context.Context, request
 	}
 	resolved, ok := adapter.sessions.Get(request.Session)
 	if !ok || !resolved.context.CanRead {
+		return errNetworkPolicyDenied
+	}
+	return nil
+}
+
+// Private connections require an authenticated administrator whose effective
+// environment policy permits read, write and execution. The platform owns the
+// exact destination review, revision-bound approval, address pinning and revoke.
+func (adapter *networkPolicyAdapter) AuthorizePrivateNetwork(_ context.Context, request host.PrivateNetworkRequest) error {
+	if adapter == nil || adapter.sessions == nil {
+		return errNetworkPolicyDenied
+	}
+	resolved, ok := adapter.sessions.Get(request.Session)
+	if !ok || !permissionsAllowAction(resolved.permissions, host.ManagementActionApproveConnection) {
+		return errNetworkPolicyDenied
+	}
+	if len(request.PrivatePrefixes) == 0 || connectivity.ValidateApprovedDestination(request.Destination, request.PrivatePrefixes) != nil {
 		return errNetworkPolicyDenied
 	}
 	return nil

@@ -14,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -115,11 +116,20 @@ func main() {
 	localUIRewriteAuthority := flag.String("local-ui-rewrite-authority", "", "additional internal Local UI authority to rewrite in non-artifact responses")
 	flag.Parse()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/download", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddUint64(&counts.httpActive, 1)
 		defer func() { atomic.AddUint64(&counts.httpActive, ^uint64(0)); atomic.AddUint64(&counts.httpClosed, 1) }()
 		w.Header().Set("Content-Type", "application/octet-stream")
-		_, _ = deterministic(w, *payloadBytes)
+		size := *payloadBytes
+		if raw := r.URL.Query().Get("bytes"); raw != "" {
+			parsed, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || parsed < 1 || parsed > *payloadBytes {
+				http.Error(w, "invalid size", http.StatusBadRequest)
+				return
+			}
+			size = parsed
+		}
+		_, _ = deterministic(w, size)
 	})
 	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddUint64(&counts.httpActive, 1)

@@ -360,6 +360,7 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionDisposeSurface,
 		host.ManagementActionListIntents,
 		host.ManagementActionListPlugins,
+		host.ManagementActionListConnections,
 		host.ManagementActionListFeatures,
 		host.ManagementActionListPermissionGrants,
 		host.ManagementActionGetPermissionRequirements,
@@ -394,6 +395,11 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionCommitRetainedRecovery,
 		host.ManagementActionPatchPluginSettings:
 		return perms.write
+	case host.ManagementActionReviewConnection,
+		host.ManagementActionApproveConnection,
+		host.ManagementActionCancelConnectionReview,
+		host.ManagementActionRevokeConnection:
+		return perms.admin && perms.read && perms.write && perms.execute
 	case host.ManagementActionImportLocalPackage,
 		host.ManagementActionInstallReleaseRef,
 		host.ManagementActionInspectExternalPackage,

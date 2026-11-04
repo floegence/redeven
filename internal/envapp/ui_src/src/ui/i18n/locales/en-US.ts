@@ -691,6 +691,31 @@ export const enUS = defineDictionary({
   },
   uiCopy: {
     plugin: {
+      connections: {
+        "title": "Connections",
+        "connector": "Connector",
+        "destination": "Destination",
+        "scope": "Scope",
+        "environment": "Environment",
+        "user": "Current user",
+        "methods": "HTTP methods",
+        "privatePrefixes": "Private networks (optional)",
+        "privateHelp": "Enter explicit CIDR ranges separated by commas. Leave empty for public destinations.",
+        "expires": "Connection expires",
+        "reviewExpires": "Review expires",
+        "review": "Review connection",
+        "approve": "Approve connection",
+        "revoke": "Revoke connection",
+        "fixed": "Fixed",
+        "unconfigured": "Not configured",
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked",
+        "stale": "Needs review",
+        "empty": "No connections to display.",
+        "failed": "The operation failed. Refresh the connection status and review the configuration.",
+        "unknown": "The outcome is uncertain. Check the refreshed status before starting a new review."
+      },
       dataRecovery: {
         "title": "Restore saved data",
         "savedData": "Saved data",

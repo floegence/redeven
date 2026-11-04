@@ -1,0 +1,172 @@
+import { For, Show, createEffect, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
+import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
+import { useI18n } from '../i18n';
+import { Dialog } from '../primitives/EnvAppModal';
+import type { PluginLifecycleAPI } from './pluginApi';
+import type { PluginInventoryItem } from './pluginTypes';
+
+export type PluginConnectionsAPI = Pick<PluginLifecycleAPI,
+  'listConnections' | 'reviewConnection' | 'approveConnection' | 'cancelConnectionReview' | 'revokeConnection'>;
+type Connection = Awaited<ReturnType<PluginConnectionsAPI['listConnections']>>['connections'][number];
+type Review = Awaited<ReturnType<PluginConnectionsAPI['reviewConnection']>>['review'];
+
+type Props = {
+  open: boolean; item?: PluginInventoryItem; ownerScope?: object | false; canManage: boolean;
+  api: PluginConnectionsAPI; onOpenChange: (open: boolean) => void;
+};
+
+export function PluginConnectionsDialog(props: Props): JSX.Element {
+  const i18n = useI18n();
+  const [connections, setConnections] = createSignal<Connection[]>([]);
+  const [connectorID, setConnectorID] = createSignal('');
+  const [destination, setDestination] = createSignal('');
+  const [prefixes, setPrefixes] = createSignal('');
+  const [methods, setMethods] = createSignal<string[]>([]);
+  const [review, setReview] = createSignal<Review>();
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const [loaded, setLoaded] = createSignal(false);
+  const [reviewExpired, setReviewExpired] = createSignal(false);
+  createEffect(() => {
+    const pending = review();
+    setReviewExpired(Boolean(pending && Date.parse(pending.review_expires_at) <= Date.now()));
+    if (!pending) return;
+    const timeout = setTimeout(() => setReviewExpired(true), Math.min(2147483647, Math.max(0, Date.parse(pending.review_expires_at) - Date.now())));
+    onCleanup(() => clearTimeout(timeout));
+  });
+  let controller: AbortController | undefined;
+  let generation = 0;
+  const selected = () => connections().find((connection) => connection.connector_id === connectorID());
+  const declaration = () => props.item?.networkConnectors?.find((connector) => connector.connectorID === connectorID());
+  const editable = () => props.canManage && declaration()?.configurable && loaded() && !busy();
+  const statusLabel = (status: Connection['status']) => i18n.t(({
+    fixed: 'uiCopy.plugin.connections.fixed', unconfigured: 'uiCopy.plugin.connections.unconfigured',
+    active: 'uiCopy.plugin.connections.active', expired: 'uiCopy.plugin.connections.expired',
+    revoked: 'uiCopy.plugin.connections.revoked', stale: 'uiCopy.plugin.connections.stale',
+  } as const)[status]);
+  const date = (value: string) => i18n.formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' });
+
+  function choose(id: string) {
+    const connection = connections().find((entry) => entry.connector_id === id);
+    setConnectorID(id);
+    setDestination(connection?.destination ?? '');
+    setPrefixes(connection?.private_prefixes?.join(', ') ?? '');
+    setMethods(connection?.http_methods ?? []);
+  }
+  async function refresh(signal: AbortSignal, id: string, current: () => boolean) {
+    setLoaded(false);
+    const result = await props.api.listConnections({ plugin_instance_id: id }, { signal });
+    if (!current()) return;
+    setConnections(result.connections);
+    choose(result.connections.some((entry) => entry.connector_id === connectorID()) ? connectorID() : result.connections[0]?.connector_id ?? '');
+    setLoaded(true);
+  }
+  async function run(action: (signal: AbortSignal, id: string, current: () => boolean) => Promise<void>) {
+    const id = props.item?.pluginInstanceID;
+    if (!props.open || !props.ownerScope || !id || busy()) return;
+    const currentGeneration = generation;
+    const operation = new AbortController();
+    controller = operation;
+    const current = () => currentGeneration === generation && !operation.signal.aborted;
+    setBusy(true); setError(undefined);
+    try { await action(operation.signal, id, current); }
+    catch (cause) {
+      if (current()) setError(i18n.t(pluginMutationOutcome(cause) === 'unknown'
+        ? 'uiCopy.plugin.connections.unknown' : 'uiCopy.plugin.connections.failed'));
+    } finally { if (current()) { setBusy(false); controller = undefined; } }
+  }
+  async function cancelReview(closeAfter = false) {
+    const pending = review();
+    setReview(undefined);
+    const currentGeneration = generation;
+    if (pending && props.ownerScope && props.canManage) {
+      await run(async (signal) => { await props.api.cancelConnectionReview({ plugin_instance_id: pending.plugin_instance_id, review_id: pending.review_id }, { signal }); });
+    }
+    if (closeAfter && currentGeneration === generation) props.onOpenChange(false);
+  }
+  createEffect(on(() => [props.open, props.ownerScope, props.item?.pluginInstanceID,
+    props.item?.recoveryIdentity?.active_fingerprint, props.item?.managementRevision, props.canManage] as const,
+  ([open, scope, id]) => {
+    generation += 1; controller?.abort(); controller = undefined;
+    setReview(undefined); setBusy(false); setConnections([]); setLoaded(false); setError(undefined);
+    if (open && (!scope || !id)) { props.onOpenChange(false); return; }
+    if (open && scope && id) void run((signal, target, current) => refresh(signal, target, current));
+  }));
+  onCleanup(() => { generation += 1; controller?.abort(); });
+
+  function prepareReview() {
+    if (!editable() || !selected() || !destination().trim()) return;
+    const connection = selected()!;
+    const privatePrefixes = prefixes().split(/[\s,]+/u).filter(Boolean);
+    void run(async (signal, id, current) => {
+      const result = await props.api.reviewConnection({
+        plugin_instance_id: id, connector_id: connection.connector_id, destination: destination().trim(),
+        expected_revision: connection.revision,
+        ...(methods().length ? { http_methods: methods() as NonNullable<Review['http_methods']> } : {}),
+        ...(privatePrefixes.length ? { private_prefixes: privatePrefixes } : {}),
+        ...(connection.secret_ref ? { secret_ref: connection.secret_ref } : {}),
+      }, { signal });
+      if (current()) setReview(result.review);
+    });
+  }
+  function mutate(kind: 'approve' | 'revoke') {
+    const pending = review(); const connection = selected();
+    if (!editable() || (kind === 'approve' ? !pending || reviewExpired() : !connection)) return;
+    // A review is one-use even if the response is lost. Reconcile by listing;
+    // never keep an approval button that can replay an uncertain write.
+    setReview(undefined);
+    void run(async (signal, id, current) => {
+      let failure: unknown;
+      try {
+        if (kind === 'approve') await props.api.approveConnection({ plugin_instance_id: id, review_id: pending!.review_id }, { signal });
+        else await props.api.revokeConnection({ plugin_instance_id: id, connector_id: connection!.connector_id, expected_revision: connection!.revision }, { signal });
+      } catch (cause) { failure = cause; }
+      if (current()) await refresh(signal, id, current);
+      if (failure) throw failure;
+    });
+  }
+
+  return <Dialog open={props.open} title={i18n.t('uiCopy.plugin.connections.title')}
+    onOpenChange={(open) => { if (!open && !busy()) { void cancelReview(true); } }}>
+    <div class="space-y-4" data-plugin-connections aria-busy={busy()}>
+      <Show when={busy() && !loaded()}><p role="status" class="text-sm text-muted-foreground">{i18n.t('common.status.loading')}</p></Show>
+      <Show when={error()}>{(message) => <p role="alert" class="text-sm text-error">{message()}</p>}</Show>
+      <Show when={!review()} fallback={<Show when={review()}>{(pending) => <>
+        <dl class="space-y-2 break-words text-sm" data-connection-review>
+          <dt class="font-medium">{i18n.t('uiCopy.plugin.connections.destination')}</dt><dd>{pending().destination}</dd>
+          <dt class="font-medium">{i18n.t('uiCopy.plugin.connections.scope')}</dt><dd>{i18n.t(pending().scope === 'environment' ? 'uiCopy.plugin.connections.environment' : 'uiCopy.plugin.connections.user')}</dd>
+          <Show when={pending().http_methods?.length}><dt>{i18n.t('uiCopy.plugin.connections.methods')}</dt><dd>{pending().http_methods?.join(', ')}</dd></Show>
+          <Show when={pending().private_prefixes?.length}><dt>{i18n.t('uiCopy.plugin.connections.privatePrefixes')}</dt><dd>{pending().private_prefixes?.join(', ')}</dd></Show>
+          <Show when={pending().secret_ref}><dt>{i18n.t('uiCopy.plugin.external.secretRefs')}</dt><dd>{pending().secret_ref}</dd></Show>
+          <dt>{i18n.t('uiCopy.plugin.connections.expires')}</dt><dd>{date(pending().expires_at)}</dd>
+          <dt>{i18n.t('uiCopy.plugin.connections.reviewExpires')}</dt><dd>{date(pending().review_expires_at)}</dd>
+        </dl>
+        <div class="flex flex-wrap justify-end gap-2">
+          <Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" disabled={busy()} onClick={() => void cancelReview()}>{i18n.t('common.actions.cancel')}</Button>
+          <Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} disabled={!editable() || reviewExpired()} onClick={() => mutate('approve')}>{i18n.t('uiCopy.plugin.connections.approve')}</Button>
+        </div>
+      </>}</Show>}>
+        <Show when={connections().length} fallback={<Show when={!busy()}><p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.connections.empty')}</p></Show>}>
+          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.connector')}</span>
+            <select class="w-full rounded-md border bg-background px-3 py-2" value={connectorID()} disabled={busy()} onChange={(event) => choose(event.currentTarget.value)}>
+              <For each={connections()}>{(connection) => <option value={connection.connector_id}>{connection.connector_id} · {statusLabel(connection.status)}</option>}</For>
+            </select>
+          </label>
+          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.destination')}</span><Input value={destination()} disabled={!editable()} onInput={(event) => setDestination(event.currentTarget.value)} /></label>
+          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.privatePrefixes')}</span><Input value={prefixes()} disabled={!editable()} onInput={(event) => setPrefixes(event.currentTarget.value)} /><span class="block text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.privateHelp')}</span></label>
+          <Show when={declaration()?.httpMethods.length}><fieldset class="flex flex-wrap gap-3 text-sm"><legend>{i18n.t('uiCopy.plugin.connections.methods')}</legend>
+            <For each={declaration()?.httpMethods}>{(method) => <label class="inline-flex items-center gap-2"><input type="checkbox" disabled={!editable()} checked={methods().includes(method)} onChange={(event) => setMethods((previous) => event.currentTarget.checked ? [...previous, method] : previous.filter((entry) => entry !== method))} />{method}</label>}</For>
+          </fieldset></Show>
+          <Show when={selected()?.expires_at}>{(expires) => <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.expires')}: {date(expires())}</p>}</Show>
+        </Show>
+        <div class="flex flex-wrap justify-end gap-2">
+          <Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" loading={busy()} disabled={busy()} onClick={() => void run((signal, id, current) => refresh(signal, id, current))}>{i18n.t('common.actions.refresh')}</Button>
+          <Show when={selected()?.status === 'active'}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" disabled={!editable()} onClick={() => mutate('revoke')}>{i18n.t('uiCopy.plugin.connections.revoke')}</Button></Show>
+          <Show when={declaration()?.configurable}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} disabled={!editable() || !destination().trim() || (declaration()?.transport === 'http' && !methods().length)} onClick={prepareReview}>{i18n.t('uiCopy.plugin.connections.review')}</Button></Show>
+        </div>
+      </Show>
+    </div>
+  </Dialog>;
+}

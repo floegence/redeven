@@ -7,6 +7,7 @@ import {
   assertIsolatedSmokeConfiguration,
   assessPluginSmoke,
   browserPages,
+  createSmokeTransportGate,
   ensureEnabledWorkerRuntime,
   isEnvAppPage,
   releaseRefFromInstalledPlugin,
@@ -38,7 +39,7 @@ const completeIOEvidence = {
       watch: true,
       remove: true,
     },
-    http: { download_bytes: 64 * 1024 * 1024, upload_bytes: 64 * 1024 * 1024, sha256: 'b'.repeat(64) },
+    http: { download_bytes: 64 * 1024 * 1024, upload_bytes: 64 * 1024 * 1024, sha256: 'b'.repeat(64), request_bytes: 1024 * 1024, requests_per_direction: 64, upload_limit_enforced: true, download_limit_enforced: true },
     websocket: { messages: 100 },
     tcp: { exchanges: 100 },
     udp: { datagrams: 100 },
@@ -237,11 +238,13 @@ test('v9 I/O smoke keeps 64 MiB transfer verification bounded to streaming chunk
     new URL('./fixtures/redevplugin_io_smoke/worker/src/lib.rs', import.meta.url),
     'utf8',
   ));
-  assert.match(source, /file\.read\(CHUNK\)/u);
+  assert.match(source, /file\.read\(CHUNK\.min/u);
   assert.match(source, /download_body\.read\(CHUNK\)/u);
   assert.doesNotMatch(source, /fs::read_file/u);
   assert.doesNotMatch(source, /\.read_all\(\)/u);
-  assert.doesNotMatch(source, /Sha256/u);
+  assert.match(source, /file_hash\.update\(&chunk\)/u);
+  assert.match(source, /HTTP_SEGMENT: usize = 1024 \* 1024/u);
+  assert.match(source, /chunk\.iter\(\)\.enumerate\(\)/u);
 });
 
 test('Desktop smoke persists the failed RPC response and iframe diagnostics on timeout', async () => {
@@ -280,7 +283,7 @@ test('Desktop smoke launches a task-owned Linux target and opens it through the 
   ]);
   assert.match(shellSource, /docker run/u);
   assert.match(shellSource, /linux\/arm64/u);
-  assert.ok(shellSource.indexOf('scripts/build_assets.sh') < shellSource.indexOf('go build -trimpath -o /out/redeven'));
+  assert.ok(shellSource.indexOf('scripts/build_assets.sh') < shellSource.indexOf('go build -trimpath -o "$LINUX_TARGET_ROOT/redeven"'));
   assert.match(shellSource, /REDEVEN_DESKTOP_AUTO_START_RUNTIME=0/u);
   assert.match(browserSource, /redevenDesktopLauncher\.performAction/u);
   assert.match(browserSource, /kind: 'open_remote_environment'/u);
@@ -366,7 +369,7 @@ test('browser smoke opens the Panel before waiting for session inventory credent
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
-  const sessionWait = source.indexOf("}, 30_000, 'plugin session credential');");
+  const sessionWait = source.indexOf("const credential = await waitFor");
   const panelPhase = source.indexOf("phase = 'panel_open';");
   const panelOpen = source.indexOf("await visiblePluginTrigger().click();", panelPhase);
   assert.ok(panelOpen > panelPhase && sessionWait > panelOpen);
@@ -574,33 +577,33 @@ test('Desktop smoke uses the current Host-owned recovery route', async () => {
   assert.doesNotMatch(source, /runtime\/refresh-enabled/u);
 });
 
-test('Desktop smoke records close button, Escape, backdrop, and final reopen evidence', async () => {
+test('Desktop smoke records close button, Escape, outside pointer, and final reopen evidence', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
   assert.match(source, /panelDismissal\.close_button/u);
   assert.match(source, /panelDismissal\.escape/u);
-  assert.match(source, /panelDismissal\.backdrop/u);
+  assert.match(source, /panelDismissal\.outside_pointer/u);
   assert.match(source, /panelDismissal\.final_reopen/u);
   assert.match(source, /waitFor\(\{ state: 'detached', timeout: 10_000 \}\)/u);
 });
 
-test('Desktop smoke reopens the Panel five times without a visible loading state or inventory reload', async () => {
+test('Desktop smoke reopens the Panel five times from its snapshot with the session transport paused', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
   assert.match(source, /for \(let index = 0; index < 5; index \+= 1\)/u);
   assert.match(source, /Loading plugins\|正在加载插件/u);
-  assert.match(source, /catalogQueryCountBefore/u);
-  assert.match(source, /catalogQueryCountAfter/u);
-  assert.match(source, /catalogQueryCountAfter !== catalogQueryCountBefore/u);
+  assert.match(source, /await transportGate.pause\(\)/u);
+  assert.match(source, /snapshot_independent_of_network: transportGate.available/u);
   assert.match(source, /open_duration_ms/u);
   assert.match(source, /tile_keys/u);
-  assert.match(source, /inventory_refresh_count/u);
+  assert.match(source, /inventory_request_count: null/u);
   assert.match(source, /background refresh control pending/u);
-  assert.match(source, /page\.route\('\*\*\/_redevplugin\/api\/plugins\/catalog\/query'/u);
+  assert.match(source, /task_owned_linux_host_suspended/u);
+  assert.match(source, /finally \{[\s\S]*?await transportGate\.resume\(\)/u);
   assert.match(source, /background_refresh_tile_keys/u);
 });
 
@@ -646,14 +649,18 @@ test('Desktop smoke leaves Plugin Center before reopening the Activity Plugin Pa
   assert.match(source, /plugin-center-close-diagnostics\.json/u);
   assert.doesNotMatch(source, /data-activity-id="monitor"/u);
   assert.match(source, /const activityPluginTrigger = page\.locator\('\[aria-controls="redeven-plugin-switcher"\]'\)\.filter\(\{ visible: true \}\)\.first\(\)/u);
-  assert.match(source, /const pluginPanelBackdrop = page\.locator\('\[data-plugin-launcher-backdrop\]'\)\.first\(\)/u);
-  assert.match(source, /if \(!await pluginPanelBackdrop\.isVisible\(\)\.catch\(\(\) => false\)\) \{[\s\S]*?await activityPluginTrigger\.click\(\);[\s\S]*?pluginPanelBackdrop\.waitFor\(\{ state: 'visible'/u);
+  assert.match(source, /const pluginPanel = page\.locator\('#redeven-plugin-switcher'\)\.first\(\)/u);
+  assert.match(source, /if \(!await pluginPanel\.isVisible\(\)\.catch\(\(\) => false\)\) \{[\s\S]*?await activityPluginTrigger\.click\(\);[\s\S]*?pluginPanel\.waitFor\(\{ state: 'visible'/u);
   assert.doesNotMatch(source, /stale Activity Plugin Panel trigger reset|panelTriggerOpenDelayMS|pluginPanelActivityEvents|__redevenPluginPanelClickTrace/u);
 });
 
 test('Desktop smoke identifies the Env App target by its product route before shell readiness', () => {
   assert.equal(isEnvAppPage({ url: () => 'http://127.0.0.1:60927/_redeven_proxy/env/' }), true);
   assert.equal(isEnvAppPage({ url: () => 'file:///workspace/desktop/dist/welcome/index.html' }), false);
+  const page = { url: () => 'http://127.0.0.1:60927/_redeven_proxy/env/' };
+  assert.equal(isEnvAppPage(page, 'http://127.0.0.1:60927/'), true);
+  assert.equal(isEnvAppPage(page, 'http://127.0.0.1:60928/'), false);
+  assert.equal(isEnvAppPage(page, 'http://localhost:60927/'), false);
 });
 
 test('Desktop smoke brings the Env App window to the foreground before user interaction', async () => {
@@ -664,12 +671,13 @@ test('Desktop smoke brings the Env App window to the foreground before user inte
   assert.match(source, /page = await waitFor[\s\S]*?await page\.bringToFront\(\);[\s\S]*?page\.waitForLoadState\('domcontentloaded'\)/u);
 });
 
-test('Desktop smoke observes the first Env App navigation without forcing a reload', async () => {
+test('Desktop smoke binds credential observation and session routing before document acquisition', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
-  assert.doesNotMatch(source, /page\.reload\(/u);
+  assert.ok(source.indexOf("page.on('request'") < source.indexOf('await page.reload'));
+  assert.doesNotMatch(source, /routeWebSocket/u);
   assert.match(source, /page\.waitForLoadState\('domcontentloaded'\)/u);
 });
 
@@ -680,7 +688,7 @@ test('Desktop smoke waits for the closed Panel trigger instead of the unmounted 
   ));
   assert.match(source, /\[aria-controls="redeven-plugin-switcher"\]/u);
   assert.match(source, /\[data-workbench-dock-action="plugins"\]/u);
-  assert.doesNotMatch(source, /page\.locator\('#redeven-plugin-switcher'\)\.count\(\)/u);
+  assert.match(source, /waitFor\(\(\) => page\.locator\(PLUGIN_TRIGGER_SELECTOR\)\.count\(\)/u);
 });
 
 test('Desktop smoke normalizes every phase to the Activity Plugin Panel', async () => {
@@ -690,10 +698,10 @@ test('Desktop smoke normalizes every phase to the Activity Plugin Panel', async 
   ));
   assert.match(source, /getByRole\('tab', \{ name: 'Activity', exact: true \}\)/u);
   assert.match(source, /page\.locator\('\[aria-controls="redeven-plugin-switcher"\]'\)\.filter\(\{ visible: true \}\)/u);
-  assert.doesNotMatch(source, /locator\('\[data-plugin-launcher-backdrop\]'\)\.count\(\) === 1/u);
-  const initialBackdropIndex = source.indexOf('initialBackdrop');
+  assert.doesNotMatch(source, /locator\('#redeven-plugin-switcher'\)\.count\(\) === 1/u);
+  const initialPanelIndex = source.indexOf('initialPanel');
   assert.ok(
-    initialBackdropIndex >= 0 && initialBackdropIndex < source.indexOf('const activityMode'),
+    initialPanelIndex >= 0 && initialPanelIndex < source.indexOf('const activityMode'),
     'an already-open Panel must be closed before the Activity tab can be clicked',
   );
 });
@@ -757,4 +765,37 @@ test('Desktop smoke records the task owner in each phase summary', async () => {
     'utf8',
   ));
   assert.doesNotMatch(source, /owner_id: config\.ownerID/u);
+});
+
+const gateConfig = {
+  root: '/tmp/redeven-plugin-gate-test', stateRoot: '/tmp/redeven-plugin-gate-test/state',
+  userDataRoot: '/tmp/redeven-plugin-gate-test/user', cacheRoot: '/tmp/redeven-plugin-gate-test/cache',
+  tempRoot: '/tmp/redeven-plugin-gate-test/temp', localUIPort: 21001, cdpPort: 21002, inspectorPort: 21003,
+  linuxTarget: { container_id: 'a'.repeat(64), local_ui_pid: 14 },
+};
+test('transport delay never suspends an attached or unrelated target', async () => {
+  const calls = [];
+  const execute = async (...args) => { calls.push(args); return { stdout: '/unrelated-container' }; };
+  const attached = createSmokeTransportGate({ ...gateConfig, mode: 'attach' }, execute);
+  await attached.pause(); await attached.resume();
+  assert.equal(calls.length, 0);
+  const isolated = createSmokeTransportGate(gateConfig, execute);
+  await assert.rejects(isolated.pause(), /unrelated container/u);
+  await isolated.resume();
+  assert.equal(calls.length, 1);
+});
+test('transport delay resumes the exact host even after a lost stop acknowledgement', async () => {
+  const calls = [];
+  const execute = async (_command, args) => {
+    calls.push(args);
+    if (args[0] === 'inspect') return { stdout: '/redeven-plugin-smoke-1234' };
+    if (args[4].includes('kill -STOP')) throw new Error('Response lost');
+    return { stdout: '' };
+  };
+  const gate = createSmokeTransportGate(gateConfig, execute);
+  await assert.rejects(gate.pause(), /Response lost/u);
+  await gate.resume(); await gate.resume();
+  assert.equal(calls.length, 3);
+  assert.match(calls[2][4], /kill -CONT/u);
+  assert.deepEqual(calls[2].slice(-2), ['sh', '14']);
 });

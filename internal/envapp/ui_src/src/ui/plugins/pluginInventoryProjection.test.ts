@@ -969,3 +969,16 @@ it('retains every Host-verified view surface as a restoration target without rep
   const disabled = projectPluginInventory({ officialCatalog: [examplePlugin], installedPlugins: [{ ...record, action_state: { ...record.action_state!, can_open: false } }] });
   expect(disabled.items.find((item) => item.pluginInstanceID === record.plugin_instance_id)?.launchTargets).toEqual([]);
 });
+
+it('projects connector capabilities only from verified installed declarations', () => {
+  const record = installedRecord();
+  record.manifest.network_access = { connectors: [{ connector_id: 'service', transport: 'http', configurable: true, scope: 'environment', destinations: [] }] };
+  record.manifest.methods = [{ method: 'fetch', effect: 'read', execution: 'sync', route: { kind: 'surface', surface_id: 'metrics.dashboard' },
+    broker_access: { network: [{ connector_id: 'service', transport: 'http', operations: ['http'], http_methods: ['GET'] }] }, request_schema: { type: 'object', additionalProperties: false }, response_schema: { type: 'object', additionalProperties: false } }];
+  record.manifest.surfaces[0].web!.network = [{ connector_id: 'service', transport: 'http', operations: ['http'], http_methods: ['GET', 'POST'] }];
+  for (const officialCatalog of [[], [examplePlugin]]) {
+    const projected = projectPluginInventory({ officialCatalog, installedPlugins: [record] }).items.find((item) => item.pluginInstanceID === record.plugin_instance_id)!;
+    expect(projected.networkConnectors).toEqual([{ connectorID: 'service', transport: 'http', configurable: true, httpMethods: ['GET', 'POST'] }]);
+  }
+  expect(projectPluginInventory({ officialCatalog: [examplePlugin], installedPlugins: [] }).items[0].networkConnectors).toBeUndefined();
+});

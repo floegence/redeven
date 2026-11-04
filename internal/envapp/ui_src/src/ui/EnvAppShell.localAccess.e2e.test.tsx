@@ -2463,6 +2463,42 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('refreshes installed inventory even when the market refresh is unavailable', async () => {
+    pluginLifecycleMocks.refreshMarketCatalog.mockRejectedValue(new Error('Market offline'));
+    pluginPanelState.renderActual = true;
+    pluginCenterViewState.renderActual = true;
+    uiFirstSelectionState.useActual = true;
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockResolvedValueOnce({ items: [], marketUnavailable: true })
+      .mockResolvedValueOnce(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-center-market-action]')), 40);
+      (document.querySelector('[data-plugin-center-market-action]') as HTMLButtonElement).click();
+      await vi.waitFor(() => expect(pluginCenterViewState.lastProps?.onRefresh).toEqual(expect.any(Function)));
+
+      await expect(pluginCenterViewState.lastProps.onRefresh()).rejects.toThrow('Market offline');
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
+        (tile: any) => tile.kind === 'plugin' && tile.item?.pluginID === examplePluginCatalog.pluginID,
+      ), 40);
+
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      expect(pluginCenterViewState.lastProps.projection.items).toContainEqual(
+        expect.objectContaining({ pluginID: examplePluginCatalog.pluginID }),
+      );
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps one real PluginPanel authority across enabled Activity and Workbench ingress', async () => {
     vi.useFakeTimers();
     pluginPanelState.renderActual = true;

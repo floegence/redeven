@@ -234,6 +234,7 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		Connectivity: &host.ConnectivityModule{
 			Broker:          connectivityBroker,
 			NetworkExecutor: networkExecutor,
+			PrivateNetwork:  newNetworkPolicyAdapter(sessions.resolver.cache),
 		},
 		Secrets:    &host.SecretsModule{Store: secretStore},
 		Process:    &host.ProcessModule{Supervisor: processSupervisor},

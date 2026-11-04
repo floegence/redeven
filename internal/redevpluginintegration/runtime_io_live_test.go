@@ -5,6 +5,8 @@ package redevpluginintegration
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -47,6 +49,9 @@ func TestPublishedAuthorWorkerRunsThroughRedevenRuntime(t *testing.T) {
 }
 
 func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the full I/O fixture requires the published Linux filesystem-watch implementation")
+	}
 	invoke := openLivePluginWorker(t, "REDEVEN_TEST_PLUGIN_PACKAGE", "io.view")
 	fullIO := os.Getenv("REDEVEN_TEST_PLUGIN_IO_FULL") == "1"
 	port := func(name string) float64 {
@@ -73,9 +78,36 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 		if err != nil {
 			t.Fatalf("full invocation: %T: %+v", err, err)
 		}
-		if result.Data == nil {
-			t.Fatal("full invocation returned no data")
+		encoded, err := json.Marshal(result.Data)
+		if err != nil {
+			t.Fatal(err)
 		}
+		var evidence struct {
+			FS struct {
+				Bytes                             int64
+				SHA256                            string
+				ExpectedSHA256                    string `json:"expected_sha256"`
+				List, Stat, Rename, Watch, Remove bool
+			}
+			HTTP struct {
+				DownloadBytes int64 `json:"download_bytes"`
+				UploadBytes   int64 `json:"upload_bytes"`
+				RequestBytes  int64 `json:"request_bytes"`
+				Requests      int   `json:"requests_per_direction"`
+				UploadLimit   bool  `json:"upload_limit_enforced"`
+				DownloadLimit bool  `json:"download_limit_enforced"`
+			}
+			WebSocket struct{ Messages int }
+			TCP       struct{ Exchanges int }
+			UDP       struct{ Datagrams int }
+		}
+		if err := json.Unmarshal(encoded, &evidence); err != nil {
+			t.Fatal(err)
+		}
+		if evidence.FS.Bytes != 64<<20 || evidence.FS.SHA256 != evidence.FS.ExpectedSHA256 || !evidence.FS.List || !evidence.FS.Stat || !evidence.FS.Rename || !evidence.FS.Watch || !evidence.FS.Remove || evidence.HTTP.DownloadBytes != 64<<20 || evidence.HTTP.UploadBytes != 64<<20 || evidence.HTTP.RequestBytes != 1<<20 || evidence.HTTP.Requests != 64 || !evidence.HTTP.UploadLimit || !evidence.HTTP.DownloadLimit || evidence.WebSocket.Messages != 100 || evidence.TCP.Exchanges != 100 || evidence.UDP.Datagrams != 100 {
+			t.Fatalf("incomplete I/O evidence: %s", encoded)
+		}
+		t.Logf("verified I/O evidence: %s", encoded)
 		return
 	}
 	workerError, ok := host.AsValidatedWorkerExecutionError(err)
@@ -196,6 +228,28 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string) func(
 		installed.Plugin.ManagementRevision = granted.Revisions.ManagementRevision
 		installed.Plugin.RevokeEpoch = granted.Revisions.RevokeEpoch
 	}
+	if surfaceID == "io.view" {
+		for _, connector := range []struct{ id, scheme, port, suffix string }{
+			{"http", "http", "REDEVEN_TEST_PLUGIN_IO_HTTP_PORT", "/"}, {"ws", "ws", "REDEVEN_TEST_PLUGIN_IO_WS_PORT", ""},
+			{"tcp", "tcp", "REDEVEN_TEST_PLUGIN_IO_TCP_PORT", ""}, {"udp", "udp", "REDEVEN_TEST_PLUGIN_IO_UDP_PORT", ""},
+		} {
+			port := "1"
+			if os.Getenv("REDEVEN_TEST_PLUGIN_IO_FULL") == "1" {
+				port = os.Getenv(connector.port)
+			}
+			req := host.ReviewConnectionRequest{PluginInstanceID: installed.Plugin.PluginInstanceID, ConnectorID: "smoke." + connector.id, Destination: fmt.Sprintf("%s://127.0.0.1:%s%s", connector.scheme, port, connector.suffix), PrivatePrefixes: []string{"127.0.0.1/32"}}
+			if connector.id == "http" {
+				req.HTTPMethods = []string{"GET", "POST"}
+			}
+			review, err := integration.host.ReviewConnection(ctx, req)
+			if err != nil {
+				t.Fatalf("review %s: %v", connector.id, err)
+			}
+			if _, err := integration.host.ApproveConnection(ctx, host.ConnectionReviewRequest{PluginInstanceID: installed.Plugin.PluginInstanceID, ReviewID: review.ReviewID}); err != nil {
+				t.Fatalf("approve %s: %v", connector.id, err)
+			}
+		}
+	}
 	if recovery, err := integration.host.RetryPluginRecovery(ctx, installed.Plugin.PluginInstanceID); err != nil {
 		t.Fatalf("retry runtime recovery: %v", err)
 	} else if recovery.Status != host.PluginRecoveryReady {
@@ -236,10 +290,15 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string) func(
 	return func(method string, params map[string]any) (host.CallMethodResult, error) {
 		callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
-		return integration.host.CallPluginMethod(callCtx, host.CallMethodRequest{
+		result, callErr := integration.host.CallPluginMethod(callCtx, host.CallMethodRequest{
 			PluginInstanceID:  installed.Plugin.PluginInstanceID,
 			SurfaceInstanceID: surfaceInstanceID, BridgeChannelID: bridgeChannelID,
 			GatewayToken: gateway.GatewayToken, Method: method, Params: params,
 		})
+		if callErr != nil {
+			events, diagnosticErr := integration.host.ListDiagnosticEvents(ctx, host.ListDiagnosticEventsRequest{PluginInstanceID: installed.Plugin.PluginInstanceID, Limit: 50})
+			t.Logf("invocation diagnostics: %+v error: %v", events, diagnosticErr)
+		}
+		return result, callErr
 	}
 }

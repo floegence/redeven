@@ -1642,7 +1642,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const refreshPluginMarket = (): Promise<void> => {
     if (pluginMarketRefreshPromise) return pluginMarketRefreshPromise;
     const refresh = (async () => {
-      const result = await pluginLifecycle.refreshMarketCatalog();
+      let result: PluginMarketCatalogResult;
+      try { result = await pluginLifecycle.refreshMarketCatalog(); }
+      catch (error) {
+        // Installed state is independently readable when the market is offline.
+        await refetchPluginInventory();
+        throw error;
+      }
       await synchronizePluginInventoryForMarket(result);
     })();
     let tracked: Promise<void>;
@@ -3919,6 +3925,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           canRecoverPluginData={Boolean(pluginInventorySource() && env()?.permissions?.can_read && env()?.permissions?.can_write)}
           pluginOwnerScope={pluginInventorySource()}
           retainedDataAPI={pluginLifecycle}
+          connectionsAPI={pluginLifecycle}
+          canManageConnections={Boolean(pluginInventorySource() && canAdmin() && env()?.permissions?.can_read && env()?.permissions?.can_write && env()?.permissions?.can_execute)}
           canOpenPluginSurfaces={canOpenPluginSurfaces()}
           runtimeRecovery={undefined}
           runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}

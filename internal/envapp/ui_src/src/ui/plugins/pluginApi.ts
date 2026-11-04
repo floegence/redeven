@@ -381,6 +381,11 @@ export function createPluginLifecycleAPI(
   };
 
   return Object.freeze({
+    listConnections: (...args: Parameters<PluginPlatformClient['listConnections']>) => client.listConnections(...args),
+    reviewConnection: (...args: Parameters<PluginPlatformClient['reviewConnection']>) => client.reviewConnection(...args),
+    approveConnection: (...args: Parameters<PluginPlatformClient['approveConnection']>) => client.approveConnection(...args),
+    cancelConnectionReview: (...args: Parameters<PluginPlatformClient['cancelConnectionReview']>) => client.cancelConnectionReview(...args),
+    revokeConnection: (...args: Parameters<PluginPlatformClient['revokeConnection']>) => client.revokeConnection(...args),
     listInstalledPlugins,
     loadCachedMarketCatalog,
     refreshMarketCatalog,

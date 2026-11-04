@@ -7362,6 +7362,31 @@
         "unknown": "Ergebnis des letzten Laufs unbekannt",
         "failed": "Letzter Lauf fehlgeschlagen",
         "next": "Nächster Lauf: {time}"
+      },
+      "connections": {
+        "title": "Verbindungen",
+        "connector": "Konnektor",
+        "destination": "Ziel",
+        "scope": "Geltungsbereich",
+        "environment": "Umgebung",
+        "user": "Aktueller Benutzer",
+        "methods": "HTTP-Methoden",
+        "privatePrefixes": "Private Netzwerke (optional)",
+        "privateHelp": "Explizite CIDR-Bereiche durch Kommas trennen. Für öffentliche Ziele leer lassen.",
+        "expires": "Verbindung läuft ab",
+        "reviewExpires": "Prüfung läuft ab",
+        "review": "Verbindung prüfen",
+        "approve": "Verbindung genehmigen",
+        "revoke": "Verbindung widerrufen",
+        "fixed": "Festgelegt",
+        "unconfigured": "Nicht konfiguriert",
+        "active": "Aktiv",
+        "expired": "Abgelaufen",
+        "revoked": "Widerrufen",
+        "stale": "Prüfung erforderlich",
+        "empty": "Keine Verbindungen vorhanden.",
+        "failed": "Der Vorgang ist fehlgeschlagen. Aktualisieren Sie den Verbindungsstatus und prüfen Sie die Konfiguration.",
+        "unknown": "Das Ergebnis ist ungewiss. Prüfen Sie den aktualisierten Status, bevor Sie eine neue Prüfung starten."
       }
     },
     "pluginRuntime": {

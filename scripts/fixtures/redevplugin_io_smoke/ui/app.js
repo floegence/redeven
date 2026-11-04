@@ -27,8 +27,10 @@ async function run(method) {
     const response = await bridge.call(method, { server });
     result = JSON.stringify(response.data ?? response, null, 2);
     status = 'ready';
+    console.info('redevplugin-io-smoke:' + JSON.stringify({ method, ok: true, result: response.data ?? response }));
   } catch (error) {
     status = error instanceof Error ? error.message : String(error);
+    console.info('redevplugin-io-smoke:' + JSON.stringify({ method, ok: false, error: status }));
     throw error;
   } finally {
     await render();

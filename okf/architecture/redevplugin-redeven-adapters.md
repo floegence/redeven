@@ -3,7 +3,7 @@ type: Architecture Boundary
 title: ReDevPlugin Redeven adapters
 tags: [architecture, plugins, adapters, ui]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -39,6 +39,29 @@ caller-owned package transport on failure or shutdown. Each granted connector
 receives an independent transport managed by the upstream pool lifecycle. TLS
 verification and system trust roots remain enabled; proxy credentials stay on the
 proxy hop and never become origin or plugin credentials.
+
+## Reviewed connections
+
+Connection inventory requires effective read access. Review, approval, cancellation
+and revocation require an authenticated administrator with effective read, write
+and execute access. The private-network adapter checks the exact cached session
+and explicit nonempty prefixes using the published destination classifier;
+metadata endpoints, unspecified addresses and blanket prefixes stay denied.
+Upstream owns exact destination binding, address pinning, revisions, expiry,
+leases and revocation. Installing a package grants no connection authority.
+
+Plugin Center presents verified installed connector declarations, a separate
+review and approval, exact destination/methods/private prefixes/secret reference,
+and both connection and review expiry. Owner, active package, revision or policy
+changes retire pending UI state. An uncertain approval is never replayed; the
+client lists current authority before enabling another write. Failed reconciliation
+keeps mutations disabled until an explicit successful refresh.
+
+The connectivity executor retains the released 1 MiB request/response defaults.
+Large application transfers require explicitly designed bounded requests; the
+qualification fixture transfers 64 MiB as 64 one-MiB requests per direction and
+also requires oversized requests and responses to fail. It does not certify a
+single 64 MiB HTTP request or relax platform quotas.
 
 ## Surfaces and interaction ownership
 The product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.

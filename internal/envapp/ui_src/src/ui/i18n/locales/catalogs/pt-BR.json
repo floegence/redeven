@@ -7362,6 +7362,31 @@
         "unknown": "Resultado anterior desconhecido",
         "failed": "A última execução falhou",
         "next": "Próxima execução: {time}"
+      },
+      "connections": {
+        "title": "Conexões",
+        "connector": "Conector",
+        "destination": "Destino",
+        "scope": "Escopo",
+        "environment": "Ambiente",
+        "user": "Usuário atual",
+        "methods": "Métodos HTTP",
+        "privatePrefixes": "Redes privadas (opcional)",
+        "privateHelp": "Insira intervalos CIDR explícitos separados por vírgulas. Deixe vazio para destinos públicos.",
+        "expires": "A conexão expira",
+        "reviewExpires": "A revisão expira",
+        "review": "Revisar conexão",
+        "approve": "Aprovar conexão",
+        "revoke": "Revogar conexão",
+        "fixed": "Fixa",
+        "unconfigured": "Não configurada",
+        "active": "Ativa",
+        "expired": "Expirada",
+        "revoked": "Revogada",
+        "stale": "Requer revisão",
+        "empty": "Nenhuma conexão para exibir.",
+        "failed": "A operação falhou. Atualize o status da conexão e revise a configuração.",
+        "unknown": "O resultado é incerto. Verifique o status atualizado antes de iniciar uma nova revisão."
       }
     },
     "pluginRuntime": {
