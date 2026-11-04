@@ -14,7 +14,7 @@ await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const sources = [
   ...['DesktopAnchoredOverlaySurface.tsx', 'DesktopAnchoredListbox.tsx', 'DesktopActionPopover.tsx', 'DesktopPopover.tsx', 'DesktopTooltip.tsx', 'DesktopThemePicker.tsx', 'SSHDestinationCombobox.tsx', 'EnvironmentCards.tsx', 'RuntimeCloudConnections.tsx', 'RuntimeGatewayConnectionsDialog.tsx', 'SSHEnvironmentSettingsForm.tsx', 'App.tsx', 'index.css'].map(name => `desktop/src/welcome/${name}`),
-  ...['FlowerContextMenu.tsx', 'FlowerSurface.tsx', 'threads/FlowerThreadList.tsx', 'styles/flower.css'].map(name => `internal/flower_ui/src/${name}`),
+  ...['FlowerContextMenu.tsx', 'FlowerSurface.tsx', 'FlowerComputerStage.tsx', 'FlowerTurnLauncherWindow.tsx', 'filePicker/FlowerWorkingDirPickerDialog.tsx', 'threads/FlowerThreadList.tsx', 'styles/flower.css', 'settings/ManualModelCapabilities.tsx', 'settings/FlowerProviderDialog.tsx', 'preview/SpreadsheetPreview.tsx', 'preview/preview.css', 'chat/FlowerContextCompactionDivider.tsx'].map(name => `internal/flower_ui/src/${name}`),
   'desktop/package-lock.json',
 ];
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -34,7 +34,7 @@ try {
       document.documentElement.classList.toggle('light', theme.endsWith('light'));
       await document.fonts.ready;
     }, theme);
-    for (const kind of ['action', 'surface', 'hover', 'tooltip', 'listbox', 'endpoints', 'theme', 'ssh', 'dropdown', 'select', 'flower-context']) {
+    for (const kind of ['action', 'surface', 'hover', 'tooltip', 'listbox', 'endpoints', 'theme', 'ssh', 'dropdown', 'select', 'flower-context', 'capabilities', 'preview-select', 'preview-panel', 'compaction', 'frame-rate', 'kimi-endpoint', 'directory', 'launcher']) {
       await page.mouse.move(10, 10);
       await page.locator('#outside').focus();
       await page.evaluate(({ kind, width }) => { popupFixture.setOpen(false); popupFixture.setKind(kind); popupFixture.setPlacement({ left: width < 640 ? 50 : 450, top: 480 }); }, { kind, width });
@@ -44,10 +44,13 @@ try {
       else if (kind === 'dropdown') await page.locator('[data-floe-dropdown-trigger]').click();
       else if (kind === 'flower-context') await page.locator('[data-flower-thread-card]').click({ button: 'right' });
       else if (kind === 'select') await page.getByRole('combobox').click();
-      else if (['action', 'surface', 'listbox'].includes(kind)) await page.locator('#anchor').click();
+      else if (['capabilities', 'preview-select', 'frame-rate', 'kimi-endpoint'].includes(kind)) await page.getByRole('combobox').first().click();
+      else if (kind === 'preview-panel') await page.locator('.flower-spreadsheet-icon').last().click();
+      else if (kind === 'compaction') await page.locator('.flower-compaction-divider-pill').focus();
+      else if (['action', 'surface', 'listbox', 'directory', 'launcher'].includes(kind)) await page.locator('#anchor').click();
       else await page.locator('main > div button').first().click();
-      const selector = { action: '.redeven-action-popover-surface', surface: '[role=dialog]', hover: '[role=dialog]', tooltip: '[role=tooltip]', listbox: '[data-redeven-anchored-listbox]', endpoints: '.redeven-endpoints-surface', theme: '.redeven-theme-picker', ssh: '[data-redeven-anchored-listbox]', dropdown: '[role=menu]', select: '.floe-floating-menu', 'flower-context': '.flower-thread-context-menu' }[kind];
-      const surface = page.locator(selector).first();
+      const selector = { action: '.redeven-action-popover-surface', surface: '[role=dialog]', hover: '[role=dialog]', tooltip: '[role=tooltip]', listbox: '[data-redeven-anchored-listbox]', endpoints: '.redeven-endpoints-surface', theme: '.redeven-theme-picker', ssh: '[data-redeven-anchored-listbox]', dropdown: '[role=menu]', select: '.floe-floating-menu', 'flower-context': '.flower-thread-context-menu', capabilities: '.floe-floating-menu', 'preview-select': '.floe-floating-menu', 'preview-panel': '[data-spreadsheet-panel]', compaction: '.flower-compaction-divider-tooltip', 'frame-rate': '.floe-floating-menu' }[kind];
+      const surface = page.locator(kind === 'kimi-endpoint' ? '.floe-floating-menu' : kind === 'directory' ? '[data-floe-dialog-panel]' : kind === 'launcher' ? '[data-floe-geometry-surface="floating-window"]' : selector).first();
       try { await surface.waitFor({ state: 'visible', timeout: 5000 }); } catch (error) { await writeFile(`${output}/failure.html`, await page.content()); await page.screenshot({ path: `${output}/failure.png` }); throw error; }
       const opening = await surface.evaluate(async (el, reducedMotion) => {
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -71,7 +74,7 @@ try {
       if (reducedMotion === 'no-preference') {
         assert.ok(opening.timing.some(t => t.property === 'opacity'), `${label}: opacity entrance runs`);
         assert.ok(opening.start.opacity < opening.middle.opacity && opening.middle.opacity < 1, `${label}: visible fade progression`);
-        if (kind !== 'tooltip') assert.ok(opening.start.scale < 1, `${label}: shared subtle scale`);
+        if (kind !== 'tooltip' && kind !== 'compaction') assert.ok(opening.start.scale < 1, `${label}: shared subtle scale`);
         if (opening.start.position) {
           for (const key of ['x', 'y', 'width', 'height']) assert.equal(opening.start.position[key], opening.middle.position[key], `${label}: positioning ignores animated transforms (${key})`);
         }
@@ -90,7 +93,7 @@ try {
         }
         await page.waitForTimeout(280);
       }
-      if (['action', 'surface', 'hover', 'listbox', 'endpoints'].includes(kind)) await page.evaluate(() => popupFixture.setOpen(false));
+      if (['action', 'surface', 'hover', 'listbox', 'endpoints', 'directory', 'launcher'].includes(kind)) await page.evaluate(() => popupFixture.setOpen(false));
       else if (kind === 'tooltip') { await page.locator('#outside').hover(); await page.locator('#outside').focus(); }
       else if (kind === 'ssh') { await page.locator('input').press('Escape'); }
       else await page.keyboard.press('Escape');
@@ -99,6 +102,32 @@ try {
         assert.equal(exiting.state, 'exiting', `${label}: retained exit state`);
       }
       await surface.waitFor({ state: 'detached' });
+      if (kind === 'frame-rate') {
+        assert.equal(await page.evaluate(() => popupFixture.windowCloses()), 0, 'Escape dismisses only the frame-rate listbox');
+        const windowBounds = await page.locator('[data-floe-geometry-surface="floating-window"]').first().boundingBox();
+        await page.getByRole('combobox', { name: 'Frame rate', exact: true }).click();
+        await page.getByRole('option', { name: '15 FPS', exact: true }).click();
+        await surface.waitFor({ state: 'detached' });
+        assert.equal(await page.getByRole('combobox', { name: 'Frame rate', exact: true }).innerText(), '15 FPS');
+        assert.deepEqual(await page.locator('[data-floe-geometry-surface="floating-window"]').first().boundingBox(), windowBounds, 'frame rate selection never drags or closes the window');
+      }
+      if (kind === 'capabilities') {
+        const control = page.getByRole('combobox').first();
+        assert.equal(await control.getAttribute('aria-required'), 'true');
+        await control.click();
+        await page.getByRole('option', { name: 'Not supported', exact: true }).click();
+        assert.equal(await page.evaluate(() => popupFixture.capabilityModel().supports_tools), false);
+        assert.equal(await control.getAttribute('aria-invalid'), null, 'explicit capability clears validation state');
+        await surface.waitFor({ state: 'detached' });
+      }
+      if (kind === 'kimi-endpoint') {
+        const control = page.getByRole('combobox', { name: 'Base URL', exact: true });
+        await control.click();
+        await page.getByRole('option', { name: 'Global · api.kimi.ai', exact: true }).click();
+        assert.equal(await control.innerText(), 'Global · api.kimi.ai');
+        await surface.waitFor({ state: 'detached' });
+        assert.equal(await page.locator('[role=dialog]').count(), 1, 'endpoint selection retains the provider dialog');
+      }
       report.cases.push({ label, opening });
     }
     // All resolved directions, including a viewport collision flip, keep the anchor gap stable.

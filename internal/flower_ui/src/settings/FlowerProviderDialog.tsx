@@ -885,13 +885,11 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           size="sm"
                           class="w-full"
                         />}>
-                          <select value={store.draft!.base_url?.replace(/\/+$/, '') || defaultBaseURLForFlowerProviderType('kimi_code')}
-                            class="h-8 w-full cursor-pointer rounded border border-input bg-background px-2.5 text-[length:var(--floe-type-control)] shadow-sm disabled:cursor-not-allowed"
-                            aria-label={copy().baseURL} disabled={props.disabled || props.saving}
-                            onChange={event => updateProvider({ base_url: event.currentTarget.value })}>
-                            <option value="https://api.kimi.com/coding/v1">{copy().kimiCode.china}</option>
-                            <option value="https://api.kimi.ai/coding/v1">{copy().kimiCode.global}</option>
-                          </select>
+                          <Select value={store.draft!.base_url?.replace(/\/+$/, '') || defaultBaseURLForFlowerProviderType('kimi_code')}
+                            class="h-8" ariaLabel={copy().baseURL} disabled={props.disabled || props.saving}
+                            onChange={value => updateProvider({ base_url: value })}
+                            options={[{ value: 'https://api.kimi.com/coding/v1', label: copy().kimiCode.china },
+                              { value: 'https://api.kimi.ai/coding/v1', label: copy().kimiCode.global }]} />
                         </Show>
                       </div>
                       <Show when={store.draft!.type === 'openai'}>

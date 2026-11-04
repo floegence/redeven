@@ -1,9 +1,9 @@
 import { COMPUTER_FRAME_RATES } from './computerViewer';
 import type { Component } from 'solid-js';
-import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, untrack } from 'solid-js';
 import { AlertTriangle, Clock, MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
 
-import { Button, FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
+import { Button, FloatingWindow, Select, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerActivityItem, FlowerComputerInputCommand, FlowerComputerFrameSource, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 
@@ -71,6 +71,7 @@ export type FlowerComputerStageProps = Readonly<{
 }>;
 
 export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => {
+  const frameRateHintID = `flower-computer-frame-rate-${createUniqueId()}`;
   const [resolvedURL, setResolvedURL] = createSignal<string>();
   const [failed, setFailed] = createSignal(false);
   const [actualSize, setActualSize] = createSignal(false);
@@ -207,10 +208,12 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           <Show when={props.sessionState !== 'historical'}><span class="flower-computer-state" data-session-state={props.sessionState}>{props.copy.state[props.sessionState]}</span></Show>
           <Show when={!props.historical}><label class="flower-computer-frame-rate" title={`${props.copy.frameRateHint}\n${props.copy.receivedFrameRate.replace('{fps}', String(props.receivedFrameRate ?? 0))}`}>
             <span class="sr-only">{props.copy.frameRate}</span>
-            <select aria-label={props.copy.frameRate} aria-description={`${props.copy.frameRateHint} ${props.copy.receivedFrameRate.replace('{fps}', String(props.receivedFrameRate ?? 0))}`} value={props.frameRate ?? 3} onChange={(event) => props.onFrameRateChange?.(Number(event.currentTarget.value))}
-              onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-              {COMPUTER_FRAME_RATES.map(fps => <option value={fps}>{fps} FPS</option>)}
-            </select>
+            <span onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
+              <span id={frameRateHintID} class="sr-only">{props.copy.frameRateHint} {props.copy.receivedFrameRate.replace('{fps}', String(props.receivedFrameRate ?? 0))}</span>
+              <Select ariaLabel={props.copy.frameRate} ariaDescribedBy={frameRateHintID} class="h-7 text-[11px]" value={String(props.frameRate ?? 3)}
+                options={COMPUTER_FRAME_RATES.map(fps => ({ value: String(fps), label: `${fps} FPS` }))}
+                onChange={value => props.onFrameRateChange?.(Number(value))} />
+            </span>
           </label></Show>
           <Show when={resolvedURL() && viewInterrupted()}><button type="button" aria-label={retryLabel()} title={retryLabel()} onClick={retryFrames}><Refresh class="h-4 w-4" /></button></Show>
         </div>}

@@ -566,6 +566,10 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
 export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   const [viewport, setViewport] = createSignal(currentViewportSize());
   const controller = createFlowerTurnLauncherPanelController(props, 'window');
+  // FloatingWindow owns presence. Keep its last admitted presentation when the
+  // caller clears the intent on close, until that owner removes the content.
+  const presentedIntent = createMemo<FlowerTurnLauncherIntent | null>(previous =>
+    props.open && props.intent ? props.intent : previous ?? null);
 
   onMount(() => {
     const syncViewport = () => setViewport(currentViewportSize());
@@ -602,9 +606,8 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   });
 
   return (
-    <Show when={props.open ? props.intent : null}>
       <FloatingWindow
-        open
+        open={props.open && Boolean(props.intent)}
         onOpenChange={(next) => {
           if (controller.sending()) return;
           if (!next) props.onClose();
@@ -621,8 +624,8 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       >
         <FlowerTurnLauncherPanelControllerContext.Provider value={controller}>
           <FlowerTurnLauncherPanel
-            open={props.open}
-            intent={props.intent}
+            open={Boolean(presentedIntent())}
+            intent={presentedIntent()}
             copy={props.copy}
             contentClass={props.contentClass}
             localScrollProps={props.localScrollProps}
@@ -635,6 +638,5 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
           />
         </FlowerTurnLauncherPanelControllerContext.Provider>
       </FloatingWindow>
-    </Show>
   );
 }

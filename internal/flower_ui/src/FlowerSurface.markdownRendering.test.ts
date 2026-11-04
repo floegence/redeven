@@ -168,9 +168,9 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('<FlowerContextCompactionDivider');
     expect(dividerSrc).toContain('flower-compaction-divider');
     expect(dividerSrc).toContain('data-flower-compaction-status={compaction().status}');
-    expect(dividerSrc).toContain('class="flower-compaction-divider-tooltip"');
+    expect(dividerSrc).toContain('class="flower-compaction-divider-tooltip floe-floating-presence floe-floating-tooltip"');
     expect(dividerSrc).toContain('role="tooltip"');
-    expect(dividerSrc).toContain('when={tooltipOpen() && hasDetail()}');
+    expect(dividerSrc).toContain('when={tooltipPresence.mounted()}');
     expect(dividerSrc).toContain("role={hasDetail() ? 'button' : undefined}");
     expect(dividerSrc).toContain('tabIndex={hasDetail() ? 0 : -1}');
     expect(dividerSrc).toContain('onFocus={openTooltip}');

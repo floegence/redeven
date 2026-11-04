@@ -4,7 +4,7 @@
 .flower-delimited-search { flex:1 1 200px; }
 .flower-delimited-toolbar input, .flower-delimited-toolbar select { min-width:0; height:28px; border:1px solid var(--border); border-radius:4px; background:var(--background); color:var(--foreground); font-size:12px; padding:2px 6px; }
 .flower-delimited-toolbar input { width:100%; }
-.flower-delimited-toolbar select { max-width:140px; }
+.flower-spreadsheet-encoding { min-width:0; max-width:140px; }
 .flower-delimited-toolbar output { min-width:2ch; font-size:12px; }
 .flower-delimited-value { padding:4px 10px; font-size:12px; border-bottom:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-height:26px; flex:none; user-select:text; }
 .flower-delimited-body { position:relative; flex:1; min-height:0; min-width:0; overflow:hidden; }
@@ -23,6 +23,7 @@
 .flower-spreadsheet-toolbar .flower-spreadsheet-sheet { flex:0 1 220px; width:clamp(80px,25%,220px); min-width:64px; max-width:220px; min-height:28px; border-color:transparent; background:transparent; text-overflow:ellipsis; }
 .flower-spreadsheet-toolbar .flower-spreadsheet-sheet:hover { background:var(--muted); }
 .flower-spreadsheet-toolbar button { height:28px; min-height:28px; padding:0 6px; flex-shrink:0; }
+.flower-spreadsheet-sheet button { width:100%; }
 .flower-spreadsheet-toolbar .flower-spreadsheet-icon { width:28px; padding:0; }
 .flower-spreadsheet-selection { flex:1; min-width:0; overflow:hidden; }
 .flower-spreadsheet-popover { width:360px; min-width:0; }

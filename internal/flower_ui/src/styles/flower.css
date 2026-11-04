@@ -11734,7 +11734,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-computer-header-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .flower-computer-frame-rate { flex: none; }
-.flower-computer-frame-rate select { cursor: pointer; font-size: 11px; color: var(--text-secondary); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 4px; padding: 2px 4px; }
+.flower-computer-frame-rate [data-floe-control='select'] { min-width: 5rem; }
 .flower-computer-header-actions button { cursor: pointer; }
 .flower-computer-state[data-session-state='paused'] { color: var(--redeven-status-warning); }
 @media (max-width: 560px) { .flower-computer-header-actions .flower-computer-state { max-width: 6rem; } }

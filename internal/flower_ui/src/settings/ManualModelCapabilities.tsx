@@ -32,19 +32,17 @@ export function ManualModelCapabilities(props: Readonly<{
   return <div class="space-y-3 md:col-span-3">
     <label class="block space-y-1">
       <span class="text-xs font-medium">{props.copy.tools}</span>
-      <select class="h-8 w-full cursor-pointer rounded border border-input bg-background px-2.5 text-[length:var(--floe-type-control)] shadow-sm disabled:cursor-not-allowed"
+      <Select class="h-8" ariaLabel={props.copy.tools}
         value={props.model.supports_tools === undefined ? '' : props.model.supports_tools ? 'supported' : 'unsupported'}
-        required aria-invalid={props.model.supports_tools === undefined} disabled={props.disabled}
-        onChange={event => props.onChange({ supports_tools: event.currentTarget.value === 'supported' })}>
-        <option value="" disabled>{props.copy.toolsUnknown}</option>
-        <option value="supported">{props.copy.reasoningEnabled}</option>
-        <option value="unsupported">{props.copy.toolsUnsupported}</option>
-      </select>
+        required invalid={props.model.supports_tools === undefined} disabled={props.disabled}
+        placeholder={props.copy.toolsUnknown}
+        options={[{ value: 'supported', label: props.copy.reasoningEnabled }, { value: 'unsupported', label: props.copy.toolsUnsupported }]}
+        onChange={value => props.onChange({ supports_tools: value === 'supported' })} />
     </label>
     <div class="space-y-1">
       <label class="text-xs font-medium">{props.copy.reasoning}</label>
       <Select value={props.model.reasoning_capability?.wire_shape ? 'enabled' : 'disabled'}
-        aria-label={props.copy.reasoning} disabled={props.disabled || !reasoningShapes[props.type]}
+        ariaLabel={props.copy.reasoning} disabled={props.disabled || !reasoningShapes[props.type]}
         options={[{ value: 'disabled', label: props.copy.reasoningDisabled }, { value: 'enabled', label: props.copy.reasoningEnabled }]}
         onChange={value => props.onChange({ reasoning_capability: manualReasoningCapability(props.type, props.baseURL, value === 'enabled'),
           default_reasoning_selection: value === 'enabled' && props.type === 'anthropic' ? { level: 'on', budget_tokens: 1024 } : undefined })} />

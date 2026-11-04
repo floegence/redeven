@@ -1,5 +1,5 @@
 import { AlertCircle, Check, Clock, Minus, Refresh } from '@floegence/floe-webapp-core/icons';
-import { SurfaceFloatingLayer, Tooltip } from '@floegence/floe-webapp-core/ui';
+import { SurfaceFloatingLayer, Tooltip, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 
@@ -49,6 +49,7 @@ export function FlowerContextCompactionDivider(props: {
     }
   });
   const [panel, setPanel] = createSignal<HTMLSpanElement>();
+  const tooltipPresence = createFloatingPresence({ open: () => tooltipOpen() && hasDetail(), element: panel });
   const [owner, setOwner] = createSignal<HTMLElement>();
   const [layout, setLayout] = createSignal({ position: { x: 0, y: 0 }, size: { width: 0, height: 0 } });
   createEffect(() => {
@@ -56,7 +57,7 @@ export function FlowerContextCompactionDivider(props: {
     if (!tooltipOpen() || !trigger || !tooltip) return;
     const measure = () => {
       const rect = trigger!.getBoundingClientRect();
-      const { width, height } = tooltip.getBoundingClientRect();
+      const { width, height } = tooltip.parentElement!.getBoundingClientRect();
       const boundary = trigger!.closest<HTMLElement>('.flower-subagent-detail-window')?.getBoundingClientRect();
       const top = boundary ? Math.max(0, boundary.top) : 0;
       const y = rect.top - height - 8;
@@ -145,13 +146,15 @@ export function FlowerContextCompactionDivider(props: {
           </Tooltip>
         </Show>
       </div>
-      <Show when={tooltipOpen() && hasDetail()}>
+      <Show when={tooltipPresence.mounted()}>
         <SurfaceFloatingLayer owner={owner()} boundary={owner()?.closest<HTMLElement>('.flower-subagent-detail-window') ?? undefined} position={layout().position} estimatedSize={layout().size} class="flower-compaction-tooltip-layer" data-flower-floating-layer="true">
           <span
-            ref={setPanel}
+            ref={element => { setPanel(element); onCleanup(() => setPanel(undefined)); }}
             id={tooltipID}
             role="tooltip"
-            class="flower-compaction-divider-tooltip"
+            class="flower-compaction-divider-tooltip floe-floating-presence floe-floating-tooltip"
+            data-floating-presence={tooltipPresence.state()}
+            inert={tooltipPresence.exiting()} aria-hidden={tooltipPresence.exiting() ? 'true' : undefined}
             data-open="true"
             onPointerEnter={openTooltip}
             onPointerLeave={leaveTooltip}

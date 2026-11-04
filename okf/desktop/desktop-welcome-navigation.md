@@ -33,10 +33,13 @@ Welcome consumes published Floe presence and menu/tooltip CSS. Each surface has 
 | Gateway member/leave target, Cloud route and SSH bootstrap strategy | Published `Select`, including native form state and accessible listbox semantics |
 | Embedded Flower model, permission, reasoning, thread switcher, subagent, goal, composer overflow/reference/command and context/compaction details | Existing Flower adapters consuming shared Floe presence |
 | Embedded Flower settings, extensions and browser connection selectors | Published `Select` / `Dropdown` |
+| Embedded Flower tool capability, Kimi endpoint and computer frame rate | Published `Select`; frame-rate input stays isolated from window dragging |
+| File preview encoding/worksheet selectors and find/info/cell details | Published `Select` and a retained shared-presence preview panel |
+| Compaction detail tooltip | Shared tooltip presence; text remains selectable while open |
 | Embedded Flower thread/transcript context menus | `FlowerContextMenu`; callers retain the current presentation through the shared exit |
-| Command palette, feedback disclosure, dialogs and drawers | Published Floe components retain their own presence and focus lifecycle |
+| Command palette, feedback disclosure, dialogs and drawers, working-directory picker and Ask Flower window | Published Floe components retain their own presence and focus lifecycle; the launcher retains its presentation when the caller clears its intent |
 
-Do not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. No native visible select popup or local popup animation recipe remains in Welcome chrome/settings.
+Do not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. No native visible select popup or local popup animation recipe remains in Welcome or its embedded Flower surfaces.
 
 # Boundaries
 
@@ -48,4 +51,5 @@ Navigation grants no Runtime authority. [Ask Flower windows](../ui/flower-activi
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.
 - `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.
 - `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.
+- `redeven:desktop/scripts/check-office-preview.mjs` - Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.
 - `floe-webapp:scripts/check-select-motion-browser.mjs` - Select/Combobox/MultiSelect motion and collision checks in Chromium, WebKit and Firefox.

@@ -881,6 +881,8 @@ describe('linked environment owner interactions', () => {
     expect(vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.length).toBe(before + 2);
     expect(vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1].context_action).toEqual(sent.context_action);
     button(launcher, 'Close').click(); await settle();
+    expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')?.getAttribute('data-floating-presence')).toBe('exiting');
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window')).toBeNull());
     expect(document.querySelector('.flower-turn-launcher-window')).toBeNull();
 
     const cloudLauncher = await open('cloud');
@@ -893,6 +895,7 @@ describe('linked environment owner interactions', () => {
     expect(cloudContent).not.toContain('port already in use');
     expect(cloudContent).toContain('"card_operation": null');
     button(cloudLauncher, 'Close').click(); await settle();
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window')).toBeNull());
 
     const reopened = await open('runtime');
     const reopenedInput = reopened.querySelector('textarea')!;

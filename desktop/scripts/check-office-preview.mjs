@@ -123,7 +123,8 @@ await session.run(async () => {
     report.checks.push('file:// sortable multi-file header tabs, whitespace window drag, retained CSV canvas/zoom/source, independent text, close-to-single and Escape');
 
     await open('encoded.csv', 'text/csv', [0xc4, 0xe3, 0xba, 0xc3, 44, 48, 48, 49]);
-    await page.getByRole('combobox', { name: 'Encoding' }).selectOption('gb18030'); await gridReady(); await find('你好');
+    await page.getByRole('combobox', { name: 'Encoding' }).click();
+    await page.getByRole('option', { name: 'GB18030', exact: true }).click(); await gridReady(); await find('你好');
     await page.setViewportSize({ width: 390, height: 760 }); await gridReady();
     assert.ok(await page.locator('.flower-delimited-toolbar').evaluate(element => element.scrollWidth <= element.clientWidth));
     await page.setViewportSize({ width: 1240, height: 900 }); await gridReady();
@@ -134,21 +135,21 @@ await session.run(async () => {
       await open('identity.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', workbook, attachment); await gridReady();
       assert.equal(await page.locator('table').count(), 0);
       const sheets = page.getByRole('combobox', { name: 'Worksheet', exact: true });
-      assert.deepEqual(await sheets.locator('option').allTextContents(), ['Identity', 'Notes']);
+      assert.deepEqual(await sheets.locator('..').locator('select option:not([value=""])').allTextContents(), ['Identity', 'Notes']);
       assert.equal(await page.getByRole('searchbox').count(), 0);
       assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => element.getBoundingClientRect().height <= 40));
       for (const value of ['00123', '12345678901234567890', 'Beyond legacy limits']) await find(value);
       await page.getByRole('searchbox').press('Escape');
       await page.locator('[data-spreadsheet-panel]').waitFor({ state: 'detached' });
       await gridReady();
-      await sheets.selectOption('2'); await gridReady(); await find('Commented cell');
+      await sheets.click(); await page.getByRole('option', { name: 'Notes', exact: true }).click(); await gridReady(); await find('Commented cell');
       await page.getByRole('searchbox').press('Escape');
       await page.locator('[data-spreadsheet-panel]').waitFor({ state: 'detached' });
-      await sheets.selectOption('0'); await gridReady();
+      await sheets.click(); await page.getByRole('option', { name: 'Identity', exact: true }).click(); await gridReady();
       await page.setViewportSize({ width: 390, height: 760 }); await gridReady();
       assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => element.scrollWidth <= element.clientWidth));
       assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => {
-        const controls = [...element.querySelectorAll('button,select')];
+        const controls = [...element.querySelectorAll('button')].filter(control => control.checkVisibility() && !control.closest('[data-floating-presence]'));
         return controls.every((control, index) => !index || control.getBoundingClientRect().left >= controls[index - 1].getBoundingClientRect().right);
       }));
       await page.screenshot({ path: path.join(output, attachment ? 'attachment-xlsx-narrow.png' : 'task-xlsx-narrow.png') });
@@ -162,8 +163,8 @@ await session.run(async () => {
       const original = await readFile(process.env.REDEVEN_ACCEPTANCE_XLSX);
       await open(path.basename(process.env.REDEVEN_ACCEPTANCE_XLSX), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', original); await gridReady();
       const sheets = page.getByRole('combobox', { name: 'Worksheet', exact: true });
-      const indices = await sheets.locator('option').evaluateAll(options => options.map(option => option.value));
-      for (const index of indices) { await sheets.selectOption(index); await gridReady(); await page.screenshot({ path: path.join(output, 'original-sheet-' + index + '.png') }); }
+      const indices = await sheets.locator('..').locator('select option:not([value=""])').evaluateAll(options => options.map(option => ({ value: option.value, label: option.textContent })));
+      for (const index of indices) { await sheets.click(); await page.getByRole('option', { name: index.label, exact: true }).click(); await gridReady(); await page.screenshot({ path: path.join(output, 'original-sheet-' + index.value + '.png') }); }
       await page.screenshot({ path: path.join(output, 'original-xlsx.png') });
       report.originalWorkbook = { sha256: createHash('sha256').update(original).digest('hex'), visibleSheets: indices.length };
       report.checks.push('Original workbook: ' + indices.length + ' visible worksheets rendered');
