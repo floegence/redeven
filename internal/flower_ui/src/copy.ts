@@ -1381,7 +1381,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       error: 'Failed',
       declined: 'Declined',
       canceled: 'Canceled',
-      unknown: 'Outcome unknown',
     },
     toolCallCanceled: 'Tool call was canceled',
     toolApprovalRejectedDetail: 'User declined tool execution',

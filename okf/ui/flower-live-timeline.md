@@ -50,6 +50,8 @@ Transport/handshake/gap keeps backoff; dispose cannot publish,reconnect publishe
 
 A centered floating stack above the companion shows interrupted live updates, Resync and minimizable details without moving content or occupying headers. Minimize preserves its horizontal center. Shared Button and floating presence own control feedback and entry/exit; detail expansion uses a bounded transition, chevron and inert hidden controls. Reduced motion removes animation; forced colors retain borders/focus. Busy Resync shows progress and coalesces repeated activation. Without transcript content, the same notice exposes its explanation immediately; it never implies that the underlying task paused. Escape/outside dismisses without stealing focus; targets >=44 px. The owner coalesces reconnect. Restored requires current connection/selected authoritative detail, not optional collapsed reads. Dismiss after 2.6 s unless focused/hovered/expanded. Preserve drafts/selection/bounds. Canonical cancellation owns Stopping; viewer facts grant no coverage. [Approvals](flower-approval-context.md), [read state](flower-read-state.md) and [turn disclosure](flower-turn-process-disclosure.md) retain policy.
 
+A timed-out Stop confirmation retains an actionable Resync button once its read settles; awaiting canonical confirmation must not leave that explicit recovery action busy indefinitely. Initial synchronization notices may finish their exit transition after readiness.
+
 # Boundaries
 
 Streams/queues/cache are ephemeral, never durable cursors/lifecycle. Preserve database kinds/migrations and complete accessible history; layout grants no authority or data omission.

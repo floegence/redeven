@@ -45,7 +45,8 @@ export function FlowerSyncNotice(props: {
       if (!hadFailure) return;
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined; setSettlePending(false);
-      setAwaitingConfirmation(status === 'ready' && !confirmed);
+      // A failed Stop confirmation has settled; keep explicit Resync actionable.
+      setAwaitingConfirmation(status === 'ready' && !confirmed && !unconfirmed);
       if (status !== 'ready' || unconfirmed || !confirmed) { setRestored(false); return; }
       if (document.activeElement === retryButton) detailButton?.focus({ preventScroll: true });
       hadFailure = false; setRestored(true);

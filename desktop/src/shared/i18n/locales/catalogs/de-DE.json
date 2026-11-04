@@ -797,7 +797,6 @@
       "toolStatusSuccess": "Erledigt",
       "toolStatusError": "Fehlgeschlagen",
       "toolStatusCanceled": "Abgebrochen",
-      "toolStatusUnknown": "Ergebnis unbekannt",
       "toolStatusDeclined": "Abgelehnt",
       "toolCallCanceled": "Der Befehl wurde abgebrochen",
       "toolApprovalRejectedDetail": "Du hast die Tool-Ausführung abgelehnt",

@@ -544,7 +544,6 @@
     "toolStatusSuccess": "Done",
     "toolStatusError": "Failed",
     "toolStatusCanceled": "Canceled",
-    "toolStatusUnknown": "Outcome unknown",
     "toolStatusDeclined": "Declined",
     "toolCallCanceled": "Tool call was canceled",
     "toolApprovalRejectedDetail": "User declined tool execution",

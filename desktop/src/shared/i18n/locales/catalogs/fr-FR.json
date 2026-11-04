@@ -797,7 +797,6 @@
       "toolStatusSuccess": "Terminé",
       "toolStatusError": "Échec",
       "toolStatusCanceled": "Annulé",
-      "toolStatusUnknown": "Résultat inconnu",
       "toolStatusDeclined": "Refusé",
       "toolCallCanceled": "La commande a été annulée",
       "toolApprovalRejectedDetail": "Vous avez refusé l'exécution de l'outil",

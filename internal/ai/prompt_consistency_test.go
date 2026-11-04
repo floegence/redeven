@@ -11,7 +11,7 @@ import (
 )
 
 func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
-	// Reviewed Computer Use additions update the exact provider-visible baseline.
+	// Reviewed navigation waits and explicit read invalidation update the exact baseline.
 	// Permission, interaction and allowlist variants remain independently checked.
 	var baseline map[string]struct {
 		SystemBytes int    `json:"system_bytes"`
