@@ -89,7 +89,9 @@ function HistorySection(props: Readonly<{ entries: readonly FlowerTimelineEntry[
       document.removeEventListener('selectionchange', settle); document.removeEventListener('focusout', settle); });
   });
   return <div ref={shell} data-flower-history-section={props.sectionKey} data-flower-history-mounted={layoutVisible() ? 'true' : 'false'}
-    style={{ 'content-visibility': layoutVisible() ? 'visible' : 'hidden', 'contain-intrinsic-block-size': height() === undefined ? undefined : height() + 'px', 'overflow-anchor': 'none' }}>
+    // Native skipping makes newly exposed content paintable before the
+    // asynchronous intersection notification, including scrollbar jumps.
+    style={{ 'content-visibility': layoutVisible() ? 'visible' : 'auto', 'contain-intrinsic-block-size': height() === undefined ? undefined : height() + 'px', 'overflow-anchor': 'none' }}>
     <div ref={content} style={{ display: 'flow-root' }}>{props.children}</div>
   </div>;
 }

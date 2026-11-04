@@ -39,6 +39,9 @@ describe('Flower streaming presentation stability', () => {
     const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
     viewport.focus(); await userEvent.keyboard('{PageUp}');
     sections[0].scrollIntoView({ block: 'start' });
+    // A scrollbar jump can expose a skipped section before its asynchronous
+    // intersection callback. Its retained prose must already be paintable.
+    expect(row.querySelector('p')!.checkVisibility({ contentVisibilityAuto: true })).toBe(true);
     await expect.poll(() => sections[0].dataset.flowerHistoryMounted).toBe('true');
     const text = document.createTreeWalker(row.querySelector('p')!, NodeFilter.SHOW_TEXT).nextNode()!;
     const selection = document.getSelection()!;

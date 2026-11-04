@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 tags: [flower, streaming, performance, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -32,6 +32,8 @@ Published createIncrementalMarkdownParser owns Marked/CJK/GFM. reset installs fu
 New prose fades to currentColor over 320 ms via 20 fixed CSS highlight phases, without node splitting, line movement or delivery delay. History/corrections are immediate; links/code/media keep colors. No stylesheet changes, computed-style reads or per-frame inline writes. Limit 32 transient groups/owner and diff inspection to 8,192 characters/128 nodes per region; larger changes appear immediately. Completion settles valid effects; reset/disposal/hidden/reduced-motion/forced-color clears them. Published hot drag/resize also settles ink immediately while text, selection and DOM remain live; only post-release additions animate. Historical/unsupported-API owners schedule nothing.
 
 Cold historical bodies stage until complete, retaining offset/staging through reconnect; expose final Markdown geometry without height motion. Sample table/code/list/text from first visible frame. Existing prose/live output remain incremental. Font measurements use disposable completion/error listeners, not detached FontFaceSet.ready retention. Companion reads newest relevant record plus bounded Unicode tail.
+
+Measured history sections retain their DOM and use native `content-visibility: auto` offscreen, with their measured intrinsic height. Near, live, focused and selected sections stay explicitly visible. IntersectionObserver controls measurement readiness, not permission to paint: a scrollbar jump can expose a section before its callback. Browser regressions require retained prose to be paintable immediately on that jump; compositor qualification also checks for blank frames during native wheel input. Existing scroll ownership corrects geometry before paint.
 
 ## Queue and measurements
 One ordered frame queue atomically applies envelopes in reactive batches. Cooperative 4 ms budget includes reactive work and yields between envelopes, never preempts one expensive envelope. Capture failures inside batch so recovery commits before rethrow to connection owner. Ready waits for drain; other reads pause at 16 frames/1 MiB. Epoch/failure/disposal releases readers and fences late callbacks.

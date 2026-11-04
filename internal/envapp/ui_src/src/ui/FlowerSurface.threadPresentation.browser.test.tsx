@@ -174,7 +174,7 @@ describe('Flower destination presentation', () => {
     expect(sections.length).toBeGreaterThan(0);
     expect(getComputedStyle(sections.at(-1)!).contentVisibility).toBe('visible');
     if (count === 24) {
-      await expect.poll(() => getComputedStyle(sections[0]).contentVisibility).toBe('hidden');
+      await expect.poll(() => getComputedStyle(sections[0]).contentVisibility).toBe('auto');
       expect(sections[0].style.containIntrinsicBlockSize).not.toBe('');
     }
   });

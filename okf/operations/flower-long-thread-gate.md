@@ -35,6 +35,8 @@ Published Floret v7.106.1 shares bounded transaction-local window source reads a
 
 Run `scripts/qualify_flower_thread_open.mjs --fixture=<isolated-fixture.json> --output=<evidence.json> --history-scroll-steps=80` against `TestServerFlowerHistoryScrollQualification` for actual HTTP decoding and native bidirectional scrolling. Add `--visual-frames` in a separate visual run to retain compositor JPEG frames and timestamps; it cannot be combined with profiling, tracing or an opening-time threshold. Geometry checks and visual inspection complement each other. Capture is not latency evidence.
 
+Visual runs retain per-frame section geometry and reject visible sections with forced hidden content. Retained offscreen sections use native automatic skipping so delayed intersection callbacks cannot suppress a newly exposed frame. Preserve actual canceled body/parent-event request evidence separately from HTTP and synchronization errors.
+
 For explicit settled-reading endurance, add `--stability-seconds=1800` (up to 3600). It checks the same visible paragraph/table/code anchor every animation frame, rejects loading/error/owner-loss frames, and compares collected heap plus DOM/document/listener counts before and after. This complements the fixed active-output qualification; it does not replace the 600-second, 80Hz workload or permit shorter acceptance runs. Retain the reports and inspect captured frames for flashes, gaps, clipping and overlap.
 
 ## Responsiveness

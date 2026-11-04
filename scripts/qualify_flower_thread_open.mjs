@@ -82,10 +82,10 @@ try {
         if (!response.ok()) evidence.errors.push({ op: url.searchParams.get('op'), status: response.status(), error: bytes.toString() });
       })().catch(error => {
         const op = url.searchParams.get('op'), failure = request.failure();
-        // Visibility/navigation legitimately aborts a bounded body read after
-        // headers. CDP cannot retrieve that body; retain cancellation evidence.
-        if (failure?.errorText === 'net::ERR_ABORTED' && op === 'history_body') {
-          (evidence.cancelledReads ??= []).push({ op, timing: request.timing() });
+        // Navigation cancels superseded body/parent-event demands after headers.
+        // CDP cannot retrieve those bodies; retain the exact canceled request.
+        if (failure?.errorText === 'net::ERR_ABORTED' && ['history_body', 'parent_events'].includes(op)) {
+          (evidence.cancelledReads ??= []).push({ op, input: request.postData(), timing: request.timing() });
         } else evidence.errors.push({ error: String(error), op, failure, timing: request.timing() });
       }));
     });
@@ -307,6 +307,24 @@ try {
     if (historyScrollSteps > 0) {
       assert.equal(info.boundary, 'product-http', 'Deep scrolling must cross the production HTTP boundary.');
       const viewport = page.locator('.flower-chat-transcript');
+      if (visualFrames) await page.evaluate(() => {
+        window.historyVisualGeometry = { active: true, frames: [] };
+        const sample = () => {
+          const state = window.historyVisualGeometry;
+          if (!state.active) return;
+          const viewport = document.querySelector('.flower-chat-transcript');
+          const bounds = viewport.getBoundingClientRect();
+          const sections = [...viewport.querySelectorAll('[data-flower-history-section]')].map(node => {
+            const box = node.getBoundingClientRect();
+            return { key: node.dataset.flowerHistorySection, mounted: node.dataset.flowerHistoryMounted,
+              contentVisibility: getComputedStyle(node).contentVisibility,
+              top: box.top, bottom: box.bottom, visible: node.checkVisibility({ contentVisibilityAuto: true }) };
+          }).filter(box => box.bottom > bounds.top && box.top < bounds.bottom);
+          state.frames.push({ at: performance.now(), scrollTop: viewport.scrollTop, sections });
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
       evidence.historyScroll = [];
       const responses = evidence.requests.length;
       evidence.historyIdle = [];
@@ -372,6 +390,12 @@ try {
       assert.ok(selections.some(read => read.items === 150), 'Exercise a complete 150-item reading selection.');
       assert.ok(new Set(evidence.historyScroll.map(step => step.ordinal)).size > 2, 'Historical windows must advance.');
       await page.screenshot({ path: output + '.history.png' });
+      if (visualFrames) evidence.historyVisualGeometry = await page.evaluate(() => {
+        window.historyVisualGeometry.active = false;
+        return window.historyVisualGeometry.frames;
+      });
+      if (visualFrames) assert.ok(evidence.historyVisualGeometry.every(frame => frame.sections.every(section => section.contentVisibility !== 'hidden')),
+        'A retained history section must never hide content while it intersects the reading viewport.');
     }
     if (filmstrip) {
       await filmstrip.send('Page.stopScreencast');
