@@ -391,6 +391,20 @@ describe('history layout sections', () => {
     } finally { slicing.mockRestore(); }
   });
 
+  it('does not reread immutable section identities on structural updates', () => {
+    let reads = 0;
+    const rows = Array.from({ length: 2400 }, (_, i) => {
+      const value = row(i);
+      return { ...value, message: { ...value.message, get turn_id() { reads++; return 'turn'; } } };
+    });
+    const before = projectFlowerHistorySections(rows, active);
+    reads = 0;
+    const next = row(2400);
+    const after = projectFlowerHistorySections([...rows, next], active, before);
+    expect(reads).toBe(0);
+    expect(after.flatMap(section => section.entries)).toEqual([...rows, next]);
+  });
+
   it('preserves interleaved turn boundaries', () => {
     const rows = ['a', 'b', 'b', 'a', 'c', 'd', 'c'].map((id, i) => {
       const value = row(i);

@@ -1,5 +1,5 @@
 import { isPresentedToolFailure } from './computerActivityOutcome';
-import { createMemo, mapArray, type Accessor } from 'solid-js';
+import { createComputed, createMemo, createSignal, mapArray, untrack, type Accessor } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
 import type { FlowerContextCompaction, FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
 import type { HistoryReadingGap } from './historyReadingWindow';
@@ -153,8 +153,11 @@ export function projectFlowerToolSequences(
   breakBefore: ReadonlySet<string> = new Set(),
   coverage: Readonly<{ hasBefore: boolean; hasAfter: boolean; missingEvents?: readonly Readonly<{ after: number; before: number }>[];
     sequenceGaps?: ReadonlyMap<string, HistoryReadingGap>; compactions?: readonly FlowerContextCompaction[] }> = { hasBefore: false, hasAfter: false },
-  messageTokens: (entry: MessageEntry) => readonly SequenceToken[] = messageSequenceTokens,
+  messageTokens?: ReadonlyMap<MessageEntry, readonly SequenceToken[]>,
 ): FlowerToolSequenceProjection {
+  // Read the mounted token snapshot once. Subscribing to a memo per retained
+  // entry rebuilds thousands of Solid dependency edges on every new row.
+  const tokensFor = messageTokens ? (entry: MessageEntry) => messageTokens.get(entry)! : messageSequenceTokens;
   const turnsByID = uniqueTurnsByID(readPresentationValue(turns));
   const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
   const parentEventNode = (entry: Extract<FlowerTimelineEntry, { type: 'parent_event' }>): SequenceNode | null => {
@@ -226,7 +229,7 @@ export function projectFlowerToolSequences(
       visit(parentEventNode(entry));
       continue;
     }
-    if (entry.type === 'message') for (const token of messageTokens(entry)) visit(token);
+    if (entry.type === 'message') for (const token of tokensFor(entry)) visit(token);
     else visit(null);
   }
 
@@ -326,12 +329,27 @@ export function projectFlowerToolSequences(
 // ordered projection reuses completed tool/thinking facts without walking them
 // again. mapArray disposes subscriptions as entries leave the reading document.
 export function createFlowerSequenceTokens(entries: Accessor<readonly FlowerTimelineEntry[]>) {
+  const [revision, setRevision] = createSignal(0);
   const records = mapArray(entries, entry => {
     if (entry.type !== 'message') return undefined;
     const content = new Map(entry.blocks.flatMap(block => block.type === 'content' && block.block_type !== 'thinking'
       ? [[block, createMemo(() => Boolean(block.content.trim()))] as const] : []));
-    return { entry, tokens: createMemo(() => messageSequenceTokens(entry, block => content.get(block)!())) };
+    const tokens = createMemo(() => messageSequenceTokens(entry, block => content.get(block)!()));
+    const record = { entry, tokens: untrack(tokens) };
+    // The mounted entry owns mutable boundaries. Notify the ordered snapshot
+    // only when its facts change; membership already publishes initial facts.
+    createComputed(() => {
+      const next = tokens();
+      if (next === record.tokens) return;
+      record.tokens = next;
+      setRevision(value => value + 1);
+    });
+    return record;
   });
-  const byEntry = createMemo(() => new Map(records().flatMap(value => value ? [[value.entry, value.tokens] as const] : [])));
-  return (entry: MessageEntry): readonly SequenceToken[] => byEntry().get(entry)!();
+  return createMemo(() => {
+    revision();
+    const result = new Map<MessageEntry, readonly SequenceToken[]>();
+    for (const value of records()) if (value) result.set(value.entry, value.tokens);
+    return result;
+  });
 }

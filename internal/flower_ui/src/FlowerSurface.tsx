@@ -7074,13 +7074,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const cache = untrack(threadCache);
     const threadID = thread.thread_id;
     const members: { canonical: number; ordinal: number | undefined }[] = [];
+    let ordered = true;
+    let lastCanonical = -Infinity;
     for (const value of readPresentationValue(thread.messages)) {
       const message = readPresentationValue(value);
       if (message.canonical_ordinal !== undefined && Number.isSafeInteger(message.canonical_ordinal) && message.canonical_ordinal > 0) {
+        if (message.canonical_ordinal < lastCanonical) ordered = false;
+        lastCanonical = message.canonical_ordinal;
         members.push({ canonical: message.canonical_ordinal, ordinal: cache.runtimeItem(threadID, message.id)?.ordinal });
       }
     }
-    members.sort((a, b) => a.canonical - b.canonical);
+    if (!ordered) members.sort((a, b) => a.canonical - b.canonical);
     if (!members.length) return;
     const spans: { first: number; last: number }[] = [];
     for (const [index, member] of members.entries()) {

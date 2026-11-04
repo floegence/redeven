@@ -257,7 +257,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       hasAfter: props.thread?.history_window?.has_after ?? false,
       missingEvents: props.missingEvents,
       sequenceGaps: props.sequenceGaps, compactions: props.thread?.context_compactions,
-    }, sequenceTokens);
+    }, sequenceTokens());
     // The canonical first node may change on prepend. Share its choice so a
     // later navigation remount resolves the same manually controlled state.
     for (const group of next.groups.values()) {

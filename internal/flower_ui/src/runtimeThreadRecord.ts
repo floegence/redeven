@@ -589,10 +589,18 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           else makeMessage(message);
         }
         if (messageStructureChanged || messageOwnersChanged || readingMembershipChanged) {
-          let membership: readonly FlowerChatMessage[] = [...nextOrder.flatMap(id => messages.has(id) ? [messages.get(id)!.value] : []),
-            ...(previews ?? readPresentationValue(projectedMessages).filter(message => readPresentationValue(message).blocks?.[0]?.type === 'tool-call-preview'))
-              .flatMap(message => messages.has(message.id) ? [messages.get(message.id)!.value] : [])];
-          membership = withReadingMessages(membership);
+          const ordered: FlowerChatMessage[] = [];
+          for (const id of nextOrder) {
+            const record = messages.get(id);
+            if (record) ordered.push(record.value);
+          }
+          for (const value of previews ?? readPresentationValue(projectedMessages)) {
+            const source = readPresentationValue(value);
+            if (!previews && source.blocks?.[0]?.type !== 'tool-call-preview') continue;
+            const record = messages.get(source.id);
+            if (record) ordered.push(record.value);
+          }
+          const membership = withReadingMessages(ordered);
           // Protocol boundaries can replace an equal item or clear an already
           // empty preview. Keep the mounted timeline when its ordered owners
           // are unchanged; mutable message fields have their own subscribers.

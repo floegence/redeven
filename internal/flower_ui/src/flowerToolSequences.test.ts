@@ -47,7 +47,7 @@ describe('consecutive tool presentation', () => {
   it('reuses unchanged sequence summaries while a long active turn adds groups', () => {
     let labels = 0;
     const entries: Message[] = [];
-    const tokens = new Map<Message, ReturnType<NonNullable<Parameters<typeof projectFlowerToolSequences>[6]>>>();
+    const tokens = new Map<Message, NonNullable<Parameters<typeof projectFlowerToolSequences>[6]> extends ReadonlyMap<Message, infer T> ? T : never>();
     const append = (index: number) => {
       const thinking = text('thinking-' + index, true), call = tool('call-' + index), prose = text('prose-' + index);
       entries.push(thinking, call, prose);
@@ -57,12 +57,11 @@ describe('consecutive tool presentation', () => {
       tokens.set(prose, [{ outputScope: 'scope', contentKey: prose.key }]);
     };
     for (let index = 0; index < 600; index++) append(index);
-    const tokenize = (entry: Message) => tokens.get(entry)!;
-    const before = projectFlowerToolSequences(entries, 'thread', [], undefined, undefined, undefined, tokenize);
+    const before = projectFlowerToolSequences(entries, 'thread', [], undefined, undefined, undefined, tokens);
     expect(before.groups.size).toBe(600);
     labels = 0; append(600);
     const slices = vi.spyOn(entries, 'slice');
-    const after = projectFlowerToolSequences(entries, 'thread', [], before, undefined, undefined, tokenize);
+    const after = projectFlowerToolSequences(entries, 'thread', [], before, undefined, undefined, tokens);
     expect(labels).toBe(1);
     expect(slices).toHaveBeenCalledTimes(1);
     slices.mockRestore();
@@ -71,7 +70,7 @@ describe('consecutive tool presentation', () => {
     expect(after.groups.get('thinking-600')?.latestToolLabel).toBe('call-600');
     const changed = entries[1];
     tokens.set(changed, [{ key: changed.key, entryKey: changed.key, scope: 'scope', turnID: 'turn', kind: 'tool', active: false, failed: true, label: 'Failed call' }]);
-    const failed = projectFlowerToolSequences(entries, 'thread', [], after, undefined, undefined, tokenize);
+    const failed = projectFlowerToolSequences(entries, 'thread', [], after, undefined, undefined, tokens);
     expect(failed.groups.get('thinking-0')).toMatchObject({ latestToolLabel: 'Failed call', failedCount: 1 });
     expect(failed.groups.get('thinking-1')).toBe(after.groups.get('thinking-1'));
   });

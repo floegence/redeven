@@ -11,7 +11,7 @@ import (
 )
 
 func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
-	// Reviewed navigation waits and explicit read invalidation update the exact baseline.
+	// Reviewed navigation waits, read invalidation and source-tree grammar update the exact baseline.
 	// Permission, interaction and allowlist variants remain independently checked.
 	var baseline map[string]struct {
 		SystemBytes int    `json:"system_bytes"`

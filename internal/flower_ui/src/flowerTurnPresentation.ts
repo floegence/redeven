@@ -198,8 +198,7 @@ export function projectFlowerHistorySections(entries: readonly FlowerTimelineEnt
   const activeTurnID = thread?.current_execution?.turn_id;
   const activeStatus = thread && ['running', 'waiting_user', 'waiting_approval'].includes(thread.status);
   const prior = new Map(previous.filter(section => section.threadID === threadID).map(section => [section.key, section]));
-  const id = (entry: FlowerTimelineEntry) => entry.type === 'message' ? readPresentationValue(entry.message).turn_id : entry.type === 'parent_event'
-    ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
+  const id = (entry: FlowerTimelineEntry) => classifyProcessRow(entry).turnID;
   const priorByEntry = new Map<string, string>();
   for (const section of prior.values()) for (const entry of section.entries) priorByEntry.set(entry.key, section.key);
   const used = new Set<string>();

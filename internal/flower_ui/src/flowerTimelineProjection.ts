@@ -487,14 +487,14 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
     decorationsByMessage.set(sourceDecorations, byMessage);
   }
   const seenMessageIDs = new Set<string>();
-  const positions = new Map<string, number>();
+  const positions: number[] = [];
   let lastPosition = -Infinity;
   let ordered = true;
   const appendEntry = (entry: FlowerTimelineEntry, ordinal?: number) => {
     const position = ordinal ?? Infinity;
     if (position < lastPosition) ordered = false;
     lastPosition = position;
-    if (ordinal !== undefined) positions.set(entry.key, ordinal);
+    positions.push(position);
     entries.push(entry);
   };
   // Membership replacement is the structural boundary. Reuse each cached row
@@ -502,13 +502,13 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
   // Newly projected rows still receive the reactive message owner for growth.
   const sources = readPresentationValue(thread.messages);
   const reactiveMembership = sources !== thread.messages;
+  const projections = reactiveMembership ? reactiveMessageProjections : messageProjections;
   const entries: FlowerTimelineEntry[] = [];
   let goalActivity = false;
   for (let index = 0; index < sources.length; index++) {
     const source = sources[index];
     // A plain snapshot and a store can share raw facts, but only the store
     // projection may own live getters. Solid retains one proxy per raw object.
-    const projections = reactiveMembership ? reactiveMessageProjections : messageProjections;
     const prior = projections.get(source);
     const facts = prior?.facts ?? readPresentationValue(source);
     const messageID = prior?.messageID ?? trimString(facts.id);
@@ -555,10 +555,11 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
   }
   // Most runtime documents already have canonical order. Retain that order
   // without a comparison sort; receipts/decorations still sort when required.
-  if (!ordered) entries.sort((left, right) => {
-    const a = positions.get(left.key), b = positions.get(right.key);
-    return a === undefined ? b === undefined ? 0 : 1 : b === undefined ? -1 : a - b;
-  });
+  if (!ordered) {
+    const order = entries.map((_, index) => index).sort((a, b) => positions[a] - positions[b]);
+    const sorted = order.map(index => entries[index]);
+    for (let index = 0; index < entries.length; index++) entries[index] = sorted[index];
+  }
 
   const queuedIDs = new Set<string>();
   for (const turn of thread.queued_turns ?? []) {
