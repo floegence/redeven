@@ -119,7 +119,88 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 	}
 }
 
-func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string) func(string, map[string]any) (host.CallMethodResult, error) {
+func TestLiveWorkerRevokeClosesPendingNetworkResources(t *testing.T) {
+	if runtime.GOOS != "linux" || os.Getenv("REDEVEN_TEST_PLUGIN_IO_FULL") != "1" {
+		t.Skip("requires the isolated Linux I/O target")
+	}
+	var integration *Integration
+	var ctx context.Context
+	var id string
+	var revision uint64
+	invoke := openLivePluginWorker(t, "REDEVEN_TEST_PLUGIN_PACKAGE", "io.view", func(i *Integration, c context.Context, plugin string, r uint64) {
+		integration, ctx, id, revision = i, c, plugin, r
+	})
+	port := func(key string) float64 {
+		v, err := strconv.Atoi(os.Getenv(key))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return float64(v)
+	}
+	params := map[string]any{"server": map[string]any{"http": port("REDEVEN_TEST_PLUGIN_IO_HTTP_PORT"), "ws": port("REDEVEN_TEST_PLUGIN_IO_WS_PORT"), "tcp": port("REDEVEN_TEST_PLUGIN_IO_TCP_PORT"), "udp": port("REDEVEN_TEST_PLUGIN_IO_UDP_PORT")}}
+	done := make(chan error, 1)
+	go func() { _, err := invoke("smoke.hold", params); done <- err }()
+	stateURL := fmt.Sprintf("http://127.0.0.1:%.0f/state", port("REDEVEN_TEST_PLUGIN_IO_HTTP_PORT"))
+	client := &http.Client{Timeout: 2 * time.Second}
+	state := func() map[string]int {
+		response, err := client.Get(stateURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		var v map[string]int
+		if err := json.NewDecoder(response.Body).Decode(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		select {
+		case err := <-done:
+			workerError, _ := host.AsValidatedWorkerExecutionError(err)
+			t.Fatalf("hold stopped before resources opened: %T: %+v; worker: %+v", err, err, workerError)
+		default:
+		}
+		v := state()
+		if v["http_active"] > 0 && v["ws_active"] > 0 && v["tcp_active"] > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("resources did not open: %+v", v)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	disableCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	_, err := integration.host.DisablePlugin(disableCtx, host.DisableRequest{PluginInstanceID: id, ExpectedManagementRevision: revision, Reason: "user_disabled"})
+	if err != nil {
+		events, _ := integration.host.ListDiagnosticEvents(ctx, host.ListDiagnosticEventsRequest{PluginInstanceID: id, Limit: 50})
+		t.Fatalf("disable error: %T: %+v; events: %+v; fixture: %+v", err, err, events, state())
+	}
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("pending invocation succeeded after revoke")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("pending invocation did not settle")
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		v := state()
+		if v["http_active"] == 0 && v["ws_active"] == 0 && v["tcp_active"] == 0 && v["http_closed"] > 0 && v["ws_closed"] > 0 && v["tcp_closed"] > 0 {
+			t.Logf("revocation completed; pending invocation rejected; fixture: %+v", v)
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("resources remain active: %+v", v)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string, capture ...func(*Integration, context.Context, string, uint64)) func(string, map[string]any) (host.CallMethodResult, error) {
 	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("the production plugin runtime requires Linux or macOS")
@@ -287,6 +368,9 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string) func(
 		t.Fatalf("mint bridge token: %v", err)
 	}
 
+	for _, callback := range capture {
+		callback(integration, ctx, installed.Plugin.PluginInstanceID, installed.Plugin.ManagementRevision)
+	}
 	return func(method string, params map[string]any) (host.CallMethodResult, error) {
 		callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()

@@ -55,7 +55,10 @@ review and approval, exact destination/methods/private prefixes/secret reference
 and both connection and review expiry. Owner, active package, revision or policy
 changes retire pending UI state. An uncertain approval is never replayed; the
 client lists current authority before enabling another write. Failed reconciliation
-keeps mutations disabled until an explicit successful refresh.
+keeps mutations disabled until an explicit successful refresh. Closing a pending
+review awaits its cancellation before dialog teardown; generation changes still
+retire stale observations. Market refresh errors do not prevent the independent
+installed-inventory reconciliation.
 
 The connectivity executor retains the released 1 MiB request/response defaults.
 Large application transfers require explicitly designed bounded requests; the

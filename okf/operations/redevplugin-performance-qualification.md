@@ -100,16 +100,29 @@ also completes 30 minutes (1,432 correct calls, 358 expected rejections). Author
 guests differ in these endurance runs; they are correctness/lifetime checks,
 not a paired throughput or memory-performance comparison.
 
-The broad browser suite has a pre-existing Monokai hover-contrast failure:
-4.3187 versus 4.5 in unchanged Floe 0.87.2 Button styles. The threshold remains
-unchanged; the same 27/28 result is reproduced with published ReDevPlugin 3.14
-and the same Floe 0.87.2. Full legacy Desktop I/O smoke is not certified: its old SDK fixture
-fails compilation, and a current-SDK experiment reaches explicit loopback
-connector denial. Redeven has no private-network approval adapter; 3.14 has the
-same restriction. The Linux trusted-bridge readiness probe also receives 401.
-Do not add permissive networking or claim these runs passed. Any private-network
-feature requires a separate product-policy/UI design on the released upstream
-connection contract.
+The original expanded acceptance exposed Monokai hover contrast of 4.3187
+against the unchanged 4.5 threshold in Floe 0.87.2. The owning Floe repository
+fixed the foreground color and published 0.87.3; Redeven consumes 0.87.4, which
+includes the fix. The upstream matrix passes all 168 cases across 28 themes,
+two variants and three engines. Monokai hover is now 4.6178. The product's
+28-theme comparison and connection/management/Workbench checks also pass.
+
+The legacy Desktop fixture now uses the published Worker SDK and explicit
+reviewed connection contracts. The product adapter and localized review UI
+require effective administrator/read/write/execute authority and exact private
+prefixes. The isolated Linux target uses authenticated public Local UI routing.
+Actual Worker I/O validates 64 MiB filesystem SHA256, 64 one-MiB HTTP requests
+per direction, oversized transfer rejection and 100 WS/TCP/UDP echoes each.
+The released single-request quotas remain unchanged. Native Desktop verifies
+installed inventory while the server is paused, panel dismissal and five reopen
+cycles. Market refresh failures no longer suppress installed inventory refresh.
+
+Native revocation acceptance then exposed a platform defect: cancellation
+closed the underlying TCP socket before explicit revocation, so the second close
+returned an erroneous unknown mutation outcome despite closed resources. This
+has a deterministic TCP/UDP upstream regression and a fix pending coordinated
+3.15.1 publication and downstream native requalification. It is not yet a
+complete Desktop I/O pass. Failure evidence is retained.
 
 No Store pool, persistent native cache, wider SQLite pool or four-surface cap is
 introduced: measurements do not justify their complexity. Production phase

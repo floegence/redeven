@@ -799,3 +799,8 @@ test('transport delay resumes the exact host even after a lost stop acknowledgem
   assert.match(calls[2][4], /kill -CONT/u);
   assert.deepEqual(calls[2].slice(-2), ['sh', '14']);
 });
+
+test('Desktop smoke does not reload a window while the launcher is navigating it', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(new URL('./smoke_desktop_plugins.mjs', import.meta.url), 'utf8'));
+  assert.match(source, /if \(opening\) await page\.waitForLoadState\('domcontentloaded'\);\s+else await page\.reload/u);
+});

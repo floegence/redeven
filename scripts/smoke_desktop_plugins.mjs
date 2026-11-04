@@ -439,12 +439,25 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
     reason: 'user_disabled',
   }, sessionHeaders);
   pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/disable', ...disableResponse });
-  if (disableResponse.status !== 200) throw new Error(`v9 I/O disable failed: ${JSON.stringify(disableResponse)}`);
+  if (disableResponse.status !== 200) {
+    const [fixtureState, diagnostics] = await Promise.all([
+      fetch(stateURL).then((response) => response.json()).catch((error) => ({ error: String(error) })),
+      requestPluginJSON(page, '/_redevplugin/api/plugins/diagnostics/query', {
+        plugin_instance_id: plugin.plugin_instance_id, limit: 100,
+      }, sessionHeaders).catch((error) => ({ error: String(error) })),
+    ]);
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-revoke-diagnostics.json`), JSON.stringify({
+      activeBefore, disableResponse, fixtureState, diagnostics, guestOutcomes,
+    }, null, 2));
+    throw new Error(`v9 I/O disable failed: ${JSON.stringify(disableResponse)}`);
+  }
   const closed = await waitFor(async () => {
     const response = await fetch(stateURL);
     const state = await response.json();
     return state.http_active === 0 && state.ws_active === 0 && state.tcp_active === 0
-      && state.http_closed > 0 && state.ws_closed > 0 && state.tcp_closed > 0 ? state : null;
+      && state.http_closed >= activeBefore.http_closed + activeBefore.http_active
+      && state.ws_closed >= activeBefore.ws_closed + activeBefore.ws_active
+      && state.tcp_closed >= activeBefore.tcp_closed + activeBefore.tcp_active ? state : null;
   }, 60_000, 'v9 resource closure after revoke');
   const holdOutcome = await waitFor(() => guestOutcomes.slice(holdRPCStart).find((entry) =>
     entry.method === 'smoke.hold') ?? null, 30_000, 'v9 hold RPC revocation');
@@ -464,9 +477,9 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
   return {
     disabled: true,
     pending_rpc_rejected: holdOutcome.ok === false,
-    http_closed: closed.http_closed > activeBefore.http_active,
-    websocket_closed: closed.ws_closed > activeBefore.ws_active,
-    tcp_closed: closed.tcp_closed > activeBefore.tcp_active,
+    http_closed: closed.http_closed >= activeBefore.http_closed + activeBefore.http_active,
+    websocket_closed: closed.ws_closed >= activeBefore.ws_closed + activeBefore.ws_active,
+    tcp_closed: closed.tcp_closed >= activeBefore.tcp_closed + activeBefore.tcp_active,
     revoked_resources: activeBefore.http_active + activeBefore.ws_active + activeBefore.tcp_active,
     active_before: activeBefore,
     closed_state: closed,
@@ -750,7 +763,8 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   })());
   // Observe acquisition before loading the same document generation.
   // Credentials never enter persisted evidence.
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  if (opening) await page.waitForLoadState('domcontentloaded');
+  else await page.reload({ waitUntil: 'domcontentloaded' });
   await page.bringToFront();
   if (config.externalLocalUIURL) {
     const accessPassword = page.locator('#redeven-access-password');
@@ -1341,6 +1355,9 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   }
 
   const assessment = assessPluginSmoke({ recovery, catalog, panelInstalledCount, surface, rpc });
+  await fs.writeFile(path.join(config.reportRoot, `${config.phase}-io-checkpoint.json`), JSON.stringify({
+    commit: config.commit, assessment, surface, rpc, timings,
+  }, null, 2));
   let disabledUpdateIntent = null;
   if (config.mode !== 'attach' && config.phase === 'initial' && config.ioPackagePath) {
     phase = 'disabled_revoke';
