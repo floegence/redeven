@@ -1476,7 +1476,8 @@ describe('EnvPortForwardsPage', () => {
     expect(hostRow?.getAttribute('data-template-state')).toBe('available');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(false);
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+    Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
     await flushPage();
     const containerRow = host.querySelector<HTMLElement>('[data-template-id="example-container"]');
     expect(containerRow?.getAttribute('data-template-state')).toBe('installed');
@@ -1562,8 +1563,9 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
-    const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim().startsWith('Container templates'));
+    const containerTab = Array.from(document.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.trim().startsWith('Container templates'));
     containerTab?.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
     await flushPage();
     const containerCard = document.querySelector('[data-template-id="example-container"]');
     const containerDetails = document.querySelector('[data-testid="service-template-details"][data-template-id="example-container"]');
@@ -1711,7 +1713,8 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+    Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
     await flushPage();
 
     expect(host.querySelector('[data-template-id="example-desktop-a"] [data-template-kind="container"]')).toBeTruthy();
@@ -1796,7 +1799,8 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+    Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
     await flushPage();
@@ -1889,7 +1893,8 @@ describe('EnvPortForwardsPage', () => {
       await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
       await flushPage();
-      Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+      Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
+      await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
       await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
       await flushPage();
