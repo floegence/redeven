@@ -42,5 +42,3 @@ Native transport never acquires trusted Desktop management identity.
 
 - `redeven:internal/localui/access_cookie.go` - Source.
 - `redeven:internal/localui/access_cookie_test.go` - Default/IPv6 authority admission; forwarded/foreign/retired names reject.
-
-- `redeven:internal/localui/access_cookie_test.go` - Tests.

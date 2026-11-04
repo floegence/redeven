@@ -1,9 +1,84 @@
 package okf
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestNarrativeEvidenceSurvivesBundleAndExplicitOpen(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("---\nokf_version: \"0.2\"\n---\n## Tests\n\n- [Result](result.md)\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	narrative := "Historical failure: CAPTURE_LAYOUT_UNSUPPORTED. " + strings.Repeat("Qualified only on the recorded fixture. ", 40)
+	source := "---\ntype: Acceptance Record\ntitle: Retained qualification\n---\n# Summary\n\nCurrent scope.\n\n# Contract\n\nPreserve adverse outcomes.\n\n# Boundaries\n\nNo broader qualification.\n\n# Evidence\n\n" + narrative + "\n\n- `fixture.log` - Original failed run.\n"
+	if err := os.WriteFile(filepath.Join(root, "result.md"), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	built, err := BuildFromSource(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bundle Bundle
+	if err := json.Unmarshal(built.BundleJSON, &bundle); err != nil {
+		t.Fatal(err)
+	}
+	result, err := OpenBundle(bundle, OpenRequest{Path: "result.md"})
+	if err != nil || !result.EvidenceOmitted || strings.Contains(result.Body, "CAPTURE_LAYOUT") || len(result.Evidence) != 0 {
+		t.Fatalf("default open must omit evidence: %#v, %v", result, err)
+	}
+	search := SearchBundle(bundle, SearchRequest{Query: "CAPTURE_LAYOUT_UNSUPPORTED"})
+	if len(search.Matches) != 1 || search.Matches[0].SectionID != "evidence" {
+		t.Fatalf("narrative evidence is not searchable: %#v", search)
+	}
+	opened, err := OpenBundle(bundle, OpenRequest{Path: "result.md", Section: "Evidence", BodyLimit: 1000})
+	if err != nil || opened.EvidenceOmitted || len(opened.Evidence) != 1 || !opened.Truncated || !strings.HasPrefix(opened.Body, "Historical failure:") {
+		t.Fatalf("explicit evidence open: %#v, %v", opened, err)
+	}
+	tail, err := OpenBundle(bundle, OpenRequest{Path: "result.md", Section: "evidence", BodyOffset: opened.ReturnedBodyLength, BodyLimit: 1000})
+	if err != nil || opened.Body+tail.Body != narrative+"\n\n- `fixture.log` - Original failed run." {
+		t.Fatalf("evidence pagination lost content: %#v, %v", tail, err)
+	}
+	count := 0
+	for _, section := range opened.Sections {
+		if section.ID == "evidence" {
+			count++
+			if section.CharCount != opened.BodyLength {
+				t.Fatalf("evidence length=%d, want %d", section.CharCount, opened.BodyLength)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("evidence appears %d times in section catalog", count)
+	}
+	withReferences, err := OpenBundle(bundle, OpenRequest{Path: "result.md", IncludeEvidence: true})
+	if err != nil || len(withReferences.Evidence) != 1 || strings.Contains(withReferences.Body, "CAPTURE_LAYOUT") {
+		t.Fatalf("reference flag must retain the selected summary: %#v, %v", withReferences, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "result.md"), []byte(strings.ReplaceAll(source, "\n\n- `fixture.log` - Original failed run.", "")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	narrativeOnly, err := BuildFromSource(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle = Bundle{}
+	if err := json.Unmarshal(narrativeOnly.BundleJSON, &bundle); err != nil {
+		t.Fatal(err)
+	}
+	result, err = OpenBundle(bundle, OpenRequest{Path: "result.md"})
+	if err != nil || !result.EvidenceOmitted {
+		t.Fatalf("narrative-only evidence must be discoverable: %#v, %v", result, err)
+	}
+	opened, err = OpenBundle(bundle, OpenRequest{Path: "result.md", Section: "evidence", BodyLimit: 20000})
+	if err != nil || opened.Body != strings.TrimSpace(narrative) || len(opened.Evidence) != 0 || opened.EvidenceOmitted {
+		t.Fatalf("narrative-only evidence open: %#v, %v", opened, err)
+	}
+}
 
 func testBundle(t *testing.T) Bundle {
 	t.Helper()

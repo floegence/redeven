@@ -3,7 +3,7 @@ type: OKF Lifecycle
 title: OKF bundle lifecycle
 tags: [okf, provenance, release]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -12,7 +12,7 @@ Redeven builds its embedded OKF bundle from curated source files under the top-l
 # Contract
 
 ## Mechanism
-`build_assets.sh` invokes `build_okf_bundle.sh`, which runs `cmd/okf-bundle` against explicit source and dist roots. The builder emits the bundle, manifest and checksum deterministically. Summary and section bodies are embedded as structured data; Evidence remains in its source file but is omitted from ordinary concept opening unless requested. `okf/dist/*` is generated from source and is never an authoring surface.
+`build_assets.sh` invokes `build_okf_bundle.sh`, which runs `cmd/okf-bundle` against explicit source and dist roots. The builder emits the bundle, manifest and checksum deterministically. Summary, contract, boundary and complete Evidence bodies are embedded as structured sections. Explicit Evidence opening returns bounded narrative text plus structured references; default Summary opening omits them. Authored source budgets still count every section; the contract/body budget excludes observational Evidence. `okf/dist/*` is generated from source and is never an authoring surface.
 
 ## Quality gates
 Report mode exposes layout, indexing, summary, evidence, duplication, lifecycle and budget issues without blocking cleanup. Strict mode fails structural and source-integrity violations, overdue reviews, and source totals above the hard cap. Final integration runs strict content quality after source integrity and before verifying the generated bundle.

@@ -21,11 +21,10 @@ An isolated Service/SQLite/scripted-provider browser qualification exercises act
 
 # Boundaries
 
-[Subagent runtime](../ai/subagent-runtime.md) owns delivery, tool authorization and complete report reads. The timeline must not add an inbox, model-read receipt, transcript, lifecycle cache, or periodic refresh. It does not copy reports into model context; the canonical admission path does that at the next natural provider boundary.
+[Subagent runtime](../ai/subagent-runtime.md#child-runtime) owns delivery, tool authorization and complete report reads. The timeline must not add an inbox, model-read receipt, transcript, lifecycle cache, or periodic refresh. It does not copy reports into model context; the canonical admission path does that at the next natural provider boundary.
 
 # Evidence
 
 - The parent-event browser suite covers inline timestamp geometry at 292/420/960 px, long names, unavailable sources, mouse/keyboard name navigation, report expansion/scroll anchoring, themes and localized disclosure controls. The prior layout fails all three new geometry cases. Existing ResizeObserver delivery diagnostics also reproduce on the unmodified baseline.
-
 - `redeven:internal/flower_ui/src/parentEvents.tsx` - Source.
 - `redeven:internal/ai/parent_events.go` - Source.

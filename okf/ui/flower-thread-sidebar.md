@@ -23,7 +23,7 @@ The header pencil edits the existing ThreadID, including during execution/loadin
 [Selection](flower-thread-selection.md) owns deferred commitment, bounded reads, cancellation and recovery. ThreadCache owns committed selection/detail; sidebar intent reserves feedback only.
 
 ## Reference action
-Right-click, More and Shift+F10 share the ThreadID-owned menu. [References](flower-thread-references.md) own deduplication, preview, admission and recovery.
+Right-click, More and Shift+F10 share the ThreadID-owned menu. [References](flower-composer-references.md#thread-references) own deduplication, preview, admission and recovery.
 
 ## Context menu response
 Sidebar and transcript context menus are fully visible on the first frame, without an entrance transition. Use published Floe compact row/control tokens on desktop and retain 44px touch targets. The shared resize observer supplies the measured client border box to `SurfaceFloatingLayer`; Floe owns clamping and projected coordinates. Live action changes remeasure without replacing the menu or losing focus. Long paths remain truncated with the full path available on hover.
@@ -48,6 +48,5 @@ Read confirmation and loaded-content revisions follow the canonical [read-state 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Tests.
 - `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.
-
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/threads/threadListModel.ts` - Source.

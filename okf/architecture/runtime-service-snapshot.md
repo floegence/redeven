@@ -15,9 +15,9 @@ Runtime publishes its own service protocol and independent component version. De
 
 Runtime snapshot fields and generated wire schemas change together; an unknown response key must not turn a healthy Runtime into a reconnect loop.
 
-Compatibility epoch 35 requires both Desktop and Runtime to understand explicit reasoning `on` alongside the existing default, off, effort, and budget choices. Earlier clients reject `on`; ordinary epoch admission prevents a mixed pair from accepting a Flower or Desktop model-source request it cannot interpret. See the [reasoning selection contract](../ui/flower-reasoning-selection.md) for model capability and control semantics.
+Compatibility epoch 35 requires both Desktop and Runtime to understand explicit reasoning `on` alongside the existing default, off, effort, and budget choices. Earlier clients reject `on`; ordinary epoch admission prevents a mixed pair from accepting a Flower or Desktop model-source request it cannot interpret. See the [reasoning selection contract](../ai/model-reasoning-runtime.md#selection-controls) for model capability and control semantics.
 
-Epoch 59 pairs Runtime authorization requests with the shared Desktop and Env App OpenAI account picker. A saved registry requires an account selection or explicit new-registration intent; old Desktop clients must update before Flower access. Registration semantics belong to the [ChatGPT account lifecycle](../ai/chatgpt-account-lifecycle.md).
+Epoch 59 pairs Runtime authorization requests with the shared Desktop and Env App OpenAI account picker. A saved registry requires an account selection or explicit new-registration intent; old Desktop clients must update before Flower access. Registration semantics belong to the [ChatGPT account lifecycle](../ai/chatgpt-account-lifecycle.md#account-lifecycle).
 
 Epoch 65 requires the model directory's backend-owned default_fetch_source field in provider search policies. See [model web search](../ai/model-web-search.md).
 

@@ -1,44 +1,48 @@
 ---
 type: UI Contract
-title: Flower composer references
+title: Flower references, origin context and canonical admission
 tags: [ui, flower, composer, references, floret]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Redeven owns authorized discovery and connection-local drafts; Floret owns admitted ordered references. Chips show files, directories, frozen threads/page context. Stale discovery retains editor; failed capture retains outbox without overwriting edits. Labels grant no identity or authority.
+Connection-local chips carry authorized discovery and frozen page/thread context into explicit Send. Floret alone owns admitted ordered references. Labels and paths grant no authority; source failures retain drafts and outbox reconciliation never overwrites newer input or creates duplicate canonical records.
 
 # Contract
 
-## Ask Flower context
-Launcher and Tessiven composers show linked chips inside their composite input. Chips wrap/scroll within a bounded region under local-scroll rules; editable `@` references retain controls.
+## Reference drafts
+Launcher/Tessiven linked chips wrap/scroll in bounded input;editable @ requires whitespace boundary/collapsed caret. Focus changes color without changing1px geometry/shadow;retain candidate/action focus. Discover under immutable thread cwd or new-thread directory draft;slashless token uses bounded global matching. Root failures Retry,inaccessible descendants skip within bound.
 
-## Composer interaction
-An editable `@` token requires whitespace boundary and collapsed caret. Focus changes a restrained border color, preserving one-pixel geometry/shadow and explicit candidate/action focus indicators.
+Ordered file/directory/page/thread chips hold connection-memory local IDs/labels,never another connection/persistence. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Queue preview binds exact ThreadID/QueueID/ReferenceID;resubmit reauthorizes. Only outbox retains original ordinary launch until canonical confirmation/terminal cleanup;after admission read canonical references through current authorization,no second queryable mapping.
 
-## New conversation origin page
-[Page context](flower-page-context.md) owns opening/New capture, authorized readers, scope and removal. Env App reuses Ask Flower's preview/text viewer for draft and submitted snapshots without transferring draft authority.
+## Origin page
+Capture requires no resource read or editor replacement; submission uses exact visible text, terminal current screen only, excluding unloaded/unauthorized facts.
 
-## Conversation references
-[Thread references](flower-thread-references.md) own frozen snapshots, menus, preview, removal and recovery under the shared draft owner.
+Desktop Activity companion in both hosts captures origin immediately on explicit New or explicit open with no selected thread,including close reversal. Page switches/existing-thread opens never add context. Automatic reference alone cannot enable empty Send. Reuse context-preview/text component for draft/admitted snapshots without draft-authority transfer.
 
-## Bounded discovery
-Search uses immutable thread working directory or the new-thread directory draft. Slashless tokens use bounded global matching. Root read failures are retryable; inaccessible descendants are skipped within the same bounded scan.
+## Thread references
+Right-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.
 
-## Draft and admission
-Ordered file/directory/page/thread chips have local identities/host labels and stay in connection memory, never persistence or another connection. [Tool runtime](../ai/ai-tool-runtime.md) defines one-pass canonical `MessageReference`/context admission.
+## Context actions
+One authorized privacy-checked mapper emits ordered MessageReference and UserInput.Context snapshots. Malformed/forged/unknown input or failed projection rejects admission and preserves editable drafts.
 
-## Queue previews and editing
-Compact queue references preview by exact ThreadID/QueueID/ReferenceID. Resubmission repeats authorization/admission; labels cannot reconstruct resource authority.
+One assistant.ask.flower action carries target/source/presentation/typed items. Runtime enforces privacy matrix:file_path for files,terminal_selection for terminal,process_snapshot for monitoring,bounded text_snapshot for Git/environment. Never reconstruct references from product action copies. Product routing commands independently resolve/authorize environment target. Missing thread/reference means absence;other Floret failures remain unavailable,no product fallback.
 
 # Boundaries
 
-Search results and persisted paths are display and navigation metadata, not filesystem authorization.
-
-After Send, only the browser transport outbox may retain the original ordinary launch payload until canonical confirmation or terminal cleanup; the product-local chip identity and label are not canonical identity or admission authority. Once admitted, Redeven does not retain a second queryable message-reference record, and canonical reference presentation and navigation derive from Floret reads plus current host authorization.
+Labels,paths/search/context are information,never filesystem/target/execution authority. They cannot change cwd,tool routing,permissions or attachment ownership. Floret owns admitted history;companion owns retained placement/dismissal/stream. Outbox cannot become canonical lifecycle or reference authority.
 
 # Evidence
 
 - `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Source.
 - `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Tests.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Source.
+
+- [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).
+- [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).
+
+- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.
+- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.

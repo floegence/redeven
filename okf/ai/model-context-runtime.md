@@ -18,7 +18,7 @@ Redeven passes model output capability as Floret ModelMaxOutputTokens, and only 
 The comparison logs are /tmp/redeven-budget-desktop-failures-focused.log and /tmp/redeven-budget-desktop-main-baseline.log.
 
 ## Mechanism
-Model reasoning capability, stream fields, history replay, and immutable thread settings are governed by [model reasoning capabilities and transport](model-reasoning-runtime.md).
+Model reasoning capability, stream fields, history replay, and immutable thread settings are governed by [model reasoning capabilities and transport](model-reasoning-runtime.md#runtime-capability).
 
 Unsupported transports reject non-empty state before HTTP.
 
@@ -31,7 +31,7 @@ Hosted-turn diagnostics record the selected wire mode, and Floret lifecycle audi
 Provider-visible history, render lineage, and unavailable-tool continuity are owned by [Model provider surface and history](model-provider-surface-and-history.md).
 
 ## Related context usage
-Usage accounting, context pressure, compaction, token budgets, and capacity failures are owned by [Model context usage and compaction](model-context-usage-and-compaction.md).
+Usage accounting, context pressure, compaction, token budgets, and capacity failures are owned by [Model context usage and compaction](model-context-usage-and-compaction.md#usage-and-recovery).
 
 # Boundaries
 
@@ -40,5 +40,4 @@ Redeven owns model preferences, credentials, gateway selection, and the one-shot
 # Evidence
 
 - `redeven:internal/ai/floret_provider.go:55` - Provider deltas become Floret events, never direct product-state writes.
-
 - `redeven:internal/ai/prompt_builder.go` - Source.

@@ -1,30 +1,85 @@
 ---
 type: Architecture Contract
-title: Tessiven canvas contract
+title: Tessiven immutable canvases, DSL and display compatibility
 tags: [architecture, tessiven, persistence]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Runtime owns immutable Tessiven service canvases: each save creates a version containing complete v1.1.0 YAML. Desktop Welcome and local Env App render the same library. Validation/version conflict preserves the last saved document; clients hold no separate canonical library.
+Runtime owns immutable canvas YAML and contiguous version migration; clients render a frozen data-only display contract. Reads preserve historical bytes, digests and revisions while writes create current validated snapshots. Display projection never grants resource authority or rewrites topology.
 
 # Contract
 
-- A canvas document contains stable IDs for Runtime nodes, visual groups,   business services, instances, external resources, relations, and evidence. - Every service has at least one instance on an existing node. A missing   placement fails validate/save at the service ID with a source location. - A service kind describes its primary responsibility independently of its   product name, instance role or deployment format. The [DSL versioning contract](tessiven-dsl-versioning.md)   owns version selection, read projections and write upgrades.
+## Canvas storage
+- A canvas document contains stable IDs for Runtime nodes, visual groups, business services, instances, external resources, relations, and evidence.
+- Every service has at least one instance on an existing node. A missing placement fails validate/save at the service ID with a source location.
+- A service kind describes its primary responsibility independently of its product name, instance role or deployment format. The [DSL versioning contract](#dsl-versions) owns version selection, read projections and write upgrades.
 
 The `tessiven_canvas_library` SQLite lineage starts at schema v1. Canvas identities, archive state, immutable YAML versions, and idempotent request results remain intact.
 
 A fresh v2 library and an upgraded v1 library must both reopen successfully.
 
+## DSL versions
+The contiguous v1→v1.0.0→v1.1.0 chain changes version only and retains legacy layout. New canvases use v1.1.0; invalid/unknown/failed migration remains unchanged for explicit repair. Reads preserve YAML/digest/revision; writes create current snapshots.
+
+### Version Identities And Releases
+DSL identities use stable `vMAJOR.MINOR.PATCH` strings, for example `v1.2.3`.
+
+Paths must be unique, acyclic and complete, with source validation, target validation and semantic checks. Do not introduce a schema-only registry entry without its executable migration and fixtures.
+
+### Read Compatibility
+Validation selects the exact source schema, applies the explicit upgrade chain, and validates the current shape and cross-object contracts. Returned `document` is canonical current data.
+
+The [canvas contract](#canvas-storage) owns those semantic rules.
+
+Native rendering uses the independently frozen [canvas presentation contract](#display-projection), not the current DSL identity. Every DSL release must verify its explicit mapping to the oldest supported display contract without rewriting source or granting resource authority.
+
+Ordinary edits valid in the original schema continue to upgrade automatically; no historical YAML is rewritten.
+
+## Display projection
+Unsupported source remains viewable/exportable without guessed topology; integrity failure forbids export.
+
+### Read And Negotiation
+Under `/_redeven_proxy/api/tessiven`, `GET /presentation-contract` returns `formats` and `capabilities`. Unknown well-formed capabilities are ignored rather than treated as authority.
+
+The initial optional `group_layouts` capability enables authored group packing; without it automatic layout preserves the same memberships and relationships.
+
+### Compatibility And Authority
+The frozen schema is independent of the DSL registry. Existing display meanings must not change in place.
+
+Resource requests continue to read the original version, check exact bindings and enforce current permissions.
+
 # Boundaries
 
-The local Runtime owns the SQLite canvas library and immutable version documents. Canvas references never authorize resource actions; the [Flower and operations contract](../ai/tessiven-flower-and-operations.md) owns that boundary. Tessiven does not deploy services, discover targets in the background, or synchronize libraries between devices.
+The local Runtime owns the SQLite canvas library and immutable version documents. Canvas references never authorize resource actions; the [Flower and operations contract](../ai/tessiven-runtime-operations.md#flower-document-tools) owns that boundary. Tessiven does not deploy services, discover targets in the background, or synchronize libraries between devices.
+
+### New Snapshots And Failure Boundary
+Creation, imports, full save and exact edits write the current DSL. Existing history is never bulk-rewritten.
+
+The [canvas storage contract](#canvas-storage) continues to own atomic startup database upgrades independently.
+
+One normalized snapshot drives graph, object selection, compact summaries, details and Flower references. Native bridges receive display data and revision identity, never historical YAML, credentials or downloaded renderer code.
+
+Removing a supported display format requires an explicit client compatibility-window decision; a DSL release cannot remove it incidentally.
 
 # Evidence
 
 - `spec/tessiven/v1.1.0.schema.json`
-
 - `internal/tessiven/document.go`
+- `internal/tessiven/document_test.go`
+- Tests.
 
-- `internal/tessiven/document_test.go` - Tests.
+- `spec/tessiven/schema.go`
+- Exact formats, current identity and forward edges.
+- `spec/tessiven/v1.schema.json`
+- Frozen legacy schema.
+- `spec/tessiven/v1.0.0.schema.json`
+- Frozen semantic baseline schema.
+
+- `spec/tessiven-presentation/v1.schema.json`
+- Frozen data-only display shape.
+- `internal/tessiven/presentation.go`
+- Source.
+- `internal/tessiven/dsl_version_test.go`
+- Tests.

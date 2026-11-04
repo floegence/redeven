@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: OKF tool suite
 tags: [ai, okf, ui]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -16,6 +16,8 @@ Runtime OKF code loads the embedded bundle once, indexes root directory sections
 
 ## Tool workflow
 `okf.index` browses `okf/index.md` as a structured directory and returns summaries plus section counts. `okf.search` returns a bounded short candidate list with query-aware snippets and the best matching section id/title; title and Summary matches outrank section body matches.
+
+Evidence narrative participates in search and the section catalog. Explicit `section: "evidence"` reads its bounded body and references; `include_evidence` on another section adds only structured references. Default opening omits evidence content.
 
 Models should follow `okf.index -> okf.search -> okf.open Summary -> okf.open section` and must not rely on snippets for detailed contracts.
 

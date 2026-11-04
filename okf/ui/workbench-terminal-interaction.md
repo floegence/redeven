@@ -14,7 +14,7 @@ Floeterm terminal-go owns PTY, VT, geometry, controller epoch, semantic history 
 ## Ownership
 One SessionActor owns each session; sequence/geometry generation only advance. All views receive the same canonical-dimension Presentation. Paint complete background before cells/graphics/selection/cursor to prevent stale resize/activation/theme edges. Floeterm owns attachment/geometry arbitration; browser views never parse bytes, own history or hide extra renderers.
 
-[Activity companion](flower-activity-companion.md#activity-terminal-footer) owns its measured footer; Workbench supplies none. Layout grants no attachment/control/input authority. TerminalInputBridge sends confirmed Unicode once, structured keys to native encoder and bounded paste. Reject script/malformed URLs, stale capabilities and remote paths.
+[Activity companion](flower-activity-companion.md#companion) owns its measured footer; Workbench supplies none. Layout grants no attachment/control/input authority. TerminalInputBridge sends confirmed Unicode once, structured keys to native encoder and bounded paste. Reject script/malformed URLs, stale capabilities and remote paths.
 
 Clear is actor semantic reset, never canvas erasure/Ctrl-L/recreation/detach. Stale generations do nothing. Close/delete removes catalog/attachments/capabilities; late events cannot resurrect sessions.
 
@@ -39,5 +39,3 @@ Redeven adapts Flowersec transport, permissions, local paths, responsive placeme
 - `redeven:internal/terminal/manager.go` - Source.
 - `redeven:internal/terminal/live_stream_test.go` - Tests.
 - `redeven:internal/envapp/ui_src/scripts/checkTerminalHistoryCarrier.mjs`: real Runtime/Electron navigation/settings, 320px/200% layout, Docker Exec/restart persistence and supervised process/port cleanup.
-
-- `redeven:internal/envapp/ui_src/scripts/checkTerminalHistoryCarrier.mjs` - Tests.

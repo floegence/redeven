@@ -28,7 +28,7 @@ Diff uses nonmodal desktop Activity windows, persisted Workbench widgets or the 
 Successful creation closes the name dialog, inserts the entry into the loaded parent directory, and reveals the new entry. Users do not need to refresh a loaded root to see a successful creation or copy.
 
 ## Menu ownership
-Existing context-event target snapshots, multi-selection, permissions, file operations, and confirmation owners are unchanged. [Workbench surface lifecycle](workbench-surface-lifecycle.md) owns the common projected host and local interaction contract.
+Existing context-event target snapshots, multi-selection, permissions, file operations, and confirmation owners are unchanged. [Workbench surface lifecycle](workbench-composition.md#surface-lifetime) owns the common projected host and local interaction contract.
 
 # Evidence
 

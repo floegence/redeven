@@ -30,7 +30,7 @@ Host supplies verified native launch identity and executes only the applied auth
 
 Endpoint reachability is checked separately from process identity.
 
-Imported Host templates receive `REDEVEN_TEMPLATE_DIR` pointing to the active original source directory for helper files; [Git source review](managed-service-git-sources.md) prevents replacement during associated service operations and opening hooks.
+Imported Host templates receive `REDEVEN_TEMPLATE_DIR` pointing to the active original source directory for helper files; [Git source review](managed-web-service-templates.md#github-sources) prevents replacement during associated service operations and opening hooks.
 
 # Evidence
 

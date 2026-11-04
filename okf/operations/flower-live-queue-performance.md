@@ -1,32 +1,52 @@
 ---
 type: Qualification Evidence
-title: Flower live queue CPU qualification
+title: Flower streaming, request-history and navigation qualification
 tags: [flower, performance, streaming, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Ordered queues defer full-history snapshots; global facts and bounded root/child reading have separate owners. Local read failure preserves content/drafts without reconnecting. [Live-state contract](../ui/flower-live-timeline.md) remains authoritative.
+Published Floret owns canonical reads and bounded source reuse; Redeven qualifies queue, history and rendering together through real Service and production browser/Electron. Retain original source identities, workload differences and failed absolute budgets. Relative CPU gains and later passes never erase adverse runs.
 
 # Contract
 
-Isolated Service/fake providers emit Markdown/Unicode/reasoning/tools at40Hz on Apple M5 Pro (18 cores/64GiB), macOS arm64, Go1.27.3/Node26.7.0, published Floret/GOWORK=off. CPU is process time (100%=one core), combined includes Electron; allocations are cumulative. Current SSE uses published parser/product headers/framing; payload excludes framing/encryption. Older NDJSON retains its scope.
+## Shared method
+Use isolated Service/SQLite,published Floret,GOWORK=off,fake providers and frozen UI/qualifier/backend hashes. Retain original failures/raw evidence privately and verify exact canonical/rendered prose/reasoning/code,>=95% cadence/markers plus cleanup of owned processes/subscribers/queues. No user databases/credentials/task continuation. Apple M5 Pro18 cores/64GiB,macOSarm64,Go1.27.3/Node26.7.0: process CPU100%=one core,combined includes Electron,allocations cumulative rather than retained heap. Payload excludes framing/encryption; old NDJSON and current SSE parser/product headers retain separate scopes.
 
-Build qualify_flower_cpu.mjs --build --dist=<ui> and TestFlowerCPUQualification against frozen backend. Fresh REDEVEN_CPU_QUALIFICATION=1/STATE/DIST/HISTORY_TURNS (520 comparison,100 recovery); CHILD_DETAIL=1 adds child. Run --fixture=<state>/fixture.json --seconds=60 --warmup=10 --threads=1 --hz=40 --candidate-gates --output=<sample>.json; child adds --subagent --full-cache, idle --idle --seconds=30, older comparison120s. Retain raw hashes/failures, exact canonical/rendered prose/reasoning/code, ≥95% cadence/markers and cleanup of owned processes/subscribers/queues. Never relax gates.
+Build TestFlowerCPUQualification with GOWORK=off and `qualify_flower_cpu.mjs --build --dist=<ui>`. REDEVEN_CPU_QUALIFICATION=1 plus REDEVEN_CPU_STATE/DIST/HISTORY_TURNS select fresh fixtures. Live queue:520 turns comparison or100 recovery,40Hz; --fixture=<state>/fixture.json --seconds=60 --warmup=10 --threads=1 --hz=40 --candidate-gates --output=<sample>.json; CHILD_DETAIL=1 and --subagent --full-cache add child, --idle --seconds=30 adds idle; older comparison120s.
+
+Request-history:100 turns/200requests,16,384-byte system prompt,mixed output/tool every40 updates,40Hz,warm10s/measure120s. REDEVEN_CPU_SYSTEM_PROMPT_BYTES=16384,TOOL_EVERY=40,RETAIN_SEED_SCOPE=1 amplify historical reuse only; ordinary concurrency/forks leave seed override unset. Fixture timeout45m; qualifier --stop-samples=3. Retain UI selector/source compatibility and bounded content/cleanup inspection. No reduced cadence,dropped history,second cache or durable ledger.
+
+## Navigation acceptance
+Local targets: short-detail P95 reduction>=70%,warm synchronous P95<8ms,feedback before commit. Compare identical machines/dependencies/workloads/modes,backend and render timings separately. Windows/body transport excludes metadata/pending-control budgets. Cold admission may prepare metadata before complete execution; selected activities use bounded fields. Never discard arbitrary frames; validate private baselines first.
+
+Run internal/ai tests and BenchmarkFlowerThreadDetailPointRead,check_flower_storage_compatibility.py,focused history/cache/runtime/browser tests,both host typechecks/locales. Explicit synthetic/released-writer acceptance stays outside ordinary gates. HTTP deep-scroll uses TestServerFlowerHistoryScrollQualification on an owned execution-deferred copy plus qualify_flower_thread_open.mjs --history-scroll-steps=80:both directions,canonical progress,successful>8KiB membership requests and idle stability every10 gestures. Service-only evidence cannot certify HTTP limits. Historical inspection requires zero model/tool calls and verified cleanup.
 
 # Boundaries
 
-Older comparison predates paging. Recovery and520-turn results have different workloads; neither proves arbitrary-content bounds/encrypted performance/30-minute stability. Separate soak evidence has its own scope.
+Canonical history stays complete. [Live delivery](../ui/flower-live-timeline.md),[streaming](../ui/flower-streaming-stability.md) and [storage](../ai/flower-storage-ownership-and-migrations.md) remain normative; [long-thread](flower-long-thread-gate.md) owns current fixed sustained acceptance. Older520-turn,100-turn,three-thread and soak workloads are distinct. Loopback/short timing proves no encrypted/model/network latency,arbitrary-content peak bounds or universal frame/population guarantee. Retain failed strict budgets and source-bound timings; unrelated focused passes cannot recertify them.
 
 # Evidence
 
-October 22 v7.78.2,520turns/2080items, three alternating 120 s samples,10 s warmup, reference 40c924749/shared UI 7e14ee68d:median backend 90.31→6.39%, renderer 163.10→52.26%, combined 257.62→67.89%, payload 11621515→180390 B/s, allocation 677006967→52148838 B/s, output P95 1459→49 ms, frame 549.2→17.5 ms. Content/markers retained; reference timeouts 35/35/31. Relative gates pass; absolute renderer 20%/combined 60% and<100 ms tasks fail(576–618 ms). Three-thread 30 s preserves content/cleanup.
+Full immutable per-source tables/raw samples remain in Git/private evidence. CPU is process time,not retained memory; source/workload changes prohibit pooling.
 
-October 23 v7.80.3 pseudo-version 6389f55946e3,100turns/40 Hz/60 s:root CPU 5.30/18.45/33.37%, child 7.93/19.41/37.38%; output 38/44 ms, frame 17.3/17.6 ms. All fixed gates/content/markers/cleanup pass; idle combined 0.79%. Three-thread/1 MiB stresses pass their scope. Earlier child 20.34% fails before style-read removal; 130browser/98Desktop checks retain recovery/interaction.
+## Live queue
+- Oct22 v7.78.2,520turns/2080items,three alternating120s/warm10s,reference40c924749/UI7e14ee68d:backend90.31→6.39%,renderer163.10→52.26%,combined257.62→67.89%,payload11621515→180390B/s,allocation677006967→52148838B/s,outputP95 1459→49ms,frame549.2→17.5ms. Content/markers pass;reference35/35/31timeouts. Relative passes,absolute20%renderer/60%combined and<100ms tasks fail(576–618ms). Three-thread30s content/cleanup pass.
+- Oct23 v7.80.3/6389f55946e3,100turns/40Hz/60s:rootCPU5.30/18.45/33.37%,child7.93/19.41/37.38%,output38/44ms,frame17.3/17.6ms;fixed gates/content/cleanup pass,idlecombined0.79%. Three-thread/1MiB passes. Earlier child20.34%fails before style-read fix;interaction suites pass separately.
+- Oct25 v7.87.0 renderer20.27%fails,19.89%controlled passes narrowly;both retain two live→sealedHTTP500s despite exact content/no long tasks. NDJSON30min fails disposalcycle30,raw fetch reproduces;120parsercycles are no soak proof. Later SSE1800s/30cycles passes:heap+6.71/+2.44%,CPU+4.14/+1.60%,DOM+0.32%,131listeners,max19goroutines,zero disposed queues/subscribers.
+- Oct26 eight8s Chromium/Electron,72/500messages,20/100tools,30/60Hz:frame16.7–17.6ms,click26–31.7ms,no DOM damage/flashes. fa3a56ca0 comparison CPU-32.4–55.4%,allocation-72.2–85%,but500message60Hz baseline~282KiB versus508–513KiB is unequal work.20appends read no100/10000historical ordinals,no new schema/index.
 
-October 25 v7.87.0 renderer 20.27% fails; controlled 19.89% passes with little margin. Both exact content/no long tasks retain two live→sealed HTTP 500 s. Initial NDJSON30min fails disposal cycle 30; raw fetch reproduces and 120 parser cycles are not soak proof. Later SSE1800 s/30cycles passes:heap+6.71/+2.44%, CPU+4.14/+1.60%, DOM+0.32%,131listeners, max 19goroutines; zero disposed queues/subscriptions. Fixed workload cannot bound arbitrary content.
+## Request history
+Floret7.79.0 one-read execution versus31e4966a4/7.78.2;product includes2445833,7d649a3b6,233a46346/41341d417/8cb73c54e. Engine1000requests,three×ten:778.78→150.89ms,allocation2305077316→389844408B,reads10→1(one tool)/65→1(twelve). Observer600/300 and Go/race/history/retry/fork/restart pass.
 
-October 26 eight 8 s Chromium/Electron samples,72/500messages,20/100tools,30/60 Hz:frame 16.7–17.6 ms, click 26–31.7 ms, no protected-DOM changes/flashes. Reference fa3a56ca0 CPU-32.4–55.4%, allocation-72.2–85%; 500-message 60 Hz baseline delivers~282 KiB versus 508–513 KiB, so CPU is not equal-work evidence. Twenty appends scan no 100/10000historic ordinals; no new schema/index.
+Three product medians:backend103.49→20.41%,combined156.27→72.03%,allocation125.861→16.414GB/120s;content/100%markers,frame17.7–18.6ms. Relative>=50/30%,input/click/output/Stop<=100ms,frame<=33ms pass;long tasks201/218ms still fail. Pre-reuse output110/151/146ms,Stop106.6ms,three baseline selector failures,two candidate overlap failures/nonalternating order retained. Earlier99.23%three-thread/30min soak cannot certify final source. e4a505bfc/938b525a6 independent confirmations(content/cleanup,combined71.35/65.96%,output87/51ms) are not pooled medians. Goal2cf47fd8f/browser/scroll/sequence pass separately.
 
-Sources: [queue](../../internal/ai/flower_live_stream.go), [pressure](../../internal/ai/flower_live_incremental_pressure_test.go), [backpressure](../../internal/ai/flower_live_backpressure_test.go), [history](../../internal/ai/flower_history_test.go), [baseline](../../internal/ai/flower_live_baseline_test.go), [fixture](../../internal/ai/flower_cpu_qualification_test.go), [qualifier](../../scripts/qualify_flower_cpu.mjs). Git retains exact sample tables and adverse results.
+## Navigation
+- Oct28 3108347bf stale64→32px/replayed titles reproduced. Recovery/unit pass;original423/428 retains two companion geometry failures after three expectation repairs. Eight paired frame16.8–17.6ms/click29.1–34ms,no streaming long tasks/flashes/detail reads. CPU/layout/allocation mixed;baseline135ms first click retained.
+- Oct27 historical685.2ms/92602B,90frames/60gestures/eightidle;85ms opening task remains.680call turn opens unknown count/completes while reading,parent alignment19→1pages,no statistical body reads.16profiles frame<=17.7ms/click<=33ms,no streaming long tasks.
+- Oct26 focused suites pass,blocked1000row<=100ms/<=1px; broad17failures/sevenfiles/theme guard. Two5.6GiB copies:7.87.3 coldSendAck4099.6/4203.5ms,queued59.6/47.9ms versus7.87.1 6329ms;metadata still scans,feedback is not dispatch. HTTP/Electron/restart586.7/343.7/534ms exact content;earlier1580.1ms fails nine missing members. Firstbytes238048→40076;window_bytes authoritative/delayed Markdown stable.
+- Oct25 HTTP400 at9129B(released10289B) fixed:Electron160gestures/18idle,maxrequest11839B/response487446B,open352.8ms.973.9/260/240.7ms readable remain source-bound. Blocked migration available;equal SQLite puts zero changed rows,locator ratios not disk amplification.
+- Oct23 319e7d3b1 1156→1703px/1424px bottom error fixed:Electron26.8–38.2ms,bottom<=0.5px,expansion<0.15px;Chromium799.7→437.3ms,aligned baselines. Cached21.1–32.1ms;legacy eightfailures/sixpasses.2000→100rows/277→142ms task excludes backend/network. Firstbytes11058337→183597,20pages/2945once,cold5.159s/warm4.939ms;earlier disclosure/scroll failures remain.
+
+Sources: internal/ai/flower_{live_stream,live_incremental_pressure_test,live_backpressure_test,history_test,live_baseline_test,cpu_qualification_test}.go,scripts/qualify_flower_cpu.mjs,flowerSurfaceModel.test.ts,FlowerSurface.streamingStability.browser.test.tsx.

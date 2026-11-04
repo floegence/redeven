@@ -289,7 +289,7 @@ func parseConceptBody(body string) parsedConceptBody {
 		HasEvidence: hasTopLevelHeading(headings, "Evidence"),
 	}
 	for i, heading := range headings {
-		if heading.level != 1 || strings.EqualFold(heading.title, "Summary") || strings.EqualFold(heading.title, "Evidence") {
+		if heading.level != 1 || strings.EqualFold(heading.title, "Summary") {
 			continue
 		}
 		end := conceptHeadingEnd(headings, i, len(lines))
@@ -301,13 +301,9 @@ func parseConceptBody(body string) parsedConceptBody {
 			Body:      sectionBody,
 			CharCount: len([]rune(sectionBody)),
 		})
-	}
-	for i, heading := range headings {
-		if heading.level != 1 || !strings.EqualFold(heading.title, "Evidence") {
-			continue
+		if strings.EqualFold(heading.title, "Evidence") {
+			parsed.Evidence = parseEvidence(sectionBody)
 		}
-		end := conceptHeadingEnd(headings, i, len(lines))
-		parsed.Evidence = parseEvidence(strings.Join(lines[heading.index+1:end], "\n"))
 	}
 	if len(parsed.Sections) == 0 && strings.TrimSpace(body) != "" {
 		parsed.Sections = []ConceptSection{{ID: "legacy", Title: "Legacy", Level: 1, Body: body, CharCount: len([]rune(body))}}

@@ -11,78 +11,23 @@ Redeven binds authenticated sessions, source policy, business capabilities and p
 
 # Contract
 
-## Host modules and external packages
-Redeven constructs the released Host with explicit core, official-release, runtime, connectivity, secrets, capability, and external-package modules. Redeven supplies session, authorization, web-security, trust, official release-source, observability, secret, external source, and business adapters; it never edits registry, inspection, token, lease, revoke-epoch, or plugin-data state directly.
+## Host modules
+Construct released Host with core,official-release,runtime,connectivity,secrets,capability,external-package modules. Product supplies authenticated session/policy/web-security/trust/source/observability/secret/business adapters,never edits registry/inspection/token/lease/revoke/plugin-data state. Signed official release-ref remains stricter.
 
-The official signed-release module remains the stricter release-ref path.
+## Network
+hostnetwork constructs without I/O. Explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY either case,including empty/direct,plus standard NO_PROXY hostname/IP/CIDR. Otherwise macOS uses CFNetwork/bounded cancellable PAC,Linux normal OS routing;remote Runtime its own environment. Preserve configured route order. Only bodyless GET/HEAD may advance after pre-connection dial failure;no invented direct fallback,TLS/protocol/unknown retry or write replay even with idempotency header. Writes use freshHTTP1;transport cap8requests/read pool2idle per origin/30s.
 
-## Network adapter
-
-The product-owned hostnetwork package implements current host routing without
-network I/O in its constructor. HTTP_PROXY, HTTPS_PROXY and ALL_PROXY use explicit
-upper/lowercase environment settings, including explicit empty values for direct
-routing; NO_PROXY is evaluated with the standard hostname/IP/CIDR matcher. On
-macOS, requests without applicable environment policy use CFNetwork system
-settings and bounded cancellable PAC resolution. Linux uses environment proxies
-or normal OS routing. Remote Runtimes use their own host network environment.
-
-The adapter respects the ordered configured routes. A bodyless GET/HEAD may try
-the next configured route only after a dial failure before an application
-connection exists. It never invents a direct fallback. TLS, protocol and unknown
-outcome errors do not change routes. Writes use fresh HTTP/1 connections and are
-not automatically replayed, including when the application supplies an idempotency
-header. Read and write requests share a bounded eight-request limit per transport;
-read pools retain at most two idle connections per origin for thirty seconds.
-
-Market services own their default transport. The plugin integration closes its
-caller-owned package transport on failure or shutdown. Each granted connector
-receives an independent transport managed by the upstream pool lifecycle. TLS
-verification and system trust roots remain enabled; proxy credentials stay on the
-proxy hop and never become origin or plugin credentials.
+Market owns default transport;integration closes caller-owned package transport on failure/shutdown. Connector transports independently follow upstream pool lifecycle. Keep TLS/system roots;proxy credentials stay proxy-hop only.
 
 ## Reviewed connections
+Inventory requires effective Read;review/approve/cancel/revoke authenticated admin+RWX. Exact cached session/nonempty private prefixes pass published destination classifier;deny metadata/unspecified/blanket prefixes. Upstream binds address/destination/revision/expiry/lease/revoke;install grants no connection.
 
-Connection inventory requires effective read access. Review, approval, cancellation
-and revocation require an authenticated administrator with effective read, write
-and execute access. The private-network adapter checks the exact cached session
-and explicit nonempty prefixes using the published destination classifier;
-metadata endpoints, unspecified addresses and blanket prefixes stay denied.
-Upstream owns exact destination binding, address pinning, revisions, expiry,
-leases and revocation. Installing a package grants no connection authority.
+Plugin Center reviews verified installed declarations with exact destination/methods/prefixes/secret reference and connection/review expiry. Owner/package/revision/policy changes retire pending UI. Unknown approval never replays;list authority before another write,failed reconciliation keeps writes disabled until explicit successful refresh. Close awaits pending cancellation;generation fences late replies. Market failure cannot suppress installed reconciliation. Released1MiB request/response quotas stay:64MiB fixture uses64one-MiB requests/direction and rejects oversize,not a single64MiB claim.
 
-Plugin Center presents verified installed connector declarations, a separate
-review and approval, exact destination/methods/private prefixes/secret reference,
-and both connection and review expiry. Owner, active package, revision or policy
-changes retire pending UI state. An uncertain approval is never replayed; the
-client lists current authority before enabling another write. Failed reconciliation
-keeps mutations disabled until an explicit successful refresh. Closing a pending
-review awaits its cancellation before dialog teardown; generation changes still
-retire stale observations. Market refresh errors do not prevent the independent
-installed-inventory reconciliation.
+## Surfaces and origins
+One Shell PluginPlatformClient/authenticated transport/shared scope owns placement. surface.methods receiver uses opening Read authority and registers/polls/responds only within validated surface/gateway/bridge/frame generation. Each intent still checks effect/policy/schema/confirmation;receiver grants no write authority. Placement/recovery cannot become identity,permission or second opening/catchup gate.
 
-The connectivity executor retains the released 1 MiB request/response defaults.
-Large application transfers require explicitly designed bounded requests; the
-qualification fixture transfers 64 MiB as 64 one-MiB requests per direction and
-also requires oversized requests and responses to fail. It does not certify a
-single 64 MiB HTTP request or relax platform quotas.
-
-## Surfaces and interaction ownership
-The product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.
-
-The application-method receiver (`surface.methods`) uses the same read authorization as opening and preparing its surface. The receiver registers, polls, and responds only within the platform-validated surface, gateway token, bridge channel, and frame generation. Registering a receiver grants no document write access: each intent invocation still passes its declared method effect, local policy, schema, and confirmation checks.
-
-Redeven uses them for host placement behavior, never as identity, authorization, or permission evidence.
-
-A recovery presentation may explain or retry the Host snapshot, but it is not a second open gate and owns no catch-up identity state machine.
-
-## Web origin adapter
-
-Redeven derives a plugin origin only from a trusted product entry origin and the released surface origin key. Local UI and AppServer route child requests to the released Web surface handler after removing parent credentials. Desktop, Gateway and Center own the product transport and origin routing; package assets, tickets and surface bridge semantics remain upstream-owned.
-
-Ordinary HTTP loopback Local UI uses the same isolated resource handler as
-Desktop. Its child authority must derive from a current public loopback parent
-on the exact listener port. This is a resource route, not an additional public
-management authority or a private-bridge fallback.
+Derive origins only from trusted product entry and released origin key. Local UI/AppServer strip parent credentials before released handler;Desktop/Gateway/Center route product transport. Platform owns assets/tickets/bridge. Ordinary HTTP loopback uses same isolated handler with exact current public parent/listener port,not management authority/private-bridge fallback.
 
 # Boundaries
 

@@ -35,7 +35,7 @@ Browsing and Terminal availability are separate. Disabled reasons/errors are exp
 
 Directory callbacks express product navigation, not file-action authorization or AI execution.
 
-[Surface lifecycle](workbench-surface-lifecycle.md), [terminal interaction](workbench-terminal-interaction.md) and [Activity companion](flower-activity-companion.md) own destination placement and retained product state.
+[Surface lifecycle](workbench-composition.md#surface-lifetime), [terminal interaction](workbench-terminal-interaction.md) and [Activity companion](flower-activity-companion.md#companion) own destination placement and retained product state.
 
 # Evidence
 

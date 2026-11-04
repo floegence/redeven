@@ -30,7 +30,7 @@ Baseline review: October 12; Kimi update: October 24. Audio, video, embeddings a
 | Custom compatible | User-defined models | Retain explicit endpoint, token limits, and capability configuration. |
 
 ## October catalog refresh
-upstream.json records baseline and per-provider refresh hashes. [ChatGPT authentication](chatgpt-local-authentication.md) intersects account inventory with reviewed capabilities.
+upstream.json records baseline and per-provider refresh hashes. [ChatGPT authentication](chatgpt-account-lifecycle.md#local-admission) intersects account inventory with reviewed capabilities.
 
 ## Kimi review on October 24
 K3.1 Pro/Highspeed launched October 23. Floret v7.83.0 qualifies Moonshot catalog, output controls and reasoning/tool replay from the same snapshot. The downstream adoption test exercises its public gateway with Redeven capabilities.
@@ -50,5 +50,5 @@ Runtime owns routing and projection. Native Anthropic/Google discovery preserves
 # Evidence
 
 - `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev projection and original SHA-256.
-
-- redeven:internal/ai/model_gateway_kimi_code_test.go - Subscription wire, canonical replay, quota classification and K3.1 platform parameters.
+- redeven:internal/ai/model_gateway_kimi_code_test.go
+- Subscription wire, canonical replay, quota classification and K3.1 platform parameters.

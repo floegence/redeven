@@ -38,5 +38,3 @@ containerengine owns argv/validation/atomic replace-rollback/observation;contain
 - `redeven:internal/containerengine/container_services_desktop_test.go` - Tests.
 - `redeven:internal/containerresource/desktop_lifecycle_qualification_test.go`:opt-in authorized real macOS preflight/operation/reconciliation,ordinary CI skips.2026-10-27 dev environment reproduces Docker4.52.0 fork-server `unmarshaling start request: unexpected EOF` via LaunchServices and earlier CLI. Removing Redeven metadata restores launch. Explicit app env plus58KiB synthetic metadata passes stop10.290s/start12.111s/restart22.354s,engine29.0.1,four container IDs preserved. Earlier shell-only test missed dev failure.
 - Same date:45 browser cases (390px English/Chinese,1440px,poll controls/stream loss),158 UI/API/locale,Go race,typecheck/lint pass. Isolated built Desktop shows real service/native icons;actual stop/start uses production service separately from UI fixtures.
-
-- `redeven:internal/containerresource/desktop_lifecycle_qualification_test.go` - Tests.

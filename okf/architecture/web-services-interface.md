@@ -12,7 +12,7 @@ Activity/Workbench share service list/drawer: identity, state, action, facts. Re
 # Contract
 
 ## Collection
-Centered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/asynchronous-layout-stability.md); narrow/localized text wraps.
+Centered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/page-loading-continuity.md#asynchronous-layout); narrow/localized text wraps.
 
 ## Opening restrictions
 Unavailable Open retains its ordinary icon and native disabled state. Focusable wrapper exposes reason on keyboard/touch/hover; active work names action/stage. When backend offers executable Start, it is primary within existing permissions.

@@ -29,5 +29,3 @@ Descriptor acquisition uses the real environment Electron session and its [priva
 - `redeven:desktop/src/main/codespaceNativeWindows.test.ts` - Tests.
 - `redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts` - Source.
 - `redeven:desktop/scripts/check-codespace-native-electron.mjs` - Supervised Electron descriptor/forwarding qualification. Run from `desktop`; `--real-editor` builds the Local UI test fixture and verifies workbench loading, file edit/save, terminal execution and reopen through the real private bridge. Build embedded assets first and provide an installed published editor via `REDEVEN_CODE_SERVER_BIN` when needed. `REDEVEN_NATIVE_ACCEPTANCE_REPORT` optionally retains the final scenario/cleanup report.
-
-- `redeven:desktop/scripts/check-codespace-native-electron.mjs` - Tests.

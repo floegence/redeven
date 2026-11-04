@@ -79,7 +79,7 @@ func TestParseConceptBodyExtractsSectionsAndEvidence(t *testing.T) {
 	if parsed.Legacy || !parsed.HasSummary || !parsed.HasContract || !parsed.HasBounds || !parsed.HasEvidence {
 		t.Fatalf("parsed layout=%#v", parsed)
 	}
-	if len(parsed.Sections) != 2 || parsed.Sections[0].ID != "contract" {
+	if len(parsed.Sections) != 3 || parsed.Sections[0].ID != "contract" || parsed.Sections[2].ID != "evidence" || parsed.Sections[2].Body == "" {
 		t.Fatalf("sections=%#v", parsed.Sections)
 	}
 	if len(parsed.Evidence) != 1 || parsed.Evidence[0].Source != "redeven:internal/okf/search.go" || parsed.Evidence[0].Line != 1 {

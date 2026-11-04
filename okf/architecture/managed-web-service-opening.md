@@ -32,7 +32,7 @@ Per-service progress follows [Web Services interface](web-services-interface.md)
 
 # Boundaries
 
-Entrance preparation operates within the existing [Managed Web Service contract](managed-web-services.md) and [Desktop protected-route contract](web-service-desktop-loopback.md). It does not change execution, access-mode or Forward authorization ownership.
+Entrance preparation operates within the existing [Managed Web Service contract](managed-web-services.md) and [Desktop protected-route contract](web-service-browser-sessions.md#desktop-loopback). It does not change execution, access-mode or Forward authorization ownership.
 
 ## Qualification ownership
 `scripts/qualify_managed_web_opening.sh` is the dedicated real-service lane. A failed Electron runtime preflight is an explicit environment failure; qualification cannot alter macOS trust or sign dependencies.

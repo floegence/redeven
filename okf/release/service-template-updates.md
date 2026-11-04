@@ -28,9 +28,9 @@ A failed gate can leave a candidate on the ephemeral runner's local main, but it
 
 The schema/acquisition npm SDK is independently pinned to a formal upstream release tarball and SHA-512 in Desktop and Env App lockfiles.
 
-They are checked and updated only through the user-driven [Git source review](../architecture/managed-service-git-sources.md) flow, never by repository scheduling or application startup.
+They are checked and updated only through the user-driven [Git source review](../architecture/managed-web-service-templates.md#github-sources) flow, never by repository scheduling or application startup.
 
-The [Managed Service release contract](../architecture/managed-service-release-discovery.md) owns installed release identity and user-selected upgrades; catalog adoption does not rebuild, restart, or upgrade installed instances.
+The [Managed Service release contract](../architecture/managed-service-release-discovery.md#release-discovery) owns installed release identity and user-selected upgrades; catalog adoption does not rebuild, restart, or upgrade installed instances.
 
 # Evidence
 

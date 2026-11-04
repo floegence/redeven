@@ -11,22 +11,16 @@ ReDevPlugin owns trust, inspection, install, readiness, caches and durable lifec
 
 # Contract
 
-## Package sources and lifecycle
-Production obtains catalog entries from the validated latest-only market snapshot. Publisher, plugin, version, hashes, signatures, revocation evidence, source policy, and Host requirements must match before ReDevPlugin changes the registry.
+## Sources
+Validated latest-only market supplies entries;platform verifies publisher/plugin/version/hash/signature/revocation/source policy/Host requirements before registry mutation. GitHub without admin tag resolves latest eligible Release each inspection;resolved evidence is not durable user pin.
 
-A GitHub source without an administrator-entered tag resolves the latest eligible Release on each new inspection; the previously resolved release tag is evidence, not a new durable user pin.
+## Retained data
+Released3.9 owns target-filtered discovery/exact inspection/one-shot recovery/read-only reconciliation. Source is uninstalled compatible retained data,target explicitly disabled. Host checks owner,publisher/plugin,data shape,generation,management revision,active fingerprint;atomic reference swap retains both generations,never grants/secrets/enabled state. Pass SDK DTOs unchanged:Read discovery/inspection/status,Write commit,Admin disable. Unknown commit cannot replay;exact-plan reconciliation allows new explicit review only on confirmed pending,unknown stays read-only. Restart recovery upstream.
 
-## Retained plugin data
+## Upgrade/downgrade
+3.10 owns declared conversion,isolated generations,quotas/cancel and atomic package/data/history. Converter matches exact predecessor/version/shape. Failure/cancel preserves old bytes;committed/unknown uses update reconciliation,no replay. Downgrade restores exact historical package's last generation;control-store migration is opaque upstream.
 
-ReDevPlugin 3.9 owns target-filtered discovery, exact inspection, one-shot recovery commit and read-only reconciliation. The source is an uninstalled instance with compatible retained data; the target must be explicitly disabled. The Host verifies owner, publisher, plugin identity, data shape, generation, management revision and active fingerprint. Its atomic transaction swaps data references while retaining both generations. It does not restore grants, secrets or enabled state.
-
-Redeven passes published SDK DTOs unchanged. Discovery, inspection and status require environment read permission; commit requires write permission; disabling remains an admin action. An uncertain commit is never replayed. Reconciliation uses the exact inspected plan; a confirmed pending result permits a new explicit review, while unknown status remains read-only. Host restart recovery remains upstream-owned.
-
-## Plugin data upgrades
-
-ReDevPlugin 3.10 owns package-declared conversion, isolated input/output generations, quotas, cancellation, and the atomic package/data/history transaction. A converter matches an exact predecessor version and data shape. Failed or cancelled conversion keeps the old package and data; committed or unknown outcomes use the existing update reconciliation path and never trigger automatic replay. Downgrade restores the exact historical package's last data generation. The platform migrates its control store before opening it; Redeven never reads or writes that schema.
-
-Redeven consumes the verified data-upgrade declaration from the released security summary. Review presents one concise saved-data notice before approval; method, predecessor identities and resource limits remain in expandable package details. Added, changed and removed declarations use the existing security-difference projection. Review omits empty release-note placeholders and generic instructions; inspection-binding facts stay inside expandable evidence, and unchanged permission grants appear only once. No second migration wizard, converter dispatcher, durable job or product-owned data copy is introduced.
+Review consumes verified security declaration:one concise saved-data notice,expandable method/predecessor/limits and ordinary added/changed/removed differences. Omit empty release notes/generic instructions;inspection binding stays evidence and unchanged grants appear once. No extra wizard,dispatcher,job or data copy.
 
 # Boundaries
 
@@ -36,5 +30,4 @@ Redeven does not parse plugin bytes, persist inspection receipts, implement a se
 
 - `redeven:internal/redevpluginintegration/integration.go:240` - Source.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Source.
-
 - redeven:internal/redevpluginintegration/adapters_test.go:1

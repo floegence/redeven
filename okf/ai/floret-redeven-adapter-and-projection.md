@@ -24,7 +24,7 @@ consistently, preserving ordered semantic components and accepted explicit
 baselines. The adapter consumes this owner contract without compensating diffs,
 extra subscriptions, canonical reads or observer persistence.
 
-Workspace facts preserve equal sidebar cache identity. Each observer has two cancellable slots: conversation and child. Off-window Computer assistance uses server-only canonical evidence, excluded from bounded response. [Live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md) own details. No schema/migration change.
+Workspace facts preserve equal sidebar cache identity. Each observer has two cancellable slots: conversation and child. Off-window Computer assistance uses server-only canonical evidence, excluded from bounded response. [Live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-live-queue-performance.md#navigation) own details. No schema/migration change.
 
 ## Model result and UI
 [Final encoder](../../internal/ai/tool_result_encoding.go) applies execution facts/content policy/JSON, then Text plus independent Decoder.UseNumber structured snapshot. Activity separately projects valid source; truncation cannot alter model content. Floret's uncertain-effect warning sits outside payload budget, preserving complete diagnostics through provider/restart/retry.
@@ -42,6 +42,5 @@ The obsolete logged max_tool_calls declaration is removed because it never enfor
 # Evidence
 
 - [Output-source integration fixture](../../internal/ai/flower_output_sources_integration_test.go) checks every intermediate HTTP-provider publication and canonical reopen; shared mapper and isolated browser tests consume its sanitized checkpoints.
-
 - `redeven:internal/ai/floret_runtime.go` - Source.
 - `redeven:internal/ai/threads.go` - Source.

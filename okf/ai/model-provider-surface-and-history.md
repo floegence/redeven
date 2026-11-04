@@ -28,7 +28,7 @@ Floret7.99.0 CommitAssistant binds full text once before ordered functions. Host
 Floret7.37.0 owns append-only lineage keyed provider/model/reasoning/prompt/local-hosted tools/adapter/context policy/state compatibility. Flower uses saved Activity/neutral display,never unknown JSON/arguments.
 
 ## Measurement/recovery
-Floret7.26.0 EstimateRenderedRequest owns Responses/Chat/Gemini signatures/Moonshot/Anthropic. Verified models use official vocabularies; unknown explicit multilingual BPE proxy. Server rendering may differ; no host calibration/preflight. Floret7.79.0 owns [measurement](model-request-measurement.md),frozen-prefix pressure/schema28; [recovery](model-request-recovery.md) owns retries/deadlines/diagnostics/current feedback.
+Floret7.26.0 EstimateRenderedRequest owns Responses/Chat/Gemini signatures/Moonshot/Anthropic. Verified models use official vocabularies; unknown explicit multilingual BPE proxy. Server rendering may differ; no host calibration/preflight. Floret7.79.0 owns [measurement](model-context-usage-and-compaction.md#request-measurement),frozen-prefix pressure/schema28; [recovery](model-request-recovery.md) owns retries/deadlines/diagnostics/current feedback.
 
 ## Anthropic
 Floret7.95.0 owns HTTP/SSE,frozen cache hints,authorized attachments,signed output; Redeven maps public Gateway content/controls/usage/events,retiring SDK route. Brand selects no behavior. Engine permits<=4 ephemeral cache markers separate from opaque state. Cache-off keeps signed history; secrets clear both reuse paths.
@@ -40,7 +40,7 @@ Floret7.89.1 owns Files upload/validation/expiring reuse/accounting/frozen repla
 
 # Boundaries
 
-Redeven maps typed product state,never persists envelopes,reconstructs history or infers UI authority. [Context usage](model-context-usage-and-compaction.md) owns accounting/compaction/capacity.
+Redeven maps typed product state,never persists envelopes,reconstructs history or infers UI authority. [Context usage](model-context-usage-and-compaction.md#usage-and-recovery) owns accounting/compaction/capacity.
 
 # Evidence
 

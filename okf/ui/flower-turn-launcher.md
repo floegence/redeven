@@ -1,19 +1,20 @@
 ---
 type: UI Contract
-title: Flower command and composer flow
+title: Flower turn submission, outbox and input recall
 tags: [ui, flower, composer, commands]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Each input has one retry-stable request ID echoed with ThreadID. New-thread HTTP nests it under create; existing uses client_request_id with URL thread. Short-lived nonsecret outbox retains uncertain input/settings while composer, Stop, navigation and interactions stay usable.
+One immutable transport outbox captures ordinary submitted text and resources before asynchronous admission. Request identity survives receipt/live ordering and explicit recovery, while newer composer edits remain independent. Canonical confirmation retires transport state; recalling history never submits or restores attachments.
 
 # Contract
 
+## Submission
 Core commands reject missing, duplicate, invalid or conflicting IDs; only the legacy RPC adapter may fill a missing one. [Goals](../ai/flower-goals.md) share the outbox. Empty-thread creation retains text/reference/attachment authority; first Send binds staged resources to the authorized canonical thread. Unknown effect outcomes are terminal with safe explanation and no replay action.
 
-## Immediate send feedback
+### Immediate send feedback
 The immutable transport outbox owns submitted text, references and attachment
 metadata before IndexedDB or HTTP completes. Ordinary sends render a pending
 user row immediately and consume only the captured draft; newer edits stay in
@@ -31,17 +32,32 @@ post-admission authority write or second conversation lifecycle is introduced.
 Full model history remains an engine execution requirement, not a prerequisite
 for painting the submitted message.
 
-## Restored data and preserved inputs
+### Restored data and preserved inputs
 New submissions capture storage generation immediately, even behind paused dispatch. Rejected input stays copyable/restorable; running it requires explicit new submission, never resumed old approvals/effects.
 
-## Context preview presentation
+### Context preview presentation
 One Env App `FlowerContextPreviewWindow` uses existing preview/text components for launcher and draft/canonical snapshots. Launcher owns attachment IO, sequencing and URL cleanup; Flower owns validity. Related-surface markers preserve input ownership; Escape dismisses preview before companion.
+
+## Input recall
+### Candidates and ownership
+Only selected-thread canonical ordinary user messages qualify, never metadata, secrets or structured answers. [Composer references](flower-composer-references.md#reference-drafts) owns draft scope.
+
+### Keyboard interaction
+Unmodified ArrowUp in an exactly empty textarea recalls newest eligible text. Whitespace counts as a nonempty draft. Thread changes reset history browsing while retaining each draft.
+
+### Presentation
+All placements use localized Ask Flower... without history instructions in the placeholder. Recall restores no attachments or canonical mutations.
 
 # Boundaries
 
 Composer drafts and the transport outbox own only unconfirmed browser input, stable request identity, and presentation-only launch settings. They never become authorization evidence or canonical queue, interaction, effect, turn, Thread settings, or Agent lifecycle state. Secret answers bypass the outbox, and canonical confirmation or terminal cleanup removes transport state instead of projecting a second durable command.
 
+Recall never submits, changes canonical messages, restores attachments or overwrites a nonempty draft. Scope, availability, candidate or external-draft changes end browsing while preserving current text.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.
 - `redeven:internal/flower_ui/src/transportOutbox.ts` - Source.
+
+- `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Source.
+- `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Tests.

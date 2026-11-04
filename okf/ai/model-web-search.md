@@ -17,10 +17,9 @@ Diagnostics expose reviewed structured fields or a safe typed classification, ne
 
 # Boundaries
 
-Model inventory and selected membership belong to [Model directory and selection](model-directory-and-selection.md). Shared controls and keyboard/touch behavior belong to [Flower provider configuration](../ui/flower-provider-configuration.md).
+Model inventory and selected membership belong to [Model directory and selection](model-directory-and-selection.md). Shared controls and keyboard/touch behavior belong to [Flower provider configuration](../ui/flower-provider-configuration.md#provider-configuration).
 
 # Evidence
 
 - redeven:internal/config/ai_web_search.go
-
 - redeven:internal/config/ai_web_search_controls_test.go

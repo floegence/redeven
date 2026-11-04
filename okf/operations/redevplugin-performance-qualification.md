@@ -3,7 +3,7 @@ type: Validation Report
 title: ReDevPlugin 3.15 performance qualification
 tags: [plugins, performance, runtime, validation]
 lifecycle: active_evidence
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -71,90 +71,25 @@ passed. Release manifest SHA256 is
 
 # Boundaries
 
-Plugin component tests cover first reveal, document visibility, hide while
-opening, unopened close/disposal, context/retry, unknown outcomes and sibling
-retirement. Production resource and UI fixtures verify inputs, native undo,
-selection, close veto, focus, fresh origins and zero final frames. Runtime
-qualification uses finite fuel/deadlines, memory bounds, cancellation and
-revocation. Linux sealed static PIE/clone3/seccomp and macOS hardened workloads
-pass upstream. Product Docker lifecycle, published source consumption and live
-author execution pass. An isolated native Desktop build also starts its local
-environment and Plugin Center. Its exact bundled hardened runtime executes the
-current published author Worker successfully through production Integration;
-this does not certify the separate full Desktop I/O workflow.
+These observations qualify only their recorded workloads, releases and sources. Resource RSS includes shared pages/retained allocations; bounded endurance is not leak proof. Different author guests prevent paired throughput/memory comparison. Deferred opening is neither a concurrency cap nor iframe reuse.
 
-Both independent product endurance runs complete. The candidate browser passes
-100 unique-origin churn cycles and 30 minutes with 357 input/visibility/selection
-checks, native undo, close veto and sibling-preserving retirement; final live
-frames, page/HTTP errors and observed guest long tasks are all zero. Input plus
-switch P95 is 22.83 ms (baseline 23.02 ms). Candidate process-tree RSS during the
-soak is 1,065.02 MiB initially and 502.25 MiB at the last live sample; it is
-505.95 MiB after frame cleanup. RSS includes shared pages and retained browser
-allocations, so this is bounded-duration evidence rather than proof of no leak.
-
-Candidate Worker endurance completes 30m4.40s: 359 batches, 1,436 correct calls,
-359 expected application rejections, three normal gateway renewals and successful
-Integration close. The host and runtime exit. Observed host/runtime process-tree
-RSS is 71.55 MiB initially, 63.78 MiB finally and 78.13 MiB at peak. The baseline
-also completes 30 minutes (1,432 correct calls, 358 expected rejections). Author
-guests differ in these endurance runs; they are correctness/lifetime checks,
-not a paired throughput or memory-performance comparison.
-
-The original expanded acceptance exposed Monokai hover contrast of 4.3187
-against the unchanged 4.5 threshold in Floe 0.87.2. The owning Floe repository
-fixed the foreground color and published 0.87.3; Redeven consumes 0.90.0, which
-includes the fix. The upstream matrix passes all 168 cases across 28 themes,
-two variants and three engines. Monokai hover is now 4.6178. The product's
-28-theme comparison and connection/management/Workbench checks also pass: all
-154 browser cases are requalified on 0.90.0 after retaining concurrent main
-changes. Single-line action geometry uses exact 16-pixel layout and scroll
-heights before and after selection, avoiding transformed viewport rounding.
-
-The legacy Desktop fixture now uses the published Worker SDK and explicit
-reviewed connection contracts. The product adapter and localized review UI
-require effective administrator/read/write/execute authority and exact private
-prefixes. The isolated Linux target uses authenticated public Local UI routing.
-Actual Worker I/O validates 64 MiB filesystem SHA256, 64 one-MiB HTTP requests
-per direction, oversized transfer rejection and 100 WS/TCP/UDP echoes each.
-The released single-request quotas remain unchanged. Native Desktop verifies
-installed inventory while the server is paused, panel dismissal and five reopen
-cycles. Market refresh failures no longer suppress installed inventory refresh.
-
-Native revocation acceptance then exposed a platform defect: cancellation
-closed the underlying TCP socket before explicit revocation, so the second close
-returned an erroneous unknown mutation outcome despite closed resources. This
-has deterministic TCP/UDP regressions and a fix whose focused tests, full
-performance, stress and property gates pass. The 3.15.1 exact-main gate and Quick CI passed, but its immutable release
-failed isolated Linux source-package qualification: the runaway fuel test could
-reach its independent deadline before exhausting fuel. Version 3.15.2 gives that
-test an explicit small fuel budget and asserts the typed budget failure without
-changing production policy. Under a 0.1 CPU quota, the original test fails and
-ten corrected runs pass; all 186 Linux runtime tests pass. The complete
-3.15.2 feature gate passes all 13 stages, with first-attempt qualified performance,
-64 revoke acknowledgements at 1 ms P95 against 500 ms, and hardened macOS
-execution. Public release completion and downstream native requalification are
-still pending. It is not yet a complete Desktop I/O pass; failure evidence is retained.
-
-No Store pool, persistent native cache, wider SQLite pool or four-surface cap is
-introduced: measurements do not justify their complexity. Production phase
-tracing is not shipped as a new public contract. This qualification does not
-claim arbitrary native-library, shell, WASI or browser-sandbox escape support.
+Do not infer arbitrary native-library, shell, WASI or sandbox-escape support. Measurements justify no Store pool, persistent native cache, wider SQLite pool or four-surface cap. Production tracing is not a new public contract. The separate complete Desktop I/O workflow remains unqualified pending the release/native work recorded below.
 
 # Evidence
 
-- ReDevPlugin source 8b9b9fc1; Actions Quick CI 41724816794 and release
-  41724964932 attempt 2. The first attempt's temporary npm provenance 404 is
-  retained; unchanged release artifacts passed the retry.
-- External task evidence directory: redevplugin-implementation, November 3
-  2026, task 01a1a274-ecbc-7370-8ebf-e111bf8adee9. It retains raw trials,
-  harnesses, source identities, failures and the acceptance ledger; it is not a
-  dependency or production configuration.
-- product-paired-summary-315.json, product-runtime-cold-summary.json,
-  product-resources-candidate315-summary.json, accepted-paired-summary.json and
-  accepted-throughput-summary.json record the measured aggregates.
-- product-ui-soak-summary.json and product-runtime-soak-summary.json bind the
-  completed endurance results to their retained raw samples and pass logs.
-- Redeven implementation commit is 902191cb2fe690d84d04824833cf464da82a28e1;
-  its normal staged-source commit hook passed all three groups.
-- Redeven integration is local only for this task. Its push gate and push are
-  explicitly excluded by the owner; prior unpublished main commits are kept.
+## Qualification outcomes
+Component tests cover reveal/visibility/opening/close/disposal, context/retry, unknown outcomes and sibling retirement. Production resource/UI fixtures verify input, native undo, selection, veto, focus, fresh origins and zero final frames. Upstream finite fuel/deadlines, memory, cancel/revoke, Linux static PIE/clone3/seccomp and macOS hardened workloads pass. Product Docker lifecycle, published-source consumption and live author execution pass. An isolated native Desktop starts its local environment/Plugin Center and its bundled signed runtime executes the published author Worker through production Integration; this alone is not full Desktop I/O acceptance.
+
+Both independent 30-minute endurance runs pass. Browser: 100 unique-origin churn cycles, 357 input/visibility/selection checks, native undo/veto/sibling preservation; final frames, page/HTTP errors and guest long tasks all zero. Input+switch P95: candidate 22.83 ms, baseline 23.02 ms. Candidate process-tree RSS: 1,065.02 MiB initial, 502.25 MiB last live, 505.95 MiB after cleanup. Worker: 30m4.40s, 359 batches, 1,436 correct calls, 359 expected application rejections, three gateway renewals and successful Integration close/host-runtime exit. RSS: 71.55/63.78/78.13 MiB initial/final/peak. Baseline: 30 minutes, 1,432 correct calls, 358 expected rejections; author guests differ.
+
+Expanded acceptance found Floe 0.87.2 Monokai hover contrast 4.3187 below the unchanged 4.5 threshold. Upstream 0.87.3 fixes the foreground; consumed Floe 0.90.0 includes it. All 168 upstream theme/variant/engine cases pass; hover is 4.6178. Product 28-theme comparison and connection/management/Workbench checks pass: 154 browser cases requalified on 0.90.0 after concurrent main changes. Single-line actions assert exact 16-pixel layout/scroll heights before/after selection, avoiding transformed rounding.
+
+The Desktop fixture uses published Worker SDK/reviewed connection contracts. Product adapter/localized review require effective admin/read/write/execute authority and exact private prefixes. Isolated Linux uses authenticated public Local UI. Actual Worker I/O verifies 64 MiB filesystem SHA256, 64 one-MiB HTTP requests/direction, oversize rejection and 100 WS/TCP/UDP echoes each without changing released quotas. Native Desktop checks installed inventory while paused, panel dismissal and five reopens; market failure no longer suppresses installed refresh.
+
+Native revocation exposed upstream TCP close-after-cancel returning an erroneous unknown mutation despite closed resources. Deterministic TCP/UDP regressions and focused/performance/stress/property gates pass for the fix. The 3.15.1 exact-main gate/Quick CI passed but immutable Linux source qualification failed: the runaway test could hit its independent deadline before fuel exhaustion. 3.15.2 sets a small test fuel budget and asserts typed failure, changing no production policy. At 0.1 CPU, original fails/ten corrected runs pass; all 186 Linux runtime tests pass. Its 13-stage feature gate passes, including first-attempt performance, 64 revoke acknowledgements at 1 ms P95 versus 500 ms and hardened macOS execution. Public release completion/downstream native requalification remain pending; this is not a complete Desktop I/O pass.
+
+## Provenance
+- ReDevPlugin source 8b9b9fc1; Quick CI 41724816794; release 41724964932 attempt 2. Retain initial npm provenance 404; unchanged artifacts pass retry.
+- External evidence: redevplugin-implementation, November 3, 2026, task 01a1a274-ecbc-7370-8ebf-e111bf8adee9. Raw trials/harnesses/source identities/failures/acceptance ledger are evidence, not dependencies/configuration.
+- Aggregates: product-paired-summary-315.json, product-runtime-cold-summary.json, product-resources-candidate315-summary.json, accepted-paired-summary.json, accepted-throughput-summary.json; endurance: product-ui-soak-summary.json/product-runtime-soak-summary.json with raw samples/pass logs.
+- Redeven implementation 902191cb2fe690d84d04824833cf464da82a28e1 passed all three staged-source hook groups. Integration was local; owner excluded push/gate and preserved prior unpublished commits.

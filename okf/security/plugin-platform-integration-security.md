@@ -48,5 +48,3 @@ Desktop control tokens, direct sessions, Gateway/RCPP credentials and Flower gra
 - `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Tests.
 - `redeven:desktop/scripts/check-tessiven-workers.mjs` - Tests.
 - `redeven:desktop/scripts/fixtures/codespace-bridge-session.ts`: real Electron main fetch/native routes use production policy; native qualification checks allowed and denied requests.
-
-- `redeven:desktop/scripts/fixtures/codespace-bridge-session.ts` - Source.

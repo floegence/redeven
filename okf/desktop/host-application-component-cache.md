@@ -19,7 +19,7 @@ Other component consumers do not inherit this product's eviction policy.
 ## Temporary transfer ownership
 The initiating Desktop document owns its subprocess and temporary ZIP.
 
-The [preparation contract](../architecture/host-application-preparation.md) owns those boundaries and pending application opening.
+The [preparation contract](../architecture/host-applications.md#preparation) owns those boundaries and pending application opening.
 
 ## Honest progress and recovery
 The delivery choice explains that Desktop reuses its cache and downloads only missing components.
@@ -35,5 +35,4 @@ This policy applies only to Desktop graphical component archives. Temporary ZIPs
 # Evidence
 
 - [Runtime adapter](../../cmd/redeven/host_application_package.go): fixed retention policy, released SDK calls and independent maintenance diagnostics.
-
 - [Desktop regression tests](../../desktop/src/main/hostApplicationComponents.test.ts): cancellation, cache preservation and temporary-file boundaries.

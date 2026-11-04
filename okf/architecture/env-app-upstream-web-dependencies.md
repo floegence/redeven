@@ -12,7 +12,7 @@ Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floet
 
 # Contract
 
-Pins: Floe Boot/Core/Protocol v0.90.4 (Env App Core v0.90.4), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.
+Pins: Floe Boot/Core/Protocol v0.90.4 (Env App Core v0.90.4), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.
 
 ## Mechanism
 
@@ -22,7 +22,7 @@ components import their shared header stylesheet; the root stylesheet does not
 duplicate these imports. Every document retains the enforced 122 KiB gzip
 initial CSS budget, including Desktop development builds.
 
-Floe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).
+Floe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).
 
 Floe owns progress-shimmer paint scheduling during drag and resize. Hosts consume
 its published CSS and shared interaction marker; they do not copy its animation

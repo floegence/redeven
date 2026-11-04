@@ -18,7 +18,7 @@ The request object itself must contain only JSON values before entering the publ
 
 # Boundaries
 
-[Runtime transport dependencies](runtime-transport-dependencies.md) owns the shared session and transport lifecycle. Transport failures with unknown outcomes do not authorize automatic retries.
+[Runtime transport dependencies](runtime-transport-dependencies.md#transport-composition) owns the shared session and transport lifecycle. Transport failures with unknown outcomes do not authorize automatic retries.
 
 # Evidence
 

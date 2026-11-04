@@ -173,24 +173,24 @@ func OpenBundle(bundle Bundle, req OpenRequest) (OpenResult, error) {
 	sectionTitle := "Summary"
 	selectedBody := concept.Summary
 	if sectionID != "" && !strings.EqualFold(sectionID, "summary") {
-		if strings.EqualFold(sectionID, "evidence") {
-			sectionTitle = "Evidence"
-			selectedBody = ""
-		} else {
-			selected, ok := findSection(concept.Sections, sectionID)
-			if !ok {
-				return OpenResult{}, fmt.Errorf("OKF section not found: %s", sectionID)
-			}
+		if selected, ok := findSection(concept.Sections, sectionID); ok {
 			sectionID = selected.ID
 			sectionTitle = selected.Title
 			selectedBody = selected.Body
+		} else if strings.EqualFold(sectionID, "evidence") {
+			sectionID = "evidence"
+			sectionTitle = "Evidence"
+			selectedBody = ""
+		} else {
+			return OpenResult{}, fmt.Errorf("OKF section not found: %s", sectionID)
 		}
 	} else {
 		sectionID = "summary"
 	}
 	body, offset, returned, truncated := bodyWindow(selectedBody, req.BodyOffset, req.BodyLimit)
 	evidence := []EvidenceRef(nil)
-	evidenceOmitted := len(concept.Evidence) > 0
+	evidenceSection, hasEvidenceSection := findSection(concept.Sections, "evidence")
+	evidenceOmitted := len(concept.Evidence) > 0 || hasEvidenceSection && evidenceSection.CharCount > 0
 	if req.IncludeEvidence || strings.EqualFold(sectionID, "evidence") {
 		evidence = append([]EvidenceRef(nil), concept.Evidence...)
 		evidenceOmitted = false
@@ -229,7 +229,7 @@ func sectionSummaries(concept Concept) []SectionSummary {
 	for _, section := range concept.Sections {
 		out = append(out, SectionSummary{ID: section.ID, Title: section.Title, Level: section.Level, CharCount: section.CharCount})
 	}
-	if len(concept.Evidence) > 0 {
+	if _, exists := findSection(concept.Sections, "evidence"); !exists && len(concept.Evidence) > 0 {
 		out = append(out, SectionSummary{ID: "evidence", Title: "Evidence", Level: 1, CharCount: len(concept.Evidence)})
 	}
 	return out

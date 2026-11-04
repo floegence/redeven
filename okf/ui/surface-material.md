@@ -11,27 +11,23 @@ Published Floe owns material and motion. Env App/Welcome select soft-neumorphic 
 
 # Contract
 
-## Configuration and ownership
-Both first-party renderers set `theme.defaultSurfaceStyle` to `soft-neumorphic`. The [published dependency contract](../architecture/env-app-upstream-web-dependencies.md) owns exact package versions and registry requirements.
+Both first-party renderers set `theme.defaultSurfaceStyle: soft-neumorphic`; [published dependencies](../architecture/env-app-upstream-web-dependencies.md) own versions/registry requirements. Use released Button/Card/selection/progress/Dialog/FloatingWindow treatments; hover preserves selected fill/text. Business content stays flat.
 
-## Activity icon states
-Published Floe owns the 24-unit rounded rail family, 1.5-unit strokes, 13% idle faces and filled selected silhouettes. Desktop Activity Bar and mobile tabs pass their real active or expanded state; hover changes ink without selecting. Monitoring remains a rounded pulse with a soft area and Switch Environment keeps slender opposing arrows. Web Services remains a globe. Plugin launcher disclosure fills while open without changing the selected page; environment switching is momentary.
+## Icons
+Consume Floe's icons subpath: 24-unit rounded rails,1.5-unit strokes,13% idle faces/filled selection. Desktop Activity Bar/mobile tabs pass actual active/expanded state; hover changes ink only. Monitoring uses rounded pulse/soft area, Switch Environment opposing arrows, Web Services globe. Plugin disclosure fills only while open; environment switching is momentary. Neither changes action/name/navigation ownership.
 
-Redeven's adapters consume the published icons subpath. Flower reuses the product's canonical five-petal artwork: each petal meets beneath the yellow center. Its navigation variant follows the host's size and active state, with outlined idle petals and selected ink-filled petals separated by visible surface-colored seams. Geometry remains stable through selection; ordinary brand and Workbench artwork retain their existing treatment. Shared icon detail masks reveal each theme's actual surface, and forced colors use system navigation ink. Verify live selection, disclosure, mobile editor retention, petal-seam contrast and icon contrast; never replace these with static SVG-only checks.
+Flower's five petals meet beneath the yellow center. Navigation follows host size/state with outlined idle and filled selected petals/seams; geometry stays stable, brand/Workbench artwork unchanged. Detail masks reveal actual theme surface; forced colors use system ink. Verify live selection/disclosure/mobile editor retention and seam/icon contrast, not static SVG alone.
 
-## Product presentation
-Ordinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls, Dialogs, and FloatingWindows use their released component treatment. Hover must preserve the selected fill and text.
+## Composer and layers
+Expanded composer uses Floe field fill/edge as one stable writing boundary. Focus transfers among editor/toolbar/menu/thread never recolor it; internal controls retain keyboard feedback. Published Plus attachment is leftmost. Permission trigger is compact text/mode icon, no border/background/shadow even hover/open; keyboard focus underlines text.
 
-The plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.
+Dedicated pages retain top editing inset and equal8px side/bottom upload/send insets. Control size sets radius; send circle stays concentric including1px border. Chat/approval/input share frame; touch targets>=44px. Companions retain panel radius/height/editor identity.
 
-## Flower composer and disclosures
-The expanded composer consumes Floe field fill and edge with one stable writing boundary. Chat focus transfers between editor, toolbar, menus and threads do not recolor the frame; internal controls retain keyboard focus feedback. The attachment action is the leftmost toolbar control and uses the published Plus icon. Permission selection remains compact text and a mode icon without a border, background or shadow, including hover/open states; keyboard focus underlines its label. Dedicated pages preserve the top editing inset and use equal 8px side/bottom insets for the upload and send controls. Control size derives the outer radius, keeping the send circle concentric with the lower-right corner, including the 1px border; chat, approval and input requests retain that frame, and touch controls retain 44px targets. Compact companions retain Floe panel radius, their existing height and editor identity. Floating model, permission, reasoning, More, reference, command, Goal, context and conversation controls consume published material and presence. Exiting panels become inert and hidden from accessibility immediately, while Floe finishes the visual exit; reopening reverses that exit. Context menus retain their deliberate first-frame appearance.
+Model/permission/reasoning/More/reference/command/Goal/context/conversation layers use published material/presence. Exiting panels immediately become inert/accessibility-hidden; visual exit can reverse on reopening. Context menus keep first-frame appearance. Hover context retains content/scroll/expansion while hidden.
 
-Model and permission menus have one surface-owned lifetime, independent of inline/More toolbar placement. Published anchored layers own positioning and boundary clamping for model, permission, reasoning and More; animated children do not own geometry. Constraints are applied before first-paint measurement, so permission menus never appear below their final position and jump upward. Published Floe also resolves the actual opening side before presence begins: menus above the composer rise from its edge and return toward it when closing; boundary flips reverse travel and transform origin together. Reduced-motion mode suppresses travel. Redeven does not override shared popup motion. Read-only, approval-required and full-access modes use the published Eye, ShieldCheck and Unlock icons consistently in the trigger, menu and toolbar measurement copy. Moving an open control into More retains its editor and focus. The More trigger is reactive so rebuilding the responsive toolbar updates the existing popup anchor before focus restoration. Hover context disclosures retain their content, scroll and expansion while hidden, with shared presence controlling paint.
+Model/permission lifetimes are surface-owned across toolbar/More placement. Published anchored layers constrain/measure before first paint and resolve opening side before motion; above-composer menus travel from/back to edge, flipping travel/origin together. Reduced motion suppresses travel; no product popup-motion override. Eye/ShieldCheck/Unlock consistently identify modes, including measurement copy. Moving open controls into More retains editor/focus; reactive More updates the existing anchor before focus restoration.
 
-Unavailable catalog models remain configured choices. A background availability update must not replace the composer with first-time setup or discard its draft, menu search or focus; unavailable models remain disabled for admission.
-
-Cached Activity pages retain their last visible transcript gutter and toolbar allocation while hidden. Restoring a page must not resize the composer for a zero-width hidden measurement; saved thread-rail width is applied before the first visible layout.
+Background catalog availability retains configured unavailable models, disabled for admission, without setup replacement or loss of draft/search/focus. Hidden Activity pages retain transcript gutter/toolbar allocation; apply saved rail width before visible layout and never resize composer from a zero-width hidden measurement.
 
 # Boundaries
 
@@ -41,9 +37,6 @@ Use restrained static depth and short functional control motion. The progress di
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Source.
-
 - `redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx` - Source.
-
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.polish.browser.test.tsx` - Hidden-page geometry, shared material, focus, responsive layouts, reversal and reduced-motion acceptance.
-
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.permissionStability.browser.test.tsx` - First-painted popup geometry, repeated focus transfers, captured page pixels, distinct mode icons, compact bottom inset and retained thread drafts.

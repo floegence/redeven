@@ -5,6 +5,7 @@
 Concepts own current contracts and original qualification outcomes; Git retains change history.
 
 - 2026-11-04: [Flower Goals](ai/flower-goals.md) share the editor's first line box and clear converted native command text; browser and Desktop acceptance measure entry/typing/exit geometry and localized placeholders.
+- 2026-11-04: Consolidate overlapping concepts under their owners, repair boundaries/navigation and remove repeated prose. Retain contracts, acceptance thresholds, adverse qualification outcomes and unqualified scopes; regenerate the bundle with unchanged quality budgets. Preserve narrative Evidence in embedded sections so search and explicit paginated opening can retrieve retained qualification results.
 - 2026-11-04: [Provider tool names](ai/model-provider-surface-and-history.md) explain canonical-to-callable mappings in detached tool descriptions before freezing; preserve canonical content, return identities and retry bytes.
 - 2026-11-04: Qualify published transaction-local Flower history read improvements with 1 px per-frame anchors, visible-content continuity, compositor frame capture and explicit settled-reading endurance.
 - 2026-11-04: Keep newly exposed history paintable before intersection callbacks with native automatic layout skipping; reproduce and guard scrollbar-jump continuity.

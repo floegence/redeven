@@ -1,22 +1,23 @@
 ---
 type: UI Contract
-title: File preview viewport and rendering
+title: File preview rendering, formats and viewport
 tags: [ui, files, preview, viewport, rendering]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Redeven owns preview identity/modes; Floe sizing, PDF layers and static PPTX. Initial fit may enlarge, resize keeps manual zoom. One owner renders each page, fencing stale work. Errors stay local/retryable, cancellation neutral, and incomplete HTML never executes.
+Redeven owns source identity, authorization and preview modes; published renderers own layout and parsing. Each page has one asynchronous owner, stale work is fenced and failures remain local/retryable. HTML stays isolated, rich formats retain original bytes and unselected widgets gain no input authority.
 
 # Contract
 
-## Viewport
+## Viewport and formats
+### Viewport
 [Floating layers](env-app-floating-layer-order.md) owns placement/clamps. Keep title/close/toolbar reachable with local scrolling. Fit uses local CSS pixels excluding padding/scrollbars, independent of Workbench transforms. Attachments keep native PDF controls/contained images/shrinkable containers.
 
 Lazy Floe PDF owns layers/scoped CSS. One PDF/PPTX renderer/page; identity fences callbacks/stale work. Cancellation neutral, faults local/retryable.
 
-## Office/delimited
+### Office/delimited
 Shared task/attachment adapters serve both hosts. Attachments retain native image/PDF/text; Env App file actions/Monaco/selected-Workbench wheel. Never pass legacy XLS/DOC/PPT to OOXML.
 
 XLSX/CSV/TSV lazily consume exact unmodified @silurus/ooxml@0.89.7 XLSX with copied original bytes, no flattening. XlsxWorkbook.load, visible metadata/getWorksheet/XlsxSheetViewer.fromWorkbook/activation own rendering. Read sheet before activation to expose parse errors; select every visible sheet,skip hidden. Engine owns styles/merges/cached formulas/comments. Remove ExcelJS/200-row50-column caps everywhere.
@@ -27,14 +28,39 @@ Limits20MiB input/100000rows/1000000cells/64MiB UTF8/128MiB JSON. Disable Google
 
 DOCX keeps docx-preview with off-DOM identity-checked commit. Floe PPTX owns pages/navigation/incomplete-external warning. All rich previews20MiB/local Retry; originals unchanged. Original-author releases only,no fork/vendor/patch/model rewrite/fallback. XLSX indentation/views/malformed fidelity may differ from Office; DOCX/PPTX migration needs upstream fixes/Word math-layout evidence. Lazy assets include licenses; production admits only hashed graph-router/XLSX WASM matching installed package bytes. Unknown/altered assets reject. Build size≠installer size.
 
-## HTML/Markdown
-[HTML](file-preview-html.md) owns page-first/edit/bounds/isolation/incomplete rejection. [Diagrams](markdown-diagrams.md) use Floe/Pele with theme and identity-fenced cleanup. Contents defaults closed in right-drawer Dialog,retaining width/nodes/scroll; heading scroll closes it. File change resets,headingless disables; main sidebar remains.
+### HTML/Markdown
+[HTML](#html) owns page-first/edit/bounds/isolation/incomplete rejection. [Diagrams](markdown-diagrams.md) use Floe/Pele with theme and identity-fenced cleanup. Contents defaults closed in right-drawer Dialog,retaining width/nodes/scroll; heading scroll closes it. File change resets,headingless disables; main sidebar remains.
 
 Floe roles: headings/links interaction-info; lower headings/quotes tip; emphasis note; code ink. Dark headings keep hue/lightness floor; tables/metadata subtle, GFM alerts semantic. Text/inset titles>=4.5:1 across presets/materials/windows. Preserve underline/focus/selection/forced colors; theme never changes geometry/DOM/selection/focus/scroll.
 
+## HTML
+### Page rendering
+Files ending in `.html`, `.htm`, or `.xhtml`, regardless of case, open as rendered pages in floating windows, mobile previews, Workbench, and attachment snapshot previews.
+
+It renders an opaque `allow-scripts`, no-referrer iframe; it never inserts file HTML into the trusted shell or navigates to an authenticated file endpoint.
+
+The current Activity file preview and Workbench same-file reuse rules still own placement.
+
+### Placement and interaction
+The page fills the reading area and scrolls internally. An unselected Workbench iframe is inert and cannot intercept pointer, keyboard, or wheel input. Unrelated shell updates preserve the live document.
+
+### Source editing and snapshots
+Edit opens the existing HTML source editor only when write permission permits. Attachment snapshots remain read-only and show the attached bytes rather than re-reading the live file.
+
+## PPTX
+PPTX uses the lazy published `@floegence/floe-webapp-core/pptx` entrypoint. Opening another file type must not load the PPTX engine.
+
+Preview opens directly to the slides without a generic PowerPoint compatibility notice or an empty notice bar. Document-specific guidance appears only when external resources are disabled or some content cannot be rendered.
+
+The renderer's original licenses, ECMA geometry notice, bundled dependency notices, and MPL corresponding source are verified and retained in the distributed third-party notice.
+
 # Boundaries
 
-[Window actions](file-preview-window-actions.md) owns drafts/actions/dismissal. Preserve unselected-widget wheel ownership,permission/editability/native attachment PDF.
+[Window actions](file-preview-window-actions.md#window-actions) owns drafts/actions/dismissal. Preserve unselected-widget wheel ownership,permission/editability/native attachment PDF.
+
+[Window actions](file-preview-window-actions.md#window-actions) owns shared file actions and draft dismissal. Synthetic clicks, forged messages, sibling iframes, and retired documents cannot invoke its host handler. User-activated file navigation does not authorize automatic loading of neighboring assets or add a separate editor lifecycle.
+
+The [preview viewport contract](#viewport-and-formats) owns shared fit, controls, and local coordinate policy. This surface must not grant unselected widgets local wheel authority or change file permissions or editability.
 
 # Evidence
 
@@ -45,3 +71,9 @@ Floe roles: headings/links interaction-info; lower headings/quotes tip; emphasis
 - `redeven:desktop/scripts/check-office-preview.mjs` (desktop pnpm test:office-preview): production-built Electron file://,offline assets/task-attachment/Escape/DOCX/PPTX/multisheet/native PDF/cleanup; no installer/Office-equivalence claim.
 - Workbook SHA256 bed4a8aa26d0ddf254f41da4b792da957122759b382bca85eda8470c5581c22f reproduces ExcelJS4.4.0 comment crash; unchanged four-visible-sheet bytes render in Env/production Electron via official OOXML. Optional REDEVEN_ACCEPTANCE_XLSX keeps user data outside Git. Generated fixture: absolute nested comments relation,hidden sheet,styles/merges/literal IDs/cached formulas/BA301 beyond old cap.
 - `redeven:internal/envapp/ui_src/scripts/initialBuildGraphPolicy.node-test.mjs` - Tests.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.browser.test.tsx` - Tests.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.test.tsx` - Tests.

@@ -17,13 +17,13 @@ Welcome setup requires no selected thread, configured provider or usable model, 
 The unconfigured surface is one open, canvas-level composition using published Floe ink and Button interaction, with no card, icon tile, heavy heading or filled call-to-action. It contains the Flower mark, setup title, one short explanation and the available settings destinations. Local setup has one text action; remote Desktop setup keeps distinct Desktop and environment text actions with concise localized labels. No model-sync control or starter-task previews appear before configuration. Existing settings updates restore the retained composer and draft when a model becomes usable; configured-model recovery remains in its existing settings/menu owner.
 
 ## Starter tasks
-Four editable drafts cover current-folder understanding, connected computer, installed applications and folder organization. Names/dates alone never justify deletion. The [companion](flower-activity-companion.md) omits the grid.
+Four editable drafts cover current-folder understanding, connected computer, installed applications and folder organization. Names/dates alone never justify deletion. The [companion](flower-activity-companion.md#companion) omits the grid.
 
 ## Settings composition
 Settings edit the environment profile even with a Desktop model source. Flat sections preserve identity/drafts. Immediate switches block duplicate edits and roll back on failure.
 
 ## Provider configuration
-[Provider configuration](flower-provider-configuration.md) owns authentication, layout and connection-before-model sequencing.
+[Provider configuration](flower-provider-configuration.md#provider-configuration) owns authentication, layout and connection-before-model sequencing.
 
 ## Retained panels
 FlowerSurface retains chat/extensions and a lazily loaded settings form in a bounded scrollable modal. Covered chat/navigation remain inert through close and do not acknowledge reads. Settings interactions belong to the companion: dialog close keeps it expanded; host collapse closes both while retaining form/progress/errors.

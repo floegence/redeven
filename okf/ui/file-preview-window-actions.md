@@ -1,46 +1,44 @@
 ---
 type: UI Contract
-title: File preview window actions
+title: File preview actions and dismissal
 tags: [ui, files, preview, floating-windows, selection]
 lifecycle: contract
 reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Redeven owns file actions/drafts; Floe titlebar/window lifecycle. Compact actions precede window controls in Activity/Workbench, preserving permission/selection/download/discard policy. Close immediately fences pending work but keeps content visible through retirement.
+Redeven owns file actions, drafts and immediate cancellation; Floe owns titlebar, tabs and exit presence. Retained panels preserve document state through switching and close motion. Accepted dismissal fences work before releasing resources, with unsaved-change confirmation and responsive focus restoration.
 
 # Contract
 
-## Title bar and reading space
-Activity uses published Floe FloatingWindow.titleContent/WindowTabs for multiple documents and headerActions for the active document. One file keeps the ordinary title; two or more replace only the title area with scrollable, closable tabs. Tab selection never drags or maximizes the window. Unused header space, including the trailing reserved grip area, inactive feedback slot and action separators, moves the window; only actual controls own their pointer input. Floe uses physical titlebar event ownership so per-document actions portaled into the header retain the same blank-space behavior. Labels cannot select text. Pointer sorting keeps the original opaque tab face under the pointer with a quiet shadow, smoothly shifts neighbors and settles into its new slot without an insertion bar or external focus border. Host order changes only on release; cancellation restores the original order. Reduced-motion preferences remove settling animation; Alt+Shift+Left/Right offers keyboard sorting. Escape cancels sorting before window dismissal. Reordering preserves selection and panel DOM order, including live iframe documents. Keyboard focus stays visible inside the tab face. Arrow/Home/End navigation and Delete close remain local; long names truncate and full paths appear as tooltips. Only Ask Flower, More actions and fixed window controls remain in the floating header. More actions owns Copy path, Edit, Save, Discard and Download with their existing availability, selection and feedback. No separate path row; Copy still copies the active full path with success feedback.
+## Window actions
+Activity consumes Floe titleContent/WindowTabs/headerActions. One document has ordinary title;>=2 replace title only with scrollable closable tabs. Selection never drags/maximizes. Blank header/grip/inactive feedback/separators move window; real controls own pointer,including portaled actions via physical titlebar ownership. Labels do not select text.
 
-The Activity preview workspace owns one controller and retained panel per normalized file path. Every filesystem entry point uses this owner; opening an existing path selects its tab without re-reading or discarding changes. Switching preserves editor drafts, renderer nodes, reading position and preview mode; inactive native audio/video pauses. Each tab retains its own actions, load/retry state and error. Close an inactive tab without changing the active one; closing the active tab selects the adjacent survivor. Last-tab close dismisses the window. Window close confirms all unsaved documents together, and cancellation leaves every draft intact. Saving blocks confirmed discard until it settles. Accepted dismissal fences pending reads and releases retained resources after Floe exit presence.
+Sorting retains opaque face/quiet shadow under pointer,shifts neighbors/settles without insertion bar/external border. Commit order on release,cancel restores; reduced motion skips settling. Alt+Shift+Left/Right sorts;Escape cancels before dismissal. Preserve selection/panel DOM/live iframes. Arrow/Home/End/Delete stay local;focus visible,long names truncate/full path tooltip. Header retains Ask Flower/More/fixed controls. More owns Copy path/Edit/Save/Discard/Download with existing permission/selection/feedback;no extra path row.
 
-Flower message/attachment floating previews retain their own source-identity tabs through the same upstream header component in both hosts. Source loaders remain independent, repeated opens select the existing source, and close/retirement aborts reads and releases object URLs. Failed attachment loads expose an independent Retry action. Snapshot inspectors and Workbench canvas widgets retain their separate ownership; modal conversation-file navigation retains its existing back-to-list flow.
+One retained controller/panel per normalized path serves all filesystem entries; repeated open selects without reread/discard. Switching preserves draft/nodes/position/mode and pauses inactive native media. Independent actions/load/errors/Retry per tab. Inactive close preserves active;active close selects adjacent;last closes window. Window close confirms all unsaved together;cancel preserves all. Saving blocks discard until settled.
 
-## Workbench reading space and narrow widgets
-Workbench exposes the full path through tooltip/Copy and begins content beneath its header, except existing sync notices. Keyboard/Escape/Tab/focus behavior cannot trigger canvas gestures or reclaim focus through the shell.
+Flower attachments use source-identity tabs through same header in both hosts,independent loaders/retry/cancel/object-URL retirement;repeat selects existing source. Snapshot inspectors,Workbench widgets and modal conversation-file back navigation retain separate ownership. Workbench starts beneath header except sync notices;tooltip/Copy exposes path,keyboard/Escape/Tab cannot trigger canvas or shell focus reclaim. FilePreviewActions is sole availability/feedback owner and download builder retains draft mapping. Writable PDFs use Edit;PDF.js saves Unicode,NeedAppearances for unsupported fonts,no replacement-font embed. Product Downloads owns all downloads,including child previews ([lifetime](../ai/flower-task-files.md#downloads-and-panel)). Live navigation opens current objects;historical snapshots retain bytes;failed targets offer Retry/Open parent.
 
-## One action implementation
-`FilePreviewActions` owns availability/feedback. Header actions preserve reading selection; the product download builder keeps current file/draft mapping.
+## Preview retirement
+Cancel/fence reads immediately on accepted close; no new edits/retries/probes. Retain document/title/existing resources through Floe exit,release on unmount;switching tabs never closes controller. Reopen reverses same presence owner;old release cannot clear current/retained preview. Store constant-size presentation token/references only,no copied lifecycle/timer/blank iframe/extra read or brightness rebound. Disposal always cleans/fences late responses.
 
-## PDF drafts and persistence
-Writable PDFs expose Edit file. PDF.js saves full Unicode values; unsupported original fonts use `NeedAppearances` instead of embedded replacement fonts. Downloads always use the product manager, including conversation-file child previews; [conversation file ownership](../ai/flower-task-files.md#downloads) defines background lifetime and toolbar history.
-
-## Unavailable targets and recovery
-Navigation opens current filesystem objects; historical tool/diff/image snapshots retain original content. Failed targets offer Retry/Open parent. [Dismissal](file-preview-dismissal.md) owns resource lifetime and close semantics.
+## Files window retirement
+Explicit close clears browser request/restores focus immediately while host memoizes last title/key/live browser through shared inert exit. Same owner cancels exit on reopen;no old completion/detached browser/timeout survives. Subsequent actions need not await motion. A1000-entry/five-cycle fixture checks synchronous close,opener focus,underlying action and<50ms frame intervals.
 
 # Boundaries
 
-Preview loading and error presentation remain in the body. A title-bar layout change must not add a second close policy or bypass discard confirmation.
-
-Preview scale, content bounds, and asynchronous renderer ownership follow the [viewport and rendering contract](file-preview-viewport-and-rendering.md).
+Loading/errors stay in body. [Rendering](file-preview-viewport-and-rendering.md) owns scale,bounds/async renderer; window changes cannot bypass discard,duplicate close policy or alter Floe motion. Controller owns requests/focus;host retains presentation only,never snapshots/polling. Bright-HTML fade measurements qualify browser fixture,not packaged Desktop release.
 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewWorkspace.browser.test.tsx` - Multi-document state, actions, keyboard, narrow header and CSV-mode acceptance.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerAttachmentPreviewTabs.browser.test.tsx` - Attachment identity, retry, cancellation and resource release.
 - `redeven:desktop/scripts/check-office-preview.mjs` - Real Electron `file://` acceptance verifies header tabs, retained CSV canvas/zoom/source state, close-to-single and Escape.
-
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewPanel.tsx` - Source.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts` - Source.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createFileBrowserSurfaceController.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSurfaceHost.browser.test.tsx` - Tests.

@@ -19,7 +19,7 @@ Runtime status distinguishes no Desktop provider (`not_configured`), configured 
 ## Model identity and recovery
 Thread snapshots, list items, and patches carry `model_id` and `reasoning_selection` as thread defaults. The last is a disabled, ungrouped display of a thread's missing model; Flower never silently replaces it.
 
-See [reasoning selection ownership](flower-reasoning-selection.md) for loading, draft, and submission rules.
+See [reasoning selection ownership](../ai/model-reasoning-runtime.md#selection-controls) for loading, draft, and submission rules.
 
 ## Web search presentation
 Model choices display the shared search badge from the server's readonly `web_search` projection. A provider brand or frontend model name never enables search. See [model directory ownership](../ai/model-directory-and-selection.md).

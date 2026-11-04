@@ -35,7 +35,7 @@ second time. Side drawers keep their edge-attached presentation.
 Headers, close controls and footer actions remain reachable while long content
 scrolls inside the body. Flower settings, nested editors and conversation rename
 use the published Dialog. Preserve the bounded loading geometry defined in
-[page-loading continuity](page-loading-continuity.md).
+[page-loading continuity](page-loading-continuity.md#page-continuity).
 
 # Boundaries
 

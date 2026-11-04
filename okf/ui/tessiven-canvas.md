@@ -1,22 +1,58 @@
 ---
 type: UI Contract
-title: Tessiven canvas
+title: Tessiven canvas navigation, relationships and Flower reading
 tags: [ui, tessiven, graph]
-quality_exception: Cross-surface canvas interaction contract for Activity, standalone windows, topology browsing, and exact object actions; document, Runtime, and Flower lifecycle remain separately owned.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Tessiven maps services to Runtime cards, tinted groups and distinct external dependencies. Root connections give overview; focus reveals local relationships. Canvas owns pan/zoom while details remain selectable. Flower edits documents; the canvas progressively presents them without a parallel manual editor.
+Published Floe owns graph layout, routing and viewport paint; Tessiven supplies canonical topology and selectable details. Folding, summaries and filters change only the visible scene. Flower remains the editing/operations interface, with compact replies retaining canonical actions and conversation state.
 
 # Contract
 
-The Connected environments panel and Runtime node details follow the [scoped Runtime operations contract](../ai/tessiven-runtime-operations.md).
+## Canvas surfaces
+The Connected environments panel and Runtime node details follow the [scoped Runtime operations contract](../ai/tessiven-runtime-operations.md#runtime-operations).
 
 Browsers retain popup-blocking feedback, and native refusal or failure remains visible through localized command feedback without starting another opening path.
 
-Separate responsibilities   include cloud controllers, node agents, container runtimes, network plugins,   service meshes, ingress, operators, registries, observability, identity, secret   and certificate services, streaming, and metadata; repeated instances of the   same responsibility keep the same icon.
+Separate responsibilities include cloud controllers, node agents, container runtimes, network plugins, service meshes, ingress, operators, registries, observability, identity, secret and certificate services, streaming, and metadata; repeated instances of the same responsibility keep the same icon.
+
+## Navigation and rendering
+### Layout and routing
+Automatic layout and library thumbnails use the same published Floe layout engine, direction, layers, and visibility projection. Saved positions guide ordering within a layer and never override its rank. Positioned objects without relationships still contribute their actual world bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
+
+### Connection scopes
+Default browsing shows one directed overview connector per root endpoint pair. Group-internal relationships remain in the canonical pool overview and never create a group self-loop.
+
+The interactive overview and library thumbnails always paint the root overview, even while the main canvas shows a focused host's detailed paths.
+
+### Controls and rendering
+- Canvas controls expand or collapse all logical groups in one compact reflow. They preserve the selected visible object, or its enclosing group when hidden, and never create a document version. Large-graph qualification measures actual host counts, including groups of ten so a thousand-host fixture never silently measures only aggregate cards.
+
+## Relationship summaries
+### Group summaries
+Patterns use ordered canonical endpoint identities, endpoint granularity, relationship kind, exact protocol and locality.
+
+Main graph and thumbnail share this projection; raw relationship volume never expands every group's top padding.
+
+### Interaction and details
+Hover and keyboard focus never open a popup.
+
+No list is silently truncated to 100 references.
+
+## Flower replies
+### Reading surface
+The window uses the theme's main reading surface continuously across its titlebar, transcript and composer surroundings. A subtle border and shadow frame compact readable message spacing; canvas nodes must not bleed through reply text.
+
+End padding keeps the final choice fully readable when scrolled to the bottom; the action controls remain outside the fade.
+
+### Actions and continuity
+Less frequent actions live in the More menu: new conversation, settings, subagents, available Computer actions and opening the full conversation.
+
+Messages, tool disclosures, questions, approvals and errors remain canonical.
+
+Existing canvases open the combined window directly.
 
 # Boundaries
 
@@ -26,15 +62,45 @@ The data-only bridge reports loading, rendered, failure, or an immutable object 
 
 Ask Flower focuses the canvas composer and never sends a message automatically.
 
-## Explicit Group Packing
+### Explicit Group Packing
 The shared document-to-graph mapper passes only visible container rules from `presentation.groupLayouts` to the published Floe layout API. No additional menu or local layout engine owns these rules.
+
+The saved canvas contract owns topology and versions; these browsing controls change only the visible scene. Tessiven does not replace worker failures with guessed routes or use viewport culling to alter the complete inspectable model.
+
+Native hosts use the same summary browser and retain the existing single-object selection callback when an exact relationship is selected. The native renderer loads the published Floe foundation stylesheet as well as graph styles; shared floating layers must retain their positioning utilities.
+
+Canonical endpoint indexes and Set-based deduplication bound repeated-call aggregation without a second persisted graph or local router.
+
+### Product verification
+Component rendering and an HTTP 200 from a frontend development server do not qualify a connected Env App.
+
+Both surfaces send a Flower turn, display the canonical streamed reply and exercise the reply menu in the compact window.
+
+It never attaches to an existing user browser or Runtime.
 
 # Evidence
 
-- `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts` - Identity-only native request/ACK.
+- `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts`
+- Identity-only native request/ACK.
+- `desktop/src/main/main.ts`
+- Source.
+- `desktop/scripts/check-service-canvas-window.mjs`
+- Real Desktop Open/repeat/close/reopen and invalid rejection.
+- `desktop/scripts/check-service-canvas-window.mjs`
+- Tests.
 
-- `desktop/src/main/main.ts` - Source.
+- `internal/tessiven_ui/src/TessivenGraph.tsx`
+- Source.
+- `internal/tessiven_ui/src/connections.ts`
+- Source.
+- `internal/tessiven_ui/src/projection.ts`
+- Source.
 
-- `desktop/scripts/check-service-canvas-window.mjs` - Real Desktop Open/repeat/close/reopen and invalid rejection.
+- `internal/tessiven_ui/src/relations.ts`
+- Source.
+- `internal/tessiven_ui/src/TessivenServiceRelations.tsx`
+- Source.
 
-- `desktop/scripts/check-service-canvas-window.mjs` - Tests.
+- `internal/tessiven_ui/src/TessivenFlowerPanel.tsx`: placement, More menu and restore behavior.
+- `internal/tessiven_ui/src/tessiven.css`: scoped reading material and touch sizing.
+- `internal/flower_ui/src/FlowerSurface.tsx`: canonical header action definitions and live conversation.

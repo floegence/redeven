@@ -12,7 +12,7 @@ Floret owns canonical Goal, model tool, reflection and completion; Redeven autho
 # Contract
 
 ## Compaction and continuation
-[Manual compaction](flower-context-compaction.md) defaults to explicit continue_goal intent. Retry and restart use canonical preparation and confirmed tools. Redeven forwards intent and renders state without a second execution coordinator.
+[Manual compaction](model-context-usage-and-compaction.md#manual-compaction) defaults to explicit continue_goal intent. Retry and restart use canonical preparation and confirmed tools. Redeven forwards intent and renders state without a second execution coordinator.
 
 ## Goal ownership and execution
 User and model updates enter Floret's shared journal writer with request identity and expected version. An existing unfinished Goal remains authoritative across continuation and context restoration.
@@ -39,7 +39,6 @@ Default Flower tools, capability lists and prompts omit write_todos and current 
 # Evidence
 
 - redeven:internal/ai/activity_goal_test.go
-
 - redeven:internal/ai/thread_goal.go
 
 - [Goal entry browser regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.goalLayout.browser.test.tsx)

@@ -154,7 +154,11 @@ func validateBundleQualityAt(bundle Bundle, sourceRoot string, mode QualityMode,
 
 		bodyLength := 0
 		for _, section := range concept.Sections {
-			bodyLength += section.CharCount
+			// Evidence is retrievable, but is not contract/boundary prose. The
+			// source-character budgets above still include all authored evidence.
+			if section.ID != "evidence" {
+				bodyLength += section.CharCount
+			}
 		}
 		if bodyLength > 8000 {
 			report.add("warning", "OKF009", path, fmt.Sprintf("contract and boundary body length is %d characters; target is at most 8000", bodyLength))

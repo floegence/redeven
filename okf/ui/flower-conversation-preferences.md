@@ -18,7 +18,7 @@ Explicit model, directory and model-owned reasoning choices are remembered per a
 Patch only the chosen field. Existing-thread edits must succeed before saving memory; memory failure cannot roll back confirmed thread state. Explicit Default differs from absent memory; Default/budget and Off/budget semantics remain.
 
 ## Drafts and admission
-Draft overrides remain distinct from effective model/directory admission values; old selection cannot seed a new draft. Without explicit/remembered reasoning, root launch freezes explicit Default so retries cannot acquire later memory. Server [canonicalization](../ai/model-reasoning-runtime.md) owns model capability. Existing busy/queued/unresolved-input edit restrictions apply.
+Draft overrides remain distinct from effective model/directory admission values; old selection cannot seed a new draft. Without explicit/remembered reasoning, root launch freezes explicit Default so retries cannot acquire later memory. Server [canonicalization](../ai/model-reasoning-runtime.md#runtime-capability) owns model capability. Existing busy/queued/unresolved-input edit restrictions apply.
 
 ## Concurrency and failure
 Adapters serialize captured patches and load latest revision; the store atomically merges with compare-and-set. Stale writes return 409 without auto-retry. Captured target/model identity fences late responses against navigation or retargeting.
