@@ -133,3 +133,17 @@ func TestComputerFrameSourceIdentityReachesGuestReceiptsAndModelTree(t *testing.
 		t.Fatalf("lost identity: %+v", data)
 	}
 }
+
+func TestComputerReadFailureSummaryNeverReclassifiesGuestFaultOrUnknownEffect(t *testing.T) {
+	for _, code := range []aitools.ErrorCode{"SCRIPT_FAILED", "EFFECT_OUTCOME_UNKNOWN", "TARGET_OBSERVATION_UNAVAILABLE"} {
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: code, Message: "fixture"}, Data: map[string]any{"action_executed": true, "completed_actions": []any{"click"}, "failed_action": "text"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, chip := range activity.Chips {
+			if chip.Kind == "computer_failed_read" {
+				t.Fatalf("untyped summary reclassified %s", code)
+			}
+		}
+	}
+}

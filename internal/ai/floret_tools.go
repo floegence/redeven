@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -1393,8 +1394,10 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		if rawPayload["context_reset"] == true {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_context", Label: "context", Value: "reset"})
 		}
-		if status == toolResultStatusError {
+		if status == toolResultStatusError && result.Error != nil && slices.Contains([]aitools.ErrorCode{aitools.ErrorCodeElementNotFound, aitools.ErrorCodeAmbiguousElement, aitools.ErrorCodeTargetCapabilityUnavailable}, result.Error.Code) {
 			if action := anyToString(rawPayload["failed_action"]); computerOperationReturnsInvalidation(map[string]any{"action": action}) {
+				// Summaries omit payload errors. Only typed content lookup failures
+				// carry this marker, never guest faults or observation unavailability.
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_failed_read", Label: "read", Value: action})
 			}
 		}
