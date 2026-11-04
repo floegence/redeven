@@ -3,7 +3,7 @@ type: Architecture Boundary
 title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -27,6 +27,9 @@ Granted HTTPS hostname connectors without private-prefix binding use released tr
 3.11.2 reads signed pre-Webv9 without changing manifest/hash/signature/generation. Incompatible install stays manageable,not executable/enabled. Explicit same-install Web update retains history; no VNode/invented declarations. Unknown/corrupt stays unchanged/local unavailable.
 
 Platform owns Web admission/package modules/sandbox/bootstrap/bridge. Product allocates origins/mounts handlers; no DOM translation/VNode renderer/ambient parent credentials.
+
+## Runtime build ownership
+Product prepares complete Rust/C/archiver/link tools before exact published-source builds; [target build tooling](../operations/redevplugin-cross-build.md) owns pinned Zig, early real probes, cache identity, cancellation and Desktop package acceptance. Upstream runtime semantics and containment stay unchanged.
 
 ## Runtime performance boundary
 Released 3.15 uses one Wasmtime actor/job path with fresh invocation state, bounded in-process compiled-module reuse, finite fuel and signed deadlines. Immutable manifest caching never replaces current permission or revocation checks. Product supplies fixed toolchain, runtime signing and placement policy; it does not add an executor, authorization cache or compatibility fallback. Cold module preparation remains separate from warm execution latency.

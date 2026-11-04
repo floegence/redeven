@@ -23,6 +23,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Tessiven stable canvas presentation](architecture/tessiven-canvas-presentation.md)
 - [Tessiven canvas contract](architecture/tessiven-canvas-contract.md)
 
+- [ReDevPlugin target build toolchain](operations/redevplugin-cross-build.md)
+
 - [Native Runtime bridge](architecture/native-runtime-bridge.md)
 
 - [Flower working files and deliverables](ai/flower-task-files.md)

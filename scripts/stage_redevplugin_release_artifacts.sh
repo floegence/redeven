@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+stage_phase=validation_failed
+trap 'printf "[redevplugin-stage:%s] Runtime preparation failed\n" "$stage_phase" >&2' ERR
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 REPOSITORY="floegence/redevplugin"
-RUST_TOOLCHAIN="1.98.0"
+RUST_TOOLCHAIN=$(node -p 'require(process.argv[1]).rust' "$SCRIPT_DIR/redevplugin_build_toolchain.json")
 RELEASE_MANIFEST_ASSET="platform-release-manifest.json"
 RELEASE_VERIFICATION="redevplugin-release-verification-v1.json"
 RUNTIME_MARKER=".redevplugin-release-artifacts-verified.json"
@@ -36,6 +38,11 @@ Rustup reuses installed components and recovers transient network
 failures with bounded retries. Set REDEVEN_RUSTUP_OFFLINE=1 for explicit
 Rustup cache-only preparation; set REDEVEN_RUSTUP_MAX_ATTEMPTS or
 REDEVEN_RUSTUP_RETRY_DELAY_SECONDS to tune the bounded retry policy.
+The unified build preparer also verifies a pinned Zig 0.16.0 archive for macOS
+Linux builds and tests target C compilation, archiving and static PIE linkage.
+REDEVEN_REDEVPLUGIN_TOOLCHAIN_CACHE selects its absolute cache directory;
+REDEVEN_TOOLCHAIN_OFFLINE=1 requires complete cached build tools. CC/AR settings
+are target-scoped and never exported to the user's shell.
 USAGE
 }
 
@@ -61,7 +68,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 die() {
-  echo "[redevplugin-stage] $*" >&2
+  echo "[redevplugin-stage:$stage_phase] $*" >&2
   exit 1
 }
 
@@ -76,33 +83,15 @@ if [[ "$self_test" -eq 1 ]]; then
     "$SCRIPT_DIR/redevplugin_release_contract.test.mjs" \
     "$SCRIPT_DIR/redevplugin_manifest_download.test.mjs" \
     "$SCRIPT_DIR/redevplugin_rust_toolchain.test.mjs" \
+    "$SCRIPT_DIR/redevplugin_build_toolchain.test.mjs" \
     "$SCRIPT_DIR/redevplugin_macos_signature.test.mjs"
 fi
 
 [[ -n "$dest_dir" && -n "$runtime_out" && -n "$goos" && -n "$goarch" ]] || { usage >&2; exit 2; }
 [[ "$profile" == "development" || "$profile" == "release" ]] || die "unsupported build profile: $profile"
 target="$goos/$goarch"
-rust_libc="gnu"
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  # macOS has no Linux libc. Use the musl Rust standard library and Rust LLD
-  # so the resulting Runtime remains a dependency-free static PIE.
-  rust_libc="musl"
-fi
 case "$target" in
-  linux/amd64)
-    rust_target="x86_64-unknown-linux-$rust_libc"
-    ;;
-  linux/arm64)
-    rust_target="aarch64-unknown-linux-$rust_libc"
-    ;;
-  darwin/amd64)
-    [[ "$(uname -s)" == "Darwin" ]] || die "Darwin ReDevPlugin runtime builds require a macOS builder"
-    rust_target="x86_64-apple-darwin"
-    ;;
-  darwin/arm64)
-    [[ "$(uname -s)" == "Darwin" ]] || die "Darwin ReDevPlugin runtime builds require a macOS builder"
-    rust_target="aarch64-apple-darwin"
-    ;;
+  linux/amd64|linux/arm64|darwin/amd64|darwin/arm64) ;;
   *) die "unsupported ReDevPlugin runtime target: $target" ;;
 esac
 
@@ -139,6 +128,8 @@ runtime_out="$runtime_parent/$(basename -- "$runtime_out")"
 
 tmpdir=$(mktemp -d "$dest_parent/.redevplugin-stage.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 tag=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Version}}' github.com/floegence/redevplugin/v3)
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid ReDevPlugin module version: $tag"
 
@@ -158,6 +149,7 @@ if [[ -n "$manifest_file" ]]; then
 else
   # curl's ordinary retry policy excludes TLS handshake errors (exit 35).
   # This is a replayable GET into staging; retry all transfer errors with limits.
+  stage_phase=download_failed
   if ! curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
     --fail --silent --show-error --location \
     --retry 3 --retry-all-errors --retry-max-time 120 \
@@ -167,6 +159,7 @@ else
   then
     die "failed to download ReDevPlugin $tag release manifest after bounded retries; check GitHub connectivity and HTTPS_PROXY, then retry"
   fi
+  stage_phase=validation_failed
   manifest="$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
   version=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; process.stdout.write(JSON.parse(readFileSync(process.argv[1], 'utf8')).platform_version);" "$manifest")
   [[ "v$version" == "$tag" ]] || die "release manifest version does not match Go module version"
@@ -194,15 +187,22 @@ process.stdout.write(artifact.sha256);
 NODE
 )
 
-# Keep Rustup preparation in one owner, before the isolated Cargo build cache.
-toolchain_cargo=$("$SCRIPT_DIR/prepare_redevplugin_rust_toolchain.sh" \
-  --toolchain "$RUST_TOOLCHAIN" \
-  --target "$rust_target")
+stage_phase=toolchain_failed
+# One owner prepares Rust, target C compilation/archiving and a real link probe.
+toolchain_file="$tmpdir/build-toolchain.json"
+node "$SCRIPT_DIR/prepare_redevplugin_build_toolchain.mjs" --goos "$goos" --goarch "$goarch" >"$toolchain_file"
+toolchain_cargo=$(node -p 'require(process.argv[1]).cargo' "$toolchain_file")
+rust_target=$(node -p 'require(process.argv[1]).rust_target' "$toolchain_file")
+toolchain_identity=$(node -p 'require(process.argv[1]).identity' "$toolchain_file")
+build_environment=()
+while IFS= read -r entry; do build_environment+=("$entry"); done < <(node -e '
+  for (const [key,value] of Object.entries(require(process.argv[1]).env)) console.log(`${key}=${value}`);
+' "$toolchain_file")
 toolchain_root=$(cd -- "$(dirname -- "$toolchain_cargo")/.." >/dev/null 2>&1 && pwd -P)
 toolchain_rustc="$toolchain_root/bin/rustc"
-[[ -x "$toolchain_cargo" && -x "$toolchain_rustc" ]] || die "Rust toolchain $RUST_TOOLCHAIN is not installed"
 cargo_version=$("$toolchain_cargo" --version)
 rustc_version=$("$toolchain_rustc" --version)
+stage_phase=validation_failed
 
 # Only development launches opt into a profile-owned Cargo download/build cache.
 # Cargo still installs into a fresh root with --locked, and the crate digest,
@@ -217,7 +217,7 @@ if [[ "$profile" == development && -n "${REDEVEN_REDEVPLUGIN_BUILD_CACHE:-}" ]];
     process.stdout.write(h.digest("hex"));
   ' "$SCRIPT_DIR/stage_redevplugin_release_artifacts.sh" "$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
     "$SCRIPT_DIR/redevplugin-runtime-entitlements.plist" "$SCRIPT_DIR/verify_redevplugin_macos_signature.py" \
-    "$expected_runtime_crate_sha" "$cargo_version" "$rustc_version")
+    "$expected_runtime_crate_sha" "$cargo_version" "$rustc_version" "$toolchain_identity")
   cache_root="$REDEVEN_REDEVPLUGIN_BUILD_CACHE/$RUST_TOOLCHAIN/$rust_target/$cache_key"
   mkdir -p "$cache_root/cargo-home" "$cache_root/target"
   export CARGO_HOME="$cache_root/cargo-home"
@@ -251,29 +251,19 @@ else
   export CARGO_TARGET_DIR="$tmpdir/cargo-target"
 fi
 install_root="$tmpdir/runtime-install"
-rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
-if [[ "$goos" == "linux" ]]; then
-  env \
-    "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C linker=$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
-    PATH="$toolchain_root/bin:$PATH" \
-    CARGO_HOME="$CARGO_HOME" \
-    "$toolchain_cargo" install \
-    --locked \
-    --root "$install_root" \
-    --target "$rust_target" \
-    --version "=$version" \
-    redevplugin-runtime
-else
-  env \
-    PATH="$toolchain_root/bin:$PATH" \
-    CARGO_HOME="$CARGO_HOME" \
-    "$toolchain_cargo" install \
-    --locked \
-    --root "$install_root" \
-    --target "$rust_target" \
-    --version "=$version" \
-    redevplugin-runtime
-fi
+stage_phase=build_failed
+env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS "${build_environment[@]}" \
+  PATH="$toolchain_root/bin:$PATH" CARGO_HOME="$CARGO_HOME" \
+  "$toolchain_cargo" install --locked --root "$install_root" \
+  --target "$rust_target" --version "=$version" redevplugin-runtime 2> >(tee "$tmpdir/build.log" >&2) || {
+    if LC_ALL=C grep -Eq '^error: (failed to download|download of .* failed|failed to get .* as a dependency)' "$tmpdir/build.log"; then
+      echo "[redevplugin-stage:download_failed] Failed to acquire the locked Runtime sources" >&2
+    else
+      echo "[redevplugin-stage:build_failed] Published Runtime source compilation failed" >&2
+    fi
+    exit 1
+  }
+stage_phase=validation_failed
 
 runtime_sources=()
 while IFS= read -r runtime_source; do

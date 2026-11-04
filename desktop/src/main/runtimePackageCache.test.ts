@@ -200,6 +200,10 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     '[ "$check_only" -eq 0 ] || exit 0',
     'GOWORK=off GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "$output" "$command_path"',
   ].join('\n'), { mode: 0o755 });
+  await fs.writeFile(path.join(root, 'scripts', 'redevplugin_build_toolchain.json'), JSON.stringify({
+    rust: '1.98.0', zig: '0.16.0', build_inputs: ['redevplugin_build_toolchain.json', 'prepare_redevplugin_build_toolchain.mjs'],
+  }));
+  await fs.writeFile(path.join(root, 'scripts', 'prepare_redevplugin_build_toolchain.mjs'), "console.log('{}');\n");
   await fs.writeFile(path.join(root, 'scripts', 'stage_redevplugin_release_artifacts.sh'), [
     '#!/usr/bin/env sh',
     'set -eu',
@@ -418,7 +422,7 @@ describe('runtimePackageCache', () => {
       )) as Record<string, string>;
       expect(metadata.source_commit).toBe('unknown');
       expect(metadata.redevplugin_release_tag).toBe('v3.0.31');
-      expect(metadata.rust_toolchain).toBe('1.98.0');
+      expect(metadata.build_toolchain_identity).toMatch(/^[a-f0-9]{64}$/u);
       expect(metadata.archive_sha256).toMatch(/^[a-f0-9]{64}$/u);
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
       expect(buildLog).toMatch(/^assets:/u);
@@ -706,6 +710,67 @@ describe('runtimePackageCache', () => {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
   });
+
+  it.each([
+    ['[redevplugin-toolchain:unavailable] target C compiler unavailable', 'runtime_toolchain_unavailable'],
+    ['[redevplugin-toolchain:download_failed] pinned toolchain download failed', 'runtime_toolchain_download_failed'],
+    ['[redevplugin-stage:build_failed] source compilation failed', 'runtime_source_compile_failed'],
+    ['[redevplugin-stage:validation_failed] invalid ELF', 'runtime_artifact_invalid'],
+  ])('classifies %s before building or touching a target', async (message, code) => {
+    const fixture = await createSourceRuntimeFixture();
+    try {
+      await fs.writeFile(path.join(fixture.root, 'scripts', 'prepare_redevplugin_build_toolchain.mjs'),
+        `console.error(${JSON.stringify(message)}); process.exitCode = 1;`);
+      const error = await preparePackage({ cacheRoot: fixture.cacheRoot, sourceRuntimeRoot: fixture.root,
+        platform: resolveDesktopSSHRemotePlatform('linux', 'x86_64') }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      expect((error as DesktopOperationFailureError).presentation.code).toBe(code);
+      expect((error as DesktopOperationFailureError).presentation.summary_key).toBeTruthy();
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await fs.readFile(fixture.originalDistPath, 'utf8')).toBe('original checkout dist');
+    } finally { await fs.rm(path.dirname(fixture.root), { recursive: true, force: true }); }
+  });
+
+  it('invalidates cached packages when build wrappers change without a source commit', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    try {
+      const args = { cacheRoot: fixture.cacheRoot, sourceRuntimeRoot: fixture.root,
+        platform: resolveDesktopSSHRemotePlatform('linux', 'x86_64') };
+      expect((await preparePackage(args)).source).toBe('source_build');
+      await fs.appendFile(path.join(fixture.root, 'scripts', 'prepare_redevplugin_build_toolchain.mjs'), '// changed toolchain\n');
+      expect((await preparePackage(args)).source).toBe('source_build');
+      expect((await preparePackage(args)).source).toBe('source_build_cache');
+    } finally { await fs.rm(path.dirname(fixture.root), { recursive: true, force: true }); }
+  }, 15_000);
+
+  it('cancels the build process group and waits for descendants before returning', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const controller = new AbortController();
+    const marker = path.join(path.dirname(fixture.root), 'descendant.json');
+    try {
+      await fs.writeFile(path.join(fixture.root, 'scripts', 'prepare_redevplugin_build_toolchain.mjs'), [
+        "import { spawn } from 'node:child_process';",
+        "import { writeFileSync } from 'node:fs';",
+        // A descendant that ignores TERM must still be killed before cancellation settles.
+        `const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'], { stdio: 'inherit' });`,
+        `writeFileSync(${JSON.stringify(marker)}, JSON.stringify({parent:process.pid,child:child.pid}));`,
+        'setInterval(()=>{},1000);',
+      ].join('\n'));
+      const pending = prepareDesktopRuntimeUploadAsset({ runtimeReleaseTag: 'v1.2.3',
+        releaseBaseURL: 'https://mirror.example.invalid/releases', assetCacheRoot: fixture.cacheRoot,
+        sourceRuntimeRoot: fixture.root, platform: resolveDesktopSSHRemotePlatform('linux', 'x86_64'),
+        fetchPolicy: runtimeReleaseFetchPolicy(45_000), signal: controller.signal });
+      const observed = pending.catch((error: unknown) => error);
+      await vi.waitFor(async () => expect(await fs.readFile(marker, 'utf8')).toContain('child'), { timeout: 5_000 });
+      const pids = JSON.parse(await fs.readFile(marker, 'utf8')) as { parent: number; child: number };
+      controller.abort();
+      expect(await observed).toMatchObject({ name: 'AbortError' });
+      await vi.waitFor(() => {
+        for (const pid of [pids.parent, pids.child]) expect(() => process.kill(pid, 0)).toThrow();
+      }, { timeout: 5_000 });
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally { controller.abort(); await fs.rm(path.dirname(fixture.root), { recursive: true, force: true }); }
+  }, 15_000);
 
   it('does not copy unrelated worktrees or native build caches into Gateway source builds', async () => {
     const fixture = await createSourceRuntimeFixture();

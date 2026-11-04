@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "rust": "1.98.0",
+  "zig": "0.16.0",
+  "zig_archives": {
+    "darwin/arm64": {
+      "name": "zig-aarch64-macos-0.16.0.tar.xz",
+      "sha256": "b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489"
+    },
+    "darwin/x64": {
+      "name": "zig-x86_64-macos-0.16.0.tar.xz",
+      "sha256": "0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7"
+    },
+    "linux/arm64": {
+      "name": "zig-aarch64-linux-0.16.0.tar.xz",
+      "sha256": "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17"
+    },
+    "linux/x64": {
+      "name": "zig-x86_64-linux-0.16.0.tar.xz",
+      "sha256": "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
+    }
+  },
+  "build_inputs": [
+    "redevplugin_build_toolchain.json",
+    "prepare_redevplugin_build_toolchain.mjs",
+    "prepare_redevplugin_rust_toolchain.sh",
+    "link_redevplugin_runtime_static_pie.sh",
+    "stage_redevplugin_release_artifacts.sh",
+    "redevplugin-runtime-entitlements.plist",
+    "verify_redevplugin_macos_signature.py",
+    "redevplugin_target_cc.sh",
+    "redevplugin_release_contract.mjs"
+  ]
+}

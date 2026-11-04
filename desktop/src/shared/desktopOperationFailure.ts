@@ -18,6 +18,10 @@ export type DesktopFailureCode =
   | 'container_runtime_stop_failed'
   | 'gateway_package_prepare_failed'
   | 'runtime_package_prepare_failed'
+  | 'runtime_toolchain_unavailable'
+  | 'runtime_toolchain_download_failed'
+  | 'runtime_source_compile_failed'
+  | 'runtime_artifact_invalid'
   | 'redevplugin_release_asset_forbidden'
   | 'redevplugin_release_asset_unavailable'
   | 'redevplugin_release_asset_timeout'
@@ -86,6 +90,10 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'container_runtime_stop_failed':
     case 'gateway_package_prepare_failed':
     case 'runtime_package_prepare_failed':
+    case 'runtime_toolchain_unavailable':
+    case 'runtime_toolchain_download_failed':
+    case 'runtime_source_compile_failed':
+    case 'runtime_artifact_invalid':
     case 'redevplugin_release_asset_forbidden':
     case 'redevplugin_release_asset_unavailable':
     case 'redevplugin_release_asset_timeout':

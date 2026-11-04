@@ -1,0 +1,34 @@
+---
+type: Runtime Build Contract
+title: ReDevPlugin target build toolchain
+tags: [plugins, desktop, runtime, packaging]
+lifecycle: contract
+reviewed_at: "2026-11-04"
+---
+# Summary
+
+Redeven prepares target C compilation and archiving alongside Rust before building the exact published ReDevPlugin source crate. macOS builds Linux static PIE with pinned Zig and the existing Rust LLD wrapper. This is product packaging ownership; it introduces no alternate plugin executor or upstream source dependency.
+
+# Contract
+
+`scripts/redevplugin_build_toolchain.json` pins Rust 1.98.0, Zig 0.16.0, official archive checksums and build-input files. The unified preparer selects the actual builder and requested target, prepares Rust, downloads Zig only when missing with HTTPS/checksum/bounded retries, then compiles C, archives it, links it into a Rust program and validates the resulting executable. Darwin native uses Apple tools; Linux native uses its C compiler and static libraries. A failed probe prevents costly package compilation.
+
+macOS maps Linux amd64/arm64 to x86_64/aarch64 musl. Target-specific cc-rs CC/AR settings use private wrappers; the CC wrapper removes only the exact Rust triple injected by cc-rs, supplies Zig's target, PIC and disables Zig's implicit undefined-behavior instrumentation. Rust LLD remains responsible for static PIE; existing ELF architecture, interpreter and dynamic dependency rejection stay authoritative. No ambient target GCC or installed PATH Zig is assumed.
+
+Desktop preflights before copying source or building UI/Go. Staging independently invokes the same owner. Development Cargo identity binds exact published crate digest, compiler versions, Zig archive/binary, target flags, wrapper and validation inputs. Desktop package-cache v2 binds host, target, input inventory, release manifest and source identity; older disposable entries rebuild. `REDEVEN_REDEVPLUGIN_TOOLCHAIN_CACHE` selects an absolute tool cache; `REDEVEN_TOOLCHAIN_OFFLINE=1` requires cached tools. Rust's narrower offline setting remains available.
+
+Preparation distinguishes unavailable tools/cache, network acquisition, source compilation and artifact validation. Shipped locales provide the concise summaries; diagnostics retain original output. Compiler errors never trigger a network retry. Cancellation/timeout terminates the task-owned command group, escalates after two seconds, waits for close and cleans temporary state. Target replacement begins only after a complete package is prepared. Helper/package uploads use the existing bounded transfer budget rather than the short command budget. Checksums, signed release consumption, SBOM, provenance and product signing remain required.
+
+# Evidence
+
+November 4, 2026: macOS ARM64 builds published 3.15.0 for both Linux targets and verifies static PIE/no dynamic dependencies, signature and product evidence. First/cache runs take amd64 116/6 seconds and arm64 109/5 seconds on the recorded candidate. Real target Worker I/O passes on native x86_64 Linux and arm64 Docker Linux, including 64 MiB FS/HTTP and WS/TCP/UDP. Published cancellation/isolation correctness passes on both and hardened Darwin; these are functional tests without performance gate thresholds.
+
+Desktop's real main-process update function prepares source packages through the affected staging script and completes install/start/final process verification on arm64 Docker and native amd64 Linux through SSH. The harness imports production modules without mocks; it does not claim a native GUI click qualification. Offline tool absence, refused downloads and user cancellation preserve installed bytes/process inventory and leave no temporary tool directories.
+
+Keep adverse evidence: amd64 architecture emulation fails containment and final process inventory, so it is not a native acceptance substitute. Published 3.15.0 still returns a duplicate TCP-close error during live revocation even though resources close and pending work rejects. That pre-existing upstream failure remains unaccepted; the cross-compiler repair neither masks it nor consumes unpublished fixes. The prior [qualification](redevplugin-performance-qualification.md) records that separate issue.
+
+# References
+
+- `redeven:scripts/prepare_redevplugin_build_toolchain.mjs:1`
+- `redeven:scripts/redevplugin_build_toolchain.test.mjs:1`
+- `redeven:desktop/src/main/runtimePackageCache.test.ts:1`

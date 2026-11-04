@@ -67,14 +67,14 @@ type LocalCommandResult = Readonly<{
 }>;
 
 type DesktopSourceRuntimePackageCacheEntry = Readonly<{
-  schema_version: 'redeven.desktop_source_runtime_package_cache.v1';
+  schema_version: 'redeven.desktop_source_runtime_package_cache.v2';
   source_root: string;
   source_commit: string;
   package_kind: DesktopSSHReleasePackageKind;
   runtime_release_tag: string;
   redevplugin_release_tag: string;
   platform_id: string;
-  rust_toolchain: string;
+  build_toolchain_identity: string;
   manifest_digest: string;
   archive_sha256: string;
 }>;
@@ -119,7 +119,6 @@ function releaseAssetInFlightKey(sourceCacheKey: string, releaseTag: string, pla
 }
 
 const REDEVPLUGIN_RUNTIME_MANIFEST = 'platform-release-manifest.json';
-const REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN = '1.98.0';
 const SOURCE_RUNTIME_CACHE_DIR = 'source-build-cache';
 const REDEVPLUGIN_MANIFEST_CACHE_DIR = 'redevplugin-manifests';
 
@@ -131,6 +130,19 @@ function digestBuffer(value: Buffer): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+async function sourceBuildToolchainIdentity(sourceRoot: string): Promise<string> {
+  const configPath = path.join(sourceRoot, 'scripts', 'redevplugin_build_toolchain.json');
+  const configData = await fs.readFile(configPath);
+  const config = JSON.parse(configData.toString('utf8')) as { build_inputs: string[] };
+  if (!Array.isArray(config.build_inputs) || !config.build_inputs.length
+    || config.build_inputs.some((file) => path.basename(file) !== file)) {
+    throw new Error('Invalid Runtime build toolchain input inventory.');
+  }
+  const hash = createHash('sha256').update(`${os.platform()}/${os.arch()}`);
+  for (const file of config.build_inputs) hash.update(file).update(await fs.readFile(path.join(sourceRoot, 'scripts', file)));
+  return hash.digest('hex');
+}
+
 function sourceRuntimeCacheKey(args: Readonly<{
   sourceRoot: string;
   sourceCommit: string;
@@ -139,6 +151,7 @@ function sourceRuntimeCacheKey(args: Readonly<{
   platformID: string;
   packageKind: DesktopSSHReleasePackageKind;
   manifestDigest: string;
+  buildToolchainIdentity: string;
 }>): string {
   return digestText(JSON.stringify({
     source_root: args.sourceRoot,
@@ -147,7 +160,7 @@ function sourceRuntimeCacheKey(args: Readonly<{
     redevplugin_release_tag: args.redevpluginReleaseTag,
     platform_id: args.platformID,
     package_kind: args.packageKind,
-    rust_toolchain: REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN,
+    build_toolchain_identity: args.buildToolchainIdentity,
     manifest_digest: args.manifestDigest,
   }));
 }
@@ -266,30 +279,45 @@ async function runLocalCommand(
 ): Promise<LocalCommandResult> {
   throwIfCanceled(options.signal);
   return new Promise<LocalCommandResult>((resolve, reject) => {
+    const processGroup = process.platform !== 'win32';
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: sanitizeDesktopChildEnvironment({
-        ...process.env,
-        ...options.env,
-      }),
+      env: sanitizeDesktopChildEnvironment({ ...process.env, ...options.env }),
       stdio: ['ignore', 'pipe', 'pipe'],
-      signal: options.signal,
+      detached: processGroup,
     });
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let timedOut = false;
+    let killTimeout: ReturnType<typeof setTimeout> | undefined;
+    const terminate = (signal: NodeJS.Signals): void => {
+      if (!child.pid) return;
+      try {
+        if (processGroup) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    };
+    const stop = (): void => {
+      if (settled || killTimeout) return;
+      terminate('SIGTERM');
+      killTimeout = setTimeout(() => terminate('SIGKILL'), 2_000);
+    };
+    const abort = (): void => stop();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    // Recheck after listener registration to close the spawn/abort race.
+    if (options.signal?.aborted) stop();
     const timeoutMs = Number(options.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS);
     const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
-      ? setTimeout(() => {
-          if (settled) return;
-          child.kill('SIGTERM');
-          settled = true;
-          const details = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
-          reject(new Error(details
-            ? `${command} timed out after ${Math.floor(timeoutMs)} ms:\n${details}`
-            : `${command} timed out after ${Math.floor(timeoutMs)} ms`));
-        }, timeoutMs)
+      ? setTimeout(() => { timedOut = true; stop(); }, timeoutMs)
       : undefined;
+    const cleanup = (): void => {
+      if (timeout) clearTimeout(timeout);
+      if (killTimeout) clearTimeout(killTimeout);
+      options.signal?.removeEventListener('abort', abort);
+    };
 
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
@@ -302,7 +330,7 @@ async function runLocalCommand(
     child.once('error', (error) => {
       if (settled) return;
       settled = true;
-      if (timeout) clearTimeout(timeout);
+      cleanup();
       if (isAbortError(error) || options.signal?.aborted) {
         reject(new DOMException('Runtime package preparation was canceled.', 'AbortError'));
         return;
@@ -311,10 +339,15 @@ async function runLocalCommand(
     });
     child.once('close', (exitCode, signal) => {
       if (settled) return;
+      if (killTimeout) terminate('SIGKILL');
       settled = true;
-      if (timeout) clearTimeout(timeout);
+      cleanup();
       if (options.signal?.aborted) {
         reject(new DOMException('Runtime package preparation was canceled.', 'AbortError'));
+        return;
+      }
+      if (timedOut) {
+        reject(new Error(`${command} timed out after ${Math.floor(timeoutMs)} ms:\n${[stdout.trim(), stderr.trim()].filter(Boolean).join('\n')}`));
         return;
       }
       if (exitCode === 0 && !signal) {
@@ -478,6 +511,7 @@ async function buildSourceRuntimeBinary(args: Readonly<{
 
 async function stageSourceRuntimeCompanions(args: Readonly<{
   sourceRoot: string;
+  cacheRoot: string;
   outputRoot: string;
   platform: DesktopSSHRemotePlatform;
   manifestPath: string;
@@ -496,6 +530,10 @@ async function stageSourceRuntimeCompanions(args: Readonly<{
     '--runtime-out', path.join(args.outputRoot, 'redevplugin-runtime'),
   ], {
     cwd: args.sourceRoot,
+    env: {
+      REDEVEN_REDEVPLUGIN_TOOLCHAIN_CACHE: path.join(args.cacheRoot, 'build-toolchains'),
+      REDEVEN_REDEVPLUGIN_BUILD_CACHE: path.join(args.cacheRoot, 'build-cache'),
+    },
     signal: args.signal,
     timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
   });
@@ -615,6 +653,7 @@ async function readSourceRuntimeCache(args: Readonly<{
   packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
   manifestDigest: string;
+  buildToolchainIdentity: string;
 }>): Promise<DesktopRuntimeUploadAsset | null> {
   const paths = sourceRuntimeCachePaths(args.cacheRoot, args.key);
   const [metadataData, archiveData] = await Promise.all([
@@ -624,14 +663,14 @@ async function readSourceRuntimeCache(args: Readonly<{
   if (!metadataData || !archiveData) return null;
   try {
     const metadata = JSON.parse(metadataData.toString('utf8')) as DesktopSourceRuntimePackageCacheEntry;
-    if (metadata.schema_version !== 'redeven.desktop_source_runtime_package_cache.v1'
+    if (metadata.schema_version !== 'redeven.desktop_source_runtime_package_cache.v2'
       || metadata.source_root !== args.sourceRoot
       || metadata.source_commit !== args.sourceCommit
       || metadata.package_kind !== args.packageKind
       || metadata.runtime_release_tag !== args.runtimeReleaseTag
       || metadata.redevplugin_release_tag !== args.redevpluginReleaseTag
       || metadata.platform_id !== args.platform.platform_id
-      || metadata.rust_toolchain !== REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN
+      || metadata.build_toolchain_identity !== args.buildToolchainIdentity
       || metadata.manifest_digest !== args.manifestDigest
       || metadata.archive_sha256 !== digestBuffer(archiveData)) {
       return null;
@@ -655,6 +694,7 @@ async function findSourceRuntimeCache(args: Readonly<{
   redevpluginReleaseTag: string;
   packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
+  buildToolchainIdentity: string;
 }>): Promise<DesktopRuntimeUploadAsset | null> {
   const root = path.join(args.cacheRoot, SOURCE_RUNTIME_CACHE_DIR);
   const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [] as Dirent[]);
@@ -667,14 +707,14 @@ async function findSourceRuntimeCache(args: Readonly<{
     if (!metadataData || !archiveData) continue;
     try {
       const metadata = JSON.parse(metadataData.toString('utf8')) as DesktopSourceRuntimePackageCacheEntry;
-      if (metadata.schema_version !== 'redeven.desktop_source_runtime_package_cache.v1'
+      if (metadata.schema_version !== 'redeven.desktop_source_runtime_package_cache.v2'
         || metadata.source_root !== args.sourceRoot
         || metadata.source_commit !== args.sourceCommit
         || metadata.runtime_release_tag !== args.runtimeReleaseTag
         || metadata.redevplugin_release_tag !== args.redevpluginReleaseTag
         || metadata.package_kind !== args.packageKind
         || metadata.platform_id !== args.platform.platform_id
-        || metadata.rust_toolchain !== REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN
+        || metadata.build_toolchain_identity !== args.buildToolchainIdentity
         || metadata.archive_sha256 !== digestBuffer(archiveData)) continue;
       if (sourceRuntimeCacheKey({
         sourceRoot: metadata.source_root,
@@ -684,6 +724,7 @@ async function findSourceRuntimeCache(args: Readonly<{
         platformID: metadata.platform_id,
         packageKind: metadata.package_kind,
         manifestDigest: metadata.manifest_digest,
+        buildToolchainIdentity: args.buildToolchainIdentity,
       }) !== entry.name) continue;
       validateRuntimePackageArchive(archiveData, args);
       return { archiveData, cacheEntry: null, source: 'source_build_cache' };
@@ -704,19 +745,20 @@ async function writeSourceRuntimeCache(args: Readonly<{
   packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
   manifestDigest: string;
+  buildToolchainIdentity: string;
   archiveData: Buffer;
 }>): Promise<void> {
   validateRuntimePackageArchive(args.archiveData, args);
   const paths = sourceRuntimeCachePaths(args.cacheRoot, args.key);
   const metadata: DesktopSourceRuntimePackageCacheEntry = {
-    schema_version: 'redeven.desktop_source_runtime_package_cache.v1',
+    schema_version: 'redeven.desktop_source_runtime_package_cache.v2',
     source_root: args.sourceRoot,
     source_commit: args.sourceCommit,
     package_kind: args.packageKind,
     runtime_release_tag: args.runtimeReleaseTag,
     redevplugin_release_tag: args.redevpluginReleaseTag,
     platform_id: args.platform.platform_id,
-    rust_toolchain: REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN,
+    build_toolchain_identity: args.buildToolchainIdentity,
     manifest_digest: args.manifestDigest,
     archive_sha256: digestBuffer(args.archiveData),
   };
@@ -783,6 +825,17 @@ function runtimePackagePreparationFailure(
     });
   }
   const message = error instanceof Error ? error.message : String(error);
+  const toolchainFailure = /\[redevplugin-toolchain:([a-z_]+)\]/u.exec(message)?.[1];
+  const stageFailure = /\[redevplugin-stage:([a-z_]+)\]/u.exec(message)?.[1];
+  const buildFailure = toolchainFailure === 'download_failed' || stageFailure === 'download_failed'
+    ? { code: 'runtime_toolchain_download_failed', summaryKey: 'progress.runtimeToolchainDownloadFailedSummary', summary: 'Desktop could not download the required Runtime build inputs.' }
+    : toolchainFailure
+      ? { code: 'runtime_toolchain_unavailable', summaryKey: 'progress.runtimeToolchainUnavailableSummary', summary: 'The target C and Rust build toolchain is not ready.' }
+      : stageFailure === 'build_failed'
+        ? { code: 'runtime_source_compile_failed', summaryKey: 'progress.runtimeSourceCompileFailedSummary', summary: 'The published Runtime source could not be compiled.' }
+        : stageFailure === 'validation_failed'
+          ? { code: 'runtime_artifact_invalid', summaryKey: 'progress.runtimeArtifactInvalidSummary', summary: 'The prepared Runtime artifact did not pass verification.' }
+          : undefined;
   const isGateway = packageKind === 'gateway';
   return new DesktopOperationFailureError(desktopOperationFailurePresentation({
     code: isGateway ? 'gateway_package_prepare_failed' : 'runtime_package_prepare_failed',
@@ -794,6 +847,11 @@ function runtimePackagePreparationFailure(
       recoveryHintKey: 'progress.runtimePackagePrepareFailedRecoveryHint' as const,
     }),
     summary: `Desktop could not prepare the ${platform.platform_label} ${isGateway ? 'Redeven Gateway' : 'Redeven runtime'} package.`,
+    ...(buildFailure && !isGateway ? {
+      code: buildFailure.code as 'runtime_toolchain_unavailable' | 'runtime_toolchain_download_failed' | 'runtime_source_compile_failed' | 'runtime_artifact_invalid',
+      summaryKey: buildFailure.summaryKey as 'progress.runtimeToolchainUnavailableSummary' | 'progress.runtimeToolchainDownloadFailedSummary' | 'progress.runtimeSourceCompileFailedSummary' | 'progress.runtimeArtifactInvalidSummary',
+      summary: buildFailure.summary,
+    } : {}),
     detail: `Package preparation failed before Desktop changed the target environment.`,
     recoveryHint: `Check the local package build and retry the ${isGateway ? 'Gateway service' : 'runtime lifecycle'} action.`,
     diagnostics: [{
@@ -809,6 +867,7 @@ function runtimePackagePreparationFailure(
 
 async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   sourceRuntimeRoot: string;
+  cacheRoot: string;
   sourceCommit: string;
   runtimeReleaseTag: string;
   manifestPath?: string;
@@ -825,6 +884,13 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
     throw new Error(`Desktop ${args.packageKind} source root is not a Redeven checkout: ${sourceRoot}`);
   }
   await checkSourceRuntimeCompiler(sourceRoot, args.platform, args.signal);
+  if (args.packageKind === 'runtime') {
+    await runLocalCommand('node', [
+      path.join(sourceRoot, 'scripts', 'prepare_redevplugin_build_toolchain.mjs'),
+      '--goos', args.platform.goos, '--goarch', args.platform.goarch,
+      '--cache-root', path.join(args.cacheRoot, 'build-toolchains'),
+    ], { cwd: sourceRoot, signal: args.signal, timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS });
+  }
 
   const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), `redeven-source-${args.packageKind}-`));
   try {
@@ -850,6 +916,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
       await fs.mkdir(suiteRoot, { recursive: true });
       await stageSourceRuntimeCompanions({
         sourceRoot,
+        cacheRoot: args.cacheRoot,
         outputRoot: suiteRoot,
         platform: args.platform,
         manifestPath: args.manifestPath ?? (() => { throw new Error('ReDevPlugin release manifest is required for a Linux Runtime build.'); })(),
@@ -908,6 +975,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
   const sourceRoot = normalizeSourceRuntimeRoot(requestedSourceRoot);
   const sourceCommit = await readSourceRuntimeCommit(sourceRoot, args.signal);
   const manifestDigest = args.manifestDigest ?? 'none';
+  const buildToolchainIdentity = args.packageKind === 'runtime' ? await sourceBuildToolchainIdentity(sourceRoot) : 'none';
   const key = sourceRuntimeCacheKey({
     sourceRoot,
     sourceCommit,
@@ -916,7 +984,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     platformID: args.platform.platform_id,
     packageKind: args.packageKind,
     manifestDigest,
-  });
+    buildToolchainIdentity,  });
   const cacheArgs = {
     cacheRoot: args.cacheRoot,
     key,
@@ -927,7 +995,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     packageKind: args.packageKind,
     platform: args.platform,
     manifestDigest,
-  } as const;
+    buildToolchainIdentity,  } as const;
   const cached = await readSourceRuntimeCache(cacheArgs);
   if (cached) return cached;
 
@@ -936,6 +1004,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     if (cachedInside) return cachedInside;
     const built = await prepareSourceRuntimeUploadAsset({
       sourceRuntimeRoot: sourceRoot,
+      cacheRoot: args.cacheRoot,
       sourceCommit,
       runtimeReleaseTag: args.runtimeReleaseTag,
       manifestPath: args.manifestPath,
@@ -1175,6 +1244,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
         cacheRoot: args.assetCacheRoot,
         sourceRoot: normalizedSourceRoot,
         sourceCommit,
+        buildToolchainIdentity: await sourceBuildToolchainIdentity(normalizedSourceRoot),
         runtimeReleaseTag,
         redevpluginReleaseTag,
         packageKind,
@@ -1231,6 +1301,9 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
       source: 'release_cache',
     };
   } catch (error) {
+    if (isAbortError(error) || args.signal?.aborted) {
+      throw new DOMException('Runtime package preparation was canceled.', 'AbortError');
+    }
     if (compact(args.sourceRuntimeRoot) !== '') {
       throw runtimePackagePreparationFailure(error, args.platform, packageKind);
     }

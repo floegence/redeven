@@ -39,6 +39,7 @@ import {
 } from './runtimeProcessInventory';
 import { type StartupReport } from './startup';
 import {
+  DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
   createWSLRuntimeHostExecutor,
@@ -215,7 +216,7 @@ export async function openContainerRuntimeProcessSession(
         engine: args.placement.container_engine,
         container_id: args.placement.container_id,
       }),
-      { stdinData: args.helper_archive, signal: args.signal },
+      { stdinData: args.helper_archive, signal: args.signal, timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
     );
     helperBinary = compact(staged.stdout.split(/\r?\n/u).filter(Boolean).at(-1));
     if (helperBinary === '') {
@@ -685,6 +686,7 @@ export async function ensureRuntimePlacementReady(
         {
           stdinData: preparedRuntimeAsset.archiveData,
           signal: args.signal,
+          timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
         },
       );
       probe = await probeContainerRuntime(executor, placement, runtimeReleaseTag, args.signal);

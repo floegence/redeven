@@ -29,3 +29,5 @@ Concepts own current contracts and original qualification outcomes; Git retains 
 - 2026-11-03: Bind browser content to sampled source metadata, carry scoped
   lifecycle evidence, complete explicit readonly invalidation and wait publication
   contracts, and consume Floret Activity source fidelity with visible transformations.
+
+- 2026-11-04: [ReDevPlugin target build toolchain](operations/redevplugin-cross-build.md) prepares pinned cross-C tools, verifies real static PIE linkage and qualifies Desktop source updates, cancellation and cache identity while retaining known upstream revocation failures.

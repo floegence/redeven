@@ -25,12 +25,12 @@ function fixture(t) {
   function run(profile, index, options = {}) {
     const staging = path.join(root, 'stage-' + index); mkdirSync(staging);
     const script = path.join(root, 'run.sh');
-    writeFileSync(script, 'set -euo pipefail\ndie() { echo "$*" >&2; exit 1; }\n' + source.slice(start, end));
+    writeFileSync(script, 'set -euo pipefail\nbuild_environment=(FIXTURE_BUILD=1)\ndie() { echo "$*" >&2; exit 1; }\n' + source.slice(start, end));
     const result = spawnSync('bash', [script], { encoding: 'utf8', env: {
       ...process.env, profile, tmpdir: staging, REDEVEN_REDEVPLUGIN_BUILD_CACHE: path.join(root, 'persistent'),
       RUST_TOOLCHAIN: '1.98.0', rust_target: 'aarch64-apple-darwin', goos: 'darwin', version: '3.0.36',
       SCRIPT_DIR: scripts, expected_runtime_crate_sha: createHash('sha256').update('published crate').digest('hex'), cargo_version: 'cargo 1.98.0', rustc_version: 'rustc 1.98.0',
-      toolchain_root: path.join(root, 'toolchain'), toolchain_cargo: cargo, FIXTURE_CALLS: path.join(root, 'calls'),
+      toolchain_identity: options.identity ?? 'toolchain-one', toolchain_root: path.join(root, 'toolchain'), toolchain_cargo: cargo, FIXTURE_CALLS: path.join(root, 'calls'),
       CARGO_TARGET_DIR: path.join(root, 'unrelated'),
       CARGO_NET_OFFLINE: '', FIXTURE_MISSING: options.missing ? '1' : '',
     } });
@@ -91,4 +91,11 @@ test('changing runtime entitlements or signed-output verification invalidates th
   writeFileSync(verifier, readFileSync(verifier, 'utf8') + '\n# changed signed-output validation\n');
   const changedVerifier = f.run('development', 3);
   assert.notEqual(changedVerifier[0], changedProfile[0]);
+});
+
+ test('changing target C toolchain identity invalidates Cargo artifacts', t => {
+  const f = fixture(t);
+  const first = f.run('development', 1);
+  const second = f.run('development', 2, { identity: 'toolchain-two' });
+  assert.notEqual(first[0], second[0]);
 });
