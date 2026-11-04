@@ -3535,7 +3535,6 @@
   --flower-reader-meta: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   --flower-content-link: color-mix(in srgb, var(--info) 78%, var(--foreground) 22%);
   --flower-content-link-hover: color-mix(in srgb, var(--info) 60%, var(--foreground) 40%);
-  --flower-reader-code: color-mix(in srgb, var(--inline-code-foreground) 82%, var(--foreground) 18%);
   color: var(--foreground);
 }
 
@@ -5325,17 +5324,6 @@ button.flower-composer-context-source:focus-visible,
   box-decoration-break: clone;
 }
 
-.flower-message-bubble-assistant .flower-chat-md-inline-code {
-  color: var(--flower-reader-code);
-  font-size: 0.91em;
-  font-weight: 400;
-}
-
-.flower-message-bubble-assistant .flower-chat-md-inline-code::selection {
-  background: var(--flower-reader-code);
-  color: var(--inline-code-background);
-}
-
 .flower-message-bubble-assistant .flower-chat-md-link .flower-chat-md-inline-code {
   color: inherit;
 }
@@ -5367,7 +5355,6 @@ button.flower-composer-context-source:focus-visible,
   --flower-reader-meta: var(--foreground);
   --flower-content-link: var(--info);
   --flower-content-link-hover: var(--info);
-  --flower-reader-code: var(--inline-code-foreground);
 }
 
 :root[data-floe-shell-theme='hc-light'] .flower-message-bubble-assistant .flower-chat-md-link {
@@ -5399,10 +5386,6 @@ button.flower-composer-context-source:focus-visible,
   padding: 0.5rem 0.75rem;
   text-align: left;
   vertical-align: top;
-}
-
-.flower-message-bubble-assistant .flower-chat-md-block :is(th, td) .flower-chat-md-inline-code {
-  font-size: 0.96em;
 }
 
 .flower-chat-md-block th {
@@ -5522,7 +5505,6 @@ button.flower-composer-context-source:focus-visible,
     --flower-reader-meta: CanvasText;
     --flower-content-link: LinkText;
     --flower-content-link-hover: LinkText;
-    --flower-reader-code: CanvasText;
     color: CanvasText;
   }
 

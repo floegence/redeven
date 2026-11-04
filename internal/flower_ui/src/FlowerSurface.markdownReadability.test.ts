@@ -75,10 +75,8 @@ describe('Flower markdown readability', () => {
     expect(inlineCodeRule).toContain('font-family: var(--flower-chat-md-code-font)');
     expect(inlineCodeRule).toContain('font-size: 0.96em');
     expect(inlineCodeRule).toContain('font-weight: 500');
-    const assistantCodeRule = cssRule(css, '.flower-message-bubble-assistant .flower-chat-md-inline-code');
-    expect(assistantCodeRule).toContain('color: var(--flower-reader-code)');
-    expect(assistantCodeRule).toContain('font-size: 0.91em');
-    expect(assistantCodeRule).toContain('font-weight: 400');
+    expect(css).not.toContain('--flower-reader-code');
+    expect(css).not.toContain('font-size: 0.91em');
     expect(codeBlockRule).toContain('font-family: var(--flower-chat-md-code-font)');
     expect(codeBlockRule).toContain('font-size: 0.875em');
     expect(codeBlockRule).toContain('line-height: 1.65');

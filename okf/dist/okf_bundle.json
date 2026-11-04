@@ -12891,7 +12891,7 @@
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.87.2 (Env App Core v0.87.2), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "body": "Pins: Floe Boot/Core/Protocol v0.87.4 (Env App Core v0.87.4), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
           "char_count": 1331
         },
         {
@@ -26654,7 +26654,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "ai",
           "citations",
@@ -26664,7 +26664,7 @@
         "title": "Flower citations",
         "type": "UI Contract"
       },
-      "body_length": 2463,
+      "body_length": 3072,
       "summary": "Floret stores assistant sources with end-exclusive Unicode code-point ranges. Flower renders titled links and removes provider markers on Copy. Only safe credential-free HTTP(S) URLs link; marker IDs imply no URL. Historical gaps stay explicit and authored bibliographies remain content.",
       "sections": [
         {
@@ -26678,8 +26678,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Published Floe Markdown parsing owns GFM syntax with CJK-aware emphasis boundaries for completed and streamed text. Display parsing never writes back to canonical messages or provider cache input. New messages preserve complete sources; old records lacking sources remain readable without rewriting historical data.\n\n## Inline-code references\nInline Markdown code derives from the published Floe `--inline-code-foreground` and `--inline-code-background` pair.\n\nFenced code, copy behavior and canonical content remain independent.\n\nTheme changes preserve focus, selection, DOM and geometry; see [message appearance](flower-message-appearance.md).\n\n## Source-card presentation\nSources start collapsed, showing the count and a deduplicated stack of up to four website icons plus an overflow count. Sources never expose their own copy button. Inline citations retain their existing links.\n\n## Website icons\nThe shared Flower UI bundles 27 common website marks from pinned theSVG assets with audited per-icon licenses. Icon enhancement runs independently after Markdown rendering; collapse/expand never restarts it.\n\nThe renderer receives image bytes, never a third-party tracking URL.\n\n## Authored bibliography\nAssistant Markdown can already contain an explicit bibliography inside an unlabelled, `text` or `plaintext` fence. This is display-only authored content: it neither fabricates canonical source annotations nor binds numeric prose references to provider metadata. User messages and fetched external Markdown do not enable this assistant-specific presentation.",
-          "char_count": 1564
+          "body": "Published Floe Markdown parsing owns GFM syntax with CJK-aware emphasis boundaries for completed and streamed text. Display parsing never writes back to canonical messages or provider cache input. New messages preserve complete sources; old records lacking sources remain readable without rewriting historical data.\n\n## Inline-code references\nInline Markdown code consumes the published Floe `--inline-code-foreground` and `--inline-code-background` pair directly, without desaturating assistant references. Prose and table references use `0.96em` and medium weight so compact identifiers remain readable beside CJK text. Linked references retain navigation affordances.\n\nPorcelain Light uses deep burgundy ink on a pale rose inset. Normal and selected code text clear 7:1; the fill stays restrained while separating from the canvas by 1.14–1.2:1. The latter is a product design budget, not a control-boundary accessibility threshold. Acceptance includes dense mixed-language tables, both materials, desktop/narrow widths, native selection and theme-switch continuity.\n\nFenced code, copy behavior and canonical content remain independent.\n\nTheme changes preserve focus, selection, DOM and geometry; see [message appearance](flower-message-appearance.md).\n\n## Source-card presentation\nSources start collapsed, showing the count and a deduplicated stack of up to four website icons plus an overflow count. Sources never expose their own copy button. Inline citations retain their existing links.\n\n## Website icons\nThe shared Flower UI bundles 27 common website marks from pinned theSVG assets with audited per-icon licenses. Icon enhancement runs independently after Markdown rendering; collapse/expand never restarts it.\n\nThe renderer receives image bytes, never a third-party tracking URL.\n\n## Authored bibliography\nAssistant Markdown can already contain an explicit bibliography inside an unlabelled, `text` or `plaintext` fence. This is display-only authored content: it neither fabricates canonical source annotations nor binds numeric prose references to provider metadata. User messages and fetched external Markdown do not enable this assistant-specific presentation.",
+          "char_count": 2173
         }
       ],
       "snippet": "Floret stores assistant sources with end-exclusive Unicode code-point ranges. Flower renders titled links and removes provider markers on Copy. Only safe credential-free HTTP(S) URLs link; marker IDs imply no URL. Historical gaps stay expli",
@@ -32032,5 +32032,5 @@
       ]
     }
   ],
-  "source_sha256": "5155eb2ebad748312ef45ba8ebbd0de1055d38d0b68cc87d56778e0949bb9f53"
+  "source_sha256": "9a3b754c771462c29c47039e4fdbe3cc3336f64d378beae3eaace973cda96d4b"
 }

@@ -3,7 +3,7 @@ import './flower-feature.css';
 
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { render } from 'solid-js/web';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { FlowerAnswerActions } from '../../../../flower_ui/src/FlowerAnswerActions';
 import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
@@ -96,8 +96,8 @@ it('preserves the original compact reading scale for assistant and user bubbles'
   expect(parseFloat(getComputedStyle(user).fontSize)).toBe(14);
   expect(parseFloat(getComputedStyle(user).lineHeight)).toBeCloseTo(24.5);
   const code = assistant.querySelector<HTMLElement>('.flower-chat-md-inline-code')!;
-  expect(parseFloat(getComputedStyle(code).fontSize) / 14).toBeCloseTo(0.91);
-  expect(getComputedStyle(code).fontWeight).toBe('400');
+  expect(parseFloat(getComputedStyle(code).fontSize) / 14).toBeCloseTo(0.96);
+  expect(getComputedStyle(code).fontWeight).toBe('500');
   expect(getComputedStyle(host.querySelector('.flower-answer-time')!).fontSize).toBe('12px');
   expect(assistant.querySelector('strong')!.textContent).toBe('October 18 · PR #54961');
   expect(getComputedStyle(assistant.querySelector('strong')!).fontWeight).toBe('600');
@@ -169,7 +169,7 @@ it.each(['standard', 'soft-neumorphic'])('keeps assistant text readable in every
     }
     probe.style.color = preset.name === 'hc-light' ? 'var(--info)' : 'color-mix(in srgb, var(--info) 78%, var(--foreground) 22%)';
     expect.soft(rgb(getComputedStyle(link).color), label + ': semantic link').toEqual(rgb(getComputedStyle(probe).color));
-    probe.style.color = preset.name === 'hc-light' ? 'var(--inline-code-foreground)' : 'color-mix(in srgb, var(--inline-code-foreground) 82%, var(--foreground) 18%)';
+    probe.style.color = 'var(--inline-code-foreground)';
     expect.soft(rgb(getComputedStyle(code).color), label + ': semantic code').toEqual(rgb(getComputedStyle(probe).color));
     expect.soft(contrast(getComputedStyle(code).color, getComputedStyle(code).backgroundColor), label + ': code').toBeGreaterThanOrEqual(4.5);
     const selected = getComputedStyle(code, '::selection');
@@ -185,6 +185,57 @@ it.each(['standard', 'soft-neumorphic'])('keeps assistant text readable in every
     await userEvent.unhover(link);
   }
 }, 30_000);
+
+it('keeps dense Porcelain references readable and copies the original transcript Markdown', async () => {
+  await page.viewport(1100, 1000);
+  applyTheme(builtInShellThemePresets.find(preset => preset.name === 'porcelain-light')!);
+  const markdown = [
+    '## 复核结论',
+    '目标已复核完毕，浏览器也恢复原状了。',
+    '| 检查项 | 结果 |',
+    '| --- | --- |',
+    '| 数据完整性 | 171 条告警全部取回，状态均为 ' + tick + 'active' + tick + '、未忽略 |',
+    '| 配置真实性 | ' + tick + 'account.example' + tick + ' HSTS off，与告警吻合；' + tick + 'example.com' + tick + ' Always HTTPS 已开启 |',
+    '| 副作用 | 借用的标签页已从 ' + tick + 'file://' + tick + ' 恢复到 Cloudflare 安全中心 |',
+  ].join('\n');
+  const timestamp = Date.parse('2026-11-03T10:00:00Z');
+  const source = thread({ title: 'Domain review', turns: [{
+    turn_id: 'turn-reference', run_id: 'run-reference', started_at: new Date(timestamp - 1000).toISOString(), ended_at: new Date(timestamp).toISOString(),
+    outcome: 'completed', elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: ['reference-answer'], final_boundary_complete: true,
+  }], messages: [{ id: 'reference-answer', turn_id: 'turn-reference', run_id: 'run-reference', role: 'assistant', content: markdown,
+    status: 'complete', created_at_ms: timestamp, blocks: [{ type: 'markdown', content: markdown }] }] });
+  const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  onTestFinished(() => write.mockRestore());
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [source], loadThread: async () => liveBootstrap(source) }, {
+    focusThreadRequest: { request_id: 'reference', thread_id: source.thread_id },
+  });
+  await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="reference-answer"] .flower-answer-actions')));
+  const message = runtime.querySelector<HTMLElement>('[data-flower-message-id="reference-answer"]')!;
+  const references = [...message.querySelectorAll<HTMLElement>('td .flower-chat-md-inline-code')];
+  expect(references.map(node => node.textContent)).toEqual(['active', 'account.example', 'example.com', 'file://']);
+  const { contrast } = colors();
+  for (const node of references) {
+    const style = getComputedStyle(node);
+    expect(contrast(style.color, style.backgroundColor), node.textContent!).toBeGreaterThanOrEqual(7);
+    expect(style.fontWeight).toBe('500');
+    expect(parseFloat(style.fontSize)).toBeGreaterThanOrEqual(12.48);
+    expect(style.opacity).toBe('1');
+  }
+  const code = references[2];
+  const range = document.createRange(); range.selectNodeContents(code);
+  window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+  expect(window.getSelection()!.toString()).toBe('example.com');
+  const geometry = code.getBoundingClientRect().toJSON();
+  applyTheme(builtInShellThemePresets.find(preset => preset.name === 'porcelain-dark')!);
+  applyTheme(builtInShellThemePresets.find(preset => preset.name === 'porcelain-light')!);
+  expect(code.isConnected).toBe(true);
+  expect(code.getBoundingClientRect().toJSON()).toEqual(geometry);
+  expect(window.getSelection()!.toString()).toBe('example.com');
+  window.getSelection()!.removeAllRanges();
+  await userEvent.click(message.querySelector<HTMLButtonElement>('.flower-message-copy-button-assistant')!);
+  expect(write).toHaveBeenCalledWith(markdown);
+  await page.screenshot({ element: runtime, path: '__screenshots__/porcelain-dense-transcript.png' });
+});
 
 it('preserves text, focus, geometry and native selection when the theme changes', async () => {
   await page.viewport(900, 1000);

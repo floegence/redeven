@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower citations
 tags: [ai, flower, markdown, citations]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -18,7 +18,9 @@ Provider/gateway annotations preserve title, URL and optional positions. Floret 
 Published Floe Markdown parsing owns GFM syntax with CJK-aware emphasis boundaries for completed and streamed text. Display parsing never writes back to canonical messages or provider cache input. New messages preserve complete sources; old records lacking sources remain readable without rewriting historical data.
 
 ## Inline-code references
-Inline Markdown code derives from the published Floe `--inline-code-foreground` and `--inline-code-background` pair.
+Inline Markdown code consumes the published Floe `--inline-code-foreground` and `--inline-code-background` pair directly, without desaturating assistant references. Prose and table references use `0.96em` and medium weight so compact identifiers remain readable beside CJK text. Linked references retain navigation affordances.
+
+Porcelain Light uses deep burgundy ink on a pale rose inset. Normal and selected code text clear 7:1; the fill stays restrained while separating from the canvas by 1.14–1.2:1. The latter is a product design budget, not a control-boundary accessibility threshold. Acceptance includes dense mixed-language tables, both materials, desktop/narrow widths, native selection and theme-switch continuity.
 
 Fenced code, copy behavior and canonical content remain independent.
 

@@ -183,7 +183,7 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
   }
 });
 
-it.each(['standard', 'soft-neumorphic'])('renders theme-derived nonpurple references with quiet fills and %s material', async (material) => {
+it.each(['standard', 'soft-neumorphic'])('renders published chromatic references with quiet fills and %s material', async (material) => {
   const host = mount();
   const { rgb, contrast } = colors();
   const assistant = host.querySelector<HTMLElement>('.flower-message-bubble-assistant')!;
@@ -211,7 +211,6 @@ it.each(['standard', 'soft-neumorphic'])('renders theme-derived nonpurple refere
         expect(nodes.length).toBe(3);
         for (const node of nodes) {
           const style = getComputedStyle(node);
-          const assistantReference = Boolean(node.closest('.flower-message-bubble-assistant'));
           const [red, green, blue] = rgb(style.color).slice(0, 3).map(value => value / 255);
           const maximum = Math.max(red, green, blue), minimum = Math.min(red, green, blue);
           const delta = maximum - minimum;
@@ -219,21 +218,19 @@ it.each(['standard', 'soft-neumorphic'])('renders theme-derived nonpurple refere
           const sector = maximum === red ? (green - blue) / delta
             : maximum === green ? (blue - red) / delta + 2 : (red - green) / delta + 4;
           const hue = (sector * 60 + 360) % 360;
-          if (!assistantReference) expect(saturation, label + ': user chromatic emphasis').toBeGreaterThanOrEqual(0.55);
+          expect(saturation, label + ': chromatic emphasis').toBeGreaterThanOrEqual(preset.name === 'porcelain-light' ? 0.25 : 0.55);
           expect(hue < 245 || hue > 330, label + ': avoid purple accents').toBe(true);
           expect(contrast(rgb(style.backgroundColor), rgb(getComputedStyle(document.documentElement).getPropertyValue('--background'))), label + ': quiet fill').toBeLessThan(1.2);
           const probe = document.createElement('span');
-          probe.style.color = assistantReference && preset.name !== 'hc-light'
-            ? 'color-mix(in srgb, var(--inline-code-foreground) 82%, var(--foreground) 18%)'
-            : 'var(--inline-code-foreground)';
+          probe.style.color = 'var(--inline-code-foreground)';
           node.parentElement!.append(probe);
           expect(rgb(style.color), label).toEqual(rgb(getComputedStyle(probe).color));
           probe.remove();
           expect(rgb(style.backgroundColor), label).toEqual(rgb(tokens['--inline-code-background']!));
           expect(style.borderTopWidth, label).toBe('0px');
-          expect(style.fontWeight, label + ': optical emphasis').toBe(assistantReference ? '400' : '500');
+          expect(style.fontWeight, label + ': optical emphasis').toBe('500');
           const bodySize = parseFloat(getComputedStyle(node.closest('.flower-chat-md-block')!).fontSize);
-          expect(parseFloat(style.fontSize) / bodySize, label + ': reference reading size').toBeCloseTo(assistantReference ? 0.91 : 0.96, 2);
+          expect(parseFloat(style.fontSize) / bodySize, label + ': reference reading size').toBeCloseTo(0.96, 2);
           expect(contrast(rgb(style.color), rgb(style.backgroundColor)), label).toBeGreaterThanOrEqual(preset.name === 'hc-light' ? 7 : 4.5);
           const range = document.createRange(); range.selectNodeContents(node);
           const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
@@ -252,14 +249,71 @@ it.each(['standard', 'soft-neumorphic'])('renders theme-derived nonpurple refere
         if (width === 900 && material === 'standard') {
           window.getSelection()!.removeAllRanges();
           await page.screenshot({ element: host, path: '__screenshots__/flower-inline-' + preset.name + '.png' });
-          window.getSelection()!.addRange(retainedRange);
         }
+        window.getSelection()!.removeAllRanges();
+        window.getSelection()!.addRange(retainedRange);
       }
     }
   } finally {
     disposeInline();
   }
 }, 30_000);
+
+it.each(['standard', 'soft-neumorphic'])('keeps compact Porcelain references legible in prose and dense tables with %s material', async (material) => {
+  const preset = builtInShellThemePresets.find(theme => theme.name === 'porcelain-light')!;
+  const host = document.createElement('div');
+  document.body.append(host);
+  const longPath = '/workspace/' + 'nested-reference/'.repeat(12) + 'settings.json';
+  const content = '### 复核结论\n\n确认 `example.com` 与 **Cloudflare** 配置一致。打开 [`域名指南`](https://example.com/guide)。\n\n| 检查项 | 结果 |\n| --- | --- |\n| 数据完整性 | 171 条告警全部取回，状态均为 `active`、未忽略 |\n| 配置真实性 | `account.example` HSTS off，与告警吻合；`example.com` Always HTTPS 已开启 |\n| 副作用 | 借用的标签页已从 `file://` 恢复到 Cloudflare 安全中心 |\n\n检查 `' + longPath + '` 后继续。';
+  dispose = render(() => <div class="flower-chat-shell" style={{ width: 'min(760px, 100%)', padding: '24px' }}>
+    <div class="flower-message-bubble flower-message-bubble-assistant flower-message-bubble-plain">
+      <FlowerMarkdownBlock content={content} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />
+    </div>
+    <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
+      <FlowerMarkdownBlock content={'请检查 `example.com` 和 [`域名指南`](https://example.com/guide)。'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />
+    </div>
+  </div>, host);
+  const { rgb, background, contrast } = colors();
+  for (const width of [900, 640, 320]) {
+    await page.viewport(width, 900);
+    applyTheme(preset, material);
+    document.documentElement.removeAttribute('style');
+    const nodes = [...host.querySelectorAll<HTMLElement>('.flower-chat-md-inline-code')];
+    expect(nodes.length).toBe(9);
+    for (const node of nodes) {
+      const style = getComputedStyle(node);
+      const label = `${material}/${width}/${node.textContent}`;
+      expect.soft(style.fontWeight, label + ': readable strokes').toBe('500');
+      expect.soft(parseFloat(style.fontSize) / parseFloat(getComputedStyle(node.parentElement!).fontSize), label + ': readable size').toBeGreaterThanOrEqual(0.96);
+      expect.soft(contrast(rgb(style.color), background(node)), label + ': text contrast').toBeGreaterThanOrEqual(node.closest('a') ? 4.5 : 7);
+      if (!node.closest('a')) expect.soft(rgb(style.color), label + ': published ink').toEqual(rgb(preset.semanticTokens!['--inline-code-foreground']!));
+      if (node.closest('.flower-message-bubble-assistant')) {
+        const distinction = contrast(rgb(style.backgroundColor), background(node.parentElement));
+        expect.soft(distinction, label + ': distinguishable fill').toBeGreaterThanOrEqual(1.14);
+        expect.soft(distinction, label + ': restrained fill').toBeLessThan(1.2);
+      }
+      const range = document.createRange(); range.selectNodeContents(node);
+      window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+      expect(window.getSelection()!.toString(), label).toBe(node.textContent);
+      const selected = getComputedStyle(node, '::selection');
+      expect.soft(contrast(rgb(selected.color), rgb(selected.backgroundColor)), label + ': selected ink').toBeGreaterThanOrEqual(7);
+    }
+    const retained = nodes.find(node => node.textContent === longPath)!;
+    const range = document.createRange(); range.selectNodeContents(retained);
+    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+    const before = retained.getBoundingClientRect().toJSON();
+    applyTheme(builtInShellThemePresets.find(theme => theme.name === 'paper')!, material);
+    applyTheme(preset, material);
+    document.documentElement.removeAttribute('style');
+    expect(retained.isConnected).toBe(true);
+    expect(window.getSelection()!.toString()).toBe(longPath);
+    expect(retained.getBoundingClientRect().toJSON()).toEqual(before);
+    expect(host.scrollWidth).toBeLessThanOrEqual(width);
+    if (width === 320) expect(retained.getClientRects().length).toBeGreaterThan(1);
+    window.getSelection()!.removeAllRanges();
+    await page.screenshot({ element: host, path: `__screenshots__/porcelain-dense-${material}-${width}.png` });
+  }
+});
 
 it('keeps external pages compact, visibly navigable and keyboard accessible at mobile width', async () => {
   await page.viewport(390, 800);
