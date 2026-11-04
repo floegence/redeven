@@ -379,7 +379,16 @@ func computerWaitFacts(raw any) map[string]any {
 	}
 	out := map[string]any{"requested_state": state}
 	for _, key := range []string{"timeout_ms", "elapsed_ms", "samples"} {
-		n, valid := computerNonnegativeInteger(p[key])
+		value := p[key]
+		// Activity decoding preserves JSON numbers as json.Number.
+		if number, ok := value.(json.Number); ok {
+			parsed, err := number.Float64()
+			if err != nil {
+				return nil
+			}
+			value = parsed
+		}
+		n, valid := computerNonnegativeInteger(value)
 		if !valid || (key == "timeout_ms" && n > 30000) {
 			return nil
 		}

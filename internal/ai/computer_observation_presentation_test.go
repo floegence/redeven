@@ -183,3 +183,38 @@ func TestComputerNarrowReadHasSeparatePresentationFacts(t *testing.T) {
 		t.Fatal("missing scoped read fact")
 	}
 }
+
+func TestComputerObservationPresentationKeepsLifecycleAndReadFacts(t *testing.T) {
+	payload := map[string]any{
+		"invalidation":    map[string]any{"scope": "safety", "event": "Page.frameDetached", "frame_id": "child", "page_text": "not a diagnostic"},
+		"wait":            map[string]any{"requested_state": "visible", "timeout_ms": float64(12000), "elapsed_ms": float64(417), "samples": float64(2), "page_text": "not a diagnostic"},
+		"completed_reads": []any{map[string]any{"operation_index": 0, "action": "text", "scope": "element", "source": "browser_dom", "document_id": "document", "frame_id": "main", "ref": "ref"}},
+	}
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "TARGET_OBSERVATION_UNAVAILABLE", Message: "Read interrupted"}, Data: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := activity.Payload.(fltools.StructuredActivityPayload).Rows
+	for _, key := range []string{"invalidation", "wait", "completed_reads"} {
+		found := false
+		for _, row := range rows {
+			if row.Title != key {
+				continue
+			}
+			found = true
+			want := payload[key]
+			if key == "invalidation" {
+				want = computerInvalidationFacts(want)
+			}
+			if key == "wait" {
+				want = computerWaitFacts(want)
+			}
+			if row.Content != toolDetailValue(want) || row.Format != fltools.StructuredActivityRowFormatCode {
+				t.Fatalf("%s facts changed: %+v", key, row)
+			}
+		}
+		if !found {
+			t.Errorf("missing %s in public Activity rows: %+v", key, rows)
+		}
+	}
+}

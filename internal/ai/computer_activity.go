@@ -49,6 +49,15 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			add(key, "", value, fltools.StructuredActivityRowFormatText)
 		}
 	}
+	if facts := computerInvalidationFacts(payload["invalidation"]); facts != nil {
+		add("invalidation", "", toolDetailValue(facts), fltools.StructuredActivityRowFormatCode)
+	}
+	if facts := computerWaitFacts(payload["wait"]); facts != nil {
+		add("wait", "", toolDetailValue(facts), fltools.StructuredActivityRowFormatCode)
+	}
+	if reads := toAnySlice(payload["completed_reads"]); len(reads) > 0 {
+		add("completed_reads", "", toolDetailValue(reads), fltools.StructuredActivityRowFormatCode)
+	}
 	if tool == "computer.targets" {
 		candidates := toAnySlice(payload["candidates"])
 		defaultRef := anyToString(payload["default_candidate_ref"])
