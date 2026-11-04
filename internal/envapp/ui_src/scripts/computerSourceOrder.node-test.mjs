@@ -44,3 +44,14 @@ test('query items retain each frame source identity',()=>fixture(async({page,con
  const [parent,child]=query.result.items;assert.notEqual(parent.frame_id,child.frame_id);assert.notEqual(parent.frame_document_id,child.frame_document_id);
  for(const item of query.result.items){const source=await controller.execute(request('source',{selector:{ref:item.ref},source:'ax',field:'name'}));assert.equal(source.result.frame_document_id,item.frame_document_id);assert.equal(source.result.frame_id,item.frame_id);}
 }));
+
+test('table root carries exact provenance without per-cell duplication',()=>fixture(async({page,controller})=>{
+ await page.setContent('<table><tr><th>Object</th><th>Value</th></tr><tr><td>First</td><td>42</td></tr></table>');
+ const result=await controller.execute(request('table',{selector:{role:'table'}}));
+ assert.ok(result.result.ref&&result.result.frame_id&&result.result.frame_document_id);
+ assert.equal(result.result.total,2);
+ for(const row of result.result.rows){
+  assert.equal(row.frame_document_id,undefined);
+  for(const cell of row.cells){assert.equal(cell.frame_document_id,undefined);const source=await controller.execute(request('source',{selector:{ref:cell.ref},source:'ax',field:'name'}));assert.equal(source.result.frame_document_id,result.result.frame_document_id);}
+ }
+}));

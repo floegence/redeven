@@ -42,7 +42,7 @@ later explicit call. Only confirmed identity changes invalidate the token. Seman
 
 Both directions of every parent/child edge must agree. An observation describes the bounded returned tree, not an exhaustive view of every application node.
 
-Browser document_id describes the page sample revision across reads. Each source-backed node/query item/row/cell exposes frame_id and frame_document_id for its actual frame lifetime. An unrelated iframe replacement may advance document_id without changing a main-frame ref or frame_document_id. Ref validation remains owned by the existing frame/document records. Text-tree frame_document_id inherits like frame_id; frame_document_absent explicitly clears inheritance.
+Browser document_id describes the page sample revision across reads. Each source-backed node/query item exposes frame_id and frame_document_id for its actual frame lifetime. A table result carries that provenance once at its root; its rows and cells belong to the same frame. An unrelated iframe replacement may advance document_id without changing a main-frame ref or frame_document_id. Ref validation remains owned by the existing frame/document records. Text-tree frame_document_id inherits like frame_id; frame_document_absent explicitly clears inheritance.
 
 ## Roles, states and relationships
 One Runtime alias inventory owns normalization and canonical selector expansion.

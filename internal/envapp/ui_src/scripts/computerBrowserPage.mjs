@@ -742,7 +742,7 @@ export class BrowserComputerPage {
       if (id!==element.axNodeId && ['table','grid','treegrid'].includes(role)) return;
       if (!node.ignored && role==='row' && node.backendDOMNodeId) {
         const entry=this.rememberNode(element.frame,node,false);
-        row={ref:entry.ref,...this.sourceIdentity(entry),cells:[]}; rows.push(row); entries.push(entry);
+        row={ref:entry.ref,cells:[]}; rows.push(row); entries.push(entry);
       }
       if (row && !node.ignored && ['cell','gridcell','columnheader','rowheader'].includes(role)) {
         const full=node.name?.value || '';
@@ -750,7 +750,7 @@ export class BrowserComputerPage {
         const text=Array.from(full).slice(0,2000).join('');
         const entry=node.backendDOMNodeId?this.rememberNode(element.frame,node,false):undefined;
         if(entry)cellsByRef.set(entry.ref,entry);
-        const cell={...(entry?{ref:entry.ref,...this.sourceIdentity(entry)}:{}),role:role==='gridcell'?'cell':role,text,...(text!==full?{text_truncated:true}:{})};
+        const cell={...(entry?{ref:entry.ref}:{}),role:role==='gridcell'?'cell':role,text,...(text!==full?{text_truncated:true}:{})};
         // A single pathological row must never exceed the page budget.
         if (row.cells.length<200 && Buffer.byteLength(JSON.stringify(row))+Buffer.byteLength(JSON.stringify(cell))<44000) row.cells.push(cell);
         else row.cells_truncated=true;
@@ -760,7 +760,7 @@ export class BrowserComputerPage {
     };
     const visited=new Set(); visit(element.axNodeId);
     if (revision!==this.revision || !source.has(element.axNodeId)) throw new Error('STALE_REFERENCE');
-    const page=this.collectionPage({ref:element.ref},rows,entries,options,'rows',[rows,identity]);
+    const page={...this.collectionPage({ref:element.ref},rows,entries,options,'rows',[rows,identity]),...this.sourceIdentity(element),ref:element.ref};
     for(const row of page.rows)for(const cell of row.cells)if(cellsByRef.has(cell.ref)){
       if(this.references.size>=2000&&!this.references.has(cell.ref))this.references.delete(this.references.keys().next().value);
       this.references.set(cell.ref,cellsByRef.get(cell.ref));

@@ -26,7 +26,7 @@ never grants iframe, filesystem, clipboard or application authority.
 
 Browser AX child_refs retain ignored and DOM-less records as read-only refs in the existing owner; source reads validate AX/document identity without actionability. DOM-less records retain an ancestor privacy anchor and cannot authorize input. All declared child IDs must resolve or the read fails explicitly, never reports a false empty list.
 
-Browser source/text/attribute/geometry/selection/node reads preserve page document_id and exact frame_id/frame_document_id provenance. Collection items carry their own frame provenance. These are facts, not readiness or automatic invalidation policy.
+Browser source/text/attribute/geometry/selection/node reads preserve page document_id and exact frame_id/frame_document_id provenance. Cross-frame query items carry their own frame provenance; table rows/cells share the table result provenance without repeating it per cell. These are facts, not readiness or automatic invalidation policy.
 
 No separate source store is introduced. Ref retention is bounded; read returned
 refs before requesting distant pages. Source changes, detached DOM nodes and
