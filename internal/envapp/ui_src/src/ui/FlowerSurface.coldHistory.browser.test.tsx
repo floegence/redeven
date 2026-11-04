@@ -59,15 +59,26 @@ it.each([{ offset: 40, chunked: false }, { offset: -28, chunked: false }, { offs
   const top = row().getBoundingClientRect().top;
   expect(top).toBeGreaterThan(viewport.getBoundingClientRect().top - 20);
   expect(top).toBeLessThan(viewport.getBoundingClientRect().top + 100);
-  const frames: number[] = []; let sampling = true;
-  const sample = () => { if (!sampling) return; frames.push(row().getBoundingClientRect().top); requestAnimationFrame(sample); };
+  const frames: { top: number; missing: boolean; malformed: boolean }[] = []; let sampling = true;
+  const tableOwner = root.querySelector('[data-flower-message-id=visible-table]');
+  const sample = () => {
+    if (!sampling) return;
+    const current = row();
+    const cells = current ? [...current.children].map(cell => cell.getBoundingClientRect()) : [];
+    frames.push({ top: current?.getBoundingClientRect().top ?? NaN,
+      missing: !current || root.querySelector('[data-flower-message-id=visible-table]') !== tableOwner || !current.checkVisibility(),
+      malformed: cells.length !== 3 || cells.some((cell, index) => cell.height <= 0 || index > 0 && cell.left < cells[index - 1].right - 1),
+    });
+    requestAnimationFrame(sample);
+  };
   requestAnimationFrame(sample);
   try {
     held.resolve();
     await waitFor(() => root.textContent?.includes('The full table is available.') === true);
     await new Promise(resolve => setTimeout(resolve, 200));
     expect(frames.length).toBeGreaterThan(5);
-    expect(Math.max(...frames.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(2);
+    expect(frames.every(frame => !frame.missing && !frame.malformed)).toBe(true);
+    expect(Math.max(...frames.map(frame => Math.abs(frame.top - top)))).toBeLessThanOrEqual(1);
     expect(root.querySelector('.flower-history-text-loading')).toBeNull();
     expect(root.querySelectorAll('[data-flower-message-id=visible-table] tbody tr')).toHaveLength(36);
     if (chunked) { expect(chunks).toHaveBeenCalledOnce(); expect(body).not.toHaveBeenCalled(); }
@@ -144,8 +155,22 @@ it.each([
   viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
   let expectedTop = anchor.getBoundingClientRect().top;
   let nativeMovement = false;
-  const samples: { drift: number; skeleton: boolean; scroll: number; height: number }[] = []; let sampling = true;
-  const sample = () => { samples.push({ drift: Math.max(0, expectedTop - anchor.getBoundingClientRect().top, anchor.getBoundingClientRect().top - expectedTop - (nativeMovement ? 60 : 0)), scroll: viewport.scrollTop, height: viewport.scrollHeight, skeleton: Boolean(viewport.querySelector('.flower-history-text-loading')) }); if (sampling) requestAnimationFrame(sample); };
+  const samples: { drift: number; skeleton: boolean; missing: boolean; blank: boolean; duplicate: boolean }[] = []; let sampling = true;
+  const sample = () => {
+    if (!sampling) return;
+    const bounds = viewport.getBoundingClientRect();
+    const visible = [...viewport.querySelectorAll<HTMLElement>('[data-flower-message-id]')].filter(node => {
+      const box = node.getBoundingClientRect();
+      return box.height > 0 && box.bottom > bounds.top && box.top < bounds.bottom && node.checkVisibility();
+    });
+    const ids = visible.map(node => node.dataset.flowerMessageId);
+    samples.push({ drift: Math.max(0, expectedTop - anchor.getBoundingClientRect().top, anchor.getBoundingClientRect().top - expectedTop - (nativeMovement ? 60 : 0)),
+      skeleton: Boolean(viewport.querySelector('.flower-history-text-loading')),
+      missing: !anchor.isConnected || root.querySelector('[data-flower-message-id=active-user]') !== anchor,
+      blank: visible.length === 0, duplicate: new Set(ids).size !== ids.length,
+    });
+    requestAnimationFrame(sample);
+  };
   requestAnimationFrame(sample);
   try {
     await waitFor(() => chunked ? chunks.mock.calls.length === 2 : body.mock.calls.length > 0);
@@ -175,8 +200,8 @@ it.each([
     await waitFor(() => root.textContent?.includes('The complete report ends here.') === true);
     await new Promise(resolve => setTimeout(resolve, 200));
     expect(samples.length).toBeGreaterThan(5);
-    expect(Math.max(...samples.map(sample => sample.drift))).toBeLessThanOrEqual(2);
-    expect(samples.every(sample => !sample.skeleton)).toBe(true);
+    expect(Math.max(...samples.map(sample => sample.drift))).toBeLessThanOrEqual(1);
+    expect(samples.every(sample => !sample.skeleton && !sample.missing && !sample.blank && !sample.duplicate)).toBe(true);
     if (native) expect(anchor.getBoundingClientRect().top - expectedTop).toBeCloseTo(60, 0);
     expect(root.textContent).toContain(suffix.trim());
     expect(oldRow.querySelector('.flower-message-bubble')).toBe(bubble);

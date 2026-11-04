@@ -11,15 +11,21 @@ assert.ok(fixtureArgument && outputArgument, 'Provide --fixture and --output. Th
 const fixture = path.resolve(fixtureArgument), output = path.resolve(outputArgument);
 const maximumInteractiveMs = argument('max-interactive-ms');
 const historyScrollSteps = Number(argument('history-scroll-steps') ?? 0);
+const stabilitySeconds = Number(argument('stability-seconds') ?? 0);
+assert.ok(stabilitySeconds === 0 || Number.isInteger(stabilitySeconds) && stabilitySeconds >= 1800 && stabilitySeconds <= 3600,
+  'Explicit stability qualification runs for 1800–3600 seconds.');
+const visualFrames = process.argv.includes('--visual-frames');
+assert.ok(!visualFrames || !process.argv.includes('--profile') && !process.argv.includes('--trace') && maximumInteractiveMs === undefined,
+  'Visual frame capture runs separately from performance qualification.');
 assert.ok(Number.isInteger(historyScrollSteps) && historyScrollSteps >= 0 && historyScrollSteps <= 500, 'Use 0–500 --history-scroll-steps.');
 if (maximumInteractiveMs !== undefined) assert.ok(Number.isFinite(Number(maximumInteractiveMs)) && Number(maximumInteractiveMs) > 0, 'Provide a positive --max-interactive-ms.');
 const info = JSON.parse(await readFile(fixture, 'utf8'));
 const require = createRequire(path.join(root, 'internal/envapp/ui_src/package.json'));
 const desktop = createRequire(path.join(root, 'desktop/package.json'));
 const { _electron: electron } = require('playwright');
-const evidence = { fixture: info, requests: [], errors: [], opening: undefined, stability: [] };
+const evidence = { fixture: info, measurementMode: visualFrames ? 'visual' : 'timing', requests: [], errors: [], opening: undefined, stability: [] };
 await mkdir(path.dirname(output), { recursive: true });
-const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 180000 + historyScrollSteps * 1600 });
+const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 180000 + historyScrollSteps * 1600 + stabilitySeconds * 1000 });
 try {
   await session.run(async () => {
     const application = await session.launchElectron(electron, {
@@ -28,6 +34,29 @@ try {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, FLOWER_PERF_PROFILE: output + '.profile', FLOWER_PERF_URL: info.url + '/?cpu=1&thread=' },
     });
     const page = await application.firstWindow();
+    if (stabilitySeconds > 0 || visualFrames) {
+      const window = await application.browserWindow(page);
+      await window.evaluate(native => native.setIgnoreMouseEvents(true));
+    }
+    const filmstrip = visualFrames ? await page.context().newCDPSession(page) : undefined;
+    let filmstripStopped = false;
+    const paints = [];
+    const writes = new Set();
+    if (filmstrip) {
+      await mkdir(output + '.frames', { recursive: true });
+      filmstrip.on('Page.screencastFrame', frame => {
+        const index = paints.length;
+        paints.push({ index, metadata: frame.metadata });
+        const write = writeFile(path.join(output + '.frames', String(index).padStart(6, '0') + '.jpg'), Buffer.from(frame.data, 'base64'))
+          .catch(error => { evidence.errors.push({ visualFrame: index, error: String(error) }); })
+          .finally(async () => {
+            await filmstrip.send('Page.screencastFrameAck', { sessionId: frame.sessionId }).catch(() => {});
+            writes.delete(write);
+          });
+        writes.add(write);
+      });
+      await filmstrip.send('Page.startScreencast', { format: 'jpeg', quality: 80, everyNthFrame: 1 });
+    }
     const pending = [];
     const ordinals = new Map();
     const activityFields = [];
@@ -344,6 +373,53 @@ try {
       assert.ok(new Set(evidence.historyScroll.map(step => step.ordinal)).size > 2, 'Historical windows must advance.');
       await page.screenshot({ path: output + '.history.png' });
     }
+    if (filmstrip) {
+      await filmstrip.send('Page.stopScreencast');
+      await Promise.all(writes);
+      await filmstrip.detach();
+      filmstripStopped = true;
+      evidence.visualFrames = paints;
+      assert.ok(paints.length >= 30, 'Retain actual visual frames across history navigation.');
+    }
+    if (stabilitySeconds > 0) {
+      const cdp = await page.context().newCDPSession(page);
+      try {
+        await cdp.send('HeapProfiler.collectGarbage');
+        const before = await cdp.send('Memory.getDOMCounters');
+        const heapBefore = await cdp.send('Runtime.getHeapUsage');
+        evidence.longStability = await page.evaluate(async seconds => {
+          const viewport = document.querySelector('.flower-chat-transcript');
+          if (!viewport) throw new Error('Missing stability viewport.');
+          const bounds = viewport.getBoundingClientRect();
+          const anchor = [...viewport.querySelectorAll('[data-flower-message-id] p,[data-flower-message-id] tbody tr,[data-flower-message-id] pre')]
+            .find(node => { const box = node.getBoundingClientRect(); return box.height > 0 && box.top >= bounds.top && box.bottom <= bounds.bottom && node.checkVisibility(); });
+          if (!anchor) throw new Error('Missing visible reading anchor.');
+          const started = performance.now(), top = anchor.getBoundingClientRect().top;
+          let frames = 0, maximumDrift = 0;
+          await new Promise((resolve, reject) => {
+            const sample = () => {
+              frames++;
+              maximumDrift = Math.max(maximumDrift, Math.abs(anchor.getBoundingClientRect().top - top));
+              if (!anchor.isConnected || !anchor.checkVisibility() || maximumDrift > 1
+                || viewport.querySelector('.flower-history-text-loading') || document.querySelector('.flower-thread-load-error,.flower-thread-sync-error')) {
+                reject(new Error('Reading continuity failed during stability qualification.')); return;
+              }
+              if (performance.now() - started >= seconds * 1000) resolve();
+              else requestAnimationFrame(sample);
+            };
+            requestAnimationFrame(sample);
+          });
+          return { seconds: (performance.now() - started) / 1000, frames, maximumDrift };
+        }, stabilitySeconds);
+        await cdp.send('HeapProfiler.collectGarbage');
+        const after = await cdp.send('Memory.getDOMCounters');
+        const heapAfter = await cdp.send('Runtime.getHeapUsage');
+        Object.assign(evidence.longStability, { before, after, heapBefore, heapAfter });
+        assert.ok(after.documents <= before.documents && after.nodes <= before.nodes + 128 && after.jsEventListeners <= before.jsEventListeners + 16,
+          'Settled reading must not accumulate documents, nodes or listeners.');
+        assert.ok(heapAfter.usedSize <= heapBefore.usedSize * 1.1 + 16 * 1024 * 1024, 'Settled reading heap must remain bounded after collection.');
+      } finally { await cdp.detach(); }
+    }
     await Promise.all(pending);
     await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
     assert.equal(evidence.errors.length, 0, JSON.stringify(evidence.errors));
@@ -358,6 +434,12 @@ try {
       evidence.failure = String(error);
       throw error;
     } finally {
+      if (filmstrip && !filmstripStopped) {
+        await filmstrip.send('Page.stopScreencast').catch(() => {});
+        await Promise.all(writes);
+        evidence.visualFrames = paints;
+        await filmstrip.detach().catch(() => {});
+      }
       await Promise.all(pending);
       await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
     }

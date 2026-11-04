@@ -2,6 +2,8 @@
 
 Concepts own current contracts and original qualification outcomes; Git retains change history.
 
+- 2026-11-04: Qualify published transaction-local Flower history read improvements with 1 px per-frame anchors, visible-content continuity, compositor frame capture and explicit settled-reading endurance.
+
 - 2026-11-03: Document shared drag/resize motion priority and root/child arrival, lifecycle, draft and selection regressions in the Flower long-thread gate.
 
 ## 2026-11-03
