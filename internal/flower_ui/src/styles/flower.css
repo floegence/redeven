@@ -9013,9 +9013,15 @@ button.flower-composer-context-source:focus-visible,
   padding: 0.625rem;
 }
 
+/* A conversation is a persistent writing surface: moving focus into its toolbar
+ * or a popup must not pulse the frame. Keep Floe's compound-field ownership. */
+.flower-composer[data-flower-bottom-mode='chat'] {
+  --floe-input-focus-color: var(--floe-field-edge);
+}
+
 .flower-surface[data-flower-presentation='full'] .flower-composer[data-flower-bottom-mode='chat'] {
-  min-height: 6rem;
-  padding: 0.875rem;
+  min-height: 5.5rem;
+  padding: 0.875rem 0.875rem 0.5rem;
 }
 
 .flower-decision-surface[data-flower-bottom-mode='input_request'] textarea,

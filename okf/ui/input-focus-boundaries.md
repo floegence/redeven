@@ -3,11 +3,11 @@ type: UI Contract
 title: Input focus boundaries
 tags: [ui, desktop, flower, accessibility, focus]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published Floe owns focus presentation; Redeven supplies layout, semantic state and explicit compound-input boundaries. Focus changes border color only, preserving geometry/shadows. Fix conflicting styles at their owner with source/browser checks; no fallback stylesheet.
+Published Floe owns focus presentation; Redeven supplies layout, semantic state and explicit compound-input boundaries. Ordinary fields change border color only, preserving geometry/shadows; the persistent Flower chat composer keeps its border unchanged. Fix conflicting styles at their owner with source/browser checks; no fallback stylesheet.
 
 # Contract
 
@@ -17,7 +17,7 @@ Ordinary inputs, textareas, and native selects consume Floe's default rule. Focu
 Buttons, links, checkboxes, and switches retain their distinct keyboard focus indicators; a button inside an input boundary follows the upstream compound-control treatment.
 
 ## Published ownership
-Desktop Welcome, Env App, and Flower consume the same released Floe dependency. Product selectors may define normal and hover appearance but must not override Floe's input focus state. It does not copy CSS rules or load the full renderer stylesheet into that document.
+Desktop Welcome, Env App, and Flower consume the same released Floe dependency. Product selectors may define normal and hover appearance without duplicating Floe's focus rules. Flower's persistent chat composer maps the published `--floe-input-focus-color` token to its existing field edge, keeping focus handoffs and thread switches visually quiet, including forced colors. Approval and input-request fields retain their ordinary focus behavior. It does not copy CSS rules or load the full renderer stylesheet into that document.
 
 # Boundaries
 

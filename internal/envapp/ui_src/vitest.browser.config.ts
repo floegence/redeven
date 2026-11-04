@@ -128,6 +128,33 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        capturePermissionOpening: async ({ page }) => {
+          const frame = await frameForSelector(page, '.flower-permission-trigger');
+          const header = await frame.locator('.flower-chat-header').boundingBox();
+          const transcript = await frame.locator('.flower-chat-transcript').boundingBox();
+          if (!header || !transcript) throw new Error('Flower reading surface is unavailable');
+          const regions = [header, { ...transcript, height: Math.min(200, transcript.height) }];
+          const paint = (png: ReturnType<typeof PNG.sync.read>) => regions.map(region => hashPngRegion(png, region)).join(':');
+          const baseline = paint(PNG.sync.read(await page.screenshot({ scale: 'css' })));
+          const cdp = await page.context().newCDPSession(page);
+          const frames: string[] = [];
+          cdp.on('Page.screencastFrame', event => {
+            frames.push(paint(PNG.sync.read(Buffer.from(event.data, 'base64'))));
+            void cdp.send('Page.screencastFrameAck', { sessionId: event.sessionId });
+          });
+          try {
+            await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
+            await frame.locator('button.flower-permission-trigger').click();
+            await frame.locator('.flower-permission-menu').evaluate(async menu => {
+              for (let sample = 0; sample < 24; sample++) await new Promise(resolve => requestAnimationFrame(resolve));
+              await Promise.all(menu.getAnimations().map(animation => animation.finished));
+            });
+          } finally {
+            await cdp.send('Page.stopScreencast');
+            await cdp.detach();
+          }
+          return { baseline, frames };
+        },
         resizeTerminalSidebar: async ({ page }, delta: number) => {
           const frame = await terminalPanelFrame(page);
           const handle = frame.locator('[data-terminal-sidebar-resizer]');

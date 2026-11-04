@@ -9,7 +9,7 @@ import { JSONEditor } from '../ui/pages/settings/SettingsPrimitives';
 import { TerminalSearchOverlay } from '../ui/widgets/TerminalSearchOverlay';
 import { FileBrowserPathControl } from '../ui/widgets/FileBrowserPathControl';
 import { InputDialog } from '../ui/widgets/InputDialog';
-import { expectSingleInputFocus } from './inputFocus.test-support';
+import { expectSingleInputFocus, expectStableComposerFocus } from './inputFocus.test-support';
 
 let dispose: (() => void) | undefined;
 afterEach(() => {
@@ -38,14 +38,17 @@ it('keeps product input boundaries stable across every shell theme', () => {
     <input class="flower-reasoning-menu-budget" aria-label="Reasoning budget" />
     <select class="flower-settings-select" aria-label="Model selection"><option>Default</option></select>
     <input class="redeven-settings-search border border-border" aria-label="Settings search" />
-    <div class="flower-surface"><div class="flower-composer" data-floe-input-surface><textarea aria-label="Conversation composer" /></div></div>
+    <div class="flower-surface"><div class="flower-composer" data-flower-bottom-mode="chat" data-floe-input-surface><textarea aria-label="Conversation composer" /></div></div>
   </>, host);
   for (const preset of builtInShellThemePresets) {
     document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
     document.documentElement.dataset.floeShellTheme = preset.name;
     document.documentElement.classList.toggle('dark', preset.mode === 'dark');
     document.documentElement.classList.toggle('light', preset.mode === 'light');
-    host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input,textarea,select').forEach(expectSingleInputFocus);
+    host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input,textarea,select').forEach(input => {
+      if (input instanceof HTMLTextAreaElement && input.closest('.flower-composer')) expectStableComposerFocus(input);
+      else expectSingleInputFocus(input);
+    });
   }
 });
 it('uses the shared focus border in the real rename dialog, including forced colors', async () => {

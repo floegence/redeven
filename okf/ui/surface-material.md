@@ -25,9 +25,9 @@ Ordinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls
 The plugin launcher keeps its existing action and localized name; artwork owns no input or navigation behavior.
 
 ## Flower composer and disclosures
-The expanded composer consumes Floe field fill, edge and panel radius with one border-only focus boundary. Dedicated pages have a more generous editing inset; compact companions retain their existing height and editor identity. Floating model, permission, reasoning, More, reference, command, Goal, context and conversation controls consume published material and presence. Exiting panels become inert and hidden from accessibility immediately, while Floe finishes the visual exit; reopening reverses that exit. Context menus retain their deliberate first-frame appearance.
+The expanded composer consumes Floe field fill, edge and panel radius with one stable writing boundary. Chat focus transfers between editor, toolbar, menus and threads do not recolor the frame; internal controls retain keyboard focus feedback. Dedicated pages preserve the top editing inset and use an 8px bottom inset; compact companions retain their existing height and editor identity. Floating model, permission, reasoning, More, reference, command, Goal, context and conversation controls consume published material and presence. Exiting panels become inert and hidden from accessibility immediately, while Floe finishes the visual exit; reopening reverses that exit. Context menus retain their deliberate first-frame appearance.
 
-Model and permission menus have one surface-owned lifetime, independent of inline/More toolbar placement. Published anchored layers own positioning and boundary clamping for model, permission, reasoning and More; animated children do not own geometry. Moving an open control into More retains its editor and focus. Hover context disclosures retain their content, scroll and expansion while hidden, with shared presence controlling paint.
+Model and permission menus have one surface-owned lifetime, independent of inline/More toolbar placement. Published anchored layers own positioning and boundary clamping for model, permission, reasoning and More; animated children do not own geometry. Constraints are applied before first-paint measurement, so permission menus never appear below their final position and jump upward. Read-only, approval-required and full-access modes use the published Eye, ShieldCheck and Unlock icons consistently in the trigger, menu and toolbar measurement copy. Moving an open control into More retains its editor and focus. Hover context disclosures retain their content, scroll and expansion while hidden, with shared presence controlling paint.
 
 Unavailable catalog models remain configured choices. A background availability update must not replace the composer with first-time setup or discard its draft, menu search or focus; unavailable models remain disabled for admission.
 
@@ -45,3 +45,5 @@ Use restrained static depth and short functional control motion. The progress di
 - `redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx` - Source.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.polish.browser.test.tsx` - Hidden-page geometry, shared material, focus, responsive layouts, reversal and reduced-motion acceptance.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.permissionStability.browser.test.tsx` - First-painted popup geometry, repeated focus transfers, captured page pixels, distinct mode icons, compact bottom inset and retained thread drafts.

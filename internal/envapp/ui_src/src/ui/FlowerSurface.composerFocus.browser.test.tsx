@@ -8,7 +8,7 @@ import { adapter, renderSurface, renderSurfaceWithAdapterProps, waitFor } from '
 it.each([
   ['light', 'page'], ['dark', 'page'],
   ['light', 'companion'], ['dark', 'companion'],
-] as const)('changes only the published focus border on the %s %s composer', async (theme, presentation) => {
+] as const)('keeps the border and material unchanged on the %s %s composer', async (theme, presentation) => {
   await page.viewport(1280, 900);
   const previousClass = document.documentElement.className;
   document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -40,12 +40,6 @@ it.each([
     };
   };
   const unfocused = appearance();
-  const focusProbe = document.createElement('span');
-  focusProbe.style.color = 'var(--floe-input-focus-color, var(--ring))';
-  composer.append(focusProbe);
-  const focusColor = getComputedStyle(focusProbe).color;
-  focusProbe.remove();
-  const focused = { ...unfocused, borders: unfocused.borders.map(border => ({ ...border, color: focusColor })) };
   for (let cycle = 0; cycle < 2; cycle += 1) {
     editor.focus();
     editor.setSelectionRange(2, 7);
@@ -55,7 +49,7 @@ it.each([
     expect({ ...during, borders: during.borders.map(({ width }) => width) })
       .toEqual({ ...unfocused, borders: unfocused.borders.map(({ width }) => width) });
     await new Promise(resolve => setTimeout(resolve, 180));
-    expect(appearance()).toEqual(focused);
+    expect(appearance()).toEqual(unfocused);
     editor.blur();
     await new Promise(resolve => setTimeout(resolve, 180));
     expect(appearance()).toEqual(unfocused);
@@ -64,7 +58,7 @@ it.each([
   expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 7]);
 });
 
-it('preserves the published composer focus indicator in forced colors', async () => {
+it('keeps a stable composer boundary in forced colors', async () => {
   const media = commands as unknown as { emulateMediaPreferences: (preferences: { forcedColors: 'active' | 'none' }) => Promise<void> };
   await media.emulateMediaPreferences({ forcedColors: 'active' });
   onTestFinished(() => media.emulateMediaPreferences({ forcedColors: 'none' }));
@@ -72,8 +66,10 @@ it('preserves the published composer focus indicator in forced colors', async ()
   await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
   const composer = runtime.querySelector<HTMLElement>('.flower-composer')!;
   const editor = composer.querySelector('textarea')!;
+  editor.blur();
+  const border = getComputedStyle(composer).borderColor;
   editor.focus();
-  expect(getComputedStyle(composer).getPropertyValue('--floe-input-focus-color').trim()).toBe('Highlight');
+  expect(getComputedStyle(composer).borderColor).toBe(border);
 });
 
 it('focuses composer padding only after a completed tap and preserves an existing selection', async () => {

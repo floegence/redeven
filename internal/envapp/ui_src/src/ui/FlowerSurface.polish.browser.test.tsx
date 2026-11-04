@@ -3,7 +3,7 @@ import './flower-feature.css';
 import { afterEach, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
-import { expectSingleInputFocus } from '../styles/inputFocus.test-support';
+import { expectStableComposerFocus } from '../styles/inputFocus.test-support';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { adapter, renderSurfaceWithAdapterProps, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -83,7 +83,7 @@ it.each(['paper', 'porcelain-dark'])('keeps the composer quiet, stable and reada
   const composer = host.querySelector<HTMLElement>('.flower-composer')!;
   const editor = composer.querySelector<HTMLTextAreaElement>('textarea')!;
   const before = composer.getBoundingClientRect();
-  expectSingleInputFocus(editor);
+  expectStableComposerFocus(editor);
   await userEvent.fill(editor, 'Design a focused workspace. 保留输入与选择。');
   expect(composer.getBoundingClientRect().x).toBe(before.x);
   expect(composer.getBoundingClientRect().width).toBe(before.width);
@@ -97,7 +97,7 @@ it.each(['paper', 'porcelain-dark'])('keeps the composer quiet, stable and reada
   expect(composer.getBoundingClientRect().right).toBeLessThanOrEqual(390);
   await page.screenshot({ element: composer, path: '__screenshots__/flower-composer-polish-' + theme + '-390.png' });
   await media.emulateMediaPreferences({ forcedColors: 'active' });
-  expectSingleInputFocus(editor);
+  expectStableComposerFocus(editor);
 });
 
 it('reverses a closing menu without remounting or losing its search', async () => {

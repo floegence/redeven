@@ -65,7 +65,7 @@ import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack, useContext } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, Workflow, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Eye, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, ShieldCheck, Terminal, Trash, Unlock, Workflow, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -448,6 +448,7 @@ type PendingAdmissionHandoff = Readonly<{
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
+const FLOWER_PERMISSION_ICONS = { readonly: Eye, approval_required: ShieldCheck, full_access: Unlock } satisfies Record<FlowerPermissionType, typeof Eye>;
 const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
 const flowerComposerCommandOptionID = (command: string) => command === '/goal' ? 'flower-composer-command-goal' : command === 'compact-only' ? 'flower-composer-command-compact-only' : 'flower-composer-command-compact-context';
 const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['permission', 'model_reasoning', 'read_only'];
@@ -2017,6 +2018,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerPermissionType = createMemo<FlowerPermissionType | undefined>(() => {
     if (selectedThreadID()) return selectedThreadPermissionType();
     return currentComposerSessionDraft().permissionTypeOverride ?? defaultComposerPermissionType();
+  });
+  const composerPermissionIcon = createMemo(() => {
+    const permissionType = composerPermissionType();
+    return permissionType ? FLOWER_PERMISSION_ICONS[permissionType] : Shield;
   });
   const composerPermissionCopy = createMemo(() => {
     const permissionType = composerPermissionType();
@@ -8244,7 +8249,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               title={permissionSelectorTitle()}
               aria-label={permissionSelectorTitle()}
             >
-              <Shield class="flower-permission-icon" />
+              <Dynamic component={composerPermissionIcon()} class="flower-permission-icon" aria-hidden="true" />
               <span class="flower-permission-label">{permissionLabel()}</span>
             </span>
           )}
@@ -8269,7 +8274,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             }}
             onKeyDown={handlePermissionTriggerKeyDown}
           >
-            <Shield class="flower-permission-icon" />
+            <Dynamic component={composerPermissionIcon()} class="flower-permission-icon" aria-hidden="true" />
             <span class="flower-permission-label">{permissionLabel()}</span>
             <span class="flower-permission-saving-dot" aria-hidden="true" style={{ visibility: permissionPatchPending() ? 'visible' : 'hidden' }} />
           </button>
@@ -13375,7 +13380,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onClick={() => void updateComposerPermissionType(permissionType)}
                   >
                     <span class="flower-permission-menu-row">
-                      <Shield class="flower-permission-menu-icon" />
+                      <Dynamic component={FLOWER_PERMISSION_ICONS[permissionType]} class="flower-permission-menu-icon" aria-hidden="true" />
                       <span class="flower-permission-menu-label">{itemCopy().label}</span>
                       <Show when={selected()}>
                         <Check class="flower-permission-menu-check" aria-hidden="true" />
@@ -13558,7 +13563,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'permission':
         return (
           <span class="flower-permission-trigger flower-composer-control-measure" data-permission-type={composerPermissionType()}>
-            <Shield class="flower-permission-icon" />
+            <Dynamic component={composerPermissionIcon()} class="flower-permission-icon" aria-hidden="true" />
             <span class="flower-permission-label">{composerPermissionCopy()?.label ?? copy().chat.permissionSelectorLabel}</span>
           </span>
         );

@@ -33,8 +33,8 @@ describe('Flower approval permission controls', () => {
     expect(trigger).not.toBeNull();
     expect(trigger!.disabled).toBe(false);
     trigger!.click();
-    await waitFor(() => Boolean(runtime.querySelector('[role=option][data-permission-type=full_access]')));
-    runtime.querySelector<HTMLButtonElement>('[role=option][data-permission-type=full_access]')!.click();
+    await waitFor(() => Boolean(document.querySelector('[role=option][data-permission-type=full_access]')));
+    document.querySelector<HTMLButtonElement>('[role=option][data-permission-type=full_access]')!.click();
     expect(setThreadPermissionType).toHaveBeenCalledExactlyOnceWith(waiting.thread_id, 'full_access');
     expect(trigger!.disabled).toBe(true);
     expect(trigger!.dataset.permissionType).toBe('full_access');
@@ -65,8 +65,8 @@ describe('Flower approval permission controls', () => {
     const trigger = runtime.querySelector<HTMLButtonElement>('.flower-approval-queue-footer button.flower-permission-trigger');
     expect(trigger).not.toBeNull();
     trigger!.click();
-    await waitFor(() => Boolean(runtime.querySelector('[role=option][data-permission-type=readonly]')));
-    runtime.querySelector<HTMLButtonElement>('[role=option][data-permission-type=readonly]')!.click();
+    await waitFor(() => Boolean(document.querySelector('[role=option][data-permission-type=readonly]')));
+    document.querySelector<HTMLButtonElement>('[role=option][data-permission-type=readonly]')!.click();
     await waitFor(() => setThreadPermissionType.mock.calls.length === 1 && !trigger!.disabled);
     expect(trigger!.dataset.permissionType).toBe('approval_required');
     expect(runtime.querySelector('[data-flower-approval-action-id=approval-date]')).not.toBeNull();

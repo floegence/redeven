@@ -17,7 +17,7 @@ function snapshot(element: HTMLElement) {
   };
 }
 
-export function expectSingleInputFocus(input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
+function expectInputFocus(input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, stableBorder: boolean) {
   const owner = input.closest<HTMLElement>('[data-floe-input-surface]') ?? input;
   const style = document.createElement('style');
   style.textContent = 'input,textarea,select,[data-floe-input-surface] { transition: none !important; }';
@@ -40,9 +40,18 @@ export function expectSingleInputFocus(input: HTMLInputElement | HTMLTextAreaEle
     } else {
       expect(document.activeElement).toBe(input);
       if (owner.getAttribute('aria-invalid') !== 'true' && input.getAttribute('aria-invalid') !== 'true') {
-        expect(after.color, `${label}: visible focus border`).not.toBe(before.color);
+        if (stableBorder) expect(after.color, `${label}: stable composer border`).toBe(before.color);
+        else expect(after.color, `${label}: visible focus border`).not.toBe(before.color);
       }
     }
     if (owner !== input) expect(innerAfter.border, `${label}: frameless inner editor`).toBe('0px');
   } finally { style.remove(); }
+}
+
+export function expectSingleInputFocus(input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
+  expectInputFocus(input, false);
+}
+
+export function expectStableComposerFocus(input: HTMLTextAreaElement) {
+  expectInputFocus(input, true);
 }
