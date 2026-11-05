@@ -51,6 +51,16 @@ udesk26amd64/1920x1280 and Orangearm64/1920x1080 verify attachment/stale rejecti
 
 Physical-only fixes Orange lock IME leakage; Chromium/WebKit/Firefox cover empty codes/stale composition/release without weakening ordinary text. udesk26 unlock passes. Native login_latency/text/unlock qualification and host_desktop_drm/login seat sources retain raw logs outside Git without passwords/input text. Task ports24236/24246/24247 excluded23998; full physical-host acceptance remains incomplete.
 
+The udesk26 lock-screen delay has a measurable scheduling cause: DRM capture polls
+unchanged scanout at 5 Hz to bound idle CPU/GPU work, while a real input calls the
+native `interacted` wake path and returns capture to the negotiated rate for a
+short window. This explains why the first lock-screen response can feel slower
+than an already-active desktop. The viewer now arms physical unlock as soon as a
+lock frame is painted, removing the extra click without changing that native
+wake or any authority check. Fixed high-rate lock capture is intentionally not
+enabled; future latency work should measure input-to-first-changed-frame and
+retain the idle resource bound together.
+
 ## AFBC and device Viewer
 Native0.22.34 commit2bcd721e2eeb68947c3943627ab0135068f2b808 decodes Orange1920x1080 Wayland legacy AFBC via EGL on HDMI-A-2. Actual pixels/lock/invalid-valid unlock/new generation and udesk26 regression pass without Portal/driver/ACL/compositor changes. Unsupported drivers/modifiers/private swizzle/HDR/AR24/multiplane reject. Published drm/worker.c,scanout_format tests,host_desktop_drm_native_test.py,host_desktop_afbc_pattern.py and login_capture_linux_test.go retain format/errno/FD/pixel proofs.
 

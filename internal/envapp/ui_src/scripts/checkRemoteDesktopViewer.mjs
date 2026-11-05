@@ -1193,12 +1193,11 @@ await session.run(async () => {
       await page.waitForFunction(() => !document.querySelector('#unlock-bar').hidden);
       assert(await page.locator('#start-unlock').isDisabled(), 'unlock accepted an unpainted lock screen');
       paint();
-      await page.waitForFunction(() => !document.querySelector('#start-unlock').disabled);
+      await page.waitForFunction(() => !document.querySelector('#start-unlock').disabled && !document.querySelector('#cancel-unlock').hidden);
       assert(await page.locator('#connection').isHidden(), 'painted lock screen retained the connection overlay');
       assert(await page.locator('#clipboard').isDisabled(), 'lock screen exposed clipboard');
       assert(await page.locator('#shortcuts').isDisabled(), 'lock screen exposed shortcuts');
       const beforeUnlock = messages.length;
-      await page.locator('#start-unlock').click();
       assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock must keep the local text editor disabled');
       assert(
         await page.locator('#desktop').evaluate((element) => element === document.activeElement),
@@ -1256,24 +1255,25 @@ await session.run(async () => {
         messages.some((item) => item.command.method === 'unlock_cancel'),
         'unlock cancellation missing',
       );
+      assert(await page.locator('#cancel-unlock').isHidden(), 'cancel must pause lock-screen input');
       desktopState = 'locked';
       await page.locator('#start-unlock').click();
       const beforeRecovery = messages.length;
       corruptFrame();
-      await page.waitForFunction(
-        () => !document.querySelector('#start-unlock').hidden && !document.querySelector('#start-unlock').disabled,
-      );
+      for (let attempt = 0; attempt < 100 && !messages.slice(beforeRecovery).some((item) => item.command.method === 'keyframe'); attempt++) {
+        await page.waitForTimeout(20);
+      }
+      await page.waitForFunction(() => !document.querySelector('#cancel-unlock').hidden);
       assert(
         messages.slice(beforeRecovery).some((item) => item.command.method === 'keyframe'),
         'locked decode failure did not request a fresh generation',
       );
-      assert(await page.locator('.floe-remote-input').isDisabled(), 'locked recovery restored input without explicit unlock intent');
+      assert(await page.locator('.floe-remote-input').isDisabled(), 'locked recovery must keep the local text editor disabled');
       await page.keyboard.press('b');
       assert(
-        !messages.slice(beforeRecovery).some((item) => item.command.method === 'unlock_input'),
-        'locked recovery replayed unlock input',
+        messages.slice(beforeRecovery).some((item) => item.command.method === 'unlock_input' && item.command.input.code === 'KeyB'),
+        'locked recovery did not restore physical unlock input',
       );
-      await page.locator('#start-unlock').click();
       holdRecovery = true;
       corruptFrame();
       await page.waitForFunction(() => document.querySelector('#reconnect').hidden === false, null, { timeout: 15000 });

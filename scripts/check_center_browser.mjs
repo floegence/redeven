@@ -1037,7 +1037,7 @@ try {
       if (reportDir) await physicalViewer.screenshot({path:path.join(reportDir,engine+'-udesk26-physical.png'),fullPage:true});
       const locked = await physicalViewer.locator('#toolbar').getAttribute('data-state') === 'locked';
       if (locked) {
-        await physicalViewer.locator('#start-unlock').click();
+        await physicalViewer.locator('#cancel-unlock').waitFor({state:'visible',timeout:15000});
         const focused = await physicalViewer.locator('#desktop').screenshot();
         await physicalViewer.keyboard.press('Enter');
         await until(async () => changedDisplayPixels(focused, await physicalViewer.locator('#desktop').screenshot()) > 1000, 'Physical login-screen input did not change the central display; focus borders do not count');
