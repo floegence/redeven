@@ -21558,15 +21558,15 @@
         "title": "Flower companion presence, composer and motion",
         "type": "UI Contract"
       },
-      "body_length": 4081,
+      "body_length": 4586,
       "summary": "Collapsed Flower projects canonical work and connection-local editor intent through one retained textarea. Priority decides whether to show a decision, draft, status target or inspection. Shared shell motion preserves draft, selection, IME and focus; historical completion never becomes new feedback.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Presence\n### Status and live output\nCanonical priority is running, queued, attention, unread failure, unread cancellation, unread completion, unavailable, idle. Reduced motion disables flow/tracking/arrival effects while retaining semantic text/color. Live tails use matching current-run facts without exposing raw thinking.\n\n### Completion acknowledgement\nOnly a matching successful run previously observed running while collapsed may temporarily replace an idle editor with localized completion feedback. Exclude history, queued-only work, failures, cancellation, attention, expired/mismatched runs and completion while other running/queued work remains. Feedback is ephemeral, not canonical presence.\n\n### Observation and transport\nUse the shared workspace SSE; summaries cannot invent personal read state. Expansion requests current selected detail without a second stream; disconnect uses existing recovery.\n\n### Composer precedence\nOne derived entry owns rendering/target, in this order:\n1. Current-thread pending decision, regardless of question type or draft.\n2. Ordinary editor for draft, attachment, reference, focus or IME; inspection if editing unavailable.\n3. Eligible running, queued, unread-failure or ephemeral-completion target button.\n4. Ordinary editor or read-only/unavailable inspection.\n\n[Activity companion](flower-activity-companion.md#companion) owns question activation and one-shot focus handoffs.\n\n## Composer\nSettings recovery stays inside the collapsed row, with a reachable Retry and unchanged height. It replaces compact summary copy until recovery; active Stop remains available. The published shell cannot clip recovery outside its bounds. Expanded recovery uses the existing floating notice stack.\n\n### Retained editor and explicit entry\nThe same ordinary editor moves between compact/detail presentations. Specialized decisions retain separate controls; input/approval/work priority follows [presence](#presence), never converts a decision/status entry into an editor.\n\n### Editor layout and growth\nToolbar left stays empty; permission/model/reasoning remain in More during loading/errors. Recovery/guidance sit above the editor. Short input leaves no blank space beneath the toolbar; multiline growth moves it without replacing the editor. Dedicated pages retain complete starter suggestions.\n\n### Motion and surface treatment\nOne shell grows upward/outward in width and height, preserving bottom edge, border, background and clipping. Close dissolves detail before compact layout; reversal follows current phase. Exit keeps fixed coordinates and Activity height, without origin flashes. Published forced-color and focus indicators remain. Composer disclosures follow [shared surface material](surface-material.md): portaled nested menus retain More ownership, Escape returns focus one level at a time, and exits stop accepting input immediately. Collapsed content uses only its compact composer inset; transcript/activity gutters apply to expanded content and cannot push the entry icon away from the left edge.",
-          "char_count": 3052
+          "body": "## Presence\n### Status and live output\nCanonical priority is running, queued, attention, unread failure, unread cancellation, unread completion, unavailable, idle. Reduced motion disables flow/tracking/arrival effects while retaining semantic text/color. Live tails use matching current-run facts without exposing raw thinking. A collapsed Activity companion uses stable localized status and thread-title copy for running work; it does not render continuously changing assistant output or live-tail motion. Expanded and full Flower presentations retain live progress.\n\n### Completion acknowledgement\nOnly a matching successful run previously observed running while collapsed may temporarily replace an idle editor with localized completion feedback. Exclude history, queued-only work, failures, cancellation, attention, expired/mismatched runs and completion while other running/queued work remains. Feedback is ephemeral, not canonical presence.\n\n### Observation and transport\nUse the shared workspace SSE; summaries cannot invent personal read state. Expansion requests current selected detail without a second stream; disconnect uses existing recovery.\n\n### Composer precedence\nOne derived entry owns rendering/target, in this order:\n1. Current-thread pending decision, regardless of question type or draft.\n2. Ordinary editor for draft, attachment, reference, focus or IME; inspection if editing unavailable.\n3. Eligible running, queued, unread-failure or ephemeral-completion target button.\n4. Ordinary editor or read-only/unavailable inspection.\n\n[Activity companion](flower-activity-companion.md#companion) owns question activation and one-shot focus handoffs.\n\n## Composer\nSettings recovery stays inside the collapsed row, with a reachable Retry and unchanged height. It replaces compact summary copy until recovery; active Stop remains available. The published shell cannot clip recovery outside its bounds. Expanded recovery uses the existing floating notice stack.\n\n### Retained editor and explicit entry\nThe same ordinary editor moves between compact/detail presentations. Specialized decisions retain separate controls; input/approval/work priority follows [presence](#presence), never converts a decision/status entry into an editor.\n\n### Editor layout and growth\nToolbar left stays empty; permission/model/reasoning remain in More during loading/errors. Recovery/guidance sit above the editor. Short input leaves no blank space beneath the toolbar; multiline growth moves it without replacing the editor. Dedicated pages retain complete starter suggestions.\n\n### Motion and surface treatment\nOne shell grows upward/outward in width and height, preserving bottom edge, border, background and clipping. Close dissolves detail before compact layout; reversal follows current phase. Exit keeps fixed coordinates and Activity height, without origin flashes. Published forced-color and focus indicators remain. Composer disclosures follow [shared surface material](surface-material.md): portaled nested menus retain More ownership, Escape returns focus one level at a time, and exits stop accepting input immediately. Collapsed content uses only its compact composer inset; transcript/activity gutters apply to expanded content and cannot push the entry icon away from the left edge.",
+          "char_count": 3292
         },
         {
           "id": "boundaries",
@@ -21579,8 +21579,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Source.\n- `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - Source.\n\n- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Tests.",
-          "char_count": 303
+          "body": "- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Source.\n- `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/activityFlowerSummary.ts` - Collapsed versus expanded summary projection.\n- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Collapsed running status and companion interaction coverage.\n\n- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Tests.",
+          "char_count": 568
         }
       ],
       "evidence": [
@@ -21593,6 +21593,16 @@
           "id": "redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts:0:source.",
           "source": "redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/activityFlowerSummary.ts:0:collapsed versus expanded summary projection.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/activityFlowerSummary.ts",
+          "description": "Collapsed versus expanded summary projection."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx:0:collapsed running status and companion interaction coverage.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx",
+          "description": "Collapsed running status and companion interaction coverage."
         },
         {
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:source.",
@@ -25687,5 +25697,5 @@
       ]
     }
   ],
-  "source_sha256": "e3768a30ca6eee48d691e3a4cab7ce66569d90047a5626f6e0903a6d17612498"
+  "source_sha256": "55fef45cbfa95b15798e7c2256b094e845325c656ed27a0384c4769d04941fdf"
 }

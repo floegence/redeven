@@ -13,7 +13,7 @@ Collapsed Flower projects canonical work and connection-local editor intent thro
 
 ## Presence
 ### Status and live output
-Canonical priority is running, queued, attention, unread failure, unread cancellation, unread completion, unavailable, idle. Reduced motion disables flow/tracking/arrival effects while retaining semantic text/color. Live tails use matching current-run facts without exposing raw thinking.
+Canonical priority is running, queued, attention, unread failure, unread cancellation, unread completion, unavailable, idle. Reduced motion disables flow/tracking/arrival effects while retaining semantic text/color. Live tails use matching current-run facts without exposing raw thinking. A collapsed Activity companion uses stable localized status and thread-title copy for running work; it does not render continuously changing assistant output or live-tail motion. Expanded and full Flower presentations retain live progress.
 
 ### Completion acknowledgement
 Only a matching successful run previously observed running while collapsed may temporarily replace an idle editor with localized completion feedback. Exclude history, queued-only work, failures, cancellation, attention, expired/mismatched runs and completion while other running/queued work remains. Feedback is ephemeral, not canonical presence.
@@ -52,6 +52,8 @@ This concept owns content presentation only. [Flower companion presence](#presen
 
 - `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Source.
 - `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/activityFlowerSummary.ts` - Collapsed versus expanded summary projection.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Collapsed running status and companion interaction coverage.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Tests.
