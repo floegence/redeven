@@ -427,7 +427,6 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <Button class="remote-desktop-connect" data-desktop-focus="connect" disabled={sshManaged() ? !full() || !!busy() || refreshing() || sshCaptureUnavailable() : !canConnect()} aria-describedby={descriptionID} onClick={() => { rememberFocus(); if (sshManaged()) showDeployment('ensure', true); else if (status()?.control_in_use && mode() === 'control') showConfirmation('takeover'); else void open(false); }}>
         <StableText class="text-center" reserve={[i18n.t('remoteDesktop.connecting'), i18n.t('remoteDesktop.connect')]}>{i18n.t(needsSSHSetup() ? 'remoteDesktop.connect' : busy() === 'connect' ? 'remoteDesktop.connecting' : 'remoteDesktop.connect')}</StableText><ArrowRight size={16} aria-hidden="true" />
       </Button>
-      <Show when={sshCaptureUnavailable()}><Button variant="outline" disabled={!full() || !!busy() || refreshing()} onClick={() => void refresh()}>{i18n.t('remoteDesktop.refresh')}</Button></Show>
       <p id={descriptionID} role={opened() ? 'status' : undefined}>{i18n.t(opened() ? 'remoteDesktop.windowOpened' : 'remoteDesktop.openHint')}</p>
     </div>
     </Match>
