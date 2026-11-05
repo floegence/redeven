@@ -59,7 +59,7 @@ type ExternalPluginInstallDialogProps = {
 };
 
 type InstallStage = 'source' | 'review' | 'committing' | 'complete';
-type ExternalReviewOperation = 'install' | 'update' | 'reinstall' | 'replace' | 'install_checked';
+type ExternalReviewOperation = 'install' | 'update';
 
 type PluginInstallError = {
   summary: string;
@@ -91,14 +91,11 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   let reviewHeading: HTMLElement | undefined;
 
   const isUpdate = () => Boolean(props.updateItem?.pluginInstanceID);
-  const reviewOperation = createMemo<ExternalReviewOperation>(() => resolveReviewOperation(inspection(), props.updateItem));
+  const reviewOperation = createMemo<ExternalReviewOperation>(() => resolveReviewOperation(props.updateItem));
   const dialogTitle = () => {
     const plugin = props.updateItem?.displayName ?? '';
     switch (reviewOperation()) {
       case 'install': return i18n.t('uiCopy.plugin.external.installTitle');
-      case 'reinstall': return i18n.t('uiCopy.plugin.external.reinstallTitle', { plugin });
-      case 'replace': return i18n.t('uiCopy.plugin.external.replaceTitle', { plugin });
-      case 'install_checked': return i18n.t('uiCopy.plugin.external.installCheckedTitle', { plugin });
       case 'update': return i18n.t('uiCopy.plugin.external.updateTitle', { plugin });
     }
   };
@@ -256,7 +253,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     if (!installed?.pluginInstanceID) return false;
     if (!installed.version || validSemVer(installed.version) !== installed.version || validSemVer(current.version) !== current.version) return true;
     const comparison = compareSemVer(current.version, installed.version);
-    return comparison < 0 || (comparison === 0 && installed.externalPackage?.sourceProvenance.package_sha256 !== current.inspected_hashes.package_sha256);
+    return comparison <= 0;
   });
 
   const returnToSource = () => {
@@ -393,6 +390,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
               inspection={current()}
               displayName={props.updateItem?.displayName}
               previousVersion={props.updateItem?.version}
+              previousHash={props.updateItem?.installedPackage?.packageHash ?? props.updateItem?.externalPackage?.sourceProvenance.package_sha256}
               previousSummary={props.updateItem?.externalPackage?.securitySummary}
               operation={reviewOperation()}
               focusTargetRef={(element) => { reviewHeading = element; }}
@@ -676,6 +674,7 @@ function InspectionReview(props: {
   inspection: ExternalPluginInspection;
   displayName?: string;
   previousVersion?: string;
+  previousHash?: string;
   previousSummary?: PluginExternalPackageSecuritySummary;
   operation: ExternalReviewOperation;
   focusTargetRef?: (element: HTMLElement) => void;
@@ -707,6 +706,8 @@ function InspectionReview(props: {
               operation={props.operation}
               previousVersion={props.previousVersion}
               inspectedVersion={props.inspection.version}
+              installedHash={props.previousHash}
+              inspectedHash={props.inspection.inspected_hashes.package_sha256}
             />
           </div>
         </div>
@@ -1050,32 +1051,19 @@ function VersionReview(props: {
   operation: ExternalReviewOperation;
   previousVersion?: string;
   inspectedVersion: string;
+  installedHash?: string;
+  inspectedHash: string;
 }): JSX.Element {
   const i18n = useI18n();
   if (!props.previousVersion) return <>v{props.inspectedVersion}</>;
-  if (props.operation === 'update') return <>{i18n.t('uiCopy.plugin.external.versionChange', {
-    previous: props.previousVersion,
-    next: props.inspectedVersion,
+  if (props.previousVersion !== props.inspectedVersion) return <>{i18n.t('uiCopy.plugin.external.versionChange', {
+    previous: props.previousVersion, next: props.inspectedVersion,
   })}</>;
-  const label = () => {
-    switch (props.operation) {
-      case 'reinstall': return i18n.t('uiCopy.plugin.external.samePackageInstalled', { version: props.inspectedVersion });
-      case 'replace': return i18n.t('uiCopy.plugin.external.sameVersionDifferentPackage', { version: props.inspectedVersion });
-      case 'install_checked': return i18n.t('uiCopy.plugin.external.sameVersionUnknownPackage', { version: props.inspectedVersion });
-      default: return `v${props.inspectedVersion}`;
-    }
-  };
-  return (
-    <span class={cn(
-      'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium',
-      props.operation === 'reinstall' && 'border-[var(--redeven-status-success-foreground)] text-[var(--redeven-status-success-foreground)]',
-      (props.operation === 'replace' || props.operation === 'install_checked')
-        && 'border-[var(--redeven-status-warning-foreground)] text-[var(--redeven-status-warning-foreground)]',
-    )}>
-      {props.operation === 'reinstall' ? <CheckCircle class="h-3 w-3" /> : <AlertTriangle class="h-3 w-3" />}
-      {label()}
-    </span>
-  );
+  const same = () => props.installedHash === props.inspectedHash;
+  return <span class="text-xs font-medium">{i18n.t(same()
+    ? 'uiCopy.plugin.external.samePackageInstalled'
+    : props.installedHash ? 'uiCopy.plugin.external.sameVersionDifferentPackage'
+      : 'uiCopy.plugin.external.sameVersionUnknownPackage', { version: props.inspectedVersion })}</span>;
 }
 
 function ChangeBadge(props: { change: NonNullable<SecurityDeclaration['change']> }): JSX.Element {
@@ -1270,14 +1258,9 @@ function fields(value: object): string {
 }
 
 function resolveReviewOperation(
-  inspection: ExternalPluginInspection | null,
   updateItem?: PluginInventoryItem,
 ): ExternalReviewOperation {
-  if (!updateItem?.pluginInstanceID) return 'install';
-  if (!inspection || updateItem.version !== inspection.version) return 'update';
-  const previousHash = updateItem.externalPackage?.sourceProvenance.package_sha256;
-  if (!previousHash) return 'install_checked';
-  return previousHash === inspection.inspected_hashes.package_sha256 ? 'reinstall' : 'replace';
+  return updateItem?.pluginInstanceID ? 'update' : 'install';
 }
 
 function reviewOperationActionLabel(
@@ -1287,9 +1270,6 @@ function reviewOperationActionLabel(
   switch (operation) {
     case 'install': return i18n.t('uiCopy.plugin.external.confirmInstall');
     case 'update': return i18n.t('uiCopy.plugin.external.confirmUpdate');
-    case 'reinstall': return i18n.t('uiCopy.plugin.external.confirmReinstall');
-    case 'replace': return i18n.t('uiCopy.plugin.external.confirmReplace');
-    case 'install_checked': return i18n.t('uiCopy.plugin.external.confirmInstallChecked');
   }
 }
 
@@ -1300,9 +1280,6 @@ function reviewOperationConfirmationTitle(
   switch (operation) {
     case 'install': return i18n.t('uiCopy.plugin.external.confirmInstallTitle');
     case 'update': return i18n.t('uiCopy.plugin.external.confirmUpdateTitle');
-    case 'reinstall': return i18n.t('uiCopy.plugin.external.confirmReinstallTitle');
-    case 'replace': return i18n.t('uiCopy.plugin.external.confirmReplaceTitle');
-    case 'install_checked': return i18n.t('uiCopy.plugin.external.confirmInstallCheckedTitle');
   }
 }
 
@@ -1313,9 +1290,6 @@ function reviewOperationProgressLabel(
   switch (operation) {
     case 'install': return i18n.t('uiCopy.plugin.external.committing');
     case 'update': return i18n.t('uiCopy.plugin.external.updating');
-    case 'reinstall': return i18n.t('uiCopy.plugin.external.reinstalling');
-    case 'replace': return i18n.t('uiCopy.plugin.external.replacing');
-    case 'install_checked': return i18n.t('uiCopy.plugin.external.installingChecked');
   }
 }
 
@@ -1325,9 +1299,6 @@ function reviewOperationCompletionKey(
   switch (operation) {
     case 'install': return 'uiCopy.plugin.external.complete';
     case 'update': return 'uiCopy.plugin.external.updateComplete';
-    case 'reinstall': return 'uiCopy.plugin.external.reinstallComplete';
-    case 'replace': return 'uiCopy.plugin.external.replaceComplete';
-    case 'install_checked': return 'uiCopy.plugin.external.installCheckedComplete';
   }
 }
 

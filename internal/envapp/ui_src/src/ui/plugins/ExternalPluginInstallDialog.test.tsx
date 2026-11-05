@@ -1108,7 +1108,7 @@ describe('ExternalPluginInstallDialog', () => {
     expect(controlText(document.body)).not.toContain('Example Toolbox was installed');
   });
 
-  it('reinstalls the exact package when version and package hash match', async () => {
+  it('does not submit an update when the exact package is already installed', async () => {
     const updateItem = externalUpdateItem();
     const inspected = {
       ...inspection(),
@@ -1127,11 +1127,9 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     expect(controlText(document.querySelector('[data-external-plugin-identity]'))).toContain('This exact package is already installed; no update is needed · v1.2.3');
-    expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Reinstall Example Toolbox');
-    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
-    button('Reinstall this version').click();
-    await flush();
-    expect(onCommit).toHaveBeenCalledWith(inspected, expect.any(AbortSignal));
+    expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Update Example Toolbox');
+    expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(onCommit).not.toHaveBeenCalled();
   });
 
   it('warns when the same version resolves to different package content', async () => {

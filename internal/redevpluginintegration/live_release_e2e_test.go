@@ -43,7 +43,13 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if release.InstallPreview == nil {
+	var preview *pluginmarket.InstallPreview
+	for _, item := range snapshot.Plugins {
+		if item.PluginID == pluginID {
+			preview = item.Latest.InstallPreview
+		}
+	}
+	if preview == nil {
 		t.Fatal("live release is missing its verified install preview")
 	}
 
@@ -63,7 +69,7 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	if runtimePath == "" {
 		runtimePath = testRuntimePath(t, stateDir)
 	}
-	integration, err := New(context.Background(), Options{
+	options := Options{
 		StateDir: stateDir, PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
 		RuntimePath: runtimePath, PluginMarket: market,
 		ResolveSessionMeta: func(got string) (*session.Meta, bool) {
@@ -72,17 +78,19 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 				FloeApp: "com.floegence.redeven.agent", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
 			}, got == channelID
 		},
-	})
+	}
+	integration, err := New(context.Background(), options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := integration.Close(); err != nil {
-			t.Errorf("close integration: %v", err)
+		if integration != nil {
+			if err := integration.Close(); err != nil {
+				t.Errorf("close integration: %v", err)
+			}
 		}
 	})
 
-	preview := release.InstallPreview
 	inspectBody, err := json.Marshal(host.InspectExternalPackageRequest{
 		Intent: host.ExternalPackageIntent{Action: "install"},
 		Source: host.ExternalPackageSource{Kind: "github_repository", Host: "redeven", PluginID: pluginID,
@@ -143,6 +151,42 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 			if current.Data.MutationOutcome != "committed" {
 				t.Fatalf("release install terminal status = %s failure = %s", current.Data.Execution.Status, current.Data.Execution.FailureCode)
 			}
+			// Inspect durable inventory, then renew the Host and recover the exact
+			// receipt before relying on any process-local inspection state.
+			catalogResponse := httptest.NewRecorder()
+			integration.Handler().ServeHTTP(catalogResponse, liveReleaseRequest(t, http.MethodPost, "/_redevplugin/api/plugins/catalog/query", channelID, []byte(`{}`)))
+			var catalog struct {
+				Data struct {
+					Plugins []struct {
+						ID          string `json:"plugin_instance_id"`
+						PackageHash string `json:"package_hash"`
+						EnableState string `json:"enable_state"`
+					} `json:"plugins"`
+				} `json:"data"`
+			}
+			if catalogResponse.Code != http.StatusOK || json.Unmarshal(catalogResponse.Body.Bytes(), &catalog) != nil || len(catalog.Data.Plugins) != 1 {
+				t.Fatalf("installed inventory: %s", catalogResponse.Body.String())
+			}
+			record := catalog.Data.Plugins[0]
+			if record.ID != current.Data.Execution.PluginInstanceID || record.PackageHash != inspected.Data.InspectedHashes.PackageSHA256 || record.EnableState != "enabled" {
+				t.Fatalf("installed identity: %+v", record)
+			}
+			if err := integration.Close(); err != nil {
+				t.Fatal(err)
+			}
+			integration, err = New(context.Background(), options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			recovered := httptest.NewRecorder()
+			integration.Handler().ServeHTTP(recovered, liveReleaseRequest(t, http.MethodPost, "/_redevplugin/api/plugins/external-packages/install-operations", channelID, startBody))
+			var replay struct {
+				Data host.InspectedInstallOperation `json:"data"`
+			}
+			if recovered.Code != http.StatusOK || json.Unmarshal(recovered.Body.Bytes(), &replay) != nil || replay.Data.Execution.ID != current.Data.Execution.ID || replay.Data.MutationOutcome != "committed" {
+				t.Fatalf("restart receipt: %d %s", recovered.Code, recovered.Body.String())
+			}
+			t.Logf("verified %s %s, exact package %s, durable request %s after Host restart", pluginID, release.Version, record.PackageHash, replay.Data.RequestID)
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
