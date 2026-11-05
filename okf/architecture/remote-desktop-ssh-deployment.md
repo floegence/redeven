@@ -14,6 +14,7 @@ Desktop owns SSH authorization/UI lifetime, Floe Native Apps privileged preparat
 - Only the owning root/main frame of an RWX-authorized SSH environment uses typed deployment IPC. Sensitive admin streams retain no stdout/stderr diagnostics.
 - The upstream manager owns ensure/stop/uninstall and supported migrations. Unknown/future/unverifiable ownership remains unchanged. Service readiness, Runtime admission and capture readiness are separate; absent scanout cannot invalidate admitted policy.
 - A kernel-authenticated root manager holds maintenance ownership. Unknown attachment counts on older services require confirmation. Stage cleanup is independently bounded; transport loss is not rollback proof.
+- Linux login-screen capability failures preserve published, redacted reason codes across the native service, Runtime status and launcher. Stale compositor binaries after an OS update (`LOGIN_SESSION_STALE_RUNTIME`) and changed, missing, ambiguous, seat or TTY identities are host-action states with refresh guidance; unsupported desktops remain unsupported. The launcher never falls back to Portal or opens a connection while capture or input authority is unavailable.
 - [Launcher](remote-desktop-launcher.md) projects one operation; operation/challenge IDs reject stale replies. Input release, takeover, viewer routing and local Portal/macOS retain their owning contracts.
 
 # Boundaries
