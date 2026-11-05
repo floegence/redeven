@@ -4,6 +4,7 @@ import { createSignal } from 'solid-js';
 import { page, userEvent } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { modelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import type { FlowerConversationPreferencePatch, FlowerConversationPreferences, FlowerReasoningCapability } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, deferred, disposeRenderedSurface, liveBootstrap, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, settingsSnapshot, thread, waitFor } from './FlowerSurface.navigation.testHarness';
@@ -50,7 +51,8 @@ async function selectOld(surface: HTMLElement) {
 }
 async function chooseReasoning(surface: HTMLElement, label: string) {
   reasoningControl(surface)!.querySelector('button')!.click();
-  const item = Array.from(reasoningControl(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')).find(button => button.textContent?.trim() === label);
+  await waitFor(() => Boolean(document.querySelector('[role="menuitemradio"]')));
+  const item = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')).find(button => button.textContent?.trim() === label);
   expect(item).toBeDefined();
   item!.click();
 }
@@ -67,6 +69,22 @@ function newChat(surface: HTMLElement) {
 beforeEach(async () => { await page.viewport(1280, 900); });
 
 describe('Flower personal new-conversation preferences', () => {
+  it('starts a directory conversation with a draft-only working directory', async () => {
+    const f = fixture();
+    const surface = renderSurfaceWithDraftCoordinator(f.base, f.drafts);
+    await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
+    surface.querySelector<HTMLButtonElement>(`[aria-label="${DEFAULT_FLOWER_SURFACE_COPY.threadList.viewByDirectory}"]`)!.click();
+    const header = Array.from(surface.querySelectorAll<HTMLElement>('[data-flower-directory-header]')).find(node => node.dataset.flowerDirectoryHeader === '/project-b')!;
+    header.querySelector<HTMLButtonElement>('.flower-directory-new')!.click();
+    expect(f.drafts.read('__new_thread__').value.working_dir_override).toBe('/project-b');
+    expect(f.save).not.toHaveBeenCalled();
+    expect(f.preferences().working_dir).toBe('/project-a');
+    const launch = f.base.launchTurn as ReturnType<typeof vi.fn>;
+    await userEvent.fill(surface.querySelector<HTMLTextAreaElement>('textarea')!, 'Start in project B');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => launch.mock.calls.length > 0);
+    expect(launch.mock.calls[0][0]).toMatchObject({ working_dir: '/project-b' });
+  });
   it('keeps the active composer stable when its preference save notifies mounted surfaces', async () => {
     const f = fixture();
     const [revision, setRevision] = createSignal(0);

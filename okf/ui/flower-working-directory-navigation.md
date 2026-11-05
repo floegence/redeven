@@ -16,6 +16,8 @@ Flower owns draft/thread directory intent; Env App destination navigation. Full-
 ## Header and new-conversation entry points
 The full-page header has a borderless folder/name browse button; new-conversation welcome selects the draft directory without persistent full-path secondary text. Only picker confirmation remembers a validated real directory. Browsing, cancellation, suggestions and destination navigation never write it; created-thread directories remain immutable.
 
+The [conversation sidebar](flower-thread-sidebar.md#directory-view) can start a new draft from a listed directory. This supplies a draft-only directory override and follows normal admission validation; it does not remember a new personal default or modify an existing conversation.
+
 ## Directory and menu ownership
 Right-click captures its row's thread/directory without loading, selecting or acknowledging it. Updates cannot retarget actions; handled child events cannot open outer menus. Copy/cancel restores valid triggers without scrolling.
 

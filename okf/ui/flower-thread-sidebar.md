@@ -34,6 +34,11 @@ Localized reply/approval labels appear beside the title with bounded status/prog
 ## Pin ordering
 The stable `.flower-thread-rows` owner contains inline size for real/skeleton rows; movable cards cannot be size containers. Keyboard order matches visible search/pin-overlay order. Failed pin operations undo only their own presentation and reconcile via the existing summary stream or one explicit command read.
 
+## Directory view
+The compact header switches between the existing creation-time groups and full working-directory groups. Directory groups keep canonical pinned order ahead of other conversations. Search includes the full path; duplicate directory names expose their distinct paths. Each group shows six conversations, adds six per request and resets that limit on collapse. The directory's new-conversation action starts a draft in that directory without changing personal defaults.
+
+Directory order and the selected view are local preferences scoped to the host environment. Dragging a directory header displays an insertion line at the whole group's boundary; Alt+Up/Down and touch long-press provide equivalent movement. Search disables reordering. The workspace dialog displays every group and its conversations with selection, pinning, incremental loading and directory creation. Storage failure leaves the current interaction usable.
+
 ## Stable presentation and convergence
 Key rows by ThreadID and group labels separately. ThreadCache owns summaries; each batch publishes once under existing title/revision rules, preserving menus, focus and running-wave continuity.
 
@@ -50,3 +55,4 @@ Read confirmation and loaded-content revisions follow the canonical [read-state 
 - `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/threads/threadListModel.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerThreadList.directory.browser.test.tsx` - Directory view and workspace interactions.

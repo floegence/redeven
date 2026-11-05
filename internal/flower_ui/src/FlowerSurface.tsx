@@ -645,6 +645,8 @@ export type FlowerSurfaceProps = Readonly<{
   renderTaskFilePreviewContent?: Component<FlowerTaskFilePreviewContentProps>;
   renderContextSnapshotPreview?: Component<FlowerContextSnapshotPreviewProps>;
   filesystemScopeKey?: string;
+  /** Stable host identity for local sidebar preferences. */
+  threadListPreferenceScope?: string;
   filesystemScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement>;
   approvalScrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties } & Readonly<Record<`data-${string}`, string>>;
   approvalReadingProps?: JSX.HTMLAttributes<HTMLDivElement> & Readonly<Record<`data-${string}`, string>>;
@@ -6864,6 +6866,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const startCompose = () => {
     resetCompose();
     capturePageContext(currentComposerSessionKey(), 'refresh');
+  };
+
+  const startComposeInDirectory = (path: string) => {
+    startCompose();
+    updateComposerSessionDraft(pendingDraftKey(), draft => ({ ...draft, workingDirDraft: path }));
   };
 
   const retireThreadLocally = (threadID: string) => {
@@ -14995,6 +15002,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
         <FlowerThreadList
           items={sidebarListItems()}
+          preferenceScope={props.threadListPreferenceScope ?? props.adapter.runtime.runtime_id}
           activeThreadID={pendingThreadSelection() || (sidePanel() === 'chat' ? selectedThreadID() : '')}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
@@ -15007,6 +15015,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           onQueryChange={setHistoryFilter}
           onRefresh={() => void refreshThreads()}
           onSelect={selectThread}
+          onNewInDirectory={startComposeInDirectory}
           referenceDisabledReason={threadReferenceDisabledReason()}
           canFork={!!props.adapter.forkThread}
           canRename={!!props.adapter.renameThread}

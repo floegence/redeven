@@ -16,6 +16,42 @@ export type FlowerThreadGroup =
   | Readonly<{ kind: 'pinned'; threads: FlowerThreadListItem[] }>
   | Readonly<{ kind: 'time'; group: TimeGroup; threads: FlowerThreadListItem[] }>;
 
+export type FlowerDirectoryGroup = Readonly<{
+  path: string;
+  threads: FlowerThreadListItem[];
+}>;
+
+export const FLOWER_DIRECTORY_PAGE_SIZE = 6;
+
+export function flowerDirectoryName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) ?? path;
+}
+
+export function groupFlowerThreadsByDirectory(threads: readonly FlowerThreadListItem[], order: readonly string[]): FlowerDirectoryGroup[] {
+  const byPath = new Map<string, FlowerThreadListItem[]>();
+  const sorted = [...threads].sort((a, b) => b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id));
+  for (const thread of sorted) {
+    const path = thread.working_dir.trim();
+    const group = byPath.get(path) ?? [];
+    group.push(thread);
+    byPath.set(path, group);
+  }
+  const paths = [...byPath.keys()];
+  const ordered = [...order.filter((path, index) => byPath.has(path) && order.indexOf(path) === index), ...paths.filter(path => !order.includes(path))];
+  return ordered.map(path => ({ path, threads: byPath.get(path)!.sort((a, b) => (
+    Number(b.pinned) - Number(a.pinned)
+      || (a.pinned && b.pinned ? comparePinnedFlowerThreads(a, b) : b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id))
+  )) }));
+}
+
+export function moveFlowerDirectory(order: readonly string[], path: string, anchor: string, placement: 'before' | 'after'): string[] {
+  if (path === anchor || !order.includes(path) || !order.includes(anchor)) return [...order];
+  const next = order.filter(value => value !== path);
+  next.splice(next.indexOf(anchor) + (placement === 'after' ? 1 : 0), 0, path);
+  return next;
+}
+
 function threadGroupTime(thread: FlowerThreadListItem): number {
   return thread.created_at_ms;
 }
@@ -80,6 +116,7 @@ export function filterFlowerThreadItems(threads: readonly FlowerThreadListItem[]
     thread.model_id,
     thread.source_label,
     thread.read_only_reason,
+    thread.working_dir,
     ...thread.target_labels,
   ].join(' ').toLowerCase().includes(needle));
 }

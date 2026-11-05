@@ -126,6 +126,14 @@ export type FlowerThreadListCopy = Readonly<{
   unpin: string;
   pinnedGroup: string;
   pinnedBadge: string;
+  viewByTime: string;
+  viewByDirectory: string;
+  workspaces: string;
+  noDirectory: string;
+  newInDirectory: (directory: string) => string;
+  showMoreThreads: (count: number) => string;
+  reorderDirectory: string;
+  closeWorkspaces: string;
   rename: string;
   renameTitle: string;
   renameNameLabel: string;
@@ -1523,6 +1531,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     unpin: 'Unpin',
     pinnedGroup: 'Pinned',
     pinnedBadge: 'Pinned',
+    viewByTime: 'Time',
+    viewByDirectory: 'Directory',
+    workspaces: 'Workspaces and conversations',
+    noDirectory: 'No working directory',
+    newInDirectory: (directory) => `New conversation in ${directory}`,
+    showMoreThreads: (count) => `Show ${count} more`,
+    reorderDirectory: 'Drag to reorder; use Alt and arrow keys to move',
+    closeWorkspaces: 'Close workspaces',
     rename: 'Rename',
     renameTitle: 'Rename conversation',
     renameNameLabel: 'Name',

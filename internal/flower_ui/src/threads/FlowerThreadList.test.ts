@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { FlowerThreadListItem, FlowerThreadReadStatus } from '../contracts/flowerSurfaceContracts';
-import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems } from './threadListModel';
+import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems, groupFlowerThreadsByDirectory, moveFlowerDirectory } from './threadListModel';
 import { canForkThreadItem, canPinThreadItem, canRenameThreadItem } from './threadListActions';
 
 function readStatus(isUnread = false): FlowerThreadReadStatus {
@@ -57,6 +57,24 @@ describe('groupFlowerThreadItems', () => {
       threads: [{ thread_id: 'regular' }],
     });
     vi.useRealTimers();
+  });
+});
+
+describe('directory grouping', () => {
+  it('uses full paths, keeps canonical pins first, and respects the saved directory order', () => {
+    const groups = groupFlowerThreadsByDirectory([
+      thread({ thread_id: 'a', working_dir: '/one/project', created_at_ms: 30 }),
+      thread({ thread_id: 'b', working_dir: '/two/project', created_at_ms: 20 }),
+      thread({ thread_id: 'c', working_dir: '/one/project', pinned: true, pin_rank: 1, created_at_ms: 10 }),
+      thread({ thread_id: 'd', working_dir: '', created_at_ms: 5 }),
+    ], ['/two/project', '/missing']);
+    expect(groups.map(group => group.path)).toEqual(['/two/project', '/one/project', '']);
+    expect(groups[1].threads.map(item => item.thread_id)).toEqual(['c', 'a']);
+    expect(moveFlowerDirectory(groups.map(group => group.path), '/two/project', '/one/project', 'after')).toEqual(['/one/project', '/two/project', '']);
+  });
+
+  it('matches complete working directory paths', () => {
+    expect(filterFlowerThreadItems([thread({ working_dir: '/one/project' }), thread({ thread_id: 'other', working_dir: '/two/project' })], '/two').map(item => item.thread_id)).toEqual(['other']);
   });
 });
 

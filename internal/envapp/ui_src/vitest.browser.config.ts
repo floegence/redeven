@@ -993,6 +993,45 @@ export default mergeConfig(viteConfig, defineConfig({
             await session.detach();
           }
         },
+        dragFlowerDirectoryWithTouch: async ({ page }) => {
+          const frame = await frameForSelector(page, '[data-flower-directory-header="/two/project"]');
+          const session = await page.context().newCDPSession(page);
+          try {
+            await session.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+            const start = await frame.locator('[data-flower-directory-header="/two/project"] .flower-directory-toggle').boundingBox();
+            const target = await frame.locator('[data-flower-directory-header="/one/project"]').boundingBox();
+            if (!start || !target) throw new Error('Directory drag targets are unavailable');
+            const startPoint = { x: start.x + start.width / 2, y: start.y + start.height / 2 };
+            const targetPoint = { x: target.x + target.width / 2, y: target.y + 2 };
+            await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [startPoint] });
+            await new Promise(resolve => setTimeout(resolve, 450));
+            await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [targetPoint] });
+            const indicator = await frame.locator('[data-flower-directory-header="/one/project"]').getAttribute('data-drop-before');
+            await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            return { indicator, order: await frame.locator('[data-flower-directory-header]').evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.flowerDirectoryHeader)) };
+          } finally {
+            await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+            await session.detach();
+          }
+        },
+        scrollFlowerDirectoryWithTouch: async ({ page }) => {
+          const frame = await frameForSelector(page, '[data-flower-directory-header="/one/project"]');
+          const session = await page.context().newCDPSession(page);
+          try {
+            await session.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+            const header = await frame.locator('[data-flower-directory-header="/one/project"] .flower-directory-toggle').boundingBox();
+            if (!header) throw new Error('Directory scroll target is unavailable');
+            const x = header.x + header.width / 2, y = header.y + header.height / 2;
+            await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+            await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - 50 }] });
+            await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            await new Promise(resolve => setTimeout(resolve, 100));
+            return await frame.locator('.flower-thread-list .flower-scroll').evaluate(element => element.scrollTop);
+          } finally {
+            await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+            await session.detach();
+          }
+        },
         emulateMediaPreferences: async (
           { page },
           preferences: {
