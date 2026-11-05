@@ -89,8 +89,11 @@ Use the preview's resource, connection, action, execution, and diagnostics panel
 Configurable connectors require review of the exact destination and explicit
 approval; local endpoints also require the loopback option and normal network
 grants. A preview does not authorize installation or production resource access.
-Inspect an uncertain operation instead of blindly replaying it. Reset development
-data is destructive and belongs to the preview's explicit confirmation flow.
+Refresh state preserves the action draft and does not make a pending or uncertain
+operation safe to repeat. Inspect the application and observations, then use
+Review uncertain result only after deciding another action is appropriate; the
+acknowledgement never replays the previous action. Reset development data is
+destructive and belongs to the preview's explicit confirmation flow.
 
 ## Workers when needed
 

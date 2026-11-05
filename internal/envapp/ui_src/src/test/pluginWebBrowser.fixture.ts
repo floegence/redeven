@@ -7,7 +7,9 @@ import { openRuntimeSession } from '../../../../../desktop/scripts/fixtures/gate
 // Its messages are test observations only; the SDK owns all surface authority.
 export async function verifyPluginWebApplication(packageBase64: string, center: boolean): Promise<string[]> {
   const { current, acquisition } = await openRuntimeSession();
+  let methodRequests = 0;
   const authenticatedFetch: FetchLike = (input, init) => {
+    if (new URL(input, location.origin).pathname.endsWith("/surfaces/methods")) methodRequests++;
     const headers = new Headers(init.headers);
     headers.set('X-ReDevPlugin-CSRF', 'redeven-env-v1');
     headers.set('X-Redeven-Plugin-Session', acquisition.plugin_session_credential);
@@ -74,6 +76,8 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
     require(await first.slot.requestClose() !== undefined && !first.host.element.isConnected && second.host.element.isConnected, 'Closing one application affected another');
     const reopened = await open(3);
     require(reopened.origin !== first.origin && reopened.host.surfaceInstanceId !== first.host.surfaceInstanceId, 'Reopen reused revoked surface authority');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    require(methodRequests === 0, 'A resource-only Web application started a method receiver');
     const confirmationCount = confirmations;
     const record = (await client.catalog()).plugins.find(item => item.plugin_instance_id === pluginID)!;
     await client.disablePlugin({ plugin_instance_id: pluginID, expected_management_revision: record.management_revision, reason: 'qualification' });
@@ -83,7 +87,7 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
       require(surface.host.element.src === 'about:blank' && !surface.host.element.sandbox.contains('allow-same-origin'), 'Disabled application retained its document or origin authority');
     }
     require(confirmations === confirmationCount, 'Forced invalidation asked for an unsaved-close veto');
-    return ['Published Web package installs and runs native ESM, dynamic import, DOM, Worker and Canvas through the product route', 'Private KV persists across independent surfaces with conditional-write conflicts and snapshot observation', 'Private settings enforce revisions and SQLite executes bounded parameterized transactions without a backend Worker', 'Binary private-file stream roundtrip preserves 262177 bytes and content through the product transport', 'Plugin origin cannot read parent DOM or Runtime management', 'Independent simultaneous surfaces, cancelled unsaved close, confirmed close and fresh reopen', 'Disable invalidates all plugin surfaces without an unsaved-close veto'];
+    return ['Resource-only Web applications perform storage and local interaction without method receiver polling', 'Published Web package installs and runs native ESM, dynamic import, DOM, Worker and Canvas through the product route', 'Private KV persists across independent surfaces with conditional-write conflicts and snapshot observation', 'Private settings enforce revisions and SQLite executes bounded parameterized transactions without a backend Worker', 'Binary private-file stream roundtrip preserves 262177 bytes and content through the product transport', 'Plugin origin cannot read parent DOM or Runtime management', 'Independent simultaneous surfaces, cancelled unsaved close, confirmed close and fresh reopen', 'Disable invalidates all plugin surfaces without an unsaved-close veto'];
   } finally {
     try {
       await Promise.all(slots.map(slot => slot.dispose()));

@@ -34,6 +34,18 @@ Product prepares complete Rust/C/archiver/link tools before exact published-sour
 ## Runtime performance boundary
 Released 3.15 uses one Wasmtime actor/job path with fresh invocation state, bounded in-process compiled-module reuse, finite fuel and signed deadlines. Immutable manifest caching never replaces current permission or revocation checks. Product supplies fixed toolchain, runtime signing and placement policy; it does not add an executor, authorization cache or compatibility fallback. Cold module preparation remains separate from warm execution latency.
 
+## Pure Web communication
+Pure Web applications use native browser rendering and the released sandbox,
+not a Worker forwarding layer. The default author template declares no unused
+methods or intents; resource templates retain their own declared actions.
+No registered Surface methods means no receiver polling. Removing the final
+method drains already claimed calls and cancellation before stopping the receiver.
+Opening, authority renewal, resource access and business calls remain separate
+traffic. Zero receiver requests is not a zero-network or product latency claim.
+Each simultaneous container owns a distinct slot, frame and origin. Product
+qualification exercises private resources, sibling closure and fresh authority
+through the published SDK and actual product routes.
+
 ## Authoring/execution
 Platform owns config/manifest validation,bindings,build/test/package,diagnostics/watch,persistent preview,manual update candidates,connection review,verified dev runtime. Redeven version-derived skill invokes released CLI. Product owns intent/placement/review/install approval and build/signature/SBOM/publication proof; authoring grants no permissions.
 
@@ -48,6 +60,12 @@ installation under a new request identity. Preview state and formal installation
 have separate stores and grants. Deleting author resources preserves installed
 plugins. Host-local source access is scoped to the authenticated draft and normal
 Flower effect approval; it does not authorize plugin execution.
+
+Preview refresh preserves selected actions and JSON drafts; pending work remains
+single-flight. Unknown outcomes require explicit review and never replay.
+Readiness resolves project-relative tools from the project directory. These
+behaviors belong to the released author CLI; Redeven only provides its
+version-derived instructions.
 
 3.13.0 owns manifest actions/direct Surface KV/SQLite/files/settings without Worker forwarding. Dedicated-origin binary/WebSocket handler requires exact handshake; Host checks session ceilings/scope/grants/quotas/revoke. Product mounts/presents,never new endpoints/manifest interpretation. SDK conflict/unknown cannot replay; coalesced watches are not logs.
 
