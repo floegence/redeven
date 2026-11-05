@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin Center interaction
 tags: [ui, plugins, plugin-center, workbench, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -28,6 +28,8 @@ The directory, detail actions, package-install source form and update review com
 Floe owns Input focus, Button pending/disabled treatment and Tabs keyboard/selection behavior. Search, source/trust/lifecycle filters, retained selection and scroll remain product state. Menu triggers are single focusable boundaries with centered content, neutral hover and visible keyboard focus; nested trigger boxes are avoided. Details keep primary actions outside their scroll body, with secondary evidence in quiet disclosures.
 
 Source tabs retain complete accessible names and three equal columns on compact dialogs. Mobile actions remain at least 44px; install progress replaces the primary action without changing card/sibling geometry. Reduced-motion, localized long copy and light/dark themes use the same shared controls.
+
+Changing the external install source may increase body height and show scrolling. The published Floe Dialog keeps its body scrollbar gutter stable, so the panel and body widths remain fixed while the existing height transition settles; content stays scrollable.
 
 ## Restore saved data
 

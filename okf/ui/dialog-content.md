@@ -3,7 +3,7 @@ type: UI Contract
 title: Dialog content placement
 tags: [ui, dialogs, accessibility, desktop]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-04"
 ---
 # Summary
 
@@ -37,6 +37,12 @@ scrolls inside the body. Flower settings, nested editors and conversation rename
 use the published Dialog. Preserve the bounded loading geometry defined in
 [page-loading continuity](page-loading-continuity.md#page-continuity).
 
+Published Floe reserves a stable scrollbar gutter when the default Dialog body
+owns scrolling. Panel and body widths stay fixed as content crosses the scrolling
+threshold during the existing smooth height transition. Custom layouts that
+replace body scrolling retain their full width without an empty gutter. Floe
+continues to own height observation, animation and reduced-motion behavior.
+
 # Boundaries
 
 Headers contain identity and controls only. Missing guidance must be repaired in the body through the shared Dialog contract; a custom header, hidden description or restored subtitle is not a recovery path.
@@ -48,3 +54,4 @@ Headers contain identity and controls only. Missing guidance must be repaired in
 - `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Source-switch width stability, smooth resizing, scroll access and reduced-motion tests.

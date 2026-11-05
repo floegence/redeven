@@ -10688,7 +10688,7 @@
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.90.10 (Env App Core v0.90.10), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "body": "Pins: Floe Boot/Core/Protocol v0.90.11 (Env App Core v0.90.11), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
           "char_count": 1459
         },
         {
@@ -20214,7 +20214,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "accessibility",
           "desktop",
@@ -20224,15 +20224,15 @@
         "title": "Dialog content placement",
         "type": "UI Contract"
       },
-      "body_length": 2566,
+      "body_length": 3131,
       "summary": "Published Floe owns Dialog structure; Redeven supplies localized content/actions. Headers hold identity/controls; guidance and consequences belong in bodies, including drawers and confirmations. Missing descriptions require content fixes, not hidden text or header subtitles.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and `ConfirmDialog`. Custom headers and title JSX must not recreate the removed explanatory subtitle.\n\nThis contract changes no application connection, process, or window lifecycle.\n\n## Header-safe bounds\n\nGlobal dialogs and drawers reserve the visible application header before allocating\ntheir body height. The shared Redeven stylesheet applies the larger of the native\nDesktop titlebar and Floe's visible shell top bar plus its top safe inset, followed\nby the published presentation gap. Floe owns the visible viewport, keyboard\nresponse, remaining safe edges, panel maximum height, focus and dismissal. The\nsingle product top-padding override is intentional because the published Dialog\nsets that padding inline. Do not reintroduce per-dialog viewport subtraction or\nminimum heights that can overflow short windows.\n\nThe shell header contract is Floe's `h-10` content plus its one-pixel border. A\nheaderless mobile shell adds no phantom header; inactive KeepAlive views do not\ncount as visible headers. Surface-local dialogs and Workbench window confirmations\nstay within their existing host below the shell header without subtracting it a\nsecond time. Side drawers keep their edge-attached presentation.\n\nHeaders, close controls and footer actions remain reachable while long content\nscrolls inside the body. Flower settings, nested editors and conversation rename\nuse the published Dialog. Preserve the bounded loading geometry defined in\n[page-loading continuity](page-loading-continuity.md#page-continuity).",
-          "char_count": 1594
+          "body": "Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and `ConfirmDialog`. Custom headers and title JSX must not recreate the removed explanatory subtitle.\n\nThis contract changes no application connection, process, or window lifecycle.\n\n## Header-safe bounds\n\nGlobal dialogs and drawers reserve the visible application header before allocating\ntheir body height. The shared Redeven stylesheet applies the larger of the native\nDesktop titlebar and Floe's visible shell top bar plus its top safe inset, followed\nby the published presentation gap. Floe owns the visible viewport, keyboard\nresponse, remaining safe edges, panel maximum height, focus and dismissal. The\nsingle product top-padding override is intentional because the published Dialog\nsets that padding inline. Do not reintroduce per-dialog viewport subtraction or\nminimum heights that can overflow short windows.\n\nThe shell header contract is Floe's `h-10` content plus its one-pixel border. A\nheaderless mobile shell adds no phantom header; inactive KeepAlive views do not\ncount as visible headers. Surface-local dialogs and Workbench window confirmations\nstay within their existing host below the shell header without subtracting it a\nsecond time. Side drawers keep their edge-attached presentation.\n\nHeaders, close controls and footer actions remain reachable while long content\nscrolls inside the body. Flower settings, nested editors and conversation rename\nuse the published Dialog. Preserve the bounded loading geometry defined in\n[page-loading continuity](page-loading-continuity.md#page-continuity).\n\nPublished Floe reserves a stable scrollbar gutter when the default Dialog body\nowns scrolling. Panel and body widths stay fixed as content crosses the scrolling\nthreshold during the existing smooth height transition. Custom layouts that\nreplace body scrolling retain their full width without an empty gutter. Floe\ncontinues to own height observation, animation and reduced-motion behavior.",
+          "char_count": 1985
         },
         {
           "id": "boundaries",
@@ -20245,8 +20245,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.",
-          "char_count": 436
+          "body": "- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Source-switch width stability, smooth resizing, scroll access and reduced-motion tests.",
+          "char_count": 610
         }
       ],
       "evidence": [
@@ -20274,6 +20274,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx:0:tests.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx",
           "description": "Tests."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:0:source-switch width stability, smooth resizing, scroll access and reduced-motion tests.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx",
+          "description": "Source-switch width stability, smooth resizing, scroll access and reduced-motion tests."
         }
       ],
       "snippet": "Published Floe owns Dialog structure; Redeven supplies localized content/actions. Headers hold identity/controls; guidance and consequences belong in bodies, including drawers and confirmations. Missing descriptions require content fixes, n",
@@ -24674,7 +24679,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-04",
         "tags": [
           "accessibility",
           "plugin-center",
@@ -24685,15 +24690,15 @@
         "title": "Plugin Center interaction",
         "type": "UI Contract"
       },
-      "body_length": 4026,
+      "body_length": 4289,
       "summary": "Redeven owns Plugin Center navigation; Floe owns dialogs, presence and input. Workbench uses a retained drawer and Activity the same directory page. Search/filter/selection/scroll persist. Closing management does not cancel Host execution; released ReDevPlugin owns lifecycle, permissions and surface authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Management placement and input\nOnly Plugin Center explicitly selects global Dialog placement at the product modal layer. Recent Dock or widget interactions cannot mount the drawer under `.workbench-surface`, `inert`, or a transformed canvas ancestor.\n\nA successful Open closes management and focuses the target after canvas input becomes available; a failed Open preserves the directory and error feedback.\n\n## Directory and responsive details\nLocal filters combine source (official catalog or external), trust, and lifecycle without rebuilding identity. Refresh status remains outside the card grid, so a pending refresh cannot appear as a duplicate card.\n\nExternal installation source tabs retain three columns with the same complete accessible names when their visible selection labels need ellipsis.\n\n## Shared design language\n\nThe directory, detail actions, package-install source form and update review compose released Floe controls. Cards use the shared default plane, without visible resting contours, decorative lift, icon magnification or custom shadow stacks. Selected cards use the shared selection fill. Shared Tags carry trust/lifecycle semantics without changing Host authority.\n\nFloe owns Input focus, Button pending/disabled treatment and Tabs keyboard/selection behavior. Search, source/trust/lifecycle filters, retained selection and scroll remain product state. Menu triggers are single focusable boundaries with centered content, neutral hover and visible keyboard focus; nested trigger boxes are avoided. Details keep primary actions outside their scroll body, with secondary evidence in quiet disclosures.\n\nSource tabs retain complete accessible names and three equal columns on compact dialogs. Mobile actions remain at least 44px; install progress replaces the primary action without changing card/sibling geometry. Reduced-motion, localized long copy and light/dark themes use the same shared controls.\n\n## Restore saved data\n\nInstalled plugin details expose Restore saved data in the existing action menu. Discovery is read-only, including for enabled plugins. The user selects a retained record by date and instance suffix; Disable and continue is explicit when needed, and the Host then produces the exact review. A short confirmation states that current data is also retained. No permanent card, technical hash wall or automatic re-enable is added.\n\nThe dialog binds requests to the current session owner, target instance and read/write/admin permissions. Ordinary inventory refreshes preserve the review. Closing aborts reads; reopening the same target retains an uncertain plan and only checks status. Uncertain disabling likewise refreshes authoritative inventory without repeating the write. A completed recovery stays complete if list refresh fails. Source selection uses native keyboard-operable radio inputs; the existing Dialog owns isolation, dismissal and focus restoration, and mobile actions retain at least 44-pixel targets.",
-          "char_count": 2971
+          "body": "## Management placement and input\nOnly Plugin Center explicitly selects global Dialog placement at the product modal layer. Recent Dock or widget interactions cannot mount the drawer under `.workbench-surface`, `inert`, or a transformed canvas ancestor.\n\nA successful Open closes management and focuses the target after canvas input becomes available; a failed Open preserves the directory and error feedback.\n\n## Directory and responsive details\nLocal filters combine source (official catalog or external), trust, and lifecycle without rebuilding identity. Refresh status remains outside the card grid, so a pending refresh cannot appear as a duplicate card.\n\nExternal installation source tabs retain three columns with the same complete accessible names when their visible selection labels need ellipsis.\n\n## Shared design language\n\nThe directory, detail actions, package-install source form and update review compose released Floe controls. Cards use the shared default plane, without visible resting contours, decorative lift, icon magnification or custom shadow stacks. Selected cards use the shared selection fill. Shared Tags carry trust/lifecycle semantics without changing Host authority.\n\nFloe owns Input focus, Button pending/disabled treatment and Tabs keyboard/selection behavior. Search, source/trust/lifecycle filters, retained selection and scroll remain product state. Menu triggers are single focusable boundaries with centered content, neutral hover and visible keyboard focus; nested trigger boxes are avoided. Details keep primary actions outside their scroll body, with secondary evidence in quiet disclosures.\n\nSource tabs retain complete accessible names and three equal columns on compact dialogs. Mobile actions remain at least 44px; install progress replaces the primary action without changing card/sibling geometry. Reduced-motion, localized long copy and light/dark themes use the same shared controls.\n\nChanging the external install source may increase body height and show scrolling. The published Floe Dialog keeps its body scrollbar gutter stable, so the panel and body widths remain fixed while the existing height transition settles; content stays scrollable.\n\n## Restore saved data\n\nInstalled plugin details expose Restore saved data in the existing action menu. Discovery is read-only, including for enabled plugins. The user selects a retained record by date and instance suffix; Disable and continue is explicit when needed, and the Host then produces the exact review. A short confirmation states that current data is also retained. No permanent card, technical hash wall or automatic re-enable is added.\n\nThe dialog binds requests to the current session owner, target instance and read/write/admin permissions. Ordinary inventory refreshes preserve the review. Closing aborts reads; reopening the same target retains an uncertain plan and only checks status. Uncertain disabling likewise refreshes authoritative inventory without repeating the write. A completed recovery stays complete if list refresh fails. Source selection uses native keyboard-operable radio inputs; the existing Dialog owns isolation, dismissal and focus restoration, and mobile actions retain at least 44-pixel targets.",
+          "char_count": 3234
         },
         {
           "id": "boundaries",
@@ -25697,5 +25702,5 @@
       ]
     }
   ],
-  "source_sha256": "abd7250b46bdf291ddfe381348968d8815f7bf4276493bf0e53afc15532e8d8d"
+  "source_sha256": "f81382cbd9fafeff86a34dd325d24c618b1a3e224926a30ef8bf9e47647610dc"
 }

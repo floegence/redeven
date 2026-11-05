@@ -1663,6 +1663,92 @@ describe('plugin management browser geometry and interaction', () => {
   });
 
   it.each([
+    { width: 1440, height: 900, scrolling: false, reducedMotion: 'no-preference' },
+    { width: 390, height: 844, scrolling: false, reducedMotion: 'no-preference' },
+    { width: 390, height: 370, scrolling: true, reducedMotion: 'no-preference' },
+    { width: 390, height: 370, scrolling: true, reducedMotion: 'reduce' },
+  ] as const)('keeps source-switch widths stable at $width x $height with $reducedMotion motion', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: viewport.reducedMotion });
+    mountExternalDialog();
+    await settle();
+    // Finish the separate opening transform before measuring content resizing.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const body = dialog.querySelector<HTMLElement>('[data-floe-dialog-body]')!;
+    const sourceTabs = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    expect(sourceTabs).toHaveLength(3);
+    expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+
+    const initialPanelWidth = dialog.getBoundingClientRect().width;
+    const initialBodyWidth = body.clientWidth;
+    const initialPanelHeight = dialog.getBoundingClientRect().height;
+    const sampleSourceChange = async (tabID: string) => {
+      const samples: Array<{ panel: number; body: number; height: number }> = [];
+      const heightAnimations = new Set<Animation>();
+      sourceTabs.find(tab => tab.id === tabID)!.click();
+      await new Promise<void>((resolve) => {
+        const start = performance.now();
+        const tick = () => {
+          samples.push({
+            panel: dialog.getBoundingClientRect().width,
+            body: body.clientWidth,
+            height: dialog.getBoundingClientRect().height,
+          });
+          for (const animation of dialog.getAnimations()) {
+            if (animation.effect instanceof KeyframeEffect && animation.effect.getKeyframes().some(frame => 'height' in frame)) {
+              heightAnimations.add(animation);
+            }
+          }
+          const elapsed = performance.now() - start;
+          const settled = !dialog.getAnimations().some(animation => animation.playState === 'running') && !dialog.style.willChange;
+          if (elapsed < 400 || (!settled && elapsed < 1500)) requestAnimationFrame(tick);
+          else resolve();
+        };
+        requestAnimationFrame(tick);
+      });
+      expect(samples.length).toBeGreaterThan(1);
+      expect(samples.every(({ panel, body: width }) => panel === initialPanelWidth && width === initialBodyWidth), JSON.stringify(samples)).toBe(true);
+      if (viewport.reducedMotion === 'reduce') expect(heightAnimations.size).toBe(0);
+      expect(dialog.style.height).toBe('');
+      expect(dialog.style.willChange).toBe('');
+      expectNoHorizontalOverflow(body);
+      expectInsideViewport(dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!, viewport);
+      return samples;
+    };
+
+    const growing = await sampleSourceChange('external-plugin-source-tab-github_repository');
+    await expect.element(page.getByRole('textbox', { name: 'GitHub repository URL', exact: true })).toBeVisible();
+    expect(body.scrollHeight > body.clientHeight).toBe(viewport.scrolling);
+    const expandedHeight = dialog.getBoundingClientRect().height;
+    expect(expandedHeight).toBeGreaterThan(initialPanelHeight + 1);
+    if (viewport.reducedMotion === 'no-preference') {
+      expect(growing.some(({ height }) => height > initialPanelHeight + 1 && height < expandedHeight - 1)).toBe(true);
+    }
+    if (viewport.scrolling) {
+      body.scrollTop = 100;
+      expect(body.scrollTop).toBeGreaterThan(0);
+      body.scrollTop = 0;
+    }
+
+    const shrinking = await sampleSourceChange('external-plugin-source-tab-package_url');
+    expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+    expect(dialog.getBoundingClientRect().height).toBeCloseTo(initialPanelHeight, 0);
+    if (viewport.reducedMotion === 'no-preference') {
+      expect(shrinking.some(({ height }) => height > initialPanelHeight + 1 && height < expandedHeight - 1)).toBe(true);
+    }
+
+    // The file source has a different intrinsic height from the URL source.
+    // Switching from either source must preserve the same content width.
+    await sampleSourceChange('external-plugin-source-tab-package_upload');
+    expect(dialog.querySelector('input[type="file"]')).not.toBeNull();
+    await sampleSourceChange('external-plugin-source-tab-github_repository');
+    await expect.element(page.getByRole('textbox', { name: 'GitHub repository URL', exact: true })).toBeVisible();
+    expect(body.scrollHeight > body.clientHeight).toBe(viewport.scrolling);
+  });
+
+  it.each([
     { width: 1280, height: 900, theme: 'light' },
     { width: 1280, height: 900, theme: 'dark' },
     { width: 390, height: 844, theme: 'light' },
