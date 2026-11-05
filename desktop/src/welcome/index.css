@@ -658,12 +658,14 @@ html:not(.dark) .redeven-welcome-surface {
 /* ── Environment cards ── */
 
 .redeven-environment-card {
+  --redeven-environment-card-plane: var(--redeven-welcome-card);
   position: relative;
   overflow: visible;
   display: flex;
   min-height: auto;
   flex-direction: column;
-  transition: background-color 120ms ease-out;
+  background-color: var(--redeven-environment-card-plane);
+  transition: background-color var(--floe-duration-slow) var(--floe-ease-out);
 }
 
 /* The environment grid needs an identifiable perimeter even when the page and
@@ -685,44 +687,25 @@ html:not(.dark) .redeven-welcome-surface {
 
 html:not(.dark) .redeven-environment-card {
   border-radius: 0.5rem;
-  background: var(--redeven-welcome-card);
 }
 
-/*
- * floe-webapp Card wraps children in a <div class="relative z-10"> container.
- * That wrapper must participate in the flex layout so CardFooter's mt-auto can
- * push the footer to the bottom of the card.
- */
-.redeven-environment-card > .relative {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
-.redeven-environment-card:hover {
-  background: color-mix(in srgb, var(--card) 98%, var(--primary) 2%);
-}
-
-html:not(.dark) .redeven-environment-card:hover {
-  background: color-mix(in srgb, var(--redeven-welcome-card) 96%, var(--primary) 4%);
+/* Keep one opaque carrying plane through connection changes and hover. A
+ * background shorthand would remove the old gradient instantly, exposing the
+ * page while background-color interpolates from transparent. The gentle ink
+ * wash retains the status tint and reverses from the current painted color.
+ * Cards group independent controls, so their contour and geometry stay still. */
+@media (hover: hover) and (pointer: fine) and (forced-colors: none) {
+  .redeven-environment-card:hover {
+    background-color: color-mix(in srgb, var(--foreground) 2%, var(--redeven-environment-card-plane));
+  }
 }
 
 .redeven-environment-card--featured {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--primary) 5%, var(--card)), var(--card));
-}
-
-html:not(.dark) .redeven-environment-card--featured {
-  background: color-mix(in srgb, var(--primary) 5%, var(--redeven-welcome-card));
+  --redeven-environment-card-plane: color-mix(in srgb, var(--primary) 3%, var(--redeven-welcome-card));
 }
 
 .redeven-environment-card--open {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--success) 6%, var(--card)), var(--card));
-}
-
-html:not(.dark) .redeven-environment-card--open {
-  background: color-mix(in srgb, var(--success) 6%, var(--redeven-welcome-card));
+  --redeven-environment-card-plane: color-mix(in srgb, var(--success) 3%, var(--redeven-welcome-card));
 }
 
 .redeven-environment-card__flower-button {
@@ -764,18 +747,6 @@ html:not(.dark) .redeven-environment-card--open {
 
 
 
-
-.redeven-new-environment-card:hover {
-  box-shadow:
-    var(--redeven-welcome-soft-shadow);
-}
-
-html:not(.dark) .redeven-new-environment-card:hover {
-  border-color: color-mix(in srgb, var(--primary) 34%, var(--redeven-welcome-card-border));
-  background: color-mix(in srgb, var(--redeven-welcome-card) 96%, var(--primary) 4%);
-  box-shadow:
-    var(--redeven-welcome-soft-shadow);
-}
 
 /* ── Card body: flat fact rows ── */
 

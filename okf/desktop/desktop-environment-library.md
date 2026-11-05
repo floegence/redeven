@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Environment library, registrations and card presentation
 tags: [desktop, environment, cloud, welcome]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -25,6 +25,7 @@ Each action names Local, Runtime target, saved URL or Gateway-member storage own
 - Every Launcher Operation declares `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall` or `gateway`. Main/renderer title, details and cancellation consume it without another timeline.
 
 ## Card presentation
+- Cards retain one opaque theme-derived plane and a quiet, stable contour. Connected cards carry a restrained success tint; fine-pointer hover gently shifts the same plane without removing the tint, swapping gradients, adding shadows or moving controls. Shared Floe color timing reverses from the painted state; reduced motion settles immediately and touch never latches hover.
 - Use **Open window** for unopened environments and **Show window** to focus existing sessions, preserving readiness, authority, lifecycle and session ownership. Use Environment/environment window/Redeven in settings, progress, recovery and titles; Env App is internal. Every shipped catalog translates the copy.
 - Card controls stay single-line; long progress actions wrap. Four creation entries form an equal-column 2x2 grid. Copy log/Close share Floe outline treatment, widths and row height without translation overflow.
 - Center primary content excluding the menu toggle; idle reserves no icon space. Submission shows loader/shimmer, accessible busy state and blocks repeat clicks; completion restores centered text. Keep geometry and icon-label grouping stable.
@@ -54,6 +55,8 @@ Desktop owns registration metadata: edits/removal cannot delete Runtime/Gateway/
 
 - `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Tests.
 - `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Tests.
+- `redeven:desktop/scripts/check-welcome-card-hover.mjs` - All published palettes, intermediate color frames, rapid reversal, connection changes, reduced motion/forced colors/touch and real Local/SSH Welcome cards at desktop, tablet and phone widths.
+- `redeven:desktop/scripts/check-welcome-cards.mjs` - Card contour and reading contrast across the current published material and theme matrix.
 - `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Tests.
 - `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Tests.
 

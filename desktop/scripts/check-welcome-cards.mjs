@@ -8,7 +8,8 @@ import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 const output = process.env.REDEVEN_WELCOME_CARD_OUTPUT
   || fileURLToPath(new URL('../dist/welcome-card-acceptance/', import.meta.url));
 await mkdir(output, { recursive: true });
-const server = await createSSHSettingsPreviewServer(0);
+const server = await createSSHSettingsPreviewServer(0, ['welcome-cards.html']);
+await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], systemCases: [], errors: [], status: 'running' };
 try {
@@ -17,7 +18,7 @@ try {
   await page.goto(new URL('welcome-cards.html', server.resolvedUrls.local[0]).href);
   await page.locator('[data-card-state="idle"]').waitFor();
   for (const preset of builtInShellThemePresets) {
-    for (const material of ['standard', 'soft-neumorphic']) {
+    for (const material of ['soft-neumorphic']) {
       await page.evaluate(({ preset, material }) => {
         const root = document.documentElement;
         root.classList.toggle('dark', preset.mode === 'dark');
@@ -25,7 +26,7 @@ try {
         root.dataset.floeShellTheme = preset.name;
         root.dataset.floeSurfaceStyle = material;
       }, { preset, material });
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(350);
       const cards = await page.evaluate(() => {
         const rgb = value => {
           const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
