@@ -487,8 +487,6 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.shell.backToEnvironments).toBe('返回环境');
     expect(zhCN.environmentCenter.askFlowerForLabel).toBe('询问 Flower：{label}');
     expect(zhCN.environmentCenter.askFlowerCardTitle).toBe('询问 Flower');
-    expect(zhCN.environmentCenter.askFlowerLauncherQuestion).toBe('想让我们先查看这个环境的哪一部分？');
-    expect(zhCN.environmentCenter.askFlowerLauncherPlaceholder).toBe('告诉 Flower 要检查或协调什么...');
     expect(zhCN.environmentCenter.askFlowerCardContextLabel).toBe('已关联上下文');
     expect(zhCN.environmentCenter.askFlowerWorkingDirectoryUnavailable).toBe('未选择工作目录。');
     expect(zhCN.environmentCenter.askFlowerCardLaunchFailedTitle).toBe('Flower 无法发起这次对话。');
@@ -639,13 +637,9 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.threadList.refreshLabel).toBe('重新整理對話');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.settings.backToChat).toBe('返回聊天');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].environmentCenter.askFlowerCardTitle).toBe('詢問 Flower');
-    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].environmentCenter.askFlowerCardReplyHint).toBe('回覆 Flower');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.conversationsAria).toBe('Flower conversations');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardTitle).toBe('Ask Flower');
-    expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerLauncherQuestion).toBe('What should we look into for this Environment?');
-    expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerLauncherPlaceholder).toBe('Ask what Flower should inspect or coordinate here...');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardContextLabel).toBe('Linked context');
-    expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardReplyHint).toBe('Reply to Flower');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerWorkingDirectoryUnavailable).toBe('No working directory selected.');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardLaunchFailedTitle).toBe('Flower could not start this turn.');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].shell.backToEnvironments).toBe('Back to Environments');

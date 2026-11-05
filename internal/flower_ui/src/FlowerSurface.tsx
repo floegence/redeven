@@ -32,6 +32,8 @@ import { withFlowerModelDirectory } from './modelDirectory';
 import { FlowerReadDeadlineError, FlowerRequestDeadlineError, withFlowerRequestDeadline, withFlowerReadDeadline } from './requestDeadline';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
+import { flowerComposerModelOption, type ComposerModelOption } from './composerModelOption';
+import { FlowerModelOptionContent } from './composer/FlowerModelOptionContent';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
 import {
   Input,
@@ -60,14 +62,13 @@ import { FlowerApprovalRow, FlowerApprovalDecisionActions } from './FlowerApprov
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
 import { createFlowerMotionPreference } from './flowerMotionPreference';
 import { readPresentationValue, retainEqualValue, retainKeyedItems } from './presentationIdentity';
-import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack, useContext } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Eye, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Pencil, Plus, Refresh, Search, Send, Settings, Shield, ShieldCheck, Terminal, Trash, Unlock, Workflow, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Eye, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Pencil, Plus, Refresh, Search, Send, Settings, Shield, ShieldCheck, Terminal, Trash, Unlock, Workflow, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -175,8 +176,6 @@ import type {
   FlowerModelSourceStatus,
   FlowerSurfaceAction,
   FlowerPermissionType,
-  FlowerProviderType,
-  FlowerReasoningCapability,
   FlowerReasoningSelection,
   FlowerSubagentDetail,
   FlowerSubagentInputOperation,
@@ -3222,31 +3221,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     });
   });
-  type ComposerModelOption = Readonly<{
-    billingSource?: 'chatgpt_plan';
-    id: string;
-    label: string;
-    name?: string;
-    group: string;
-    aliasKey?: string;
-    source: 'model_profile' | 'desktop_model_source' | 'platform' | 'thread_snapshot';
-    disabled?: boolean;
-    providerType?: FlowerProviderType;
-    reasoningCapability?: FlowerReasoningCapability;
-    defaultReasoningSelection?: FlowerReasoningSelection;
-    pending?: boolean;
-    unavailableReason?: string;
-  }>;
-  const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => (modelDirectory()?.models ?? []).map(model => ({
-    id: model.id, label: model.label || model.id, billingSource: model.billing_source,
-    name: model.label?.split(' / ').slice(1).join(' / ') || model.model_name,
-    group: model.provider_name || (model.source === 'platform' ? 'Redeven AI' : model.source === 'desktop_model_source' ? 'Desktop' : copy().settings.dialog.catalog.unavailableModel),
-    source: model.source === 'runtime_config' ? 'model_profile' : model.source || 'thread_snapshot',
-    unavailableReason: ({ missing_keys: copy().chat.modelUnavailableMissingKeys, provider_disabled: copy().chat.modelUnavailableProviderDisabled, model_missing: copy().chat.modelUnavailableModelMissing, chatgpt_renewing: copy().settings.dialog.chatGPT.renewing, chatgpt_temporarily_unavailable: copy().settings.dialog.chatGPT.temporarilyUnavailable, chatgpt_review_required: copy().settings.dialog.chatGPT.reviewRequired, chatgpt_plan_permission_required: copy().settings.dialog.chatGPT.planPermission, chatgpt_authorization_required: copy().settings.dialog.chatGPT.authorizationRequired, chatgpt_signing_out: copy().settings.dialog.chatGPT.signingOut, chatgpt_signed_out: copy().settings.dialog.chatGPT.signedOut, chatgpt_storage_unavailable: copy().settings.dialog.chatGPT.storageUnavailable } as Record<string, string>)[model.reason ?? ''],
-    disabled: model.state !== 'ready', pending: model.state === 'pending', providerType: model.provider_type,
-    aliasKey: model.alias_group, reasoningCapability: model.reasoning_capability,
-    defaultReasoningSelection: model.default_reasoning_selection,
-  })));
+  const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => (modelDirectory()?.models ?? []).map(model => flowerComposerModelOption(model, copy())));
   const currentModelLabel = createMemo(() => catalogModelOptions().find(model => model.id === currentModelID())?.label || currentModelID() || copy().chat.noModelSelected);
   const reasoningControlLabel = createMemo(() => trimString(copy().chat.reasoningLabel) || DEFAULT_FLOWER_SURFACE_COPY.chat.reasoningLabel);
   const selectedThreadModelLabel = createMemo(() => {
@@ -13364,20 +13339,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           closeModelMenu(true);
         }}
       >
-        <span class="flower-model-menu-avatar" aria-hidden="true">
-          {option.providerType
-            ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
-            : <Bot class="flower-model-menu-icon" />}
-        </span>
-        <span class="flower-model-menu-copy">
-          <span class="flower-model-menu-name" title={option.label}>{option.name || option.label}</span>
-        </span>
-        <Show when={option.disabled}>
-          <span class="flower-model-menu-unavailable">{option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel}</span>
-        </Show>
-        <Show when={selected()}>
-          <span class="flower-model-menu-selection" aria-hidden="true"><Check class="flower-model-menu-check" /></span>
-        </Show>
+        <FlowerModelOptionContent option={option} selected={selected()} pendingLabel={copy().chat.modelsChecking} unavailableLabel={copy().settings.dialog.catalog.unavailableModel} />
       </button>
     );
   };

@@ -2808,6 +2808,13 @@
   color: var(--primary-foreground);
 }
 .flower-model-menu-check { width: 0.5rem; height: 0.5rem; }
+/* The contextual card uses the same model identities in a compact dropdown. */
+.flower-model-dropdown { width: min(20rem, calc(100vw - 24px)); }
+.flower-model-dropdown .floe-select-option-check { display: none; }
+.flower-model-dropdown [role='option'] { gap: 0.5rem; padding: 0.25rem 0.5rem; }
+.flower-model-dropdown [aria-disabled='true'] .flower-model-menu-avatar { opacity: 0.55; }
+.flower-model-dropdown .floe-select-group-label { font-size: var(--floe-type-caption); }
+
 .flower-model-menu-group {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -4883,23 +4890,6 @@
 .flower-turn-launcher-window button:not(:disabled),
 .flower-turn-launcher-window [role='button']:not([aria-disabled='true']) {
   cursor: pointer;
-}
-
-.flower-turn-launcher-surface {
-  --flower-turn-launcher-message: color-mix(in srgb, var(--card) 94%, var(--background) 6%);
-  --flower-turn-launcher-message-border: color-mix(in srgb, var(--border) 72%, transparent);
-}
-
-.flower-turn-launcher-message-row {
-  display: flex;
-  min-width: 0;
-  gap: 0.5rem;
-}
-
-.flower-turn-launcher-message-surface {
-  border: 1px solid var(--flower-turn-launcher-message-border);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--flower-turn-launcher-message) 96%, var(--redeven-surface-highlight-source) 4%), var(--flower-turn-launcher-message));
 }
 
 .flower-turn-launcher-dock {

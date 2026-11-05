@@ -1521,7 +1521,6 @@ export type FlowerTurnLauncherIntent = Readonly<{
   source_surface: FlowerTurnLauncherSourceSurface;
   initial_prompt?: string;
   /** Localized opening question owned by the launching product surface. */
-  opening_question?: string;
   suggested_working_dir?: string;
   context_items: readonly FlowerTurnLauncherContextItem[];
   pending_attachments?: readonly File[];

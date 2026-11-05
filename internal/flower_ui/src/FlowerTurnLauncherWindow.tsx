@@ -1,15 +1,17 @@
-import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
 import { Activity, AlertTriangle, ArrowUp, FileText } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Button, PromptCard, type FloatingWindowViewportInsets } from '@floegence/floe-webapp-core/ui';
+import { Button, PromptCard, type FloatingWindowViewportInsets, type SelectOption } from '@floegence/floe-webapp-core/ui';
 
 import type {
   FlowerTurnLauncherIntent, FlowerModelDirectory, FlowerSurfaceAdapter,
 } from './contracts/flowerSurfaceContracts';
 import { createFlowerClientRequestID } from './flowerRequestIdentity';
 import { FlowerIcon } from './icons/FlowerIcon';
+import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerSurfaceCopy } from './copy';
+import { flowerComposerModelOption, type ComposerModelOption } from './composerModelOption';
+import { FlowerModelOptionContent } from './composer/FlowerModelOptionContent';
 import { FlowerContextIcon } from './icons/FlowerContextIcon';
 import { flowerTurnAdmissionFailureKind } from './flowerTurnAdmission';
 import { FlowerComposerContextReference, FlowerComposerContextReferences } from './composer/FlowerComposerContextReferences';
@@ -40,6 +42,7 @@ export type FlowerTurnLauncherPanelProps = Readonly<{
   open: boolean;
   intent: FlowerTurnLauncherIntent | null;
   copy?: FlowerTurnLauncherWindowCopyInput;
+  modelCopy?: FlowerSurfaceCopy;
   contentClass?: string;
   footerClass?: string;
   localScrollProps?: Record<string, unknown>;
@@ -94,15 +97,6 @@ function secondaryActionLabel(action: FlowerTurnLauncherContextAction): string {
   if (action.type === 'open_directory_browser') return action.label;
   return action.title;
 }
-
-const FlowerLauncherAvatar: Component = () => (
-  <div data-testid="flower-turn-launcher-avatar" class="flower-turn-launcher-avatar relative flex size-8 shrink-0 items-center justify-center">
-    <div class="absolute inset-0 rounded-full bg-primary/8 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_55%,transparent)]" />
-    <div class="relative flex size-8 items-center justify-center rounded-full border border-primary/18 bg-gradient-to-br from-primary/15 to-[var(--redeven-status-warning-soft)] shadow-[0_10px_20px_-16px_color-mix(in_srgb,var(--primary)_42%,transparent)]">
-      <FlowerIcon class="h-5 w-5 text-primary" />
-    </div>
-  </div>
-);
 
 export function createFlowerTurnLauncherPanelController(
   props: FlowerTurnLauncherPanelProps,
@@ -343,7 +337,6 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
     isComposing,
     setIsComposing,
     sending,
-    projected,
     canSubmit,
     setTextareaEl,
     textareaValue,
@@ -354,34 +347,11 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
     <Show when={props.open ? props.intent : null} keyed>
       {(intent) => (
         <div class={cn('flower-turn-launcher-surface flex h-full min-h-0 flex-col overflow-hidden bg-background', props.contentClass)}>
-            <div
-              {...(props.localScrollProps ?? {})}
-              data-testid="flower-turn-launcher-scroll-region"
-              class="flower-turn-launcher-scroll-region flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5"
-            >
-              <div class="mx-auto flex w-full max-w-[40rem] flex-col gap-2">
-                <div class="flower-turn-launcher-message-row chat-message-item items-start">
-                  <FlowerLauncherAvatar />
-                  <div class="chat-message-content-wrapper max-w-[min(100%,37rem)] gap-1">
-                    <div class="flower-turn-launcher-message-surface min-w-0 rounded-[1.05rem] rounded-tl-md px-2.5 py-2 shadow-[0_14px_28px_-28px_color-mix(in_srgb,var(--foreground)_34%,transparent)] backdrop-blur sm:px-3 sm:py-2.5">
-                      <div class="flower-body-copy leading-5 text-foreground/95">{projected()?.question}</div>
-
-                      <Show when={(intent.notes?.length ?? 0) > 0}>
-                        <div class="mt-1.5 space-y-1">
-                          <For each={(intent.notes ?? []).map(compact).filter(Boolean)}>
-                            {(note) => (
-                              <div class="rounded-[0.95rem] border border-[var(--redeven-status-info-border)] bg-[var(--redeven-status-info-soft)] px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
-                                {note}
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    </div>
-                  </div>
-                </div>
+            <Show when={(intent.notes?.length ?? 0) > 0}>
+              <div {...props.localScrollProps} class="min-h-0 overflow-y-auto px-2.5 py-2">
+                <For each={intent.notes}>{note => <div class="flower-ask-card-note">{note}</div>}</For>
               </div>
-            </div>
+            </Show>
 
             <div data-testid="flower-turn-launcher-dock" class="flower-turn-launcher-dock shrink-0 border-t border-border/65 bg-background/96 shadow-[0_-14px_30px_-30px_color-mix(in_srgb,var(--foreground)_32%,transparent)] backdrop-blur">
               <div class="mx-auto w-full max-w-[40rem]">
@@ -389,18 +359,6 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                   <div class="chat-input-body flower-chat-input-body flower-turn-launcher-input-body">
                     <div class="flower-chat-input-primary-row flower-turn-launcher-editor-row">
                       <div class="flower-turn-launcher-editor min-w-0 flex-1">
-                        <div class="flower-turn-launcher-heading mb-0.5 flex items-center justify-between gap-2">
-                          <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">{copyValue(props.copy, 'you_label')}</div>
-                          <span
-                            class="text-[11px] text-muted-foreground"
-                            role="status"
-                            aria-live="polite"
-                            aria-atomic="true"
-                          >
-                            {sending() ? copyValue(props.copy, 'sending') : copyValue(props.copy, 'reply_to_flower_label')}
-                          </span>
-                        </div>
-
                         <div data-floe-input-surface={controller.footerPlacement === 'panel' ? true : undefined} data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
                           <FlowerTurnLauncherReferences controller={controller} copy={props.copy} localScrollProps={props.localScrollProps} />
                           <textarea
@@ -410,7 +368,6 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                             aria-label={copyValue(props.copy, 'you_label')}
                             rows={3}
                             value={visiblePrompt()}
-                            placeholder={projected()?.placeholder}
                             disabled={sending() || admissionUnknown()}
                             onInput={(event) => {
                               setUserPrompt(event.currentTarget.value);
@@ -496,6 +453,8 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
   );
 }
 
+type FlowerModelSelectOption = SelectOption & Readonly<{ model: ComposerModelOption }>;
+
 /** Product content and admission state over the published contextual input. */
 export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   const controller = createFlowerTurnLauncherPanelController(props, 'window');
@@ -524,6 +483,20 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         .finally(() => { if (active) setModelLoading(false); });
     });
   });
+  const modelCopy = () => props.modelCopy ?? DEFAULT_FLOWER_SURFACE_COPY;
+  const modelOptions = createMemo<FlowerModelSelectOption[]>(() => {
+    const groups = new Map<string, ReturnType<typeof flowerComposerModelOption>[]>();
+    for (const model of directory()?.models ?? []) {
+      const option = flowerComposerModelOption(model, modelCopy());
+      const key = `${option.source}/${model.provider_id || option.group}`;
+      groups.set(key, [...groups.get(key) ?? [], option]);
+    }
+    return [...groups].flatMap(([group, options]) => options.map(option => ({
+      value: option.id, label: option.name || option.label, group, groupLabel: option.group,
+      disabled: option.disabled, description: option.unavailableReason,
+      keywords: [option.label, option.id, option.group], model: option,
+    })));
+  });
   const presentedIntent = createMemo<FlowerTurnLauncherIntent | null>(previous =>
     props.open && props.intent ? props.intent : previous ?? null);
   return (
@@ -543,12 +516,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       onClose={props.onClose}
       autoFocus={props.autoFocus}
       editorRef={controller.setTextareaEl}
-      question={<>
-        {controller.projected()?.question}
-        <For each={(presentedIntent()?.notes ?? []).map(compact).filter(Boolean)}>{note =>
-          <div class="flower-ask-card-note">{note}</div>
-        }</For>
-      </>}
+      question={(presentedIntent()?.notes?.length ?? 0) > 0 ? <For each={presentedIntent()?.notes}>{note => <div class="flower-ask-card-note">{note}</div>}</For> : undefined}
       value={controller.visiblePrompt()}
       onValueChange={value => {
         controller.setUserPrompt(value);
@@ -564,9 +532,13 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       attachment={{ label: copyValue(props.copy, 'add_attachments'), onFiles: controller.addFiles }}
       selection={props.modelSource ? {
         label: copyValue(props.copy, 'select_model'), placeholder: copyValue(props.copy, 'select_model'),
-        value: controller.selectedModelID(), options: (directory()?.models ?? []).map(model => ({
-          value: model.id, label: compact(model.model_name) || model.label || model.id, keywords: [model.label, model.id], disabled: model.state !== 'ready',
-        })), onChange: controller.setSelectedModelID, loading: modelLoading(), error: modelError(),
+        value: controller.selectedModelID(), options: modelOptions(),
+        renderOption: option => <FlowerModelOptionContent option={(option as FlowerModelSelectOption).model}
+          selected={controller.selectedModelID() === option.value} pendingLabel={modelCopy().chat.modelsChecking}
+          unavailableLabel={modelCopy().settings.dialog.catalog.unavailableModel} />,
+        search: { label: modelCopy().settings.dialog.catalog.search, placeholder: modelCopy().settings.dialog.catalog.search },
+        popupClass: 'flower-model-dropdown',
+        onChange: controller.setSelectedModelID, loading: modelLoading(), error: modelError(),
         onRetry: () => setModelReload(value => value + 1),
       } : undefined}
       references={<FlowerTurnLauncherReferences controller={controller} copy={props.copy} localScrollProps={props.localScrollProps} />}

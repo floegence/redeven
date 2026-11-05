@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
   FlowerTurnLauncherPanel as SharedFlowerTurnLauncherPanel,
@@ -23,7 +23,8 @@ import {
 } from '../utils/filePreview';
 import { basenameFromPath, fileItemFromPath } from '../utils/filePreviewItem';
 import { getRedevenFilePreviewReadPlan } from '../file-preview/readPlan';
-import { useI18n } from '../i18n';
+import { useI18n, type EnvAppTranslationKey } from '../i18n';
+import { createLocalizedFlowerSurfaceCopy } from '../../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FlowerContextPreviewWindow, type FlowerContextPreviewState } from './FlowerContextPreviewWindow';
 import { PreviewWindow } from './PreviewWindow';
@@ -49,7 +50,6 @@ function createFlowerTurnLauncherCopy(i18n: ReturnType<typeof useI18n>): FlowerT
     linked_context_label: i18n.t('flowerTurnLauncher.linkedContextLabel'),
     remove_reference: (path) => i18n.t('flowerSurface.chat.composerReferenceRemove', { path }),
     you_label: i18n.t('flowerTurnLauncher.youLabel'),
-    reply_to_flower_label: i18n.t('flowerTurnLauncher.replyToFlowerLabel'),
     send_turn: i18n.t('flowerTurnLauncher.launchTurn'),
     empty_message: i18n.t('flowerTurnLauncher.validation.emptyMessage'),
     ready: i18n.t('common.status.ready'),
@@ -77,33 +77,6 @@ function createFlowerTurnLauncherCopy(i18n: ReturnType<typeof useI18n>): FlowerT
       attachment_snapshot_title: i18n.t('flowerTurnLauncher.context.attachmentSnapshotTitle'),
       preview_attachment_target: i18n.t('flowerTurnLauncher.context.previewAttachmentTarget'),
       preview_attached_snapshot_for_target: i18n.t('flowerTurnLauncher.context.previewAttachedSnapshotForTarget'),
-    },
-    prompt: {
-      environment_placeholder: i18n.t('flowerTurnLauncher.prompt.environmentPlaceholder'),
-      environment_question: i18n.t('flowerTurnLauncher.prompt.environmentQuestion'),
-      selection_placeholder: i18n.t('flowerTurnLauncher.prompt.selectionPlaceholder'),
-      selection_question: i18n.t('flowerTurnLauncher.prompt.selectionQuestion'),
-      terminal_output_placeholder: i18n.t('flowerTurnLauncher.prompt.terminalOutputPlaceholder'),
-      terminal_context_placeholder: i18n.t('flowerTurnLauncher.prompt.terminalContextPlaceholder'),
-      terminal_question: i18n.t('flowerTurnLauncher.prompt.terminalQuestion'),
-      process_placeholder: i18n.t('flowerTurnLauncher.prompt.processPlaceholder'),
-      inspect_explain_question: i18n.t('flowerTurnLauncher.prompt.inspectExplainQuestion'),
-      git_placeholder: i18n.t('flowerTurnLauncher.prompt.gitPlaceholder'),
-      git_question: i18n.t('flowerTurnLauncher.prompt.gitQuestion'),
-      context_placeholder: i18n.t('flowerTurnLauncher.prompt.contextPlaceholder'),
-      file_placeholder: i18n.t('flowerTurnLauncher.prompt.filePlaceholder'),
-      focus_question: i18n.t('flowerTurnLauncher.prompt.focusQuestion'),
-      folder_placeholder: i18n.t('flowerTurnLauncher.prompt.folderPlaceholder'),
-      folder_question: i18n.t('flowerTurnLauncher.prompt.folderQuestion'),
-      file_question: i18n.t('flowerTurnLauncher.prompt.fileQuestion'),
-      files_and_folders_placeholder: i18n.t('flowerTurnLauncher.prompt.filesAndFoldersPlaceholder'),
-      files_placeholder: i18n.t('flowerTurnLauncher.prompt.filesPlaceholder'),
-      files_question: i18n.t('flowerTurnLauncher.prompt.filesQuestion'),
-      help_question: i18n.t('flowerTurnLauncher.prompt.helpQuestion'),
-      attachment_placeholder: i18n.t('flowerTurnLauncher.prompt.attachmentPlaceholder'),
-      attachment_question: i18n.t('flowerTurnLauncher.prompt.attachmentQuestion'),
-      default_placeholder: i18n.t('flowerTurnLauncher.prompt.defaultPlaceholder'),
-      default_question: i18n.t('flowerTurnLauncher.prompt.defaultQuestion'),
     },
   };
 }
@@ -386,6 +359,11 @@ async function buildFileLikeContextPreview(params: {
 export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   const filePreview = useFilePreviewContext();
   const i18n = useI18n();
+  const modelCopy = createMemo(() => createLocalizedFlowerSurfaceCopy({
+    locale: i18n.locale(),
+    t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+    tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
+  }));
   const floatingWindowStack = useEnvAppFloatingWindowStack();
   const viewportInsets = createAskFlowerWindowViewportInsets({
     open: () => props.open && props.placement !== 'panel',
@@ -563,6 +541,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             intent={props.intent}
             anchor={props.anchor}
             viewportInsets={viewportInsets()}
+            modelCopy={modelCopy()}
             copy={createFlowerTurnLauncherCopy(i18n)}
             draft={props.draft}
             onDraftChange={props.onDraftChange}
@@ -581,6 +560,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         <SharedFlowerTurnLauncherPanel
           open={props.open}
           intent={props.intent}
+          modelCopy={modelCopy()}
           copy={createFlowerTurnLauncherCopy(i18n)}
           draft={props.draft}
           onDraftChange={props.onDraftChange}

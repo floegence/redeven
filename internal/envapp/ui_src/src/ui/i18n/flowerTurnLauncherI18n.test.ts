@@ -48,6 +48,8 @@ describe('Flower turn launcher i18n dictionaries', () => {
     const sourceKeys = Object.keys(sourceLeaves).sort();
 
     for (const locale of SUPPORTED_LOCALES) {
+      expect(dictionaries[locale].flowerTurnLauncher).not.toHaveProperty('prompt');
+      expect(dictionaries[locale].flowerTurnLauncher).not.toHaveProperty('replyToFlowerLabel');
       const targetLeaves = collectStringLeaves(dictionaries[locale].flowerTurnLauncher);
       expect(Object.keys(targetLeaves).sort()).toEqual(sourceKeys);
 

@@ -68,7 +68,8 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   expect(selectionIcon.querySelector('path, polyline')).not.toBeNull();
   expect(rows[4].querySelector('.flower-composer-context-icon svg')?.getAttribute('data-file-icon-kind')).toBe('folder');
   expect(input.querySelector('.flower-composer-context-heading')).toBeNull();
-  expect(document.querySelector('.floe-prompt-card-question')?.textContent).not.toContain('selected content');
+  expect(document.querySelector('.floe-prompt-card-question')).toBeNull();
+  expect(list.getBoundingClientRect().bottom).toBeLessThanOrEqual(input.querySelector('textarea')!.getBoundingClientRect().top);
   expect(list.clientHeight).toBeLessThanOrEqual(80);
   expect(list.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
   for (const row of rows) {

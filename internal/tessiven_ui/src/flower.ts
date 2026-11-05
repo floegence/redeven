@@ -25,7 +25,6 @@ export function tessivenFlowerIntent(
   return {
     id: `tessiven-${secureRandomUUID()}`,
     source_surface: 'tessiven',
-    opening_question: t('flowerEntry'),
     context_items: selection
       ? [
           {

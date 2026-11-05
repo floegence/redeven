@@ -127,10 +127,11 @@ describe('FlowerTurnLauncherPanel', () => {
     expect(onSubmit.mock.calls[0]?.[0].intent.pending_attachments).toEqual([other]);
   });
 
-  it('renders the shared prompt, context projection, notes, and footer without FloatingWindow chrome', () => {
+  it('renders context projection, notes, and footer without introductory copy without FloatingWindow chrome', () => {
     const { onClose, onContextAction } = renderPanel();
 
-    expect(host.textContent).toContain('What should we focus on?');
+    expect(host.querySelector('.flower-turn-launcher-message-surface')).toBeNull();
+    expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBeNull();
     expect(host.textContent).toContain('main.go');
     expect(host.querySelector('.flower-composer-context-source')?.getAttribute('title')).toContain('/workspace/redeven/main.go');
     expect(host.textContent).toContain('The file is linked as live context.');
@@ -138,7 +139,6 @@ describe('FlowerTurnLauncherPanel', () => {
     expect(host.querySelector('[data-floe-geometry-surface="floating-window"]')).toBeNull();
     const input = host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]')!;
     expect(input.querySelector('.flower-composer-context-references')?.textContent).toContain('main.go');
-    expect(host.querySelector('.flower-turn-launcher-message-surface')?.textContent).not.toContain('main.go');
 
     const contextButton = host.querySelector('button[title*="/workspace/redeven/main.go"]') as HTMLButtonElement;
     contextButton.click();

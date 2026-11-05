@@ -141,7 +141,11 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       ai_secrets: { provider_api_key_set: { fixture: true } },
     } };
     if (route.startsWith('ai/') && !aiReady) { fixture.prematureRequests++; return unavailable(); }
-    if (route === 'ai/models') return { ok: true, data: modelDirectoryWireFixture({ ai: { current_model_id: 'fixture/gpt-4.1' } }, { models: [{ id: 'fixture/gpt-4.1', label: 'GPT-4.1' }, { id: 'fixture/claude-sonnet-4.5', label: 'Claude Sonnet 4.5' }] }) };
+    if (route === 'ai/models') return { ok: true, data: modelDirectoryWireFixture({ ai: { current_model_id: 'fixture/gpt-4.1' } }, { models: [
+      { id: 'fixture/gpt-4.1', label: 'OpenAI / gpt-4.1', provider_name: 'OpenAI', provider_type: 'openai' },
+      { id: 'anthropic/claude-sonnet-4.5', label: 'Anthropic / claude-sonnet-4.5', provider_name: 'Anthropic', provider_type: 'anthropic' },
+      { id: 'gateway/claude-sonnet-4.5', label: 'Team Gateway / claude-sonnet-4.5', provider_name: 'Team Gateway', provider_type: 'openai_compatible' },
+    ] }) };
     if (route === 'ai/conversation_preferences') return { ok: true, data: { revision: 0, reasoning_by_model: {} } };
     if (route === 'ai/threads') return { ok: true, data: { threads: [thread] } };
     if (route === 'ai/storage-generation') return { ok: true, data: { storage_generation: 'a'.repeat(32) } };

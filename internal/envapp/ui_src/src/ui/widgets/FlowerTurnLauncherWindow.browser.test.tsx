@@ -147,7 +147,7 @@ describe('Flower turn launcher send feedback', () => {
   it.each([
     { viewport: { width: 1440, height: 900 }, expectedHeight: 200 },
     { viewport: { width: 390, height: 844 }, expectedHeight: 240 },
-  ])('fits the question and editor within a content-sized card below $expectedHeight px', async ({ viewport, expectedHeight }) => {
+  ])('fits references above the editor within a content-sized card below $expectedHeight px', async ({ viewport, expectedHeight }) => {
     const mounted = await mountLauncher('dark', viewport);
     const floatingWindow = document.querySelector('.flower-turn-launcher-window');
     const dock = document.querySelector('.floe-prompt-card-composer');
@@ -159,8 +159,10 @@ describe('Flower turn launcher send feedback', () => {
     const dockRect = dock.getBoundingClientRect();
     expect(frameRect.height).toBeLessThan(expectedHeight);
     expect(document.querySelector('[data-floe-floating-window-titlebar]')).toBeNull();
-    const question = document.querySelector('.floe-prompt-card-question')!.getBoundingClientRect();
-    expect(dockRect.top - question.bottom).toBeLessThan(28);
+    expect(document.querySelector('.floe-prompt-card-question')).toBeNull();
+    const references = document.querySelector('.floe-prompt-card-references')!.getBoundingClientRect();
+    const editor = document.querySelector('textarea')!.getBoundingClientRect();
+    expect(references.bottom).toBeLessThanOrEqual(editor.top);
     expect(document.querySelector('.flower-turn-launcher-footer')).toBeNull();
     expect(Math.abs(dockRect.bottom - frameRect.bottom)).toBeLessThanOrEqual(48);
     expect(frameRect.right).toBeLessThanOrEqual(viewport.width);
@@ -212,7 +214,7 @@ describe('Flower turn launcher send feedback', () => {
       expect(idleRect.top).toBeGreaterThanOrEqual(textarea!.getBoundingClientRect().bottom - 1);
       expect(getComputedStyle(editorShell!).borderWidth).toBe('0px');
       expect(textareaStyle.fontSize).toBe(testCase.touch ? '16px' : '13px');
-      expect(getComputedStyle(document.querySelector('.floe-prompt-card-question')!).fontSize).toBe(testCase.touch ? '14px' : '13px');
+      expect(document.querySelector('.floe-prompt-card-question')).toBeNull();
       expect(sendButton!.querySelector('svg')).not.toBeNull();
       expect(sendButton!.querySelector('.animate-spin')).toBeNull();
 

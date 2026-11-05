@@ -779,7 +779,7 @@ describe('EnvCodespacesPage', () => {
       pending_attachments: [],
       notes: [],
     });
-    expect(buildFlowerTurnLauncherCopy(intent).question).toBe('What would you like to explore inside it?');
+    expect(buildFlowerTurnLauncherCopy(intent).context_entries).toEqual([expect.objectContaining({ tone: 'directory', label: 'demo' })]);
   });
 
   it('shows Browser Editor setup guidance when the runtime is missing', async () => {

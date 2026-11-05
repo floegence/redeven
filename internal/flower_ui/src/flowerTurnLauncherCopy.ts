@@ -52,8 +52,6 @@ export type FlowerTurnLauncherContextChip = Readonly<{
 }>;
 
 export type FlowerTurnLauncherProjectedCopy = Readonly<{
-  placeholder: string;
-  question: string;
   context_entries: readonly FlowerTurnLauncherContextChip[];
 }>;
 
@@ -67,7 +65,6 @@ export type FlowerTurnLauncherWindowChromeCopy = Readonly<{
   close: string;
   sending: string;
   you_label: string;
-  reply_to_flower_label: string;
   send_turn: string;
   add_attachments: string;
   select_model: string;
@@ -100,44 +97,14 @@ export type FlowerTurnLauncherContextCopy = Readonly<{
   preview_attached_snapshot_for_target: string;
 }>;
 
-export type FlowerTurnLauncherPromptCopy = Readonly<{
-  environment_placeholder: string;
-  environment_question: string;
-  selection_placeholder: string;
-  selection_question: string;
-  terminal_output_placeholder: string;
-  terminal_context_placeholder: string;
-  terminal_question: string;
-  process_placeholder: string;
-  inspect_explain_question: string;
-  git_placeholder: string;
-  git_question: string;
-  context_placeholder: string;
-  file_placeholder: string;
-  focus_question: string;
-  folder_placeholder: string;
-  folder_question: string;
-  file_question: string;
-  files_and_folders_placeholder: string;
-  files_placeholder: string;
-  files_question: string;
-  help_question: string;
-  attachment_placeholder: string;
-  attachment_question: string;
-  default_placeholder: string;
-  default_question: string;
-}>;
-
 export type FlowerTurnLauncherProjectionCopy = Readonly<{
   context: FlowerTurnLauncherContextCopy;
-  prompt: FlowerTurnLauncherPromptCopy;
 }>;
 
 export type FlowerTurnLauncherWindowCopy = FlowerTurnLauncherWindowChromeCopy & FlowerTurnLauncherProjectionCopy;
 
 export type FlowerTurnLauncherWindowCopyInput = Partial<FlowerTurnLauncherWindowChromeCopy> & Readonly<{
   context?: Partial<FlowerTurnLauncherContextCopy>;
-  prompt?: Partial<FlowerTurnLauncherPromptCopy>;
 }>;
 
 export const DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY: FlowerTurnLauncherWindowCopy = {
@@ -150,12 +117,11 @@ export const DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY: FlowerTurnLauncherWindowC
   close: 'Close',
   sending: 'Sending',
   you_label: 'You',
-  reply_to_flower_label: 'Reply to Flower',
   send_turn: 'Launch turn',
   add_attachments: 'Add attachments',
   select_model: 'Select model',
   models_failed: 'Could not load models. Try again.',
-  empty_message: 'Enter a question before sending.',
+  empty_message: 'Enter a message before sending.',
   launch_failed_title: 'Flower could not start this turn.',
   launch_unknown_title: 'Delivery is still being confirmed. Retry to check the same request.',
   context: {
@@ -180,33 +146,7 @@ export const DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY: FlowerTurnLauncherWindowC
     preview_attachment_target: 'Preview attachment {target}',
     preview_attached_snapshot_for_target: 'Preview attached snapshot for {target}',
   },
-  prompt: {
-    environment_placeholder: 'Ask Flower to inspect, explain, or change this environment...',
-    environment_question: 'What would you like Flower to do in this environment?',
-    selection_placeholder: 'Ask about this selection, request a change, or describe what you need',
-    selection_question: 'What would you like to understand, change, or verify?',
-    terminal_output_placeholder: 'Ask about the output, request a command, or describe the next step',
-    terminal_context_placeholder: 'Ask about the terminal context, request a command, or describe the next step',
-    terminal_question: 'What would you like me to inspect or do next?',
-    process_placeholder: 'Ask why this process is busy, whether it is expected, or what to do next',
-    inspect_explain_question: 'What would you like me to inspect or explain?',
-    git_placeholder: 'Ask about this Git context, request a change, or describe what you need',
-    git_question: 'What should Flower inspect or help with?',
-    context_placeholder: 'Ask about this context, request a change, or describe what you need',
-    file_placeholder: 'Ask about this file, request a change, or describe what you need',
-    focus_question: 'What should we focus on?',
-    folder_placeholder: 'Ask about this folder, the files inside it, or describe what you need',
-    folder_question: 'What would you like to explore inside it?',
-    file_question: 'What would you like me to help with?',
-    files_and_folders_placeholder: 'Ask about these files and folders, compare them, or describe what you need',
-    files_placeholder: 'Ask about these files, compare them, or describe what you need',
-    files_question: 'What would you like to explore, compare, or change?',
-    help_question: 'What would you like help with?',
-    attachment_placeholder: 'Ask about the attached context or describe what you need',
-    attachment_question: 'What would you like me to focus on?',
-    default_placeholder: 'Describe what you want to understand, change, or verify',
-    default_question: 'What would you like to work on?',
-  },
+
 };
 
 function formatCopy(template: string, values: Readonly<Record<string, unknown>> = {}): string {
@@ -237,33 +177,6 @@ function resolveProjectionCopy(copy?: FlowerTurnLauncherWindowCopyInput): Flower
       attachment_snapshot_title: compact(copy?.context?.attachment_snapshot_title) || defaults.context.attachment_snapshot_title,
       preview_attachment_target: compact(copy?.context?.preview_attachment_target) || defaults.context.preview_attachment_target,
       preview_attached_snapshot_for_target: compact(copy?.context?.preview_attached_snapshot_for_target) || defaults.context.preview_attached_snapshot_for_target,
-    },
-    prompt: {
-      environment_placeholder: compact(copy?.prompt?.environment_placeholder) || defaults.prompt.environment_placeholder,
-      environment_question: compact(copy?.prompt?.environment_question) || defaults.prompt.environment_question,
-      selection_placeholder: compact(copy?.prompt?.selection_placeholder) || defaults.prompt.selection_placeholder,
-      selection_question: compact(copy?.prompt?.selection_question) || defaults.prompt.selection_question,
-      terminal_output_placeholder: compact(copy?.prompt?.terminal_output_placeholder) || defaults.prompt.terminal_output_placeholder,
-      terminal_context_placeholder: compact(copy?.prompt?.terminal_context_placeholder) || defaults.prompt.terminal_context_placeholder,
-      terminal_question: compact(copy?.prompt?.terminal_question) || defaults.prompt.terminal_question,
-      process_placeholder: compact(copy?.prompt?.process_placeholder) || defaults.prompt.process_placeholder,
-      inspect_explain_question: compact(copy?.prompt?.inspect_explain_question) || defaults.prompt.inspect_explain_question,
-      git_placeholder: compact(copy?.prompt?.git_placeholder) || defaults.prompt.git_placeholder,
-      git_question: compact(copy?.prompt?.git_question) || defaults.prompt.git_question,
-      context_placeholder: compact(copy?.prompt?.context_placeholder) || defaults.prompt.context_placeholder,
-      file_placeholder: compact(copy?.prompt?.file_placeholder) || defaults.prompt.file_placeholder,
-      focus_question: compact(copy?.prompt?.focus_question) || defaults.prompt.focus_question,
-      folder_placeholder: compact(copy?.prompt?.folder_placeholder) || defaults.prompt.folder_placeholder,
-      folder_question: compact(copy?.prompt?.folder_question) || defaults.prompt.folder_question,
-      file_question: compact(copy?.prompt?.file_question) || defaults.prompt.file_question,
-      files_and_folders_placeholder: compact(copy?.prompt?.files_and_folders_placeholder) || defaults.prompt.files_and_folders_placeholder,
-      files_placeholder: compact(copy?.prompt?.files_placeholder) || defaults.prompt.files_placeholder,
-      files_question: compact(copy?.prompt?.files_question) || defaults.prompt.files_question,
-      help_question: compact(copy?.prompt?.help_question) || defaults.prompt.help_question,
-      attachment_placeholder: compact(copy?.prompt?.attachment_placeholder) || defaults.prompt.attachment_placeholder,
-      attachment_question: compact(copy?.prompt?.attachment_question) || defaults.prompt.attachment_question,
-      default_placeholder: compact(copy?.prompt?.default_placeholder) || defaults.prompt.default_placeholder,
-      default_question: compact(copy?.prompt?.default_question) || defaults.prompt.default_question,
     },
   };
 }
@@ -501,116 +414,13 @@ function buildContextEntries(
   return entries;
 }
 
-function firstEntryByTone(
-  entries: readonly FlowerTurnLauncherContextChip[],
-  tone: FlowerTurnLauncherContextTone,
-): FlowerTurnLauncherContextChip | undefined {
-  return entries.find((entry) => entry.tone === tone);
-}
-
-function sourcePrompt(
-  intent: FlowerTurnLauncherIntent,
-  entries: readonly FlowerTurnLauncherContextChip[],
-  copy: FlowerTurnLauncherProjectionCopy,
-): Pick<FlowerTurnLauncherProjectedCopy, 'placeholder' | 'question'> {
-  const promptCopy = copy.prompt;
-  const firstContext = intent.context_items[0];
-  if (firstContext?.kind === 'environment') {
-    return {
-      placeholder: promptCopy.environment_placeholder,
-      question: promptCopy.environment_question,
-    };
-  }
-
-  if (firstContext?.kind === 'file_selection') {
-    return {
-      placeholder: promptCopy.selection_placeholder,
-      question: promptCopy.selection_question,
-    };
-  }
-
-  if (firstContext?.kind === 'terminal_selection') {
-    return {
-      placeholder: compact(firstContext.selection) ? promptCopy.terminal_output_placeholder : promptCopy.terminal_context_placeholder,
-      question: promptCopy.terminal_question,
-    };
-  }
-
-  if (firstContext?.kind === 'process_snapshot') {
-    return {
-      placeholder: promptCopy.process_placeholder,
-      question: promptCopy.inspect_explain_question,
-    };
-  }
-
-  if (firstContext?.kind === 'text_snapshot') {
-    if (intent.source_surface === 'git_browser') {
-      return {
-        placeholder: promptCopy.git_placeholder,
-        question: promptCopy.git_question,
-      };
-    }
-    return {
-      placeholder: promptCopy.context_placeholder,
-      question: promptCopy.inspect_explain_question,
-    };
-  }
-
-  if ((intent.source_surface === 'file_preview' || intent.source_surface === 'editor_preview') && firstEntryByTone(entries, 'file')) {
-    return {
-      placeholder: promptCopy.file_placeholder,
-      question: promptCopy.focus_question,
-    };
-  }
-
-  if (intent.source_surface === 'file_browser') {
-    const fileEntries = entries.filter((entry) => entry.tone === 'file' || entry.tone === 'directory');
-    if (fileEntries.length === 1) {
-      const directory = fileEntries[0].tone === 'directory';
-      return {
-        placeholder: directory ? promptCopy.folder_placeholder : promptCopy.file_placeholder,
-        question: directory ? promptCopy.folder_question : promptCopy.file_question,
-      };
-    }
-    if (fileEntries.length > 1) {
-      const directoryCount = fileEntries.filter((entry) => entry.tone === 'directory').length;
-      return {
-        placeholder: directoryCount > 0 ? promptCopy.files_and_folders_placeholder : promptCopy.files_placeholder,
-        question: promptCopy.files_question,
-      };
-    }
-  }
-
-  if (entries.some((entry) => entry.tone === 'file' || entry.tone === 'directory')) {
-    return {
-      placeholder: promptCopy.context_placeholder,
-      question: promptCopy.help_question,
-    };
-  }
-
-  if (firstEntryByTone(entries, 'attachment')) {
-    return {
-      placeholder: promptCopy.attachment_placeholder,
-      question: promptCopy.attachment_question,
-    };
-  }
-
-  return {
-    placeholder: promptCopy.default_placeholder,
-    question: promptCopy.default_question,
-  };
-}
-
 export function buildFlowerTurnLauncherCopy(
   intent: FlowerTurnLauncherIntent,
   copy?: FlowerTurnLauncherWindowCopyInput,
 ): FlowerTurnLauncherProjectedCopy {
   const projectionCopy = resolveProjectionCopy(copy);
   const contextEntries = buildContextEntries(intent, projectionCopy);
-  const prompt = sourcePrompt(intent, contextEntries, projectionCopy);
   return {
-    placeholder: prompt.placeholder,
-    question: compact(intent.opening_question) || prompt.question,
     context_entries: contextEntries,
   };
 }

@@ -6802,6 +6802,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         open={flowerTurnLauncherOpen()}
         intent={flowerTurnLauncherIntent()}
         modelSource={flowerTurnLauncherAdapter}
+        modelCopy={flowerSurfaceCopy()}
         anchor={flowerTurnLauncherAnchor()}
         viewportInsets={flowerTurnLauncherViewportInsets()}
         copy={{
@@ -6817,15 +6818,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           close: i18n().t('common.close'),
           sending: i18n().t('environmentCenter.askFlowerCardSending'),
           you_label: i18n().t('environmentCenter.askFlowerCardPromptLabel'),
-          reply_to_flower_label: i18n().t('environmentCenter.askFlowerCardReplyHint'),
           send_turn: i18n().t('environmentCenter.askFlowerCardSend'),
           empty_message: i18n().t('environmentCenter.askFlowerCardNoMessage'),
           launch_failed_title: i18n().t('environmentCenter.askFlowerCardLaunchFailedTitle'),
           launch_unknown_title: i18n().t('environmentCenter.askFlowerCardAdmissionUnknownTitle'),
-          prompt: {
-            environment_question: i18n().t('environmentCenter.askFlowerLauncherQuestion'),
-            environment_placeholder: i18n().t('environmentCenter.askFlowerLauncherPlaceholder'),
-          },
         }}
         onClose={closeFlowerTurnLauncher}
         onSubmit={submitFlowerTurnLauncher}

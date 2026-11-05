@@ -5,7 +5,7 @@ import { render as renderRoot } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setFlowerTurnLauncherAttachmentSourcePath } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
 import { flowerTurnAdmissionError } from '../../../../../flower_ui/src/flowerTurnAdmission';
-import type { FlowerSettingsSnapshot } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerSettingsSnapshot, FlowerModelDirectory } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { FlowerTurnLauncherSubmitInput } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 
 import { FlowerTurnLauncherWindow } from './FlowerTurnLauncherWindow';
@@ -106,6 +106,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     MessageSquare: Icon,
     Paperclip: Icon,
     Activity: Icon,
+    Bot: Icon,
+    Check: Icon,
     AlertTriangle: Icon,
     Terminal: Icon,
     X: Icon,
@@ -294,7 +296,7 @@ describe('FlowerTurnLauncherWindow', () => {
     const body = host.querySelector('.floe-prompt-card-body');
     expect(body?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
     expect(body?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
-    expect(body?.querySelector('.floe-prompt-card-question')).toBeTruthy();
+    expect(body?.querySelector('.floe-prompt-card-question')).toBeNull();
     expect(body?.querySelector('[data-floe-input-surface] textarea')).toBeTruthy();
     expect(host.querySelector('.flower-turn-launcher-avatar')).toBeNull();
   });
@@ -552,6 +554,34 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(onSubmit.mock.calls[1]?.[0]).toEqual(onSubmit.mock.calls[0]?.[0]);
   });
 
+  it('distinguishes providers and preserves disabled model availability in the dropdown', async () => {
+    const directory: FlowerModelDirectory = { current_model_id: 'primary/sonnet', sources: [], models: [
+      { id: 'primary/sonnet', label: 'Primary / Sonnet', provider_id: 'primary', provider_name: 'Primary', provider_type: 'anthropic', source: 'runtime_config', state: 'ready' },
+      { id: 'gateway/sonnet', label: 'Gateway / Sonnet', provider_id: 'gateway', provider_name: 'Gateway', provider_type: 'openai_compatible', source: 'runtime_config', state: 'ready' },
+      { id: 'gateway/unavailable', label: 'Gateway / Unavailable', provider_id: 'gateway', provider_name: 'Gateway', provider_type: 'openai_compatible', source: 'runtime_config', state: 'unavailable', reason: 'missing_keys' },
+    ] };
+    const host = document.createElement('div'); document.body.appendChild(host);
+    render(() => <FlowerTurnLauncherWindow open intent={baseIntent} onClose={() => undefined} onSubmit={async () => undefined}
+      modelSource={{ loadSettings: async () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, model_directory: directory, provider_secrets: [] }) }} />, host);
+    const trigger = host.querySelector<HTMLButtonElement>('[role=combobox]')!;
+    await vi.waitFor(() => expect(trigger.textContent).toContain('Sonnet'));
+    trigger.click();
+    await vi.waitFor(() => expect(host.querySelectorAll('[role=group]')).toHaveLength(2));
+    const gateway = host.querySelector('[role=group][aria-label=Gateway]')!;
+    const choices = gateway.querySelectorAll<HTMLElement>('[role=option]');
+    expect(choices[0].textContent).toContain('Sonnet');
+    expect(choices[1].getAttribute('aria-disabled')).toBe('true');
+    expect(choices[1].getAttribute('aria-description')).toBeTruthy();
+    expect(choices[1].querySelector('.flower-model-menu-unavailable')).not.toBeNull();
+    choices[1].click();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    choices[0].click();
+    await flushAsync();
+    trigger.click();
+    expect(host.querySelector('[role=group][aria-label=Gateway] [role=option]')?.getAttribute('aria-selected')).toBe('true');
+    expect(host.querySelector('[role=group][aria-label=Primary] [role=option]')?.getAttribute('aria-selected')).toBe('false');
+  });
+
   it('keeps the captured files and model when discovery finishes after unknown admission', async () => {
     const settings = deferred<FlowerSettingsSnapshot>();
     const file = new File(['attached context'], 'notes.txt', { type: 'text/plain' });
@@ -734,7 +764,7 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(host.querySelector('[data-testid="preview-window"]')).toBeFalsy();
   });
 
-  it('renders the Flower bubble as a plain question with linked context inside the input', () => {
+  it('renders linked context above the editor without introductory copy', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -757,10 +787,11 @@ describe('FlowerTurnLauncherWindow', () => {
         />
     ), host);
 
-    expect(host.textContent).toContain('What would you like to explore inside it?');
+    expect(host.querySelector('.floe-prompt-card-question')).toBeNull();
+    expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBeNull();
+    expect(host.querySelector('.floe-prompt-card-references')?.compareDocumentPosition(host.querySelector('textarea')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(host.querySelector('.flower-composer-context-references')?.getAttribute('aria-label')).toBe('Linked context');
     expect(host.querySelector('.floe-prompt-card-composer')?.textContent).toContain('project');
-    expect(host.querySelector('.floe-prompt-card-question')?.textContent).not.toContain('project');
     expect(host.textContent).not.toContain('Question');
     expect(host.textContent).not.toContain('Files');
   });

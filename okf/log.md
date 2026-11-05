@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Place [Ask Flower context and attachments](ui/flower-activity-companion.md#shared-input-card) above the real writing caret, remove generated introductory copy, and share provider/model identity and availability content with the conversation picker.
+
 - 2026-11-05: Bound official OpenAI [prompt cache keys](ai/model-request-reuse.md) while preserving stable provider and account isolation across Floret thread turns.
 
 - 2026-11-05: Preserve [snapshot source completeness](ai/computer-use-scripts.md), [confirmed tab identity](ai/computer-use-target-selection.md) and [exact-source disconnect causes](ai/computer-use-browser-connection.md) through model/Activity results; qualify help return unions and the method inventory without replay or inferred capability.
