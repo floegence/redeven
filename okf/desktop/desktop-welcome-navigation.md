@@ -3,7 +3,7 @@ type: UI Contract
 title: Desktop Welcome navigation
 tags: [desktop, welcome, flower, navigation]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -39,6 +39,10 @@ Welcome consumes published Floe presence and menu/tooltip CSS. Each surface has 
 | Embedded Flower thread/transcript context menus | `FlowerContextMenu`; callers retain the current presentation through the shared exit |
 | Command palette, feedback disclosure, dialogs and drawers, working-directory picker and Ask Flower window | Published Floe components retain their own presence and focus lifecycle; the launcher retains its presentation when the caller clears its intent |
 
+Action popovers opt into published Floe `observeDialogHeight`; their content clip adds no second fill, border or shadow. The outer rounded surface owns material and height, while top placement anchors its bottom edge so expansion preserves the trigger gap without scaling text. Geometry observes the inner clip, below the height owner, to avoid ResizeObserver feedback. Closing during resize freezes the painted height through exit; reduced motion commits the natural size immediately.
+
+An Environment split action retains one primary button and one anchor across admission, progress, recovery and completion. Localized transient labels use `StableText`; Floe's slow color tokens ease the inverse fill and foreground together. Tooltip availability cannot remount the control, and its existing action authority and progress disclosure behavior remain unchanged.
+
 Do not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. No native visible select popup or local popup animation recipe remains in Welcome or its embedded Flower surfaces.
 
 # Boundaries
@@ -50,5 +54,6 @@ Navigation grants no Runtime authority. [Ask Flower windows](../ui/flower-activi
 - `redeven:desktop/src/welcome/App.tsx` - Source.
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.
 - `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.
+- `redeven:desktop/scripts/check-welcome-workflow-motion.mjs` - Real split-action identity, inverse-color samples, growing/shrinking Runtime plans, rapid updates, anchor continuity, single rounded material and cancel/exit access in light/dark, narrow/desktop and reduced motion.
 - `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.
 - `redeven:desktop/scripts/check-office-preview.mjs` - Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.

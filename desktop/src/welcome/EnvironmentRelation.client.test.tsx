@@ -1169,6 +1169,33 @@ describe('perspective ownership across navigation and removal', () => {
 });
 
 describe('background interaction continuity', () => {
+  it('retains the primary button and focus through running, failure and ready snapshots', async () => {
+    const f = await runtimeGatewayBackgroundProbeFixture('local');
+    const snapshot = f.snapshot();
+    const h = await mount(snapshot);
+    const primary = document.querySelector<HTMLButtonElement>('.redeven-split-action-primary button')!;
+    primary.focus();
+    for (const status of ['running', 'failed', 'succeeded'] as const) {
+      const phase = status === 'succeeded' ? 'runtime_ready' : 'starting_runtime_process';
+      h.publish({ ...snapshot, action_progress: [{
+        action: 'start_environment_runtime', environment_id: f.environment.id,
+        operation_key: 'local:auto_start', subject_kind: 'local_environment',
+        status, phase, title: 'Starting Runtime', detail: '', started_at_unix_ms: 1,
+        active_progress_surface: 'runtime_lifecycle',
+        lifecycle_progress: runtimeLifecycleProgress({ location: 'local_host', operation: 'start', phase,
+          targetID: f.environment.managed_runtime_placement_target_id!, targetLabel: f.environment.label }),
+      }] });
+      await settle();
+      expect(document.querySelector('.redeven-split-action-primary button')).toBe(primary);
+      expect(document.activeElement).toBe(primary);
+      expect(primary.disabled).toBe(false);
+      expect(primary.getAttribute('data-floe-progress-shimmer')).toBe(status === 'running' ? 'surface' : null);
+    }
+    expect(controlText(primary)).toBe('Open window');
+    primary.click(); await settle();
+    expect(h.performAction.mock.calls.at(-1)?.[0]).toMatchObject({ kind: 'open_local_environment', environment_id: f.environment.id });
+  });
+
   it('opens the ready environment instead of reopening completed startup progress', async () => {
     const f = await runtimeGatewayBackgroundProbeFixture('local');
     const snapshot = f.snapshot();

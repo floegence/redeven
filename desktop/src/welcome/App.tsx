@@ -9928,41 +9928,14 @@ export function EnvironmentSplitActionButton(
     menuRef = undefined;
   });
 
-  const renderPrimaryButton = () => (
-    <Button
-      size="sm"
-      variant={props.presentation.primary_action.variant}
-      class={primaryButtonClass()}
-      style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-      aria-busy={primaryActionLoading() || undefined}
-      data-floe-progress-shimmer={primaryActionLoading() ? 'surface' : undefined}
-      title={props.presentation.primary_action.label}
-      disabled={!props.presentation.primary_action.enabled || primaryActionLoading()}
-      onClick={() => {
-        closeMenu();
-        props.onProgressOpenChange(false);
-        props.onRunAction(props.presentation.primary_action);
-      }}
-    >
-      <Show when={primaryActionLoading()} fallback={renderPrimaryActionIcon()}>
-        <Loader2 class="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
-      </Show>
-      <span class="redeven-control-label">{props.presentation.primary_action.label}</span>
-    </Button>
-  );
+  // One button owns the whole lifecycle so color transitions, focus and the
+  // anchor survive admission, progress, recovery and completion.
+  const hasPrimaryPanel = createMemo(() => hasPanelProgress() || popoverOverlay() !== undefined);
+  const primaryLabel = createMemo(() => primaryProgressPresentation()?.label
+    ?? (props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label));
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
-        <Show
-          when={hasPanelProgress() || popoverOverlay()}
-          fallback={
-            <Show when={tooltipOverlay()} fallback={renderPrimaryButton()}>
-              <DesktopTooltip content={tooltipOverlay()!.message} placement="top" anchorClass="flex w-full">
-                {renderPrimaryButton()}
-              </DesktopTooltip>
-            </Show>
-          }
-        >
           <DesktopActionPopover
             open={popoverOpen()}
             onOpenChange={(open) => {
@@ -10149,84 +10122,57 @@ export function EnvironmentSplitActionButton(
                 : (popoverOverlay()?.title ?? '')
             }
           >
-            <Show
-              when={primaryProgressPresentation()}
-              fallback={
-                <Button
-                  size="sm"
-                  variant={props.presentation.primary_action.variant}
-                  class={cn(
-                    primaryButtonClass(),
-                    blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
-                  )}
-                  style={{
-                    'min-width': 'var(--redeven-split-action-primary-min-width)',
-                  }}
-                  disabled={!props.settingsRestart && props.operationState.actionsDisabled && primaryFallbackRunsAction()}
-                  aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
-                  aria-haspopup={(hasPanelProgress() && !readyPrimaryAction()) || popoverOverlay() ? 'dialog' : undefined}
-                  aria-expanded={props.settingsRestart ? props.progressOpen : popoverOverlay() ? props.guidanceOpen : undefined}
-                  title={props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label}
-                  aria-label={
-                    blockedPrimaryActionDisabled()
-                      ? blockedPrimaryActionTriggerLabel(props.i18n, props.presentation.primary_action.label)
-                      : undefined
+            <DesktopTooltip content={tooltipOverlay()?.message} disabled={!tooltipOverlay() || popoverOpen()}
+              placement="top" anchorClass="flex w-full">
+              <Button
+                size="sm"
+                variant={props.presentation.primary_action.variant}
+                class={cn(primaryButtonClass(),
+                  primaryProgressPresentation() && progressTriggerClassName(primaryProgressPresentation()!),
+                  !primaryProgressPresentation() && blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked')}
+                style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+                disabled={primaryProgressPresentation() ? false : hasPrimaryPanel()
+                  ? !props.settingsRestart && props.operationState.actionsDisabled && primaryFallbackRunsAction()
+                  : !props.presentation.primary_action.enabled || primaryActionLoading()}
+                aria-busy={!hasPrimaryPanel() && primaryActionLoading() || undefined}
+                data-floe-progress-shimmer={primaryProgressPresentation()?.kind === 'progress_trigger'
+                  || (!hasPrimaryPanel() && primaryActionLoading()) ? 'surface' : undefined}
+                aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
+                aria-haspopup={primaryProgressPresentation() || (hasPanelProgress() && !readyPrimaryAction()) || popoverOverlay() ? 'dialog' : undefined}
+                aria-expanded={primaryProgressPresentation() || props.settingsRestart ? props.progressOpen : popoverOverlay() ? props.guidanceOpen : undefined}
+                aria-label={primaryProgressPresentation()?.ariaLabel ?? (blockedPrimaryActionDisabled()
+                  ? blockedPrimaryActionTriggerLabel(props.i18n, props.presentation.primary_action.label) : undefined)}
+                title={primaryLabel()}
+                onClick={() => {
+                  closeMenu();
+                  if (primaryProgressPresentation() || (hasPanelProgress() && !readyPrimaryAction())) {
+                    props.onProgressOpenChange(!props.progressOpen); return;
                   }
-                  onClick={() => {
-                    closeMenu();
-                    if (hasPanelProgress() && !readyPrimaryAction()) { props.onProgressOpenChange(!props.progressOpen); return; }
-                    if (primaryFallbackRunsAction()) {
-                      props.onGuidanceOpenChange(false);
-                      props.onProgressOpenChange(false);
-                      props.onRunAction(readyPrimaryAction() ?? props.presentation.primary_action);
-                      return;
-                    }
+                  if (!hasPrimaryPanel() || primaryFallbackRunsAction()) {
+                    props.onGuidanceOpenChange(false);
                     props.onProgressOpenChange(false);
-                    props.onGuidanceOpenChange(!props.guidanceOpen);
-                  }}
-                >
-                  <Show when={blockedPrimaryActionDisabled()} fallback={<span class="redeven-control-label">{props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label}</span>}>
-                    <span class="redeven-split-action-trigger__content">
-                      {props.presentation.primary_action.intent === 'request_open_access' ? (
-                        <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-                      ) : (
-                        <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-                      )}
-                      <span class="redeven-control-label">{props.presentation.primary_action.label}</span>
-                    </span>
+                    props.onRunAction(readyPrimaryAction() ?? props.presentation.primary_action);
+                    return;
+                  }
+                  props.onProgressOpenChange(false);
+                  props.onGuidanceOpenChange(!props.guidanceOpen);
+                }}
+              >
+                <Show when={primaryProgressPresentation()} fallback={
+                  <Show when={blockedPrimaryActionDisabled()} fallback={
+                    <Show when={!hasPrimaryPanel() && primaryActionLoading()} fallback={!hasPrimaryPanel() && renderPrimaryActionIcon()}>
+                      <Loader2 class="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                    </Show>
+                  }>
+                    <Show when={props.presentation.primary_action.intent === 'request_open_access'} fallback={<Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}>
+                      <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+                    </Show>
                   </Show>
-                </Button>
-              }
-            >
-              {(presentation) => {
-                return (
-                  <Button
-                    size="sm"
-                    variant={props.presentation.primary_action.variant}
-                    class={cn(primaryButtonClass(), progressTriggerClassName(presentation()))}
-                    data-floe-progress-shimmer={presentation().kind === 'progress_trigger' ? 'surface' : undefined}
-                    style={{
-                      'min-width': 'var(--redeven-split-action-primary-min-width)',
-                    }}
-                    aria-haspopup="dialog"
-                    aria-expanded={props.progressOpen}
-                    aria-label={presentation().ariaLabel}
-                    title={presentation().label}
-                    onClick={() => {
-                      closeMenu();
-                      props.onProgressOpenChange(!props.progressOpen);
-                    }}
-                  >
-                    <span class="redeven-split-action-trigger__content">
-                      {renderEnvironmentProgressPresentationIcon(presentation())}
-                      <span class="redeven-control-label">{presentation().label}</span>
-                    </span>
-                  </Button>
-                );
-              }}
-            </Show>
+                }>{presentation => <>{renderEnvironmentProgressPresentationIcon(presentation())}</>}</Show>
+                <StableText class="redeven-control-label" reserve={[props.presentation.primary_action.label, primaryLabel()]}>{primaryLabel()}</StableText>
+              </Button>
+            </DesktopTooltip>
           </DesktopActionPopover>
-        </Show>
       </div>
       <Show when={hasMenuActions()}>
         <button

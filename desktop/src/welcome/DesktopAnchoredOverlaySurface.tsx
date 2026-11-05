@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
-import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
+import { createFloatingPresence, observeDialogHeight } from '@floegence/floe-webapp-core/ui';
 import { Portal } from 'solid-js/web';
 import {
   desktopOverlayArrowClass,
@@ -20,6 +20,7 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   hideArrow?: boolean;
   zIndex?: number;
   motion?: 'menu' | 'tooltip';
+  animateHeight?: boolean;
   onExitComplete?: () => void;
   role?: JSX.HTMLAttributes<HTMLDivElement>['role'];
   ariaModal?: boolean;
@@ -41,13 +42,25 @@ function cn(...values: Array<string | undefined | null | false>): string {
 }
 
 export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfaceProps) {
-  const [position, setPosition] = createSignal<DesktopAnchoredOverlayPosition | null>(null);
+  const [position, setPosition] = createSignal<(DesktopAnchoredOverlayPosition & { bottom?: number }) | null>(null);
   const [overlayElement, setOverlayElement] = createSignal<HTMLDivElement | undefined>();
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
   const presence = createFloatingPresence({
     open: () => props.open,
     element: overlayElement,
     exitDurationMs: props.motion === 'tooltip' ? 90 : 160,
+  });
+  createEffect(() => {
+    const element = overlayElement();
+    if (!props.animateHeight || !element || !props.open) return;
+    element.style.removeProperty('height');
+    const stopHeightMotion = observeDialogHeight(element, { isSettled: () => presence.state() === 'open' });
+    onCleanup(() => {
+      const height = element.offsetHeight;
+      stopHeightMotion();
+      // Keep the last painted box through exit, even if content was resizing.
+      if (element.isConnected && !props.open) element.style.height = `${height}px`;
+    });
   });
   let wasMounted = props.open;
   createEffect(() => {
@@ -119,6 +132,10 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       ...nextPosition,
       left: nextPosition.left + viewportOffsetLeft,
       top: nextPosition.top + viewportOffsetTop,
+      // A top popup grows upward from its anchored bottom edge. CSS keeps that
+      // edge attached during shared height motion without a frame-late top write.
+      ...(nextPosition.placement === 'top' ? { bottom: window.innerHeight - viewportOffsetTop - nextPosition.top
+        - Math.min(overlay.offsetHeight, nextPosition.maxHeight ?? overlay.offsetHeight) } : {}),
     });
   };
 
@@ -162,7 +179,10 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
     const anchorEl = props.anchorRef;
-    const nextOverlayRef = positionerRef;
+    // Shared height motion observes the surface. Measure its inner clip rather
+    // than its ancestor so its synchronous height writes cannot invalidate an
+    // already-delivered, shallower ResizeObserver target in the same frame.
+    const nextOverlayRef = props.animateHeight ? overlayElement()?.firstElementChild : positionerRef;
     const observer = typeof ResizeObserver === 'undefined' || !anchorEl || !nextOverlayRef
       ? null
       : new ResizeObserver(() => {
@@ -202,7 +222,8 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
             'z-index': props.zIndex ?? 225,
             width: 'max-content',
             left: position() ? `${position()!.left}px` : '0px',
-            top: position() ? `${position()!.top}px` : '0px',
+            top: position()?.bottom !== undefined ? undefined : position() ? `${position()!.top}px` : '0px',
+            bottom: position()?.bottom !== undefined ? `${position()!.bottom}px` : undefined,
             visibility: position() ? 'visible' : 'hidden',
             ...(position()?.maxWidth !== undefined ? { maxWidth: `${position()!.maxWidth}px` } : {}),
             ...(position()?.maxHeight !== undefined

@@ -2242,18 +2242,21 @@ html:not(.dark) .redeven-header-separator {
   --redeven-action-popover-width: min(19rem, calc(100vw - 1rem));
   --redeven-action-popover-border: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 86%, var(--foreground) 14%);
   width: var(--redeven-action-popover-width);
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  max-height: var(--redeven-anchored-overlay-max-height, none);
+  border-radius: var(--floe-radius-panel);
+  outline: 1px solid var(--floe-line);
+  outline-offset: -1px;
 }
 
 .redeven-action-popover-frame {
   box-sizing: border-box;
   width: 100%;
-  min-height: 2.75rem;
-  max-height: var(--redeven-anchored-overlay-max-height, none);
-  border-radius: var(--floe-radius-panel);
+  height: 100%;
+  max-height: inherit;
+  border-radius: inherit;
   overflow: hidden;
-  border: 1px solid var(--floe-line);
-  background: var(--popover);
-  box-shadow: var(--floe-elevation-float);
 }
 
 .redeven-action-popover-surface[data-placement='top'] > .redeven-anchored-overlay-arrow {
@@ -4317,7 +4320,6 @@ pre,
   background: var(--secondary);
   color: var(--secondary-foreground);
   box-shadow: none;
-  transition: background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention):hover {
@@ -4328,6 +4330,17 @@ pre,
 .redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention):active {
   background: var(--secondary);
   background: color-mix(in srgb, var(--foreground) 12%, var(--secondary));
+}
+
+/* State changes keep the same button; both ink and fill ease together. */
+@media (prefers-reduced-motion: no-preference) {
+  .redeven-environment-card .redeven-split-action-primary button {
+    transition:
+      background-color var(--floe-duration-slow) var(--floe-ease-out),
+      color var(--floe-duration-slow) var(--floe-ease-out),
+      border-color var(--floe-duration-slow) var(--floe-ease-out),
+      opacity var(--floe-duration-base) var(--floe-ease-out);
+  }
 }
 
 /* The loading shimmer paints a full-bleed sweep behind the label. Upstream

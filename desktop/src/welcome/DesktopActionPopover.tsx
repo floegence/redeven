@@ -38,7 +38,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
   return (
     <span ref={anchorRef} data-redeven-action-popover-anchor="" class={cn('relative inline-block max-w-full', props.anchorClass)} onPointerDown={props.onAnchorPointerDown}>
       {props.children}
-      <DesktopAnchoredOverlaySurface open={props.open} anchorRef={anchorRef} placement="top"
+      <DesktopAnchoredOverlaySurface open={props.open} anchorRef={anchorRef} placement="top" animateHeight
         placementLock={props.placementLock} allowMainAxisOverflow={props.allowMainAxisOverflow ?? false}
         role="dialog" ariaModal={false} ariaLabel={props.popoverAriaLabel} interactive={props.open}
         onExitComplete={props.onExitComplete}

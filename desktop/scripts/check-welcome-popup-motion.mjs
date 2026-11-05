@@ -83,11 +83,16 @@ try {
       assert.ok(opening.end.width <= width - 16 + 1, `${label}: panel fits viewport`);
       if (kind === 'action') {
         const draft = surface.locator('input'); await draft.fill('retained draft');
-        await page.evaluate(() => { window.savedPopup = document.querySelector('.redeven-action-popover-surface'); popupFixture.setOpen(false); });
-        const exit = await surface.evaluate(el => ({ inert: el.inert, hidden: el.getAttribute('aria-hidden'), state: el.dataset.floatingPresence }));
+        // Close, inspect and reverse in one browser task: reduced motion may
+        // finish its exit before another Playwright round trip reaches the DOM.
+        const exit = await page.evaluate(() => {
+          const el = window.savedPopup = document.querySelector('.redeven-action-popover-surface');
+          popupFixture.setOpen(false);
+          const state = { inert: el.inert, hidden: el.getAttribute('aria-hidden'), state: el.dataset.floatingPresence };
+          popupFixture.setOpen(true);
+          return state;
+        });
         assert.deepEqual(exit, { inert: true, hidden: 'true', state: 'exiting' }, `${label}: exits disable input immediately`);
-        // Reopen in the same task even for reduced motion, before its exit deadline.
-        await page.evaluate(() => popupFixture.setOpen(true));
         if (reducedMotion === 'no-preference') {
           assert.equal(await surface.evaluate(el => el === window.savedPopup), true, `${label}: reverses on the same DOM`);
           assert.equal(await draft.inputValue(), 'retained draft', `${label}: retains draft on reversal`);

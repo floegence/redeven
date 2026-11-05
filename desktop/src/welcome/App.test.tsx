@@ -1359,8 +1359,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('loading={loading()}');
     expect(appSrc).toContain('loading={props.foregroundActionBusy(action())}');
     expect(appSrc).toContain('renderEnvironmentProgressPresentationIcon(presentation())');
-    expect(appSrc).toContain('data-floe-progress-shimmer={primaryActionLoading() ? \'surface\' : undefined}');
-    expect(appSrc).toContain('data-floe-progress-shimmer={presentation().kind === \'progress_trigger\' ? \'surface\' : undefined}');
+    expect(appSrc).toContain("data-floe-progress-shimmer={primaryProgressPresentation()?.kind === 'progress_trigger'");
+    expect(appSrc).toContain("|| (!hasPrimaryPanel() && primaryActionLoading()) ? 'surface' : undefined}");
     expect(appSrc).not.toContain('shimmer-overlay');
     expect(styles).not.toContain('shimmer-overlay');
     expect(styles).not.toContain('@keyframes redeven-status-dot-pulse');

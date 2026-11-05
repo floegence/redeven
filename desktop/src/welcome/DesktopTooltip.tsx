@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import { type DesktopOverlayPlacement } from './desktopOverlayPosition';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 
@@ -6,6 +6,7 @@ export type DesktopTooltipPlacement = DesktopOverlayPlacement;
 
 export type DesktopTooltipProps = Readonly<{
   content: string | JSX.Element;
+  disabled?: boolean;
   children: JSX.Element;
   placement?: DesktopTooltipPlacement;
   delay?: number;
@@ -37,6 +38,7 @@ export function DesktopTooltip(props: DesktopTooltipProps) {
 
   const show = () => {
     clearTimeoutHandle();
+    if (props.disabled) return;
     const delay = props.delay ?? 300;
     if (delay <= 0) {
       setVisible(true);
@@ -52,6 +54,8 @@ export function DesktopTooltip(props: DesktopTooltipProps) {
     clearTimeoutHandle();
     setVisible(false);
   };
+
+  createEffect(() => { if (props.disabled) hide(); });
 
   onCleanup(() => {
     clearTimeoutHandle();
