@@ -35,10 +35,15 @@ import (
 
 const (
 	DesktopModelSourceProviderType      = "desktop_model_source"
-	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v5"
+	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v6"
 	DesktopModelSourceDefaultSource     = "desktop_local_environment"
 	desktopModelSourceModelIDPrefix     = "desktop:model_"
 	defaultDesktopModelSourceRPCTimeout = 30 * time.Second
+	desktopModelSourcePartBytes         = 32 << 10
+	desktopModelSourceMaxPayloadBytes   = 32 << 20
+	desktopModelSourceMaxBufferedBytes  = 64 << 20
+	desktopModelSourceMaxPending        = 32
+	desktopModelSourceMaxWireBytes      = 64 << 20
 )
 
 var errDesktopModelSourceProtocol = errors.New("desktop model source protocol error")
@@ -162,6 +167,8 @@ type DesktopModelSourceRPCFrame struct {
 	Event           *StreamEvent                `json:"event,omitempty"`
 	Result          json.RawMessage             `json:"result,omitempty"`
 	Error           *DesktopModelSourceRPCError `json:"error,omitempty"`
+	Part            []byte                      `json:"part,omitempty"`
+	Final           bool                        `json:"final,omitempty"`
 }
 
 type DesktopModelSourceRPCError struct {
@@ -282,6 +289,20 @@ type desktopModelSourceStreamRequest struct {
 	Request ModelGatewayRequest `json:"request"`
 }
 
+type desktopModelSourcePrepareResult struct {
+	Handle      string                   `json:"handle,omitempty"`
+	Fingerprint string                   `json:"fingerprint,omitempty"`
+	Estimate    flprovider.TokenEstimate `json:"estimate"`
+	Supported   bool                     `json:"supported"`
+}
+
+type desktopModelSourcePreparedOperation struct {
+	Handle       string `json:"handle"`
+	AttemptID    string `json:"attempt_id,omitempty"`
+	AttemptEpoch int    `json:"attempt_epoch,omitempty"`
+	OutputLimit  int64  `json:"output_limit,omitempty"`
+}
+
 type desktopModelSourceRegistryEntry struct {
 	Model         DesktopModelSourceModel
 	ProviderID    string
@@ -311,10 +332,119 @@ type desktopModelSourceProvider struct {
 type desktopModelSourceRuntimeConn struct {
 	ws        *websocket.Conn
 	writeGate chan struct{}
+	cleanupMu sync.Mutex
 	mu        sync.Mutex
 	pending   map[string]chan DesktopModelSourceRPCFrame
+	failed    map[string]error
+	buffered  int
 	closed    bool
 	closeErr  error
+}
+
+type desktopModelSourcePreparedTurn struct {
+	conn           *desktopModelSourceRuntimeConn
+	lifetime       context.Context
+	accountStopped func()
+	handle         string
+	estimate       flprovider.TokenEstimate
+	fingerprint    string
+}
+
+func (p *desktopModelSourceProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
+	if p == nil || p.client == nil {
+		return nil, ErrNotConfigured
+	}
+	if !isDesktopModelSourceModelID(req.Model) {
+		req.Model = p.defaultModelID
+	}
+	preparedImages, err := prepareModelGatewayImages(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	p.client.mu.Lock()
+	conn, session := p.client.conn, p.client.session
+	p.client.mu.Unlock()
+	if conn == nil || (session.ExpiresAtUnixMS > 0 && time.Now().UnixMilli() >= session.ExpiresAtUnixMS) {
+		return nil, flprovider.WithRetryAdvice(errors.New("desktop model source is not connected"), flprovider.RetryAdvice{Category: flprovider.RetryTransient})
+	}
+	var out desktopModelSourcePrepareResult
+	if err := conn.call(ctx, "ai.turn.prepare", desktopModelSourceStreamRequest{Request: preparedImages}, nil, &out); err != nil {
+		return nil, err
+	}
+	if !out.Supported {
+		return nil, errModelGatewayPreparationUnsupported
+	}
+	if out.Handle == "" || out.Fingerprint == "" || out.Estimate.EstimatedInputTokens <= 0 {
+		return nil, fmt.Errorf("%w: invalid prepared request", errDesktopModelSourceProtocol)
+	}
+	if err := ctx.Err(); err != nil {
+		(&desktopModelSourcePreparedTurn{conn: conn, handle: out.Handle}).release()
+		return nil, err
+	}
+	prepared := newDesktopModelSourcePreparedTurn(ctx, conn, out)
+	prepared.accountStopped = p.accountStopped
+	return prepared, nil
+}
+
+func newDesktopModelSourcePreparedTurn(ctx context.Context, conn *desktopModelSourceRuntimeConn, result desktopModelSourcePrepareResult) *desktopModelSourcePreparedTurn {
+	p := &desktopModelSourcePreparedTurn{conn: conn, lifetime: ctx, handle: result.Handle, estimate: result.Estimate, fingerprint: result.Fingerprint}
+	context.AfterFunc(ctx, func() { p.release() })
+	return p
+}
+
+func (p *desktopModelSourcePreparedTurn) release() {
+	p.conn.cleanupMu.Lock()
+	defer p.conn.cleanupMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = p.conn.call(ctx, "ai.turn.prepared.release", desktopModelSourcePreparedOperation{Handle: p.handle}, nil, nil)
+}
+
+func (p *desktopModelSourcePreparedTurn) TokenEstimate() flprovider.TokenEstimate {
+	return cloneModelTokenEstimate(p.estimate)
+}
+
+func (p *desktopModelSourcePreparedTurn) RenderedPayloadFingerprint() string { return p.fingerprint }
+
+func (p *desktopModelSourcePreparedTurn) StreamTurn(ctx context.Context, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	var result ModelGatewayResult
+	err := p.conn.call(ctx, "ai.turn.prepared.stream", desktopModelSourcePreparedOperation{Handle: p.handle}, onEvent, &result)
+	var failure *DesktopModelSourceRPCError
+	if p.accountStopped != nil && errors.As(err, &failure) && (failure.Code == "CHATGPT_AUTHORIZATION_REQUIRED" || failure.Code == "CHATGPT_STORAGE_UNAVAILABLE") {
+		p.accountStopped()
+	}
+	return result, err
+}
+
+func (p *desktopModelSourcePreparedTurn) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	return p.conn.call(ctx, "ai.turn.prepared.close", desktopModelSourcePreparedOperation{Handle: p.handle}, nil, nil)
+}
+
+func (p *desktopModelSourcePreparedTurn) replay(ctx context.Context, next flprovider.Request) (preparedModelGatewayTurn, error) {
+	return p.derive(ctx, "ai.turn.prepared.replay", desktopModelSourcePreparedOperation{Handle: p.handle, AttemptID: next.AttemptID, AttemptEpoch: next.AttemptEpoch})
+}
+
+func (p *desktopModelSourcePreparedTurn) withMaxOutputTokens(ctx context.Context, limit int64) (preparedModelGatewayTurn, error) {
+	return p.derive(ctx, "ai.turn.prepared.refit", desktopModelSourcePreparedOperation{Handle: p.handle, OutputLimit: limit})
+}
+
+func (p *desktopModelSourcePreparedTurn) derive(ctx context.Context, method string, operation desktopModelSourcePreparedOperation) (preparedModelGatewayTurn, error) {
+	var out desktopModelSourcePrepareResult
+	if err := p.conn.call(ctx, method, operation, nil, &out); err != nil {
+		return nil, err
+	}
+	if !out.Supported || out.Handle == "" || out.Fingerprint == "" || out.Estimate.EstimatedInputTokens <= 0 {
+		return nil, fmt.Errorf("%w: invalid derived request", errDesktopModelSourceProtocol)
+	}
+	if err := ctx.Err(); err != nil {
+		(&desktopModelSourcePreparedTurn{conn: p.conn, handle: out.Handle}).release()
+		return nil, err
+	}
+	prepared := newDesktopModelSourcePreparedTurn(p.lifetime, p.conn, out)
+	prepared.accountStopped = p.accountStopped
+	return prepared, nil
 }
 
 func normalizeDesktopModelSourceSession(session DesktopModelSourceSession) (DesktopModelSourceSession, error) {
@@ -404,6 +534,7 @@ func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session Desktop
 		return err
 	}
 	runtimeConn := newDesktopModelSourceRuntimeConn(ws)
+	ws.SetReadLimit(desktopModelSourceMaxWireBytes)
 	var old *desktopModelSourceRuntimeConn
 	c.mu.Lock()
 	if c.session.SessionID == normalized.SessionID {
@@ -787,6 +918,7 @@ func newDesktopModelSourceRuntimeConn(ws *websocket.Conn) *desktopModelSourceRun
 		ws:        ws,
 		writeGate: make(chan struct{}, 1),
 		pending:   make(map[string]chan DesktopModelSourceRPCFrame),
+		failed:    make(map[string]error),
 	}
 }
 
@@ -843,8 +975,8 @@ func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) (err error
 		frame.Type = strings.TrimSpace(frame.Type)
 		frame.ID = strings.TrimSpace(frame.ID)
 		switch frame.Type {
-		case "event", "result", "error":
-			if frame.ID == "" || (frame.Type == "event" && frame.Event == nil) {
+		case "part":
+			if frame.ID == "" || len(frame.Part) == 0 || len(frame.Part) > desktopModelSourcePartBytes {
 				err := fmt.Errorf("%w: missing frame fields", errDesktopModelSourceProtocol)
 				c.closeWithError(err)
 				return err
@@ -876,11 +1008,20 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 	if err != nil {
 		return err
 	}
-	ch := make(chan DesktopModelSourceRPCFrame, 64)
-	if err := c.addPending(id, ch); err != nil {
+	ch := make(chan DesktopModelSourceRPCFrame, 1)
+	if err := c.addPendingWithPriority(id, ch, method == "ai.turn.prepared.release"); err != nil {
 		return err
 	}
 	defer c.removePending(id)
+	completed := false
+	defer func() {
+		if completed {
+			return
+		}
+		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = c.writeFrame(cancelCtx, DesktopModelSourceRPCFrame{Type: "cancel", ID: id, Method: "ai.turn.cancel"})
+	}()
 	failProtocol := func(err error) error { c.closeWithError(err); return desktopModelSourceTransportError(err) }
 
 	rawParams, err := marshalRawMessage(params)
@@ -896,28 +1037,62 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 	}); err != nil {
 		return err
 	}
+	stopCancellation := context.AfterFunc(ctx, func() {
+		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = c.writeFrame(cancelCtx, DesktopModelSourceRPCFrame{Type: "cancel", ID: id, Method: "ai.turn.cancel"})
+	})
+	defer stopCancellation()
 
+	var payload []byte
+	reserved := 0
+	defer func() { c.releaseBuffered(reserved) }()
 	for {
 		select {
 		case <-ctx.Done():
-			cancelCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-			_ = c.writeFrame(cancelCtx, DesktopModelSourceRPCFrame{
-				ProtocolVersion: DesktopModelSourceProtocolVersion,
-				Type:            "cancel",
-				ID:              id,
-				Method:          "ai.turn.cancel",
-			})
-			cancel()
 			return ctx.Err()
 		case frame, ok := <-ch:
 			c.mu.Lock()
 			closed, failure := c.closed, c.closeErr
+			local := c.failed[id]
+			if local != nil {
+				failure = local
+			}
 			c.mu.Unlock()
-			if !ok || (closed && errors.Is(failure, errDesktopModelSourceProtocol)) {
+			if !ok || local != nil || (closed && errors.Is(failure, errDesktopModelSourceProtocol)) {
 				return failure
 			}
+			if frame.Type != "part" || len(payload)+len(frame.Part) > desktopModelSourceMaxPayloadBytes {
+				return flprovider.WithRetryAdvice(errors.New("desktop model source response exceeds buffer limit"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+			}
+			needed := len(payload) + len(frame.Part)
+			if needed > cap(payload) {
+				capacity := min(desktopModelSourceMaxPayloadBytes, max(needed, max(desktopModelSourcePartBytes, cap(payload)*2)))
+				if !c.reserveBuffered(capacity) {
+					return flprovider.WithRetryAdvice(errors.New("desktop model source connection exceeds buffer limit"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+				}
+				next := make([]byte, len(payload), capacity)
+				copy(next, payload)
+				c.releaseBuffered(reserved)
+				payload, reserved = next, capacity
+			}
+			payload = append(payload, frame.Part...)
+			if !frame.Final {
+				if err := c.writeFrame(ctx, DesktopModelSourceRPCFrame{Type: "credit", ID: id}); err != nil {
+					return err
+				}
+				continue
+			}
+			var message DesktopModelSourceRPCFrame
+			if err := json.Unmarshal(payload, &message); err != nil || message.ID != id {
+				return failProtocol(fmt.Errorf("%w: invalid response payload", errDesktopModelSourceProtocol))
+			}
+			frame = message
 			switch strings.TrimSpace(frame.Type) {
 			case "event":
+				if frame.Event == nil || frame.Error != nil || len(frame.Result) != 0 {
+					return failProtocol(fmt.Errorf("%w: invalid event payload", errDesktopModelSourceProtocol))
+				}
 				if frame.Event != nil && onEvent != nil {
 					if frame.Event.Transport != nil {
 						if err := frame.Event.Transport.Validate(); err != nil {
@@ -931,17 +1106,23 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 					}
 					onEvent(*frame.Event)
 				}
+				c.releaseBuffered(reserved)
+				payload, reserved = nil, 0
+				if err := c.writeFrame(ctx, DesktopModelSourceRPCFrame{Type: "credit", ID: id}); err != nil {
+					return err
+				}
 			case "result":
 				if frame.Error != nil || frame.Event != nil {
 					return failProtocol(fmt.Errorf("%w: conflicting terminal fields", errDesktopModelSourceProtocol))
 				}
 				if out == nil {
+					completed = true
 					return nil
 				}
 				if len(frame.Result) == 0 || string(frame.Result) == "null" {
 					return failProtocol(fmt.Errorf("%w: missing result", errDesktopModelSourceProtocol))
 				}
-				if method == "ai.turn.stream" {
+				if method == "ai.turn.stream" || method == "ai.turn.prepared.stream" {
 					var result struct {
 						FinishReason string `json:"finish_reason"`
 					}
@@ -952,25 +1133,44 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 				if err := json.Unmarshal(frame.Result, out); err != nil {
 					return failProtocol(fmt.Errorf("%w: invalid result", errDesktopModelSourceProtocol))
 				}
+				completed = true
 				return nil
 			case "error":
 				if len(frame.Result) != 0 || frame.Event != nil {
 					return failProtocol(fmt.Errorf("%w: conflicting terminal fields", errDesktopModelSourceProtocol))
 				}
-				if err := validateDesktopModelSourceRPCError(frame.Error, method == "ai.turn.stream"); err != nil {
+				if err := validateDesktopModelSourceRPCError(frame.Error, desktopModelSourceModelMethod(method)); err != nil {
 					return failProtocol(err)
 				}
+				completed = true
 				return frame.Error
+			default:
+				return failProtocol(fmt.Errorf("%w: unsupported response payload", errDesktopModelSourceProtocol))
 			}
 		}
 	}
 }
 
+func desktopModelSourceModelMethod(method string) bool {
+	return method == "ai.turn.stream" || strings.HasPrefix(method, "ai.turn.prepare")
+}
+
 func (c *desktopModelSourceRuntimeConn) addPending(id string, ch chan DesktopModelSourceRPCFrame) error {
+	return c.addPendingWithPriority(id, ch, false)
+}
+
+func (c *desktopModelSourceRuntimeConn) addPendingWithPriority(id string, ch chan DesktopModelSourceRPCFrame, cleanup bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
 		return c.closeErr
+	}
+	limit := desktopModelSourceMaxPending - 1
+	if cleanup {
+		limit++
+	}
+	if len(c.pending) >= limit {
+		return errors.New("desktop model source request capacity exceeded")
 	}
 	c.pending[id] = ch
 	return nil
@@ -979,6 +1179,7 @@ func (c *desktopModelSourceRuntimeConn) addPending(id string, ch chan DesktopMod
 func (c *desktopModelSourceRuntimeConn) removePending(id string) {
 	c.mu.Lock()
 	delete(c.pending, id)
+	delete(c.failed, id)
 	c.mu.Unlock()
 }
 
@@ -997,9 +1198,32 @@ func (c *desktopModelSourceRuntimeConn) dispatch(frame DesktopModelSourceRPCFram
 	case ch <- frame:
 		c.mu.Unlock()
 	default:
+		delete(c.pending, id)
+		c.failed[id] = errors.New("desktop model source request exceeded its flow-control window")
+		close(ch)
 		c.mu.Unlock()
-		c.closeWithError(fmt.Errorf("%w: pending frame queue overflow", errDesktopModelSourceProtocol))
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			_ = c.writeFrame(ctx, DesktopModelSourceRPCFrame{Type: "cancel", ID: id})
+		}()
 	}
+}
+
+func (c *desktopModelSourceRuntimeConn) reserveBuffered(n int) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if n < 0 || n > desktopModelSourceMaxBufferedBytes-c.buffered {
+		return false
+	}
+	c.buffered += n
+	return true
+}
+
+func (c *desktopModelSourceRuntimeConn) releaseBuffered(n int) {
+	c.mu.Lock()
+	c.buffered -= n
+	c.mu.Unlock()
 }
 
 func (c *desktopModelSourceRuntimeConn) writeFrame(ctx context.Context, frame DesktopModelSourceRPCFrame) error {
@@ -1019,14 +1243,10 @@ func (c *desktopModelSourceRuntimeConn) writeFrame(ctx context.Context, frame De
 	select {
 	case c.writeGate <- struct{}{}:
 	case <-ctx.Done():
-		c.closeWithError(ctx.Err())
 		return ctx.Err()
 	}
 	defer func() { <-c.writeGate }()
-	stopCancellation := context.AfterFunc(ctx, func() { c.closeWithError(ctx.Err()) })
-	defer stopCancellation()
 	if err := ctx.Err(); err != nil {
-		c.closeWithError(err)
 		return err
 	}
 	deadline := time.Now().Add(defaultDesktopModelSourceRPCTimeout)
@@ -1235,6 +1455,114 @@ type desktopModelSourceExecutor struct {
 	session            DesktopModelSourceSession
 }
 
+type desktopModelSourceActiveRequest struct {
+	cancel  context.CancelFunc
+	credit  chan struct{}
+	mu      sync.Mutex
+	waiting bool
+}
+
+func (r *desktopModelSourceActiveRequest) acquire(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.credit:
+	}
+	r.mu.Lock()
+	r.waiting = true
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *desktopModelSourceActiveRequest) grant() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.waiting {
+		return false
+	}
+	r.waiting = false
+	r.credit <- struct{}{}
+	return true
+}
+
+type desktopModelSourcePreparedEntry struct {
+	turn          preparedModelGatewayTurn
+	request       ModelGatewayRequest
+	provider      string
+	size          int
+	created       time.Time
+	stopExpiry    func() bool
+	closed        bool
+	streamed      bool
+	keepForReplay bool
+}
+
+type desktopModelSourcePreparedStore struct {
+	mu      sync.Mutex
+	entries map[string]*desktopModelSourcePreparedEntry
+	bytes   int
+}
+
+func (s *desktopModelSourcePreparedStore) release(handle string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if entry := s.entries[handle]; entry != nil {
+		if entry.stopExpiry != nil {
+			entry.stopExpiry()
+		}
+		delete(s.entries, handle)
+		s.bytes -= entry.size
+		_ = entry.turn.Close()
+	}
+}
+
+func newDesktopModelSourcePreparedStore() *desktopModelSourcePreparedStore {
+	return &desktopModelSourcePreparedStore{entries: map[string]*desktopModelSourcePreparedEntry{}}
+}
+
+func (s *desktopModelSourcePreparedStore) add(entry *desktopModelSourcePreparedEntry) (desktopModelSourcePrepareResult, error) {
+	id, err := newDesktopModelSourceRPCID()
+	if err != nil {
+		return desktopModelSourcePrepareResult{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(time.Now())
+	if len(s.entries) >= 64 || entry.size > 64<<20-s.bytes {
+		return desktopModelSourcePrepareResult{}, errors.New("desktop prepared request capacity exceeded")
+	}
+	entry.created = time.Now()
+	s.entries[id] = entry
+	s.bytes += entry.size
+	return desktopModelSourcePrepareResult{Supported: true, Handle: id, Fingerprint: entry.turn.RenderedPayloadFingerprint(), Estimate: entry.turn.TokenEstimate()}, nil
+}
+
+func (s *desktopModelSourcePreparedStore) pruneLocked(now time.Time) {
+	for id, entry := range s.entries {
+		if entry.closed && now.Sub(entry.created) >= 10*time.Minute {
+			if entry.stopExpiry != nil {
+				entry.stopExpiry()
+			}
+			_ = entry.turn.Close()
+			delete(s.entries, id)
+			s.bytes -= entry.size
+		}
+	}
+}
+
+func (s *desktopModelSourcePreparedStore) closeAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, entry := range s.entries {
+		if entry.stopExpiry != nil {
+			entry.stopExpiry()
+		}
+		_ = entry.turn.Close()
+		delete(s.entries, id)
+	}
+	s.bytes = 0
+}
+
 func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Conn) error {
 	if e == nil {
 		return errors.New("missing desktop model source executor")
@@ -1242,6 +1570,7 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 	if ws == nil {
 		return errors.New("missing desktop model source websocket")
 	}
+	ws.SetReadLimit(desktopModelSourceMaxWireBytes)
 	stopWatch := make(chan struct{})
 	defer close(stopWatch)
 	go func() {
@@ -1258,23 +1587,25 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 	}()
 	var writeMu sync.Mutex
 	var activeMu sync.Mutex
-	active := map[string]context.CancelFunc{}
+	active := map[string]*desktopModelSourceActiveRequest{}
 
 	cancelAll := func() {
 		activeMu.Lock()
 		defer activeMu.Unlock()
-		for id, cancel := range active {
-			cancel()
+		for id, request := range active {
+			request.cancel()
 			delete(active, id)
 		}
 	}
 	var workers sync.WaitGroup
 	pool := e.openAIConnectionPool()
+	prepared := newDesktopModelSourcePreparedStore()
 	defer func() {
 		_ = ws.Close()
 		cancelAll()
 		pool.closeConnections()
 		workers.Wait()
+		prepared.closeAll()
 	}()
 
 	write := func(frame DesktopModelSourceRPCFrame) error {
@@ -1312,12 +1643,19 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 			}
 			reqCtx, cancel := context.WithCancel(ctx)
 			activeMu.Lock()
+			if len(active) >= desktopModelSourceMaxPending {
+				activeMu.Unlock()
+				cancel()
+				return fmt.Errorf("%w: too many active requests", errDesktopModelSourceProtocol)
+			}
 			if active[frame.ID] != nil {
 				activeMu.Unlock()
 				cancel()
 				return fmt.Errorf("%w: duplicate request ID", errDesktopModelSourceProtocol)
 			}
-			active[frame.ID] = cancel
+			request := &desktopModelSourceActiveRequest{cancel: cancel, credit: make(chan struct{}, 1)}
+			request.credit <- struct{}{}
+			active[frame.ID] = request
 			activeMu.Unlock()
 			workers.Add(1)
 			go func(frame DesktopModelSourceRPCFrame) {
@@ -1328,17 +1666,59 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 					activeMu.Unlock()
 					cancel()
 				}()
-				e.handleRequest(reqCtx, frame, write)
+				terminated := false
+				writeResponse := func(response DesktopModelSourceRPCFrame) error {
+					if terminated {
+						return errors.New("desktop model source response already terminated")
+					}
+					raw, err := json.Marshal(response)
+					if err != nil {
+						return err
+					}
+					oversized := len(raw) > desktopModelSourceMaxPayloadBytes
+					if oversized {
+						failure := &DesktopModelSourceRPCError{Code: "RESPONSE_TOO_LARGE", Message: "Desktop model source response exceeds its transport limit."}
+						if desktopModelSourceModelMethod(frame.Method) {
+							failure.Message = (&providerFailure{diagnostic: providerFailureDiagnostic{Provider: "unknown", Code: runErrorCodeProviderRequestFailed, Shape: "unknown"}}).Error()
+							failure.RetryAdvice = &flprovider.RetryAdvice{Category: flprovider.RetryPermanent}
+						}
+						raw, _ = json.Marshal(DesktopModelSourceRPCFrame{Type: "error", ID: frame.ID, Error: failure})
+					}
+					for len(raw) > 0 {
+						if err := request.acquire(reqCtx); err != nil {
+							return err
+						}
+						n := min(len(raw), desktopModelSourcePartBytes)
+						part := DesktopModelSourceRPCFrame{Type: "part", ID: frame.ID, Part: raw[:n], Final: n == len(raw)}
+						if err := write(part); err != nil {
+							return err
+						}
+						raw = raw[n:]
+					}
+					if oversized {
+						terminated = true
+						return errors.New("desktop model source response exceeds payload limit")
+					}
+					return nil
+				}
+				e.handleRequest(reqCtx, frame, writeResponse, prepared)
 			}(frame)
 		case "cancel":
 			if frame.ID == "" {
 				return fmt.Errorf("%w: missing cancellation identity", errDesktopModelSourceProtocol)
 			}
 			activeMu.Lock()
-			cancel := active[frame.ID]
+			request := active[frame.ID]
 			activeMu.Unlock()
-			if cancel != nil {
-				cancel()
+			if request != nil {
+				request.cancel()
+			}
+		case "credit":
+			activeMu.Lock()
+			request := active[frame.ID]
+			activeMu.Unlock()
+			if request != nil && !request.grant() {
+				request.cancel()
 			}
 		case "ping":
 			if err := write(DesktopModelSourceRPCFrame{Type: "pong", ID: frame.ID}); err != nil {
@@ -1351,10 +1731,10 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 	}
 }
 
-func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error) {
+func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error, stores ...*desktopModelSourcePreparedStore) {
 	sendErr := func(code string, err error) {
 		failure := &DesktopModelSourceRPCError{Code: code, Message: "Desktop model source request failed."}
-		if frame.Method == "ai.turn.stream" {
+		if desktopModelSourceModelMethod(frame.Method) {
 			var media *flprovider.MediaLimitError
 			var bytes *flprovider.RequestByteLimitError
 			var httpError *flprovider.ProviderHTTPError
@@ -1422,6 +1802,31 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 			return
 		}
 		sendResult(snapshot)
+	case "ai.turn.prepare", "ai.turn.prepared.stream", "ai.turn.prepared.close", "ai.turn.prepared.release", "ai.turn.prepared.replay", "ai.turn.prepared.refit":
+		if len(stores) == 0 || stores[0] == nil {
+			sendErr("PREPARED_UNAVAILABLE", errors.New("desktop prepared store unavailable"))
+			return
+		}
+		value, err := e.handlePrepared(ctx, frame, write, stores[0])
+		if err != nil {
+			code := "PREPARED_FAILED"
+			var failure *chatgpt.Error
+			if errors.As(err, &failure) && (failure.Code == "authorization_required" || failure.Code == "storage_unavailable") {
+				code = "CHATGPT_" + strings.ToUpper(failure.Code)
+			}
+			sendErr(code, err)
+			return
+		}
+		if prepared, ok := value.(desktopModelSourcePrepareResult); ok && prepared.Handle != "" {
+			stop := context.AfterFunc(ctx, func() { stores[0].release(prepared.Handle) })
+			if ctx.Err() != nil {
+				stop()
+				stores[0].release(prepared.Handle)
+				return
+			}
+			defer stop()
+		}
+		sendResult(value)
 	case "ai.turn.stream":
 		result, err := e.streamTurn(ctx, frame, write)
 		if err != nil {
@@ -1463,6 +1868,131 @@ func (e *desktopModelSourceExecutor) status() (*DesktopModelSourceStatus, error)
 	}, nil
 }
 
+func (e *desktopModelSourceExecutor) handlePrepared(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error, store *desktopModelSourcePreparedStore) (any, error) {
+	if frame.Method == "ai.turn.prepare" {
+		var body desktopModelSourceStreamRequest
+		if err := json.Unmarshal(frame.Params, &body); err != nil {
+			return nil, err
+		}
+		adapter, request, providerType, err := e.resolveTurn(ctx, body.Request)
+		if err != nil {
+			return nil, err
+		}
+		if providerType == "deepseek" {
+			return desktopModelSourcePrepareResult{}, nil
+		}
+		if raw, err := json.Marshal(request); err != nil {
+			return nil, err
+		} else if err := flprovider.CheckRequestBytes(raw, flowerModelRequestMaxBytes); err != nil {
+			return nil, err
+		}
+		preparer, ok := adapter.(modelGatewayRequestPreparer)
+		if !ok {
+			return desktopModelSourcePrepareResult{}, nil
+		}
+		turn, err := preparer.prepareTurn(ctx, request)
+		if err != nil {
+			return nil, providerTransportFailure(err, providerType)
+		}
+		result, err := store.add(&desktopModelSourcePreparedEntry{turn: turn, request: request, provider: providerType, size: len(frame.Params), keepForReplay: true})
+		if err != nil {
+			_ = turn.Close()
+		}
+		return result, err
+	}
+	var operation desktopModelSourcePreparedOperation
+	if err := json.Unmarshal(frame.Params, &operation); err != nil || operation.Handle == "" {
+		return nil, errors.New("invalid desktop prepared request handle")
+	}
+	store.mu.Lock()
+	store.pruneLocked(time.Now())
+	entry := store.entries[operation.Handle]
+	if entry == nil {
+		store.mu.Unlock()
+		if frame.Method == "ai.turn.prepared.release" || frame.Method == "ai.turn.prepared.close" {
+			return struct{}{}, nil
+		}
+		return nil, errors.New("desktop prepared request expired or unavailable")
+	}
+	switch frame.Method {
+	case "ai.turn.prepared.release":
+		if entry.stopExpiry != nil {
+			entry.stopExpiry()
+		}
+		delete(store.entries, operation.Handle)
+		store.bytes -= entry.size
+		err := entry.turn.Close()
+		store.mu.Unlock()
+		return struct{}{}, err
+	case "ai.turn.prepared.close":
+		if !entry.keepForReplay {
+			delete(store.entries, operation.Handle)
+			store.bytes -= entry.size
+			entry.closed = true
+			err := entry.turn.Close()
+			store.mu.Unlock()
+			return struct{}{}, err
+		}
+		if entry.closed {
+			store.mu.Unlock()
+			return struct{}{}, nil
+		}
+		entry.closed = true
+		entry.created = time.Now()
+		entry.stopExpiry = time.AfterFunc(10*time.Minute, func() { store.release(operation.Handle) }).Stop
+		err := entry.turn.Close()
+		store.mu.Unlock()
+		return struct{}{}, err
+	case "ai.turn.prepared.stream":
+		if entry.closed || entry.streamed {
+			store.mu.Unlock()
+			return nil, errors.New("desktop prepared request already used or closed")
+		}
+		entry.streamed = true
+		store.mu.Unlock()
+		return e.streamResolvedTurn(ctx, frame.ID, entry.request.Model, entry.request, func(ctx context.Context, _ ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+			return entry.turn.StreamTurn(ctx, onEvent)
+		}, write)
+	case "ai.turn.prepared.replay", "ai.turn.prepared.refit":
+		var turn preparedModelGatewayTurn
+		var err error
+		request := entry.request
+		if frame.Method == "ai.turn.prepared.replay" {
+			replayer, ok := entry.turn.(interface {
+				replay(context.Context, flprovider.Request) (preparedModelGatewayTurn, error)
+			})
+			if !ok {
+				store.mu.Unlock()
+				return nil, errors.New("desktop prepared request cannot replay")
+			}
+			request.AttemptID, request.AttemptEpoch = operation.AttemptID, operation.AttemptEpoch
+			turn, err = replayer.replay(ctx, flprovider.Request{AttemptID: operation.AttemptID, AttemptEpoch: operation.AttemptEpoch})
+		} else {
+			limiter, ok := entry.turn.(interface {
+				withMaxOutputTokens(context.Context, int64) (preparedModelGatewayTurn, error)
+			})
+			if !ok || entry.closed || entry.streamed {
+				store.mu.Unlock()
+				return nil, errors.New("desktop prepared request cannot refit")
+			}
+			turn, err = limiter.withMaxOutputTokens(ctx, operation.OutputLimit)
+			request.Budgets.MaxOutputToken = int(operation.OutputLimit)
+		}
+		size, providerType := entry.size, entry.provider
+		store.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		result, err := store.add(&desktopModelSourcePreparedEntry{turn: turn, request: request, provider: providerType, size: size, keepForReplay: frame.Method == "ai.turn.prepared.refit"})
+		if err != nil {
+			_ = turn.Close()
+		}
+		return result, err
+	}
+	store.mu.Unlock()
+	return nil, errors.New("unsupported desktop prepared request operation")
+}
+
 func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error) (result ModelGatewayResult, err error) {
 	var body desktopModelSourceStreamRequest
 	if len(frame.Params) > 0 {
@@ -1470,52 +2000,84 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 			return ModelGatewayResult{}, err
 		}
 	}
-	snapshot, cfg, secretStore, registry, err := e.snapshot()
+	adapter, req, providerType, err := e.resolveTurn(ctx, body.Request)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
-	publicModelID := strings.TrimSpace(body.Request.Model)
+	defer func() {
+		if err != nil {
+			err = providerTransportFailure(err, providerType)
+		}
+	}()
+	return e.streamResolvedTurn(ctx, frame.ID, body.Request.Model, req, adapter.StreamTurn, write)
+}
+
+func (e *desktopModelSourceExecutor) resolveTurn(ctx context.Context, req ModelGatewayRequest) (ModelGateway, ModelGatewayRequest, string, error) {
+	snapshot, cfg, secretStore, registry, err := e.snapshot()
+	if err != nil {
+		return nil, req, "", err
+	}
+	publicModelID := strings.TrimSpace(req.Model)
 	if publicModelID == "" {
 		publicModelID = strings.TrimSpace(snapshot.CurrentModel)
 	}
 	entry, ok := registry[publicModelID]
 	if !ok || cfg == nil || !cfg.AI.HasModelProfile() {
-		return ModelGatewayResult{}, fmt.Errorf("model not allowed: %s", publicModelID)
+		return nil, req, "", fmt.Errorf("model not allowed: %s", publicModelID)
 	}
-	defer func() {
-		if err != nil {
-			err = providerTransportFailure(err, strings.TrimSpace(entry.ProviderCfg.Type))
-		}
-	}()
+	providerType := strings.TrimSpace(entry.ProviderCfg.Type)
 	if !desktopModelSourceSnapshotHasModel(snapshot, publicModelID) {
-		return ModelGatewayResult{}, newProviderFailure(providerFailureDiagnostic{Provider: entry.ProviderCfg.Type, Code: runErrorCodeProviderMissingKey, Shape: "unknown"}, errors.New("desktop model is missing its local API key"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+		return nil, req, providerType, newProviderFailure(providerFailureDiagnostic{Provider: entry.ProviderCfg.Type, Code: runErrorCodeProviderMissingKey, Shape: "unknown"}, errors.New("desktop model is missing its local API key"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
 	}
 	apiKey, available, err := resolveProviderCredential(ctx, entry.ProviderCfg, secretStore.GetAIProviderAPIKey, chatgpt.New(secretStore))
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, req, providerType, err
 	}
 	if !available {
-		return ModelGatewayResult{}, newProviderFailure(providerFailureDiagnostic{Provider: entry.ProviderCfg.Type, Code: runErrorCodeProviderMissingKey, Shape: "unknown"}, errors.New("desktop provider is missing its local API key"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+		return nil, req, providerType, newProviderFailure(providerFailureDiagnostic{Provider: entry.ProviderCfg.Type, Code: runErrorCodeProviderMissingKey, Shape: "unknown"}, errors.New("desktop provider is missing its local API key"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
 	}
 	adapter, err := newProviderAdapter(strings.TrimSpace(entry.ProviderCfg.Type), strings.TrimSpace(entry.ProviderCfg.BaseURL), strings.TrimSpace(apiKey), entry.ProviderCfg.StrictToolSchema, parallelToolCallsWireOmit)
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, req, providerType, err
 	}
 	configureChatGPTAdapter(adapter, entry.ProviderCfg, chatgpt.New(secretStore))
 	configureResponsesContinuation(adapter, entry.ProviderCfg)
 	configureOpenAIConnections(adapter, entry.ProviderCfg.ID, entry.ProviderCfg.BaseURL, string(entry.ProviderCfg.EffectiveAuthMethod())+":"+entry.ProviderCfg.AccountID, e.openAIConnectionPool())
 	if err := e.deepSeekFiles().configure(adapter, entry.ProviderCfg.ID); err != nil {
-		return ModelGatewayResult{}, err
+		return nil, req, providerType, err
 	}
-	req := body.Request
 	req.Model = strings.TrimSpace(entry.WireModelName)
-	result, err = adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
-		_ = write(DesktopModelSourceRPCFrame{
+	return adapter, req, providerType, nil
+}
+
+func (e *desktopModelSourceExecutor) streamResolvedTurn(ctx context.Context, requestID, publicModelID string, req ModelGatewayRequest, stream func(context.Context, ModelGatewayRequest, func(StreamEvent)) (ModelGatewayResult, error), write func(DesktopModelSourceRPCFrame) error) (result ModelGatewayResult, err error) {
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var writeErr error
+	var outputBytes int
+	result, err = stream(streamCtx, req, func(ev StreamEvent) {
+		if writeErr != nil {
+			return
+		}
+		encoded, err := json.Marshal(ev)
+		if err != nil || len(encoded) > desktopModelSourceMaxPayloadBytes-outputBytes {
+			writeErr = flprovider.WithRetryAdvice(errors.New("desktop model source stream exceeds output limit"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+			cancel()
+			return
+		}
+		outputBytes += len(encoded)
+		writeErr = write(DesktopModelSourceRPCFrame{
 			Type:  "event",
-			ID:    frame.ID,
+			ID:    requestID,
 			Event: &ev,
 		})
+		if writeErr != nil {
+			cancel()
+		}
 	})
+	if writeErr != nil {
+		return ModelGatewayResult{}, writeErr
+	}
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -1523,7 +2085,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 		if e.log != nil {
 			e.log.Error("desktop model source provider returned an invalid model result",
 				"stage", "provider_complete",
-				"request_id", logsafe.Text(frame.ID, 256),
+				"request_id", logsafe.Text(requestID, 256),
 				"model_id", logsafe.Text(publicModelID, 256),
 				"error", logsafe.Error(err),
 			)

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	flconfig "github.com/floegence/floret/v7/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/gorilla/websocket"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -23,6 +25,166 @@ import (
 
 	flprovider "github.com/floegence/floret/v7/provider"
 )
+
+func TestDesktopPreparedRequestFreezesProviderWireAcrossRefitAndRetry(t *testing.T) {
+	wires := make(chan []byte, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		wires <- raw
+		writeOpenAIResponsesSSE(w, r, "gpt-4o", "resp_fixture", "done")
+	}))
+	defer server.Close()
+	adapter := desktopContinuationGateway(t, "openai", "gpt-4o", server.URL, false)
+	adapter.outputControl = flprovider.OutputControlClient
+	req := flprovider.Request{RunID: "run-freeze", PromptScopeID: "scope-freeze", LogicalRequestID: "logical-freeze", AttemptID: "attempt-1", AttemptEpoch: 1, Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "inspect", Attachments: []flprovider.Attachment{{ResourceRef: "image-1", MIMEType: "image/png"}}}}}
+	prepared, err := adapter.Prepare(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.TokenEstimate().Method != "provider_rendered_payload_estimate" || prepared.TokenEstimate().AttachmentTokens <= 0 {
+		t.Fatalf("expected provider-rendered media estimate: %+v", prepared.TokenEstimate())
+	}
+	fitted, err := prepared.(flprovider.PreparedRequestOutputLimiter).WithMaxOutputTokens(t.Context(), 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepared.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stream, err := fitted.Stream(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for event := range stream {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+	}
+	first := <-wires
+	if got := fmt.Sprintf("sha256:%x", sha256.Sum256(first)); got != fitted.RenderedPayloadFingerprint() {
+		t.Fatalf("wire fingerprint %s differs from frozen %s", got, fitted.RenderedPayloadFingerprint())
+	}
+	if err := fitted.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req.MaxOutputTokens, req.AttemptID, req.AttemptEpoch = 128, "attempt-2", 2
+	retry, err := fitted.(flprovider.PreparedRequestReplay).PrepareRetry(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer retry.Close()
+	stream, err = retry.Stream(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for event := range stream {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+	}
+	if second := <-wires; string(first) != string(second) || retry.RenderedPayloadFingerprint() != fitted.RenderedPayloadFingerprint() {
+		t.Fatal("retry changed the frozen provider wire")
+	}
+}
+
+func TestDesktopStreamFlowControlsSlowRequestAndFragmentsLargeResult(t *testing.T) {
+	var sent atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		for range 100 {
+			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": "x"})
+			sent.Add(1)
+		}
+		writeOpenAIResponsesSSE(w, r, "gpt-4o", "resp_large", strings.Repeat("z", 100<<10))
+	}))
+	defer server.Close()
+	adapter := desktopContinuationGateway(t, "openai", "gpt-4o", server.URL, false)
+	start := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		result, err := adapter.base.StreamTurn(t.Context(), ModelGatewayRequest{Model: adapter.modelName, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "fixture"}}}}}, func(ev StreamEvent) {
+			if ev.Type == StreamEventTextDelta {
+				select {
+				case <-start:
+				default:
+					close(start)
+					<-release
+				}
+			}
+		})
+		if err == nil && len(result.Text) < 100<<10 {
+			err = fmt.Errorf("large terminal result lost: %d bytes", len(result.Text))
+		}
+		done <- err
+	}()
+	select {
+	case <-start:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stream did not start")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for sent.Load() < 100 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if sent.Load() != 100 {
+		close(release)
+		t.Fatal("provider did not produce the burst while the consumer was blocked")
+	}
+	provider := adapter.base.(*desktopModelSourceProvider)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	_, err := provider.client.ListModels(ctx)
+	cancel()
+	close(release)
+	if err != nil {
+		t.Fatalf("slow stream blocked unrelated request: %v", err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream did not complete after consumer resumed")
+	}
+}
+
+func TestDesktopPreparedRetryOutlivesAttemptContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeOpenAIResponsesSSE(w, r, "gpt-4o", "resp_retry", "done")
+	}))
+	defer server.Close()
+	adapter := desktopContinuationGateway(t, "openai", "gpt-4o", server.URL, false)
+	req := flprovider.Request{RunID: "run-attempt", PromptScopeID: "scope-attempt", LogicalRequestID: "logical-attempt", AttemptID: "attempt-1", AttemptEpoch: 1, Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "fixture"}}}
+	prepared, err := adapter.Prepare(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = prepared.Close(); err != nil {
+		t.Fatal(err)
+	}
+	attemptCtx, cancelAttempt := context.WithCancel(t.Context())
+	req.AttemptID, req.AttemptEpoch = "attempt-2", 2
+	retry, err := prepared.(flprovider.PreparedRequestReplay).PrepareRetry(attemptCtx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelAttempt()
+	defer retry.Close()
+	stream, err := retry.Stream(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for event := range stream {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+	}
+}
 
 func TestDesktopModelContinuationPreservesOpaqueState(t *testing.T) {
 	for _, kind := range []string{"deepseek_responses_v1", providerContinuationKindOpenAIResponses, geminiStateKind, chatGPTStateKind} {

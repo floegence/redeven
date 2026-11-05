@@ -51,6 +51,8 @@ type preparedModelGatewayTurn interface {
 	Close() error
 }
 
+var errModelGatewayPreparationUnsupported = errors.New("model gateway preparation unsupported")
+
 type preparedFloretModelRequest struct {
 	mu                  sync.Mutex
 	adapter             *floretProviderAdapter
@@ -176,13 +178,15 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	}
 	if preparer, ok := p.base.(modelGatewayRequestPreparer); ok {
 		transport, err := preparer.prepareTurn(ctx, turnReq)
-		if err != nil {
+		if err != nil && !errors.Is(err, errModelGatewayPreparationUnsupported) {
 			return nil, providerTransportFailure(err, p.providerType)
 		}
-		return &preparedFloretModelRequest{
-			adapter: p, providerRequest: req, frozenProviderInput: frozenProviderInput, transport: transport,
-			estimate: transport.TokenEstimate(), fingerprint: transport.RenderedPayloadFingerprint(),
-		}, nil
+		if err == nil {
+			return &preparedFloretModelRequest{
+				adapter: p, providerRequest: req, frozenProviderInput: frozenProviderInput, transport: transport,
+				estimate: transport.TokenEstimate(), fingerprint: transport.RenderedPayloadFingerprint(),
+			}, nil
+		}
 	}
 	payload, err := json.Marshal(turnReq)
 	if err != nil {

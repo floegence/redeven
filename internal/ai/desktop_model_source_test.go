@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,9 +45,33 @@ func TestDesktopModelSourceConnectionErrorRetryability(t *testing.T) {
 	}
 }
 
+func TestDesktopModelSourceOverflowDoesNotDisconnectOtherRequests(t *testing.T) {
+	conn := newDesktopModelSourceRuntimeConn(nil)
+	slow := make(chan DesktopModelSourceRPCFrame, 1)
+	other := make(chan DesktopModelSourceRPCFrame, 1)
+	if err := conn.addPending("slow", slow); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.addPending("other", other); err != nil {
+		t.Fatal(err)
+	}
+	event := DesktopModelSourceRPCFrame{Type: "part", ID: "slow", Part: []byte("x")}
+	conn.dispatch(event)
+	conn.dispatch(event)
+	conn.dispatch(DesktopModelSourceRPCFrame{Type: "part", ID: "other", Part: []byte("{}"), Final: true})
+	select {
+	case frame, ok := <-other:
+		if !ok || frame.Type != "part" {
+			t.Fatalf("other request lost its result: open=%v frame=%+v", ok, frame)
+		}
+	default:
+		t.Fatal("other request did not receive its result")
+	}
+}
+
 func TestDesktopModelSourceRejectsIncompatibleFramesWithoutWaiting(t *testing.T) {
 	for _, peer := range []string{"runtime", "executor"} {
-		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1", "redeven-desktop-model-source-rpc-v2", "redeven-desktop-model-source-rpc-v3"} {
+		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1", "redeven-desktop-model-source-rpc-v2", "redeven-desktop-model-source-rpc-v3", "redeven-desktop-model-source-rpc-v5"} {
 			t.Run(peer+"/"+version, func(t *testing.T) {
 				served := make(chan error, 1)
 				ready := make(chan struct{})
@@ -850,22 +875,45 @@ func startTestDesktopModelSource(t *testing.T, handle func(DesktopModelSourceRPC
 		t.Fatalf("DialContext: %v", err)
 	}
 	go func() {
+		credits := map[string]chan struct{}{}
+		var writeMu sync.Mutex
 		for {
 			var frame DesktopModelSourceRPCFrame
 			if err := ws.ReadJSON(&frame); err != nil {
 				return
 			}
-			if strings.TrimSpace(frame.Type) == "request" && strings.TrimSpace(frame.Method) == "ai.turn.stream" {
-				_ = ws.WriteJSON(DesktopModelSourceRPCFrame{
-					ProtocolVersion: DesktopModelSourceProtocolVersion,
-					Type:            "event",
-					ID:              frame.ID,
-					Event:           &StreamEvent{Type: StreamEventTextDelta, Text: "hi"},
-				})
+			if frame.Type == "credit" {
+				if ch := credits[frame.ID]; ch != nil {
+					ch <- struct{}{}
+				}
+				continue
 			}
-			response := handle(frame)
-			response.ProtocolVersion = DesktopModelSourceProtocolVersion
-			_ = ws.WriteJSON(response)
+			if frame.Type != "request" {
+				continue
+			}
+			credit := make(chan struct{}, 1)
+			credit <- struct{}{}
+			credits[frame.ID] = credit
+			go func(frame DesktopModelSourceRPCFrame) {
+				write := func(response DesktopModelSourceRPCFrame) {
+					raw, _ := json.Marshal(response)
+					for len(raw) > 0 {
+						<-credit
+						n := min(len(raw), desktopModelSourcePartBytes)
+						writeMu.Lock()
+						err := ws.WriteJSON(DesktopModelSourceRPCFrame{ProtocolVersion: DesktopModelSourceProtocolVersion, Type: "part", ID: frame.ID, Part: raw[:n], Final: n == len(raw)})
+						writeMu.Unlock()
+						if err != nil {
+							return
+						}
+						raw = raw[n:]
+					}
+				}
+				if frame.Method == "ai.turn.stream" {
+					write(DesktopModelSourceRPCFrame{Type: "event", ID: frame.ID, Event: &StreamEvent{Type: StreamEventTextDelta, Text: "hi"}})
+				}
+				write(handle(frame))
+			}(frame)
 		}
 	}()
 
@@ -1023,7 +1071,7 @@ func TestDesktopModelSourceRejectsMalformedTerminals(t *testing.T) {
 		}
 	}
 }
-func TestDesktopModelSourceQueueOverflowAndClosedCause(t *testing.T) {
+func TestDesktopModelSourceQueueOverflowIsRequestScoped(t *testing.T) {
 	c := newDesktopModelSourceRuntimeConn(nil)
 	ch := make(chan DesktopModelSourceRPCFrame, 1)
 	if err := c.addPending("request", ch); err != nil {
@@ -1031,11 +1079,11 @@ func TestDesktopModelSourceQueueOverflowAndClosedCause(t *testing.T) {
 	}
 	c.dispatch(DesktopModelSourceRPCFrame{ID: "request", Type: "event"})
 	c.dispatch(DesktopModelSourceRPCFrame{ID: "request", Type: "result"})
-	if !c.closed || !errors.Is(c.closeErr, errDesktopModelSourceProtocol) {
+	if c.closed || c.failed["request"] == nil {
 		t.Fatalf("closed=%v err=%v", c.closed, c.closeErr)
 	}
-	if err := c.addPending("later", make(chan DesktopModelSourceRPCFrame)); !errors.Is(err, c.closeErr) {
-		t.Fatalf("cause lost: %v", err)
+	if err := c.addPending("later", make(chan DesktopModelSourceRPCFrame)); err != nil {
+		t.Fatalf("other request rejected: %v", err)
 	}
 	<-ch
 	if _, open := <-ch; open {
@@ -1206,7 +1254,7 @@ func TestDesktopModelSourceStopBoundsOccupiedCancelWriter(t *testing.T) {
 	conn.mu.Lock()
 	closed := conn.closed
 	conn.mu.Unlock()
-	if !closed {
-		t.Fatal("timed out cancel left connection open")
+	if closed {
+		t.Fatal("canceling one request closed the shared connection")
 	}
 }

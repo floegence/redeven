@@ -49,7 +49,7 @@ type PartialUsage struct {
 type StreamEvent struct {
 	Transport       *flprovider.TransportObservation `json:"transport,omitempty"`
 	OutputPart      *flprovider.OutputPart           `json:"output_part,omitempty"`
-	HostedToolEvent *flprovider.Event                `json:"-"`
+	HostedToolEvent *flprovider.Event                `json:"hosted_tool_event,omitempty"`
 	Type            StreamEventType                  `json:"type"`
 	Text            string                           `json:"text,omitempty"`
 	ToolCall        *PartialToolCall                 `json:"tool_call,omitempty"`

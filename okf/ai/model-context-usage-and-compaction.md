@@ -26,7 +26,7 @@ records without this evidence remain unknown; no error-text inference is used.
 
 Aggregate image evidence carries exact image counts or decoded bytes, with
 preparation/response stage; counts never occupy byte or token fields. Desktop
-RPC v5 reconstructs the typed upstream cause before Engine recovery; older peers
+RPC v6 reconstructs the typed upstream cause before Engine recovery; older peers
 are rejected at the version handshake. During recovery
 the inline divider says “Organizing image history…” in every shipped locale and
 shows measured cause details. Token utilization remains independently measured.
@@ -43,6 +43,16 @@ The tooltip follows the active surface and global theme outside chat. Prefer abo
 
 ## Request measurement
 Floret calculates pressure from a qualified native prefix plus the remaining frozen-input estimate, or the complete estimate when proof does not match.
+
+Desktop RPC prepares supported provider requests on the credential-owning side and
+returns the rendered estimate and fingerprint. Execution, output refits and retries
+use the same frozen input. DeepSeek keeps the conservative host estimate because
+its preparation may upload images. The Desktop bridge does not claim native usage
+measurement proof that was not transferred and validated across the RPC boundary.
+
+RPC v6 applies one-part request credit, bounded response reassembly and per-request
+cancellation. A slow consumer cannot fill another request's queue or close the
+shared connection; incompatible older peers fail the version handshake.
 
 The 90% threshold and public output reservation semantics remain upstream.
 
