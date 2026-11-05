@@ -118,6 +118,24 @@ describe('presentActivityFlowerSummary', () => {
     });
   });
 
+  it('uses stable running status copy when live progress is disabled for the collapsed companion', () => {
+    expect(presentActivityFlowerSummary(presence({
+      priority_status: 'running',
+      priority_count: 1,
+      priority_thread_id: 'thread-running',
+      priority_thread_title: 'Refine the companion',
+      priority_thread_progress: 'The newest response fragment keeps changing',
+      priority_thread_progress_kind: 'output',
+      priority_thread_progress_identity: 'thread\u001frun\u001fmessage\u001fblock:1',
+      running_count: 1,
+    }), copy, { showLiveProgress: false })).toEqual({
+      visualText: 'Working on / Refine the companion',
+      accessibleText: 'Working on / Refine the companion',
+      presentationStatus: 'running',
+      targetThreadID: 'thread-running',
+    });
+  });
+
   it('uses a complete sentence when the canonical group has no ready title', () => {
     expect(presentActivityFlowerSummary(presence({
       priority_status: 'queued',

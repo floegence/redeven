@@ -1339,9 +1339,9 @@ describe('EnvAppShell Activity Flower browser integration', () => {
           expect(control.left).toBeGreaterThanOrEqual(chrome.contentInsetStart);
           expect(control.right).toBeLessThanOrEqual(width - chrome.contentInsetEnd);
         }
-        const notices = visible('[role="status"]');
+        const notices = visible('[role="status"]').filter(element => element.querySelector('button'));
         expect(notices).toHaveLength(reason ? 1 : 0);
-        expect(fixture.host.querySelectorAll('[role="status"]')).toHaveLength(reason ? 1 : 0);
+        expect(fixture.host.querySelectorAll('[role="status"] button')).toHaveLength(reason ? 1 : 0);
         if (reason) {
           const notice = notices[0]!;
           expect(notice.getBoundingClientRect().top).toBeGreaterThanOrEqual(bounds.bottom);
@@ -2223,7 +2223,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     }
   });
 
-  it('keeps a visible running status while reduced motion disables companion motion', async () => {
+  it('keeps the collapsed running status stable instead of streaming response text', async () => {
     await page.viewport(390, 844);
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
     activityFlowerPresence = {
@@ -2235,30 +2235,27 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const status = document.querySelector('.flower-companion-collapsed-summary');
     const summary = document.querySelector('[data-testid="activity-flower-presence-summary"]');
     const summaryText = summary?.querySelector('.flower-companion-collapsed-summary-text');
-    const tailViewport = summary?.querySelector('.flower-companion-collapsed-tail-viewport');
-    const tailValue = summary?.querySelector('.flower-companion-collapsed-tail-value');
-    if (!(status instanceof HTMLElement) || !(summary instanceof HTMLElement) || !(summaryText instanceof HTMLElement) || !(tailViewport instanceof HTMLElement) || !(tailValue instanceof HTMLElement)) {
+    if (!(status instanceof HTMLElement) || !(summary instanceof HTMLElement) || !(summaryText instanceof HTMLElement)) {
       throw new Error('Running Flower status did not render.');
     }
-    expect(summary.textContent).toContain('The newest Flower response remains visible');
-    expect(summary.textContent).not.toContain('Refine the Flower companion');
-    expect(summary.textContent?.startsWith('…')).toBe(true);
+    expect(summary.textContent).toContain('Working on');
+    expect(summary.textContent).toContain('Refine the Flower companion with a deliberately long live task title');
+    expect(summary.textContent).not.toContain('The newest Flower response remains visible');
     expect(getComputedStyle(summaryText).whiteSpace).toBe('nowrap');
-    expect(getComputedStyle(summaryText).textOverflow).toBe('clip');
+    expect(getComputedStyle(summaryText).textOverflow).toBe('ellipsis');
     expect(getComputedStyle(summaryText).overflow).toBe('hidden');
-    expect(tailValue.scrollWidth).toBeGreaterThan(tailViewport.clientWidth);
-    expect(getComputedStyle(tailValue).position).toBe('static');
-    expect(getComputedStyle(tailValue).width).not.toBe('auto');
+    expect(summary.querySelector('.flower-companion-collapsed-tail-viewport')).toBeNull();
+    expect(summary.querySelector('.flower-companion-collapsed-tail-value')).toBeNull();
     expect(summary.querySelector('.flower-companion-collapsed-status-running')).not.toBeNull();
     expect(summary.querySelector('[class*="flower-companion-collapsed-icon"]')).toBeNull();
     expect(elementRect(status).width).toBeGreaterThan(0);
     expect(getComputedStyle(status).opacity).not.toBe('0');
     const announcement = document.querySelector('[data-testid="activity-flower-presence-announcement"]');
     if (!(announcement instanceof HTMLElement)) throw new Error('Flower presence announcement did not render.');
-    expect(announcement.textContent).toContain('The newest Flower response remains visible');
-    expect(announcement.textContent).not.toContain('Refine the Flower companion');
-    expect(announcement.hasAttribute('aria-live')).toBe(false);
-    expect(announcement.hasAttribute('aria-atomic')).toBe(false);
+    expect(announcement.textContent).toContain('Working on');
+    expect(announcement.textContent).toContain('Refine the Flower companion with a deliberately long live task title');
+    expect(announcement.hasAttribute('aria-live')).toBe(true);
+    expect(announcement.hasAttribute('aria-atomic')).toBe(true);
 
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
     await settleFrames(2);

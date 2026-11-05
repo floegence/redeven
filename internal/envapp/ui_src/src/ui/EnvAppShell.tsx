@@ -3460,6 +3460,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const activityFlowerSummary = createMemo(() => presentActivityFlowerSummary(
     activityFlowerPresence(),
     activityFlowerSummaryCopy(),
+    { showLiveProgress: activityFlowerPlacement() !== 'collapsed' },
   ));
   const activityFlowerPresentedSummary = createMemo(() => {
     const notice = activityFlowerCompletionNotice();

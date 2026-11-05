@@ -29,9 +29,15 @@ export type ActivityFlowerSummary = Readonly<{
   targetThreadID?: string;
 }>;
 
+export type ActivityFlowerSummaryOptions = Readonly<{
+  /** Keep the collapsed companion stable instead of exposing streaming output. */
+  showLiveProgress?: boolean;
+}>;
+
 export function presentActivityFlowerSummary(
   presence: FlowerCompanionPresenceProjection,
   copy: ActivityFlowerSummaryCopy,
+  options: ActivityFlowerSummaryOptions = {},
 ): ActivityFlowerSummary {
   if (presence.priority_status === 'idle') {
     return { visualText: '', accessibleText: copy.readyToAsk, presentationStatus: 'idle' };
@@ -65,7 +71,7 @@ export function presentActivityFlowerSummary(
   const status = presence.priority_status;
   const count = Math.max(1, Math.floor(presence.priority_count));
   const title = String(presence.priority_thread_title ?? '').trim();
-  const progress = status === 'running'
+  const progress = options.showLiveProgress !== false && status === 'running'
     ? String(presence.priority_thread_progress ?? '').trim()
     : '';
   const lead = progress || copy.lead[status];
