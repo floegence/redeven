@@ -91,6 +91,7 @@ import type {
   FlowerEmbeddedConversation,
   FlowerConversationParts,
 } from '../../../../flower_ui/src';
+import { stageFlowerTurnLauncherAttachments } from '../../../../flower_ui/src/stageFlowerTurnLauncherAttachments';
 import { prepareFlowerNewConversationInput } from '../../../../flower_ui/src/conversationPreferences';
 import { flowerTurnAdmissionFailureKind } from '../../../../flower_ui/src/flowerTurnAdmission';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
@@ -2817,28 +2818,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
 
-  const sendFlowerTurn = async (input: FlowerTurnLauncherSubmitInput, threadID?: string): Promise<string> => {
-    if (protocol.status() !== 'connected') {
-      const message = i18n.t('shell.notifications.connectingToRuntime');
-      throw new Error(message);
-    }
-    if (!canUseFlower()) {
-      const message = i18n.t('shell.notifications.rwxPermissionRequired');
-      throw new Error(message);
-    }
-
-    const trimmedPrompt = trimString(input.prompt);
-    if (!trimmedPrompt) {
-      const message = i18n.t('shell.notifications.enterQuestionBeforeSending');
-      throw new Error(message);
-    }
-
-    const clientRequestID = trimString(input.client_request_id);
-    if (!clientRequestID) {
-      throw new Error('Missing Flower launcher request identity.');
-    }
+  const createFlowerTurnLauncherAdapter = async () => {
     const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
-    const adapter = createEnvLocalFlowerSurfaceAdapter({
+    return createEnvLocalFlowerSurfaceAdapter({
       downloadManager,
       modelReadResource: flowerModelReadResource,
       envPublicID: trimString(envId()),
@@ -2864,38 +2846,48 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       openLinkedFilePreview: openFlowerLinkedFilePreview,
       openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
     });
+  };
+
+  const sendFlowerTurn = async (input: FlowerTurnLauncherSubmitInput, threadID?: string): Promise<string> => {
+    if (protocol.status() !== 'connected') {
+      const message = i18n.t('shell.notifications.connectingToRuntime');
+      throw new Error(message);
+    }
+    if (!canUseFlower()) {
+      const message = i18n.t('shell.notifications.rwxPermissionRequired');
+      throw new Error(message);
+    }
+
+    const trimmedPrompt = trimString(input.prompt);
+    if (!trimmedPrompt && !(input.intent.pending_attachments?.length)) {
+      const message = i18n.t('shell.notifications.enterQuestionBeforeSending');
+      throw new Error(message);
+    }
+
+    const clientRequestID = trimString(input.client_request_id);
+    if (!clientRequestID) {
+      throw new Error('Missing Flower launcher request identity.');
+    }
+    const adapter = await createFlowerTurnLauncherAdapter();
     if (flowerTurnLauncherRequest?.client_request_id !== clientRequestID) {
       const prepared = await prepareFlowerNewConversationInput({
         loadSettings: adapter.loadSettings,
         getWorkingDirectoryPathContext: adapter.getWorkingDirectoryPathContext!,
       }, {
-        client_request_id: clientRequestID, thread_id: threadID, prompt: trimmedPrompt,
+        client_request_id: clientRequestID, thread_id: threadID, prompt: trimmedPrompt, model_id: input.model_id,
         context_action: input.intent.context_action, working_dir: input.intent.suggested_working_dir,
       });
-      const attachmentIDs: string[] = [];
-      const stagingScope = (input.intent.pending_attachments?.length ?? 0) > 0
-        ? await adapter.createAttachmentStagingScope?.(clientRequestID)
-        : undefined;
-      if ((input.intent.pending_attachments?.length ?? 0) > 0 && !stagingScope) {
-        throw new Error('Attachment staging is unavailable for this Flower surface.');
-      }
-      for (const [index, file] of (input.intent.pending_attachments ?? []).entries()) {
-        if (!adapter.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
-        const requestID = `${input.intent.id}:attachment:${index}`;
-        const staged = await adapter.uploadAttachment({
-          attempt_id: requestID,
-          request_id: requestID,
-          staging_scope: stagingScope!,
-          model_id: prepared.model_id ?? '',
-          capability_revision: '',
-          source: 'file',
-          file,
-          signal: new AbortController().signal,
-          on_progress: () => undefined,
+      flowerTurnLauncherRequest = await stageFlowerTurnLauncherAttachments(adapter, prepared,
+        input.intent.pending_attachments ?? [], {
+          errorUnavailable: i18n.t('flowerSurface.attachments.errorUnavailable'),
+          errorTooLarge: i18n.t('flowerSurface.attachments.errorTooLarge'),
+          errorCountExceeded: i18n.t('flowerSurface.attachments.errorCountExceeded'),
+          errorTotalSizeExceeded: i18n.t('flowerSurface.attachments.errorTotalSizeExceeded'),
+          errorUnsupported: i18n.t('flowerSurface.attachments.errorUnsupported'),
+          errorInvalidEncoding: i18n.t('flowerSurface.attachments.errorInvalidEncoding'),
+          errorUploadFailed: i18n.t('flowerSurface.attachments.errorUploadFailed'),
+          restoreFailed: i18n.t('flowerSurface.attachments.restoreFailed'),
         });
-        attachmentIDs.push(staged.attachment_id);
-      }
-      flowerTurnLauncherRequest = { ...prepared, attachment_ids: attachmentIDs, ...(stagingScope ? { staging_scope: stagingScope } : {}) };
     }
     const receipt = await adapter.launchTurn(flowerTurnLauncherRequest).catch(error => {
       if (flowerTurnAdmissionFailureKind(error) !== 'unknown') flowerTurnLauncherRequest = null;
@@ -5616,15 +5608,17 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                   <Show when={viewMode() !== 'workbench' && filePreviewHostRequested()}>
                     <FilePreviewHost />
                   </Show>
-                  <Show when={flowerTurnLauncherOpen()}>
-                    <FlowerTurnLauncherWindow
-                      open
-                      intent={flowerTurnLauncherIntent()}
-                      anchor={flowerTurnLauncherAnchor()}
-                      onClose={closeFlowerTurnLauncher}
-                      onSubmit={submitFlowerTurnLauncher}
-                    />
-                  </Show>
+                  <FlowerTurnLauncherWindow
+                    open={flowerTurnLauncherOpen()}
+                    intent={flowerTurnLauncherIntent()}
+                    modelSource={{
+                      loadSettings: async () => (await createFlowerTurnLauncherAdapter()).loadSettings(),
+                      loadModelDirectory: async refresh => (await createFlowerTurnLauncherAdapter()).loadModelDirectory!(refresh),
+                    }}
+                    anchor={flowerTurnLauncherAnchor()}
+                    onClose={closeFlowerTurnLauncher}
+                    onSubmit={submitFlowerTurnLauncher}
+                  />
               </FloeRegistryRuntime>
             </RuntimeUpdateContext.Provider>
           </FilePreviewContext.Provider>

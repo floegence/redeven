@@ -43,9 +43,9 @@ async function mountLauncher() {
     </LayoutProvider>
   ), host));
   await settle();
-  await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-ask-card]')?.getAnimations().some(a => a.playState === 'running')).toBe(false);
-  const root = document.querySelector<HTMLElement>('[data-flower-ask-card]')!;
-  const titlebar = root.querySelector<HTMLElement>('.flower-ask-card-header')!;
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-floe-prompt-card]')?.getAnimations().some(a => a.playState === 'running')).toBe(false);
+  const root = document.querySelector<HTMLElement>('[data-floe-prompt-card]')!;
+  const titlebar = root.querySelector<HTMLElement>('.floe-prompt-card-header')!;
   return { root, titlebar, setInsets, onClose, onSubmit };
 }
 
@@ -64,10 +64,10 @@ describe('Ask Flower card bounds', () => {
     expect(bounds.top).toBeGreaterThanOrEqual(108);
     expect(bounds.bottom).toBeLessThanOrEqual(388);
     expect(editor.value).toBe('Keep this draft');
-    const send = root.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
+    const send = root.querySelector<HTMLElement>('.floe-prompt-card-submit')!;
     expect(send.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom);
     await userEvent.click(send);
-    expect(onSubmit).toHaveBeenCalledOnce();
+    await expect.poll(() => onSubmit.mock.calls.length).toBe(1);
   });
 
   it('replaces window chrome with a compact identity and accessible close control', async () => {
@@ -78,7 +78,7 @@ describe('Ask Flower card bounds', () => {
     await userEvent.dblClick(titlebar);
     expect(root.getBoundingClientRect().toJSON()).toEqual(initial);
     expect(onClose).not.toHaveBeenCalled();
-    await userEvent.click(root.querySelector<HTMLElement>('[data-testid="flower-ask-card-close"]')!);
+    await userEvent.click(root.querySelector<HTMLElement>('.floe-prompt-card-close')!);
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -126,8 +126,8 @@ describe('Ask Flower card bounds', () => {
     }
     disposers.push(render(() => <Harness />, host));
     await settle();
-    await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-ask-card]')?.getAnimations().some(a => a.playState === 'running')).toBe(false);
-    const root = document.querySelector<HTMLElement>('[data-flower-ask-card]')!;
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-floe-prompt-card]')?.getAnimations().some(a => a.playState === 'running')).toBe(false);
+    const root = document.querySelector<HTMLElement>('[data-floe-prompt-card]')!;
     const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
     expect(root.getBoundingClientRect().top).toBe(60);
     await userEvent.fill(editor, 'Draft across hosts');
@@ -144,7 +144,7 @@ describe('Ask Flower card bounds', () => {
     await settle();
     expect(root.getBoundingClientRect().top).toBe(112);
     expect(editor.value).toBe('Draft across hosts');
-    const close = root.querySelector<HTMLElement>('[data-testid="flower-ask-card-close"]')!;
+    const close = root.querySelector<HTMLElement>('.floe-prompt-card-close')!;
     const box = close.getBoundingClientRect();
     expect(close.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))).toBe(true);
     await userEvent.click(close);
@@ -162,7 +162,7 @@ describe('Ask Flower card bounds', () => {
     expect(bounds.top).toBe(80);
     expect(bounds.right).toBeLessThanOrEqual(390);
     expect(bounds.bottom).toBeLessThanOrEqual(492);
-    const send = root.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
+    const send = root.querySelector<HTMLElement>('.floe-prompt-card-submit')!;
     expect(send.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom);
   });
 });
@@ -181,7 +181,7 @@ it('keeps the same draft and position through interrupted exit, then restores tr
   const trigger = host.querySelector<HTMLButtonElement>('button')!;
   await userEvent.click(trigger);
   await expect.poll(() => document.activeElement?.tagName).toBe('TEXTAREA');
-  const card = document.querySelector<HTMLElement>('[data-flower-ask-card]')!;
+  const card = document.querySelector<HTMLElement>('[data-floe-prompt-card]')!;
   await expect.poll(() => card.getAnimations().some(a => a.playState === 'running')).toBe(false);
   const editor = card.querySelector<HTMLTextAreaElement>('textarea')!;
   await userEvent.fill(editor, 'Preserve this exact draft');
@@ -238,11 +238,11 @@ it('keeps the editor and Send reachable above a narrow soft keyboard', async () 
     visual.height = 340;
     visual.dispatchEvent(new Event('resize'));
     await expect.poll(() => root.getBoundingClientRect().bottom).toBeLessThanOrEqual(332);
-    const send = root.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
+    const send = root.querySelector<HTMLElement>('.floe-prompt-card-submit')!;
     expect(send.getBoundingClientRect().bottom).toBeLessThanOrEqual(332);
     expect(editor.value).toBe('Keep my draft above the keyboard');
     await userEvent.click(send);
-    expect(onSubmit).toHaveBeenCalledOnce();
+    await expect.poll(() => onSubmit.mock.calls.length).toBe(1);
   } finally {
     if (descriptor) Object.defineProperty(window, 'visualViewport', descriptor);
     else Reflect.deleteProperty(window, 'visualViewport');

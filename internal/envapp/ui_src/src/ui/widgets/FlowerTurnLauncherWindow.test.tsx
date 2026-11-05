@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { Show } from 'solid-js';
-import { render } from 'solid-js/web';
+import { render as renderRoot } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setFlowerTurnLauncherAttachmentSourcePath } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
 import { flowerTurnAdmissionError } from '../../../../../flower_ui/src/flowerTurnAdmission';
+import type { FlowerSettingsSnapshot } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { FlowerTurnLauncherSubmitInput } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 
 import { FlowerTurnLauncherWindow } from './FlowerTurnLauncherWindow';
@@ -15,6 +16,13 @@ import {
   REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR,
   REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT,
 } from '../workbench/surface/workbenchWheelInteractive';
+
+const disposers: Array<() => void> = [];
+const render: typeof renderRoot = (...args) => {
+  const dispose = renderRoot(...args);
+  disposers.push(dispose);
+  return dispose;
+};
 
 const filePreviewContextMock = vi.hoisted(() => ({
   openPreview: vi.fn(async () => undefined),
@@ -30,6 +38,7 @@ vi.mock('solid-js/web', async (importOriginal) => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  PromptCard: (await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>()).PromptCard,
   resolveFloatingWindowViewport: (await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>()).resolveFloatingWindowViewport,
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
@@ -188,6 +197,7 @@ const baseIntent = {
 };
 
 async function flushAsync(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 60));
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -231,6 +241,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  while (disposers.length) disposers.pop()?.();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
@@ -249,7 +260,7 @@ describe('FlowerTurnLauncherWindow', () => {
       />
     ), host);
 
-    const card = host.querySelector('[data-flower-ask-card]');
+    const card = host.querySelector('[data-floe-prompt-card]');
     expect(card).not.toBeNull();
     expect((card?.parentElement as HTMLElement).style.zIndex).toBe('1000');
     expect(card?.getAttribute('role')).toBe('dialog');
@@ -277,63 +288,15 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(host.textContent).toContain('/Users/demo/project');
   });
 
-  it('keeps the Flower message in the scroll region and docks the user composer at the bottom', () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => (
-      <FlowerTurnLauncherWindow
-        open
-        intent={baseIntent}
-        onClose={() => undefined}
-        onSubmit={async () => undefined}
-      />
-    ), host);
-
-    const scrollRegion = host.querySelector('[data-testid="flower-turn-launcher-scroll-region"]');
-    const composerDock = host.querySelector('[data-testid="flower-turn-launcher-dock"]');
-    const assistantAvatar = host.querySelector('[data-testid="flower-turn-launcher-avatar"]');
-    const assistantSurface = host.querySelector('.flower-turn-launcher-message-surface');
-    const assistantRow = host.querySelector('.flower-turn-launcher-message-row');
-    const textarea = host.querySelector('textarea');
-
-    expect(scrollRegion).toBeTruthy();
-    expect(scrollRegion?.className).toContain('flower-turn-launcher-scroll-region');
-    expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
-    expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
-    expect(composerDock).toBeTruthy();
-    expect(composerDock?.className).toContain('color-mix(in_srgb,var(--foreground)_32%,transparent)');
-    expect(textarea && composerDock?.contains(textarea)).toBe(true);
-    expect(textarea && scrollRegion?.contains(textarea)).toBe(false);
-    expect(assistantAvatar).toBeTruthy();
-    expect(assistantAvatar?.className).toContain('size-8');
-    expect(assistantAvatar?.firstElementChild?.className).toContain('color-mix(in_srgb,var(--background)_55%,transparent)');
-    expect(assistantAvatar?.lastElementChild?.className).toContain('var(--redeven-status-warning-soft)');
-    expect(assistantRow).toBeTruthy();
-    expect(assistantRow?.className).not.toContain('gap-2');
-    expect(assistantSurface).toBeTruthy();
-    expect(assistantSurface?.className).not.toContain('border-border/65');
-    expect(assistantSurface?.className).toContain('color-mix(in_srgb,var(--foreground)_34%,transparent)');
-  });
-
-  it('renders the user composer as a flat bottom dock instead of a bordered chat card', () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => (
-      <FlowerTurnLauncherWindow
-        open
-        intent={baseIntent}
-        onClose={() => undefined}
-        onSubmit={async () => undefined}
-      />
-    ), host);
-
-    const composerDock = host.querySelector('[data-testid="flower-turn-launcher-dock"]');
-
-    expect(composerDock?.querySelector('.flower-turn-launcher-input')).toBeTruthy();
-    expect(composerDock?.querySelector('.chat-input-container')).toBeNull();
-    expect(composerDock?.querySelector('.flower-turn-launcher-toolbar')).toBeNull();
+  it('uses the upstream reading viewport and single input focus boundary', () => {
+    const host = document.createElement('div'); document.body.appendChild(host);
+    render(() => <FlowerTurnLauncherWindow open intent={baseIntent} onClose={() => undefined} onSubmit={async () => undefined} />, host);
+    const body = host.querySelector('.floe-prompt-card-body');
+    expect(body?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
+    expect(body?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
+    expect(body?.querySelector('.floe-prompt-card-question')).toBeTruthy();
+    expect(body?.querySelector('[data-floe-input-surface] textarea')).toBeTruthy();
+    expect(host.querySelector('.flower-turn-launcher-avatar')).toBeNull();
   });
 
   it('localizes product chrome while preserving prompt and context content', async () => {
@@ -371,8 +334,7 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(host.textContent).toContain('询问 Flower');
     expect(host.textContent).not.toContain('工作目录');
     expect(host.querySelector('.flower-composer-context-references')?.getAttribute('aria-label')).toBe('关联上下文');
-    expect(host.textContent).toContain('你');
-    expect(host.textContent).toContain('回复 Flower');
+    expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('你');
     expect(host.querySelector('.flower-composer-context-reference')?.textContent).toBe('main.ts');
     const selectionButton = Array.from(host.querySelectorAll('button')).find((button) =>
       button.title.includes('预览来自 /Users/demo/project/src/main.ts 的已选内容'),
@@ -380,9 +342,9 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(selectionButton?.getAttribute('title')).toBe('预览来自 /Users/demo/project/src/main.ts 的已选内容\nmain.ts');
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
-    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
+    const sendButton = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])') as HTMLButtonElement | null;
     expect(textarea?.value).toBe('Please keep this user prompt in English.');
-    expect(textarea?.getAttribute('placeholder')).toBe('询问这段选择内容、请求修改，或描述你的需求');
+    expect(textarea?.getAttribute('placeholder')).toBeNull();
     expect(sendButton?.getAttribute('aria-label')).toBe('发送消息');
   });
 
@@ -399,8 +361,8 @@ describe('FlowerTurnLauncherWindow', () => {
       />
     ), host);
 
-    const editorShell = host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]');
-    const inlineSend = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]');
+    const editorShell = host.querySelector('.floe-prompt-card-composer');
+    const inlineSend = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])');
 
     expect(editorShell).toBeTruthy();
     expect(inlineSend).toBeTruthy();
@@ -420,14 +382,10 @@ describe('FlowerTurnLauncherWindow', () => {
       />
     ), host);
 
-    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
+    const sendButton = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])') as HTMLButtonElement | null;
     expect(sendButton).toBeTruthy();
-    expect(sendButton?.dataset.variant).toBe('primary');
-    expect(sendButton?.dataset.size).toBe('icon');
-    expect(sendButton?.className).toContain('flower-composer-submit');
-    expect(sendButton?.className).toContain('flower-turn-launcher-send-btn');
-    expect(sendButton?.className).toContain('rounded-full');
-    expect(sendButton?.querySelector('[data-testid="arrow-up-icon"]')).toBeTruthy();
+    expect(sendButton?.className).toContain('floe-prompt-card-submit');
+    expect(sendButton?.querySelector('svg')).toBeTruthy();
     expect(sendButton?.getAttribute('aria-busy')).toBe('false');
   });
 
@@ -452,17 +410,18 @@ describe('FlowerTurnLauncherWindow', () => {
     ), host);
 
     const textarea = composePrompt(host, 'Inspect this project');
-    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    textarea.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    const sendButton = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])') as HTMLButtonElement;
     const contextButton = host.querySelector('.flower-composer-context-reference button') as HTMLButtonElement;
-    const closeButton = host.querySelector('[data-testid="flower-ask-card-close"]') as HTMLButtonElement;
+    const closeButton = host.querySelector('.floe-prompt-card-close') as HTMLButtonElement;
 
     sendButton.click();
 
-    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(sendButton.disabled).toBe(true);
     expect(sendButton.getAttribute('aria-busy')).toBe('true');
     expect(sendButton.getAttribute('aria-label')).toBe('Sending...');
-    expect(sendButton.querySelector('[data-testid="button-loading-indicator"]')).toBeTruthy();
+    expect(sendButton.querySelector('.animate-spin')).toBeTruthy();
     expect(textarea.disabled).toBe(true);
     expect(contextButton.disabled).toBe(true);
 
@@ -479,7 +438,7 @@ describe('FlowerTurnLauncherWindow', () => {
 
     expect(sendButton.disabled).toBe(false);
     expect(sendButton.getAttribute('aria-busy')).toBe('false');
-    expect(sendButton.querySelector('[data-testid="arrow-up-icon"]')).toBeTruthy();
+    expect(sendButton.querySelector('svg')).toBeTruthy();
     expect(textarea.disabled).toBe(false);
 
     closeButton.click();
@@ -509,11 +468,11 @@ describe('FlowerTurnLauncherWindow', () => {
       cancelable: true,
     }));
 
-    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
-    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const sendButton = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])') as HTMLButtonElement;
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(sendButton.disabled).toBe(true);
     expect(sendButton.getAttribute('aria-busy')).toBe('true');
-    expect(sendButton.querySelector('[data-testid="button-loading-indicator"]')).toBeTruthy();
+    expect(sendButton.querySelector('.animate-spin')).toBeTruthy();
 
     pending.resolve();
     await flushAsync();
@@ -537,8 +496,9 @@ describe('FlowerTurnLauncherWindow', () => {
     ), host);
 
     const textarea = composePrompt(host, 'Keep this draft');
-    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    const sendButton = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])') as HTMLButtonElement;
     sendButton.click();
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
     firstAttempt.reject(new Error('Runtime unavailable'));
     await flushAsync();
 
@@ -548,7 +508,7 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(document.activeElement).toBe(textarea);
     expect(sendButton.disabled).toBe(false);
     expect(sendButton.getAttribute('aria-busy')).toBe('false');
-    expect(sendButton.querySelector('[data-testid="arrow-up-icon"]')).toBeTruthy();
+    expect(sendButton.querySelector('svg')).toBeTruthy();
 
     sendButton.click();
     await flushAsync();
@@ -576,7 +536,7 @@ describe('FlowerTurnLauncherWindow', () => {
       />
     ), host);
 
-    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    const sendButton = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])') as HTMLButtonElement;
     sendButton.click();
     await flushAsync();
 
@@ -590,6 +550,30 @@ describe('FlowerTurnLauncherWindow', () => {
     await flushAsync();
     expect(onSubmit).toHaveBeenCalledTimes(2);
     expect(onSubmit.mock.calls[1]?.[0]).toEqual(onSubmit.mock.calls[0]?.[0]);
+  });
+
+  it('keeps the captured files and model when discovery finishes after unknown admission', async () => {
+    const settings = deferred<FlowerSettingsSnapshot>();
+    const file = new File(['attached context'], 'notes.txt', { type: 'text/plain' });
+    const onSubmit = vi.fn(async (_input: FlowerTurnLauncherSubmitInput) => {
+      throw flowerTurnAdmissionError('unknown', new Error('response lost'));
+    });
+    const host = document.createElement('div'); document.body.appendChild(host);
+    render(() => <FlowerTurnLauncherWindow open intent={{ ...baseIntent, pending_attachments: [file] }}
+      modelSource={{ loadSettings: () => settings.promise }} onClose={() => undefined} onSubmit={onSubmit} />, host);
+    const send = host.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!;
+    expect(send.disabled).toBe(false);
+    send.click();
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    settings.resolve({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [],
+      conversation_preferences: { revision: 1, model_id: 'late/model', reasoning_by_model: {} } });
+    await flushAsync();
+    expect(host.querySelector<HTMLButtonElement>('[role=combobox]')!.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('.floe-prompt-card-attach')!.disabled).toBe(true);
+    send.click(); await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1][0]).toBe(onSubmit.mock.calls[0][0]);
+    expect(onSubmit.mock.calls[1][0].intent.pending_attachments).toEqual([file]);
+    expect(onSubmit.mock.calls[1][0].model_id).toBeUndefined();
   });
 
   it('submits the visible composed prompt through the send button', async () => {
@@ -607,7 +591,7 @@ describe('FlowerTurnLauncherWindow', () => {
     ), host);
 
     composePrompt(host, '你好，Flower');
-    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
+    const sendButton = host.querySelector(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])') as HTMLButtonElement | null;
     expect(sendButton).toBeTruthy();
     sendButton?.click();
     await flushAsync();
@@ -775,8 +759,8 @@ describe('FlowerTurnLauncherWindow', () => {
 
     expect(host.textContent).toContain('What would you like to explore inside it?');
     expect(host.querySelector('.flower-composer-context-references')?.getAttribute('aria-label')).toBe('Linked context');
-    expect(host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]')?.textContent).toContain('project');
-    expect(host.querySelector('.flower-turn-launcher-message-surface')?.textContent).not.toContain('project');
+    expect(host.querySelector('.floe-prompt-card-composer')?.textContent).toContain('project');
+    expect(host.querySelector('.floe-prompt-card-question')?.textContent).not.toContain('project');
     expect(host.textContent).not.toContain('Question');
     expect(host.textContent).not.toContain('Files');
   });

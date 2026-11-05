@@ -145,12 +145,12 @@ function expectStableAnchoredRect(
 
 describe('Flower turn launcher send feedback', () => {
   it.each([
-    { viewport: { width: 1440, height: 900 }, expectedHeight: 320 },
-    { viewport: { width: 390, height: 844 }, expectedHeight: 360 },
+    { viewport: { width: 1440, height: 900 }, expectedHeight: 200 },
+    { viewport: { width: 390, height: 844 }, expectedHeight: 240 },
   ])('fits the question and editor within a content-sized card below $expectedHeight px', async ({ viewport, expectedHeight }) => {
     const mounted = await mountLauncher('dark', viewport);
     const floatingWindow = document.querySelector('.flower-turn-launcher-window');
-    const dock = document.querySelector('[data-testid="flower-turn-launcher-dock"]');
+    const dock = document.querySelector('.floe-prompt-card-composer');
     if (!(floatingWindow instanceof HTMLElement) || !(dock instanceof HTMLElement)) {
       throw new Error('Flower launcher window fixture did not mount.');
     }
@@ -159,7 +159,7 @@ describe('Flower turn launcher send feedback', () => {
     const dockRect = dock.getBoundingClientRect();
     expect(frameRect.height).toBeLessThan(expectedHeight);
     expect(document.querySelector('[data-floe-floating-window-titlebar]')).toBeNull();
-    const question = document.querySelector('.flower-turn-launcher-message-surface')!.getBoundingClientRect();
+    const question = document.querySelector('.floe-prompt-card-question')!.getBoundingClientRect();
     expect(dockRect.top - question.bottom).toBeLessThan(28);
     expect(document.querySelector('.flower-turn-launcher-footer')).toBeNull();
     expect(Math.abs(dockRect.bottom - frameRect.bottom)).toBeLessThanOrEqual(48);
@@ -191,9 +191,9 @@ describe('Flower turn launcher send feedback', () => {
     for (const testCase of cases) {
       await media.emulateTouchInput(Boolean(testCase.touch));
       const mounted = await mountLauncher(testCase.theme, testCase.viewport);
-      const textarea = document.querySelector('.flower-turn-launcher-textarea') as HTMLTextAreaElement | null;
-      const editorShell = document.querySelector('[data-testid="flower-turn-launcher-editor-shell"]') as HTMLElement | null;
-      const sendButton = document.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
+      const textarea = document.querySelector('.floe-prompt-card-input') as HTMLTextAreaElement | null;
+      const editorShell = document.querySelector('.floe-prompt-card-composer') as HTMLElement | null;
+      const sendButton = document.querySelector('.floe-prompt-card-submit') as HTMLButtonElement | null;
       expect(textarea).not.toBeNull();
       expect(editorShell).not.toBeNull();
       expect(sendButton).not.toBeNull();
@@ -205,25 +205,24 @@ describe('Flower turn launcher send feedback', () => {
       const idleEditorRect = editorShell!.getBoundingClientRect();
       const idleStyle = getComputedStyle(sendButton!);
       const textareaStyle = getComputedStyle(textarea!);
-      const narrow = testCase.viewport.width < 768;
-      const targetSize = narrow || testCase.touch ? 44 : 36;
+      const targetSize = testCase.touch ? 44 : 28;
       expect(idleRect.width).toBeCloseTo(targetSize, 0);
       expect(idleRect.height).toBeCloseTo(targetSize, 0);
       expect(parseFloat(idleStyle.borderRadius)).toBeGreaterThanOrEqual(idleRect.width / 2);
       expect(idleRect.top).toBeGreaterThanOrEqual(textarea!.getBoundingClientRect().bottom - 1);
       expect(getComputedStyle(editorShell!).borderWidth).toBe('0px');
-      expect(textareaStyle.fontSize).toBe(narrow || testCase.touch ? '16px' : '14px');
-      expect(getComputedStyle(document.querySelector('.flower-turn-launcher-message-surface .flower-body-copy')!).fontSize).toBe('17px');
+      expect(textareaStyle.fontSize).toBe(testCase.touch ? '16px' : '13px');
+      expect(getComputedStyle(document.querySelector('.floe-prompt-card-question')!).fontSize).toBe(testCase.touch ? '14px' : '13px');
       expect(sendButton!.querySelector('svg')).not.toBeNull();
       expect(sendButton!.querySelector('.animate-spin')).toBeNull();
 
-      await page.getByTestId('flower-turn-launcher-inline-send').click();
+      await page.getByRole('button', { name: 'Launch turn', exact: true }).click();
       await nextFrame();
 
       const loadingRect = sendButton!.getBoundingClientRect();
       const loadingEditorRect = editorShell!.getBoundingClientRect();
       expectStableAnchoredRect(idleRect, idleEditorRect, loadingRect, loadingEditorRect);
-      expect(mounted.submitCount()).toBe(1);
+      await expect.poll(() => mounted.submitCount()).toBe(1);
       expect(sendButton!.disabled).toBe(true);
       expect(sendButton!.getAttribute('aria-busy')).toBe('true');
       expect(sendButton!.getAttribute('aria-label')).toBe('Sending');
@@ -243,9 +242,10 @@ describe('Flower turn launcher send feedback', () => {
   });
 });
 
-it('uses one focus border around the real Flower launch editor', async () => {
+it('keeps the real Flower launch editor frameless while focused', async () => {
   await mountLauncher('dark', { width: 1280, height: 800 });
-  const input = document.querySelector<HTMLTextAreaElement>('.flower-turn-launcher-textarea')!;
+  const input = document.querySelector<HTMLTextAreaElement>('.floe-prompt-card-input')!;
   expect(input.closest('[data-floe-input-surface]')).toBeTruthy();
   expectSingleInputFocus(input);
+  expect(getComputedStyle(input.closest<HTMLElement>('[data-floe-input-surface]')!).borderWidth).toBe('0px');
 });

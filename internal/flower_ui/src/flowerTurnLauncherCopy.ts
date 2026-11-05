@@ -69,6 +69,9 @@ export type FlowerTurnLauncherWindowChromeCopy = Readonly<{
   you_label: string;
   reply_to_flower_label: string;
   send_turn: string;
+  add_attachments: string;
+  select_model: string;
+  models_failed: string;
   empty_message: string;
   launch_failed_title: string;
   launch_unknown_title: string;
@@ -149,6 +152,9 @@ export const DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY: FlowerTurnLauncherWindowC
   you_label: 'You',
   reply_to_flower_label: 'Reply to Flower',
   send_turn: 'Launch turn',
+  add_attachments: 'Add attachments',
+  select_model: 'Select model',
+  models_failed: 'Could not load models. Try again.',
   empty_message: 'Enter a question before sending.',
   launch_failed_title: 'Flower could not start this turn.',
   launch_unknown_title: 'Delivery is still being confirmed. Retry to check the same request.',

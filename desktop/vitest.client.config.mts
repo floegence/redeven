@@ -24,7 +24,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     server: { deps: { inline: [/\.css$/] } },
-    include: ['src/welcome/**/*.client.test.tsx', '../internal/flower_ui/src/**/*.client.test.ts'],
+    include: ['src/welcome/**/*.client.test.tsx', '../internal/flower_ui/src/**/*.client.test.ts', '../internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx'],
     maxWorkers: 1,
   },
 });

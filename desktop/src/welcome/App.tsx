@@ -1,3 +1,4 @@
+import { stageFlowerTurnLauncherAttachments } from '../../../internal/flower_ui/src/stageFlowerTurnLauncherAttachments';
 import { DesktopFloeLocaleProvider } from './DesktopFloeLocaleProvider';
 import { createDownloadManager } from '../../../internal/envapp/ui_src/src/ui/downloads/createDownloadManager';
 import { createDesktopCenterHost, createDesktopCenterProgressAdapter } from './envCenterAdapter';
@@ -3069,6 +3070,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     () => JSON.stringify([flowerFilesystemScopeKey(), flowerModelSettingsRevision()]));
   createEffect(on(flowerFilesystemScopeKey, () => setFlowerModelSettingsRevision(value => value + 1), { defer: true }));
   onCleanup(() => flowerModelReadResource.invalidate());
+  const flowerTurnLauncherAdapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, { modelReadResource: flowerModelReadResource });
   const flowerSettingsChanged = async () => { setFlowerModelSettingsRevision(value => value + 1); await refreshSnapshot(); };
   const flowerSurfaceCopy = createMemo(() => createDesktopFlowerSurfaceCopy(i18n()));
   const openFlowerMessageURL: NonNullable<FlowerSurfaceAdapter['openMessageURL']> = async ({ url, signal }) => {
@@ -6358,16 +6360,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function submitFlowerTurnLauncher(input: FlowerTurnLauncherSubmitInput): Promise<void> {
     const prompt = trimString(input.prompt);
-    if (!prompt) {
+    if (!prompt && !(input.intent.pending_attachments?.length)) {
       throw new Error(i18n().t('environmentCenter.askFlowerCardNoMessage'));
     }
     if (flowerTurnLauncherRequest?.client_request_id !== input.client_request_id) {
-      flowerTurnLauncherRequest = await prepareLocalEnvironmentFlowerTurnInput(props.runtime.settings, {
+      const prepared = await prepareLocalEnvironmentFlowerTurnInput(props.runtime.settings, {
         client_request_id: input.client_request_id,
         prompt,
+        model_id: input.model_id,
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
       });
+      flowerTurnLauncherRequest = await stageFlowerTurnLauncherAttachments(
+        flowerTurnLauncherAdapter,
+        prepared, input.intent.pending_attachments ?? [], flowerSurfaceCopy().attachments);
     }
     const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, flowerTurnLauncherRequest).catch(error => {
       if (flowerTurnAdmissionFailureKind(error) !== 'unknown') flowerTurnLauncherRequest = null;
@@ -6795,10 +6801,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <FlowerTurnLauncherWindow
         open={flowerTurnLauncherOpen()}
         intent={flowerTurnLauncherIntent()}
+        modelSource={flowerTurnLauncherAdapter}
         anchor={flowerTurnLauncherAnchor()}
         viewportInsets={flowerTurnLauncherViewportInsets()}
         copy={{
           window_title: i18n().t('environmentCenter.askFlowerCardTitle'),
+          add_attachments: flowerSurfaceCopy().attachments.add,
+          select_model: flowerSurfaceCopy().settings.selectModelPlaceholder,
+          models_failed: flowerSurfaceCopy().chat.modelsCheckFailed,
           linked_context_label: i18n().t('environmentCenter.askFlowerCardContextLabel'),
           remove_reference: (path) => i18n().t('flowerSurface.chat.composerReferenceRemove', { path }),
           working_dir_label: i18n().t('flowerSurface.threadList.workingDirectoryLabel'),

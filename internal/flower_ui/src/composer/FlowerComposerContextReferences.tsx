@@ -24,7 +24,7 @@ export function FlowerComposerContextReference(props: {
 }) {
   const remove = (button: HTMLButtonElement) => {
     const list = button.closest('.flower-composer-context-list');
-    const input = button.closest('.flower-composer, .flower-turn-launcher-editor-shell');
+    const input = button.closest('.flower-composer, .flower-turn-launcher-editor-shell, .floe-prompt-card-composer');
     const index = [...(list?.querySelectorAll('.flower-composer-context-remove') ?? [])].indexOf(button);
     props.onRemove?.();
     requestAnimationFrame(() => {

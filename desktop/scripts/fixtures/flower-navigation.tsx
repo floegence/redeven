@@ -1,3 +1,5 @@
+import { modelDirectoryWireFixture } from '../../../internal/envapp/ui_src/src/test/modelDirectoryWireFixture';
+import type { RuntimeFlowerAttachmentPrepareRequest } from '../../src/shared/runtimeFlowerAttachmentIPC';
 import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from '../../src/welcome/App';
 import type { DesktopWelcomeSnapshot } from '../../src/shared/desktopLauncherIPC';
@@ -12,6 +14,8 @@ declare global {
     navigationSnapshot: DesktopWelcomeSnapshot;
     navigationFixture: {
       requests: string[];
+      turnRequests: unknown[];
+      uploads: RuntimeFlowerAttachmentPrepareRequest[];
       streams: number;
       cancellations: number;
       prematureRequests: number;
@@ -46,6 +50,7 @@ let releaseGoalRead: ((fail: boolean) => void) | undefined;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
   message: 'AI service is unavailable', data: { readiness: { state: 'inspecting', retryable: false, safe_to_retry: false } } } });
 const fixture = window.navigationFixture = {
+  turnRequests: [] as unknown[], uploads: [] as RuntimeFlowerAttachmentPrepareRequest[],
   requests: [] as string[], streams: 0, cancellations: 0, prematureRequests: 0, dispose: () => {},
   goalReads: 0, goalRequests: [] as FlowerGoalInput[], holdGoalReads: false,
   releaseGoalRead(fail = false) { releaseGoalRead?.(fail); releaseGoalRead = undefined; },
@@ -98,7 +103,7 @@ const fixture = window.navigationFixture = {
 };
 const thread = {
   thread_id: 'navigation-thread', title: 'Keep this conversation', title_status: 'ready', title_generation: 1,
-  model_id: 'fixture/model', run_status: 'idle', working_dir: '/workspace', goal: goalMode ? goal : undefined,
+  model_id: 'fixture/gpt-4.1', run_status: 'idle', working_dir: '/workspace', goal: goalMode ? goal : undefined,
   created_at_unix_ms: 1, updated_at_unix_ms: 2, last_message_at_unix_ms: 2,
   read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } },
 };
@@ -130,13 +135,13 @@ const settings: DesktopWelcomeRuntime['settings'] = {
     const route = url.pathname.replace('/_redeven_proxy/api/', '');
     fixture.requests.push(`${request.method} ${route}`);
     if (route === 'settings') return { ok: true, data: {
-      ai: { current_model_id: 'fixture/model', permission_type: 'approval_required', computer_use_enabled: false,
+      ai: { current_model_id: 'fixture/gpt-4.1', permission_type: 'approval_required', computer_use_enabled: false,
         providers: [{ id: 'fixture', name: 'Fixture', type: 'openai_compatible', base_url: 'https://fixture.invalid',
-          models: [{ model_name: 'model', context_window: 128000, max_output_tokens: 4096, input_modalities: ['text'] }] }] },
+          models: [{ model_name: 'gpt-4.1', context_window: 128000, max_output_tokens: 4096, input_modalities: ['text'] }] }] },
       ai_secrets: { provider_api_key_set: { fixture: true } },
     } };
     if (route.startsWith('ai/') && !aiReady) { fixture.prematureRequests++; return unavailable(); }
-    if (route === 'ai/models') return { ok: true, data: { current_model: 'fixture/model', models: [{ id: 'fixture/model' }] } };
+    if (route === 'ai/models') return { ok: true, data: modelDirectoryWireFixture({ ai: { current_model_id: 'fixture/gpt-4.1' } }, { models: [{ id: 'fixture/gpt-4.1', label: 'GPT-4.1' }, { id: 'fixture/claude-sonnet-4.5', label: 'Claude Sonnet 4.5' }] }) };
     if (route === 'ai/conversation_preferences') return { ok: true, data: { revision: 0, reasoning_by_model: {} } };
     if (route === 'ai/threads') return { ok: true, data: { threads: [thread] } };
     if (route === 'ai/storage-generation') return { ok: true, data: { storage_generation: 'a'.repeat(32) } };
@@ -174,9 +179,27 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       return { ok: true, data: { mime_type: 'image/png', bytes: new Uint8Array(await blob.arrayBuffer()) } };
     }
     if (route === 'fs/path_context') return { ok: true, data: { home_path_abs: '/workspace', agent_home_path_abs: '/workspace/.redeven', default_root_id: 'home', roots: [{ id: 'home', label: 'Home', path_abs: '/workspace' }] } };
-    if (route === 'ai/attachments/capabilities') return { ok: true, data: { model_id: 'fixture/model', revision: '1', enabled: false } };
+    if (route === 'ai/attachments/capabilities') return { ok: true, data: { model_id: url.searchParams.get('model_id'), revision: '1', enabled: true,
+      supports_long_text: true, max_count: 10, max_item_bytes: 1000000, max_turn_bytes: 5000000, media_types: [] } };
+    if (route === 'ai/upload-staging-scopes') return { ok: true, stagingCapability: 'fixture-capability', data: {
+      staging_scope_id: 'scope-1', target_id: (request.body as { target_id: string }).target_id, expires_at_unix_ms: Date.now() + 60000 } };
+    if (route === 'ai/turns') {
+      fixture.turnRequests.push(request.body);
+      return { ok: false, failureKind: 'transport_unknown', error: { message: 'Delivery is still being confirmed.' } };
+    }
     return { ok: false, error: { code: 'fixture_unexpected_route', message: `Unexpected fixture route: ${route}` } };
   },
+  async prepareRuntimeFlowerAttachment(request) {
+    fixture.uploads.push(request); return { ok: true, operation_id: request.operation_id, chunk_size_bytes: 262144 };
+  },
+  async writeRuntimeFlowerAttachmentChunk(request) { return { ok: true, next_offset_bytes: request.offset_bytes + request.chunk.byteLength }; },
+  async commitRuntimeFlowerAttachment(request) {
+    const file = fixture.uploads.find(upload => upload.operation_id === request.operation_id)!;
+    return { ok: true, data: { attachment_id: 'upload-1', display_name: file.display_name, detected_media_type: file.media_type,
+      size_bytes: file.size_bytes, content_sha256: file.content_sha256, logical_locator: 'attachment://v1/upload-1/notes.txt', capability_revision: '1' } };
+  },
+  async cancelRuntimeFlowerAttachment() { return { ok: true, cancelled: true }; },
+  subscribeRuntimeFlowerAttachmentProgress() { return () => {}; },
   async startRuntimeFlowerStream(request) {
     fixture.streams++;
     receiveStreamID = request.stream_id;

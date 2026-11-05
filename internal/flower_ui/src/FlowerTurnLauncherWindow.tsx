@@ -1,13 +1,12 @@
 import type { Component } from 'solid-js';
-import { For, Show, createContext, createEffect, createMemo, createSignal, onCleanup, untrack, useContext } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
 import { Activity, AlertTriangle, ArrowUp, FileText } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Button, type FloatingWindowViewportInsets } from '@floegence/floe-webapp-core/ui';
-import { FlowerAskCard } from './FlowerAskCard';
+import { Button, PromptCard, type FloatingWindowViewportInsets } from '@floegence/floe-webapp-core/ui';
 
 import type {
-  FlowerTurnLauncherIntent,
+  FlowerTurnLauncherIntent, FlowerModelDirectory, FlowerSurfaceAdapter,
 } from './contracts/flowerSurfaceContracts';
 import { createFlowerClientRequestID } from './flowerRequestIdentity';
 import { FlowerIcon } from './icons/FlowerIcon';
@@ -33,6 +32,7 @@ export type FlowerTurnLauncherAnchor = Readonly<{
 export type FlowerTurnLauncherSubmitInput = Readonly<{
   client_request_id: string;
   prompt: string;
+  model_id?: string;
   intent: FlowerTurnLauncherIntent;
 }>;
 
@@ -44,6 +44,7 @@ export type FlowerTurnLauncherPanelProps = Readonly<{
   footerClass?: string;
   localScrollProps?: Record<string, unknown>;
   autoFocus?: boolean;
+  modelSource?: Pick<FlowerSurfaceAdapter, 'loadSettings' | 'loadModelDirectory' | 'subscribeModelDirectory'>;
   draft?: string;
   onDraftChange?: (draft: string) => void;
   onClose: () => void;
@@ -112,9 +113,10 @@ export function createFlowerTurnLauncherPanelController(
   const [launchError, setLaunchError] = createSignal('');
   const [launchErrorKind, setLaunchErrorKind] = createSignal<'failure' | 'unknown'>('failure');
   const [isComposing, setIsComposing] = createSignal(false);
+  const [selectedModelID, setSelectedModelID] = createSignal('');
   const [sending, setSending] = createSignal(false);
   const [clientRequestID, setClientRequestID] = createSignal('');
-  const [pendingRequestPrompt, setPendingRequestPrompt] = createSignal('');
+  const [pendingRequest, setPendingRequest] = createSignal<FlowerTurnLauncherSubmitInput | null>(null);
   const [editableIntent, setEditableIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   let textareaEl: HTMLTextAreaElement | undefined;
   let focusedFrame: number | undefined;
@@ -126,12 +128,12 @@ export function createFlowerTurnLauncherPanelController(
   });
   const userPrompt = () => props.draft ?? internalUserPrompt();
   const admissionUnknown = () => launchErrorKind() === 'unknown' && Boolean(launchError());
-  const visiblePrompt = () => admissionUnknown() ? pendingRequestPrompt() : userPrompt();
+  const visiblePrompt = () => admissionUnknown() ? pendingRequest()?.prompt ?? '' : userPrompt();
   const setUserPrompt = (value: string) => {
     setInternalUserPrompt(value);
     props.onDraftChange?.(value);
   };
-  const canSubmit = createMemo(() => !sending() && compact(visiblePrompt()).length > 0);
+  const canSubmit = createMemo(() => !sending() && (compact(visiblePrompt()).length > 0 || (editableIntent()?.pending_attachments?.length ?? 0) > 0));
   const suggestedWorkingDir = createMemo(() => compact(props.intent?.suggested_working_dir));
 
   const resetLauncherState = (intent: FlowerTurnLauncherIntent | null) => {
@@ -142,9 +144,10 @@ export function createFlowerTurnLauncherPanelController(
     setIsComposing(false);
     setSending(false);
     setClientRequestID(intent ? createFlowerClientRequestID() : '');
-    setPendingRequestPrompt('');
+    setPendingRequest(null);
+    setSelectedModelID('');
     setInternalUserPrompt(untrack(() => props.draft) ?? compact(intent?.initial_prompt));
-    if (props.autoFocus === false) return;
+    if (props.autoFocus === false || footerPlacement === 'window') return;
     focusedFrame = requestAnimationFrame(() => {
       focusedFrame = undefined;
       if (!props.open) return;
@@ -179,10 +182,10 @@ export function createFlowerTurnLauncherPanelController(
     const requestID = clientRequestID();
     const retryingUnknownAdmission = admissionUnknown();
     const prompt = compact(retryingUnknownAdmission
-      ? pendingRequestPrompt()
+      ? pendingRequest()?.prompt ?? ''
       : textareaEl?.value ?? userPrompt());
     if (!intent || !requestID) return;
-    if (!prompt) {
+    if (!prompt && !(intent.pending_attachments?.length)) {
       setValidationError(copyValue(props.copy, 'empty_message'));
       requestAnimationFrame(() => textareaEl?.focus());
       return;
@@ -192,15 +195,16 @@ export function createFlowerTurnLauncherPanelController(
     setValidationError('');
     setLaunchError('');
     setLaunchErrorKind('failure');
-    if (!retryingUnknownAdmission) setPendingRequestPrompt(prompt);
+    const request = retryingUnknownAdmission ? pendingRequest()! : { client_request_id: requestID, prompt, intent, ...(selectedModelID() ? { model_id: selectedModelID() } : {}) };
+    setPendingRequest(request);
     try {
-      await props.onSubmit({ client_request_id: requestID, prompt, intent });
+      await props.onSubmit(request);
     } catch (error) {
       const admissionKind = flowerTurnAdmissionFailureKind(error);
       setLaunchErrorKind(admissionKind === 'unknown' ? 'unknown' : 'failure');
       setLaunchError(error instanceof Error ? error.message : String(error));
       if (admissionKind !== 'unknown') {
-        setPendingRequestPrompt('');
+        setPendingRequest(null);
         requestAnimationFrame(() => textareaEl?.focus());
       }
     } finally {
@@ -219,7 +223,15 @@ export function createFlowerTurnLauncherPanelController(
     setEditableIntent(removeFlowerTurnLauncherReference(intent, entry));
   };
 
+  const addFiles = (files: readonly File[]) => {
+    const intent = editableIntent();
+    if (!intent || sending() || admissionUnknown()) return;
+    setEditableIntent({ ...intent, pending_attachments: [...intent.pending_attachments ?? [], ...files] });
+    setValidationError('');
+  };
+
   return {
+    selectedModelID, setSelectedModelID, addFiles,
     footerPlacement,
     visiblePrompt,
     admissionUnknown,
@@ -247,7 +259,6 @@ export function createFlowerTurnLauncherPanelController(
 }
 
 type FlowerTurnLauncherPanelController = ReturnType<typeof createFlowerTurnLauncherPanelController>;
-const FlowerTurnLauncherPanelControllerContext = createContext<FlowerTurnLauncherPanelController>();
 
 type FlowerTurnLauncherFooterProps = Readonly<{
   copy?: FlowerTurnLauncherWindowCopyInput;
@@ -289,9 +300,36 @@ function FlowerTurnLauncherFooter(props: FlowerTurnLauncherFooterProps) {
   );
 }
 
+function FlowerTurnLauncherReferences(props: {
+  controller: FlowerTurnLauncherPanelController;
+  copy?: FlowerTurnLauncherWindowCopyInput;
+  localScrollProps?: Record<string, unknown>;
+}) {
+  return (
+    <Show when={(props.controller.projected()?.context_entries.length ?? 0) > 0}>
+      <FlowerComposerContextReferences label={copyValue(props.copy, 'linked_context_label')}
+        localScrollProps={props.localScrollProps}>
+        <For each={props.controller.projected()?.context_entries ?? []}>{entry => (
+          <FlowerComposerContextReference label={entry.tone === 'selection' ? entry.detail : entry.label}
+            title={`${entry.title}${entry.detail ? `\n${entry.detail}` : ''}`}
+            icon={entryIcon(entry)} disabled={props.controller.sending()}
+            removalDisabled={props.controller.admissionUnknown()}
+            removeLabel={(props.copy?.remove_reference ?? DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY.remove_reference)(entry.tone === 'selection' ? entry.detail : entry.label)}
+            onRemove={() => props.controller.removeReference(entry)}
+            onPreview={entry.primary_action ? () => props.controller.runContextAction(entry.primary_action, entry) : undefined}
+            actions={<For each={entry.secondary_actions}>{action => (
+              <button type="button" class="flower-composer-context-action"
+                aria-label={secondaryActionLabel(action)} title={secondaryActionLabel(action)}
+                disabled={props.controller.sending()} onClick={() => props.controller.runContextAction(action, entry)}>{actionIcon(action)}</button>
+            )}</For>} />
+        )}</For>
+      </FlowerComposerContextReferences>
+    </Show>
+  );
+}
+
 export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
-  const controller = useContext(FlowerTurnLauncherPanelControllerContext)
-    ?? createFlowerTurnLauncherPanelController(props);
+  const controller = createFlowerTurnLauncherPanelController(props);
   const {
     visiblePrompt,
     admissionUnknown,
@@ -310,8 +348,6 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
     setTextareaEl,
     textareaValue,
     submit,
-    runContextAction,
-    removeReference,
   } = controller;
 
   return (
@@ -366,25 +402,7 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                         </div>
 
                         <div data-floe-input-surface={controller.footerPlacement === 'panel' ? true : undefined} data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
-                          <Show when={(projected()?.context_entries.length ?? 0) > 0}>
-                            <FlowerComposerContextReferences label={copyValue(props.copy, 'linked_context_label')}
-                              localScrollProps={props.localScrollProps}>
-                              <For each={projected()?.context_entries ?? []}>{entry => (
-                                <FlowerComposerContextReference label={entry.tone === 'selection' ? entry.detail : entry.label}
-                                  title={`${entry.title}${entry.detail ? `\n${entry.detail}` : ''}`}
-                                  icon={entryIcon(entry)} disabled={sending()}
-                                  removalDisabled={admissionUnknown()}
-                                  removeLabel={(props.copy?.remove_reference ?? DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY.remove_reference)(entry.tone === 'selection' ? entry.detail : entry.label)}
-                                  onRemove={() => removeReference(entry)}
-                                  onPreview={entry.primary_action ? () => runContextAction(entry.primary_action, entry) : undefined}
-                                  actions={<For each={entry.secondary_actions}>{action => (
-                                    <button type="button" class="flower-composer-context-action"
-                                      aria-label={secondaryActionLabel(action)} title={secondaryActionLabel(action)}
-                                      disabled={sending()} onClick={() => runContextAction(action, entry)}>{actionIcon(action)}</button>
-                                  )}</For>} />
-                              )}</For>
-                            </FlowerComposerContextReferences>
-                          </Show>
+                          <FlowerTurnLauncherReferences controller={controller} copy={props.copy} localScrollProps={props.localScrollProps} />
                           <textarea
                             ref={setTextareaEl}
                             id={`flower-turn-launcher-prompt-${intent.id}`}
@@ -478,32 +496,93 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
   );
 }
 
-/** Product-specific Ask Flower card, shared by Desktop and Env App entry points. */
+/** Product content and admission state over the published contextual input. */
 export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   const controller = createFlowerTurnLauncherPanelController(props, 'window');
-  // Retain the exact visible question and context while the card leaves.
+  const [directory, setDirectory] = createSignal<FlowerModelDirectory>();
+  const [modelLoading, setModelLoading] = createSignal(false);
+  const [modelError, setModelError] = createSignal('');
+  const [modelReload, setModelReload] = createSignal(0);
+  createEffect(() => {
+    if (!props.open || !props.modelSource) return;
+    const source = props.modelSource;
+    const intent = props.intent;
+    const refresh = modelReload() > 0;
+    let active = true;
+    setModelLoading(true); setModelError('');
+    const unsubscribe = source.subscribeModelDirectory?.(value => { if (active) setDirectory(value); });
+    onCleanup(() => { active = false; unsubscribe?.(); });
+    deferAfterPaint(() => {
+      if (!active) return;
+      void Promise.all([source.loadSettings(), source.loadModelDirectory?.(refresh)]).then(([settings, models]) => {
+        if (!active) return;
+        const value = models ?? settings.model_directory;
+        if (value) setDirectory(value);
+        if (intent === props.intent && !controller.selectedModelID() && !controller.sending() && !controller.admissionUnknown()) controller.setSelectedModelID(
+          settings.conversation_preferences?.model_id || value?.current_model_id || settings.model_profile?.current_model_id || '');
+      }).catch(() => { if (active) setModelError(copyValue(props.copy, 'models_failed')); })
+        .finally(() => { if (active) setModelLoading(false); });
+    });
+  });
   const presentedIntent = createMemo<FlowerTurnLauncherIntent | null>(previous =>
     props.open && props.intent ? props.intent : previous ?? null);
   return (
-    <FlowerAskCard
+    <PromptCard
       open={props.open && Boolean(props.intent)}
+      bodyProps={props.localScrollProps}
+      portalScope="viewport"
       anchor={props.anchor}
       viewportInsets={props.viewportInsets}
       title={copyValue(props.copy, 'window_title')}
+      icon={<FlowerIcon />}
       closeLabel={copyValue(props.copy, 'close')}
       busy={controller.sending()}
       zIndex={props.zIndex}
-      class={props.windowClass}
+      class={cn('flower-ask-card flower-turn-launcher-window', props.windowClass)}
       onActivate={props.onActivate}
       onClose={props.onClose}
-    >
-      <FlowerTurnLauncherPanelControllerContext.Provider value={controller}>
-        <FlowerTurnLauncherPanel
-          {...props}
-          open={Boolean(presentedIntent())}
-          intent={presentedIntent()}
-        />
-      </FlowerTurnLauncherPanelControllerContext.Provider>
-    </FlowerAskCard>
+      autoFocus={props.autoFocus}
+      editorRef={controller.setTextareaEl}
+      question={<>
+        {controller.projected()?.question}
+        <For each={(presentedIntent()?.notes ?? []).map(compact).filter(Boolean)}>{note =>
+          <div class="flower-ask-card-note">{note}</div>
+        }</For>
+      </>}
+      value={controller.visiblePrompt()}
+      onValueChange={value => {
+        controller.setUserPrompt(value);
+        controller.setValidationError('');
+        controller.setLaunchError('');
+        controller.setLaunchErrorKind('failure');
+      }}
+      inputLabel={copyValue(props.copy, 'you_label')}
+      inputDisabled={controller.admissionUnknown()}
+      submitDisabled={!controller.canSubmit()}
+      submitLabel={copyValue(props.copy, controller.sending() ? 'sending' : 'send_turn')}
+      onSubmit={() => { void controller.submit(); }}
+      attachment={{ label: copyValue(props.copy, 'add_attachments'), onFiles: controller.addFiles }}
+      selection={props.modelSource ? {
+        label: copyValue(props.copy, 'select_model'), placeholder: copyValue(props.copy, 'select_model'),
+        value: controller.selectedModelID(), options: (directory()?.models ?? []).map(model => ({
+          value: model.id, label: compact(model.model_name) || model.label || model.id, keywords: [model.label, model.id], disabled: model.state !== 'ready',
+        })), onChange: controller.setSelectedModelID, loading: modelLoading(), error: modelError(),
+        onRetry: () => setModelReload(value => value + 1),
+      } : undefined}
+      references={<FlowerTurnLauncherReferences controller={controller} copy={props.copy} localScrollProps={props.localScrollProps} />}
+      feedback={(controller.validationError() || controller.launchError()) && <>
+        <Show when={controller.validationError()}><div class="flower-ask-card-validation" role="alert">{controller.validationError()}</div></Show>
+        <Show when={controller.launchError()}>
+          <div role={controller.launchErrorKind() === 'unknown' ? 'status' : 'alert'}
+            class={controller.launchErrorKind() === 'unknown' ? 'flower-turn-launcher-unknown' : 'flower-turn-launcher-error'}>
+            <AlertTriangle class="size-3.5 shrink-0" />
+            <span class="min-w-0">{copyValue(props.copy, controller.launchErrorKind() === 'unknown' ? 'launch_unknown_title' : 'launch_failed_title')} {controller.launchError()}</span>
+          </div>
+        </Show>
+      </>}
+      containsTarget={target => target instanceof Element && Boolean(
+        target.closest('.flower-turn-launcher-related-surface')
+          || target.closest('[data-floe-geometry-surface="floating-window"]')?.querySelector(':scope > .flower-turn-launcher-related-surface'))}
+    />
   );
 }

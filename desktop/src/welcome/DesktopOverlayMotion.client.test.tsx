@@ -76,7 +76,7 @@ it.each(['directory', 'launcher'] as const)('%s retains its content until the su
     ? <FlowerWorkingDirPickerDialog open={open()} onOpenChange={setOpen} onSelect={() => {}} />
     : <FlowerTurnLauncherWindow open={open()} intent={intent()} onClose={() => setOpen(false)} onSubmit={async () => {}} />, document.body);
   await new Promise(resolve => setTimeout(resolve, 80));
-  const surface = document.querySelector<HTMLElement>(kind === 'directory' ? '[data-floe-dialog-panel]' : '[data-flower-ask-card]')!;
+  const surface = document.querySelector<HTMLElement>(kind === 'directory' ? '[data-floe-dialog-panel]' : '[data-floe-prompt-card]')!;
   expect(surface).not.toBeNull();
   const text = surface.textContent;
   setOpen(false);

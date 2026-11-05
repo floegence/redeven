@@ -4,6 +4,7 @@ import {
   FlowerTurnLauncherPanel as SharedFlowerTurnLauncherPanel,
   FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow,
   type FlowerTurnLauncherSubmitInput,
+  type FlowerTurnLauncherPanelProps,
 } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../flower-feature.css';
@@ -39,6 +40,9 @@ const FLOWER_TURN_LAUNCHER_STACK_ID = 'flower-turn-launcher';
 function createFlowerTurnLauncherCopy(i18n: ReturnType<typeof useI18n>): FlowerTurnLauncherWindowCopyInput {
   return {
     window_title: i18n.t('flowerTurnLauncher.windowTitle'),
+    add_attachments: i18n.t('flowerSurface.attachments.add'),
+    select_model: i18n.t('flowerSurface.settings.selectModelPlaceholder'),
+    models_failed: i18n.t('flowerSurface.chat.modelsCheckFailed'),
     working_dir_label: i18n.t('flowerTurnLauncher.workingDirLabel'),
     working_directory_unavailable: i18n.t('flowerTurnLauncher.workingDirectoryUnavailable'),
     sending: i18n.t('flowerTurnLauncher.sending'),
@@ -112,6 +116,7 @@ type FlowerTurnLauncherWindowProps = Readonly<{
   draft?: string;
   onDraftChange?: (draft: string) => void;
   autoFocus?: boolean;
+  modelSource?: FlowerTurnLauncherPanelProps['modelSource'];
   onClose: () => void;
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
 }>;
@@ -562,6 +567,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             draft={props.draft}
             onDraftChange={props.onDraftChange}
             autoFocus={props.autoFocus}
+            modelSource={props.modelSource}
             onClose={props.onClose}
             onSubmit={props.onSubmit}
             onContextAction={executeContextAction}

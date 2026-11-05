@@ -89,6 +89,8 @@ export default defineConfig({
     strictPort: true,
   },
   test: {
+    // Keep published Solid components in the same DOM runtime and mock graph.
+    server: { deps: { inline: [/@floegence\/floe-webapp-core/] } },
     execArgv: ['--no-experimental-webstorage'],
     environmentOptions: {
       jsdom: { url: 'https://localhost/_redeven_proxy/env/' },

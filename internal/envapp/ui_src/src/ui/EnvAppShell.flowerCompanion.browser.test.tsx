@@ -4,7 +4,7 @@ import './flower-feature.css';
 
 import { Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext } from 'solid-js';
 import { Portal, render } from 'solid-js/web';
-import type { FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerAttachmentUploadInput, FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, ComponentRegistryProvider, useComponentRegistry, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
@@ -57,6 +57,10 @@ const flowerLaunchTurnMock = vi.fn(async (_input: FlowerTurnLaunchInput) => ({
 }));
 let flowerLauncherPreferenceRevision = 1;
 const flowerLauncherSettingsMock = vi.fn(async () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], conversation_preferences: { revision: flowerLauncherPreferenceRevision, model_id: flowerLauncherPreferenceRevision === 1 ? 'provider/model-a' : 'provider/model-b', working_dir: '/remembered', reasoning_by_model: { 'provider/model-a': { level: 'default', budget_tokens: 4096 } } } }));
+const launcherUploadMock = vi.fn(async (input: FlowerAttachmentUploadInput) => ({
+  attachment_id: 'uploaded-notes', name: input.file.name, mime_type: input.file.type, size_bytes: input.file.size,
+  digest_sha256: 'a'.repeat(64), locator: 'attachment://v1/uploaded-notes/notes.txt', source: 'file' as const, capability_revision: '1',
+}));
 const activityDialogUnderlayActionMock = vi.fn();
 const workbenchDialogUnderlayActionMock = vi.fn();
 
@@ -880,9 +884,18 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
   ),
 }));
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
+  mapEnvFlowerSettings: () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [] }),
   createEnvLocalFlowerSurfaceAdapter: () => ({
     launchTurn: flowerLaunchTurnMock,
     loadSettings: flowerLauncherSettingsMock,
+    loadModelDirectory: async () => ({ current_model_id: 'provider/model-a', sources: [], models: ['model-a', 'model-b'].map(model_name => ({
+      id: `provider/${model_name}`, label: model_name, model_name, provider_id: 'provider', source: 'runtime_config', state: 'ready',
+    })) }),
+    loadAttachmentCapability: async (model_id: string) => ({ model_id, revision: '1', enabled: true, supports_long_text: true,
+      max_attachments: 10, max_file_size_bytes: 1000000, max_total_size_bytes: 5000000, routes: {} }),
+    createAttachmentStagingScope: async (target_id: string) => ({ staging_scope_id: 'launcher-scope', target_id, capability: 'fixture', expires_at_unix_ms: Date.now() + 60000 }),
+    releaseAttachmentStagingScope: async () => {},
+    uploadAttachment: launcherUploadMock,
     getWorkingDirectoryPathContext: async () => ({ agentHomePathAbs: '/home', homePathAbs: '/home', defaultRootId: 'home', roots: [] }),
   }),
 }));
@@ -951,7 +964,11 @@ vi.mock('./services/desktopShellBridge', () => ({
 }));
 vi.mock('./services/localApi', () => ({
   fetchLocalApi: vi.fn(),
-  fetchLocalApiJSON: vi.fn(async () => ({ scope_id: 'a'.repeat(64) })),
+  fetchLocalApiJSON: vi.fn(async (path: string) => path.includes('/ai/models') ? {
+    current_model: 'provider/model-a', directory: { sources: [], models: ['model-a', 'model-b'].map(model_name => ({
+      id: `provider/${model_name}`, label: model_name, model_name, provider_id: 'provider', source: 'runtime_config', state: 'ready',
+    })) },
+  } : { scope_id: 'a'.repeat(64) }),
   fetchLocalApiJSONResponse: vi.fn(),
   readApiJSONResponse: vi.fn(async () => ({ data: {}, headers: new Headers(), status: 200 })),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
@@ -1415,9 +1432,15 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       await flushAsync();
       expect(document.querySelector('.flower-turn-launcher-window textarea')).toBe(editor);
       expect(editor.value).toBe('Keep my context while switching display modes');
-      expect(document.querySelector('[data-testid="flower-ask-card-close"]')).toBeTruthy();
+      expect(document.querySelector('.floe-prompt-card-close')).toBeTruthy();
     }
-    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="flower-ask-card-close"]')!);
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    const retained = editor.closest<HTMLElement>('[data-floe-prompt-card]')!;
+    document.querySelector<HTMLButtonElement>('.floe-prompt-card-close')!.click();
+    expect(retained.isConnected).toBe(true);
+    expect(retained.dataset.floatingPresence).toBe('exiting');
+    expect(retained.inert).toBe(true);
+    expect(editor.value).toBe('Keep my context while switching display modes');
     await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window')).toBeNull());
   });
 
@@ -1462,7 +1485,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-open-flower-launcher"]')!);
     await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window textarea')).toBeTruthy());
     await userEvent.fill(document.querySelector<HTMLTextAreaElement>('.flower-turn-launcher-window textarea')!, 'inspect with frozen preferences');
-    const send = () => document.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
+    const send = () => document.querySelector<HTMLButtonElement>(':is(.floe-prompt-card-submit, [data-testid="flower-turn-launcher-inline-send"])')!;
     await userEvent.click(send());
     await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-unknown')).toBeTruthy());
     const first = flowerLaunchTurnMock.mock.calls[0]?.[0];
@@ -1471,7 +1494,32 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(2));
     expect(flowerLaunchTurnMock.mock.calls[1]?.[0]).toEqual(first);
     expect(first).toMatchObject({ model_id: 'provider/model-a', reasoning_selection: { level: 'default', budget_tokens: 4096 } });
-    expect(flowerLauncherSettingsMock).toHaveBeenCalledTimes(1);
+    expect(flowerLauncherSettingsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('submits the chosen model and files through Env App and retains both on unknown admission', async () => {
+    testRealFlowerLauncher = true;
+    flowerLaunchTurnMock.mockRejectedValueOnce(Object.assign(new Error('response lost'), { admission_kind: 'unknown' }));
+    await mountShell();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-open-flower-launcher"]')!);
+    await vi.waitFor(() => expect(document.querySelector('.floe-prompt-card-selection')?.textContent).toContain('model-a'));
+    const card = document.querySelector<HTMLElement>('[data-floe-prompt-card]')!;
+    await userEvent.click(card.querySelector<HTMLButtonElement>('[role=combobox]')!);
+    const choice = () => Array.from(document.querySelectorAll<HTMLElement>('[role=option]')).find(element => element.textContent === 'model-b');
+    await vi.waitFor(() => expect(choice()).toBeTruthy()); await userEvent.click(choice()!);
+    const input = card.querySelector<HTMLInputElement>('input[type=file]')!;
+    const transfer = new DataTransfer(); transfer.items.add(new File(['attached notes'], 'notes.txt', { type: 'text/plain' }));
+    input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
+    await userEvent.fill(card.querySelector<HTMLTextAreaElement>('textarea')!, '');
+    await userEvent.click(card.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-unknown')).toBeTruthy());
+    const first = flowerLaunchTurnMock.mock.calls[0][0];
+    expect(first).toMatchObject({ prompt: '', model_id: 'provider/model-b', attachment_ids: ['uploaded-notes'] });
+    expect(launcherUploadMock.mock.calls[0][0].model_id).toBe('provider/model-b');
+    flowerLauncherPreferenceRevision = 2;
+    await userEvent.click(card.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(2));
+    expect(flowerLaunchTurnMock.mock.calls[1][0]).toEqual(first); expect(launcherUploadMock).toHaveBeenCalledOnce();
   });
 
   it.each([390, 639, 767])('opens mobile Ask Flower handoff in the full page at %i pixels', async (width) => {

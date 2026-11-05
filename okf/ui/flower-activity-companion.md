@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion geometry and presence; product adapters supply safe-area measurements and focus handoffs. Contextual Ask Flower uses its own compact product card over published presence and viewport observation. Placement creates neither another stream nor a second execution or editor owner.
+One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion geometry and presence; product adapters supply safe-area measurements and focus handoffs. Contextual Ask Flower adapts the published Floe `PromptCard`; Floe owns its complete layout, motion and viewport behavior. Placement creates neither another stream nor a second execution or editor owner.
 
 # Contract
 
@@ -34,15 +34,15 @@ A floating window's geometry controls inherit ownership only from its direct pub
 
 ## Contextual window
 ### Shared question card
-Desktop environment cards and every Env App contextual entry use one `FlowerAskCard` through the shared launcher. This is a brief question surface, not a conversation window: no `FloatingWindow`, fixed conversation height, draggable title bar, resize handles or maximize controls. The 512-pixel maximum width fits the visible viewport; height follows the question, editor, bounded reference strip and explicit errors. The single outer surface owns the input focus border. References and Send share a compact bottom row; text grows naturally with a bounded editor scroll area.
+Desktop environment cards and every Env App contextual entry use the published `PromptCard` through the shared launcher. This is a brief question surface, not a conversation window: no `FloatingWindow`, fixed conversation height, draggable title bar, resize handles or maximize controls. The 384-pixel maximum width fits the visible viewport; height follows the question, editor, bounded reference strip and explicit errors. The frameless editor and toolbar share one input surface without a divider. The opaque Floe background includes a visible ink fill step against both page and content planes; neutral elevation supports the card without a visible border in ordinary themes; accessibility contrast modes retain a boundary. References sit above a compact toolbar with a plus attachment action, model choice and Send; text grows naturally within a bounded editor scroll area. File selection, paste and drop update the same editable intent immediately. Model discovery starts after paint through the existing model read resource, without delaying focus. The model name is the primary toolbar label, never a reasoning-level shorthand. The question replaces redundant placeholder copy. Opening focuses the real insertion caret immediately; completing model/file selection returns to the existing insertion point. The selected model applies only to this request. The shared attachment controller validates and stages the captured files once; unknown admission retains the exact prepared model, attachment IDs and request identity for explicit retry.
 
 ### Host boundary and motion
-The host measures the visible Shell header's client-space bottom edge and the Desktop titlebar safe area. The product card places beside the supplied point, flips upward when necessary and clamps to published Floe `observeViewport` bounds, including soft keyboard occlusion and CSS zoom. Without a point it rests in the upper central content area. Position uses layout size, never animated bounds.
+The host measures the visible Shell header's client-space bottom edge and the Desktop titlebar safe area. Published `PromptCard` places beside the supplied point, flips upward when necessary and clamps to published Floe `observeViewport` bounds, including soft keyboard occlusion and CSS zoom. Without a point it rests in the upper central content area. Position uses layout size, never animated bounds.
 
-Published `createFloatingPresence` owns mounting, exit completion and reversal. The card supplies its own gentle origin-based scale/translation and short flower-mark rotation. Reduced motion removes both. Exiting content retains the last intent, anchor and draft, becomes inert immediately and unmounts after the transition. Reversing an unfinished close for the same intent preserves editor and request identity.
+Published `PromptCard` uses shared `createFloatingPresence` for mounting, exit completion and reversal. Its restrained origin-based scale and directional translation use the Floe motion tokens; reduced motion settles immediately. The product supplies no alternate motion recipe. Exiting content retains the last intent, anchor and draft, becomes inert immediately and unmounts after the transition. Reversing an unfinished close for the same intent preserves editor and request identity.
 
 ### Interaction continuity
-Opening focuses the editor unless the caller disables autofocus. Escape and Close restore the initiating control; outside pointer dismissal leaves destination interaction intact. IME composition and nested previews retain their Escape ownership. Related context previews and their direct geometry controls count as inside; unrelated windows remain outside. Sending blocks duplicate submission and dismissal. Existing exact-request retry, unknown admission, reference removal, localization and panel-placement footer contracts remain with the shared launcher.
+Opening focuses the editor unless the caller disables autofocus. Escape and Close restore the initiating control; outside pointer dismissal leaves destination interaction intact. IME composition and nested previews retain their Escape ownership. Related context previews and their direct geometry controls count as inside; unrelated windows remain outside. Sending paints a local busy acknowledgement before invoking host admission, and blocks duplicate submission and dismissal. References are inert during this handoff. Existing exact-request retry, unknown admission, reference removal, localization and panel-placement footer contracts remain with the shared launcher.
 
 # Boundaries
 
@@ -50,7 +50,7 @@ The Workbench Flower widget retains its existing window, canvas, and focus contr
 
 The companion never auto-expands for completion, failure, approval, or user input. Showing an available, unfiltered Workbench Flower widget moves the retained product tree into that widget without starting a second list load or live stream, and later canvas deselection does not move it away.
 
-Redeven owns Ask Flower identity, content, compact placement and motion styling; published Floe owns visible viewport facts and presence lifecycle. The card adds no window management or durable state. These constraints apply to the contextual launcher, not the main Flower surface or other floating windows.
+Redeven owns Ask Flower identity, localized content, reference actions and request admission. Published Floe owns the complete reusable question card, focus, visible viewport geometry and presence. The adapter explicitly selects viewport portal scope so related Activity and Workbench previews share one interaction; constrained scrolling uses the host body ownership attributes. The card adds no window management or durable state. These constraints apply to the contextual launcher, not the main Flower surface or other floating windows.
 
 # Evidence
 
@@ -60,6 +60,6 @@ Redeven owns Ask Flower identity, content, compact placement and motion styling;
 - `redeven:desktop/src/shared/askFlowerWindowViewport.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Source.
 
-- `redeven:internal/flower_ui/src/FlowerAskCard.tsx` - Source.
+- `redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx` - Browser continuity and viewport acceptance.
 - `redeven:desktop/scripts/check-flower-ask-card.mjs` - Real Desktop entry acceptance across locales, themes and widths.
