@@ -1,4 +1,4 @@
-import { Button, StableText, Switch } from '@floegence/floe-webapp-core/ui';
+import { Button, LinearProgress, StableText, Switch } from '@floegence/floe-webapp-core/ui';
 import { Refresh, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
 import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
 import { For, Match, Show, Switch as MatchSwitch, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
@@ -335,18 +335,48 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const preparationSteps: EnvAppTranslationKey[] = ['remoteDesktop.deployStepCheck', 'remoteDesktop.deployStepComponents', 'remoteDesktop.deployStepService', 'remoteDesktop.deployStepVerify'];
   const preparationStep = () => {
     switch (deploymentProgress()?.stage) {
-      case 'checking': return 0;
-      case 'transferring': case 'preparing_media': case 'authorized': return 1;
-      case 'recovering': case 'verifying_files': case 'installing_service': case 'starting_service': case 'stopping_service': return 2;
-      case 'verification_required': case 'complete': return 3;
+      case undefined: case 'checking': return 0;
+      case 'transferring': case 'preparing_media': return 1;
+      case 'authorized': case 'recovering': case 'verifying_files': case 'installing_service': case 'starting_service': case 'stopping_service': return 2;
+      case 'verification_required': return 3;
+      case 'complete': return 4;
       default: return -1;
     }
   };
   const mediaProgress = () => {
     const progress = deploymentProgress();
-    if (progress?.stage !== 'preparing_media' || !progress.expected_bytes || progress.received_bytes === undefined) return undefined;
+    if (progress?.stage !== 'preparing_media' || !progress.expected_bytes || progress.received_bytes === undefined || progress.media_state && !['downloading', 'receiving'].includes(progress.media_state)) return undefined;
     return { value: Math.min(progress.received_bytes, progress.expected_bytes), total: progress.expected_bytes };
   };
+  const preparationDetailKeys = ['deployCheckDetail', 'deployTransferDetail', 'deployMediaCheckDetail', 'deployDownloadDetail', 'deployMediaVerifyDetail', 'deployMediaInstallDetail', 'deployMediaValidateDetail', 'deployMediaPackDetail', 'deployMediaFinishingDetail', 'deployAuthorizeDetail', 'deployRecoverDetail', 'deployFilesDetail', 'deployInstallDetail', 'deployStartDetail', 'deployStopDetail', 'deployVerifyDetail', 'connectionContinuing'] as const;
+  const preparationDetail = (): EnvAppTranslationKey => {
+    switch (deploymentProgress()?.stage) {
+      case 'transferring': return 'remoteDesktop.deployTransferDetail';
+      case 'preparing_media':
+        switch (deploymentProgress()?.media_state) {
+          case 'available': case 'checking': return 'remoteDesktop.deployMediaCheckDetail';
+          case 'verifying': return 'remoteDesktop.deployMediaVerifyDetail';
+          case 'installing': return 'remoteDesktop.deployMediaInstallDetail';
+          case 'validating': return 'remoteDesktop.deployMediaValidateDetail';
+          case 'ready': return 'remoteDesktop.deployMediaPackDetail';
+          default: {
+            const download = mediaProgress();
+            return download && download.value === download.total ? 'remoteDesktop.deployMediaFinishingDetail' : 'remoteDesktop.deployDownloadDetail';
+          }
+        }
+      case 'authorization_required': case 'authorized': return 'remoteDesktop.deployAuthorizeDetail';
+      case 'recovering': return 'remoteDesktop.deployRecoverDetail';
+      case 'verifying_files': return 'remoteDesktop.deployFilesDetail';
+      case 'installing_service': return 'remoteDesktop.deployInstallDetail';
+      case 'starting_service': return 'remoteDesktop.deployStartDetail';
+      case 'stopping_service': return 'remoteDesktop.deployStopDetail';
+      case 'verification_required': return 'remoteDesktop.deployVerifyDetail';
+      case 'complete': return 'remoteDesktop.connectionContinuing';
+      default: return 'remoteDesktop.deployCheckDetail';
+    }
+  };
+  const preparationDetails = () => preparationDetailKeys.map(key => i18n.t(`remoteDesktop.${key}`));
+  const preparationProgressLabel = createUniqueId();
   const deploymentStageCopy = (): EnvAppTranslationKey => {
     switch (deploymentProgress()?.stage) {
       case 'checking': return 'remoteDesktop.deployChecking';
@@ -509,16 +539,18 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
               <Show when={operation() === 'ensure' && !cancelingDeployment() && preparationStep() >= 0} fallback={<div class="remote-desktop-deployment-progress" role="status"><p>{i18n.t(deploymentStageCopy())}</p><progress aria-label={i18n.t(deploymentStageCopy())} /></div>}>
                 <ol class="remote-desktop-preparation-steps" aria-label={i18n.t('remoteDesktop.installStep')}>
                   <For each={preparationSteps}>{(key, index) => <li data-state={index() < preparationStep() ? 'complete' : index() === preparationStep() ? 'active' : 'upcoming'} aria-current={index() === preparationStep() ? 'step' : undefined}>
-                    <span class="remote-desktop-preparation-marker" aria-hidden="true"><Show when={index() < preparationStep()} fallback={<Show when={index() === preparationStep()}><span class="remote-desktop-preparation-pulse" /></Show>}><Check size={13} /></Show></span>
-                    <div class="remote-desktop-preparation-detail"><span>{i18n.t(key)}</span>
-                      <Show when={index() === 1 && preparationStep() === 1 && mediaProgress()}>{progress => <div class="remote-desktop-deployment-progress">
-                        <div class="remote-desktop-progress-values"><span>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().value / 1000000)} / {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().total / 1000000)}</span><span>{new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(progress().value / progress().total)}</span></div>
-                        <progress aria-label={i18n.t(key)} max={progress().total} value={progress().value} />
-                      </div>}</Show>
+                    <span class="remote-desktop-preparation-marker" aria-hidden="true"><Show when={index() < preparationStep()} fallback={index() + 1}><Check size={12} /></Show></span>
+                    <div class="remote-desktop-preparation-detail"><span class="remote-desktop-preparation-label" data-floe-progress-shimmer={index() === preparationStep() ? 'text' : undefined}>{i18n.t(key)}</span>
                     </div>
                   </li>}</For>
                 </ol>
-                <span class="sr-only" role="status">{i18n.t(preparationSteps[preparationStep()])}</span>
+                <div class="remote-desktop-preparation-current" data-floe-surface="inset">
+                  <p id={preparationProgressLabel} role="status" aria-atomic="true"><StableText reserve={preparationDetails()}>{i18n.t(preparationDetail())}</StableText></p>
+                  <div class="remote-desktop-preparation-progress" role="progressbar" aria-labelledby={preparationProgressLabel} aria-valuemin={0} aria-valuemax={mediaProgress()?.total ?? 100} aria-valuenow={mediaProgress()?.value}>
+                    <LinearProgress aria-hidden="true" value={mediaProgress()?.value} max={mediaProgress()?.total ?? 100} indeterminate={!mediaProgress()} size="sm" />
+                  </div>
+                  <div class="remote-desktop-preparation-metrics"><Show when={mediaProgress()}>{progress => <div class="remote-desktop-progress-values"><span>{i18n.t('remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().value / 1000000)} / {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().total / 1000000)}</span><span>{new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(progress().value / progress().total)}</span></div>}</Show></div>
+                </div>
               </Show>
             </div>
           </Show>

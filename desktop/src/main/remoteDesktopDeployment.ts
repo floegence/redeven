@@ -164,7 +164,7 @@ export class RemoteDesktopDeployment {
                                 mediaSHA256 = value.media_sha256;
                             }
                             else {
-                                const event = parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', received_bytes: value.received_bytes, expected_bytes: value.expected_bytes });
+                                const event = parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', media_state: value.state, received_bytes: value.received_bytes, expected_bytes: value.expected_bytes });
                                 if (!event)
                                     throw new Error('Invalid media progress');
                                 report(event);

@@ -397,8 +397,14 @@ it('shows observed preparation stages and only reports measured component progre
   expect(steps().map(item => item.dataset.state)).toEqual(['complete', 'active', 'upcoming', 'upcoming']);
   expect(host.querySelector('progress')).toBeNull();
   report({ operation_id: operationId, stage: 'preparing_media', received_bytes: 2500000, expected_bytes: 10000000 });
-  expect(host.querySelector<HTMLProgressElement>('progress')?.value).toBe(2500000);
+  expect(host.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')).toBe('2500000');
   expect(host.querySelector('.remote-desktop-progress-values')?.textContent).toContain('25%');
+  report({ operation_id: operationId, stage: 'preparing_media', media_state: 'verifying', received_bytes: 10000000, expected_bytes: 10000000 });
+  expect(host.querySelector<HTMLElement>('.remote-desktop-preparation-current p span > span:not([aria-hidden])')?.textContent).toBe('Checking the downloaded components for integrity.');
+  expect(host.querySelector('[role=progressbar]')?.hasAttribute('aria-valuenow')).toBe(false);
+  expect(host.querySelector('.remote-desktop-progress-values')).toBeNull();
+  report({ operation_id: operationId, stage: 'preparing_media', media_state: 'ready', received_bytes: 10000000, expected_bytes: 10000000 });
+  expect(host.querySelector<HTMLElement>('.remote-desktop-preparation-current p span > span:not([aria-hidden])')?.textContent).toBe('Packaging the verified components for the desktop service.');
   report({ operation_id: operationId, stage: 'installing_service' });
   expect(steps().map(item => item.dataset.state)).toEqual(['complete', 'complete', 'active', 'upcoming']);
   report({ operation_id: operationId, stage: 'verification_required' });

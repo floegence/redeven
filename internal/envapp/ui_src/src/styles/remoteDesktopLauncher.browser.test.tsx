@@ -2,7 +2,7 @@ import '../index.css';
 import { render } from 'solid-js/web';
 import { ErrorBoundary } from 'solid-js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import axe from 'axe-core';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { RemoteDesktopLauncher, RemoteDesktopPanel } from '../ui/pages/RemoteDesktopPanel';
@@ -123,7 +123,8 @@ it('keeps login-screen deployment inside the same connection dialog flow', async
   await expect.poll(() => state.create.mock.calls.length).toBe(1);
 });
 
-it.each([320, 1000])('shows measured preparation progress without overflow at %s px', async width => {
+it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, width }))))('shows concrete preparation tasks and motion in $locale at $width px', async ({ locale, width }) => {
+  state.locale = locale;
   state.ssh = true;
   state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
   let finish!: (value: object) => void;
@@ -133,12 +134,48 @@ it.each([320, 1000])('shows measured preparation progress without overflow at %s
   await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
   await expect.poll(() => state.deployment.mock.calls.some(([request]) => request.action === 'manage')).toBe(true);
   const request = state.deployment.mock.calls.find(([value]) => value.action === 'manage')![0];
-  state.progress.mock.calls[0][0]({ operation_id: request.operationId, stage: 'preparing_media', received_bytes: 2500000, expected_bytes: 10000000 });
+  const report = (event: object) => state.progress.mock.calls[0][0]({ operation_id: request.operationId, ...event });
+  report({ stage: 'preparing_media', media_state: 'downloading', received_bytes: 2500000, expected_bytes: 10000000 });
   await expect.poll(() => dialog.querySelector('.remote-desktop-preparation-steps')).toBeTruthy();
   expect(dialog.textContent).toContain('25%');
+  const progress = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-progress')!;
+  const marker = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-marker')!;
+  const label = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-label')!;
+  expect(getComputedStyle(marker, '::before').animationName).toBe('remote-desktop-flow-spin');
+  expect(getComputedStyle(label).animationName).toBe('floe-progress-shimmer');
+  expect(progress.getAttribute('aria-valuenow')).toBe('2500000');
+  expect(dialog.textContent).toContain(copy.t('remoteDesktop.deployDownloadDetail'));
+  const cancel = dialog.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:first-child')!;
+  cancel.focus();
+  await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.effect?.getTiming().iterations !== Infinity).length).toBe(0);
+  const before = cancel.getBoundingClientRect();
+  if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-preparation-download-${width}.png` });
+  report({ stage: 'preparing_media', media_state: 'verifying', received_bytes: 10000000, expected_bytes: 10000000 });
+  const currentDetail = () => dialog.querySelector<HTMLElement>('.remote-desktop-preparation-current p span > span:not([aria-hidden])')?.textContent;
+  expect(currentDetail()).toBe(copy.t('remoteDesktop.deployMediaVerifyDetail'));
+  expect(progress.hasAttribute('aria-valuenow')).toBe(false);
+  expect(dialog.querySelector('.remote-desktop-progress-values')).toBeNull();
+  expect(dialog.querySelector('.remote-desktop-preparation-current .animate-indeterminate')).not.toBeNull();
+  expect(document.activeElement).toBe(cancel);
+  await expect.poll(() => Math.abs(cancel.getBoundingClientRect().y - before.y)).toBeLessThan(1);
+  report({ stage: 'preparing_media', media_state: 'ready', received_bytes: 10000000, expected_bytes: 10000000 });
+  expect(currentDetail()).toBe(copy.t('remoteDesktop.deployMediaPackDetail'));
+  if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-preparation-pack-${width}.png` });
+  report({ stage: 'starting_service' });
+  expect(dialog.textContent).toContain(copy.t('remoteDesktop.deployStartDetail'));
+  expect([...dialog.querySelectorAll<HTMLElement>('.remote-desktop-preparation-steps li')].map(row => row.dataset.state)).toEqual(['complete', 'complete', 'active', 'upcoming']);
+  expect(document.activeElement).toBe(cancel);
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   expect((await axe.run(dialog, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
-  if (width === 320) await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-preparation-progress.png' });
+  const mediaCommands = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference'; forcedColors: 'active' | 'none' }) => Promise<void> };
+  for (const media of [{ reducedMotion: 'reduce', forcedColors: 'none' }, { reducedMotion: 'no-preference', forcedColors: 'active' }] as const) {
+    await mediaCommands.emulateMediaPreferences(media);
+    expect(getComputedStyle(dialog.querySelector('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-marker')!, '::before').animationName).toBe('none');
+    const activeLabel = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-label')!;
+    expect(getComputedStyle(activeLabel).animationName).toBe('none');
+    expect(getComputedStyle(dialog.querySelector('.animate-indeterminate')!).animationName).toBe('none');
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
+  }
   finish({ ok: false, code: 'canceled' });
 });
 

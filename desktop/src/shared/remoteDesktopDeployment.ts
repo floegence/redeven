@@ -2,6 +2,8 @@ export const REMOTE_DESKTOP_DEPLOYMENT_CHANNEL = 'redeven-desktop:remote-desktop
 export const REMOTE_DESKTOP_DEPLOYMENT_PROGRESS = 'redeven-desktop:remote-desktop-deployment-progress';
 export type DesktopDeploymentOperation = 'ensure' | 'stop' | 'uninstall';
 export type DesktopAdministratorMethod = 'sudo' | 'root';
+const mediaStates = ['available', 'checking', 'downloading', 'receiving', 'verifying', 'installing', 'validating', 'ready', 'failed', 'cancelled', 'interrupted'] as const;
+export type DesktopDeploymentMediaState = typeof mediaStates[number];
 export type DesktopDeploymentRequest = {
     action: 'capabilities';
 } | {
@@ -23,6 +25,7 @@ export type DesktopDeploymentRequest = {
 export type DesktopDeploymentProgress = Readonly<{
     operation_id: string;
     stage: 'checking' | 'preparing_media' | 'transferring' | 'authorization_required' | 'authorized' | 'confirmation_required' | 'verification_required' | 'recovering' | 'verifying_files' | 'installing_service' | 'starting_service' | 'stopping_service' | 'rolling_back' | 'rolled_back' | 'complete' | 'failed';
+    media_state?: DesktopDeploymentMediaState;
     challenge_id?: string;
     policy_digest?: string;
     service_generation?: string;
@@ -77,6 +80,8 @@ export function parseDesktopDeploymentProgress(value: unknown): DesktopDeploymen
         return;
     if (event.rollback !== undefined && !['complete', 'failed'].includes(event.rollback))
         return;
+    if (event.media_state !== undefined && (event.stage !== 'preparing_media' || !mediaStates.includes(event.media_state)))
+        return;
     for (const key of ['received_bytes', 'expected_bytes', 'active_connections'] as const) {
         if (event[key] !== undefined && (!Number.isSafeInteger(event[key]) || Number(event[key]) < 0 || Number(event[key]) > 2 ** 32))
             return;
@@ -93,6 +98,7 @@ export function parseDesktopDeploymentProgress(value: unknown): DesktopDeploymen
         if (identity !== undefined && (typeof identity !== 'string' || identity.length > 256 || /[\0\r\n]/u.test(identity)))
             return;
     return { operation_id: event.operation_id, stage: event.stage,
+        ...(event.media_state ? { media_state: event.media_state } : {}),
         ...(event.administrator_method ? { administrator_method: event.administrator_method } : {}), ...(event.host ? { host: event.host } : {}), ...(event.ssh_user ? { ssh_user: event.ssh_user } : {}),
         ...(event.challenge_id ? { challenge_id: event.challenge_id } : {}), ...(event.policy_digest ? { policy_digest: event.policy_digest } : {}),
         ...(event.service_generation ? { service_generation: event.service_generation } : {}), ...(event.active_connections !== undefined ? { active_connections: event.active_connections } : {}),

@@ -43,7 +43,8 @@ function fixture(mode: Mode = 'nopasswd') {
             if (command.includes('desktop-service-media')) {
                 options.signal?.addEventListener('abort', () => finish(done(1)), { once: true });
                 const stdin = new Writable({ write(_data, _encoding, callback) { callback(); } });
-                queueMicrotask(() => { stdout.write(JSON.stringify({ received_bytes: 5, expected_bytes: 10 }) + '\n'); if (mode !== 'prepare_cancel') {
+                queueMicrotask(() => { stdout.write(JSON.stringify({ state: 'downloading', received_bytes: 5, expected_bytes: 10 }) + '\n'); if (mode !== 'prepare_cancel') {
+                    for (const state of ['verifying', 'installing', 'validating', 'ready']) stdout.write(JSON.stringify({ state, received_bytes: 10, expected_bytes: 10 }) + '\n');
                     stdout.write(JSON.stringify({ media_sha256: 'b'.repeat(64) }) + '\n');
                     finish(done(mode === 'prepare_failure' ? 1 : 0));
                 } });
@@ -259,6 +260,12 @@ describe('SSH desktop deployment transaction', () => {
     });
     it('rejects unsupported root authentication before sending credentials',async()=>{
         const f=fixture('root_multistage');expect(await f.run()).toMatchObject({ok:false,code:'authentication_challenge_unsupported'});expect(f.credentialBuffers).toEqual([]);
+    });
+    it('preserves observed media stages after the download reaches its byte total', async () => {
+        const f = fixture();
+        expect(await f.run()).toMatchObject({ ok: true });
+        expect(f.progress.filter(event => event.stage === 'preparing_media' && event.media_state).map(event => event.media_state)).toEqual(['downloading', 'verifying', 'installing', 'validating', 'ready']);
+        expect(parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', media_state: 'untrusted-task' })).toBeUndefined();
     });
     it('rejects changed bytes before transfer and excludes arbitrary progress data', async () => { const f = fixture(); f.kit.files.set('desktop-drm', Buffer.from('modified-worker')); expect(await f.run()).toMatchObject({ ok: false, code: 'deployment_failed' }); expect(f.commands).toHaveLength(1); expect(parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', received_bytes: -1 })).toBeUndefined(); expect(parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', received_bytes: 5, secret: 'omitted' })).toEqual({ operation_id: operationId, stage: 'preparing_media', received_bytes: 5 }); });
     it('preserves permission and asynchronous host cancellation guards', async () => {
