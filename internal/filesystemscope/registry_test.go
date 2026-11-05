@@ -137,3 +137,52 @@ func TestRegistryRejectsSymlinkEscape(t *testing.T) {
 		t.Fatalf("Resolve(symlink escape) error = %v, want %v", err, ErrPathOutsideScope)
 	}
 }
+
+func TestPrivateRootsComposeWithoutLosingTaskIsolation(t *testing.T) {
+	home := t.TempDir()
+	tasks, projects := filepath.Join(t.TempDir(), "tasks"), filepath.Join(t.TempDir(), "projects")
+	tasksParent, err := filepath.EvalSymlinks(filepath.Dir(tasks))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks = filepath.Join(tasksParent, "tasks")
+	projectsParent, err := filepath.EvalSymlinks(filepath.Dir(projects))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects = filepath.Join(projectsParent, "projects")
+	ownTask, otherTask := filepath.Join(tasks, "current"), filepath.Join(tasks, "other")
+	ownSource, otherSource := filepath.Join(projects, "current", "source"), filepath.Join(projects, "other", "source")
+	for _, p := range []string{ownTask, otherTask, ownSource, otherSource} {
+		if err := os.MkdirAll(p, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	registry, err := NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.WithPrivateRoot(tasks, ownTask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.WithPrivateRoot(projects, ownSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{ownTask, ownSource, home} {
+		if _, err := registry.Resolve(p, ResolveOptions{RequireDir: true, ForWrite: true}); err != nil {
+			t.Fatalf("authorized path %s: %v", p, err)
+		}
+	}
+	// The logical path must remain private even if its target is otherwise allowed.
+	escape := filepath.Join(otherTask, "escape")
+	if err := os.Symlink(home, escape); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{otherTask, otherSource, filepath.Dir(ownSource), tasks, projects, escape} {
+		if _, err := registry.Resolve(p, ResolveOptions{RequireDir: true}); !errors.Is(err, ErrPathOutsideScope) {
+			t.Fatalf("private path %s: %v", p, err)
+		}
+	}
+}

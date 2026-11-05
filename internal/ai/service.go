@@ -26,6 +26,7 @@ import (
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/tessiven"
@@ -50,6 +51,7 @@ const (
 type Options struct {
 	ChatGPT                *chatgpt.Client
 	PlatformHTTPTransport  func() (http.RoundTripper, error)
+	PluginCreation         *plugincreation.Service
 	Tessiven               *tessiven.Service
 	TessivenResources      *tessiven.ResourceBackend
 	Logger                 *slog.Logger
@@ -113,6 +115,7 @@ type Service struct {
 	accountTasks           map[string]accountTaskWatch
 	accountUnsubscribe     func()
 	platformHTTPTransport  func() (http.RoundTripper, error)
+	pluginCreation         *plugincreation.Service
 	tessiven               *tessiven.Service
 	tessivenResources      *tessiven.ResourceBackend
 	buildVersion           string
@@ -438,6 +441,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	svc := &Service{
 		platformHTTPTransport: opts.PlatformHTTPTransport,
 		buildVersion:          strings.TrimSpace(opts.BuildVersion),
+		pluginCreation:        opts.PluginCreation,
 		tessiven:              opts.Tessiven, tessivenResources: opts.TessivenResources,
 		activateFloret:                  floretBootstrap.activate,
 		suspendFloret:                   floretBootstrap.suspend,

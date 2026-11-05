@@ -66,9 +66,13 @@ type ResolveOptions struct {
 	ForWrite        bool
 }
 
+type privateRoot struct {
+	parent string
+	own    string
+}
+
 type Registry struct {
-	privateParent string
-	privateOwn    string
+	privateRoots  []privateRoot
 	mu            sync.RWMutex
 	revision      uint64
 	homeAbs       string
@@ -236,8 +240,10 @@ func (r *Registry) Resolve(path string, opts ResolveOptions) (ResolvedPath, erro
 	if err != nil {
 		return ResolvedPath{}, err
 	}
-	if r.privateParent != "" && (pathWithin(logicalAbs, r.privateParent) || pathWithin(realAbs, r.privateParent)) && (!pathWithin(logicalAbs, r.privateOwn) || !pathWithin(realAbs, r.privateOwn)) {
-		return ResolvedPath{}, ErrPathOutsideScope
+	for _, private := range r.privateRoots {
+		if (pathWithin(logicalAbs, private.parent) || pathWithin(realAbs, private.parent)) && (!pathWithin(logicalAbs, private.own) || !pathWithin(realAbs, private.own)) {
+			return ResolvedPath{}, ErrPathOutsideScope
+		}
 	}
 	resolved, err := r.resolveRealLocked(input, logicalAbs, realAbs)
 	if err != nil {
@@ -461,7 +467,8 @@ func resolvePathViaExistingAncestor(path string) (string, error) {
 	}
 }
 
-// WithPrivateRoot snapshots current policy and grants only this task's directory.
+// WithPrivateRoot adds one exact managed directory to a policy snapshot.
+// Existing private boundaries remain enforced, including against symlink escapes.
 func (r *Registry) WithPrivateRoot(parent, own string) (*Registry, error) {
 	if r == nil {
 		return nil, errors.New("nil filesystem scope")
@@ -479,16 +486,27 @@ func (r *Registry) WithPrivateRoot(parent, own string) (*Registry, error) {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := &Registry{privateParent: parentReal, privateOwn: ownReal, revision: r.revision, homeAbs: r.homeAbs, defaultRootID: r.defaultRootID, byID: map[string]Root{}}
+	privateRoots := append([]privateRoot(nil), r.privateRoots...)
+	for _, previous := range privateRoots {
+		if pathWithin(parentReal, previous.parent) || pathWithin(previous.parent, parentReal) {
+			if previous.parent == parentReal && previous.own == ownReal {
+				return r, nil
+			}
+			return nil, ErrPathOutsideScope
+		}
+	}
+	privateRoots = append(privateRoots, privateRoot{parentReal, ownReal})
+	out := &Registry{privateRoots: privateRoots, revision: r.revision, homeAbs: r.homeAbs, defaultRootID: r.defaultRootID, byID: map[string]Root{}}
 	for _, root := range r.roots {
 		if !pathWithin(root.PathReal, parentReal) {
 			out.roots = append(out.roots, root)
 			out.byID[root.ID] = root
 		}
 	}
+	suffix := fmt.Sprint(len(privateRoots))
 	for _, root := range []Root{
-		{ID: "flower-private", Label: "Private task files", PathAbs: parentReal, PathReal: parentReal, Kind: RootKindCustom, Hidden: true, System: true},
-		{ID: "flower-task", Label: "Current task files", PathAbs: ownReal, PathReal: ownReal, Kind: RootKindCustom, Permissions: PermissionSet{Read: true, Write: true}, Hidden: true, System: true},
+		{ID: "managed-private-" + suffix, Label: "Private managed files", PathAbs: parentReal, PathReal: parentReal, Kind: RootKindCustom, Hidden: true, System: true},
+		{ID: "managed-current-" + suffix, Label: "Current managed files", PathAbs: ownReal, PathReal: ownReal, Kind: RootKindCustom, Permissions: PermissionSet{Read: true, Write: true}, Hidden: true, System: true},
 	} {
 		out.roots = append(out.roots, root)
 		out.byID[root.ID] = root

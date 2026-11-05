@@ -2498,3 +2498,66 @@ it('records conversation downloads in the shell manager with the authorized sour
   expect(write).toHaveBeenCalledOnce(); expect(complete).toHaveBeenCalledOnce();
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/threads/thread%2Fone/task-file-content?'), expect.objectContaining({ signal: expect.any(AbortSignal) }));
 });
+
+it('reviews an associated draft before committing coordinated deletion',async()=>{
+ const draft={id:'draft-one',title:'Timer',revision:7,lifecycle:'active',workspace_id:'workspace-one',thread_id:'thread-one',created_at:1,updated_at:1};
+ fetchMock.mockImplementation(async(url:string,init?:RequestInit)=>{
+  if(url.endsWith('/threads/thread-one'))return jsonResponse(draft);
+  if(url.endsWith('/drafts/draft-one/delete')){expect(JSON.parse(String(init?.body))).toEqual({revision:7});return jsonResponse({...draft,lifecycle:'deleted'});}
+  throw new Error(`Unexpected path ${url}`);
+ });
+ const adapter=createEnvLocalFlowerSurfaceAdapter({envPublicID:'env_a',envLabel:'Demo',rpc:{ai:{}} as any});
+ const review=await adapter.prepareThreadDeletion?.('thread-one');expect(review?.description).toContain('Installed plugins are kept');
+ expect(fetchMock.mock.calls.every(([,init])=>init?.method!=='POST')).toBe(true);
+ // A failed local cache cleanup must not retry the already committed deletion.
+ await expect(review?.commit()).resolves.toBeUndefined();
+ expect(fetchMock.mock.calls.filter(([url])=>String(url).endsWith('/delete'))).toHaveLength(1);
+});
+it('falls back to ordinary thread deletion only after authoritative absence',async()=>{
+ const adapter=createEnvLocalFlowerSurfaceAdapter({envPublicID:'env_a',envLabel:'Demo',rpc:{ai:{}} as any});
+ fetchMock.mockResolvedValue(errorResponse('PLUGIN_DRAFT_NOT_FOUND',{},404));await expect(adapter.prepareThreadDeletion?.('ordinary')).resolves.toBeUndefined();
+ fetchMock.mockResolvedValue(errorResponse('UNAVAILABLE',{},503));await expect(adapter.prepareThreadDeletion?.('ordinary')).rejects.toThrow();
+});
+
+
+it('submits plugin draft turns over the authenticated environment carrier', async () => {
+  const route = '/_redeven_proxy/api/plugin-creation/drafts/draft-one/turns';
+  const carrier = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    return jsonResponse({ client_request_id: body.create?.client_request_id ?? body.client_request_id, thread_id: 'author-thread' });
+  });
+  releaseTestTransport?.();
+  releaseTestTransport = await bindTestSessionHTTP(carrier);
+  fetchMock.mockRejectedValue(new Error('Plugin authoring must not use the synthetic Local UI session'));
+  const adapter = createEnvLocalFlowerSurfaceAdapter({
+    envPublicID: 'env_local', envLabel: 'Environment', rpc: { ai: {} } as never,
+    prepareTurnRoute: async () => route,
+  });
+  for (const thread_id of [undefined, 'author-thread']) {
+    await expect(adapter.launchTurn({ client_request_id: 'author-' + (thread_id ?? 'new'),
+      prompt: 'Create a focus timer', model_id: 'default/agent', thread_id,
+    })).resolves.toMatchObject({ thread_id: 'author-thread' });
+  }
+  expect(carrier).toHaveBeenCalledTimes(2);
+  expect(carrier.mock.calls.every(([url]) => url === route)).toBe(true);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+
+it('keeps plugin input and context continuations on the authenticated carrier', async () => {
+  const carrier = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({ kind: 'accepted', consumed_waiting_prompt_id: 'question', current: { thread_id: 'author-thread', view_version: 2 } }));
+  releaseTestTransport?.();
+  releaseTestTransport = await bindTestSessionHTTP(carrier);
+  fetchMock.mockRejectedValue(new Error('Synthetic session must not replace author execution authority'));
+  const adapter = createEnvLocalFlowerSurfaceAdapter({
+    envPublicID: 'env_local', envLabel: 'Environment', rpc: { ai: {} } as never,
+    prepareTurnRoute: async () => '/_redeven_proxy/api/plugin-creation/drafts/draft-one/turns',
+  });
+  await adapter.compactThreadContext!('author-thread', { storage_generation: 'generation', client_request_id: 'compact-author', continue_goal: false });
+  await adapter.submitInput({ thread_id: 'author-thread', prompt_id: 'question', answers: { choice: { text: 'Continue' } } });
+  expect(carrier.mock.calls.map(call => String(call[0]))).toEqual([
+    '/_redeven_proxy/api/ai/threads/author-thread/context/compact',
+    '/_redeven_proxy/api/ai/threads/author-thread/input_response',
+  ]);
+  expect(fetchMock).not.toHaveBeenCalled();
+});

@@ -18,6 +18,8 @@ export function findForbiddenInitialAssetNames(assets, forbiddenNames) {
 }
 
 function isForbiddenInitialModule(moduleId) {
+  if (['PluginCreationWorkspace.tsx', 'PluginDraftLibrary.tsx'].some(page =>
+    moduleId.endsWith(`/src/ui/plugins/${page}`))) return true;
   if (moduleId.startsWith('@floegence/floebrowser/dist/viewer/')) return true;
   if (moduleId === '@floegence/floe-webapp-core/dist/pptx.js'
       || moduleId.startsWith('@aiden0z/pptx-renderer/')

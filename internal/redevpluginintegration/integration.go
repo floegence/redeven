@@ -14,6 +14,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/hostnetwork"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redevplugin/v3/pkg/connectivity"
@@ -27,6 +28,7 @@ import (
 )
 
 type Options struct {
+	PluginCreation       *plugincreation.Service
 	StateDir             string
 	AgentHomeDir         string
 	ResolveWorkspacePath workspacePathResolver
@@ -48,6 +50,7 @@ type pluginMarketService interface {
 }
 
 type Integration struct {
+	author                 *authorBackend
 	handler                http.Handler
 	webHandler             http.Handler
 	host                   *host.Host
@@ -112,8 +115,6 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 	}
 	root := stateAbs
 
-	downloadTransport := hostnetwork.NewTransport(nil)
-	closers = append(closers, func() error { downloadTransport.CloseIdleConnections(); return nil })
 	var marketSnapshot *pluginmarket.Snapshot
 	if opts.PluginMarket != nil {
 		if snapshot, ok := opts.PluginMarket.CachedSnapshot(); ok {
@@ -122,96 +123,16 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		}
 	}
 
-	observabilityStore, err := rpobservability.NewSQLiteStore(ctx, filepath.Join(root, "observability.sqlite"))
+	hostConfig, sessions, cleanup, err := buildHostAdapters(ctx, root, opts, true)
 	if err != nil {
 		return nil, err
 	}
-	closers = append(closers, observabilityStore.Close)
-	observability := newObservabilityAdapter(observabilityStore, opts.Audit, opts.Diagnostics)
-
-	secretStore, err := secrets.NewSQLiteStore(ctx, filepath.Join(root, "secrets.sqlite"))
-	if err != nil {
-		return nil, err
-	}
-	closers = append(closers, secretStore.Close)
-
-	assetStore, err := pluginpkg.NewFileAssetStore(filepath.Join(root, "assets"))
-	if err != nil {
-		return nil, err
-	}
-	assetStoreOwned := true
-	defer func() {
-		if assetStoreOwned {
-			_ = assetStore.Close()
-		}
-	}()
-	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy)
-	if err != nil {
-		return nil, err
-	}
-	ioModule, err := newIOModule(opts.AgentHomeDir, sessions.resolver.cache, opts.ResolveWorkspacePath)
-	if err != nil {
-		return nil, err
-	}
-	connectivityBroker := connectivity.NewMemoryBroker()
-	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{
-		HostHTTPTransport: func(_ connectivity.Destination, config *tls.Config) (connectivity.HTTPTransport, error) {
-			return hostnetwork.NewTransport(config), nil
-		},
-	})
-	processSupervisor, err := newProcessSupervisor(sessions, opts.ResolveProcessSecret)
-	if err != nil {
-		return nil, err
-	}
-	runtimeModule, err := newOfficialRuntimeModule(ctx, runtimeModuleDependencies{
-		Path:          opts.RuntimePath,
-		ExecutionRoot: filepath.Join(root, "runtime-exec"),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if opened == nil && runtimeModule != nil {
-			// Close only caller-owned state; the released module refuses to close
-			// a capability already transferred to a Host.
-			_, _ = runtimeModule.Close(context.Background())
-		}
-	}()
-
-	hostConfig := host.Config{
-		StateRoot: root,
-		Core: host.CoreAdapters{
-			Policy:        sessions,
-			Authorization: sessions,
-			Audit:         observability,
-			SecurityAudit: observabilityStore,
-			Diagnostics:   observability,
-			Assets:        assetStore,
-		},
-		Runtime: runtimeModule,
-		IO:      ioModule,
-		Web:     &host.WebModule{Origins: surfaceOriginAdapter{}},
-		Connectivity: &host.ConnectivityModule{
-			Broker:          connectivityBroker,
-			NetworkExecutor: networkExecutor,
-			PrivateNetwork:  newNetworkPolicyAdapter(sessions.resolver.cache),
-		},
-		Secrets:    &host.SecretsModule{Store: secretStore},
-		Process:    &host.ProcessModule{Supervisor: processSupervisor},
-		Background: &host.BackgroundModule{RunnerFactory: host.NewBackgroundWorkerRunner, Policy: newBackgroundPolicyAdapter(opts.PermissionPolicy)},
-		ExternalPackage: &host.ExternalPackageModule{
-			SourceID:  "redeven.external-package",
-			Transport: downloadTransport,
-			GitHub:    externalsource.GitHubRESTReleaseClientOptions{UserAgent: "Redeven"},
-		},
-	}
+	closers = append(closers, cleanup)
 	h, err := host.Open(ctx, hostConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	assetStoreOwned = false
 	defer func() {
 		if opened == nil {
 			_ = h.Close()
@@ -234,6 +155,16 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		marketSnapshot:   marketSnapshot,
 		marketService:    opts.PluginMarket,
 		closers:          closers,
+	}
+	if opts.PluginCreation != nil {
+		author, err := newAuthorBackend(ctx, root, opts, sessions, h, handler, webHandler)
+		if err != nil {
+			return nil, err
+		}
+		integration.author = author
+		integration.handler = author
+		integration.webHandler = author.router
+		opts.PluginCreation.SetBackend(author)
 	}
 	if integration.marketService != nil {
 		integration.startMarketRefreshController(defaultMarketRefreshPolicy())
@@ -314,6 +245,11 @@ func (i *Integration) MaintainTerminalGeneration(ctx context.Context, generation
 	if _, err := validatePluginSessionGeneration(generation); err != nil {
 		return err
 	}
+	if i.author != nil {
+		if err := i.author.closeSession(ctx, generation.Session); err != nil {
+			return err
+		}
+	}
 	result, err := i.host.CloseAuthenticatedSessionScope(ctx, host.CloseAuthenticatedSessionScopeRequest{
 		Session: generation.Session,
 	})
@@ -356,6 +292,9 @@ func (i *Integration) Close() error {
 	}
 	var out error
 	i.stopMarketRefreshController()
+	if i.author != nil {
+		out = errors.Join(out, i.author.Close())
+	}
 	if i.host != nil {
 		out = errors.Join(out, i.host.Close())
 	}
@@ -372,4 +311,124 @@ func closeAll(closers []func() error) error {
 		out = errors.Join(out, closers[index]())
 	}
 	return out
+}
+
+// buildHostAdapters supplies the same product policy for installed and isolated
+// author Hosts. The platform owns their lifecycle, stores and runtime semantics.
+func buildHostAdapters(ctx context.Context, root string, opts Options, withAssets bool) (_ host.Config, _ *sessionAdapter, _ func() error, err error) {
+	var closers []func() error
+	transferred := false
+	defer func() {
+		if !transferred {
+			_ = closeAll(closers)
+		}
+	}()
+	downloadTransport := hostnetwork.NewTransport(nil)
+	closers = append(closers, func() error { downloadTransport.CloseIdleConnections(); return nil })
+	observabilityStore, err := rpobservability.NewSQLiteStore(ctx, filepath.Join(root, "observability.sqlite"))
+	if err != nil {
+		return host.Config{}, nil, nil, err
+	}
+	closers = append(closers, observabilityStore.Close)
+	observability := newObservabilityAdapter(observabilityStore, opts.Audit, opts.Diagnostics)
+
+	secretStore, err := secrets.NewSQLiteStore(ctx, filepath.Join(root, "secrets.sqlite"))
+	if err != nil {
+		return host.Config{}, nil, nil, err
+	}
+	closers = append(closers, secretStore.Close)
+
+	var assetStore *pluginpkg.FileAssetStore
+	if withAssets {
+		assetStore, err = pluginpkg.NewFileAssetStore(filepath.Join(root, "assets"))
+		if err != nil {
+			return host.Config{}, nil, nil, err
+		}
+	}
+	assetStoreOwned := true
+	defer func() {
+		if assetStoreOwned && assetStore != nil {
+			_ = assetStore.Close()
+		}
+	}()
+	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy)
+	if err != nil {
+		return host.Config{}, nil, nil, err
+	}
+	ioModule, err := newIOModule(opts.AgentHomeDir, sessions.resolver.cache, opts.ResolveWorkspacePath)
+	if err != nil {
+		return host.Config{}, nil, nil, err
+	}
+	connectivityBroker := connectivity.NewMemoryBroker()
+	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{
+		HostHTTPTransport: func(_ connectivity.Destination, config *tls.Config) (connectivity.HTTPTransport, error) {
+			return hostnetwork.NewTransport(config), nil
+		},
+	})
+	processSupervisor, err := newProcessSupervisor(sessions, opts.ResolveProcessSecret)
+	if err != nil {
+		return host.Config{}, nil, nil, err
+	}
+	runtimeModule, err := newOfficialRuntimeModule(ctx, runtimeModuleDependencies{
+		Path:          opts.RuntimePath,
+		ExecutionRoot: filepath.Join(root, "runtime-exec"),
+	})
+	if err != nil {
+		return host.Config{}, nil, nil, err
+	}
+
+	defer func() {
+		if !transferred && runtimeModule != nil {
+			// Close only caller-owned state; the released module refuses to close
+			// a capability already transferred to a Host.
+			_, _ = runtimeModule.Close(context.Background())
+		}
+	}()
+
+	hostConfig := host.Config{
+		StateRoot: root,
+		Core: host.CoreAdapters{
+			Policy:        sessions,
+			Authorization: sessions,
+			Audit:         observability,
+			SecurityAudit: observabilityStore,
+			Diagnostics:   observability,
+		},
+		Runtime: runtimeModule,
+		IO:      ioModule,
+		Web:     &host.WebModule{Origins: surfaceOriginAdapter{}},
+		Connectivity: &host.ConnectivityModule{
+			Broker:          connectivityBroker,
+			NetworkExecutor: networkExecutor,
+			PrivateNetwork:  newNetworkPolicyAdapter(sessions.resolver.cache),
+		},
+		Secrets:    &host.SecretsModule{Store: secretStore},
+		Process:    &host.ProcessModule{Supervisor: processSupervisor},
+		Background: &host.BackgroundModule{RunnerFactory: host.NewBackgroundWorkerRunner, Policy: newBackgroundPolicyAdapter(opts.PermissionPolicy)},
+		ExternalPackage: &host.ExternalPackageModule{
+			SourceID:  "redeven.external-package",
+			Transport: downloadTransport,
+			GitHub:    externalsource.GitHubRESTReleaseClientOptions{UserAgent: "Redeven"},
+		},
+	}
+	if assetStore != nil {
+		hostConfig.Core.Assets = assetStore
+	}
+	if !withAssets {
+		hostConfig.StateRoot = ""
+	}
+	closers = append(closers, func() error {
+		var failure error
+		if assetStore != nil {
+			failure = errors.Join(failure, assetStore.Close())
+		}
+		if runtimeModule != nil {
+			_, e := runtimeModule.Close(context.Background())
+			failure = errors.Join(failure, e)
+		}
+		return failure
+	})
+	assetStoreOwned = false
+	transferred = true
+	return hostConfig, sessions, func() error { return closeAll(closers) }, nil
 }

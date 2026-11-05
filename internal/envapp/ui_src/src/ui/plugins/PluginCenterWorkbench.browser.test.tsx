@@ -107,7 +107,7 @@ it.each([{ width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 1
     const master = panel.querySelector<HTMLElement>('[data-plugin-center-master]')!;
     expect(document.activeElement).toBe(details.querySelector('[data-plugin-center-detail-heading]'));
     if (panel.clientWidth >= 1100) {
-      expect(details.clientWidth).toBe(399);
+      expect(details.getBoundingClientRect().width).toBe(344);
       expect(master.getBoundingClientRect().right).toBe(details.getBoundingClientRect().left);
       const cardActions = master.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
       const cardPrimary = master.querySelector<HTMLElement>('[data-plugin-center-card-primary]')!;
@@ -157,7 +157,7 @@ it('retains search, filters, selection and scroll while excluding background inp
   const search = document.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
   await page.elementLocator(search).fill('Weather');
   await page.elementLocator(document.querySelector('[data-plugin-center-filter="source"]')!).click();
-  await page.getByRole('menuitem', { name: 'External', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Community', exact: true }).click();
   const list = document.querySelector<HTMLElement>('[data-plugin-center-list]')!;
   const scroll = await browserCommands.wheelScrollRegion({ regionSelector: '[data-plugin-center-list]', deltaY: 550 });
   expect(scroll.after).toBeGreaterThan(scroll.before);
@@ -171,7 +171,7 @@ it('retains search, filters, selection and scroll while excluding background inp
   await fixture.enter();
   expect(document.querySelector('[data-plugin-center-search]')).toBe(search);
   expect(search.value).toBe('Weather');
-  expect(document.querySelector('[data-plugin-center-filter="source"]')?.textContent).toContain('External');
+  expect(document.querySelector('[data-plugin-center-filter="source"]')?.textContent).toContain('Community');
   expect(list.scrollTop).toBe(savedScroll);
   await page.elementLocator(list.querySelectorAll('[data-plugin-center-item]')[6]).click();
   const selectedKey = document.querySelector('[data-plugin-center-details]')!.getAttribute('data-plugin-center-details');

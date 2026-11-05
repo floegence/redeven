@@ -88,8 +88,6 @@ import type {
   FlowerTurnLauncherIntent,
   FlowerTurnLauncherSubmitInput,
   FlowerTurnLaunchInput,
-  FlowerEmbeddedConversation,
-  FlowerConversationParts,
 } from '../../../../flower_ui/src';
 import { stageFlowerTurnLauncherAttachments } from '../../../../flower_ui/src/stageFlowerTurnLauncherAttachments';
 import { prepareFlowerNewConversationInput } from '../../../../flower_ui/src/conversationPreferences';
@@ -140,7 +138,9 @@ import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
 import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
 import { PluginCenterDrawer } from './plugins/PluginCenterDrawer';
-import { PluginCreationWorkspace, type PluginCreationMode } from './plugins/PluginCreationWorkspace';
+import type { PluginCreationMode } from './plugins/PluginCreationWorkspace';
+import { pluginDraftForThread } from './plugins/pluginCreationApi';
+import { LocalApiError } from './services/localApi';
 import type { PluginSurfaceResolution } from './plugins/PluginSurfaceContainer';
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
@@ -324,6 +324,8 @@ const PLUGIN_ACTIVITY_COMPONENT_PREFIX = 'redeven.plugin.activity:';
 function pluginActivityComponentID(inventoryKey: string): string {
   return `${PLUGIN_ACTIVITY_COMPONENT_PREFIX}${encodeURIComponent(inventoryKey)}`;
 }
+const PluginCreationWorkspace = lazy(() => import('./plugins/PluginCreationWorkspace').then(module => ({ default: module.PluginCreationWorkspace })));
+const PluginDraftLibrary = lazy(() => import('./plugins/PluginDraftLibrary').then(module => ({ default: module.PluginDraftLibrary })));
 const EnvTessivenPage = lazy(() => import('./pages/EnvTessivenPage'));
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
 const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
@@ -1935,55 +1937,76 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
   const workbenchPluginCenterBlocking = () => workbenchPluginCenterOpen() || workbenchPluginCenterPresent();
   const [workbenchPluginCenterVisited, setWorkbenchPluginCenterVisited] = createSignal(false);
-  const [pluginCreationOpen, setPluginCreationOpen] = createSignal(false);
-  const [pluginCreationMode, setPluginCreationMode] = createSignal<PluginCreationMode>('chat');
-  const [pluginCreationProjectID, setPluginCreationProjectID] = createSignal('');
-  const [pluginCreationThreadID, setPluginCreationThreadID] = createSignal<string>();
-  const openPluginCreation = (mode: PluginCreationMode = 'chat', threadID?: string) => {
-    setPluginCreationMode(mode);
-    setPluginCreationProjectID(previous => previous || `plugin-creation-${Date.now().toString(36)}`);
-    setPluginCreationThreadID(threadID);
-    setPluginCreationOpen(true);
-    setWorkbenchPluginCenterOpen(false);
-    updatePluginPanel({ open: false });
+  const initialPluginDraft = new URL(window.location.href).searchParams.get('plugin_draft');
+  const [pluginCreationOpen, setPluginCreationOpen] = createSignal(Boolean(initialPluginDraft));
+  const [pluginCreationProjectID, setPluginCreationProjectID] = createSignal(initialPluginDraft || 'new');
+  const [pluginCreationReference, setPluginCreationReference] = createSignal<string>();
+  let pluginCreationURL = window.location.href;
+  let pluginCreationNavigate: ((commit: () => unknown) => Promise<boolean>) | undefined;
+  let pluginHistoryPending = false;
+  let pluginHistoryTarget = { url: pluginCreationURL, state: window.history.state };
+  const navigatePluginCreation = (id: string | undefined, replace = false) => {
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set('plugin_draft', id); else url.searchParams.delete('plugin_draft');
+    window.history[replace ? 'replaceState' : 'pushState'](window.history.state, '', url);
+    pluginCreationURL = url.href;
+    if (!replace) setPluginCreationProjectID(id || 'new');
+    setPluginCreationOpen(Boolean(id));
   };
-  const deletePluginCreation = () => {
-    // The workspace owns the confirmation; clear the host mapping after the
-    // user confirms so a future /plugin starts with a fresh project/thread.
-    setPluginCreationOpen(false);
-    setPluginCreationProjectID('');
-    setPluginCreationThreadID(undefined);
+  const syncPluginCreationNavigation = () => {
+    pluginHistoryTarget = { url: window.location.href, state: window.history.state };
+    if (pluginHistoryPending) return;
+    const commit = () => {
+      const { url, state } = pluginHistoryTarget;
+      const id = new URL(url).searchParams.get('plugin_draft');
+      window.history.replaceState(state, '', url);
+      pluginCreationURL = url;
+      setPluginCreationProjectID(id || 'new');
+      setPluginCreationOpen(Boolean(id));
+    };
+    if (!pluginCreationOpen() || !pluginCreationNavigate
+      || new URL(pluginHistoryTarget.url).searchParams.get('plugin_draft') === new URL(pluginCreationURL).searchParams.get('plugin_draft')) {
+      commit();
+      return;
+    }
+    pluginHistoryPending = true;
+    void pluginCreationNavigate(commit).then(committed => {
+      if (!committed) window.history.pushState(window.history.state, '', pluginCreationURL);
+    }).finally(() => { pluginHistoryPending = false; });
   };
-  const pluginCreationConversation = (): FlowerEmbeddedConversation => ({
-    get scope() { return `plugin-creation:${pluginCreationProjectID()}`; },
-    get threadID() { return pluginCreationThreadID(); },
-    placeholder: i18n.t('uiCopy.plugin.flowerCreationPlaceholder'),
-    onAccepted: (receipt) => setPluginCreationThreadID(receipt.thread_id),
-    render: (parts: FlowerConversationParts) => (
-      <div class="plugin-creation-flower-surface" data-plugin-creation-flower>
-        <div class="plugin-creation-flower-conversation">{parts.conversation}</div>
-        <div class="plugin-creation-flower-composer">{parts.composer}</div>
-      </div>
-    ),
-  });
-  const renderPluginCreation = () => <PluginCreationWorkspace
-    open={pluginCreationOpen()}
-    mode={pluginCreationMode()}
-    projectID={pluginCreationProjectID()}
-    threadID={pluginCreationThreadID()}
-    onOpenChange={setPluginCreationOpen}
-    onModeChange={setPluginCreationMode}
-    onDeleteProject={deletePluginCreation}
-    renderFlower={() => <EnvAIPage
-      draftCoordinator={flowerDraftCoordinator}
-      embeddedConversation={pluginCreationConversation()}
-      presentation="full"
-      engaged={pluginCreationOpen()}
-      transcriptVisible={pluginCreationOpen()}
-      focusRequestScope="workbench"
-      onOpenPluginCreation={({ threadID }) => openPluginCreation('chat', threadID)}
-    />}
-  />;
+  window.addEventListener('popstate', syncPluginCreationNavigation);
+  onCleanup(() => window.removeEventListener('popstate', syncPluginCreationNavigation));
+  const openPluginDraft = (id: string) => {
+    navigatePluginCreation(id); setWorkbenchPluginCenterOpen(false); updatePluginPanel({ open: false });
+  };
+  const openPluginCreation = (_mode: PluginCreationMode = 'chat', threadID?: string) => {
+    setPluginCreationReference(undefined);
+    if (!threadID) { openPluginDraft('new'); return; }
+    void pluginDraftForThread(threadID).then(draft => openPluginDraft(draft.id)).catch(error => {
+      if (error instanceof LocalApiError && error.status === 404) { setPluginCreationReference(threadID); openPluginDraft('new'); }
+      else notify.error(i18n.t('uiCopy.plugin.creationTitle'), String(error));
+    });
+  };
+  const backFromPluginCreation = () => { navigatePluginCreation(undefined); void openPluginCenter(); };
+  const renderPluginCreation = () => <Show when={pluginCreationProjectID()} keyed>{id => <Show when={id !== 'library'} fallback={<PluginDraftLibrary onBack={backFromPluginCreation} onOpen={openPluginDraft} />}>
+    <PluginCreationWorkspace canManage={canAdmin()} draftCoordinator={flowerDraftCoordinator} draftID={id} visible={pluginCreationOpen()} centerEntry={localRuntime()?.web_entry === 'center-v1'} referenceThreadID={pluginCreationReference()}
+      onBack={backFromPluginCreation} onSaved={saved => navigatePluginCreation(saved, true)}
+      onNavigationReady={navigate => { pluginCreationNavigate = navigate; }}
+      onInstalled={async () => {if(!await refetchPluginInventory())throw new Error(i18n.t('uiCopy.plugin.creation.inventoryFailed'));}}
+      onOpenInstalled={async instanceID => {
+        const projection = await refetchPluginInventory();
+        if (!projection) throw new Error(i18n.t('uiCopy.plugin.creation.inventoryFailed'));
+        const item = projection.items.find(item => item.pluginInstanceID === instanceID);
+        if (!item) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+        if (item.defaultLaunchTarget) await openPluginSurface(item.defaultLaunchTarget);
+        else await openPluginCenter(item.inventoryKey);
+        navigatePluginCreation(undefined);
+      }}
+      renderFlower={options => <EnvAIPage draftCoordinator={flowerDraftCoordinator} embeddedConversation={options.embeddedConversation}
+        prepareTurnRoute={options.prepareTurnRoute} presentation="full" engaged={pluginCreationOpen()} transcriptVisible={pluginCreationOpen()}
+        focusRequestScope="workbench" onOpenPluginCreation={({ threadID }) => openPluginCreation('chat', threadID)} />}
+    />
+  </Show>}</Show>;
   const [pluginWidgetCounts, setPluginWidgetCounts] = createSignal<Record<string, number>>({});
   const refreshPluginWidgetCounts = async () => {
     const { getWorkbenchLayoutSnapshot } = await import('./services/workbenchLayoutApi');
@@ -4013,6 +4036,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           onRefreshInstalled={refetchPluginInventory}
           onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
           onCreatePlugin={openPluginCreation}
+          onOpenDrafts={() => openPluginDraft('library')}
           onClose={closePluginCenter}
         />
   );
@@ -5088,9 +5112,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
               draftCoordinator={flowerDraftCoordinator}
               captureNewConversationContext={captureNewConversationContext}
               presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
-              engaged={flowerSurfaceEngaged()}
-              transcriptVisible={flowerSurfaceEngaged()}
-              companionPresenceOwner={!accessGateVisible()}
+              engaged={flowerSurfaceEngaged() && !pluginCreationOpen()}
+              transcriptVisible={flowerSurfaceEngaged() && !pluginCreationOpen()}
+              companionPresenceOwner={!accessGateVisible() && !pluginCreationOpen()}
               companionOpen={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' || activityFlowerCompanionDetailVisible()}
               companionRegionID="redeven-activity-flower-companion"
               companionSummary={{
@@ -5386,8 +5410,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const renderMainShell = () => (
     <>
-      <Show when={pluginCreationOpen()} fallback={(
-      <>
+      <div class="h-full min-h-0" hidden={pluginCreationOpen()} inert={pluginCreationOpen()} data-plugin-creation-retained-shell>
       <AppViewport>
         <div
           class="flex h-full min-h-0 flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
@@ -5476,11 +5499,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       </For>
       {renderNotesOverlay()}
       <PluginConfirmationDialog queue={pluginConfirmationQueue} />
-      </>
-      )}>
+      </div>
+      <Show when={pluginCreationOpen()}>
         <AppViewport>
           <div class="relative h-full min-h-0 overflow-hidden" data-redeven-plugin-creation-page>
-            {renderPluginCreation()}
+            <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}><Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}><Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense></Show></DisplayModePageShell>
           </div>
         </AppViewport>
       </Show>

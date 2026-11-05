@@ -1218,7 +1218,7 @@ describe('plugin management browser geometry and interaction', () => {
       const masterRect = master.getBoundingClientRect();
       expect(Math.abs(masterRect.top - detailsRect.top)).toBeLessThanOrEqual(1);
       expect(Math.abs(detailsRect.left - masterRect.right)).toBeLessThanOrEqual(1);
-      expect(detailsRect.width).toBe(400);
+      expect(detailsRect.width).toBe(344);
       const visibleCard = master.querySelector('[data-plugin-center-item]')!;
       await page.elementLocator(visibleCard).click();
     } else {
@@ -1377,8 +1377,9 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('[data-plugin-directory-card]')!;
-    expect(getComputedStyle(card).minHeight).toBe('176px');
-    expect(card.getBoundingClientRect().height).toBeGreaterThanOrEqual(176);
+    expect(getComputedStyle(card).minHeight).toBe('144px');
+    expect(card.getBoundingClientRect().height).toBeGreaterThanOrEqual(144);
+    expect(card.getBoundingClientRect().height).toBeLessThan(176);
     host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:metrics"]')!.click();
     await settle();
 

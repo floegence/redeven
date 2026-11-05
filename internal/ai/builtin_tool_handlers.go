@@ -757,6 +757,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 	}
 	defs = append(defs, builtInTessivenToolDefinitions()...)
+	defs = append(defs, builtInPluginAuthorToolDefinitions()...)
 	defs = append(defs, builtInThreadQueryToolDefinitions()...)
 	defs = append(defs, builtInParentEventToolDefinitions()...)
 	defs = append(defs, builtInComputerToolDefinitions()...)
@@ -811,6 +812,9 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run, webBindings ...map[
 		return fmt.Errorf("nil tool registry")
 	}
 	for _, def := range builtInToolDefinitions() {
+		if strings.HasPrefix(def.Name, "plugin_author.") && !r.hasPluginDraft() {
+			continue
+		}
 		if def.Name == "report_to_parent" && (r == nil || r.subagentDepth == 0) {
 			continue
 		}

@@ -614,6 +614,10 @@ export type FlowerEmbeddedConversation = Readonly<{
   emptyContent?: JSX.Element;
   composerContext?: JSX.Element;
   onSubmit?: () => void;
+  /** Observe whether the canonical composer contains unsubmitted work. */
+  onDraftPresence?: (present: boolean) => void;
+  /** Host persistence observes the canonical draft without owning staging authority. */
+  onDraftChange?: (snapshot: FlowerComposerDraftSnapshot) => void;
   /** Captured at submission and invoked once after canonical admission. */
   onAccepted?: (receipt: Pick<FlowerTurnLaunchReceipt, 'client_request_id' | 'thread_id'>) => void;
   render: (parts: FlowerConversationParts) => JSX.Element;
@@ -636,6 +640,8 @@ export type FlowerConversationParts = Readonly<{
   trailingActions?: JSX.Element;
   threadID: Accessor<string>;
   newConversation: () => void;
+  submit: (intent?: Readonly<{ fallbackPrompt?: string; context?: ContextActionEnvelope }>) => Promise<void>;
+  canSubmit: (fallbackPrompt?: string) => boolean;
 }>;
 
 export type FlowerSurfaceProps = Readonly<{
@@ -1115,6 +1121,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [renameSaving, setRenameSaving] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<Readonly<{ item: FlowerThreadListItem; restore?: HTMLElement }> | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = createSignal(false);
+  const [deleteReview, setDeleteReview] = createSignal<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['prepareThreadDeletion']>>>>();
+  const [deleteReady,setDeleteReady] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
   const [subagentTailReveal, setSubagentTailReveal] = createSignal('');
   const subagentTailPreparing = () => Boolean(subagentTailReveal() && subagentTailReveal() === activeSubagentID());
@@ -4669,9 +4677,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
 
+  const prepareDeleteReview = async () => {
+    const target = deleteTarget();
+    if (!target || deleteSubmitting()) return;
+    setDeleteError('');
+    if (!props.adapter.prepareThreadDeletion) { setDeleteReady(true); return; }
+    setDeleteSubmitting(true);
+    try {
+      const review = await props.adapter.prepareThreadDeletion(target.item.thread_id);
+      if (deleteTarget() === target) { setDeleteReview(review); setDeleteReady(true); }
+    } catch (error) {
+      if (deleteTarget() === target) setDeleteError(getErrorMessage(error));
+    } finally {
+      if (deleteTarget() === target) setDeleteSubmitting(false);
+    }
+  };
+
   const openDeleteDialog = (item: FlowerThreadListItem, restore?: HTMLElement) => {
     setDeleteTarget({ item, restore });
-    setDeleteError('');
+    setDeleteReview(undefined);
+    setDeleteReady(false);
+    void prepareDeleteReview();
   };
 
   const closeDeleteDialog = () => {
@@ -5594,13 +5620,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : facts.attention?.approval_count ? 'waiting_approval' : facts.activity === 'active' ? 'running'
           : facts.last_outcome === 'failed' || facts.last_outcome === 'interrupted' ? 'failed'
             : facts.last_outcome === 'cancelled' ? 'canceled' : facts.last_outcome === 'completed' ? 'success' : 'idle';
+      const summary = threadCache().summaries.get(update.thread_id);
       const adjunct = { status, active_run_id: facts.activity === 'active' ? update.run_id : undefined,
+        run_progress: facts.activity === 'active' && summary && summary.active_run_id === update.run_id ? summary.run_progress : null,
         approval_pending: Boolean(facts.attention?.approval_count), approval_pending_count: facts.attention?.approval_count ?? 0,
         queued_turn_count: facts.queue_count };
-      const summary = threadCache().summaries.get(update.thread_id);
       // Text growth can repeat the same facts at streaming cadence. Preserve
       // cache identity unless a sidebar-visible fact actually changes.
       if (!summary || summary.status === adjunct.status && summary.active_run_id === adjunct.active_run_id
+        && summary.run_progress === adjunct.run_progress
         && summary.approval_pending === adjunct.approval_pending && summary.approval_pending_count === adjunct.approval_pending_count
         && summary.queued_turn_count === adjunct.queued_turn_count) return;
       setThreadCache(cache => cache.updateSummaryAdjuncts(update.thread_id, summary => ({ ...summary, ...adjunct })));
@@ -6312,7 +6340,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void refreshActiveSubagentDetail(true);
   };
 
-  const launchChatTurn = async (promptInput: string) => {
+  const launchChatTurn = async (promptInput: string, intentContext?: ContextActionEnvelope) => {
     if (pendingThreadSelection()) return;
     // Preserve focus ownership while preparing this immutable submission.
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
@@ -6346,8 +6374,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? 'preparing_long_text_submission' as const
       : 'ordinary' as const;
     const selectedID = trimString(selectedThreadID());
-    const frozenContextAction = operation.session.snapshot().value.omit_embedded_context ? undefined : (props.embeddedConversation?.contextAction
+    const embeddedContext = operation.session.snapshot().value.omit_embedded_context ? undefined : (props.embeddedConversation?.contextAction
       ?? (!selectedID ? props.embeddedConversation?.initialContextAction : undefined));
+    const frozenContextAction = intentContext && embeddedContext
+      ? { ...embeddedContext, context: [...embeddedContext.context, ...intentContext.context] }
+      : intentContext ?? embeddedContext;
     const notifyEmbeddedAccepted = props.embeddedConversation?.onAccepted;
     const launchAdapter = props.adapter;
     const capturedDecision = currentHandlerDecision();
@@ -6760,11 +6791,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return requestThreadStop(stoppingThreadID);
   };
 
-  const submitChat = async () => {
+  const submitChat = async (intent?: Readonly<{ fallbackPrompt?: string; context?: ContextActionEnvelope }>) => {
     if (pendingThreadSelection()) return;
     if (composerTakingBackQueuedTurn()) return;
     composerHistory.reset();
-    const promptInput = composerRef?.value ?? currentComposerSessionDraft().chatDraft;
+    const draftText = composerRef?.value ?? currentComposerSessionDraft().chatDraft;
+    const promptInput = draftText.trim() || !intent?.fallbackPrompt ? draftText : intent.fallbackPrompt;
     const prompt = trimString(promptInput);
     const promptInspection = inspectFlowerText(promptInput);
     const promptOverLimit = (promptInspection?.codePoints ?? 0) > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT;
@@ -6806,7 +6838,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     launchChatTurnInFlight.add(sessionKey);
     setPreparingSendRevision(revision => revision + 1);
     try {
-      await launchChatTurn(promptInput);
+      await launchChatTurn(promptInput, intent?.context);
     } finally {
       launchChatTurnInFlight.delete(sessionKey);
       setPreparingSendRevision(revision => revision + 1);
@@ -6897,7 +6929,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const submitDeleteThread = async () => {
     const target = deleteTarget();
-    if (!target || deleteSubmitting() || !props.adapter.deleteThread) return;
+    if (!target || deleteSubmitting() || !deleteReady() || !props.adapter.deleteThread) return;
     const threadID = trimString(target.item.thread_id);
     if (!threadID) return;
 
@@ -6905,7 +6937,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setDeleteError('');
     setThreadActionBusy({ threadID, action: 'delete' });
     try {
-      await props.adapter.deleteThread(threadID);
+      const review = deleteReview();
+      if (review) await review.commit(); else await props.adapter.deleteThread(threadID);
       retireThreadLocally(threadID);
       setDeleteTarget(null);
       notifySuccess(copy().threadList.deleteCommittedNotification);
@@ -7827,6 +7860,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void requestThreadDetail(result.thread_id, 'user_action', true).catch(() => undefined);
   };
   const executeComposerCommand = (suggested?: '/compact' | '/goal' | '/plugin') => {
+    const navigation = suggested ?? composerSlashCommand();
+    const opensPlugin = navigation === '/plugin' || typeof navigation !== 'string' && navigation.kind === 'intent' && navigation.command === '/plugin';
+    if (opensPlugin) {
+      if (!props.onOpenPluginCreation) return;
+      props.onOpenPluginCreation({ threadID: selectedThreadID() || undefined });
+      updateComposerText('');
+      return;
+    }
     if (!settingsReady()) return;
     if (goalCommand()) {
       const text = goalCommand()!.text.trim();
@@ -9806,6 +9847,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
+  createEffect(() => props.embeddedConversation?.onDraftChange?.(reactiveDraftSnapshotFor(currentComposerSessionKey())));
+  createEffect(() => props.embeddedConversation?.onDraftPresence?.(composerChatDraftHasRawText() || composerHasAttachments() || composerHasExplicitReferences()));
   const composerSlashCommand = createMemo(() => {
     if (goalCommand()) return { kind: 'intent' as const, command: '/goal' as const, operation: 'set' as const, text: goalCommand()!.text };
     if (composerHistoryBrowsing()) return { kind: 'none' as const };
@@ -9863,6 +9906,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (threadLoadError() && selectedThreadID() && !composerPrimaryActionIsStop()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (!selectedThreadID() && goalPending()) return true;
+    if (composerPrimaryActionIsCommand() && composerCommandSuggested() === '/plugin') return !props.onOpenPluginCreation;
     if (!composerPrimaryActionIsStop() && !settingsReady()) return true;
     if (composerPrimaryActionIsCommand()) {
       const parsed = composerSlashCommand();
@@ -9875,6 +9919,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
     return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasExplicitReferences());
   });
+  const canSubmitConversation = (fallbackPrompt?: string): boolean => {
+    if (bottomActionMode() !== 'chat' || pendingThreadSelection() || selectedThreadReadOnly() || selectedInputRequest()
+      || composerTakingBackQueuedTurn() || composerReferenceMutationCount() > 0 || longTextPreparing()
+      || composerSendPreparing() || selectedComposerPendingSend() || selectedThreadStopPending()
+      || selectedThreadCanStop() || !settingsReady() || !readyForChat() || !handlerAllowsSubmitIntent()
+      || composerHasSubmissionBlockingAttachments() || threadLoadError() && selectedThreadID()
+      || composerSlashCommand().kind !== 'none') return false;
+    return !composerPrimaryActionDisabled() || Boolean(fallbackPrompt?.trim() && selectedThreadID());
+  };
   const composerPrimaryActionLoading = createMemo(() => selectedThreadStopPending() || (!composerPrimaryActionIsStop() && (composerSendPreparing() || Boolean(selectedComposerPendingSend()))));
 
   let capturedComposerPrimaryAction: ComposerPrimaryAction | undefined;
@@ -14182,6 +14235,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       role="option"
                       aria-selected={composerCommandSuggested() === command}
                       class="flower-composer-command-item"
+                      disabled={command === '/plugin' && !props.onOpenPluginCreation}
                       onPointerDown={(event) => event.preventDefault()}
                       onPointerMove={() => setComposerCommandIndex(composerCommandChoices().indexOf(command))}
                       onClick={() => executeComposerCommand(command)}
@@ -15296,21 +15350,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onOpenChange={(open) => {
           if (!open) closeDeleteDialog();
         }}
-        title={copy().threadList.deleteDialogTitle}
-        confirmText={copy().threadList.deleteConfirm}
+        title={deleteReview()?.title ?? copy().threadList.deleteDialogTitle}
+        confirmText={!deleteReady() && deleteError() ? copy().chat.handlerRetry : deleteReview()?.confirmLabel ?? copy().threadList.deleteConfirm}
         variant="destructive"
         loading={deleteSubmitting()}
-        onConfirm={() => void submitDeleteThread()}
+        onConfirm={() => void (deleteReady() ? submitDeleteThread() : prepareDeleteReview())}
       >
         <div class="flower-thread-delete-copy">
-          <p>{copy().threadList.deleteDialogDescription(deleteTargetTitle())}</p>
+          <p>{deleteReview()?.description ?? copy().threadList.deleteDialogDescription(deleteTargetTitle())}</p>
           <p
             class="flower-thread-delete-active-warning"
             data-active={deleteTargetHasActiveWork() ? 'true' : 'false'}
           >
             {copy().threadList.deleteDialogActiveDescription}
           </p>
-          <p class="flower-thread-delete-workspace-note">{copy().threadList.deleteDialogWorkspaceDescription}</p>
+          <Show when={!deleteReview()}><p class="flower-thread-delete-workspace-note">{copy().threadList.deleteDialogWorkspaceDescription}</p></Show>
           <Show when={deleteError()}>
             {(message) => <p class="flower-thread-delete-error" role="alert">{message()}</p>}
           </Show>
@@ -15366,8 +15420,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
         </Dialog>
       </DialogPlacementProvider>
-      <button
-        type="button"
+      <Show when={!props.embeddedConversation}>
+        <button
+          type="button"
         class="flower-component-rail-resizer"
         role="separator"
         aria-label={copy().chat.resizeConversationsLabel}
@@ -15389,9 +15444,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}
       >
         <GripVertical class="h-3.5 w-3.5" />
-      </button>
+        </button>
+      </Show>
       <Show when={props.embeddedConversation} fallback={conversationPanel()}>
-        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), actionLayout: bottomActionMode, actions: conversationHeaderActions,
+        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), submit: submitChat, canSubmit: canSubmitConversation, actionLayout: bottomActionMode, actions: conversationHeaderActions,
           actionOverlays: subagentDropdown(), get trailingActions() { return props.headerTrailingActions; },
           threadID: selectedThreadID, newConversation: startCompose })}
       </Show>

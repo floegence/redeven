@@ -11,7 +11,13 @@ describe('Env App Flower ownership', () => {
     const shell = fs.readFileSync(path.join(uiRoot, 'EnvAppShell.tsx'), 'utf8');
     const widgets = fs.readFileSync(path.join(uiRoot, 'workbench', 'redevenWorkbenchWidgets.tsx'), 'utf8');
 
-    expect(shell.match(/<EnvAIPage/g)).toHaveLength(1);
+    const creationStart=shell.indexOf('const renderPluginCreation');
+    const creationEnd=shell.indexOf('const [pluginWidgetCounts',creationStart);
+    const creation=shell.slice(creationStart,creationEnd);
+    expect(creation.match(/<EnvAIPage/g)).toHaveLength(1);
+    expect(creation).toContain('embeddedConversation={options.embeddedConversation}');
+    expect((shell.slice(0,creationStart)+shell.slice(creationEnd)).match(/<EnvAIPage/g)).toHaveLength(1);
+    expect(shell).toContain('hidden={pluginCreationOpen()} inert={pluginCreationOpen()}');
     expect(shell.match(/\{renderFlowerProduct\(\)\}/g)).toHaveLength(1);
     expect(shell.indexOf('{renderFlowerProduct()}')).toBeGreaterThan(shell.indexOf('const renderMainShell'));
     expect(shell).toContain("flowerProductPlacement() === 'workbench'");

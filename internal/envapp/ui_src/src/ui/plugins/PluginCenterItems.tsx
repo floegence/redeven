@@ -114,7 +114,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
       role="article"
       data-plugin-directory-card={props.item.inventoryKey}
       class={cn(
-        'redeven-plugin-directory-card flex min-h-[176px] min-w-0 flex-col gap-3 p-[var(--floe-pad-card)]',
+        'redeven-plugin-directory-card flex min-h-[144px] min-w-0 flex-col gap-2.5 p-3',
         PLUGIN_ENTER_MOTION_CLASS,
         props.selected && 'bg-[var(--floe-state-selected)]',
       )}
@@ -129,17 +129,17 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         aria-label={`${displayName()}: ${i18n.t('uiCopy.plugin.viewDetails')}`}
         onClick={(event) => props.onOpenDetails(event.currentTarget)}
       >
-        <span class="flex min-w-0 items-start gap-3 overflow-hidden">
+        <span class="flex min-w-0 items-start gap-2.5 overflow-hidden">
           <PluginIcon item={props.item} size="card" />
           <span class="min-w-0 flex-1 pt-0.5">
-            <span class="line-clamp-2 break-words text-[length:var(--floe-type-control)] font-medium leading-5" title={displayName()} lang={presentation()?.resolved_locale} dir="auto">{displayName()}</span>
+            <span class="line-clamp-2 break-words text-[13px] font-medium leading-[18px]" title={displayName()} lang={presentation()?.resolved_locale} dir="auto">{displayName()}</span>
             <span class="mt-1 flex flex-wrap gap-1">
               <PluginSourceBadge item={props.item} />
             </span>
           </span>
         </span>
         <Show when={(runtimeRecovery() && runtimeRecovery()?.state !== 'ready') || (summary()?.trim() && summary()?.trim() !== displayName().trim())}>
-        <span class="line-clamp-2 break-words text-xs leading-5 text-muted-foreground" lang={presentation()?.resolved_locale} dir="auto">
+        <span class="line-clamp-2 break-words text-xs leading-[18px] text-muted-foreground" lang={presentation()?.resolved_locale} dir="auto">
           <Show when={runtimeRecovery() && runtimeRecovery()?.state !== 'ready'} fallback={(
             <Show when={summary()?.trim() !== displayName().trim()}>{summary()}</Show>
           )}>
@@ -167,7 +167,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
             variant={['install', 'enable', 'review_update'].includes(primaryAction()) ? 'primary' : 'secondary'}
             size="sm"
-            class="min-h-[44px] min-w-0 flex-1 sm:min-h-9"
+            class="min-h-[44px] min-w-0 flex-1 text-xs sm:min-h-8 sm:h-8"
             loading={commandPending()}
             icon={primaryAction() === 'install' ? Download
               : primaryAction() === 'review_update' ? Refresh
@@ -197,7 +197,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           )}
         </Show>
         <Show when={!installSummary() && runtimeRecovery()?.state === 'failed' && props.onRetryRuntimeRecovery}>
-          <Button variant="ghost" size="icon" data-plugin-runtime-recovery-retry={props.item.pluginInstanceID} class="h-11 w-11 shrink-0 sm:h-9 sm:w-9" aria-label={i18n.t('common.actions.retry')} title={i18n.t('common.actions.retry')} onClick={() => void props.onRetryRuntimeRecovery?.()}>
+          <Button variant="ghost" size="icon" data-plugin-runtime-recovery-retry={props.item.pluginInstanceID} class="h-11 w-11 shrink-0 sm:h-8 sm:w-8" aria-label={i18n.t('common.actions.retry')} title={i18n.t('common.actions.retry')} onClick={() => void props.onRetryRuntimeRecovery?.()}>
             <RefreshIcon class="h-4 w-4" />
           </Button>
         </Show>
@@ -213,7 +213,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             if (target) selectMenuItem(id, target);
           }}
           triggerAriaLabel={`${displayName()}: ${i18n.t('uiCopy.plugin.moreActions')}`}
-          triggerClass="ml-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-muted-foreground hover:bg-[var(--floe-state-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-9 sm:w-9"
+          triggerClass="ml-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-muted-foreground hover:bg-[var(--floe-state-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:w-8"
           trigger={(
             <span
               ref={menuTrigger}

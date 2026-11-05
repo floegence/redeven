@@ -10,7 +10,25 @@ Use the released ReDevPlugin tools for the platform used by this Redeven build:
 review flow; ReDevPlugin owns package validation, generated bindings, preview,
 permissions, sandboxing, execution, and runtime preparation.
 
-## Start or resume a project
+## Dedicated Plugin Center drafts
+
+In a Plugin Center creation conversation, call `plugin_author.status` first.
+It resolves the authenticated draft and managed source directory; never invent a
+project ID, capture another conversation, or initialize outside that directory.
+For a new empty source, use `plugin_author.initialize` with the selected template.
+Use normal approved file and terminal tools to edit source and install required
+dependencies. Use `plugin_author.build` for explicit pipeline execution; it runs
+project commands under the same approval boundary. `plugin_author.capture` only
+validates an already-built output and is not evidence that business tests ran.
+
+The workspace owns the real preview. Keep the dedicated conversation and source
+through iterations. Apply newer artifacts through the workspace, and inspect and
+install the exact current preview there. Do not start a parallel dev server,
+install through a shell, grant permissions, or declare a fixture a real test.
+When the user selects Create directly, implement from existing requirements and
+the submitted message; ask only for a decision required to proceed.
+
+## Standalone projects outside Plugin Center
 
 Inspect the selected project's rules and existing manifest and
 `redevplugin.project.json` before changing it. Keep existing plugin identity,
@@ -37,11 +55,14 @@ redevplugin dev . --state ../notes-development --manual
 The initialization commands are an example for a new project; do not run init
 over an existing project. Invoke the installed binary by its actual path if
 GOBIN or GOPATH/bin is not on PATH. Node 26 is required; only Workers need Rust
-1.88.0 and the wasm32-unknown-unknown target. Use doctor diagnostics to resolve
+1.98.0 and the wasm32-unknown-unknown target. Use doctor diagnostics to resolve
 missing dependencies. Doctor inspects readiness without running author commands;
 check runs the configured typecheck, build, business tests, and package validation.
 
-## Iterate with the real preview
+## Standalone CLI preview
+
+These CLI steps apply only outside a dedicated Plugin Center draft. Inside a
+draft, the workspace owns preview and installation; never launch another dev server.
 
 Open the local preview URL printed by dev. Keep one development process for the
 chosen project and use its output to diagnose failures. An explicit state directory

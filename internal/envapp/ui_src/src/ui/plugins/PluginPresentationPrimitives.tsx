@@ -75,8 +75,8 @@ export function PluginIcon(props: {
         (size() === 'launcher' || size() === 'dock') && 'border bg-muted shadow-sm',
         size() === 'launcher' && 'h-16 w-16 rounded-2xl',
         size() === 'dock' && 'h-[42px] w-[42px] rounded-xl',
-        size() === 'detail' && 'h-12 w-12 rounded-xl',
-        size() === 'card' && 'h-10 w-10 rounded-lg',
+        size() === 'detail' && 'h-10 w-10 rounded-lg',
+        size() === 'card' && 'h-8 w-8 rounded-lg',
         size() === 'row' && 'h-10 w-10 rounded-lg',
         props.class,
       )}

@@ -109,9 +109,9 @@ dependencies = [
 
 [[package]]
 name = "redevplugin-worker-sdk"
-version = "3.15.0"
+version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd1815a17af427abda0ab982214c371884e7c3f268d256e6a7b3c8ae98395ec2"
+checksum = "5ee27ecf96e278c0606e4067e18eed02d37f694b9b4d7f94f6caccb420b37736"
 dependencies = [
  "base64",
  "serde",

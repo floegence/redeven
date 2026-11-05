@@ -309,3 +309,18 @@ it('resets identity-owned drafts and attachment handles without disposing the co
   expect(coordinator.read('__new_thread__').value.text).toBe('Current draft');
   coordinator.dispose();
 });
+
+it('snapshots one draft for refresh without overwriting newer live edits', () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  coordinator.open('plugin-draft').mutate(value => ({ ...value, text: 'Original', client_request_id: 'old-admission', capability_revision: 'old-capability' }));
+  const saved = coordinator.snapshotForRestart('plugin-draft');
+  expect(saved.value.client_request_id).toBeUndefined();
+  expect(saved.value.capability_revision).toBeUndefined();
+  const restored = createFlowerComposerDraftCoordinator();
+  restored.restoreDraft(saved);
+  expect(restored.read('plugin-draft').value.text).toBe('Original');
+  restored.open('plugin-draft').mutate(value => ({ ...value, text: 'Newer edits' }));
+  restored.restoreDraft(saved);
+  expect(restored.read('plugin-draft').value.text).toBe('Newer edits');
+  coordinator.dispose(); restored.dispose();
+});

@@ -54,6 +54,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers, locale: string) {
 export type EnvAIPageProps = Readonly<{
   draftCoordinator: FlowerComposerDraftCoordinator;
   embeddedConversation?: FlowerEmbeddedConversation;
+  prepareTurnRoute?: (requestID: string) => Promise<string>;
   captureNewConversationContext?: () => FlowerPageContextSnapshot | undefined;
   presentation?: 'full' | 'companion';
   engaged?: boolean;
@@ -108,6 +109,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   ));
   const createAdapter = (signal: AbortSignal) => createEnvLocalFlowerSurfaceAdapter({
     signal,
+    prepareTurnRoute: props.prepareTurnRoute,
     downloadManager,
     envPublicID: trim(env.env_id()),
     get envLabel() { return trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'); },
@@ -134,6 +136,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       enterMessageBeforeSending: i18n.t('flowerChat.router.enterMessageBeforeSending'),
       selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
       failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
+      pluginDeleteTitle: i18n.t('uiCopy.plugin.creation.deleteTitle'), pluginDeleteBody: i18n.t('uiCopy.plugin.creation.deleteBody'), pluginDeleteConfirm: i18n.t('uiCopy.plugin.creation.deleteDraft'),
     }; },
     onSettingsChanged: env.bumpSettingsSeq,
     revealHostApplication: env.revealHostApplication,

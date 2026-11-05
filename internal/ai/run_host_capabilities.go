@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/tessiven"
 )
@@ -18,6 +19,7 @@ type runHostCapabilities struct {
 	deepSeekImageFiles   *deepSeekImageFileOwners
 	webProvider          func(string) (config.AIProvider, bool)
 	queryThreads         func(context.Context, *session.Meta, string, map[string]any) (any, error)
+	pluginCreation       *plugincreation.Service
 	tessiven             *tessiven.Service
 	tessivenResources    *tessiven.ResourceBackend
 	authorityThreadID    string
@@ -104,7 +106,8 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 			}
 			return s.execThreadQueryTool(ctx, meta, name, args)
 		},
-		tessiven: s.tessiven, tessivenResources: s.tessivenResources,
+		pluginCreation: s.pluginCreation,
+		tessiven:       s.tessiven, tessivenResources: s.tessivenResources,
 		saveToolMedia: s.toolMedia.put, readToolMedia: s.resolveToolMedia,
 		readImageAttachment: func(ctx context.Context, meta *session.Meta, locator string) (canonicalImageSnapshot, error) {
 			if meta == nil || strings.TrimSpace(meta.EndpointID) != endpointID {

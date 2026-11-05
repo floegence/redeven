@@ -92,7 +92,7 @@ func (r *accountCancelRuntime) Cancel(_ context.Context, input flruntime.CancelI
 }
 
 func TestDesktopAccountFactsCancelWaitingTurnAndDescendants(t *testing.T) {
-	svc := newSendTurnTestService(t)
+	svc := newSendTurnTestServiceWithActivation(t, true)
 	runtime := &accountCancelRuntime{ThreadService: svc.threadRuntime, view: flruntime.ThreadView{ThreadID: "parent", TurnID: "bound-turn", Activity: flruntime.ThreadActivityActive, Attention: flruntime.AttentionSummary{InputCount: 1}}, cancellations: make(chan flruntime.CancelInput, 1)}
 	svc.threadRuntime = runtime
 	source := &desktopModelSourceClient{lastSnapshot: &DesktopModelSourceModelSnapshot{Models: []DesktopModelSourceModel{{ID: "model", AccountID: "account"}}, Accounts: map[string]DesktopAccountFact{"account": {State: "ready", Revision: 1}}}}

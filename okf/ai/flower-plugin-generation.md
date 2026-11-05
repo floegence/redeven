@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Flower plugin generation
 tags: [ai, flower, plugins, floret]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -45,13 +45,49 @@ Doctor readiness and business/package tests do not establish browser or real WAS
 execution. Acceptance exercises the actual requested user journey and identifies
 which boundaries were verified.
 
+## Dedicated plugin drafts
+
+A product draft owns one dedicated canonical Flower conversation and one opaque
+platform author workspace. Ordinary conversations may be referenced explicitly;
+they are never adopted or deleted with a draft. The ordinary Flower composer,
+attachment staging, approvals, streaming and runtime dispatch remain authoritative.
+Chat and direct creation are submission intents of the same composer. `/plugin`
+is navigation, works before a model is configured, and does not become a model
+turn when unavailable.
+
+Draft turns and their input, approval, compaction and goal continuations use the
+authenticated environment HTTP carrier, like draft creation and platform operations.
+A synthetic Local UI session cannot authorize the managed author workspace or
+replace a continuation's execution authority. The owner is the authenticated user and environment. Initial admission freezes the
+exact canonical create request before creating the thread. Restart reconciles that
+same request and binds its original thread; it does not replay the user turn.
+The product resolves the managed source directory through the platform adapter.
+Only that authenticated source is added to the conversation filesystem scope;
+other projects, platform state and other task directories remain excluded. Adding
+this source never replaces existing private task-file isolation. Ordinary file
+and terminal tools use the same scope and existing effect approvals.
+
+`plugin_author.status`, `initialize`, `build` and `capture` are available only to
+the dedicated conversation. Build is a command-execution effect under Floret's
+normal approval. The actual retained stage reports distinguish passed, failed,
+interrupted and not-run work; packaging alone is not business or browser proof.
+
+Product draft deletion first durably freezes admission, reconciles any pending
+canonical create, cancels/deletes its conversation, then closes and removes the
+platform workspace. Interrupted cleanup resumes its durable stage. Unknown formal
+installation outcomes must be reconciled before author resources are removed.
+Already installed instances are retained. Thread-list deletion uses the same
+product review and cleanup path, with explicit copy describing the extra scope.
+
 ## Delivery and installation
 
 An authoring request may run authorized local project steps through normal tools.
 Final sources and packages belong at the user's project or chosen destination.
 Installation uses the released package inspection, exact-byte review and
-confirmation flow in Plugin Center. Installation approval, execution grants,
-signing trust and automatic-update eligibility remain independent facts.
+confirmation flow in Plugin Center. Installation approval, execution grants and
+automatic-update eligibility remain independent facts. Ordinary plugin packages
+require no publisher trust or signature admission; platform releases and the
+host-built runtime retain their separate verification contracts.
 
 A plugin-generation handler must not perform a second approval wait, bypass
 Floret dispatch, mutate Flower activity rows directly, or convert plugin audit
@@ -61,7 +97,7 @@ blindly replayed. A requested approval remains waiting until Floret resolves it.
 # Boundaries
 
 Flower does not write platform registry rows, mint bridge tokens, expose plugin
-assets through ordinary product routes, bypass signature assessment or trust
+assets through ordinary product routes, bypass package inspection or source
 policy, grant storage/network/runtime authority outside released brokers, or
 invoke business adapters before ReDevPlugin constructs the request context.
 Missing shared mechanics are fixed upstream and released before consumption.
@@ -74,3 +110,9 @@ Development runtime evidence never substitutes for product signing or packaging.
 - `redeven:internal/ai/system_plugin_authoring_test.go` - Tests.
 - `redeven:internal/redevpluginintegration/runtime_io_live_test.go` - Tests.
 - `redeven:okf/ai/ai-tool-runtime.md` - Source.
+- `redeven:internal/plugincreation/store_test.go` - Product ownership and durable recovery tests.
+- `redeven:internal/ai/plugin_creation_scope_test.go` - Managed source admission, recovery and private scope tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx` - Shared composer and navigation tests with a fixture adapter.
+
+- `redeven:internal/redevpluginintegration/author_model_qualification_test.go` - Opt-in model, real Host, browser surface, restart and cleanup qualification.
+- `redeven:scripts/check_plugin_creation_model.mjs` - Opt-in complete product generation and installation path with isolated model configuration.

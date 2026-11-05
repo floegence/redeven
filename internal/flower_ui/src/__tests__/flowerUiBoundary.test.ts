@@ -276,7 +276,8 @@ describe('shared Flower UI boundary', () => {
 		expect(cssSrc).toContain('.flower-model-reasoning-control');
 		expect(cssSrc).toContain('.flower-model-reasoning-divider');
 		expect(cssSrc).toContain('.flower-reasoning-segment-button');
-		expect(cssSrc).toContain('.flower-reasoning-menu-segment');
+		expect(controlSrc).toContain('class="flower-reasoning-menu floe-floating-presence floe-floating-menu"');
+        expect(controlSrc).toContain('SurfaceAnchoredLayer');
 		expect(cssSrc).toContain('.flower-reasoning-menu');
 		expect(cssSrc).toContain('.flower-reasoning-reset');
 		expect(cssSrc).toContain('cursor: pointer;');

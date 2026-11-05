@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower incremental live state
 tags: [ui, flower, live, threads]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -23,6 +23,8 @@ Charge max(transmitted,window_bytes);refresh intervals without forcing Latest. R
 One observer installs navigation/collapsed rows. Same-turn/run proof skips intermediate prose only;active/unknown/trailing/approval/input/unsafe facts stop. Accepted IDs bound repeats;scroll/expand reaches keyed gaps. [Sequence proofs](flower-tool-sequences.md#membership-and-counts) share HTTP/observer coverage without bodies/extra observers. Disclosure retires demand;new input starts fresh;foreground pages may publish during baseline queue. Sealed-prefix reuse requires exact ID/kind/turn/run/ordinal/canonicalOrdinal;stale windows prove no ends. Receipts align<=one preview page/displayed span. Activity/sequence owners retain counts,unknowns,mutations,expanded files/frozen authorized fields.
 
 ## Bodies and transport
+Body-free thread facts clear retained run progress when the run ends or its identity changes. Only an active update for the same run may retain progress. A terminal facts update can precede the equal-version detail update; composer admission must release immediately without waiting for another history refresh.
+
 Refresh retains prose/media/anchors/follow. Historical canonical previews/pending remain while sealed chunks stage;complete Markdown commits synchronously and restores paragraph/table/message anchors before paint. Disposed owners cannot correct later viewport. Horizontal table overflow never owns vertical reading;only clipped trailing text/empty margins defer. One observer admits within160px. Text/disclosure share two slots/15s,priority live/interactive→visible→background,aging every8admissions. Offscreen/navigation cancels;failure Retry.
 
 ThreadCache binds item/turn/run/source. <=16KiB chunks use accepted UTF8 offsets,yield/coalesce without polling/full-prefix reads. Visibility survives full extents;completed reads detach parent cancellation. Source/seal change retires reads/restarts preview while retaining content;same-source progress survives refresh. source_changed releases slot/awaits authoritative ItemBody,no guessed offsets;live:false alone changes no source. Same-source text/pending/locator publish atomically;overlap retains layout/resumes offset. Identity/range/prefix/empty-nonterminal failures stay explicit;Retry never replays execution.
@@ -48,6 +50,7 @@ Streams/queues/cache are ephemeral, never durable cursors/lifecycle. Preserve da
 
 # Evidence
 
+- [Composer admission browser regression](../../internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx) sends terminal body-free facts before an equal-version detail update and verifies that Stop disappears and direct creation becomes available.
 - [Continuous history browser tests](../../internal/envapp/ui_src/src/ui/FlowerSurface.continuousHistory.browser.test.tsx) sample native wheel displacement from folded-only first screens through delayed cold-table completion, including root/child, multiple retry turns, reverse input and reduced motion. Checks bound total and per-frame movement, hydration drift, idle reads, focus and drafts; merely finding earlier prose does not qualify scrolling.
 - [Electron startup](../../desktop/scripts/check-flower-startup.mjs) and [localized navigation](../../desktop/scripts/check-flower-navigation.mjs): partial/final baselines, selection, drafts, one stream, no duplicate list scan, owned cleanup.
 - [Floating notice geometry](../../internal/envapp/ui_src/src/ui/FlowerSurface.floatingNotices.browser.test.tsx) and [localized recovery](../../internal/envapp/ui_src/src/ui/FlowerSurface.syncStatus.browser.test.tsx) cover new-chat loading/failure/retry, narrow layouts, keyboard recovery and unchanged transcript/composer bounds.

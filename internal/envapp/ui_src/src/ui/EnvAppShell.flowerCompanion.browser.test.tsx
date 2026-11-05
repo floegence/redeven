@@ -22,7 +22,43 @@ let floeRegistryComponents = (): any[] => [];
 let testFilesMenu = false;
 let testDesktopBridge = false;
 let testRealFlowerLauncher = false;
+let pluginCreationNavigationFixture: { open: (instanceID: string) => Promise<void>; navigate?: (commit: () => unknown) => Promise<boolean> } | undefined;
+let pluginCreationInventory: any | undefined;
+let pluginCreationSessionReady: (() => void) | undefined;
 const [assetRecoveryReason, setAssetRecoveryReason] = createSignal<DocumentAssetRecoveryReason>(null);
+
+vi.mock('./services/pluginSessionReadinessCoordinator', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./services/pluginSessionReadinessCoordinator')>();
+  return { createPluginSessionReadinessCoordinator: (options: Parameters<typeof actual.createPluginSessionReadinessCoordinator>[0]) => {
+    pluginCreationSessionReady = () => options.onReady({ client: protocolSnapshot.currentSession, binding: { generation: 1, channelID: 'ch_local' } });
+    return actual.createPluginSessionReadinessCoordinator(options);
+  } };
+});
+
+vi.mock('./plugins/pluginApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./plugins/pluginApi')>();
+  return { ...actual, createPluginLifecycleAPI: (...args: Parameters<typeof actual.createPluginLifecycleAPI>) => {
+    const api = actual.createPluginLifecycleAPI(...args);
+    return { ...api, loadInventoryProjection: (...options: Parameters<typeof api.loadInventoryProjection>) =>
+      pluginCreationInventory ? Promise.resolve(pluginCreationInventory) : api.loadInventoryProjection(...options),
+      loadCachedMarketCatalog: (...options: Parameters<typeof api.loadCachedMarketCatalog>) =>
+        pluginCreationInventory ? Promise.resolve({ generation: 1, catalog: [] } as any) : api.loadCachedMarketCatalog(...options),
+      recoverEnabled: (...options: Parameters<typeof api.recoverEnabled>) =>
+        pluginCreationInventory ? Promise.resolve({ results: [] }) : api.recoverEnabled(...options),
+    };
+  } };
+});
+vi.mock('./plugins/PluginCreationWorkspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./plugins/PluginCreationWorkspace')>();
+  return { PluginCreationWorkspace: (props: Parameters<typeof actual.PluginCreationWorkspace>[0]) => {
+    if (!pluginCreationNavigationFixture) return <actual.PluginCreationWorkspace {...props} />;
+    pluginCreationNavigationFixture.open = async instanceID => { await props.onOpenInstalled?.(instanceID); };
+    props.onNavigationReady?.(
+      pluginCreationNavigationFixture.navigate ?? (async commit => { await commit(); return true; }),
+    );
+    return <div data-plugin-creation-navigation-fixture />;
+  } };
+});
 
 vi.mock('./reconnect/createEnvAppAssetRecovery', () => ({
   createEnvAppAssetRecovery: () => ({ reason: assetRecoveryReason }),
@@ -478,6 +514,8 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 vi.mock('./protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     terminal: {
+      listSessions: vi.fn(async () => ({ sessions: [] })),
+      onSessionsChanged: vi.fn(() => () => undefined),
       listViews: vi.fn(async () => ({ revision: 0, views: [] })),
       onViewsChanged: vi.fn(() => () => undefined),
     },
@@ -1190,6 +1228,8 @@ beforeEach(() => {
   testFilesMenu = false;
   testDesktopBridge = false;
   testRealFlowerLauncher = false;
+  pluginCreationNavigationFixture = undefined;
+  pluginCreationInventory = undefined;
   setAssetRecoveryReason(null);
   debugConsoleEnabled = false;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
@@ -1859,6 +1899,116 @@ describe('EnvAppShell Activity Flower browser integration', () => {
 
     await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]')).toBeNull();
     await expect.poll(() => document.activeElement).toBe(trigger);
+  });
+
+  it.each(['missing', 'stale'])('keeps the draft open when the installed application is %s', async state => {
+    await page.viewport(1280, 800);
+    pluginCreationNavigationFixture = { open: async () => { throw new Error('Workspace not mounted'); } };
+    publishProtocolConnected();
+    const target = { pluginID: 'dev.example.focus', pluginInstanceID: 'installed-1', surfaceID: 'focus.view', expectedManagementRevision: 1 };
+    pluginCreationInventory = { items: state === 'missing' ? [] : [{
+      inventoryKey: 'instance:installed-1', pluginID: target.pluginID, pluginInstanceID: target.pluginInstanceID,
+      displayName: 'Focus', description: '', lifecycleState: 'enabled', trustBadge: 'unknown',
+      defaultLaunchTarget: target, launchTargets: [{ ...target, expectedManagementRevision: 2 }],
+    }] };
+    await mountShell();
+    expect(protocolSnapshot.state).toBe('connected');
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    const initial = window.location.href;
+    try {
+      const url = new URL(initial); url.searchParams.set('plugin_draft', 'draft-1');
+      window.history.pushState(window.history.state, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await expect.poll(() => document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
+      await expect(pluginCreationNavigationFixture.open('installed-1')).rejects.toThrow('Plugin surface failed');
+      expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('draft-1');
+      expect(document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
+    } finally {
+      window.history.replaceState(window.history.state, '', initial);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  });
+
+  it.each(['saved', 'failed'])('waits for workspace navigation before browser history changes the visible draft: %s', async outcome => {
+    await page.viewport(1280, 800);
+    let finish: (() => void) | undefined;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const navigate = vi.fn(async (commit: () => unknown) => {
+      await pending;
+      if (outcome === 'failed') return false;
+      await commit();
+      return true;
+    });
+    pluginCreationNavigationFixture = { open: async () => {}, navigate };
+    await mountShell();
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    const initial = window.location.href;
+    try {
+      const url = new URL(initial); url.searchParams.set('plugin_draft', 'draft-1');
+      window.history.pushState(window.history.state, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await expect.poll(() => document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
+      window.history.back();
+      await expect.poll(() => navigate.mock.calls.length).toBe(1);
+      expect(document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(true);
+      finish?.();
+      await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(outcome === 'failed');
+      expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe(outcome === 'failed' ? 'draft-1' : null);
+      if (outcome === 'saved') {
+        window.history.forward();
+        await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(true);
+        expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('draft-1');
+      }
+    } finally {
+      finish?.();
+      window.history.replaceState(window.history.state, '', initial);
+    }
+  });
+
+  it('waits for authenticated plugin readiness before mounting a linked draft', async () => {
+    const initial = window.location.href;
+    pluginCreationNavigationFixture = { open: async () => {} };
+    try {
+      await mountShell();
+      const url = new URL(initial); url.searchParams.set('plugin_draft', 'draft-1');
+      window.history.pushState(window.history.state, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await flushAsync();
+      expect(document.querySelector('[data-redeven-plugin-creation-page]')).not.toBeNull();
+      expect(document.querySelector('[data-plugin-creation-navigation-fixture]')).toBeNull();
+      pluginCreationSessionReady?.();
+      await expect.poll(() => document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
+    } finally {
+      window.history.replaceState(window.history.state, '', initial);
+    }
+  });
+
+  it('retains shell and editor identity while plugin creation owns the foreground', async () => {
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    const flower = document.querySelector('[data-testid="env-ai-page"]')!;
+    const preview = document.querySelector('[data-testid="file-preview-host"]');
+    const activity = document.querySelector('[data-testid="activity-body-content"]');
+    fixture.input.value = 'Keep this ordinary conversation draft';
+    const initial = window.location.href;
+    const url = new URL(initial); url.searchParams.set('plugin_draft', 'new');
+    window.history.pushState(window.history.state, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(true);
+    await expect.poll(() => document.querySelector('[data-plugin-creation-workspace]')).not.toBeNull();
+    expect(flower.isConnected).toBe(true);
+    expect(document.querySelector('[data-testid="file-preview-host"]')).toBe(preview);
+    expect(document.querySelector('[data-testid="activity-body-content"]')).toBe(activity);
+    window.history.replaceState(window.history.state, '', initial);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(false);
+    expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flower);
+    expect(fixture.input.value).toBe('Keep this ordinary conversation draft');
+    expect(document.querySelector('[data-testid="file-preview-host"]')).toBe(preview);
   });
 
   it('moves the same Flower surface into and out of the Workbench host', async () => {

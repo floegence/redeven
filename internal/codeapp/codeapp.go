@@ -30,6 +30,7 @@ import (
 	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -119,6 +120,7 @@ type Service struct {
 	directoryFavorites *directoryfavorites.Store
 	notes              *notes.Service
 	layouts            *workbenchlayout.Service
+	pluginDrafts       *plugincreation.Store
 	tessiven           *tessiven.Service
 	tessivenBroker     *tessiven.Broker
 	aiReady            *aiReadinessController
@@ -290,6 +292,19 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		}
 	}()
 
+	draftStore, err := plugincreation.Open(filepath.Join(stateAbs, "apps", "plugin-creation", "drafts.sqlite"))
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		return nil, err
+	}
+	draftStoreOwned := true
+	defer func() {
+		if draftStoreOwned {
+			_ = draftStore.Close()
+		}
+	}()
+	pluginCreation := plugincreation.New(draftStore)
 	authorizeTessiven := func(meta *session.Meta) *session.Meta {
 		if meta == nil {
 			return nil
@@ -320,6 +335,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	aiReady := newAIReadinessController(ctx, ai.Options{
 		ChatGPT:               chatGPT,
 		PlatformHTTPTransport: opts.PlatformHTTPTransport,
+		PluginCreation:        pluginCreation,
 		Tessiven:              tessivenSvc, TessivenResources: tessivenResources,
 		Logger:            logger,
 		StateDir:          stateAbs,
@@ -391,8 +407,9 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		}
 
 		return redevpluginintegration.New(pluginCtx, redevpluginintegration.Options{
-			StateDir:     stateAbs,
-			AgentHomeDir: agentHomeDir,
+			PluginCreation: pluginCreation,
+			StateDir:       stateAbs,
+			AgentHomeDir:   agentHomeDir,
 			ResolveWorkspacePath: func(ctx context.Context, codeSpaceID string) (string, bool, error) {
 				space, err := reg.GetSpace(ctx, codeSpaceID)
 				if err != nil || space == nil {
@@ -451,6 +468,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		DirectoryFavorites:            directoryFavorites,
 		Notes:                         notesSvc,
 		WorkbenchLayout:               workbenchLayoutSvc,
+		PluginCreation:                pluginCreation,
 		Tessiven:                      tessivenSvc,
 		TessivenResources:             tessivenResources,
 		Terminal:                      opts.Terminal,
@@ -501,6 +519,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	favoritesOwned = false
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
+	svc.pluginDrafts = draftStore
+	draftStoreOwned = false
 	svc.tessiven = tessivenSvc
 	tessivenOwned = false
 	svc.aiReady = aiReady
@@ -536,6 +556,11 @@ func (s *Service) Close() error {
 	if s.appSrv != nil {
 		_ = s.appSrv.Close()
 	}
+	// Author tools may still be finishing against the draft and platform stores.
+	// Drain their canonical runs before closing any resources they depend on.
+	if s.aiReady != nil {
+		_ = s.aiReady.Close()
+	}
 	if s.runner != nil {
 		_ = s.runner.StopAll()
 	}
@@ -560,14 +585,14 @@ func (s *Service) Close() error {
 	if s.tessivenBroker != nil {
 		s.tessivenBroker.Close()
 	}
+	if s.pluginDrafts != nil {
+		_ = s.pluginDrafts.Close()
+	}
 	if s.tessiven != nil {
 		_ = s.tessiven.Close()
 	}
 	if s.layouts != nil {
 		_ = s.layouts.Close()
-	}
-	if s.aiReady != nil {
-		_ = s.aiReady.Close()
 	}
 	if s.pluginIntegration != nil {
 		_ = s.pluginIntegration.Close()

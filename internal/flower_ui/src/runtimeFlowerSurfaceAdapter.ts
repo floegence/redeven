@@ -154,6 +154,7 @@ export type FlowerRuntimeTransport = Readonly<{
 }>;
 
 export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
+  prepareThreadDeletion?: FlowerSurfaceAdapter['prepareThreadDeletion'];
   extensions?: FlowerSurfaceAdapter['extensions'];
   runtime: FlowerSurfaceRuntimeDescriptor;
   signal?: AbortSignal;
@@ -692,6 +693,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!nextID || nextID === tid) throw new Error(trim(options.failedToCreateThread) || 'Failed to create Flower chat.');
       return mapRuntimeThread(threadResp.thread!, options);
     },
+    ...(options.prepareThreadDeletion ? { prepareThreadDeletion: options.prepareThreadDeletion } : {}),
     ...(options.transport.deleteThread ? {
       deleteThread: async (threadID) => {
         const tid = trim(threadID);

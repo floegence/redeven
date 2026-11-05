@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/tessiven"
 )
@@ -705,7 +707,14 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	if workingDir == "" {
 		workingDir = strings.TrimSpace(s.agentHomeDir)
 	}
-	workingDir, err = validateThreadWorkingDir(workingDir, s.scope)
+	scope := s.scope
+	if req.managedSource != nil {
+		scope, err = scope.WithPrivateRoot(req.managedSource.PrivateRoot, req.managedSource.Directory)
+		if err != nil {
+			return threadstore.ThreadSettings{}, err
+		}
+	}
+	workingDir, err = validateThreadWorkingDir(workingDir, scope)
 	if err != nil {
 		return threadstore.ThreadSettings{}, err
 	}
@@ -1329,6 +1338,95 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 }
 
 func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) error {
+	return s.deleteThread(ctx, meta, threadID, force, false)
+}
+
+// ResumePluginDraft reconciles a previously frozen canonical create. It never
+// starts or replays a user turn, and never chooses a different launch identity.
+func (s *Service) ResumePluginDraft(ctx context.Context, meta *session.Meta, id string) (plugincreation.Draft, error) {
+	if err := requireRWX(meta); err != nil {
+		return plugincreation.Draft{}, err
+	}
+	if s.pluginCreation == nil {
+		return plugincreation.Draft{}, plugincreation.ErrNotFound
+	}
+	owner, err := plugincreation.OwnerFromSession(meta)
+	if err != nil {
+		return plugincreation.Draft{}, err
+	}
+	unlock, err := s.pluginCreation.LockDraft(ctx, meta, id)
+	if err != nil {
+		return plugincreation.Draft{}, err
+	}
+	defer unlock()
+	d, err := s.pluginCreation.Store.Get(ctx, owner, id)
+	if err != nil {
+		return d, err
+	}
+	if d.Lifecycle != "active" {
+		return d, plugincreation.ErrDeleting
+	}
+	if !d.LaunchPending {
+		return d, nil
+	}
+	var creation CreateThreadRequest
+	if d.LaunchSnapshot == "" || json.Unmarshal([]byte(d.LaunchSnapshot), &creation) != nil {
+		return d, plugincreation.ErrConflict
+	}
+	source, err := s.pluginCreation.SourceScope(ctx, meta, id)
+	if err != nil {
+		return d, err
+	}
+	creation.managedSource = &source
+	thread, err := s.CreateThreadWithOptions(ctx, meta, creation)
+	if err != nil {
+		return d, err
+	}
+	return s.pluginCreation.Store.BindThread(ctx, owner, id, d.LaunchRequestID, thread.ThreadID)
+}
+
+func (s *Service) DeletePluginDraft(ctx context.Context, meta *session.Meta, id string, revision int64) (plugincreation.Draft, error) {
+	if err := requireRWX(meta); err != nil {
+		return plugincreation.Draft{}, err
+	}
+	if s.pluginCreation == nil {
+		return plugincreation.Draft{}, plugincreation.ErrNotFound
+	}
+	owner, err := plugincreation.OwnerFromSession(meta)
+	if err != nil {
+		return plugincreation.Draft{}, err
+	}
+	unlock, err := s.pluginCreation.LockDraft(ctx, meta, id)
+	if err != nil {
+		return plugincreation.Draft{}, err
+	}
+	defer unlock()
+	d, err := s.pluginCreation.Store.BeginDelete(ctx, owner, id, revision)
+	if err != nil {
+		return d, err
+	}
+	if d.LaunchRequestID != "" && d.ThreadID == "" {
+		var creation CreateThreadRequest
+		if d.LaunchSnapshot == "" || json.Unmarshal([]byte(d.LaunchSnapshot), &creation) != nil {
+			return d, plugincreation.ErrConflict
+		}
+		source, e := s.pluginCreation.SourceScope(ctx, meta, id)
+		if e != nil {
+			return d, e
+		}
+		creation.managedSource = &source
+		thread, e := s.CreateThreadWithOptions(ctx, meta, creation)
+		if e != nil {
+			return d, e
+		}
+		d, e = s.pluginCreation.Store.BindThread(ctx, owner, id, d.LaunchRequestID, thread.ThreadID)
+		if e != nil {
+			return d, e
+		}
+	}
+	return s.pluginCreation.ResumeDelete(ctx, meta, id, func(ctx context.Context, thread string) error { return s.deleteThread(ctx, meta, thread, true, true) })
+}
+func (s *Service) deleteThread(ctx context.Context, meta *session.Meta, threadID string, force, draftCleanup bool) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -1342,6 +1440,13 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" {
 		return errors.New("invalid request")
+	}
+	if s.pluginCreation != nil && !draftCleanup {
+		if d, owner, e := s.pluginCreation.Store.ForAnyThread(ctx, threadID); e == nil && owner.Environment == meta.EndpointID && d.Lifecycle != "deleted" {
+			return plugincreation.ErrThreadReferenced
+		} else if e != nil && !errors.Is(e, plugincreation.ErrNotFound) {
+			return e
+		}
 	}
 	if s.tessiven != nil {
 		referenced, referenceErr := s.tessiven.FlowerThreadReferenced(ctxOrBackground(ctx), threadID)

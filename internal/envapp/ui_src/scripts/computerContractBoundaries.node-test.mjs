@@ -1,4 +1,4 @@
-/* global document */
+/* global scrollY */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';

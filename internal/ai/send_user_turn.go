@@ -12,6 +12,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -35,6 +36,8 @@ type typedSendOperation struct {
 }
 
 type SendUserTurnRequest struct {
+	// Set only by the authenticated product draft route.
+	PluginDraftID     string               `json:"-"`
 	StorageGeneration string               `json:"storage_generation,omitempty"`
 	ClientRequestID   string               `json:"client_request_id,omitempty"`
 	ThreadID          string               `json:"thread_id"`
@@ -102,6 +105,43 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	if endpointID == "" {
 		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
+	draftID := req.PluginDraftID
+	if threadID != "" && s.pluginCreation != nil {
+		d, owner, e := s.pluginCreation.Store.ForAnyThread(ctx, threadID)
+		if e == nil {
+			if owner.Environment != meta.EndpointID || owner.User != meta.UserPublicID {
+				return SendUserTurnResponse{}, plugincreation.ErrNotFound
+			}
+			if draftID != "" && draftID != d.ID {
+				return SendUserTurnResponse{}, plugincreation.ErrNotFound
+			}
+			draftID = d.ID
+		} else if !errors.Is(e, plugincreation.ErrNotFound) {
+			return SendUserTurnResponse{}, e
+		}
+	}
+	if draftID != "" {
+		if s.pluginCreation == nil {
+			return SendUserTurnResponse{}, plugincreation.ErrNotFound
+		}
+		unlock, e := s.pluginCreation.LockDraft(ctx, meta, draftID)
+		if e != nil {
+			return SendUserTurnResponse{}, e
+		}
+		defer unlock()
+		owner, e := plugincreation.OwnerFromSession(meta)
+		if e != nil {
+			return SendUserTurnResponse{}, e
+		}
+		d, e := s.pluginCreation.Store.Get(ctx, owner, draftID)
+		if e != nil {
+			return SendUserTurnResponse{}, e
+		}
+		if d.Lifecycle != "active" {
+			return SendUserTurnResponse{}, plugincreation.ErrDeleting
+		}
+	}
+
 	if req.Create != nil {
 		if threadID != "" || strings.TrimSpace(req.ClientRequestID) != "" {
 			return SendUserTurnResponse{}, errors.New("top-level thread_id and client_request_id must be omitted for thread creation")
@@ -374,8 +414,12 @@ func (s *Service) modelContextSnapshotForAdmission(ctx context.Context, meta *se
 		return nil, err
 	}
 	metaCopy := *meta
+	hostCapabilities, err := s.bindRunHostCapabilities(meta.EndpointID, req.ThreadID)
+	if err != nil {
+		return nil, err
+	}
 	r := newRun(runOptions{
-		StateDir: s.stateDir, TaskFiles: &s.taskFiles,
+		StateDir: s.stateDir, TaskFiles: &s.taskFiles, HostCapabilities: hostCapabilities,
 		PlatformHTTPTransport: s.platformHTTPTransport,
 		Log:                   s.log, AgentHomeDir: s.agentHomeDir, WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,
 		SessionMeta: &metaCopy, EndpointID: strings.TrimSpace(meta.EndpointID), ThreadID: strings.TrimSpace(req.ThreadID),

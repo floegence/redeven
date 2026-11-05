@@ -74,6 +74,7 @@ export type PluginCenterViewProps = {
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
   onCreatePlugin?: (mode: 'chat' | 'direct') => void;
+  onOpenDrafts?: () => void;
 };
 
 type PluginSourceFilter = 'all' | 'official' | 'community';
@@ -574,6 +575,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       focusRequest={props.selectedInventoryKey ? undefined : props.focusRequest}
       onInstallExternal={() => openExternalDialog()}
       onCreatePlugin={props.onCreatePlugin}
+      onOpenDrafts={props.onOpenDrafts}
       onClose={props.onClose}
       feedback={allItems().length > 0 && errorMessage() ? [{ id: 'inventory', severity: 'error', summary: errorMessage()!, detail: <Show when={!canManage()}><p>{i18n.t('uiCopy.plugin.permissionsAdminRequired')}</p></Show>, actions: <Button size="sm" variant="outline" disabled={loading() || refreshPending()} onClick={() => void refreshInventory()}>{i18n.t('common.actions.retry')}</Button> }] : []}
       runtimeRecovery={props.runtimeRecovery}
@@ -640,7 +642,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           <div
             data-plugin-center-list
             aria-busy={loading()}
-            class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-start gap-3 overflow-y-auto p-3 sm:p-4"
+            class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(248px,100%),1fr))] items-start gap-2.5 overflow-y-auto p-3"
           >
             <For each={visibleItems()}>
               {(item, index) => (
@@ -874,6 +876,7 @@ function PluginCenterShell(props: {
   focusRequest?: number;
   onInstallExternal: () => void;
   onCreatePlugin?: (mode: 'chat' | 'direct') => void;
+  onOpenDrafts?: () => void;
   onClose?: () => void;
   children: JSX.Element;
 }): JSX.Element {
@@ -943,7 +946,7 @@ function PluginCenterShell(props: {
   return (
     <section ref={(element) => { props.rootRef?.(element); }} data-plugin-center-view onKeyDown={props.onKeyDown} tabIndex={-1} class="redeven-plugin-motion relative flex h-full min-h-0 min-w-0 flex-col text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
-        <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
+        <div class="flex w-full min-w-0 flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap" data-plugin-center-toolbar-primary>
           <Show when={props.showTitle !== false}><div class="flex min-w-0 shrink-0 items-center gap-2">
             <h1 class="truncate text-[length:var(--floe-type-body)] font-medium">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
           </div></Show>
@@ -967,8 +970,8 @@ function PluginCenterShell(props: {
             onSelect={id => { if (id === 'clear') props.onClearFilters(); else { const [groupID, value] = id.split(':'); filterGroups.find(group => group.id === groupID)?.onSelect(value); } }} /></div>
           <div class="plugin-center-management ml-auto flex shrink-0 items-center gap-1.5">
             <Show when={props.canManage && props.onCreatePlugin}>
-              <Button variant="default" size="sm" data-plugin-center-create-plugin onClick={() => props.onCreatePlugin?.('chat')}><Wand class="mr-1 h-3.5 w-3.5" />{i18n.t('uiCopy.plugin.createWithFlower')}</Button>
-              <Button variant="ghost" size="sm" data-plugin-center-create-plugin-direct onClick={() => props.onCreatePlugin?.('direct')}>{i18n.t('uiCopy.plugin.createDirect')}</Button>
+              <Button variant="default" size="sm" data-plugin-center-create-plugin onClick={() => props.onCreatePlugin?.('chat')}><Wand class="mr-1 h-3.5 w-3.5" />{i18n.t('uiCopy.plugin.creationTitle')}</Button>
+              <Button variant="ghost" size="sm" data-plugin-center-drafts onClick={props.onOpenDrafts}>{i18n.t('uiCopy.plugin.creation.drafts')}</Button>
             </Show>
             <FeedbackIndicator label={i18n.t('uiCopy.plugin.centerTitle')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => searchRef} entries={props.feedback ?? []} />
             <Show when={props.filtersActive}>
@@ -1156,7 +1159,7 @@ export function PluginCenterDetails(props: {
       >
         {(item) => (
           <div class="flex h-full min-h-0 flex-col">
-            <div ref={detailControls} tabIndex={-1} class="shrink-0 space-y-4 border-b px-4 py-4" data-plugin-detail-controls>
+            <div ref={detailControls} tabIndex={-1} class="shrink-0 space-y-3 border-b px-4 py-3" data-plugin-detail-controls>
               <div class="flex items-center justify-between gap-3" aria-busy={props.marketDetailLoading}>
                 <FeedbackIndicator label={item().displayName} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => detailControls} entries={presentation() && props.marketDetailError ? [{ id: 'market', severity: 'error', summary: i18n.t('uiCopy.plugin.marketUnavailable'), detail: messageFromUnknown(props.marketDetailError), actions: <Button size="sm" variant="outline" disabled={props.marketDetailLoading} onClick={props.onRetryMarketDetail}>{i18n.t('common.actions.retry')}</Button> }] : []} />
                 <span class="inline-flex h-3.5 w-3.5 shrink-0" style={{ visibility: props.marketDetailLoading ? 'visible' : 'hidden' }}><RefreshIcon class="h-3.5 w-3.5 animate-spin" aria-label={i18n.t('uiCopy.plugin.loadingOfficial')} /></span>
@@ -1378,7 +1381,7 @@ function PluginAuthorContent(props: {
   );
 }
 
-function PluginPermissionInventory(props: {
+export function PluginPermissionInventory(props: {
   item: PluginInventoryItem;
   canManage: boolean;
   commandPending: boolean;

@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"io"
 	"strings"
 
@@ -242,6 +243,8 @@ type FlowerSubagentDetailResponse struct {
 }
 
 type CreateThreadRequest struct {
+	// managedSource is assigned only after authenticated draft resolution.
+	managedSource      *plugincreation.SourceScope
 	ClientRequestID    string                      `json:"client_request_id"`
 	Title              string                      `json:"title"`
 	ModelID            string                      `json:"model_id,omitempty"`

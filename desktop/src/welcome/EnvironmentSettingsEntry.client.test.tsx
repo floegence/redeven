@@ -332,8 +332,7 @@ describe('settings restart handoff', () => {
     });
     button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await waitForAccessEditor();
     input('local-ui-port', '25000'); button('Save and restart').click();
-    await new Promise(resolve => setTimeout(resolve, 250));
-    expect(document.querySelector('.redeven-environment-settings-dialog')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-environment-settings-dialog')).toBeNull());
     expect(document.querySelector('.redeven-environment-progress')?.textContent).toContain('Fixture SSH');
     expect(document.querySelector('.redeven-environment-progress')?.textContent).toContain('Stopping');
     expect(h.settings.save).toHaveBeenCalledTimes(1);
@@ -593,6 +592,7 @@ describe('settings entry asynchronous isolation', () => {
       h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? { ...entry, label: 'Renamed' } : entry) });
       return { ok: true, outcome: 'saved_environment', environment_id: id };
     });
+    await vi.waitFor(() => expect((button('Save changes') as HTMLButtonElement).disabled).toBe(false));
     button('Save changes').click(); await settle(); button('Access & security').click(); await settle();
     expect(accessEditor().value).toBe('25000');
     expect(h.settings.save).not.toHaveBeenCalled(); expect(h.settings.load).toHaveBeenCalledTimes(1);

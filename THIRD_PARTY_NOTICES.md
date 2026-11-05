@@ -3055,9 +3055,7 @@ SOFTWARE.
 | @floegence/flowersec-node-native-linux-x64-gnu | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.11.1 |  |
 | @floegence/flowersec-node-native | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.11.1 |  |
 | @floegence/redeven-service-templates | 0.7.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.7.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.7.0 source release. The SDK manifest omits its license field. |
-| @floegence/redevplugin-contracts | 3.15.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.15.0 |  |
 | @floegence/redevplugin-contracts | 3.19.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.19.0 |  |
-| @floegence/redevplugin-ui | 3.15.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.15.0 | License inherited from floegence/redevplugin root LICENSE. |
 | @floegence/redevplugin-ui | 3.19.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.19.0 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/ibm-plex-mono | 5.3.0 | OFL-1.1 | Env App UI | https://www.npmjs.com/package/%40fontsource%2Fibm-plex-mono/v/5.3.0 |  |

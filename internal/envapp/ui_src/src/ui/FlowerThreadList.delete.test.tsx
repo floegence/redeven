@@ -146,7 +146,7 @@ describe('FlowerThreadList deletion entry', () => {
     setItems([{ ...thread(), title: 'Updated release review', working_dir: '/workspace/latest', pinned: true }]);
     await Promise.resolve();
 
-    const menu = host.querySelector('[role="menu"]');
+    const menu = host.querySelector('[role="menu"]:not([aria-hidden="true"])');
     expect(menu?.getAttribute('aria-label')).toContain('Updated release review');
     expect(menu?.textContent).toContain('Unpin');
     const copyWorkdir = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
@@ -170,7 +170,7 @@ describe('FlowerThreadList deletion entry', () => {
     setItems([{ ...thread(), title: '' }]);
     await Promise.resolve();
 
-    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
     expect(host.querySelector('[data-flower-thread-card]')).toBeNull();
   });
 
@@ -179,12 +179,12 @@ describe('FlowerThreadList deletion entry', () => {
     const menuTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
     menuTrigger.click();
     await settleMenuFocus();
-    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
 
     menuTrigger.focus();
     await Promise.resolve();
 
-    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
   });
 
   it('closes on search, selection, outside pointer or focus, and Escape', async () => {
@@ -192,7 +192,7 @@ describe('FlowerThreadList deletion entry', () => {
     const open = async () => {
       (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
       await settleMenuFocus();
-      expect(host.querySelector('[role="menu"]')).toBeTruthy();
+      expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
     };
 
     await open();
@@ -234,11 +234,11 @@ describe('FlowerThreadList deletion entry', () => {
     await open();
     window.dispatchEvent(new Event('scroll'));
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
 
     (host.querySelector('.flower-scroll') as HTMLElement).dispatchEvent(new Event('scroll'));
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
     (host.querySelector('.flower-scroll') as HTMLElement).dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }));
     await Promise.resolve();
     await expectMenuClosed(host);
@@ -271,7 +271,7 @@ describe('FlowerThreadList deletion entry', () => {
     const { host, setItems } = renderList();
     (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
     await settleMenuFocus();
-    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
 
     setItems([{ ...thread(), thread_id: 'thread-replacement', title: 'Replacement' }]);
     await Promise.resolve();
@@ -288,7 +288,7 @@ describe('FlowerThreadList deletion entry', () => {
     selectButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
     await settleMenuFocus();
 
-    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[role="menu"]:not([aria-hidden="true"])')).toBeTruthy();
     expect(menuTrigger.className).toContain('flower-thread-card-menu-button');
     expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
   });

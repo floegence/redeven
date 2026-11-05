@@ -1865,6 +1865,9 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.host.queryThreads(ctx, meta, toolName, args)
 	}
+	if strings.HasPrefix(toolName, "plugin_author.") {
+		return r.execPluginAuthorTool(ctx, meta, toolName, args)
+	}
 	if strings.HasPrefix(toolName, "tessiven.") {
 		return r.execTessivenTool(ctx, meta, toolName, args)
 	}
@@ -3394,6 +3397,18 @@ func (r *run) runPathScope() (runPathScope, error) {
 		registry, err = registry.WithPrivateRoot(filepath.Dir(space.Root), space.Root)
 		if err != nil {
 			return runPathScope{}, err
+		}
+	}
+	if r.host.pluginCreation != nil && r.host.authorityThreadID != "" {
+		source, found, err := r.host.pluginCreation.ThreadSourceScope(context.Background(), r.sessionMeta, r.host.authorityThreadID)
+		if err != nil {
+			return runPathScope{}, err
+		}
+		if found {
+			registry, err = registry.WithPrivateRoot(source.PrivateRoot, source.Directory)
+			if err != nil {
+				return runPathScope{}, err
+			}
 		}
 	}
 	resolved, err := registry.Resolve(workingDir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})

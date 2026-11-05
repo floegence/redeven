@@ -46,6 +46,7 @@ import (
 	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -79,6 +80,7 @@ type Options struct {
 	DirectoryFavorites   *directoryfavorites.Store
 	Notes                *notes.Service
 	WorkbenchLayout      *workbenchlayout.Service
+	PluginCreation       *plugincreation.Service
 	Tessiven             *tessiven.Service
 	TessivenResources    *tessiven.ResourceBackend
 	Terminal             *terminal.Manager
@@ -253,6 +255,7 @@ type Server struct {
 	directoryFavorites *directoryfavorites.Store
 	notes              *notes.Service
 	layouts            *workbenchlayout.Service
+	pluginCreation     *plugincreation.Service
 	tessiven           *tessiven.Service
 	tessivenResources  *tessiven.ResourceBackend
 	term               workbenchTerminalSessionManager
@@ -465,6 +468,7 @@ func New(opts Options) (*Server, error) {
 		directoryFavorites:    opts.DirectoryFavorites,
 		notes:                 opts.Notes,
 		layouts:               opts.WorkbenchLayout,
+		pluginCreation:        opts.PluginCreation,
 		tessiven:              opts.Tessiven,
 		tessivenResources:     opts.TessivenResources,
 		term:                  opts.Terminal,
@@ -2663,6 +2667,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if g.handleHostApplicationsAPI(w, r) {
+		return
+	}
+	if g.handlePluginCreationAPI(w, r) {
 		return
 	}
 	if g.handleTessivenAPI(w, r) {

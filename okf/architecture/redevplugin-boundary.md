@@ -37,6 +37,18 @@ Released 3.15 uses one Wasmtime actor/job path with fresh invocation state, boun
 ## Authoring/execution
 Platform owns config/manifest validation,bindings,build/test/package,diagnostics/watch,persistent preview,manual update candidates,connection review,verified dev runtime. Redeven version-derived skill invokes released CLI. Product owns intent/placement/review/install approval and build/signature/SBOM/publication proof; authoring grants no permissions.
 
+Embedded creation uses the published `authoring.WorkspaceStore` and isolated
+`authoring.Environment`; the product retains only opaque workspace, artifact,
+inspection, installation-request and installed-instance references. Platform owns
+source initialization, immutable artifacts, durable build reports, isolated Host
+state, preview application and exact-byte inspection. Durable inspected installs
+own idempotent request recovery and committed/unknown/not-committed outcomes.
+Redeven must never turn a failed status read into absence or replay an uncertain
+installation under a new request identity. Preview state and formal installation
+have separate stores and grants. Deleting author resources preserves installed
+plugins. Host-local source access is scoped to the authenticated draft and normal
+Flower effect approval; it does not authorize plugin execution.
+
 3.13.0 owns manifest actions/direct Surface KV/SQLite/files/settings without Worker forwarding. Dedicated-origin binary/WebSocket handler requires exact handshake; Host checks session ceilings/scope/grants/quotas/revoke. Product mounts/presents,never new endpoints/manifest interpretation. SDK conflict/unknown cannot replay; coalesced watches are not logs.
 
 Private files1→chunked2 migration stays upstream, separate from control/author schemas. Snapshots/recovery opaque; no copied SQL/rewrite.3.12.2 retains ordinary packaging/SDK. Trusted parent query/event/cancel binds current surface gateway/plugin; pass exact scope via authenticated transport/released handler. Stale/malformed cannot broaden to management; plugin-origin direct calls denied.

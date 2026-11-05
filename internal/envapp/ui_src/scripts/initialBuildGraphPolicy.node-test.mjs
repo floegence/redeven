@@ -203,3 +203,18 @@ test('keeps the presentation engine out of every initial chunk', () => {
   } });
   assert.equal(result.forbiddenModules.length, 2);
 });
+
+
+test('loads plugin creation pages only through dynamic navigation', () => {
+  for (const page of ['PluginCreationWorkspace.tsx', 'PluginDraftLibrary.tsx']) {
+    const module = '/workspace/redeven/internal/envapp/ui_src/src/ui/plugins/' + page;
+    const manifest = {
+      'index.html': entry('assets/index.js', { dynamicImports: ['creation'] }),
+      creation: { file: 'assets/creation.js' },
+    };
+    const modules = { chunks: { 'assets/index.js': chunk(['src/index.ts']), 'assets/creation.js': chunk([module]) } };
+    assert.deepEqual(analyzeInitialBuildGraph(manifest, modules).forbiddenModules, []);
+    manifest['index.html'].imports = ['creation'];
+    assert.deepEqual(analyzeInitialBuildGraph(manifest, modules).forbiddenModules.map(value => value.moduleId), [module]);
+  }
+});

@@ -592,6 +592,13 @@
   background: var(--redeven-surface-main, var(--background));
 }
 
+.flower-surface-embedded {
+  --flower-chat-text-column-width: 43.75rem;
+}
+
+.flower-surface-embedded .flower-chat-bottom-dock-track { width: 100%; max-width: var(--flower-chat-text-column-width); }
+
+.flower-surface-embedded,
 .flower-surface-companion {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);

@@ -22,8 +22,8 @@
 }
 
 [data-plugin-center-details] {
-  width: 400px;
-  flex: 0 0 400px;
+  width: 344px;
+  flex: 0 0 344px;
 }
 
 [data-plugin-center-details][data-detail-layout='page'] {
@@ -38,3 +38,19 @@
     height: min(820px, 82dvh, calc(100dvh - 76px));
   }
 }
+
+/* Match the workspace's 12–13px control scale; coarse pointers keep 44px targets. */
+[data-plugin-center-view] {
+  --floe-type-body: 0.8125rem;
+  --floe-type-control: 0.75rem;
+  --floe-line-control: 1rem;
+  font-size: 0.8125rem;
+}
+[data-plugin-directory-card] { box-shadow: none; }
+@media (pointer: coarse) {
+  [data-plugin-center-card-actions] button,
+  [data-plugin-center-card-actions] [role='button'] { min-width: 44px; min-height: 44px; }
+}
+
+/* Reserve the same action lane for idle, progress, and recovery controls. */
+.redeven-plugin-directory-card [data-plugin-center-card-actions] { min-height: 36px; }

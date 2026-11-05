@@ -1,3 +1,5 @@
+import { pluginDraftForThread, deletePluginDraft } from '../plugins/pluginCreationApi';
+import { removePluginComposer } from '../plugins/pluginComposerPersistence';
 import { createWorkspaceEffectRpc } from '../services/workspaceEffects';
 import { createFlowerDownloads } from '../downloads/flowerDownloads';
 import type { DownloadManager } from '../downloads/types';
@@ -19,9 +21,9 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory, type FlowerModelReadResource } from '../../../../../flower_ui/src/modelDirectory';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import { readSessionEvents, envDirectoryFavorites } from '../services/sessionHTTP';
+import { readSessionEvents, envDirectoryFavorites, fetchSessionJSON } from '../services/sessionHTTP';
 import {
-  fetchLocalApiJSON,
+  fetchLocalApiJSON as fetchLocalJSON,
   fetchLocalApiJSONResponse,
   LocalApiError,
   prepareLocalApiRequestInit,
@@ -83,6 +85,7 @@ import {
   normalizeFlowerAttachmentStagingScope,
 } from '../../../../../flower_host_ui/src/flowerAttachmentStaging';
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
+  prepareTurnRoute?: (requestID: string) => Promise<string>;
   envPublicID: string;
   downloadManager?: DownloadManager;
   signal?: AbortSignal;
@@ -119,6 +122,7 @@ export type EnvLocalFlowerSurfaceAdapterCopy = Readonly<{
   enterMessageBeforeSending: string;
   selectModelBeforeChat: string;
   failedToCreateChat: string;
+  pluginDeleteTitle?: string; pluginDeleteBody?: string; pluginDeleteConfirm?: string;
 }>;
 
 type ThreadView = Readonly<{
@@ -266,7 +270,7 @@ async function createEnvAttachmentStagingScope(targetID?: string): Promise<Flowe
 
 async function releaseEnvAttachmentStagingScope(scope: FlowerAttachmentStagingScope): Promise<void> {
   const headers = flowerAttachmentStagingHeaders(scope);
-  await fetchLocalApiJSON<unknown>(
+  await fetchLocalJSON<unknown>(
     `/_redeven_proxy/api/ai/upload-staging-scopes/${encodeURIComponent(scope.staging_scope_id)}`,
     { method: 'DELETE', headers: { 'Upload-Staging-Capability': headers['Upload-Staging-Capability'] } },
   );
@@ -522,8 +526,8 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
 export function createEnvFlowerModelReadResource(scope: () => string): FlowerModelReadResource {
   return createFlowerModelReadResource({
     scope,
-    loadConfiguration: async signal => mapEnvFlowerSettings(await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET', signal })),
-    loadDirectory: async (baseline, signal) => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal })),
+    loadConfiguration: async signal => mapEnvFlowerSettings(await fetchLocalJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET', signal })),
+    loadDirectory: async (baseline, signal) => readFlowerModelDirectory(await fetchLocalJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal })),
   });
 }
 
@@ -537,6 +541,8 @@ function visibleDirectory(directory: FlowerModelDirectory, exposeDesktop: boolea
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const copy = adapterCopy(options);
+  // Every continuation in a managed draft must retain the authenticated channel.
+  const fetchLocalApiJSON = options.prepareTurnRoute ? fetchSessionJSON : fetchLocalJSON;
   const resolveCanonicalReference = async (request: FlowerCanonicalReferenceOpenRequest): Promise<FlowerCanonicalReferenceNavigationTarget> => {
     const threadID = trim(request.thread_id);
     const turnID = trim(request.turn_id);
@@ -545,7 +551,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     if (!threadID) throw new Error(copy.missingThreadID);
     if (Boolean(turnID) === Boolean(queueID)) throw new Error('Missing exact Flower reference scope.');
     if (!referenceID) throw new Error('Missing Flower reference id.');
-    return parseCanonicalReferenceOpenTarget(await fetchLocalApiJSON<unknown>(
+    return parseCanonicalReferenceOpenTarget(await fetchLocalJSON<unknown>(
       `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/reference-open-target`,
       {
         method: 'POST',
@@ -586,6 +592,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       get subtitle() { return copy.environmentLocalSubtitle; },
     },
     get canMutate() { return options.canMutate !== false; },
+    prepareThreadDeletion: async threadID => {
+      try {
+        const draft = await pluginDraftForThread(threadID);
+        return { title: options.copy?.pluginDeleteTitle ?? 'Delete this plugin draft?', description: options.copy?.pluginDeleteBody ?? 'This deletes the dedicated conversation, source and preview. Installed plugins are kept.', confirmLabel: options.copy?.pluginDeleteConfirm ?? 'Delete draft', commit: async () => {await deletePluginDraft(draft); await removePluginComposer(draft.id).catch(() => {});} };
+      } catch(error) { if(error instanceof LocalApiError && error.status===404)return undefined;throw error; }
+    },
     transport: {
       listThreads: input => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?' + new URLSearchParams({ limit: String(input?.limit ?? 25), ...(input?.cursor ? { cursor: input.cursor } : {}) }), { method: 'GET', signal: input?.signal }),
       loadThread: (threadID, signal) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET', signal }),
@@ -912,11 +924,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection),
       });
       let response: FlowerTurnHTTPResponse;
+      const route = options.prepareTurnRoute ? await options.prepareTurnRoute(clientRequestID) : undefined;
       try {
         response = await fetchLocalApiJSON<FlowerTurnHTTPResponse>(
-          existingThreadID
+          route ?? (existingThreadID
             ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
-            : '/_redeven_proxy/api/ai/turns',
+            : '/_redeven_proxy/api/ai/turns'),
           {
             method: 'POST',
             ...(stagingHeaders ? { headers: stagingHeaders } : {}),

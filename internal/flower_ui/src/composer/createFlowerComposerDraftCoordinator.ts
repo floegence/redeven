@@ -105,6 +105,8 @@ export type FlowerComposerDraftSession = Readonly<{
 
 export type FlowerComposerDraftCoordinator = Readonly<{
   reset: () => void;
+  snapshotForRestart: (scopeID: string) => FlowerComposerRestartDraft;
+  restoreDraft: (draft: FlowerComposerRestartDraft) => void;
   exportForRestart: () => readonly FlowerComposerRestartDraft[];
   restoreAfterRestart: (drafts: readonly FlowerComposerRestartDraft[]) => void;
   resumeAfterCanceledRestart: () => void;
@@ -263,39 +265,54 @@ export function createFlowerComposerDraftCoordinator(
     };
   };
 
+  const snapshotForRestart = (scopeID: string): FlowerComposerRestartDraft => {
+    const handle = stateFor(scopeID);
+    const files = handle.attachmentController?.localFiles() ?? handle.restartFiles ?? [];
+    const value = handle.cell.snapshot.value;
+    if (value.attachments.some(attachment => attachment.staged && !files.some(file => file.local_id === attachment.local_id))) {
+      throw new Error('An attachment must be available locally before restarting the Runtime.');
+    }
+    // Copy user intent explicitly. Staging capabilities, model capability
+    // revisions and previously prepared submissions belong to the old session.
+    return { scope_id: scopeID, files, value: {
+      text: value.text, goal_edit: value.goal_edit, goal_command: value.goal_command, mode: 'ordinary',
+      omit_embedded_context: value.omit_embedded_context,
+      references: value.references.map(reference => ({ ...reference })),
+      page_context_captured: value.page_context_captured,
+      attachments: value.attachments.map(attachment => ({
+        local_id: attachment.local_id, source: attachment.source,
+        name: attachment.name, mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
+        upload_request_id: `flower_attachment_request_${crypto.randomUUID()}`,
+        attempt_state: attachment.admitted ? 'staged_ready' : files.some(file => file.local_id === attachment.local_id) ? 'queued' : 'reselect_required',
+        ...(attachment.admitted ? { admitted: attachment.admitted } : {}),
+      })),
+      model_id: value.model_id, model_id_override: value.model_id_override, permission_type_override: value.permission_type_override,
+      reasoning_model_id: value.reasoning_model_id, reasoning_selection: value.reasoning_selection, working_dir: value.working_dir,
+      working_dir_override: value.working_dir_override,
+      inherited_defaults: value.inherited_defaults && structuredClone(value.inherited_defaults),
+      input_drafts: value.input_drafts && Object.fromEntries(Object.entries(value.input_drafts)
+        .map(([id, answer]) => [id, { ...answer }])),
+      active_input_question_id: value.active_input_question_id,
+    } };
+  };
+  const restoreDraft = (draft: FlowerComposerRestartDraft) => {
+    assertActive();
+    const previous = states.get(draft.scope_id);
+    if (previous && previous.cell.snapshot.revision > 0) return;
+    const handle = stateFor(draft.scope_id);
+    handle.restartFiles = draft.files;
+    replace(handle.cell, draft.value);
+  };
+
   return {
+    snapshotForRestart,
+    restoreDraft,
     exportForRestart: () => {
       assertActive();
       const drafts: FlowerComposerRestartDraft[] = [];
       for (const [scopeID, handle] of states) {
         handle.attachmentController?.setSuspended(true);
-        const files = handle.attachmentController?.localFiles() ?? handle.restartFiles ?? [];
-        const value = handle.cell.snapshot.value;
-        if (value.attachments.some(attachment => attachment.staged && !files.some(file => file.local_id === attachment.local_id))) {
-          throw new Error('An attachment must be available locally before restarting the Runtime.');
-        }
-        // Copy user intent explicitly. Staging capabilities, model capability
-        // revisions and previously prepared submissions belong to the old session.
-        drafts.push({ scope_id: scopeID, files, value: {
-          text: value.text, goal_edit: value.goal_edit, goal_command: value.goal_command, mode: 'ordinary',
-          omit_embedded_context: value.omit_embedded_context,
-          references: value.references.map(reference => ({ ...reference })),
-          page_context_captured: value.page_context_captured,
-          attachments: value.attachments.map(attachment => ({
-            local_id: attachment.local_id, source: attachment.source,
-            name: attachment.name, mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
-            upload_request_id: `flower_attachment_request_${crypto.randomUUID()}`,
-            attempt_state: attachment.admitted ? 'staged_ready' : files.some(file => file.local_id === attachment.local_id) ? 'queued' : 'reselect_required',
-            ...(attachment.admitted ? { admitted: attachment.admitted } : {}),
-          })),
-          model_id: value.model_id, model_id_override: value.model_id_override, permission_type_override: value.permission_type_override,
-          reasoning_model_id: value.reasoning_model_id, reasoning_selection: value.reasoning_selection, working_dir: value.working_dir,
-          working_dir_override: value.working_dir_override,
-          inherited_defaults: value.inherited_defaults && structuredClone(value.inherited_defaults),
-          input_drafts: value.input_drafts && Object.fromEntries(Object.entries(value.input_drafts)
-            .map(([id, answer]) => [id, { ...answer }])),
-          active_input_question_id: value.active_input_question_id,
-        } });
+        drafts.push(snapshotForRestart(scopeID));
       }
       return drafts;
     },

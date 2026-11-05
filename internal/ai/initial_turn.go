@@ -3,11 +3,13 @@ package ai
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/logsafe"
+	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -33,6 +35,17 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		return fail(initialTurnPhaseLookupFrozenState, errors.New("invalid client_request_id"))
 	}
 	create := *req.Create
+	if req.PluginDraftID != "" {
+		if s.pluginCreation == nil {
+			return fail(initialTurnPhaseLookupFrozenState, plugincreation.ErrNotFound)
+		}
+		source, e := s.pluginCreation.SourceScope(ctx, meta, req.PluginDraftID)
+		if e != nil {
+			return fail(initialTurnPhaseLookupFrozenState, e)
+		}
+		create.WorkingDir = source.Directory
+		create.managedSource = &source
+	}
 	settings, err := s.buildThreadCreateSettings(ctxOrBackground(ctx), meta, create)
 	if err != nil {
 		return fail(initialTurnPhaseLookupFrozenState, err)
@@ -59,12 +72,34 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	}
 	req.Options.ReasoningSelection = resolvedReasoning.Effective
 
+	if req.PluginDraftID != "" {
+		owner, e := plugincreation.OwnerFromSession(meta)
+		if e != nil {
+			return fail(initialTurnPhaseLookupFrozenState, e)
+		}
+		frozen, e := json.Marshal(create)
+		if e != nil {
+			return fail(initialTurnPhaseLookupFrozenState, e)
+		}
+		if _, e = s.pluginCreation.Store.FreezeLaunch(ctx, owner, req.PluginDraftID, clientRequestID, string(frozen)); e != nil {
+			return fail(initialTurnPhaseLookupFrozenState, e)
+		}
+	}
 	thread, err := s.CreateThreadWithOptions(ctxOrBackground(ctx), meta, create)
 	if err != nil {
 		return fail(initialTurnPhaseResumeCanonicalCreate, err)
 	}
 	if thread == nil || strings.TrimSpace(thread.ThreadID) == "" {
 		return fail(initialTurnPhaseResumeCanonicalCreate, errors.New("created thread identity is missing"))
+	}
+	if req.PluginDraftID != "" {
+		owner, e := plugincreation.OwnerFromSession(meta)
+		if e != nil {
+			return fail(initialTurnPhaseResumeCanonicalCreate, e)
+		}
+		if _, e = s.pluginCreation.Store.BindThread(ctx, owner, req.PluginDraftID, clientRequestID, thread.ThreadID); e != nil {
+			return fail(initialTurnPhaseResumeCanonicalCreate, e)
+		}
 	}
 	req.ClientRequestID = clientRequestID
 	req.ThreadID = thread.ThreadID
