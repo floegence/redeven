@@ -7,6 +7,7 @@ import { PluginPlatformRequestError, PluginTransportError } from '@floegence/red
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
+import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog.test-fixture';
 import { ExternalPackageInspectionTerminalError } from './pluginApi';
 import type {
   ExternalPluginCommitResult,
@@ -233,6 +234,16 @@ async function flush(): Promise<void> {
 }
 
 describe('ExternalPluginInstallDialog', () => {
+  it('rejects inspected bytes that differ from the selected community release', async () => {
+    const catalog = { ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!, sourceKind: 'reviewed-third-party' as const };
+    const item = { inventoryKey: 'catalog:test', pluginID: catalog.pluginID, displayName: catalog.displayName, officialCatalog: catalog } as PluginInventoryItem;
+    const onCommit = vi.fn();
+    renderDialog({ updateItem: item, sourcePreset: { sourceKind: 'package_url', url: 'https://plugins.example.com/toolbox.redevplugin' }, onCommit });
+    button('Review package').click();
+    await flush();
+    expect(document.querySelector('[data-external-plugin-identity]')).toBeNull();
+    expect(onCommit).not.toHaveBeenCalled();
+  });
   it('leads with verified author presentation and keeps technical review behind disclosure', async () => {
     const inspected = inspection('verified');
     inspected.presentation = { default_locale: 'en-US', locales: [{ locale: 'en-US', plugin_name: 'Weather', publisher_name: 'Redeven Official', summary: 'Local weather', description: [], highlights: [], keywords: [], surfaces: [], settings: [] }] };

@@ -79,7 +79,7 @@ func (p *officialReleaseProvider) setSnapshot(snapshot pluginmarket.Snapshot) er
 
 	next := make(map[host.PluginReleaseRef]officialReleaseProjection)
 	for _, plugin := range snapshot.Plugins {
-		if plugin.Release == nil || plugin.PublisherID != officialPublisherID {
+		if plugin.Release == nil || plugin.PublisherID != officialPublisherID || (plugin.SourceKind != "" && plugin.SourceKind != "official") {
 			continue
 		}
 		projection, projectionErr := p.projectRelease(*plugin.Release, anchors, previous)

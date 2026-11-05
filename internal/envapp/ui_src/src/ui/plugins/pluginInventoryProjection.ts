@@ -98,7 +98,7 @@ export function buildPluginPanelModel(
 
 export function buildPluginCenterModel(projection: PluginInventoryProjection, activeTab: PluginCenterTab = 'installed'): PluginCenterModel {
   const installed = projection.items.filter((item) => Boolean(item.pluginInstanceID));
-  const discover = projection.items.filter((item) => !item.pluginInstanceID && item.trustBadge === 'official' && item.lifecycleState === 'not_installed');
+  const discover = projection.items.filter((item) => !item.pluginInstanceID && (item.trustBadge === 'official' || item.officialCatalog?.sourceKind === 'reviewed-third-party') && item.lifecycleState === 'not_installed');
   const updates = projection.items.filter((item) => item.lifecycleState === 'update_available');
   return { activeTab, installed, discover, updates };
 }
@@ -352,6 +352,7 @@ function catalogPluginKey(publisherID: string, pluginID: string): string {
 }
 
 function isCatalogPackageRecord(record: ReDevPluginRecord, item: OfficialPluginCatalogItem): boolean {
+  if (item.sourceKind === 'reviewed-third-party' && record.source_provenance) return true;
   const release = item.distribution.releaseRef;
   const currentReleaseMatches = record.version === release.version
     && record.package_hash === release.expected_hashes.package_sha256
@@ -550,7 +551,7 @@ function catalogState(catalogItem: OfficialPluginCatalogItem): PluginInventoryIt
 function catalogTrustBadge(catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['trustBadge'] {
   if (catalogItem.rolloutState === 'revoked') return 'revoked';
   if (catalogItem.rolloutState === 'disabled') return 'blocked';
-  return 'official';
+  return catalogItem.sourceKind === 'reviewed-third-party' ? 'community' : 'official';
 }
 
 function catalogAttentionReason(catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['attentionReason'] | undefined {

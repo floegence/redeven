@@ -533,6 +533,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const installItem = (item: PluginInventoryItem) => {
     if (item.officialCatalog) {
       if (item.pluginInstanceID) return;
+      if (item.officialCatalog.sourceKind === 'reviewed-third-party') {
+        openExternalDialog(item, item.officialCatalog.distribution.installSource);
+        return;
+      }
       const key = officialInstallKey(item);
       const flow = officialInstallFlow();
       if (!item.officialCatalog.installPreview) {
@@ -2557,8 +2561,8 @@ function filterItems(
   const query = filters.query.normalize('NFKC').trim().toLocaleLowerCase(locale);
   return items.filter((item) => {
     if (filters.category !== 'all' && item.category !== filters.category) return false;
-    if (filters.source === 'official' && !item.officialCatalog) return false;
-    if (filters.source === 'external' && item.officialCatalog) return false;
+    if (filters.source === 'official' && (!item.officialCatalog || item.officialCatalog.sourceKind === 'reviewed-third-party')) return false;
+    if (filters.source === 'external' && item.officialCatalog && item.officialCatalog.sourceKind !== 'reviewed-third-party') return false;
     if (filters.trust !== 'all' && item.trustBadge !== filters.trust) return false;
     if (filters.lifecycle !== 'all' && item.lifecycleState !== filters.lifecycle) return false;
     if (!query) return true;

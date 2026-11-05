@@ -15,6 +15,8 @@ Redeven atomically refreshes validated latest-only market metadata for trusted E
 - Keep one current release per plugin/channel. Disabled/revoked market entries constrain discovery/actions; upstream revocation evidence owns install/runtime admission.
 - Installed author/icon presentation must match its generation/identity; mismatches use a generic placeholder rather than newer copy/bytes.
 - Packages and signed trust transport come from GitHub Releases, never market Cloudflare storage. Installation/update requires normal product review and platform lifecycle; installation grants no permission/runtime access.
+- GitHub release tags are bounded safe names and may include a plugin-specific prefix. The signed release reference and verified package bind the version; the client does not infer it from the tag.
+- Source classification is requested explicitly from a capable market; older responses remain readable. Reviewed third-party listings use external package inspection and explicit confirmation, with publisher, plugin, version and all package hashes matched to the selected listing. Directory review does not confer official trust or automatic-update eligibility.
 
 ## Network behavior
 

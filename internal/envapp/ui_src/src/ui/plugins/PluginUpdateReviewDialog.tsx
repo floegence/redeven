@@ -104,6 +104,13 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
     setConfirmedRisk(false);
     const preset = item.officialCatalog?.distribution.installSource;
     if (preset) {
+      if (item.officialCatalog?.sourceKind === 'reviewed-third-party') {
+        setSourceKind(preset.sourceKind);
+        setURL(preset.url);
+        setTag(preset.sourceKind === 'github_repository' ? preset.tag ?? '' : '');
+        setStage('source_required');
+        return;
+      }
       void prepareOfficialReview(item.inventoryKey);
       return;
     }
@@ -185,6 +192,11 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
     try {
       const inspection = await props.onInspect(request, controller.signal);
       if (controller.signal.aborted) return;
+      const expected = item.officialCatalog?.sourceKind === 'reviewed-third-party' ? item.officialCatalog.distribution.releaseRef : undefined;
+      if (expected && (inspection.plugin_id !== expected.plugin_id || inspection.publisher_id !== expected.publisher_id || inspection.version !== expected.version
+        || inspection.inspected_hashes.package_sha256 !== expected.expected_hashes.package_sha256
+        || inspection.inspected_hashes.manifest_sha256 !== expected.expected_hashes.manifest_sha256
+        || inspection.inspected_hashes.entries_sha256 !== expected.expected_hashes.entries_sha256)) throw new Error(i18n.t('uiCopy.plugin.updateReview.stale'));
       const current = props.item;
       if (current?.inventoryKey !== item.inventoryKey || current.managementRevision !== item.managementRevision) {
         throw new Error(i18n.t('uiCopy.plugin.updateReview.stale'));

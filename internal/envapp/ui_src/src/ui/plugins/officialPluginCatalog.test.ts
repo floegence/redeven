@@ -47,6 +47,12 @@ describe('official plugin catalog contracts', () => {
     });
   });
 
+  it('preserves the reviewed third-party source classification', () => {
+    const next = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+    next.plugins[0]!.source_kind = 'reviewed-third-party';
+    expect(officialPluginCatalog(next)[0]?.sourceKind).toBe('reviewed-third-party');
+  });
+
   it('projects utility plugins and network access without mislabeling method effects', () => {
     const weather = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
     weather.plugins[0]!.categories = ['utilities', 'weather'];

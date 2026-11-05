@@ -123,6 +123,7 @@ export type PluginMarketSnapshot = {
   plugins: Array<{
     plugin_id: string;
     publisher_id: string;
+    source_kind?: 'official' | 'reviewed-third-party';
     presentation: PluginMarketPresentation;
     categories: string[];
     channels: string[];
@@ -205,6 +206,7 @@ export type OfficialPluginPermission = {
 export type OfficialPluginCatalogItem = {
   pluginID: string;
   publisherID: string;
+  sourceKind?: 'official' | 'reviewed-third-party';
   pluginInstanceID: string;
   displayName: string;
   description: string;

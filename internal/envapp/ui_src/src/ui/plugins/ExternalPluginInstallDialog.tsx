@@ -147,6 +147,14 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           ? { sourceKind: 'github_repository', url: url().trim(), tag: tag().trim() || undefined, intent }
           : { sourceKind: 'package_url', url: url().trim(), intent };
       const next = await props.onInspect(request, controller.signal);
+      const expected = props.updateItem?.officialCatalog?.sourceKind === 'reviewed-third-party'
+        ? props.updateItem.officialCatalog.distribution.releaseRef : undefined;
+      if (expected && (next.plugin_id !== expected.plugin_id || next.publisher_id !== expected.publisher_id || next.version !== expected.version
+        || next.inspected_hashes.package_sha256 !== expected.expected_hashes.package_sha256
+        || next.inspected_hashes.manifest_sha256 !== expected.expected_hashes.manifest_sha256
+        || next.inspected_hashes.entries_sha256 !== expected.expected_hashes.entries_sha256)) {
+        throw new Error('Inspected package does not match the selected market release');
+      }
       setInspection(next);
       setConfirmed(false);
       setCommitNeedsReconciliation(false);

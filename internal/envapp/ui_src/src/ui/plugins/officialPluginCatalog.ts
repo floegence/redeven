@@ -193,6 +193,7 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
     return [{
       pluginID: plugin.plugin_id,
       publisherID: plugin.publisher_id,
+      sourceKind: plugin.source_kind,
       pluginInstanceID: `catalog_${plugin.publisher_id}_${plugin.plugin_id}`,
       displayName: defaultLocale.name,
       description: defaultLocale.summary,

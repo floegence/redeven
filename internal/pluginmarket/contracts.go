@@ -28,7 +28,7 @@ var (
 var (
 	idPattern          = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,127}$`)
 	semverPattern      = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
-	tagPattern         = regexp.MustCompile(`^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
+	tagPattern         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+@-]{0,254}$`)
 	shaPattern         = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	prefixedSHAPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	commitPattern      = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -53,6 +53,7 @@ type LatestPointer struct {
 type PluginSummary struct {
 	PluginID     string              `json:"plugin_id"`
 	PublisherID  string              `json:"publisher_id"`
+	SourceKind   string              `json:"source_kind,omitempty"`
 	Presentation PresentationCompact `json:"presentation"`
 	Categories   []string            `json:"categories"`
 	Channels     []string            `json:"channels"`
@@ -276,6 +277,7 @@ type PluginDetailResponse struct {
 type CatalogPlugin struct {
 	PluginID     string              `json:"plugin_id"`
 	PublisherID  string              `json:"publisher_id"`
+	SourceKind   string              `json:"source_kind,omitempty"`
 	Presentation PresentationCompact `json:"presentation"`
 	Categories   []string            `json:"categories"`
 	Channels     []string            `json:"channels"`
@@ -340,7 +342,7 @@ func validateSnapshot(snapshot Snapshot) error {
 	seen := make(map[string]struct{}, len(snapshot.Plugins))
 	for _, plugin := range snapshot.Plugins {
 		if err := validatePluginSummary(PluginSummary{
-			PluginID: plugin.PluginID, PublisherID: plugin.PublisherID, Presentation: plugin.Presentation,
+			PluginID: plugin.PluginID, PublisherID: plugin.PublisherID, SourceKind: plugin.SourceKind, Presentation: plugin.Presentation,
 			Categories: plugin.Categories, Channels: plugin.Channels, Latest: plugin.Latest,
 		}); err != nil {
 			return err
@@ -362,6 +364,9 @@ func validateSnapshot(snapshot Snapshot) error {
 }
 
 func validatePluginSummary(plugin PluginSummary) error {
+	if plugin.SourceKind != "" && plugin.SourceKind != "official" && plugin.SourceKind != "reviewed-third-party" {
+		return invalid("catalog source kind is invalid")
+	}
 	if !idPattern.MatchString(plugin.PluginID) || !idPattern.MatchString(plugin.PublisherID) || !validateCompactPresentation(plugin.Presentation, plugin.PluginID) ||
 		len(plugin.Categories) == 0 || len(plugin.Channels) == 0 || !idPattern.MatchString(plugin.Latest.Channel) || !semverPattern.MatchString(plugin.Latest.Version) {
 		return invalid("catalog plugin is invalid")
@@ -601,7 +606,7 @@ func validateLatestReleaseWithPreview(release LatestRelease, validatePreview boo
 	if !idPattern.MatchString(release.PluginID) || !idPattern.MatchString(release.Channel) || !semverPattern.MatchString(release.Version) ||
 		release.Source.Provider != "github" || release.Source.RepositoryID <= 0 || release.Source.ReleaseID <= 0 ||
 		strings.TrimSpace(release.Source.RepositoryOwner) == "" || strings.TrimSpace(release.Source.RepositoryName) == "" ||
-		!tagPattern.MatchString(release.Source.Tag) || strings.TrimPrefix(release.Source.Tag, "v") != release.Version || !commitPattern.MatchString(release.Source.TargetCommit) ||
+		!tagPattern.MatchString(release.Source.Tag) || !commitPattern.MatchString(release.Source.TargetCommit) ||
 		release.PublisherReleaseRef.SchemaVersion != "redevplugin.publisher_release_ref.v1" || ref.PluginID != release.PluginID || ref.Channel != release.Channel || ref.Version != release.Version ||
 		!idPattern.MatchString(ref.SourceID) || !idPattern.MatchString(ref.PublisherID) || !locatorPattern.MatchString(ref.ReleaseMetadataRef) || !shaPattern.MatchString(ref.ReleaseMetadataSHA256) ||
 		release.PublisherReleaseRef.Root.Algorithm != "ed25519" || !idPattern.MatchString(release.PublisherReleaseRef.Root.KeyID) || strings.TrimSpace(release.PublisherReleaseRef.Root.PublicKey) == "" ||

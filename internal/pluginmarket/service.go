@@ -268,7 +268,7 @@ func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 			}
 			seen[summary.PluginID] = struct{}{}
 			plugin := CatalogPlugin{
-				PluginID: summary.PluginID, PublisherID: summary.PublisherID, Presentation: cloneCompactPresentation(summary.Presentation),
+				PluginID: summary.PluginID, PublisherID: summary.PublisherID, SourceKind: summary.SourceKind, Presentation: cloneCompactPresentation(summary.Presentation),
 				Categories: slices.Clone(summary.Categories), Channels: slices.Clone(summary.Channels), Latest: summary.Latest,
 			}
 			if summary.Latest.AvailabilityStatus == "visible" {
@@ -314,6 +314,7 @@ func (service *Service) getJSON(parent context.Context, endpoint url.URL, destin
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "Redeven")
+	request.Header.Set("X-Redeven-Market-Capabilities", "source-kind-v1")
 	response, err := service.httpClient.Do(request)
 	if err != nil {
 		return "", err

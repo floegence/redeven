@@ -246,6 +246,24 @@ func TestValidateLatestReleaseAcceptsInstallPreviewEvidence(t *testing.T) {
 	}
 }
 
+func TestValidateLatestReleaseAcceptsReviewedPluginTag(t *testing.T) {
+	var response LatestReleaseResponse
+	if err := json.Unmarshal([]byte(validLatestResponse), &response); err != nil {
+		t.Fatal(err)
+	}
+	release := response.Data
+	release.Source.Tag = "weather-v" + release.Version
+	if err := validateLatestReleaseWithPreview(release, false); err != nil {
+		t.Fatalf("prefixed tag rejected: %v", err)
+	}
+	for _, tag := range []string{"../v" + release.Version, "weather/v" + release.Version, "weather v" + release.Version, ""} {
+		release.Source.Tag = tag
+		if err := validateLatestReleaseWithPreview(release, false); err == nil {
+			t.Fatalf("accepted unsafe tag %q", tag)
+		}
+	}
+}
+
 func TestServiceRefreshesAndKeepsValidatedCacheSeparate(t *testing.T) {
 	t.Parallel()
 	cachePath := filepath.Join(t.TempDir(), "plugin-market-lkg.json")
