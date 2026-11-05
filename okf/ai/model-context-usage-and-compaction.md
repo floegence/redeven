@@ -46,12 +46,16 @@ Floret calculates pressure from a qualified native prefix plus the remaining fro
 
 Desktop RPC prepares supported provider requests on the credential-owning side and
 returns the rendered estimate and fingerprint. Execution, output refits and retries
-use the same frozen input. DeepSeek keeps the conservative host estimate because
-its preparation may upload images. The Desktop bridge does not claim native usage
-measurement proof that was not transferred and validated across the RPC boundary.
+use the same frozen input. DeepSeek prepares authorized images through Floret's
+credential-scoped, expiring upload owner and reuses cached uploads for repeated
+preparations. The Desktop bridge does not claim native usage measurement proof
+that was not transferred and validated across the RPC boundary. Floret's logical
+preparation context releases Desktop handles after settlement or discard, while
+single-attempt close preserves replay for as long as that context remains active.
 
 RPC v6 applies one-part request credit, bounded response reassembly and per-request
-cancellation. A slow consumer cannot fill another request's queue or close the
+cancellation. Prepared handles transfer ownership only after the client acknowledges
+the result; cancellation before acknowledgment releases them on Desktop. A slow consumer cannot fill another request's queue or close the
 shared connection; incompatible older peers fail the version handshake.
 
 The 90% threshold and public output reservation semantics remain upstream.

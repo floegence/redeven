@@ -369,12 +369,22 @@ func (p *desktopModelSourceProvider) prepareTurn(ctx context.Context, req ModelG
 	}
 	var out desktopModelSourcePrepareResult
 	if err := conn.call(ctx, "ai.turn.prepare", desktopModelSourceStreamRequest{Request: preparedImages}, nil, &out); err != nil {
+		if out.Handle != "" {
+			(&desktopModelSourcePreparedTurn{conn: conn, handle: out.Handle}).release()
+		}
 		return nil, err
 	}
 	if !out.Supported {
+		if out.Handle != "" {
+			(&desktopModelSourcePreparedTurn{conn: conn, handle: out.Handle}).release()
+			return nil, fmt.Errorf("%w: unsupported preparation returned a handle", errDesktopModelSourceProtocol)
+		}
 		return nil, errModelGatewayPreparationUnsupported
 	}
 	if out.Handle == "" || out.Fingerprint == "" || out.Estimate.EstimatedInputTokens <= 0 {
+		if out.Handle != "" {
+			(&desktopModelSourcePreparedTurn{conn: conn, handle: out.Handle}).release()
+		}
 		return nil, fmt.Errorf("%w: invalid prepared request", errDesktopModelSourceProtocol)
 	}
 	if err := ctx.Err(); err != nil {
@@ -433,9 +443,15 @@ func (p *desktopModelSourcePreparedTurn) withMaxOutputTokens(ctx context.Context
 func (p *desktopModelSourcePreparedTurn) derive(ctx context.Context, method string, operation desktopModelSourcePreparedOperation) (preparedModelGatewayTurn, error) {
 	var out desktopModelSourcePrepareResult
 	if err := p.conn.call(ctx, method, operation, nil, &out); err != nil {
+		if out.Handle != "" {
+			(&desktopModelSourcePreparedTurn{conn: p.conn, handle: out.Handle}).release()
+		}
 		return nil, err
 	}
 	if !out.Supported || out.Handle == "" || out.Fingerprint == "" || out.Estimate.EstimatedInputTokens <= 0 {
+		if out.Handle != "" {
+			(&desktopModelSourcePreparedTurn{conn: p.conn, handle: out.Handle}).release()
+		}
 		return nil, fmt.Errorf("%w: invalid derived request", errDesktopModelSourceProtocol)
 	}
 	if err := ctx.Err(); err != nil {
@@ -1133,6 +1149,11 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 				if err := json.Unmarshal(frame.Result, out); err != nil {
 					return failProtocol(fmt.Errorf("%w: invalid result", errDesktopModelSourceProtocol))
 				}
+				if desktopModelSourcePreparedCreation(method) {
+					if err := c.writeFrame(ctx, DesktopModelSourceRPCFrame{Type: "accept", ID: id}); err != nil {
+						return err
+					}
+				}
 				completed = true
 				return nil
 			case "error":
@@ -1153,6 +1174,10 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 
 func desktopModelSourceModelMethod(method string) bool {
 	return method == "ai.turn.stream" || strings.HasPrefix(method, "ai.turn.prepare")
+}
+
+func desktopModelSourcePreparedCreation(method string) bool {
+	return method == "ai.turn.prepare" || method == "ai.turn.prepared.replay" || method == "ai.turn.prepared.refit"
 }
 
 func (c *desktopModelSourceRuntimeConn) addPending(id string, ch chan DesktopModelSourceRPCFrame) error {
@@ -1456,10 +1481,11 @@ type desktopModelSourceExecutor struct {
 }
 
 type desktopModelSourceActiveRequest struct {
-	cancel  context.CancelFunc
-	credit  chan struct{}
-	mu      sync.Mutex
-	waiting bool
+	cancel   context.CancelFunc
+	credit   chan struct{}
+	accepted chan struct{}
+	mu       sync.Mutex
+	waiting  bool
 }
 
 func (r *desktopModelSourceActiveRequest) acquire(ctx context.Context) error {
@@ -1490,8 +1516,6 @@ type desktopModelSourcePreparedEntry struct {
 	request       ModelGatewayRequest
 	provider      string
 	size          int
-	created       time.Time
-	stopExpiry    func() bool
 	closed        bool
 	streamed      bool
 	keepForReplay bool
@@ -1507,9 +1531,6 @@ func (s *desktopModelSourcePreparedStore) release(handle string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if entry := s.entries[handle]; entry != nil {
-		if entry.stopExpiry != nil {
-			entry.stopExpiry()
-		}
 		delete(s.entries, handle)
 		s.bytes -= entry.size
 		_ = entry.turn.Close()
@@ -1527,36 +1548,18 @@ func (s *desktopModelSourcePreparedStore) add(entry *desktopModelSourcePreparedE
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.pruneLocked(time.Now())
 	if len(s.entries) >= 64 || entry.size > 64<<20-s.bytes {
 		return desktopModelSourcePrepareResult{}, errors.New("desktop prepared request capacity exceeded")
 	}
-	entry.created = time.Now()
 	s.entries[id] = entry
 	s.bytes += entry.size
 	return desktopModelSourcePrepareResult{Supported: true, Handle: id, Fingerprint: entry.turn.RenderedPayloadFingerprint(), Estimate: entry.turn.TokenEstimate()}, nil
-}
-
-func (s *desktopModelSourcePreparedStore) pruneLocked(now time.Time) {
-	for id, entry := range s.entries {
-		if entry.closed && now.Sub(entry.created) >= 10*time.Minute {
-			if entry.stopExpiry != nil {
-				entry.stopExpiry()
-			}
-			_ = entry.turn.Close()
-			delete(s.entries, id)
-			s.bytes -= entry.size
-		}
-	}
 }
 
 func (s *desktopModelSourcePreparedStore) closeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, entry := range s.entries {
-		if entry.stopExpiry != nil {
-			entry.stopExpiry()
-		}
 		_ = entry.turn.Close()
 		delete(s.entries, id)
 	}
@@ -1653,7 +1656,7 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 				cancel()
 				return fmt.Errorf("%w: duplicate request ID", errDesktopModelSourceProtocol)
 			}
-			request := &desktopModelSourceActiveRequest{cancel: cancel, credit: make(chan struct{}, 1)}
+			request := &desktopModelSourceActiveRequest{cancel: cancel, credit: make(chan struct{}, 1), accepted: make(chan struct{}, 1)}
 			request.credit <- struct{}{}
 			active[frame.ID] = request
 			activeMu.Unlock()
@@ -1699,6 +1702,13 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 						terminated = true
 						return errors.New("desktop model source response exceeds payload limit")
 					}
+					if response.Type == "result" && desktopModelSourcePreparedCreation(frame.Method) {
+						select {
+						case <-request.accepted:
+						case <-reqCtx.Done():
+							return reqCtx.Err()
+						}
+					}
 					return nil
 				}
 				e.handleRequest(reqCtx, frame, writeResponse, prepared)
@@ -1719,6 +1729,17 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 			activeMu.Unlock()
 			if request != nil && !request.grant() {
 				request.cancel()
+			}
+		case "accept":
+			activeMu.Lock()
+			request := active[frame.ID]
+			activeMu.Unlock()
+			if request != nil {
+				select {
+				case request.accepted <- struct{}{}:
+				default:
+					request.cancel()
+				}
 			}
 		case "ping":
 			if err := write(DesktopModelSourceRPCFrame{Type: "pong", ID: frame.ID}); err != nil {
@@ -1769,13 +1790,13 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 		_ = write(DesktopModelSourceRPCFrame{Type: "error", ID: frame.ID, Error: failure})
 	}
 
-	sendResult := func(v any) {
+	sendResult := func(v any) error {
 		raw, err := json.Marshal(v)
 		if err != nil {
 			sendErr("RESULT_ENCODE_FAILED", err)
-			return
+			return err
 		}
-		_ = write(DesktopModelSourceRPCFrame{Type: "result", ID: frame.ID, Result: raw})
+		return write(DesktopModelSourceRPCFrame{Type: "result", ID: frame.ID, Result: raw})
 	}
 	switch frame.Method {
 	case "ai.thread.transport.release":
@@ -1818,13 +1839,10 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 			return
 		}
 		if prepared, ok := value.(desktopModelSourcePrepareResult); ok && prepared.Handle != "" {
-			stop := context.AfterFunc(ctx, func() { stores[0].release(prepared.Handle) })
-			if ctx.Err() != nil {
-				stop()
+			if err := sendResult(value); err != nil {
 				stores[0].release(prepared.Handle)
-				return
 			}
-			defer stop()
+			return
 		}
 		sendResult(value)
 	case "ai.turn.stream":
@@ -1878,9 +1896,6 @@ func (e *desktopModelSourceExecutor) handlePrepared(ctx context.Context, frame D
 		if err != nil {
 			return nil, err
 		}
-		if providerType == "deepseek" {
-			return desktopModelSourcePrepareResult{}, nil
-		}
 		if raw, err := json.Marshal(request); err != nil {
 			return nil, err
 		} else if err := flprovider.CheckRequestBytes(raw, flowerModelRequestMaxBytes); err != nil {
@@ -1905,7 +1920,6 @@ func (e *desktopModelSourceExecutor) handlePrepared(ctx context.Context, frame D
 		return nil, errors.New("invalid desktop prepared request handle")
 	}
 	store.mu.Lock()
-	store.pruneLocked(time.Now())
 	entry := store.entries[operation.Handle]
 	if entry == nil {
 		store.mu.Unlock()
@@ -1916,9 +1930,6 @@ func (e *desktopModelSourceExecutor) handlePrepared(ctx context.Context, frame D
 	}
 	switch frame.Method {
 	case "ai.turn.prepared.release":
-		if entry.stopExpiry != nil {
-			entry.stopExpiry()
-		}
 		delete(store.entries, operation.Handle)
 		store.bytes -= entry.size
 		err := entry.turn.Close()
@@ -1938,8 +1949,6 @@ func (e *desktopModelSourceExecutor) handlePrepared(ctx context.Context, frame D
 			return struct{}{}, nil
 		}
 		entry.closed = true
-		entry.created = time.Now()
-		entry.stopExpiry = time.AfterFunc(10*time.Minute, func() { store.release(operation.Handle) }).Stop
 		err := entry.turn.Close()
 		store.mu.Unlock()
 		return struct{}{}, err

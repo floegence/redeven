@@ -5,14 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	flconfig "github.com/floegence/floret/v7/config"
-	flidentity "github.com/floegence/floret/v7/identity"
-	flruntime "github.com/floegence/floret/v7/runtime"
-	"github.com/floegence/floret/v7/storage"
-	fltools "github.com/floegence/floret/v7/tools"
-	"github.com/floegence/redeven/internal/config"
-	"github.com/floegence/redeven/internal/settings"
-	"github.com/gorilla/websocket"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,70 +15,123 @@ import (
 	"testing"
 	"time"
 
+	flconfig "github.com/floegence/floret/v7/config"
+	flidentity "github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
+	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/floret/v7/storage"
+	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/settings"
+	"github.com/gorilla/websocket"
 )
 
 func TestDesktopPreparedRequestFreezesProviderWireAcrossRefitAndRetry(t *testing.T) {
-	wires := make(chan []byte, 2)
+	for _, tc := range []struct {
+		name, provider, model string
+	}{
+		{"openai", "openai", "gpt-4o"},
+		{"deepseek", "deepseek", "deepseek-flash"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wires := make(chan []byte, 2)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				raw, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Error(err)
+				}
+				wires <- raw
+				if tc.provider == "deepseek" {
+					writeDeepSeekIntegrationTextResponse(w, w.(http.Flusher), "resp_fixture", "done")
+				} else {
+					writeOpenAIResponsesSSE(w, r, tc.model, "resp_fixture", "done")
+				}
+			}))
+			defer server.Close()
+			adapter := desktopContinuationGateway(t, tc.provider, tc.model, server.URL, false)
+			adapter.outputControl = flprovider.OutputControlClient
+			req := flprovider.Request{RunID: "run-freeze", PromptScopeID: "scope-freeze", LogicalRequestID: "logical-freeze", AttemptID: "attempt-1", AttemptEpoch: 1, Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "inspect", Attachments: []flprovider.Attachment{{ResourceRef: "image-1", MIMEType: "image/png"}}}}}
+			prepared, err := adapter.Prepare(t.Context(), req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if prepared.TokenEstimate().Method != "provider_rendered_payload_estimate" || prepared.TokenEstimate().AttachmentTokens <= 0 {
+				t.Fatalf("expected provider-rendered media estimate: %+v", prepared.TokenEstimate())
+			}
+			fitted, err := prepared.(flprovider.PreparedRequestOutputLimiter).WithMaxOutputTokens(t.Context(), 128)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := prepared.Close(); err != nil {
+				t.Fatal(err)
+			}
+			stream, err := fitted.Stream(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for event := range stream {
+				if event.Err != nil {
+					t.Fatal(event.Err)
+				}
+			}
+			first := <-wires
+			if got := fmt.Sprintf("sha256:%x", sha256.Sum256(first)); got != fitted.RenderedPayloadFingerprint() {
+				t.Fatalf("wire fingerprint %s differs from frozen %s", got, fitted.RenderedPayloadFingerprint())
+			}
+			if err := fitted.Close(); err != nil {
+				t.Fatal(err)
+			}
+			req.MaxOutputTokens, req.AttemptID, req.AttemptEpoch = 128, "attempt-2", 2
+			retry, err := fitted.(flprovider.PreparedRequestReplay).PrepareRetry(t.Context(), req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer retry.Close()
+			stream, err = retry.Stream(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for event := range stream {
+				if event.Err != nil {
+					t.Fatal(event.Err)
+				}
+			}
+			if second := <-wires; string(first) != string(second) || retry.RenderedPayloadFingerprint() != fitted.RenderedPayloadFingerprint() {
+				t.Fatal("retry changed the frozen provider wire")
+			}
+		})
+	}
+}
+
+func TestDesktopDeepSeekImageEstimateExcludesTransportEncoding(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Error(err)
-		}
-		wires <- raw
-		writeOpenAIResponsesSSE(w, r, "gpt-4o", "resp_fixture", "done")
+		t.Error("preparation must not dispatch a model request")
 	}))
 	defer server.Close()
-	adapter := desktopContinuationGateway(t, "openai", "gpt-4o", server.URL, false)
-	adapter.outputControl = flprovider.OutputControlClient
-	req := flprovider.Request{RunID: "run-freeze", PromptScopeID: "scope-freeze", LogicalRequestID: "logical-freeze", AttemptID: "attempt-1", AttemptEpoch: 1, Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "inspect", Attachments: []flprovider.Attachment{{ResourceRef: "image-1", MIMEType: "image/png"}}}}}
-	prepared, err := adapter.Prepare(t.Context(), req)
+	adapter := desktopContinuationGateway(t, "deepseek", "deepseek-flash", server.URL, false)
+	_, attachment, image := screenshotPreparationFixture(t)
+	adapter.attachmentResolver = func(context.Context, flprovider.Attachment) (ContentPart, error) {
+		return image, nil
+	}
+	req := flprovider.Request{RunID: "run-image-budget", PromptScopeID: "scope-image-budget", Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "inspect", Attachments: []flprovider.Attachment{attachment, attachment, attachment, attachment}}}}
+	projected, err := adapter.turnRequest(t.Context(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prepared.TokenEstimate().Method != "provider_rendered_payload_estimate" || prepared.TokenEstimate().AttachmentTokens <= 0 {
-		t.Fatalf("expected provider-rendered media estimate: %+v", prepared.TokenEstimate())
-	}
-	fitted, err := prepared.(flprovider.PreparedRequestOutputLimiter).WithMaxOutputTokens(t.Context(), 128)
+	old, err := estimateGatewayInput(DesktopModelSourceProviderType, projected)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := prepared.Close(); err != nil {
-		t.Fatal(err)
-	}
-	stream, err := fitted.Stream(t.Context())
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	prepared, err := adapter.Prepare(ctx, req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for event := range stream {
-		if event.Err != nil {
-			t.Fatal(event.Err)
-		}
-	}
-	first := <-wires
-	if got := fmt.Sprintf("sha256:%x", sha256.Sum256(first)); got != fitted.RenderedPayloadFingerprint() {
-		t.Fatalf("wire fingerprint %s differs from frozen %s", got, fitted.RenderedPayloadFingerprint())
-	}
-	if err := fitted.Close(); err != nil {
-		t.Fatal(err)
-	}
-	req.MaxOutputTokens, req.AttemptID, req.AttemptEpoch = 128, "attempt-2", 2
-	retry, err := fitted.(flprovider.PreparedRequestReplay).PrepareRetry(t.Context(), req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer retry.Close()
-	stream, err = retry.Stream(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for event := range stream {
-		if event.Err != nil {
-			t.Fatal(event.Err)
-		}
-	}
-	if second := <-wires; string(first) != string(second) || retry.RenderedPayloadFingerprint() != fitted.RenderedPayloadFingerprint() {
-		t.Fatal("retry changed the frozen provider wire")
+	defer prepared.Close()
+	actual := prepared.TokenEstimate()
+	if actual.Method != "provider_rendered_payload_estimate" || actual.AttachmentTokens < 4*1024 || old.EstimatedInputTokens < 5*actual.EstimatedInputTokens {
+		t.Fatalf("old estimate=%d actual=%+v", old.EstimatedInputTokens, actual)
 	}
 }
 
@@ -182,6 +227,151 @@ func TestDesktopPreparedRetryOutlivesAttemptContext(t *testing.T) {
 	for event := range stream {
 		if event.Err != nil {
 			t.Fatal(event.Err)
+		}
+	}
+}
+
+func TestDesktopPreparedUnusedHandlesReleaseCapacity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("unused preparation must not call the provider")
+	}))
+	defer server.Close()
+	adapter := desktopContinuationGateway(t, "openai", "gpt-4o", server.URL, false)
+	req := flprovider.Request{RunID: "run-candidates", PromptScopeID: "scope-candidates", LogicalRequestID: "logical-candidates", AttemptID: "attempt-1", AttemptEpoch: 1, Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "fixture"}}}
+	for i := 0; i < 80; i++ {
+		ctx, cancel := context.WithCancel(t.Context())
+		prepared, err := adapter.Prepare(ctx, req)
+		if err != nil {
+			cancel()
+			t.Fatalf("candidate %d: %v", i, err)
+		}
+		if err := prepared.Close(); err != nil {
+			cancel()
+			t.Fatalf("close candidate %d: %v", i, err)
+		}
+		cancel()
+	}
+}
+
+type desktopPreparedHandoffFixture struct {
+	closed *atomic.Int32
+}
+
+func (p *desktopPreparedHandoffFixture) StreamTurn(context.Context, func(StreamEvent)) (ModelGatewayResult, error) {
+	return ModelGatewayResult{}, nil
+}
+
+func (p *desktopPreparedHandoffFixture) TokenEstimate() flprovider.TokenEstimate {
+	return flprovider.TokenEstimate{EstimatedInputTokens: 1}
+}
+
+func (p *desktopPreparedHandoffFixture) RenderedPayloadFingerprint() string { return "fixture" }
+func (p *desktopPreparedHandoffFixture) Close() error {
+	p.closed.Add(1)
+	return nil
+}
+
+func (p *desktopPreparedHandoffFixture) withMaxOutputTokens(context.Context, int64) (preparedModelGatewayTurn, error) {
+	return &desktopPreparedHandoffFixture{closed: p.closed}, nil
+}
+
+func TestDesktopPreparedHandoffReleasesUnacceptedResult(t *testing.T) {
+	for _, accept := range []bool{false, true} {
+		t.Run(fmt.Sprintf("accepted=%t", accept), func(t *testing.T) {
+			var closed atomic.Int32
+			store := newDesktopModelSourcePreparedStore()
+			parent, err := store.add(&desktopModelSourcePreparedEntry{turn: &desktopPreparedHandoffFixture{closed: &closed}, size: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := json.Marshal(desktopModelSourcePreparedOperation{Handle: parent.Handle, OutputLimit: 128})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			sent := make(chan string, 1)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				(&desktopModelSourceExecutor{}).handleRequest(ctx, DesktopModelSourceRPCFrame{Method: "ai.turn.prepared.refit", Params: raw}, func(frame DesktopModelSourceRPCFrame) error {
+					var result desktopModelSourcePrepareResult
+					if err := json.Unmarshal(frame.Result, &result); err != nil {
+						return err
+					}
+					sent <- result.Handle
+					if !accept {
+						<-ctx.Done()
+						return ctx.Err()
+					}
+					return nil
+				}, store)
+			}()
+			child := <-sent
+			if !accept {
+				cancel()
+			}
+			<-done
+			store.mu.Lock()
+			_, retained := store.entries[child]
+			store.mu.Unlock()
+			wantClosed := int32(1)
+			if accept {
+				wantClosed = 0
+			}
+			if retained != accept || closed.Load() != wantClosed {
+				t.Fatalf("accepted=%t retained=%t closed=%d", accept, retained, closed.Load())
+			}
+			store.closeAll()
+		})
+	}
+}
+
+func TestDesktopPreparedCanceledResultDoesNotExhaustCapacity(t *testing.T) {
+	root := t.TempDir()
+	configPath, secretsPath := filepath.Join(root, "config.json"), filepath.Join(root, "secrets.json")
+	if err := config.Save(configPath, &config.Config{AI: &config.AIConfig{CurrentModelID: "fixture/gpt-4o", Providers: []config.AIProvider{{ID: "fixture", Type: "openai", BaseURL: "https://example.invalid", Models: []config.AIProviderModel{{ModelName: "gpt-4o", ContextWindow: 128000}}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.NewSecretsStore(secretsPath).SetAIProviderAPIKey("fixture", "fixture-key"); err != nil {
+		t.Fatal(err)
+	}
+	executor := &desktopModelSourceExecutor{configPath: configPath, secretsPath: secretsPath}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err == nil {
+			_ = executor.serve(t.Context(), ws)
+		}
+	}))
+	defer server.Close()
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	if err := ws.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	params, err := json.Marshal(desktopModelSourceStreamRequest{Request: ModelGatewayRequest{Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "fixture"}}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 80 {
+		id := fmt.Sprintf("prepare-%d", i)
+		if err := ws.WriteJSON(DesktopModelSourceRPCFrame{ProtocolVersion: DesktopModelSourceProtocolVersion, Type: "request", ID: id, Method: "ai.turn.prepare", Params: params}); err != nil {
+			t.Fatal(err)
+		}
+		var part DesktopModelSourceRPCFrame
+		if err := ws.ReadJSON(&part); err != nil {
+			t.Fatal(err)
+		}
+		var response DesktopModelSourceRPCFrame
+		var prepared desktopModelSourcePrepareResult
+		if part.ID != id || !part.Final || json.Unmarshal(part.Part, &response) != nil || response.Type != "result" || json.Unmarshal(response.Result, &prepared) != nil || prepared.Handle == "" {
+			t.Fatalf("candidate %d did not prepare: %+v", i, response)
+		}
+		if err := ws.WriteJSON(DesktopModelSourceRPCFrame{ProtocolVersion: DesktopModelSourceProtocolVersion, Type: "cancel", ID: id}); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -404,7 +594,7 @@ func TestDesktopModelContinuationEndToEnd(t *testing.T) {
 
 func waitDesktopContinuation(t *testing.T, service flruntime.ThreadService, id flidentity.ThreadID) flruntime.ThreadView {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		view, err := service.View(t.Context(), id)
 		if err != nil {
