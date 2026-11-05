@@ -406,6 +406,16 @@ it('shows the actual unsupported graphics reason without an unusable connection 
   expect(host.textContent).not.toContain('Set up remote desktop');
 });
 
+it('explains a stale login runtime and keeps refresh available', async () => {
+  state.ssh = true; state.deployment.mockResolvedValue({ ok: true, available: true });
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'LOGIN_SESSION_STALE_RUNTIME' }, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  await mount();
+  expect(host.textContent).toContain('Host action required');
+  expect(host.textContent).toContain('Restart the graphical login service');
+  expect(button('Connect to desktop').disabled).toBe(true);
+  expect(button('Refresh').disabled).toBe(false);
+});
+
 it('refreshes an unavailable post-setup desktop in place without offering an impossible connection', async () => {
   const installed: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'GPU_SCANOUT_UNSUPPORTED' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
   state.status.mockResolvedValueOnce({ ...installed, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } }).mockResolvedValue(installed);

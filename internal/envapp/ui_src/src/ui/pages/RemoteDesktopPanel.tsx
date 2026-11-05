@@ -96,7 +96,10 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const sshManaged = () => sshPhysical() && sshDeploymentAvailable() && loginService()?.state !== 'unsupported';
   const needsSSHSetup = () => sshManaged() && !sshServiceUnsupported() && loginService()?.state !== 'active';
   const serviceUpdateRequired = () => loginService()?.reason === 'SERVICE_UPDATE_REQUIRED' || capabilities()?.reason === 'SERVICE_UPDATE_REQUIRED';
-  const sshCaptureUnavailable = () => sshManaged() && loginService()?.state === 'active' && ['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED'].includes(capabilities()?.reason ?? '');
+  const loginSessionReason = () => capabilities()?.reason ?? '';
+  const loginSessionRepairReasons = ['LOGIN_SESSION_STALE_RUNTIME', 'LOGIN_SESSION_COMPOSITOR_CHANGED', 'LOGIN_SESSION_COMPOSITOR_MISSING', 'LOGIN_SESSION_COMPOSITOR_AMBIGUOUS', 'LOGIN_SESSION_NO_ACTIVE_SEAT', 'LOGIN_SESSION_TTY_MISMATCH'];
+  const loginSessionRepairRequired = () => loginSessionRepairReasons.includes(loginSessionReason());
+  const sshCaptureUnavailable = () => sshManaged() && loginService()?.state === 'active' && ['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED', ...loginSessionRepairReasons].includes(loginSessionReason());
   const displays = () => capabilities()?.displays ?? [];
   const preparing = () => ['checking', 'downloading', 'receiving', 'verifying', 'installing', 'validating'].includes(status()?.setup?.state ?? '');
   const authorization = () => capabilities()?.state === 'authorization_required' || capabilities()?.state === 'host_action_required';
@@ -165,6 +168,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (!full()) return i18n.t('remoteDesktop.accessTitle');
     if (sshServiceUnsupported()) return i18n.t('remoteDesktop.unsupported');
     if (needsSSHSetup()) return i18n.t(serviceUpdateRequired() ? 'remoteDesktop.deployUpdate' : loginService()?.state === 'stopped' ? 'remoteDesktop.serviceStopped' : 'remoteDesktop.deploySetup');
+    if (sshManaged() && loginSessionRepairRequired()) return i18n.t('remoteDesktop.hostActionRequired');
     if (capabilities()?.state === 'locked') return i18n.t('remoteDesktop.locked');
     if (capabilities()?.state === 'setup_required') return i18n.t('remoteDesktop.setupRequired');
     if (available() && approvalCopy()) return i18n.t(approvalCopy()!);
@@ -181,6 +185,12 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
         case 'DISPLAY_DISCONNECTED': return 'remoteDesktop.displayDisconnected';
         case 'DISPLAY_INACTIVE': return 'remoteDesktop.displayInactive';
         case 'GPU_SCANOUT_UNSUPPORTED': return 'remoteDesktop.gpuUnsupported';
+        case 'LOGIN_SESSION_STALE_RUNTIME': return 'remoteDesktop.loginSessionStaleHint';
+        case 'LOGIN_SESSION_COMPOSITOR_CHANGED': return 'remoteDesktop.loginSessionChangedHint';
+        case 'LOGIN_SESSION_COMPOSITOR_MISSING':
+        case 'LOGIN_SESSION_COMPOSITOR_AMBIGUOUS': return 'remoteDesktop.loginSessionRestartHint';
+        case 'LOGIN_SESSION_NO_ACTIVE_SEAT':
+        case 'LOGIN_SESSION_TTY_MISMATCH': return 'remoteDesktop.loginSessionSeatHint';
         case 'LOGIN_SESSION_UNSUPPORTED': return 'remoteDesktop.sessionUnsupported';
       }
     }
@@ -363,7 +373,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <Button size="icon" variant="ghost" disabled={refreshing() || !!busy()} aria-label={i18n.t('remoteDesktop.refresh')} title={i18n.t('remoteDesktop.refresh')} onClick={() => void refresh()}><Refresh size={16} class={refreshing() ? 'animate-spin motion-reduce:animate-none' : ''} /></Button>
     </div>
     <p class="remote-desktop-description">{i18n.t('remoteDesktop.description')}</p>
-    <Show when={!failure() && stateHint()}>{key => <p class="remote-desktop-guidance">{i18n.t(key())}</p>}</Show>
+    <Show when={!failure() && stateHint()}>{key => <p class="remote-desktop-guidance" role={sshCaptureUnavailable() ? 'status' : undefined}>{i18n.t(key())}</p>}</Show>
     <Show when={!sshManaged() && (status()?.capabilities.state === 'setup_required' || preparing())}>
       <div class="remote-desktop-setup">
         <p>{i18n.t('remoteDesktop.setupHint')}</p>
@@ -417,6 +427,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <Button class="remote-desktop-connect" data-desktop-focus="connect" disabled={sshManaged() ? !full() || !!busy() || refreshing() || sshCaptureUnavailable() : !canConnect()} aria-describedby={descriptionID} onClick={() => { rememberFocus(); if (sshManaged()) showDeployment('ensure', true); else if (status()?.control_in_use && mode() === 'control') showConfirmation('takeover'); else void open(false); }}>
         <StableText class="text-center" reserve={[i18n.t('remoteDesktop.connecting'), i18n.t('remoteDesktop.connect')]}>{i18n.t(needsSSHSetup() ? 'remoteDesktop.connect' : busy() === 'connect' ? 'remoteDesktop.connecting' : 'remoteDesktop.connect')}</StableText><ArrowRight size={16} aria-hidden="true" />
       </Button>
+      <Show when={sshCaptureUnavailable()}><Button variant="outline" disabled={!full() || !!busy() || refreshing()} onClick={() => void refresh()}>{i18n.t('remoteDesktop.refresh')}</Button></Show>
       <p id={descriptionID} role={opened() ? 'status' : undefined}>{i18n.t(opened() ? 'remoteDesktop.windowOpened' : 'remoteDesktop.openHint')}</p>
     </div>
     </Match>

@@ -93,6 +93,11 @@ export const enUS = defineDictionary({
     "displayDisconnected": "No display output is connected. Connect a monitor or display adapter and refresh.",
     "displayInactive": "The display output could not be woken. Check the host’s display power state and refresh.",
     "gpuUnsupported": "This graphics device cannot provide the desktop image required for remote control.",
+    "hostActionRequired": "Host action required",
+    "loginSessionStaleHint": "The host was updated while its login screen was still running. Restart the graphical login service or the host, then refresh.",
+    "loginSessionChangedHint": "The graphical login session changed while connecting. Refresh the host status and try again.",
+    "loginSessionRestartHint": "The graphical login service is not in a stable state. Restart it on the host, then refresh.",
+    "loginSessionSeatHint": "No stable physical login seat is available. Check the host display and login session, then refresh.",
     "sessionUnsupported": "This desktop environment does not support secure remote login or lock-screen control.",
 
     "endedHint": "This session has ended. Close this window, then connect again from Remote desktop.",

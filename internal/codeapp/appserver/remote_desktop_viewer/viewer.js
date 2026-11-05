@@ -174,6 +174,12 @@ function unavailableHint(code) {
     case 'DISPLAY_DISCONNECTED': return 'displayDisconnected';
     case 'DISPLAY_INACTIVE': return 'displayInactive';
     case 'GPU_SCANOUT_UNSUPPORTED': return 'gpuUnsupported';
+    case 'LOGIN_SESSION_STALE_RUNTIME': return 'loginSessionStaleHint';
+    case 'LOGIN_SESSION_COMPOSITOR_CHANGED': return 'loginSessionChangedHint';
+    case 'LOGIN_SESSION_COMPOSITOR_MISSING':
+    case 'LOGIN_SESSION_COMPOSITOR_AMBIGUOUS': return 'loginSessionRestartHint';
+    case 'LOGIN_SESSION_NO_ACTIVE_SEAT':
+    case 'LOGIN_SESSION_TTY_MISMATCH': return 'loginSessionSeatHint';
     case 'LOGIN_SESSION_UNSUPPORTED': return 'sessionUnsupported';
     case 'SERVICE_UPDATE_REQUIRED': return 'serviceUpdateRequired';
     default: return 'unsupportedHint';
@@ -332,7 +338,7 @@ async function connect() {
           status(message.code === 'AUTHORIZATION_PENDING' ? 'approvalBusy' : 'approvalUnknown', message.code === 'AUTHORIZATION_PENDING' ? '' : 'approvalRestoreFailed');
           $('reconnect').hidden = false;
         }
-        else if (['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED', 'SERVICE_UPDATE_REQUIRED'].includes(message.code)) showUnavailable(message.code);
+        else if (['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED', 'LOGIN_SESSION_STALE_RUNTIME', 'LOGIN_SESSION_COMPOSITOR_CHANGED', 'LOGIN_SESSION_COMPOSITOR_MISSING', 'LOGIN_SESSION_COMPOSITOR_AMBIGUOUS', 'LOGIN_SESSION_NO_ACTIVE_SEAT', 'LOGIN_SESSION_TTY_MISMATCH', 'SERVICE_UPDATE_REQUIRED'].includes(message.code)) showUnavailable(message.code);
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
         else if (/UNLOCK|LOGIN_SERVICE/.test(message.code)) { status('locked', 'unlockFailed'); notice('unlockFailed'); updateTransitionControls(); }
         else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');
