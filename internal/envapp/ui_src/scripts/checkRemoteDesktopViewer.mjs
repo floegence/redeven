@@ -494,7 +494,7 @@ await session.run(async () => {
       );
       assert(await page.locator('#reconnect').isHidden(), 'unsupported graphics should not expose a misleading retry action');
       assert(await page.locator('.floe-remote-input').isDisabled(), 'unsupported graphics enabled remote input');
-      assert(await page.locator('#unlock-bar').isHidden(), 'unsupported graphics exposed unlock controls');
+      assert.equal(await page.locator('#unlock-bar').count(), 0, 'unsupported graphics exposed unlock controls');
       assert.equal(
         messages.filter((item) => item.command.method === 'connect').length,
         0,
@@ -1198,17 +1198,23 @@ await session.run(async () => {
         'takeover missing explicit flag',
       );
       control.send(JSON.stringify({ version: 1, type: 'state', state: 'locked', mode: 'control', generation: ++generation }));
-      await page.waitForFunction(() => !document.querySelector('#unlock-bar').hidden);
-      assert(await page.locator('#start-unlock').isDisabled(), 'unlock accepted an unpainted lock screen');
+      await page.waitForFunction(() => document.querySelector('#toolbar').dataset.state === 'locked');
+      const beforeUnpainted = messages.length;
+      await page.locator('#desktop').focus();
+      await page.keyboard.press('a');
+      assert(!messages.slice(beforeUnpainted).some(item => item.command.method === 'unlock_input'), 'unlock accepted an unpainted lock screen');
       paint();
       if (delayReceipt) {
         await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted'));
-        assert(await page.locator('#cancel-unlock').isHidden(), 'paint alone must not authorize before the frame receipt');
+        assert.notEqual(await page.locator('#status').textContent(), 'Unlocking host…', 'paint alone must not authorize before the frame receipt');
       }
-      await page.waitForFunction(() => !document.querySelector('#start-unlock').disabled && !document.querySelector('#cancel-unlock').hidden);
+      await page.waitForFunction(() => document.querySelector('#status').textContent === 'Unlocking host…');
       assert(await page.locator('#connection').isHidden(), 'painted lock screen retained the connection overlay');
       assert(await page.locator('#clipboard').isDisabled(), 'lock screen exposed clipboard');
       assert(await page.locator('#shortcuts').isDisabled(), 'lock screen exposed shortcuts');
+      control.send(JSON.stringify({ version: 1, type: 'error', code: 'UNLOCK_RATE_LIMITED' }));
+      await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('Wait one minute'));
+      assert(!((await page.locator('#notice').textContent()) ?? '').includes('failed'), 'rate limiting was reported as a password failure');
       const beforeUnlock = messages.length;
       assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock must keep the local text editor disabled');
       assert(
@@ -1266,21 +1272,13 @@ await session.run(async () => {
         'unlock leaked clipboard, paste or ordinary input',
       );
       await page.keyboard.up('Shift');
-      await page.locator('#cancel-unlock').click();
-      await page.waitForTimeout(20);
-      assert(
-        messages.some((item) => item.command.method === 'unlock_cancel'),
-        'unlock cancellation missing',
-      );
-      assert(await page.locator('#cancel-unlock').isHidden(), 'cancel must pause lock-screen input');
       desktopState = 'locked';
-      await page.locator('#start-unlock').click();
       const beforeRecovery = messages.length;
       corruptFrame();
       for (let attempt = 0; attempt < 100 && !messages.slice(beforeRecovery).some((item) => item.command.method === 'keyframe'); attempt++) {
         await page.waitForTimeout(20);
       }
-      await page.waitForFunction(() => !document.querySelector('#cancel-unlock').hidden);
+      await page.waitForFunction(() => document.querySelector('#status').textContent === 'Unlocking host…');
       assert(
         messages.slice(beforeRecovery).some((item) => item.command.method === 'keyframe'),
         'locked decode failure did not request a fresh generation',
@@ -1319,7 +1317,7 @@ await session.run(async () => {
       state();
       generation++;
       state();
-      await page.waitForFunction(() => document.querySelector('#unlock-bar').hidden);
+      assert.equal(await page.locator('#unlock-bar').count(), 0, 'locked status bar must not obscure the desktop');
       assert(await page.locator('#shortcuts').isDisabled(), 'unlock successor reused the lock frame authority');
       const beforePaint = messages.length;
       await page.keyboard.press('b');

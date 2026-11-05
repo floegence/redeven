@@ -379,6 +379,34 @@ it('waits for cancellation rollback and explains its observed outcome', async ()
   expect(document.querySelector('.remote-desktop-deployment-flow')).not.toBeNull();
 });
 
+it('shows observed preparation stages and only reports measured component progress', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation(request => request.action === 'capabilities'
+    ? Promise.resolve({ ok: true, available: true })
+    : new Promise(resolve => { finish = resolve; }));
+  await mount(); button('Connect to desktop').click(); button('Authorize and continue').click();
+  await vi.waitFor(() => expect(state.deployment.mock.calls.some(([request]) => request.action === 'manage')).toBe(true));
+  const operationId = state.deployment.mock.calls.find(([request]) => request.action === 'manage')![0].operationId;
+  const report = state.progress.mock.calls[0][0];
+  report({ operation_id: operationId, stage: 'checking' });
+  const steps = () => [...host.querySelectorAll<HTMLElement>('.remote-desktop-preparation-steps li')];
+  expect(steps().map(item => item.dataset.state)).toEqual(['active', 'upcoming', 'upcoming', 'upcoming']);
+  report({ operation_id: operationId, stage: 'transferring' });
+  expect(steps().map(item => item.dataset.state)).toEqual(['complete', 'active', 'upcoming', 'upcoming']);
+  expect(host.querySelector('progress')).toBeNull();
+  report({ operation_id: operationId, stage: 'preparing_media', received_bytes: 2500000, expected_bytes: 10000000 });
+  expect(host.querySelector<HTMLProgressElement>('progress')?.value).toBe(2500000);
+  expect(host.querySelector('.remote-desktop-progress-values')?.textContent).toContain('25%');
+  report({ operation_id: operationId, stage: 'installing_service' });
+  expect(steps().map(item => item.dataset.state)).toEqual(['complete', 'complete', 'active', 'upcoming']);
+  report({ operation_id: operationId, stage: 'verification_required' });
+  expect(steps().map(item => item.dataset.state)).toEqual(['complete', 'complete', 'complete', 'active']);
+  expect(host.textContent).not.toContain('Redeven does not save it');
+  finish({ ok: false, code: 'canceled' });
+});
+
 it('explains a manager timeout without claiming that SSH disconnected and allows retry', async () => {
   state.ssh = true;
   state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });

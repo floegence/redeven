@@ -12,11 +12,11 @@ Published input/playback and session contracts own current-frame authority. Sepa
 When a lock-screen frame is painted and acknowledged in control mode, the viewer
 arms physical-only unlock input automatically. Paint and acknowledgement may
 arrive in either order; both paths attempt arming, and subsequent acknowledgements
-must not steal focus. The lock-screen button pauses and re-arms input as a recovery
-control; it is not an authorization boundary. Opening a panel, losing the socket,
-changing generation or mode, and every unpainted transition revoke the armed
-target. Backend frame, generation, control owner and physical-input checks remain
-mandatory for every unlock event.
+must not steal focus. The host lock screen remains unobscured, and a rate-limited
+interaction explains the wait instead of claiming that authentication failed.
+Opening a panel, losing the socket, changing generation or mode, and every
+unpainted transition revoke the armed target. Backend frame, generation, control
+owner and physical-input checks remain mandatory for every unlock event.
 
 # Contract
 

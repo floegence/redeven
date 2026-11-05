@@ -332,6 +332,21 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     else {setDeployment({...current,phase:'connection_failed'});if(!actionError())setActionError({title:'remoteDesktop.connectionFailed',hint:stateHint()??'remoteDesktop.connectionHint'});}
   };
   const deploymentStep = () => ['authorizing','password'].includes(deploymentPhase()) ? 0 : ['preparing','confirmation','canceling','failed'].includes(deploymentPhase()) ? 1 : 2;
+  const preparationSteps: EnvAppTranslationKey[] = ['remoteDesktop.deployStepCheck', 'remoteDesktop.deployStepComponents', 'remoteDesktop.deployStepService', 'remoteDesktop.deployStepVerify'];
+  const preparationStep = () => {
+    switch (deploymentProgress()?.stage) {
+      case 'checking': return 0;
+      case 'transferring': case 'preparing_media': case 'authorized': return 1;
+      case 'recovering': case 'verifying_files': case 'installing_service': case 'starting_service': case 'stopping_service': return 2;
+      case 'verification_required': case 'complete': return 3;
+      default: return -1;
+    }
+  };
+  const mediaProgress = () => {
+    const progress = deploymentProgress();
+    if (progress?.stage !== 'preparing_media' || !progress.expected_bytes || progress.received_bytes === undefined) return undefined;
+    return { value: Math.min(progress.received_bytes, progress.expected_bytes), total: progress.expected_bytes };
+  };
   const deploymentStageCopy = (): EnvAppTranslationKey => {
     switch (deploymentProgress()?.stage) {
       case 'checking': return 'remoteDesktop.deployChecking';
@@ -487,14 +502,24 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
           </Show>
           <Show when={['preparing','canceling'].includes(deploymentPhase())}>
             <div class="remote-desktop-flow-stage" data-phase="applying">
-              <div class="remote-desktop-flow-transition" role="status">
+              <div class="remote-desktop-flow-transition">
                 <span class="remote-desktop-flow-spinner" aria-hidden="true" />
-                <div><h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t(cancelingDeployment() ? 'remoteDesktop.deployRollback' : 'remoteDesktop.installStep')}</h4><p>{i18n.t('remoteDesktop.deployPasswordHint')}</p></div>
+                <div><h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t(cancelingDeployment() ? 'remoteDesktop.deployRollback' : 'remoteDesktop.installStep')}</h4></div>
               </div>
-
-              <div class="remote-desktop-deployment-progress"><p>{i18n.t(deploymentStageCopy())}</p><Show when={deploymentProgress()?.expected_bytes} fallback={<progress aria-label={i18n.t(deploymentStageCopy())} />}>
-                {total => <progress aria-label={i18n.t(deploymentStageCopy())} max={total()} value={deploymentProgress()?.received_bytes ?? 0} />}
-              </Show></div>
+              <Show when={operation() === 'ensure' && !cancelingDeployment() && preparationStep() >= 0} fallback={<div class="remote-desktop-deployment-progress" role="status"><p>{i18n.t(deploymentStageCopy())}</p><progress aria-label={i18n.t(deploymentStageCopy())} /></div>}>
+                <ol class="remote-desktop-preparation-steps" aria-label={i18n.t('remoteDesktop.installStep')}>
+                  <For each={preparationSteps}>{(key, index) => <li data-state={index() < preparationStep() ? 'complete' : index() === preparationStep() ? 'active' : 'upcoming'} aria-current={index() === preparationStep() ? 'step' : undefined}>
+                    <span class="remote-desktop-preparation-marker" aria-hidden="true"><Show when={index() < preparationStep()} fallback={<Show when={index() === preparationStep()}><span class="remote-desktop-preparation-pulse" /></Show>}><Check size={13} /></Show></span>
+                    <div class="remote-desktop-preparation-detail"><span>{i18n.t(key)}</span>
+                      <Show when={index() === 1 && preparationStep() === 1 && mediaProgress()}>{progress => <div class="remote-desktop-deployment-progress">
+                        <div class="remote-desktop-progress-values"><span>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().value / 1000000)} / {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().total / 1000000)}</span><span>{new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(progress().value / progress().total)}</span></div>
+                        <progress aria-label={i18n.t(key)} max={progress().total} value={progress().value} />
+                      </div>}</Show>
+                    </div>
+                  </li>}</For>
+                </ol>
+                <span class="sr-only" role="status">{i18n.t(preparationSteps[preparationStep()])}</span>
+              </Show>
             </div>
           </Show>
           <Show when={deploymentPhase() === 'connecting'}>

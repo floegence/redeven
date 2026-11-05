@@ -69,6 +69,10 @@ export const enUS = defineDictionary({
     "deployHint": "Set up remote desktop through this SSH connection. No confirmation on the host’s screen is needed.",
     "deployPasswordHint": "Used only for this SSH operation. Redeven does not save it or send it to the desktop service.",
     "deployConfirm": "Authorize and continue",
+    "deployStepCheck": "Check host",
+    "deployStepComponents": "Prepare components",
+    "deployStepService": "Configure service",
+    "deployStepVerify": "Verify connection",
     "deployChecking": "Checking the SSH host…",
     "deployTransferring": "Transferring and verifying components…",
     "deployAuthorizing": "Authorizing this SSH operation…",
@@ -225,6 +229,7 @@ export const enUS = defineDictionary({
     ,"unlockHint": "Unlock mode sends only physical keyboard and pointer events. Clipboard, paste, shortcuts, and ordinary controls stay disabled."
     ,"startUnlock": "Start unlocking"
     ,"unlocking": "Unlocking host…"
+    ,"unlockRateLimited": "Too many lock screen actions. Wait one minute and try again."
     ,"unlockPhysicalOnly": "Unlock mode accepts physical keyboard and pointer input only."
     ,"unlockFailed": "The unlock attempt failed. The host remains locked; try again or cancel."
 },

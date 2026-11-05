@@ -9,7 +9,7 @@ const canvas = $('desktop'), panel = $('panel'), toolbar = $('toolbar');
 const base = config.base;
 let session = config.session, control, media, player, epoch = 0, sequence = 0;
 let generation = 0, state = 'disconnected', reason = '', painted = false, stopped = false, retry;
-let unlocking = false, unlockPaused = false, lockedFrame = 0;
+let unlocking = false, lockedFrame = 0;
 let backend = '', capabilities = {}, stats, clipboardText = '', clipboardSync = false, clipboardRead;
 let original = false, quality = 'smooth', audio = false, volume = .7, pinned = false, hideTimer;
 let textInput = 'host';
@@ -114,11 +114,6 @@ function updateTransitionControls() {
   $('disconnect').disabled = stopped;
   $('retry-disconnect').disabled = disconnectBusy;
   if (state === 'locked' && painted) $('connection').hidden = true;
-  if ($('start-unlock')) $('start-unlock').disabled = stopped || state !== 'locked' || !painted || !session.unlock;
-  if ($('cancel-unlock')) $('cancel-unlock').disabled = !unlocking;
-  $('unlock-bar')?.toggleAttribute('hidden', state !== 'locked');
-  $('start-unlock')?.toggleAttribute('hidden', unlocking);
-  $('cancel-unlock')?.toggleAttribute('hidden', !unlocking);
   toolbar.dataset.state = stopped ? 'ended' : state;
   $('session-state').textContent = copy(stopped ? 'disconnected' : state === 'active' ? session.mode : state === 'locked' ? 'locked' : 'connecting');
   for (const item of document.querySelectorAll('[data-remote-control]')) item.disabled = !authorized(generation);
@@ -128,7 +123,7 @@ function updateTransitionControls() {
 }
 function changeDesktop(method, values, takeover = false) {
   if (audioRequest || awaitingState) return;
-  unlocking = false; unlockPaused = false; revoke(); awaitingState = true; player?.reset(generation);
+  unlocking = false; revoke(); awaitingState = true; player?.reset(generation);
   updateTransitionControls();
   command(method, values, takeover);
   waitForPicture();
@@ -137,7 +132,7 @@ function waitForPicture() {
   clearTimeout(recoveryTimer);
   recoveryTimer = setTimeout(() => {
     if (stopped || painted) return;
-    epoch++; awaitingState = false; unlocking = false; unlockPaused = false; revoke(); state = 'disconnected';
+    epoch++; awaitingState = false; unlocking = false; revoke(); state = 'disconnected';
     player?.reset(0); control?.close(); media?.close(); awaitingMedia = [];
     status('disconnected', 'failure'); $('reconnect').hidden = false; updateTransitionControls();
   }, 10000);
@@ -190,28 +185,17 @@ function showUnavailable(code) {
   epoch++;
   revoke();
   state = 'unavailable'; reason = code || 'REMOTE_DESKTOP_UNAVAILABLE'; generation = 0;
-  unlocking = false; unlockPaused = false; awaitingState = false; session.unlock = false;
+  unlocking = false; awaitingState = false; session.unlock = false;
   status('unsupported', unavailableHint(reason));
   const retryable = ['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE'].includes(reason);
   $('reconnect').hidden = !retryable;
   updateTransitionControls();
   control?.close(); media?.close();
 }
-function startUnlock() {
-  if (state !== 'locked' || !painted || !session.unlock) return;
-  unlockPaused = false;
-  armUnlock();
-}
 function armUnlock() {
-  if (unlocking || unlockPaused || state !== 'locked' || !painted || !session.unlock || lockedFrame <= 0) return;
+  if (unlocking || state !== 'locked' || !painted || !session.unlock || lockedFrame <= 0) return;
   unlocking = true; input.bindTarget(unlockAuthorized(generation) ? generation : null); input.focus(); status('unlocking', 'unlockPhysicalOnly'); updateTransitionControls();
 }
-function cancelUnlock() {
-  if (!unlocking) return;
-  command('unlock_cancel'); unlocking = false; unlockPaused = true; input.bindTarget(null); status('locked', 'lockedHint'); updateTransitionControls();
-}
-if ($('start-unlock')) $('start-unlock').onclick = startUnlock;
-if ($('cancel-unlock')) $('cancel-unlock').onclick = cancelUnlock;
 function updateDisplays(displays) {
   $('display').replaceChildren(...displays.map((display, index) => {
     const option = document.createElement('option'); option.value = display.id;
@@ -228,7 +212,7 @@ function updateState(message) {
   const nextGeneration = message.generation ?? 0;
   const changed = generation !== nextGeneration;
   state = message.state; reason = message.code ?? ''; generation = nextGeneration;
-  if (changed || state === 'active') { unlocking = false; unlockPaused = false; }
+  if (changed || state === 'active') unlocking = false;
   awaitingState = false;
   if (state === 'active') session.mode = message.mode ?? session.mode;
   $('mode').value = session.mode;
@@ -264,7 +248,7 @@ function retryConnection() {
 }
 async function connect() {
   clearTimeout(retry); clearTimeout(recoveryTimer); if (stopped) return;
-  const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false; audioRequest = undefined; unlocking = false; unlockPaused = false;
+  const current = ++epoch; revoke(); state = 'connecting'; generation = 0; sequence = 0; awaitingMedia = []; awaitingState = false; audioRequest = undefined; unlocking = false;
   updateTransitionControls();
   player?.reset(0); control?.close(); media?.close(); status('connecting'); $('reconnect').hidden = true;
   if (!HostDesktopPlayer.supported()) { showUnavailable(); return; }
@@ -358,6 +342,7 @@ async function connect() {
         }
         else if (['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED', 'LOGIN_SESSION_STALE_RUNTIME', 'LOGIN_SESSION_COMPOSITOR_CHANGED', 'LOGIN_SESSION_COMPOSITOR_MISSING', 'LOGIN_SESSION_COMPOSITOR_AMBIGUOUS', 'LOGIN_SESSION_NO_ACTIVE_SEAT', 'LOGIN_SESSION_TTY_MISMATCH', 'SERVICE_UPDATE_REQUIRED'].includes(message.code)) showUnavailable(message.code);
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
+        else if (message.code === 'UNLOCK_RATE_LIMITED') notice('unlockRateLimited');
         else if (/UNLOCK|LOGIN_SERVICE/.test(message.code)) { status('locked', 'unlockFailed'); notice('unlockFailed'); updateTransitionControls(); }
         else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');
       }
@@ -373,7 +358,7 @@ async function connect() {
     const lost = () => {
       if (current !== epoch || stopped) return;
       clearTimeout(recoveryTimer);
-      epoch++; revoke(); state = 'disconnected'; player.reset(0); control.close(); media.close(); unlocking = false; unlockPaused = false;
+      epoch++; revoke(); state = 'disconnected'; player.reset(0); control.close(); media.close(); unlocking = false;
       updateTransitionControls();
       clearClipboard(); awaitingMedia = []; status('disconnected'); $('reconnect').hidden = false;
       retryConnection();
@@ -559,7 +544,7 @@ $('files').onclick = () => { window.redevenHostApplicationWindow?.request('files
 $('reconnect').onclick = () => { reconnectAttempts = 0; void connect(); };
 function stopViewer() {
   stopped = true; clearTimeout(retry); clearTimeout(hideTimer); clearTimeout(recoveryTimer); epoch++;
-  revoke(); unlocking = false; unlockPaused = false; player?.close(); control?.close(); media?.close();
+  revoke(); unlocking = false; player?.close(); control?.close(); media?.close();
   canvas.width = canvas.width; // Erase retained pixels, including screenshots after disconnect.
   state = 'disconnected'; audioRequest = undefined; awaitingState = false;
   awaitingMedia = []; clearClipboard(); audio = false;
