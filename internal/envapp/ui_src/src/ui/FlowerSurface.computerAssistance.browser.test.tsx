@@ -1,13 +1,15 @@
-import type { FlowerChromeStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerChromeStatus, FlowerComputerEnvironment, FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../index.css';
 import './flower-feature.css';
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
+import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
+import { createFlowerComposerDraftCoordinator, type FlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import type { FlowerBrowserInstallationSnapshot, FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
-import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'installation' | 'desktop_setup' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
+async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'installation' | 'desktop_setup' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required', draftCoordinator?: FlowerComposerDraftCoordinator) {
   await page.viewport(1280, 900);
   const threadID = 'assistance-fixture';
   const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: kind === 'connection' ? 'computer.targets' : 'browser.navigate', renderer: 'structured', status: 'success',
@@ -39,8 +41,9 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   const browser = { storage_bytes: 600000, enabled: true, state: 'not_installed' as const, launch: { state: 'installation_required' as const }, directory: '/state/browser', received_bytes: 0,
     package: { name: 'Chrome for Testing', id: 'fixture', version: '148', platform: 'linux', architecture: 'amd64', url: 'https://cdn.playwright.dev/fixture.zip', sha256: '0'.repeat(64), size_bytes: 180000000, installed_bytes: 390000000 } };
   const loadBrowserInstallation = vi.fn().mockResolvedValue(browser);
-  const loadEnvironment = vi.fn().mockResolvedValue({ hostname: 'udesk26', platform: 'linux', managed: { state: 'on_demand' }, desktop: { state: 'on_demand' }, chrome: { installations: [], profiles: [] } });
+  const loadEnvironment = vi.fn<() => Promise<FlowerComputerEnvironment>>().mockResolvedValue({ hostname: 'udesk26', platform: 'linux', managed: { state: 'on_demand' }, desktop: { state: 'on_demand' }, chrome: { installations: [], profiles: [] } });
   const verifyDesktop = vi.fn().mockResolvedValue({ state: 'ready' });
+  const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => ({ client_request_id: input.client_request_id, thread_id: 'repair-conversation' }));
   let receiveInstallation: ((value: FlowerBrowserInstallationSnapshot) => void) | undefined;
   const unsubscribeInstallation = vi.fn();
   const subscribeBrowserInstallation = vi.fn((listener: (value: FlowerBrowserInstallationSnapshot) => void) => {
@@ -51,10 +54,12 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   const installBrowser = vi.fn().mockResolvedValue({ ...browser, state: 'downloading', launch: { state: 'installation_required' as const }, operation_id: 'confirmed' });
   let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
   const publishStatus = (computer_status: NonNullable<FlowerLiveStreamEnvelope['computer_status']>, thread_id = computer_status.thread_id) => deliver({ schema_version: 3, kind: 'computer.status', thread_id, computer_status });
-  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput, inputComputerControl, setComputerViewer,
+  const publish = (value: FlowerLiveStreamEnvelope) => deliver(value);
+  const loadThread = vi.fn(async (id: string) => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(thread({ thread_id: id })));
+  const source = { ...adapter(true), launchTurn, submitInput, inputComputerControl, setComputerViewer,
     computerManagement: { loadEnvironment, verifyDesktop, loadBrowserInstallation, subscribeBrowserInstallation, installBrowser, saveBrowserEnabled: vi.fn(), openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
-    listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
-    connectLiveStream: async function* ({ signal }) {
+    listThreads: vi.fn(async () => [snapshot, other]), loadThread,
+    connectLiveStream: async function* ({ signal }: { signal: AbortSignal }) {
       yield { schema_version: 3 as const, kind: 'ready' as const, baseline_complete: true, observer_id: 'assistance-observer', summaries: [snapshot, other] };
       while (!signal.aborted) {
         const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>((resolve) => {
@@ -65,11 +70,120 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
         if (envelope) yield envelope;
       }
     },
-  }, { focusThreadRequest: { request_id: 'select-assistance', thread_id: threadID }, layout: true });
+  };
+  const focusThreadRequest = { request_id: 'select-assistance', thread_id: threadID };
+  const surface = draftCoordinator ? renderSurfaceWithDraftCoordinator(source, draftCoordinator, { focusThreadRequest })
+    : renderSurfaceWithAdapterProps(source, { focusThreadRequest, layout: true });
   Object.assign(surface.style, { width: '1200px', height: '800px' });
   await waitFor(() => !!surface.querySelector('.flower-computer-control-heading'));
-  return { surface, gate, saveAccess, loadAccess, submitInput, inputComputerControl, setComputerViewer, publishStatus, loadExtensionStatus, loadBrowserInstallation, installBrowser, browser, publishInstallation, unsubscribeInstallation, verifyDesktop };
+  return { surface, gate, saveAccess, loadAccess, submitInput, inputComputerControl, setComputerViewer, publishStatus, publish, loadThread, loadExtensionStatus, loadBrowserInstallation, installBrowser, browser, publishInstallation, unsubscribeInstallation, verifyDesktop, loadEnvironment, launchTurn };
 }
+
+async function requestDesktopRepair(s: Awaited<ReturnType<typeof setup>>) {
+  s.loadEnvironment.mockResolvedValue({ hostname: 'udesk26', platform: 'linux', managed: { state: 'on_demand' },
+    desktop: { state: 'setup_required', reason: 'window_manager_missing' }, chrome: { installations: [], profiles: [] } });
+  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
+  const install = [...card.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === 'Ask Flower to install')!;
+  install.click(); install.click();
+  await waitFor(() => s.launchTurn.mock.calls.length === 1);
+}
+
+it('opens the accepted repair and provides a working reference back to the unanswered original task', async () => {
+  const drafts = createFlowerComposerDraftCoordinator();
+  const s = await setup('desktop_setup', 'approval_required', drafts);
+  drafts.open('assistance-fixture').mutate(value => ({ ...value, text: 'Preserve this draft',
+    references: [{ local_id: 'kept-file', kind: 'file', path: '/workspace/notes.txt', label: 'notes.txt' }] }));
+  const originalLoad = s.loadThread.getMockImplementation()!;
+  s.launchTurn.mockImplementation(async input => {
+    const context = input.context_action as { context: { thread: { thread_id: string } }[] };
+    const repaired = thread({ thread_id: 'repair-conversation', messages: [{ id: `user:${input.client_request_id}`, turn_id: 'repair-turn',
+      role: 'user', content: input.prompt, status: 'complete', created_at_ms: 10, references: [{ reference_id: 'original-task',
+        kind: 'thread', referenced_thread_id: 'assistance-fixture', label: 'Original task', text: JSON.stringify(context.context[0].thread) }] }] });
+    const base = runtimeCurrentView(repaired, 1);
+    const current = { ...base, items: base.items?.map(item => ({ ...item, references: repaired.messages[0].references })) };
+    s.loadThread.mockImplementation(async id => id === 'repair-conversation' ? { thread: repaired, current } : originalLoad(id));
+    return { client_request_id: input.client_request_id, thread_id: repaired.thread_id, current };
+  });
+  await requestDesktopRepair(s);
+  await waitFor(() => s.surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === 'repair-conversation');
+  await waitFor(() => !!s.surface.querySelector('[data-flower-chat-context-chip="true"]'));
+  await userEvent.click(s.surface.querySelector<HTMLButtonElement>('[data-flower-chat-context-chip="true"]')!);
+  await userEvent.click(page.getByRole('button', { name: 'Open conversation', exact: true }));
+  await waitFor(() => s.surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === 'assistance-fixture');
+  await waitFor(() => !!s.surface.querySelector('.flower-computer-control-heading'));
+  expect(drafts.read('assistance-fixture').value).toMatchObject({ text: 'Preserve this draft',
+    references: [{ local_id: 'kept-file', path: '/workspace/notes.txt' }] });
+  expect(s.surface.textContent).toContain('Inspect the selected page.');
+  expect(s.submitInput).not.toHaveBeenCalled();
+  expect(s.inputComputerControl).not.toHaveBeenCalled();
+});
+
+it('keeps an unknown repair recoverable and retries the same new-conversation request identity', async () => {
+  const s = await setup('desktop_setup');
+  s.launchTurn.mockRejectedValueOnce(flowerTurnAdmissionError('unknown', new Error('Connection lost')));
+  await requestDesktopRepair(s);
+  await waitFor(() => !!s.surface.querySelector('[data-flower-transport-delivery="unknown"]'));
+  const original = s.launchTurn.mock.calls[0][0];
+  const retry = s.surface.querySelector<HTMLButtonElement>('[data-flower-transport-delivery="unknown"] [aria-label="Retry send"]')!;
+  expect(retry).toBeTruthy();
+  retry.click(); retry.click();
+  await waitFor(() => s.launchTurn.mock.calls.length === 2);
+  expect(s.launchTurn.mock.calls[1][0]).toEqual(original);
+  expect(original.thread_id).toBeUndefined();
+  expect(s.submitInput).not.toHaveBeenCalled();
+});
+
+it('does not redirect another conversation when delayed repair acceptance arrives', async () => {
+  const s = await setup('desktop_setup');
+  const pending = deferred<{ client_request_id: string; thread_id: string }>();
+  s.launchTurn.mockImplementation(() => pending.promise);
+  await requestDesktopRepair(s);
+  s.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-conversation"] .flower-thread-card-select-button')!.click();
+  await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');
+  pending.resolve({ client_request_id: s.launchTurn.mock.calls[0][0].client_request_id, thread_id: 'repair-conversation' });
+  await waitFor(() => !s.surface.querySelector('[data-flower-transport-delivery="pending"]'));
+  expect(s.surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id')).toBe('other-conversation');
+  expect(s.submitInput).not.toHaveBeenCalled();
+});
+
+it('accepts canonical repair confirmation before a lost HTTP receipt without sending twice', async () => {
+  const s = await setup('desktop_setup');
+  const pending = deferred<{ client_request_id: string; thread_id: string }>();
+  s.launchTurn.mockImplementation(() => pending.promise);
+  await requestDesktopRepair(s);
+  const request = s.launchTurn.mock.calls[0][0];
+  const repaired = thread({ thread_id: 'repair-conversation', messages: [{ id: `user:${request.client_request_id}`,
+    turn_id: 'repair-turn', role: 'user', content: request.prompt, status: 'complete', created_at_ms: 10 }] });
+  s.publish({ schema_version: 3, kind: 'thread.batch', thread_id: repaired.thread_id, current: runtimeCurrentView(repaired, 1) });
+  await waitFor(() => s.surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === repaired.thread_id);
+  pending.reject(flowerTurnAdmissionError('unknown', new Error('Receipt lost')));
+  await new Promise(resolve => setTimeout(resolve, 30));
+  expect(s.surface.querySelector('[data-flower-transport-delivery="unknown"]')).toBeNull();
+  expect(s.launchTurn).toHaveBeenCalledTimes(1);
+  expect(s.submitInput).not.toHaveBeenCalled();
+});
+
+it('starts a separate Flower repair conversation on the same runtime without answering the original question', async () => {
+  const s = await setup('desktop_setup');
+  s.loadEnvironment.mockResolvedValue({ hostname: 'udesk26', platform: 'linux', managed: { state: 'on_demand' }, desktop: { state: 'setup_required', reason: 'x11_input_missing', components: [{ id: 'x11_input', path: '/usr/bin/xdotool' }], repair: 'ubuntu_apt', packages: ['xdotool'] }, chrome: { installations: [], profiles: [] } });
+  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
+  [...card.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === 'Environment diagnostics')!.click();
+  await waitFor(() => [...document.querySelectorAll('button')].some(item => item.textContent?.trim() === 'Ask Flower to install'));
+  const install = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(item => item.textContent?.trim() === 'Ask Flower to install')!;
+  install.click(); install.click();
+  await waitFor(() => s.launchTurn.mock.calls.length === 1);
+  const request = s.launchTurn.mock.calls[0][0];
+  expect(request.thread_id).toBeUndefined();
+  expect(request.prompt).toContain('udesk26');
+  expect(request.prompt).toContain('/usr/bin/xdotool');
+  expect(request.prompt).toContain('xdotool');
+  expect(request.prompt).toContain('runtime');
+  expect(request.context_action).toMatchObject({ target: { locality: 'current_runtime' },
+    context: [{ kind: 'thread_reference', thread: { thread_id: 'assistance-fixture' } }] });
+  expect(s.submitInput).not.toHaveBeenCalled();
+  expect(s.inputComputerControl).not.toHaveBeenCalled();
+  expect(s.verifyDesktop).not.toHaveBeenCalled();
+});
 
 it('opens desktop repair for the current evidence and leaves the original question unanswered after verification', async () => {
   const s = await setup('desktop_setup');

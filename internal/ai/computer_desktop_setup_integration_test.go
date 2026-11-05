@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -45,6 +46,9 @@ func (e *desktopSetupIntegrationExecutor) ExecuteTargetTool(context.Context, Tar
 func TestDesktopSetupQuestionPreservesCanonicalWaitAndDoesNotReplay(t *testing.T) {
 	var requests atomic.Int32
 	var modelSawFailure atomic.Bool
+	var repairRequests atomic.Int32
+	var modelSawRepair atomic.Bool
+	repairFile := filepath.Join(t.TempDir(), "installed-desktop-component")
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body map[string]any
 		if json.NewDecoder(req.Body).Decode(&body) != nil {
@@ -55,6 +59,18 @@ func TestDesktopSetupQuestionPreservesCanonicalWaitAndDoesNotReplay(t *testing.T
 		flush := w.(http.Flusher)
 		if definitions, _ := body["tools"].([]any); len(definitions) == 0 {
 			writeAskUserIntegrationTextResponse(w, flush, "title", "Prepare desktop")
+			return
+		}
+		input, _ := json.Marshal(body["input"])
+		if strings.Contains(string(input), "Install the missing desktop fixture") {
+			if repairRequests.Add(1) == 1 {
+				arguments, _ := json.Marshal(map[string]any{"description": "Install and verify the isolated desktop fixture",
+					"command": "printf '#!/bin/sh\nexit 0\n' > '" + repairFile + "' && chmod 700 '" + repairFile + "' && '" + repairFile + "' && printf DESKTOP_REPAIR_VERIFIED", "yield_ms": 10000})
+				writeEncodingIntegrationCall(w, "terminal_exec", "repair-component", string(arguments))
+			} else {
+				modelSawRepair.Store(strings.Contains(string(input), "DESKTOP_REPAIR_VERIFIED") && requestContainsPairedToolHistory(body, "terminal_exec"))
+				writeAskUserIntegrationTextResponse(w, flush, "repair-done", "The desktop fixture was installed and verified.")
+			}
 			return
 		}
 		switch requests.Add(1) {
@@ -129,6 +145,22 @@ func TestDesktopSetupQuestionPreservesCanonicalWaitAndDoesNotReplay(t *testing.T
 	public, err := flowerCurrentJSON(current)
 	if err != nil || !strings.Contains(string(public), `"kind":"desktop_setup"`) || !strings.Contains(string(public), `"tool_call_id":"blocked-desktop"`) {
 		t.Fatalf("public current view lost setup evidence: %s %v", public, err)
+	}
+	repairRequest := SendUserTurnRequest{Create: &CreateThreadRequest{ClientRequestID: "desktop-repair", ModelID: "openai/gpt-5-mini", PermissionType: string(FlowerPermissionFullAccess), WorkingDir: state},
+		Input:   RunInput{Text: "Install the missing desktop fixture on the current runtime and verify it.", ContextAction: threadReferenceAction(flowerThreadReferenceRuntimeID(meta.EndpointID), thread.ThreadID)},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}
+	repair, err := svc.SendUserTurn(t.Context(), meta, repairRequest)
+	if err != nil || repair.ThreadID == "" || repair.ThreadID == thread.ThreadID {
+		t.Fatalf("repair did not start a separate conversation: %+v %v", repair, err)
+	}
+	waitForAskUserIntegrationThread(t, svc, meta, repair.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
+	installed, err := os.Stat(repairFile)
+	if err != nil || installed.Mode().Perm()&0100 == 0 || !modelSawRepair.Load() || repairRequests.Load() != 2 {
+		t.Fatalf("repair terminal effect or model-visible verification missing: installed=%v model=%t requests=%d err=%v", installed, modelSawRepair.Load(), repairRequests.Load(), err)
+	}
+	duplicate, err := svc.SendUserTurn(t.Context(), meta, repairRequest)
+	if err != nil || duplicate.ThreadID != repair.ThreadID || repairRequests.Load() != 2 {
+		t.Fatalf("repair identity was not idempotent: %+v %v", duplicate, err)
 	}
 	verified, err := svc.VerifyComputerDesktop(t.Context(), meta)
 	if err != nil || verified.State != "ready" || executor.checks.Load() != 1 {

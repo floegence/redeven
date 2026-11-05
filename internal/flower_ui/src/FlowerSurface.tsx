@@ -1,4 +1,5 @@
 import { computerObservationInterruption } from './computerActivityOutcome';
+import { Sparkles } from 'lucide-solid';
 import { historyItemNeedsObservation } from './historyWindowRetention';
 import { createHistorySequenceCompletion } from './historySequenceCompletion';
 import { createFlowerHistoryGapSubscriptions, createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions, createFlowerThreadSubscription } from './flowerPresentationSubscriptions';
@@ -50,8 +51,9 @@ import { createActivityFieldPresentation } from './activityFieldPresentation';
 import { FlowerActivityRows } from './FlowerActivityRows';
 import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from './FlowerComputerConnections';
 import { computerAssistance } from './computerAssistance';
+import { desktopRepairPrompt } from './computerDesktopRepair';
 import { computerFrameRate } from './computerViewer';
-import type { FlowerComputerFrameSource, FlowerComputerInputCommand, FlowerThreadPinMetadata, FlowerThreadPinPosition } from './contracts/flowerSurfaceContracts';
+import type { FlowerComputerEnvironment, FlowerComputerFrameSource, FlowerComputerInputCommand, FlowerThreadPinMetadata, FlowerThreadPinPosition } from './contracts/flowerSurfaceContracts';
 import { FLOE_HOT_INTERACTION_ATTR, secureRandomUUID, useOverlayMask } from '@floegence/floe-webapp-core';
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { FlowerApprovalRow, FlowerApprovalDecisionActions } from './FlowerApprovalRow';
@@ -894,7 +896,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 	const outboxResendInFlight = new Set<string>();
 	const pendingAdmissionHandoffs = new Map<string, PendingAdmissionHandoff>();
 	const canConfirmOutboxEntry = (entry: TransportOutboxEntry): boolean => (
-		!isPendingDraftKey(entry.threadId)
+		entry.desktopRepair === true || !isPendingDraftKey(entry.threadId)
 		|| pendingAdmissionHandoffs.has(entry.requestId)
 	);
 	let transportOutboxDisposed = false;
@@ -3751,6 +3753,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const reconcileRuntimeObservation = (current: FlowerRuntimeCurrentView | undefined, initialCache: ReturnType<typeof createThreadCache>, threadID: string) => {
     let currentOutbox = transportOutbox();
+    const repairEntry = current && currentOutbox.matchCurrent(current, { canConfirm: canConfirmOutboxEntry })
+      .find(entry => entry.desktopRepair && entry.threadId === (selectedThreadID() || pendingDraftKey()) && !pendingThreadSelection());
     if (current) {
       for (const entry of currentOutbox.matchCurrent(current, { canConfirm: canConfirmOutboxEntry })) {
         if (!entry.input.thread_id) currentOutbox = currentOutbox.bindAcceptedThread(entry.requestId, threadID);
@@ -3762,7 +3766,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     let nextCache = initialCache;
     let selectionTransferred = false;
     const admittedHandoffs = reconciliation.admitted.flatMap((entry) => {
-      if (entry.threadId.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(entry.threadId, threadID);
+      if (!entry.desktopRepair && entry.threadId.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(entry.threadId, threadID);
       const handoff = pendingAdmissionHandoffs.get(entry.requestId);
       if (!handoff) {
         if (entry.presentation === 'composer') consumeSubmittedComposerDraft(entry, threadID);
@@ -3792,6 +3796,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const retained = nextCache.views.get(threadID)?.thread;
       if (retained) reconcileInputDraft(threadID, retained.input_request);
       if (selectionTransferred) {
+        setThreadLoadError('');
+        setSidePanel('chat');
+      }
+      if (repairEntry) {
+        beginThreadDetailDisplayCycle(threadID);
+        nextCache = nextCache.select(threadID);
         setThreadLoadError('');
         setSidePanel('chat');
       }
@@ -5375,15 +5385,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         new Error('Flower send returned a different thread identity.'),
       );
     }
-    if (entry.threadId.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(entry.threadId, threadID);
+    if (!entry.desktopRepair && entry.threadId.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(entry.threadId, threadID);
     const handoff = pendingAdmissionHandoffs.get(requestID);
+    const openRepair = entry.desktopRepair && entry.threadId === (selectedThreadID() || pendingDraftKey()) && !pendingThreadSelection();
     const transferDraftScope = Boolean(
       handoff
       && isPendingDraftKey(handoff.sessionKey)
       && handoff.selectionSequence === threadLoadSequence
       && !threadCache().selectedId
     );
-    if (transferDraftScope) beginThreadDetailDisplayCycle(threadID);
+    if (transferDraftScope || openRepair) beginThreadDetailDisplayCycle(threadID);
     batch(() => {
       handoff?.settle(threadID, transferDraftScope);
       if (!handoff && entry.presentation === 'composer') consumeSubmittedComposerDraft(entry, threadID);
@@ -5393,7 +5404,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }));
       outboxDraftRestorers.delete(requestID);
       outboxOperations.delete(requestID);
-      if (transferDraftScope) {
+      if (transferDraftScope || openRepair) {
         setThreadCache((cache) => cache.select(threadID));
         setThreadLoadError('');
         setSidePanel('chat');
@@ -5455,7 +5466,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       if (!entry.operation && !props.adapter.launchTurn) continue;
       if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
-      if (isPendingDraftKey(entry.threadId) && !pendingAdmissionHandoffs.has(entry.requestId)) {
+      if (!entry.desktopRepair && isPendingDraftKey(entry.threadId) && !pendingAdmissionHandoffs.has(entry.requestId)) {
         pendingAdmissionHandoffs.set(entry.requestId, {
           sessionKey: entry.threadId,
           selectionSequence: entry.threadId === pendingDraftKey() ? threadLoadSequence : -1,
@@ -7139,6 +7150,58 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedTimelineEntries = createMemo(() => selectedTimelineDocument().entries);
   const selectedTimelineThread = createFlowerThreadSubscription(() => selectedTimelineDocument().thread);
   const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | 'desktop_setup' | null>(null);
+  const [desktopRepairReading, setDesktopRepairReading] = createSignal(false);
+  const desktopRepairPending = () => transportOutbox().forThread(selectedThreadID() || pendingDraftKey()).some(entry => entry.desktopRepair);
+  const startDesktopRepair = async (environment: FlowerComputerEnvironment) => {
+    const threadID = trimString(selectedThreadID()) || pendingDraftKey();
+    if (pendingThreadSelection() || desktopRepairPending() || !settingsReady() || !readyForChat()
+      || surfaceReadOnly() || !handlerAllowsSubmitIntent()) throw new Error(copy().computer.desktopRepairUnavailable);
+    const requestID = createFlowerClientRequestID();
+    const capturedDecision = currentHandlerDecision();
+    const source = selectedThreadSettings();
+    const contextAction: ContextActionEnvelope | undefined = source ? {
+      schema_version: CONTEXT_ACTION_SCHEMA_VERSION, action_id: 'assistant.ask.flower', provider: 'flower',
+      target: { target_id: 'current', locality: 'current_runtime' }, source: { surface: 'flower_composer' },
+      context: [{ kind: 'thread_reference', thread: { runtime_id: props.adapter.runtime.runtime_id,
+        thread_id: source.thread_id, title: source.title, status: source.status, working_dir: source.working_dir,
+        created_at_ms: source.created_at_ms, updated_at_ms: source.updated_at_ms, captured_at_ms: Date.now() } }],
+      presentation: { label: copy().computer.desktopInstallWithFlower, priority: 100 },
+    } : undefined;
+    const input: FlowerTurnLaunchInput = {
+      client_request_id: requestID,
+      prompt: desktopRepairPrompt(copy().computer.desktopFlowerPrompt, copy().computer.desktopFlowerObservation, environment),
+      ...(contextAction ? { context_action: contextAction } : {}),
+      model_id: selectedComposerModelID(),
+      permission_type: composerPermissionType(),
+      ...(displayedWorkingDirectory() ? { working_dir: displayedWorkingDirectory() } : {}),
+      ...(serializeFlowerReasoningSelection(composerLaunchReasoningSelection()) ? { reasoning_selection: serializeFlowerReasoningSelection(composerLaunchReasoningSelection()) } : {}),
+      decision: capturedDecision,
+    };
+    const adapter = props.adapter;
+    outboxOperations.set(requestID, { adapter, prepare: async () => {
+      const decision = capturedDecision ?? await adapter.resolveHandler({ thread_kind: 'chat', client_surface: 'flower_surface' });
+      if (!decision.selected_handler || decision.blocker || decision.route === 'blocked') throw new Error(decision.blocker?.message || copy().chat.handlerStillStarting);
+      const storageGeneration = await adapter.resolveStorageGeneration?.();
+      return { ...input, decision, ...(storageGeneration ? { storage_generation: storageGeneration } : {}) };
+    } });
+    setTransportOutbox(outbox => outbox.put({
+      desktopRepair: true, presentation: 'queue', preparation: 'pending', requestId: requestID, threadId: threadID,
+      input, attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending',
+    }));
+  };
+  const installDesktopFromTask = async () => {
+    if (desktopRepairReading() || desktopRepairPending() || surfaceReadOnly()) return;
+    const adapter = props.adapter;
+    const source = selectedThreadID();
+    setDesktopRepairReading(true);
+    try {
+      if (!adapter.computerManagement?.loadEnvironment) throw new Error(copy().computer.desktopRepairUnavailable);
+      const environment = await adapter.computerManagement.loadEnvironment();
+      if (surfaceDisposed || props.adapter !== adapter || selectedThreadID() !== source || pendingThreadSelection()) return;
+      await startDesktopRepair(environment);
+    } catch { if (!surfaceDisposed) notifyComposerError(copy().computer.desktopRepairUnavailable); }
+    finally { if (!surfaceDisposed) setDesktopRepairReading(false); }
+  };
   createEffect(on([activeThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
   const [computerStageRestoreFocus, setComputerStageRestoreFocus] = createSignal<HTMLElement>();
@@ -8081,7 +8144,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <Show when={(failed() || unknown()) && !entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoredInputCopy} title={copy().chat.restoredInputCopy}
         onClick={() => void writeClipboardText(entry().draftText ?? entry().input.prompt, copy().chat.restoredInputCopy).catch(error => notifyThreadActionError(getErrorMessage(error)))}><Copy aria-hidden="true" /></button></Show>
       <Show when={mutableUnsent()}>
-        <Show when={!entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoreSend} title={copy().chat.restoreSend}
+        <Show when={!entry().operation && !entry().desktopRepair}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoreSend} title={copy().chat.restoreSend}
           disabled={!emptyDraft()}
           onClick={() => restoreUnsentOutboxEntry(entry())}><Pencil aria-hidden="true" /></button></Show>
         <button type="button" class="flower-queued-turn-action flower-queued-turn-delete" aria-label={localRecoveryCopy() ? copy().chat.removeRecoveryCopy : copy().chat.deleteUnsent}
@@ -10247,7 +10310,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
               <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('settings')}>{copy().computer.title}</Button></Show>
-              <Show when={selectedComputerAssistance().kind === 'desktop_setup'}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('desktop_setup')}>{copy().computer.diagnostics}</Button></Show>
+              <Show when={selectedComputerAssistance().kind === 'desktop_setup'}><Button variant="primary" icon={Sparkles} loading={desktopRepairReading()} disabled={surfaceReadOnly() || inputRequestIsSubmitting() || desktopRepairPending() || desktopRepairReading()} onClick={() => void installDesktopFromTask()}>{copy().computer.desktopInstallWithFlower}</Button><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('desktop_setup')}>{copy().computer.diagnostics}</Button></Show>
               <Show when={selectedComputerAssistance().kind !== 'desktop_setup' && selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target' && computerResourceStatus()?.state !== 'unavailable'}>
               <Button variant="secondary" data-computer-control-action="take" disabled={computerResponseSubmitting() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               </Show>
@@ -14855,6 +14918,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
         continuationKey={`${activeThreadID()}:${selectedInputRequest()?.prompt_id ?? ''}`}
         desktopSetup={computerDialog() === 'desktop_setup'}
+        desktopRepairPending={desktopRepairPending()} onInstallDesktopWithFlower={startDesktopRepair}
         connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {
           if (pendingThreadSelection()) return;
           const request = selectedInputRequest();

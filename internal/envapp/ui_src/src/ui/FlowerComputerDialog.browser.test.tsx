@@ -47,64 +47,92 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
   const [thread, setThread] = createSignal('thread');
   const [open, setOpen] = createSignal(true);
   const onContinue = vi.fn().mockResolvedValue(undefined);
+  const onInstallDesktopWithFlower = vi.fn().mockResolvedValue(undefined);
   const editPermission = vi.fn();
   const host = document.createElement('div'); document.body.append(host);
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open={open()} fullAccess={options.fullAccess} threadID={thread()} onOpenChange={setOpen}
-    connectionOnly={options.connectionOnly} onContinue={onContinue} onEditPermissionMode={editPermission}
+    connectionOnly={options.connectionOnly} onContinue={onContinue} onInstallDesktopWithFlower={onInstallDesktopWithFlower} onEditPermissionMode={editPermission}
     requested={{ origin: 'https://example.com', app: 'dev.fixture.Notes', foreground: true }}
     adapter={{ runtime: { display_name: 'Test environment', runtime_id: 'test', runtime_kind: 'env_local', carrier_kind: 'server', subtitle: '' }, canMutate: !options.readonly, computerManagement: management }} copy={options.copy ?? copy} /></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  return { management, setThread, setOpen, onContinue, editPermission };
+  return { management, setThread, setOpen, onContinue, onInstallDesktopWithFlower, editPermission };
 }
 async function ready() { await waitFor(() => !!button(copy.switchTarget) && !button(copy.switchTarget).disabled); }
 async function picker() { button(copy.switchTarget).click(); await waitFor(() => radios().length > 0 && !radios()[0].disabled); }
 
 for (const width of [1000, 390]) {
-  it(`guides missing Ubuntu desktop components through repair and explicit verification at ${width}px`, async () => {
+  it(`hands missing Ubuntu desktop components to Flower at ${width}px`, async () => {
     await page.viewport(width, 800);
     const labels = zhCN.flowerSurface.computer;
     const command = 'sudo apt-get install --reinstall --no-install-recommends --no-remove openbox xdotool imagemagick-7.q16';
     const missing: FlowerComputerEnvironment = { ...environment, hostname: 'udesk26', platform: 'linux', desktop: { state: 'setup_required', reason: 'window_manager_missing', repair: 'ubuntu_apt', setup_command: command,
       components: [{ id: 'window_manager', path: '/usr/bin/openbox' }, { id: 'x11_input', path: '/usr/bin/xdotool' }, { id: 'x11_capture', path: '/usr/bin/import' }] } };
-    const { management } = mount({ copy: labels, environment: missing });
+    const { management, onInstallDesktopWithFlower, setOpen } = mount({ copy: labels, environment: missing });
     await waitFor(() => !!button(labels.details));
     button(labels.details).click();
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.innerText).toContain('/usr/bin/openbox');
     expect(dialog.innerText).toContain('/usr/bin/xdotool');
     expect(dialog.innerText).toContain('/usr/bin/import');
-    expect(dialog.innerText).toContain(labels.desktopInstallImpact);
-    expect(dialog.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${labels.desktopCommand}"]`)?.value).toBe(command);
+    expect(dialog.innerText).not.toContain(command);
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/desktop-missing-${width}.png` });
+    button(labels.desktopInstallWithFlower).click();
+    await waitFor(() => onInstallDesktopWithFlower.mock.calls.length === 1);
+    expect(onInstallDesktopWithFlower).toHaveBeenCalledWith(missing);
     expect(management.verifyDesktop).not.toHaveBeenCalled();
     expect(button(labels.desktopVerify)).toBeUndefined();
-    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/desktop-missing-${width}.png` });
+    await waitFor(() => !document.querySelector('[role="dialog"]'));
     management.loadEnvironment.mockResolvedValue({ ...missing, desktop: { state: 'on_demand' } });
-    button(labels.refresh).click();
+    setOpen(true);
+    await waitFor(() => !!button(labels.details));
+    button(labels.details).click();
     await waitFor(() => !!button(labels.desktopVerify));
+    const repairedDialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(management.verifyDesktop).not.toHaveBeenCalled();
     button(labels.desktopVerify).click();
-    await waitFor(() => dialog.innerText.includes(labels.desktopVerified));
+    await waitFor(() => repairedDialog.innerText.includes(labels.desktopVerified));
     expect(management.verifyDesktop).toHaveBeenCalledTimes(1);
     expect(management.selectCandidate).not.toHaveBeenCalled();
-    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
-    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/desktop-setup-${width}.png` });
+    expect(repairedDialog.scrollWidth).toBeLessThanOrEqual(repairedDialog.clientWidth + 1);
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: repairedDialog, path: `__screenshots__/desktop-setup-${width}.png` });
   });
 }
 
-it('keeps unsupported, custom-path, busy, and verification failure states distinct', async () => {
+it('offers Flower help for custom paths and other systems and keeps verification failures distinct', async () => {
   const custom: FlowerComputerEnvironment = { ...environment, platform: 'linux', desktop: { state: 'setup_required', reason: 'x11_input_missing', repair: 'custom_path', components: [{ id: 'x11_input', path: '/custom/xdotool', overridden: true }] } };
   const { management } = mount({ environment: custom });
   await ready(); button(copy.details).click();
-  expect(document.body.textContent).toContain(copy.desktopCustomPath);
-  expect(document.body.textContent).not.toContain(copy.desktopInstallTitle);
+  expect(button(copy.desktopInstallWithFlower)).toBeTruthy();
   management.loadEnvironment.mockResolvedValue({ ...custom, desktop: { ...custom.desktop, repair: 'unsupported_platform' } });
-  button(copy.refresh).click(); await waitFor(() => document.body.textContent?.includes(copy.desktopManualRepair) === true);
+  button(copy.refresh).click(); await waitFor(() => management.loadEnvironment.mock.calls.length === 2 && !button(copy.refresh).disabled);
   management.loadEnvironment.mockResolvedValue({ ...custom, desktop: { state: 'on_demand' } });
   button(copy.refresh).click(); await waitFor(() => !!button(copy.desktopVerify));
   management.verifyDesktop.mockResolvedValueOnce({ state: 'in_use', reason: 'desktop_in_use' }).mockResolvedValueOnce({ state: 'setup_required', reason: 'atspi_connection_failed' });
-  button(copy.desktopVerify).click(); await waitFor(() => document.body.textContent?.includes(copy.desktopVerifyInUse) === true);
+  button(copy.desktopVerify).click(); await waitFor(() => document.body.textContent?.includes(copy.desktopVerifyInUse) === true && !button(copy.desktopVerify)?.disabled);
   button(copy.desktopVerify).click(); await waitFor(() => document.body.textContent?.includes(copy.desktopVerifyFailed) === true);
   expect(document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${copy.diagnostics}"]`)?.value).toContain('atspi_connection_failed');
+});
+
+it('keeps diagnostics open after a failed Flower handoff and permits retry', async () => {
+  const { onInstallDesktopWithFlower, onContinue } = mount({ environment: { ...environment, platform: 'linux', desktop: { state: 'setup_required' } } });
+  onInstallDesktopWithFlower.mockRejectedValueOnce(new Error('Handler unavailable'));
+  await ready(); button(copy.details).click();
+  button(copy.desktopInstallWithFlower).click();
+  await waitFor(() => document.body.textContent?.includes(copy.desktopRepairUnavailable) === true && !button(copy.desktopInstallWithFlower)?.disabled);
+  expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+  button(copy.desktopInstallWithFlower).click();
+  await waitFor(() => !document.querySelector('[role="dialog"]'));
+  expect(onInstallDesktopWithFlower).toHaveBeenCalledTimes(2);
+  expect(onContinue).not.toHaveBeenCalled();
+});
+
+it('does not install desktop components through a read-only connection', async () => {
+  const { onInstallDesktopWithFlower } = mount({ readonly: true, environment: { ...environment, platform: 'linux', desktop: { state: 'setup_required' } } });
+  await waitFor(() => !!button(copy.details)); button(copy.details).click();
+  expect(button(copy.desktopInstallWithFlower).disabled).toBe(true);
+  button(copy.desktopInstallWithFlower).click();
+  expect(onInstallDesktopWithFlower).not.toHaveBeenCalled();
 });
 
 for (const width of [1000, 390]) {

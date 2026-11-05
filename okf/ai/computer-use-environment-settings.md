@@ -3,7 +3,7 @@ type: Product Interaction Contract
 title: Browser and desktop settings
 tags: [ai, computer-use, settings, desktop, envapp]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -20,6 +20,8 @@ Both carriers provide complete explicit localized copy.
 `GET computer/environment` returns hostname, platform, managed-browser capability, desktop capability, and the existing live Chrome status snapshot. Capability is an observation, not an authorization or a guarantee that subsequent startup cannot fail.
 
 Published Floe components already supply the required UI primitives, so this change is product integration rather than an upstream platform extension.
+
+Missing Linux desktop components have an explicit **Ask Flower to install** action in diagnostics and the canonical setup question. It creates a separate same-Runtime conversation using the normal durable send contract, with a reference back to the original task. Opening diagnostics, passive refresh and desktop verification never submit the original input or retry its failed action. Repair admission, installation and verification are distinct facts; the executable repair contract is owned by [Linux private desktop](computer-use-desktop.md#linux-private-desktop).
 
 # Boundaries
 

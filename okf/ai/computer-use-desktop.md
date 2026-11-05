@@ -57,7 +57,9 @@ unsupported application controls fail explicitly.
 ## Linux private desktop
 The Xvfb owner starts a private session D-Bus and AT-SPI bus. The executor rejects socket or environment paths leading outside that private desktop; it never discovers or attaches to another logged-in user's session.
 
-Environment inspection is read-only and reports all missing configured executables and their actual paths. On Ubuntu 26.04, default-path omissions produce a fixed, user-run APT reinstall command; custom paths and other systems receive administrator guidance instead. APT presents the package transaction for terminal confirmation, may upgrade dependencies and change system alternatives, and cannot remove packages through this command. The Runtime neither accepts a password nor reports installation completion on the terminal's behalf. Interrupted operations require package-manager inspection before a new attempt.
+Environment inspection is read-only and reports all missing configured executables and their actual paths. The setup question and Linux diagnostics offer **Ask Flower to install**. A click starts a separate conversation through the current Runtime adapter with the selected model, permission mode and working directory. Flower rechecks the observed host, installs or repairs components through existing general-purpose terminal tools, and verifies X11, private D-Bus, AT-SPI and screenshot readiness. Custom paths require confirmation before changes. No automatic package-manager command is executed by the UI, and captured suggested commands are excluded from the repair prompt. Host observations are bounded JSON explicitly identified as untrusted data.
+
+The repair uses existing approval controls, never requests passwords in chat or tool calls, and reports a blocker if private system authorization is unavailable. Admission is not installation success. The original conversation, draft, references and pending input remain intact; the repair carries a readable thread reference back to the original task. Durable outbox recovery retries the same request identity after an uncertain send. Accepting a repair never binds unrelated drafts, and a delayed receipt does not redirect a user who changed conversations. Interrupted package operations require inspection before another attempt; no failed Computer Use action is replayed.
 
 An explicit RWX-authorized verification serializes with target control, refuses an occupied desktop, and checks X11, private D-Bus, AT-SPI and screenshot capture without changing the conversation target or sending input. Passive refresh never starts the desktop. Previously failed target snapshots become selectable after a fresh successful resource check; selection still performs its normal readiness handshake.
 
@@ -70,6 +72,8 @@ Product target preferences and canonical historical results follow their existin
 Swift unit tests and real GTK/AT-SPI/Xvfb fixtures provide separate adapter proofs. Lock-screen operation remains outside the supported scope.
 
 # Evidence
+
+- `redeven:internal/ai/computer_desktop_setup_integration_test.go` proves separate repair admission, a real terminal fixture installation and model-visible verification, request idempotency and preservation of the original canonical wait. Browser tests cover direct and diagnostic actions, failure/retry, read-only mode, source references, retained drafts and delayed admission. The Ubuntu qualification script separately installs and repairs real packages in an isolated private Xvfb/AT-SPI fixture; fixture evidence does not certify installation on a user's host.
 
 - `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/Accessibility.swift` - Source.
 - `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/ScreenCapture.swift` - Source.

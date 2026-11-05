@@ -17,6 +17,8 @@ export function FlowerComputerConnections(props: {
   permissionLabel?: string; onEditPermissionMode?: () => void;
   onContinue?: (enabled?: boolean) => Promise<void>; installationOnly?: boolean; continuationKey?: string;
   desktopSetup?: boolean;
+  onInstallDesktopWithFlower?: (environment: FlowerComputerEnvironment) => Promise<void>;
+  desktopRepairPending?: boolean;
 }) {
   const [page, setPage] = createSignal<Page>('overview');
   const [inventory, setInventory] = createSignal<FlowerComputerInventory>();
@@ -33,7 +35,6 @@ export function FlowerComputerConnections(props: {
   const [diagnostic, setDiagnostic] = createSignal<'managed' | 'desktop'>('managed');
   const [verification, setVerification] = createSignal<FlowerComputerCapability>();
   const [verificationUnavailable, setVerificationUnavailable] = createSignal(false);
-  const [commandCopied, setCommandCopied] = createSignal(false);
   const [diagnosticsCopied, setDiagnosticsCopied] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
@@ -43,7 +44,6 @@ export function FlowerComputerConnections(props: {
   const [saved, setSaved] = createSignal(false);
   let generation = 0;
   let targetList: HTMLDivElement | undefined;
-  let commandInput: HTMLTextAreaElement | undefined;
   let diagnosticsInput: HTMLTextAreaElement | undefined;
   onCleanup(() => { generation++; });
   const management = () => props.adapter.computerManagement;
@@ -114,7 +114,7 @@ export function FlowerComputerConnections(props: {
   createEffect(on(() => [props.open, props.threadID, props.connectionOnly, props.installationOnly, props.desktopSetup] as const, ([open]) => {
     generation++; setPage(props.installationOnly ? 'managed' : props.desktopSetup ? 'diagnostics' : 'overview'); setDiagnostic(props.desktopSetup ? 'desktop' : 'managed'); setInventory(undefined); setEnvironment(undefined); setAccess(undefined);
     setProfiles([]); setStopProfile(''); setError(''); setSaved(false); setDraft(''); setQuery(''); setTargetFilter('all'); setOrigin(''); setProfileName(''); setEndpoint(''); setBusy(false);
-    setVerification(undefined); setVerificationUnavailable(false); setCommandCopied(false); setDiagnosticsCopied(false);
+    setVerification(undefined); setVerificationUnavailable(false); setDiagnosticsCopied(false);
     setInventoryFailed(false); setEnvironmentFailed(false);
     if (open && !props.connectionOnly) void load(); else setLoading(false);
   }));
@@ -174,6 +174,10 @@ export function FlowerComputerConnections(props: {
   const diagnose = (kind: 'managed' | 'desktop') => { setVerification(undefined); setVerificationUnavailable(false); setDiagnostic(kind); go('diagnostics'); };
   const capability = () => environment()?.[diagnostic()];
   const desktopVerification = () => verification();
+  const repairEnvironment = () => {
+    const current = environment();
+    return current ? { ...current, desktop: { ...current.desktop, ...desktopVerification() } } : undefined;
+  };
   const verifyDesktop = () => run(async epoch => {
     setVerification(undefined); setVerificationUnavailable(false);
     try {
@@ -181,6 +185,12 @@ export function FlowerComputerConnections(props: {
       if (epoch === generation) { setVerification(result); await refreshEnvironment(epoch); await refreshInventory(epoch); }
     } catch { if (epoch === generation) setVerificationUnavailable(true); }
   }, props.copy.desktopVerifyUnavailable);
+  const installDesktopWithFlower = () => run(async epoch => {
+    const current = repairEnvironment();
+    if (!current || !props.onInstallDesktopWithFlower || props.desktopRepairPending) return;
+    await props.onInstallDesktopWithFlower(current);
+    if (epoch === generation) props.onOpenChange(false);
+  }, props.copy.desktopRepairUnavailable);
   const diagnosticText = () => JSON.stringify({ platform: environment()?.platform, desktop: environment()?.desktop, verification: desktopVerification() }, null, 2);
   const copyText = (text: string, copied: (value: boolean) => void, input?: HTMLTextAreaElement) => {
     if (!navigator.clipboard?.writeText) { input?.focus(); input?.select(); return; }
@@ -319,12 +329,8 @@ export function FlowerComputerConnections(props: {
           <div class="flower-computer-detail-card space-y-3"><div class="flower-computer-section-heading"><h3 class="font-medium text-foreground">{diagnostic() === 'managed' ? props.copy.managed : props.copy.desktopTitle}</h3><span class="flower-computer-status" data-tone={capabilityTone(capability()?.state)}>{stateLabel(capability()?.state)}</span></div><p class="leading-relaxed text-muted-foreground">{capabilityHint(diagnostic())}</p>
           <Show when={diagnostic() === 'desktop' && environment()?.platform === 'linux'} fallback={<Show when={!capability() || capability()?.state === 'setup_required'}><p class="text-xs leading-relaxed text-muted-foreground">{environmentFailed() ? props.copy.loadFailed : props.copy.repairHint}</p></Show>}>
             <Show when={capability()?.components?.length}><div class="space-y-1"><h4 class="text-xs font-medium">{props.copy.desktopMissingComponents}</h4><ul class="space-y-1"><For each={capability()?.components}>{component => <li><code class="break-all text-xs">{component.path}</code></li>}</For></ul></div></Show>
-            <Show when={capability()?.repair === 'ubuntu_apt' && capability()?.setup_command}><div class="space-y-2"><h4 class="text-xs font-medium">{props.copy.desktopInstallTitle}</h4><p>{props.copy.desktopInstallInstructions}</p><p>{props.copy.desktopInstallImpact}</p>
-              <textarea ref={commandInput} readOnly aria-label={props.copy.desktopCommand} class="flower-settings-text-input w-full min-h-20 font-mono text-xs" value={capability()!.setup_command} onFocus={event => event.currentTarget.select()} />
-              <Button size="sm" variant="outline" onClick={() => copyText(capability()!.setup_command!, setCommandCopied, commandInput)}>{commandCopied() ? props.copy.desktopCommandCopied : props.copy.desktopCopyCommand}</Button><p>{props.copy.desktopInstallAfter}</p></div></Show>
-            <Show when={capability()?.repair === 'custom_path'}><p>{props.copy.desktopCustomPath}</p></Show>
-            <Show when={capability()?.repair === 'unsupported_platform'}><p>{props.copy.desktopManualRepair}</p></Show>
-            <Show when={capability()?.state === 'setup_required' && !capability()?.repair}><p>{props.copy.desktopUnknownRepair}</p></Show>
+            <Show when={capability()?.state === 'setup_required' || desktopVerification()?.state === 'setup_required'}><div class="space-y-2"><p>{props.copy.desktopFlowerHint}</p>
+              <Button size="sm" variant="primary" icon={Sparkles} disabled={!mutable() || !props.onInstallDesktopWithFlower || props.desktopRepairPending} onClick={() => void installDesktopWithFlower()}>{props.copy.desktopInstallWithFlower}</Button></div></Show>
             <Show when={desktopVerification()}>{result => <p role={result().state === 'ready' ? 'status' : 'alert'}>{result().state === 'ready' ? props.copy.desktopVerified : result().state === 'in_use' ? props.copy.desktopVerifyInUse : props.copy.desktopVerifyFailed}</p>}</Show>
             <Show when={verificationUnavailable()}><p role="alert">{props.copy.desktopVerifyUnavailable}</p></Show>
           </Show>

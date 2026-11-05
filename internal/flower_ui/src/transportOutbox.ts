@@ -25,6 +25,8 @@ export type TransportOutboxEntry = Readonly<{
   /** Frozen compaction intent. Older entries without it remain pure compaction. */
   continueGoal?: boolean;
   goalInput?: FlowerGoalInput;
+  /** A separate desktop repair conversation requested from this thread. */
+  desktopRepair?: boolean;
   /** Product routing for a child command; canonical lifecycle stays upstream. */
   parentThreadId?: string;
   requestId: string;
@@ -261,6 +263,7 @@ function create(
       if (entry.threadId === acceptedThreadId && requestedThreadId === acceptedThreadId) return this;
       const next = new Map(currentEntries);
       for (const [pendingId, pendingEntry] of currentEntries) {
+        if (pendingId !== id && (entry.desktopRepair || pendingEntry.desktopRepair)) continue;
         if (pendingId !== id && (requestedThreadId || pendingEntry.threadId !== entry.threadId || clean(pendingEntry.input.thread_id))) continue;
         next.set(pendingId, {
           ...pendingEntry,

@@ -9,6 +9,19 @@ afterEach(() => {
 });
 
 describe('TransportOutbox', () => {
+  it('does not bind repair and ordinary new conversations to each other', () => {
+    let pending = createTransportOutbox();
+    for (const [id, desktopRepair] of [['repair', true], ['ordinary', false]] as const) pending = pending.put({
+      requestId: id, threadId: '__new_thread__', desktopRepair, input: { client_request_id: id, prompt: id },
+      attachmentLabels: [], createdAtMs: Date.now(), delivery: 'unknown' });
+    const repaired = pending.bindAcceptedThread('repair', 'repair-thread');
+    expect(repaired.entries.get('ordinary')?.input.thread_id).toBeUndefined();
+    expect(repaired.entries.get('repair')?.input.thread_id).toBe('repair-thread');
+    const ordinary = pending.bindAcceptedThread('ordinary', 'ordinary-thread');
+    expect(ordinary.entries.get('repair')?.input.thread_id).toBeUndefined();
+    pending.dispose(); repaired.dispose(); ordinary.dispose();
+  });
+
   it('persists compaction intent exactly and keeps older entries pure after restore', async () => {
     const records = new Map<string, unknown>();
     vi.stubGlobal('indexedDB', { open: () => {
@@ -33,6 +46,9 @@ describe('TransportOutbox', () => {
         input: { client_request_id: id, thread_id: 'thread', storage_generation: 'original', prompt: '' },
         attachmentLabels: [], createdAtMs: Date.now(), delivery: 'unknown' });
     }
+    outbox = outbox.put({ desktopRepair: true, requestId: 'repair', threadId: 'source',
+      input: { client_request_id: 'repair', prompt: 'Install and verify', storage_generation: 'original' },
+      attachmentLabels: [], createdAtMs: Date.now(), delivery: 'unknown' });
     await outbox.flushPersistence(); outbox.dispose();
     const restored = await restoreTransportOutbox();
     expect(restored.entries.get('continue')?.continueGoal).toBe(true);
@@ -40,6 +56,9 @@ describe('TransportOutbox', () => {
     expect(restored.entries.get('legacy')?.continueGoal).toBeUndefined();
     expect(restored.forThread('thread').map(entry => entry.continueGoal === true)).toEqual([true, false, false]);
     expect(restored.entries.get('continue')?.input.storage_generation).toBe('original');
+    expect(restored.entries.get('repair')).toMatchObject({ desktopRepair: true, threadId: 'source', delivery: 'unknown',
+      input: { client_request_id: 'repair', storage_generation: 'original' } });
+    expect(restored.entries.get('repair')?.input.thread_id).toBeUndefined();
     restored.dispose();
   });
 
