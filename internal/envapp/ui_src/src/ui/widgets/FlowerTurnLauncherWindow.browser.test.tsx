@@ -43,13 +43,6 @@ async function nextFrame(count = 2): Promise<void> {
   }
 }
 
-async function waitForFrameHeight(element: HTMLElement, expectedHeight: number): Promise<void> {
-  for (let index = 0; index < 20; index += 1) {
-    if (Math.abs(element.getBoundingClientRect().height - expectedHeight) < 0.5) return;
-    await nextFrame();
-  }
-}
-
 async function mountLauncher(theme: Theme, viewport: Viewport) {
   await page.viewport(viewport.width, viewport.height);
   document.documentElement.classList.remove('light', 'dark');
@@ -93,6 +86,7 @@ async function mountLauncher(theme: Theme, viewport: Viewport) {
     host,
   ));
   await nextFrame(3);
+  await expect.poll(() => document.querySelector('.flower-ask-card')?.getAnimations().some(animation => animation.playState === 'running')).toBe(false);
 
   return {
     host,
@@ -151,9 +145,9 @@ function expectStableAnchoredRect(
 
 describe('Flower turn launcher send feedback', () => {
   it.each([
-    { viewport: { width: 1440, height: 900 }, expectedHeight: 592 },
-    { viewport: { width: 390, height: 844 }, expectedHeight: 512 },
-  ])('removes the redundant window footer and uses the compact $expectedHeight px frame', async ({ viewport, expectedHeight }) => {
+    { viewport: { width: 1440, height: 900 }, expectedHeight: 320 },
+    { viewport: { width: 390, height: 844 }, expectedHeight: 360 },
+  ])('fits the question and editor within a content-sized card below $expectedHeight px', async ({ viewport, expectedHeight }) => {
     const mounted = await mountLauncher('dark', viewport);
     const floatingWindow = document.querySelector('.flower-turn-launcher-window');
     const dock = document.querySelector('[data-testid="flower-turn-launcher-dock"]');
@@ -161,10 +155,12 @@ describe('Flower turn launcher send feedback', () => {
       throw new Error('Flower launcher window fixture did not mount.');
     }
 
-    await waitForFrameHeight(floatingWindow, expectedHeight);
     const frameRect = floatingWindow.getBoundingClientRect();
     const dockRect = dock.getBoundingClientRect();
-    expect(frameRect.height).toBeCloseTo(expectedHeight, 0);
+    expect(frameRect.height).toBeLessThan(expectedHeight);
+    expect(document.querySelector('[data-floe-floating-window-titlebar]')).toBeNull();
+    const question = document.querySelector('.flower-turn-launcher-message-surface')!.getBoundingClientRect();
+    expect(dockRect.top - question.bottom).toBeLessThan(28);
     expect(document.querySelector('.flower-turn-launcher-footer')).toBeNull();
     expect(Math.abs(dockRect.bottom - frameRect.bottom)).toBeLessThanOrEqual(48);
     expect(frameRect.right).toBeLessThanOrEqual(viewport.width);
@@ -210,14 +206,14 @@ describe('Flower turn launcher send feedback', () => {
       const idleStyle = getComputedStyle(sendButton!);
       const textareaStyle = getComputedStyle(textarea!);
       const narrow = testCase.viewport.width < 768;
-      const targetSize = narrow || testCase.touch ? 44 : 32;
+      const targetSize = narrow || testCase.touch ? 44 : 36;
       expect(idleRect.width).toBeCloseTo(targetSize, 0);
       expect(idleRect.height).toBeCloseTo(targetSize, 0);
       expect(parseFloat(idleStyle.borderRadius)).toBeGreaterThanOrEqual(idleRect.width / 2);
-      const textRight = textarea!.getBoundingClientRect().right - parseFloat(textareaStyle.paddingRight);
-      expect(idleRect.left - textRight).toBeGreaterThanOrEqual(4);
-      expect(textareaStyle.fontSize).toBe(narrow || testCase.touch ? '16px' : '13px');
-      expect(getComputedStyle(document.querySelector('.flower-turn-launcher-message-surface .flower-body-copy')!).fontSize).toBe(testCase.touch ? '14px' : '13px');
+      expect(idleRect.top).toBeGreaterThanOrEqual(textarea!.getBoundingClientRect().bottom - 1);
+      expect(getComputedStyle(editorShell!).borderWidth).toBe('0px');
+      expect(textareaStyle.fontSize).toBe(narrow || testCase.touch ? '16px' : '14px');
+      expect(getComputedStyle(document.querySelector('.flower-turn-launcher-message-surface .flower-body-copy')!).fontSize).toBe('17px');
       expect(sendButton!.querySelector('svg')).not.toBeNull();
       expect(sendButton!.querySelector('.animate-spin')).toBeNull();
 

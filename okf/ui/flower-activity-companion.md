@@ -1,13 +1,13 @@
 ---
 type: UI Contract
-title: Flower Activity companion and contextual window placement
+title: Flower Activity companion and contextual Ask Flower placement
 tags: [ui, flower, activity, companion, read-state, floret]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
-One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion/window geometry, motion and dismissal; product adapters supply safe-area measurements and focus handoffs. Placement creates neither another stream nor a second execution or editor owner.
+One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion geometry and presence; product adapters supply safe-area measurements and focus handoffs. Contextual Ask Flower uses its own compact product card over published presence and viewport observation. Placement creates neither another stream nor a second execution or editor owner.
 
 # Contract
 
@@ -33,17 +33,16 @@ Outside capture includes shell, anchor and classified Flower-owned Portals. Trus
 A floating window's geometry controls inherit ownership only from its direct published surface. Flower preview resize handles retain the companion; unrelated windows still dismiss it.
 
 ## Contextual window
-### Host boundary
-The host adapter measures the visible Shell header's client-space bottom edge and takes the larger of that edge and the current Desktop titlebar safe area.
+### Shared question card
+Desktop environment cards and every Env App contextual entry use one `FlowerAskCard` through the shared launcher. This is a brief question surface, not a conversation window: no `FloatingWindow`, fixed conversation height, draggable title bar, resize handles or maximize controls. The 512-pixel maximum width fits the visible viewport; height follows the question, editor, bounded reference strip and explicit errors. The single outer surface owns the input focus border. References and Send share a compact bottom row; text grows naturally with a bounded editor scroll area.
 
-The host boundary and margin feed one published `viewportInsets` geometry path for anchored opening, centered opening, dragging, edge resizing, and viewport changes.
+### Host boundary and motion
+The host measures the visible Shell header's client-space bottom edge and the Desktop titlebar safe area. The product card places beside the supplied point, flips upward when necessary and clamps to published Floe `observeViewport` bounds, including soft keyboard occlusion and CSS zoom. Without a point it rests in the upper central content area. Position uses layout size, never animated bounds.
 
-### Controls and constrained space
-Ask Flower sets the published `FloatingWindow.maximizable` capability to false.
+Published `createFloatingPresence` owns mounting, exit completion and reversal. The card supplies its own gentle origin-based scale/translation and short flower-mark rotation. Reduced motion removes both. Exiting content retains the last intent, anchor and draft, becomes inert immediately and unmounts after the transition. Reversing an unfinished close for the same intent preserves editor and request identity.
 
-When it cannot accommodate the preferred size, the window shrinks within that viewport.
-
-Outside-click dismissal treats the published geometry wrapper and its resize handles as part of the launcher; resizing must never dismiss it. Other windows remain outside this boundary.
+### Interaction continuity
+Opening focuses the editor unless the caller disables autofocus. Escape and Close restore the initiating control; outside pointer dismissal leaves destination interaction intact. IME composition and nested previews retain their Escape ownership. Related context previews and their direct geometry controls count as inside; unrelated windows remain outside. Sending blocks duplicate submission and dismissal. Existing exact-request retry, unknown admission, reference removal, localization and panel-placement footer contracts remain with the shared launcher.
 
 # Boundaries
 
@@ -51,7 +50,7 @@ The Workbench Flower widget retains its existing window, canvas, and focus contr
 
 The companion never auto-expands for completion, failure, approval, or user input. Showing an available, unfiltered Workbench Flower widget moves the retained product tree into that widget without starting a second list load or live stream, and later canvas deselection does not move it away.
 
-Redeven supplies the Ask Flower placement policy and host measurements; published Floe owns dragging, resizing, clamping, and maximize controls. Host insets must not be duplicated in an alternate drag controller. These constraints apply to the contextual launcher, not the main Flower surface or other floating windows.
+Redeven owns Ask Flower identity, content, compact placement and motion styling; published Floe owns visible viewport facts and presence lifecycle. The card adds no window management or durable state. These constraints apply to the contextual launcher, not the main Flower surface or other floating windows.
 
 # Evidence
 
@@ -60,3 +59,7 @@ Redeven supplies the Ask Flower placement policy and host measurements; publishe
 
 - `redeven:desktop/src/shared/askFlowerWindowViewport.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Source.
+
+- `redeven:internal/flower_ui/src/FlowerAskCard.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx` - Browser continuity and viewport acceptance.
+- `redeven:desktop/scripts/check-flower-ask-card.mjs` - Real Desktop entry acceptance across locales, themes and widths.

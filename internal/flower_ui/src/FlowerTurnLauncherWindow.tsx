@@ -1,9 +1,10 @@
 import type { Component } from 'solid-js';
-import { For, Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, useContext } from 'solid-js';
+import { For, Show, createContext, createEffect, createMemo, createSignal, onCleanup, untrack, useContext } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Activity, AlertTriangle, ArrowUp, FileText } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Button, FloatingWindow, resolveFloatingWindowViewport, type FloatingWindowViewport, type FloatingWindowViewportInsets } from '@floegence/floe-webapp-core/ui';
+import { Button, type FloatingWindowViewportInsets } from '@floegence/floe-webapp-core/ui';
+import { FlowerAskCard } from './FlowerAskCard';
 
 import type {
   FlowerTurnLauncherIntent,
@@ -23,18 +24,6 @@ import {
   type FlowerTurnLauncherWindowCopyInput,
   type FlowerTurnLauncherWindowChromeCopy,
 } from './flowerTurnLauncherCopy';
-
-const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
-const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
-const WINDOW_ANCHOR_OFFSET = 8;
-const WINDOW_DEFAULT_WIDTH_DESKTOP = 560;
-const WINDOW_DEFAULT_HEIGHT_DESKTOP = 592;
-const WINDOW_DEFAULT_WIDTH_COMPACT = 420;
-const WINDOW_DEFAULT_HEIGHT_COMPACT = 512;
-const WINDOW_MIN_WIDTH_DESKTOP = 400;
-const WINDOW_MIN_HEIGHT_DESKTOP = 452;
-const WINDOW_MIN_WIDTH_COMPACT = 300;
-const WINDOW_MIN_HEIGHT_COMPACT = 372;
 
 export type FlowerTurnLauncherAnchor = Readonly<{
   x: number;
@@ -70,96 +59,8 @@ export type FlowerTurnLauncherWindowProps = FlowerTurnLauncherPanelProps & Reado
   onActivate?: () => void;
 }>;
 
-type ViewportSize = Readonly<{
-  width: number;
-  height: number;
-}>;
-
-type WindowSizing = Readonly<{
-  viewport: FloatingWindowViewport;
-  viewportInsets: FloatingWindowViewportInsets;
-  defaultSize: { width: number; height: number };
-  minSize: { width: number; height: number };
-  maxSize: { width: number; height: number };
-}>;
-
 function compact(value: unknown): string {
   return String(value ?? '').trim();
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (Number.isNaN(value)) return min;
-  return Math.min(Math.max(value, min), max);
-}
-
-function currentViewportSize(): ViewportSize {
-  if (typeof window === 'undefined') return { width: 1440, height: 900 };
-  return {
-    width: window.innerWidth,
-    height: window.innerHeight,
-  };
-}
-
-function resolveWindowSizing(viewport: ViewportSize, hostInsets?: FloatingWindowViewportInsets): WindowSizing {
-  const compactViewport = viewport.width < 640;
-  const margin = compactViewport ? WINDOW_VIEWPORT_MARGIN_MOBILE : WINDOW_VIEWPORT_MARGIN_DESKTOP;
-  const hostViewport = resolveFloatingWindowViewport(viewport, hostInsets);
-  const viewportInsets = {
-    top: hostViewport.y + margin,
-    left: hostViewport.x + margin,
-    right: viewport.width - hostViewport.x - hostViewport.width + margin,
-    bottom: viewport.height - hostViewport.y - hostViewport.height + margin,
-  };
-  const availableViewport = resolveFloatingWindowViewport(viewport, viewportInsets);
-  const maxWidth = availableViewport.width;
-  const maxHeight = availableViewport.height;
-  const defaultWidth = compactViewport
-    ? Math.min(WINDOW_DEFAULT_WIDTH_COMPACT, maxWidth)
-    : Math.min(WINDOW_DEFAULT_WIDTH_DESKTOP, maxWidth);
-  const defaultHeight = compactViewport
-    ? Math.min(WINDOW_DEFAULT_HEIGHT_COMPACT, maxHeight)
-    : Math.min(WINDOW_DEFAULT_HEIGHT_DESKTOP, maxHeight);
-  const minWidth = Math.min(compactViewport ? WINDOW_MIN_WIDTH_COMPACT : WINDOW_MIN_WIDTH_DESKTOP, maxWidth);
-  const minHeight = Math.min(compactViewport ? WINDOW_MIN_HEIGHT_COMPACT : WINDOW_MIN_HEIGHT_DESKTOP, maxHeight);
-
-  return {
-    viewport: availableViewport,
-    viewportInsets,
-    defaultSize: { width: defaultWidth, height: defaultHeight },
-    minSize: { width: minWidth, height: minHeight },
-    maxSize: { width: maxWidth, height: maxHeight },
-  };
-}
-
-function toWindowPosition(
-  anchor: FlowerTurnLauncherAnchor | null | undefined,
-  sizing: WindowSizing,
-): { x: number; y: number } | undefined {
-  if (!anchor) return undefined;
-
-  const { x, y, width, height } = sizing.viewport;
-  const maxX = x + Math.max(0, width - sizing.defaultSize.width);
-  const maxY = y + Math.max(0, height - sizing.defaultSize.height);
-
-  return {
-    x: clamp(anchor.x + WINDOW_ANCHOR_OFFSET, x, maxX),
-    y: clamp(anchor.y + WINDOW_ANCHOR_OFFSET, y, maxY),
-  };
-}
-
-function isPointerInsideLauncher(event: PointerEvent): boolean {
-  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
-  for (const node of path) {
-    if (!(node instanceof Element)) continue;
-    if (node.classList.contains('flower-turn-launcher-window')) return true;
-    if (node.matches('[data-floe-geometry-surface="floating-window"]')
-      && node.querySelector(':scope > .flower-turn-launcher-window')) return true;
-    if (node.classList.contains('flower-turn-launcher-related-surface')) return true;
-  }
-
-  const target = event.target;
-  if (!(target instanceof Element)) return false;
-  return !!target.closest('.flower-turn-launcher-window, .flower-turn-launcher-related-surface');
 }
 
 function shouldSubmitOnEnterKeydown(event: KeyboardEvent, composing: boolean): boolean {
@@ -216,6 +117,8 @@ export function createFlowerTurnLauncherPanelController(
   const [pendingRequestPrompt, setPendingRequestPrompt] = createSignal('');
   const [editableIntent, setEditableIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   let textareaEl: HTMLTextAreaElement | undefined;
+  let focusedFrame: number | undefined;
+  let presentedIntent: FlowerTurnLauncherIntent | null = null;
 
   const projected = createMemo(() => {
     const intent = editableIntent();
@@ -242,8 +145,10 @@ export function createFlowerTurnLauncherPanelController(
     setPendingRequestPrompt('');
     setInternalUserPrompt(untrack(() => props.draft) ?? compact(intent?.initial_prompt));
     if (props.autoFocus === false) return;
-    requestAnimationFrame(() => {
-      textareaEl?.focus();
+    focusedFrame = requestAnimationFrame(() => {
+      focusedFrame = undefined;
+      if (!props.open) return;
+      textareaEl?.focus({ preventScroll: true });
       const el = textareaEl;
       if (!el) return;
       const pos = el.value.length;
@@ -256,9 +161,17 @@ export function createFlowerTurnLauncherPanelController(
   };
 
   createEffect(() => {
-    if (!props.open) return;
-    resetLauncherState(props.intent);
+    if (!props.open) {
+      if (focusedFrame !== undefined) cancelAnimationFrame(focusedFrame);
+      return;
+    }
+    const intent = props.intent;
+    // Reversing an unfinished exit keeps the same editor, draft and request.
+    if (footerPlacement === 'window' && intent && intent === presentedIntent && textareaEl?.isConnected) return;
+    presentedIntent = intent;
+    resetLauncherState(intent);
   });
+  onCleanup(() => { if (focusedFrame !== undefined) cancelAnimationFrame(focusedFrame); });
 
   const submit = async () => {
     if (sending()) return;
@@ -452,7 +365,7 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                           </span>
                         </div>
 
-                        <div data-floe-input-surface data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
+                        <div data-floe-input-surface={controller.footerPlacement === 'panel' ? true : undefined} data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
                           <Show when={(projected()?.context_entries.length ?? 0) > 0}>
                             <FlowerComposerContextReferences label={copyValue(props.copy, 'linked_context_label')}
                               localScrollProps={props.localScrollProps}>
@@ -476,6 +389,8 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                             ref={setTextareaEl}
                             id={`flower-turn-launcher-prompt-${intent.id}`}
                             class="chat-input-textarea flower-chat-input-textarea flower-turn-launcher-textarea"
+                            aria-label={copyValue(props.copy, 'you_label')}
+                            rows={3}
                             value={visiblePrompt()}
                             placeholder={projected()?.placeholder}
                             disabled={sending() || admissionUnknown()}
@@ -563,80 +478,32 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
   );
 }
 
+/** Product-specific Ask Flower card, shared by Desktop and Env App entry points. */
 export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
-  const [viewport, setViewport] = createSignal(currentViewportSize());
   const controller = createFlowerTurnLauncherPanelController(props, 'window');
-  // FloatingWindow owns presence. Keep its last admitted presentation when the
-  // caller clears the intent on close, until that owner removes the content.
+  // Retain the exact visible question and context while the card leaves.
   const presentedIntent = createMemo<FlowerTurnLauncherIntent | null>(previous =>
     props.open && props.intent ? props.intent : previous ?? null);
-
-  onMount(() => {
-    const syncViewport = () => setViewport(currentViewportSize());
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    window.addEventListener('orientationchange', syncViewport);
-    onCleanup(() => {
-      window.removeEventListener('resize', syncViewport);
-      window.removeEventListener('orientationchange', syncViewport);
-    });
-  });
-
-  const windowSizing = createMemo(() => resolveWindowSizing(viewport(), props.viewportInsets));
-  const position = createMemo(() => toWindowPosition(props.anchor ?? null, windowSizing()));
-
-  createEffect(() => {
-    if (!props.open) return;
-    const activateFromWindowEvent = (event: Event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('.flower-turn-launcher-window')) props.onActivate?.();
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      activateFromWindowEvent(event);
-      if (controller.sending()) return;
-      if (isPointerInsideLauncher(event)) return;
-      props.onClose();
-    };
-    window.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('focusin', activateFromWindowEvent, true);
-    onCleanup(() => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('focusin', activateFromWindowEvent, true);
-    });
-  });
-
   return (
-      <FloatingWindow
-        open={props.open && Boolean(props.intent)}
-        onOpenChange={(next) => {
-          if (controller.sending()) return;
-          if (!next) props.onClose();
-        }}
-        title={copyValue(props.copy, 'window_title')}
-        defaultPosition={position()}
-        defaultSize={windowSizing().defaultSize}
-        minSize={windowSizing().minSize}
-        maxSize={windowSizing().maxSize}
-        viewportInsets={windowSizing().viewportInsets}
-        maximizable={false}
-        zIndex={props.zIndex}
-        class={cn('flower-turn-launcher-window border-border/65 shadow-[0_28px_72px_-42px_color-mix(in_srgb,var(--foreground)_38%,transparent)]', props.windowClass)}
-      >
-        <FlowerTurnLauncherPanelControllerContext.Provider value={controller}>
-          <FlowerTurnLauncherPanel
-            open={Boolean(presentedIntent())}
-            intent={presentedIntent()}
-            copy={props.copy}
-            contentClass={props.contentClass}
-            localScrollProps={props.localScrollProps}
-            autoFocus={props.autoFocus}
-            draft={props.draft}
-            onDraftChange={props.onDraftChange}
-            onClose={props.onClose}
-            onSubmit={props.onSubmit}
-            onContextAction={props.onContextAction}
-          />
-        </FlowerTurnLauncherPanelControllerContext.Provider>
-      </FloatingWindow>
+    <FlowerAskCard
+      open={props.open && Boolean(props.intent)}
+      anchor={props.anchor}
+      viewportInsets={props.viewportInsets}
+      title={copyValue(props.copy, 'window_title')}
+      closeLabel={copyValue(props.copy, 'close')}
+      busy={controller.sending()}
+      zIndex={props.zIndex}
+      class={props.windowClass}
+      onActivate={props.onActivate}
+      onClose={props.onClose}
+    >
+      <FlowerTurnLauncherPanelControllerContext.Provider value={controller}>
+        <FlowerTurnLauncherPanel
+          {...props}
+          open={Boolean(presentedIntent())}
+          intent={presentedIntent()}
+        />
+      </FlowerTurnLauncherPanelControllerContext.Provider>
+    </FlowerAskCard>
   );
 }

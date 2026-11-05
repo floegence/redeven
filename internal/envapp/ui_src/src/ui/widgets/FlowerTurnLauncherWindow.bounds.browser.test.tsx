@@ -5,7 +5,7 @@ import { LayoutProvider } from '@floegence/floe-webapp-core';
 import { InfiniteCanvas } from '@floegence/floe-webapp-core/ui';
 import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlowerTurnLauncherWindow } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import { createAskFlowerWindowViewportInsets } from '../../../../../../desktop/src/shared/askFlowerWindowViewport';
@@ -43,35 +43,18 @@ async function mountLauncher() {
     </LayoutProvider>
   ), host));
   await settle();
-  const root = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
-  const titlebar = root.querySelector<HTMLElement>('[data-floe-floating-window-titlebar]')!;
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-ask-card]')?.getAnimations().some(a => a.playState === 'running')).toBe(false);
+  const root = document.querySelector<HTMLElement>('[data-flower-ask-card]')!;
+  const titlebar = root.querySelector<HTMLElement>('.flower-ask-card-header')!;
   return { root, titlebar, setInsets, onClose, onSubmit };
 }
 
-async function movePointer(target: HTMLElement, root: HTMLElement, dx: number, dy: number) {
-  const box = target.getBoundingClientRect();
-  const start = { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
-  const options = { bubbles: true, cancelable: true, pointerId: 23, pointerType: 'mouse', button: 0, buttons: 1 };
-  target.dispatchEvent(new PointerEvent('pointerdown', { ...options, ...start }));
-  const end = { clientX: start.clientX + dx, clientY: start.clientY + dy };
-  root.dispatchEvent(new PointerEvent('pointermove', { ...options, ...end }));
-  await settle();
-  root.dispatchEvent(new PointerEvent('pointerup', { ...options, ...end, buttons: 0 }));
-  await expect.poll(() => root.getAnimations().some((animation) => animation.playState === 'running')).toBe(false);
-  await settle();
-}
-
-describe('Ask Flower window bounds', () => {
-  it('keeps opening, dragging, resizing, and viewport changes below the header', async () => {
-    const { root, titlebar, setInsets, onSubmit } = await mountLauncher();
+describe('Ask Flower card bounds', () => {
+  it('keeps content-sized opening and viewport changes below the header', async () => {
+    const { root, setInsets, onSubmit } = await mountLauncher();
     expect(root.getBoundingClientRect().top).toBeGreaterThanOrEqual(84);
     const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
     await userEvent.fill(editor, 'Keep this draft');
-    await movePointer(titlebar, root, 40, -1000);
-    expect(root.getBoundingClientRect().top).toBe(84);
-    const resize = root.querySelector<HTMLElement>('[data-floe-floating-window-resize-handle="n"]')!;
-    await movePointer(resize, root, 0, -1000);
-    expect(root.getBoundingClientRect().top).toBe(84);
     setInsets({ top: 96, right: 0, bottom: 0, left: 0 });
     await settle();
     expect(root.getBoundingClientRect().top).toBeGreaterThanOrEqual(108);
@@ -87,17 +70,15 @@ describe('Ask Flower window bounds', () => {
     expect(onSubmit).toHaveBeenCalledOnce();
   });
 
-  it('removes all maximize entry points while retaining resize and close controls', async () => {
+  it('replaces window chrome with a compact identity and accessible close control', async () => {
     const { root, titlebar, onClose } = await mountLauncher();
-    expect(root.querySelector('[data-floe-floating-window-control="maximize"]')).toBeNull();
+    expect(root.querySelector('[data-floe-floating-window-control]')).toBeNull();
+    expect(root.querySelector('[data-floe-floating-window-resize-handle]')).toBeNull();
     const initial = root.getBoundingClientRect().toJSON();
     await userEvent.dblClick(titlebar);
     expect(root.getBoundingClientRect().toJSON()).toEqual(initial);
-    const resize = root.querySelector<HTMLElement>('[data-floe-floating-window-resize-handle="se"]')!;
-    await movePointer(resize, root, 60, 40);
-    expect(root.getBoundingClientRect().width).toBeGreaterThan(initial.width);
     expect(onClose).not.toHaveBeenCalled();
-    await userEvent.click(root.querySelector<HTMLElement>('[data-floe-floating-window-control="close"]')!);
+    await userEvent.click(root.querySelector<HTMLElement>('[data-testid="flower-ask-card-close"]')!);
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -145,8 +126,8 @@ describe('Ask Flower window bounds', () => {
     }
     disposers.push(render(() => <Harness />, host));
     await settle();
-    const root = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
-    const titlebar = root.querySelector<HTMLElement>('[data-floe-floating-window-titlebar]')!;
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-ask-card]')?.getAnimations().some(a => a.playState === 'running')).toBe(false);
+    const root = document.querySelector<HTMLElement>('[data-flower-ask-card]')!;
     const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
     expect(root.getBoundingClientRect().top).toBe(60);
     await userEvent.fill(editor, 'Draft across hosts');
@@ -162,10 +143,8 @@ describe('Ask Flower window bounds', () => {
     updateChrome({ ...snapshot, titleBarHeight: 100 });
     await settle();
     expect(root.getBoundingClientRect().top).toBe(112);
-    await movePointer(titlebar, root, 50, -1000);
-    expect(root.getBoundingClientRect().top).toBe(112);
     expect(editor.value).toBe('Draft across hosts');
-    const close = root.querySelector<HTMLElement>('[data-floe-floating-window-control="close"]')!;
+    const close = root.querySelector<HTMLElement>('[data-testid="flower-ask-card-close"]')!;
     const box = close.getBoundingClientRect();
     expect(close.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))).toBe(true);
     await userEvent.click(close);
@@ -176,10 +155,9 @@ describe('Ask Flower window bounds', () => {
   });
 
   it('uses the compact header gap and keeps controls inside a narrow viewport', async () => {
-    const { root, titlebar } = await mountLauncher();
+    const { root } = await mountLauncher();
     await page.viewport(390, 500);
     await settle();
-    await movePointer(titlebar, root, 0, -1000);
     const bounds = root.getBoundingClientRect();
     expect(bounds.top).toBe(80);
     expect(bounds.right).toBeLessThanOrEqual(390);
@@ -187,4 +165,87 @@ describe('Ask Flower window bounds', () => {
     const send = root.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
     expect(send.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom);
   });
+});
+
+
+it('keeps the same draft and position through interrupted exit, then restores trigger focus', async () => {
+  await page.viewport(1280, 800);
+  const host = document.createElement('div'); document.body.append(host);
+  const [open, setOpen] = createSignal(false);
+  const intent = { id: 'reversible-card', source_surface: 'monitoring' as const, context_items: [] };
+  disposers.push(render(() => <LayoutProvider>
+    <button data-testid="ask-trigger" onClick={() => setOpen(true)}>Ask Flower</button>
+    <FlowerTurnLauncherWindow open={open()} intent={open() ? intent : null} anchor={open() ? { x: 120, y: 300 } : null}
+      onClose={() => setOpen(false)} onSubmit={async () => undefined} />
+  </LayoutProvider>, host));
+  const trigger = host.querySelector<HTMLButtonElement>('button')!;
+  await userEvent.click(trigger);
+  await expect.poll(() => document.activeElement?.tagName).toBe('TEXTAREA');
+  const card = document.querySelector<HTMLElement>('[data-flower-ask-card]')!;
+  await expect.poll(() => card.getAnimations().some(a => a.playState === 'running')).toBe(false);
+  const editor = card.querySelector<HTMLTextAreaElement>('textarea')!;
+  await userEvent.fill(editor, 'Preserve this exact draft');
+  const position = card.parentElement!.style.cssText;
+  setOpen(false);
+  expect(card.dataset.floatingPresence).toBe('exiting');
+  expect(card.inert).toBe(true);
+  expect(editor.value).toBe('Preserve this exact draft');
+  expect(card.parentElement!.style.cssText).toBe(position);
+  setOpen(true);
+  expect(document.querySelector('textarea')).toBe(editor);
+  expect(editor.value).toBe('Preserve this exact draft');
+  expect(card.inert).toBe(false);
+  expect(card.dataset.floatingPresence).toBe('open');
+  await userEvent.click(editor);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => card.isConnected).toBe(false);
+  expect(document.activeElement).toBe(trigger);
+});
+
+it('keeps preview controls inside dismissal ownership and lets outside clicks reach their destination', async () => {
+  const { root, onClose } = await mountLauncher();
+  const preview = document.createElement('div');
+  preview.dataset.floeGeometrySurface = 'floating-window';
+  preview.innerHTML = '<div class="flower-turn-launcher-related-surface"><button>Preview close</button></div><div data-resize-handle></div>';
+  document.body.append(preview);
+  preview.querySelector('button')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  preview.querySelector('[data-resize-handle]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  const previewEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+  preview.querySelector('button')!.dispatchEvent(previewEscape);
+  expect(onClose).not.toHaveBeenCalled();
+  const editor = root.querySelector('textarea')!;
+  editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, isComposing: true }));
+  expect(onClose).not.toHaveBeenCalled();
+  const outside = document.createElement('button'); outside.textContent = 'Outside destination'; document.body.append(outside);
+  const destination = vi.fn(); outside.addEventListener('click', destination);
+  await userEvent.click(outside);
+  expect(destination).toHaveBeenCalledOnce();
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(outside);
+});
+
+it('keeps the editor and Send reachable above a narrow soft keyboard', async () => {
+  const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+  await media.emulateTouchInput(true);
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+  const visual = Object.assign(new EventTarget(), { width: 390, height: 700, offsetLeft: 0, offsetTop: 0, scale: 1 });
+  Object.defineProperty(window, 'visualViewport', { configurable: true, value: visual });
+  try {
+    const { root, onSubmit } = await mountLauncher();
+    await page.viewport(390, 700);
+    const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
+    await userEvent.fill(editor, 'Keep my draft above the keyboard');
+    visual.height = 340;
+    visual.dispatchEvent(new Event('resize'));
+    await expect.poll(() => root.getBoundingClientRect().bottom).toBeLessThanOrEqual(332);
+    const send = root.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
+    expect(send.getBoundingClientRect().bottom).toBeLessThanOrEqual(332);
+    expect(editor.value).toBe('Keep my draft above the keyboard');
+    await userEvent.click(send);
+    expect(onSubmit).toHaveBeenCalledOnce();
+  } finally {
+    if (descriptor) Object.defineProperty(window, 'visualViewport', descriptor);
+    else Reflect.deleteProperty(window, 'visualViewport');
+    await media.emulateTouchInput(false);
+  }
 });

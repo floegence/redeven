@@ -14,7 +14,7 @@ await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const sources = [
   ...['DesktopAnchoredOverlaySurface.tsx', 'DesktopAnchoredListbox.tsx', 'DesktopActionPopover.tsx', 'DesktopPopover.tsx', 'DesktopTooltip.tsx', 'DesktopThemePicker.tsx', 'SSHDestinationCombobox.tsx', 'EnvironmentCards.tsx', 'RuntimeCloudConnections.tsx', 'RuntimeGatewayConnectionsDialog.tsx', 'SSHEnvironmentSettingsForm.tsx', 'App.tsx', 'index.css'].map(name => `desktop/src/welcome/${name}`),
-  ...['FlowerContextMenu.tsx', 'FlowerSurface.tsx', 'FlowerComputerStage.tsx', 'FlowerTurnLauncherWindow.tsx', 'filePicker/FlowerWorkingDirPickerDialog.tsx', 'threads/FlowerThreadList.tsx', 'styles/flower.css', 'settings/ManualModelCapabilities.tsx', 'settings/FlowerProviderDialog.tsx', 'preview/SpreadsheetPreview.tsx', 'preview/preview.css', 'chat/FlowerContextCompactionDivider.tsx'].map(name => `internal/flower_ui/src/${name}`),
+  ...['FlowerContextMenu.tsx', 'FlowerSurface.tsx', 'FlowerComputerStage.tsx', 'FlowerTurnLauncherWindow.tsx', 'FlowerAskCard.tsx', 'filePicker/FlowerWorkingDirPickerDialog.tsx', 'threads/FlowerThreadList.tsx', 'styles/flower.css', 'settings/ManualModelCapabilities.tsx', 'settings/FlowerProviderDialog.tsx', 'preview/SpreadsheetPreview.tsx', 'preview/preview.css', 'chat/FlowerContextCompactionDivider.tsx'].map(name => `internal/flower_ui/src/${name}`),
   'desktop/package-lock.json',
 ];
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -75,7 +75,7 @@ try {
         assert.ok(opening.timing.some(t => t.property === 'opacity'), `${label}: opacity entrance runs`);
         assert.ok(opening.start.opacity < opening.middle.opacity && opening.middle.opacity < 1, `${label}: visible fade progression`);
         if (!['tooltip', 'compaction', 'launcher'].includes(kind)) assert.ok(opening.start.scale < 1, `${label}: shared subtle scale`);
-        if (kind === 'launcher') assert.ok(opening.start.y !== opening.end.y, `${label}: shared window translation preserves text scale`);
+        if (kind === 'launcher') assert.ok(opening.start.scale < 1, `${label}: Ask Flower unfolds from its anchor`);
         if (opening.start.position) {
           for (const key of ['x', 'y', 'width', 'height']) assert.equal(opening.start.position[key], opening.middle.position[key], `${label}: positioning ignores animated transforms (${key})`);
         }

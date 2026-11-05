@@ -6804,7 +6804,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           working_dir_label: i18n().t('flowerSurface.threadList.workingDirectoryLabel'),
           working_directory_unavailable: i18n().t('environmentCenter.askFlowerWorkingDirectoryUnavailable'),
           ready: i18n().t('flowerSurface.chat.ready'),
-          close: i18n().t('flowerSurface.threadList.cancel'),
+          close: i18n().t('common.close'),
           sending: i18n().t('environmentCenter.askFlowerCardSending'),
           you_label: i18n().t('environmentCenter.askFlowerCardPromptLabel'),
           reply_to_flower_label: i18n().t('environmentCenter.askFlowerCardReplyHint'),

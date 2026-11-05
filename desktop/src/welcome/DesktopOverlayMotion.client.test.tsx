@@ -67,7 +67,7 @@ it('retains compaction details through exit and reverses on the same surface', a
   expect(document.querySelector('[role=tooltip]')).toBeNull();
 });
 
-it.each(['directory', 'launcher'] as const)('%s lets the shared dialog own exit before removing its content', async kind => {
+it.each(['directory', 'launcher'] as const)('%s retains its content until the surface finishes exiting', async kind => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   const [open, setOpen] = createSignal(true);
@@ -76,7 +76,7 @@ it.each(['directory', 'launcher'] as const)('%s lets the shared dialog own exit 
     ? <FlowerWorkingDirPickerDialog open={open()} onOpenChange={setOpen} onSelect={() => {}} />
     : <FlowerTurnLauncherWindow open={open()} intent={intent()} onClose={() => setOpen(false)} onSubmit={async () => {}} />, document.body);
   await new Promise(resolve => setTimeout(resolve, 80));
-  const surface = document.querySelector<HTMLElement>(kind === 'directory' ? '[data-floe-dialog-panel]' : '[data-floe-geometry-surface="floating-window"]')!;
+  const surface = document.querySelector<HTMLElement>(kind === 'directory' ? '[data-floe-dialog-panel]' : '[data-flower-ask-card]')!;
   expect(surface).not.toBeNull();
   const text = surface.textContent;
   setOpen(false);

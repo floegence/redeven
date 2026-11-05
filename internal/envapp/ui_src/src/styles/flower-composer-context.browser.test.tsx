@@ -54,6 +54,8 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   await page.viewport(1000, 800);
   const runtime = mount();
   await expect.element(page.getByRole('textbox')).toBeVisible();
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAttribute('data-floating-presence')).toBe('open');
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAnimations().some(animation => animation.playState === 'running')).toBe(false);
   const input = document.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-editor-shell"]')!;
   const list = input.querySelector<HTMLElement>('.flower-composer-context-list')!;
   const rows = [...input.querySelectorAll<HTMLElement>('.flower-composer-context-reference')];
@@ -71,8 +73,8 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   expect(list.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
   for (const row of rows) {
     const style = getComputedStyle(row);
-    expect(parseFloat(style.borderWidth)).toBe(0);
-    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(24);
+    expect(parseFloat(style.borderWidth)).toBe(1);
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(32);
   }
   const preview = rows[0].querySelector('button')!;
   await userEvent.click(preview);
@@ -92,7 +94,7 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   );
   expect(rows[5].querySelector('button.flower-composer-context-source')).toBeNull();
   expect(rows[5].querySelector('.flower-composer-context-remove')).not.toBeNull();
-  expect(rows[0].getBoundingClientRect().top).toBe(rows[1].getBoundingClientRect().top);
+  expect(rows[1].getBoundingClientRect().top).toBeGreaterThanOrEqual(rows[0].getBoundingClientRect().top);
   await page.getByRole('textbox').fill('Explain these references');
   await page.getByRole('button', { name: 'Launch turn', exact: true }).click();
   expect(runtime.onSubmit).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Explain these references', intent }));
@@ -106,6 +108,8 @@ it('uses filename artwork for Ask Flower files, directory packages and pending a
     { kind: 'file_path', path: '/workspace/App.xcodeproj', is_directory: true },
   ], pending_attachments: [new File(['report'], 'report.pdf', { type: 'application/pdf' })] });
   await expect.element(page.getByRole('textbox')).toBeVisible();
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAttribute('data-floating-presence')).toBe('open');
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAnimations().some(animation => animation.playState === 'running')).toBe(false);
   const input = document.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-editor-shell"]')!;
   const icons = [...input.querySelectorAll<SVGSVGElement>('.flower-composer-context-icon svg')];
   expect(icons.map(icon => icon.getAttribute('data-file-icon-type'))).toEqual(['image', 'json', 'xcode', 'pdf']);
@@ -124,6 +128,8 @@ it('wraps many references into a bounded viewport and restores editor focus afte
     { kind: 'file_path', path: `/workspace/service-${index}/configuration.ts`, is_directory: false }
   )) });
   await expect.element(page.getByRole('textbox')).toBeVisible();
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAttribute('data-floating-presence')).toBe('open');
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAnimations().some(animation => animation.playState === 'running')).toBe(false);
   const list = document.querySelector<HTMLElement>('.flower-composer-context-list')!;
   expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
   expect(list.clientHeight).toBeLessThanOrEqual(80);
@@ -140,6 +146,8 @@ it('renders restrained reference styling in every theme without changing input f
   await page.viewport(1000, 800);
   mount({ ...intent, context_items: intent.context_items.slice(0, 2) });
   await expect.element(page.getByRole('textbox')).toBeVisible();
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAttribute('data-floating-presence')).toBe('open');
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAnimations().some(animation => animation.playState === 'running')).toBe(false);
   const input = document.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-editor-shell"]')!;
   for (const preset of builtInShellThemePresets) {
     applyTheme(preset);
@@ -163,7 +171,9 @@ it('keeps long quotes, secondary actions and the editor reachable in a narrow wi
     ...intent.context_items.slice(1),
   ] });
   await expect.element(page.getByRole('textbox')).toBeVisible();
-  const root = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAttribute('data-floating-presence')).toBe('open');
+  await expect.poll(() => document.querySelector('[data-flower-ask-card]')?.getAnimations().some(animation => animation.playState === 'running')).toBe(false);
+  const root = document.querySelector<HTMLElement>('[data-flower-ask-card]')!;
   await expect.poll(() => root.getAttribute('data-floating-presence')).toBe('open');
   await expect.poll(() => root.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
   const bounds = root.getBoundingClientRect();

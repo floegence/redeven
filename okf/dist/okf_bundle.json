@@ -1822,7 +1822,7 @@
             "concept_id": "ui.flower-activity-companion",
             "path": "ui/flower-activity-companion.md",
             "type": "UI Contract",
-            "title": "Flower Activity companion and contextual window placement",
+            "title": "Flower Activity companion and contextual Ask Flower placement",
             "tags": [
               "activity",
               "companion",
@@ -1831,7 +1831,7 @@
               "read-state",
               "ui"
             ],
-            "summary": "One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion/window geometry, motion and dismissal; product adapters supply safe-area measurements and focus handoffs. Placement creates neither another stream nor a second execution or editor owner.",
+            "summary": "One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion geometry and presence; product adapters supply safe-area measurements and focus handoffs. Contextual Ask Flower uses its own compact product card over published presence and viewport observation. Placement creates neither another stream nor a second execution or editor owner.",
             "section_count": 3
           },
           {
@@ -4587,7 +4587,7 @@
         "label": "Flower Activity companion",
         "path": "ui/flower-activity-companion.md",
         "concept_id": "ui.flower-activity-companion",
-        "title": "Flower Activity companion and contextual window placement"
+        "title": "Flower Activity companion and contextual Ask Flower placement"
       },
       {
         "label": "Flower activity disclosure interaction",
@@ -16608,22 +16608,22 @@
         "title": "Desktop Welcome navigation",
         "type": "UI Contract"
       },
-      "body_length": 6223,
+      "body_length": 6310,
       "summary": "Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Visited pages retain state; readiness gates Flower requests, not navigation. Explicit Environment tab changes may animate cards, while refresh/return preserves headers and skips entrance replay.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Header, logo, sidebar and contextual actions select locally. Health/progress/snapshot updates cannot override navigation. Main captures navigation after asynchronous reads so stale destinations cannot publish newer revisions.\n- Selecting Environments, Redeven Cloud or Gateways renders immediately. Hiding/disposing cancels motion; return does not replay it. [Environment library](desktop-environment-library.md#library) retains card/state ownership.\n- Environments and Flower mount on first visit and remain mounted until disposal. Filesystem invalidation uses environment ID, Runtime start identity and session key, never health/probe timestamps.\n\n- Gateway management is an in-shell detail page. Returning to All Gateways restores list search, filter, scroll and focus. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns its sections, enrollment dialogs and recovery behavior; global navigation preserves the retained management context.\n\n## Popup and dropdown ownership\n\nWelcome consumes published Floe presence and menu/tooltip CSS. Each surface has one presence owner; closing immediately revokes pointer/keyboard input and accessibility exposure, freezes its measured placement, and retains the DOM through the CSS exit. Reopening reverses the same panel and preserves drafts/selection. Only the inner surface transforms; placement reads untransformed layout dimensions. Resolved collision direction and the anchor point determine motion origin. Reduced motion uses Floe's immediate recipe.\n\n| Welcome entry points | Owner |\n| --- | --- |\n| Environment split actions | `DesktopAnchoredOverlaySurface` |\n| Runtime/Gateway progress, recovery, Cloud account/connection details, SSH loading details and directory help | `DesktopActionPopover` through the same surface |\n| Hover details and help | `DesktopPopover` / `DesktopTooltip`; tooltip uses the shorter Floe recipe |\n| Connection details and retained QR disclosure | `EndpointsPopover` through the same surface; QR expansion stays an internal disclosure |\n| Appearance picker | `DesktopThemePicker` through the same surface |\n| Language, container, official Cloud provider and SSH destination options | `DesktopAnchoredListbox` |\n| Saved Gateway/address pickers and Gateway object/connection actions | Published `Dropdown` |\n| Gateway member/leave target, Cloud route and SSH bootstrap strategy | Published `Select`, including native form state and accessible listbox semantics |\n| Embedded Flower model, permission, reasoning, thread switcher, subagent, goal, composer overflow/reference/command and context/compaction details | Existing Flower adapters consuming shared Floe presence |\n| Embedded Flower settings, extensions and browser connection selectors | Published `Select` / `Dropdown` |\n| Embedded Flower tool capability, Kimi endpoint and computer frame rate | Published `Select`; frame-rate input stays isolated from window dragging |\n| File preview encoding/worksheet selectors and find/info/cell details | Published `Select` and a retained shared-presence preview panel |\n| Compaction detail tooltip | Shared tooltip presence; text remains selectable while open |\n| Embedded Flower thread/transcript context menus | `FlowerContextMenu`; callers retain the current presentation through the shared exit |\n| Command palette, feedback disclosure, dialogs and drawers, working-directory picker and Ask Flower window | Published Floe components retain their own presence and focus lifecycle; the launcher retains its presentation when the caller clears its intent |\n\nAction popovers opt into published Floe `observeDialogHeight`; their content clip adds no second fill, border or shadow. The outer rounded surface owns material and height, while top placement anchors its bottom edge so expansion preserves the trigger gap without scaling text. Geometry observes the inner clip, below the height owner, to avoid ResizeObserver feedback. Closing during resize freezes the painted height through exit; reduced motion commits the natural size immediately.\n\nAn Environment split action retains one primary button and one anchor across admission, progress, recovery and completion. Localized transient labels use `StableText`; Floe's slow color tokens ease the inverse fill and foreground together. Tooltip availability cannot remount the control, and its existing action authority and progress disclosure behavior remain unchanged.\n\nDo not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. No native visible select popup or local popup animation recipe remains in Welcome or its embedded Flower surfaces.",
-          "char_count": 4835
+          "body": "- Header, logo, sidebar and contextual actions select locally. Health/progress/snapshot updates cannot override navigation. Main captures navigation after asynchronous reads so stale destinations cannot publish newer revisions.\n- Selecting Environments, Redeven Cloud or Gateways renders immediately. Hiding/disposing cancels motion; return does not replay it. [Environment library](desktop-environment-library.md#library) retains card/state ownership.\n- Environments and Flower mount on first visit and remain mounted until disposal. Filesystem invalidation uses environment ID, Runtime start identity and session key, never health/probe timestamps.\n\n- Gateway management is an in-shell detail page. Returning to All Gateways restores list search, filter, scroll and focus. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns its sections, enrollment dialogs and recovery behavior; global navigation preserves the retained management context.\n\n## Popup and dropdown ownership\n\nWelcome consumes published Floe presence and menu/tooltip CSS. Each surface has one presence owner; closing immediately revokes pointer/keyboard input and accessibility exposure, freezes its measured placement, and retains the DOM through the CSS exit. Reopening reverses the same panel and preserves drafts/selection. Only the inner surface transforms; placement reads untransformed layout dimensions. Resolved collision direction and the anchor point determine motion origin. Reduced motion uses Floe's immediate recipe.\n\n| Welcome entry points | Owner |\n| --- | --- |\n| Environment split actions | `DesktopAnchoredOverlaySurface` |\n| Runtime/Gateway progress, recovery, Cloud account/connection details, SSH loading details and directory help | `DesktopActionPopover` through the same surface |\n| Hover details and help | `DesktopPopover` / `DesktopTooltip`; tooltip uses the shorter Floe recipe |\n| Connection details and retained QR disclosure | `EndpointsPopover` through the same surface; QR expansion stays an internal disclosure |\n| Appearance picker | `DesktopThemePicker` through the same surface |\n| Language, container, official Cloud provider and SSH destination options | `DesktopAnchoredListbox` |\n| Saved Gateway/address pickers and Gateway object/connection actions | Published `Dropdown` |\n| Gateway member/leave target, Cloud route and SSH bootstrap strategy | Published `Select`, including native form state and accessible listbox semantics |\n| Embedded Flower model, permission, reasoning, thread switcher, subagent, goal, composer overflow/reference/command and context/compaction details | Existing Flower adapters consuming shared Floe presence |\n| Embedded Flower settings, extensions and browser connection selectors | Published `Select` / `Dropdown` |\n| Embedded Flower tool capability, Kimi endpoint and computer frame rate | Published `Select`; frame-rate input stays isolated from window dragging |\n| File preview encoding/worksheet selectors and find/info/cell details | Published `Select` and a retained shared-presence preview panel |\n| Compaction detail tooltip | Shared tooltip presence; text remains selectable while open |\n| Embedded Flower thread/transcript context menus | `FlowerContextMenu`; callers retain the current presentation through the shared exit |\n| Command palette, feedback disclosure, dialogs and drawers, working-directory picker | Published Floe components retain their own presence and focus lifecycle |\n| Contextual Ask Flower | Dedicated content-sized `FlowerAskCard`, published presence/viewport facts, and product-specific entrance/exit motion |\n\nAction popovers opt into published Floe `observeDialogHeight`; their content clip adds no second fill, border or shadow. The outer rounded surface owns material and height, while top placement anchors its bottom edge so expansion preserves the trigger gap without scaling text. Geometry observes the inner clip, below the height owner, to avoid ResizeObserver feedback. Closing during resize freezes the painted height through exit; reduced motion commits the natural size immediately.\n\nAn Environment split action retains one primary button and one anchor across admission, progress, recovery and completion. Localized transient labels use `StableText`; Floe's slow color tokens ease the inverse fill and foreground together. Tooltip availability cannot remount the control, and its existing action authority and progress disclosure behavior remain unchanged.\n\nDo not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. Selects use the published popup contract. Ask Flower deliberately owns its compact card appearance and motion recipe while consuming published presence.",
+          "char_count": 4924
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Navigation grants no Runtime authority. [Ask Flower windows](../ui/flower-activity-companion.md#contextual-window) owns contextual placement.",
-          "char_count": 141
+          "body": "Navigation grants no Runtime authority. [Ask Flower cards](../ui/flower-activity-companion.md#contextual-window) owns contextual placement.",
+          "char_count": 139
         },
         {
           "id": "evidence",
@@ -16680,10 +16680,10 @@
           "title": "Gateway Desktop interactions"
         },
         {
-          "label": "Ask Flower windows",
+          "label": "Ask Flower cards",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         }
       ],
       "backlinks": [
@@ -20121,7 +20121,7 @@
           "label": "Activity companion",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         }
       ],
       "backlinks": [
@@ -21060,7 +21060,7 @@
       "path": "ui/flower-activity-companion.md",
       "concept_id": "ui.flower-activity-companion",
       "type": "UI Contract",
-      "title": "Flower Activity companion and contextual window placement",
+      "title": "Flower Activity companion and contextual Ask Flower placement",
       "tags": [
         "activity",
         "companion",
@@ -21071,7 +21071,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "activity",
           "companion",
@@ -21080,32 +21080,32 @@
           "read-state",
           "ui"
         ],
-        "title": "Flower Activity companion and contextual window placement",
+        "title": "Flower Activity companion and contextual Ask Flower placement",
         "type": "UI Contract"
       },
-      "body_length": 4546,
-      "summary": "One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion/window geometry, motion and dismissal; product adapters supply safe-area measurements and focus handoffs. Placement creates neither another stream nor a second execution or editor owner.",
+      "body_length": 6252,
+      "summary": "One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion geometry and presence; product adapters supply safe-area measurements and focus handoffs. Contextual Ask Flower uses its own compact product card over published presence and viewport observation. Placement creates neither another stream nor a second execution or editor owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Companion\n### Companion ownership\nPublished `BottomBarCompanion` owns geometry, viewport/safe-area clamps, motion, outside dismissal, Escape and mount handling. Its Portal uses the explicit Activity overlay host, never `document.body`. The collapsed field is centered; bounded detail grows upward without changing body geometry. Running work cannot prevent collapse or destination interaction.\n\n### Activity Terminal footer\nDesktop Activity Terminal supplies a 24-pixel anchor in its 28-pixel footer, centered in the terminal column with a shrinkable 360-pixel maximum width. Workbench/mobile terminals supply none. Terminal supplies its reactive background/foreground alongside the anchor. Only the collapsed footer entry uses that palette: a restrained tinted surface, visible border and monochrome Flower icon. Expanded Flower keeps the shell theme; palette changes never replace its editor. Placement does not create another Flower instance, alter transport or route Flower input through the terminal.\n\n### Stable Flower placement\nAfter first access readiness, one retained `EnvAIPage`/`FlowerSurface` moves among explicit hosts. Visibility drives `hidden`, `aria-hidden` and `inert` together. Available unfiltered Workbench placement survives deselection; canvas selection governs input/focus only. [Settings](flower-setup-and-settings.md#retained-panels) own retained panels/forms.\n\n### Contextual Ask Flower\nNew companion conversations may capture the desktop Activity origin using its read-only page reader. [Turn launcher](flower-turn-launcher.md#submission) owns sending/context actions.\n\n### Presence and summary\n[Presence](flower-companion-presence.md#presence) owns collapsed priority, live tails, completion feedback, composer precedence and workspace observation.\n\n### Dismissal, focus, and reads\nOutside capture includes shell, anchor and classified Flower-owned Portals. Trusted cross-origin plugin bridge events join host pointer/focus dismissal without consuming the destination. Shared SSE summaries are activity-only; initial/reconnect read baselines and later read envelopes are scoped to the same `UserPublicID`.\n\nA floating window's geometry controls inherit ownership only from its direct published surface. Flower preview resize handles retain the companion; unrelated windows still dismiss it.\n\n## Contextual window\n### Host boundary\nThe host adapter measures the visible Shell header's client-space bottom edge and takes the larger of that edge and the current Desktop titlebar safe area.\n\nThe host boundary and margin feed one published `viewportInsets` geometry path for anchored opening, centered opening, dragging, edge resizing, and viewport changes.\n\n### Controls and constrained space\nAsk Flower sets the published `FloatingWindow.maximizable` capability to false.\n\nWhen it cannot accommodate the preferred size, the window shrinks within that viewport.\n\nOutside-click dismissal treats the published geometry wrapper and its resize handles as part of the launcher; resizing must never dismiss it. Other windows remain outside this boundary.",
-          "char_count": 3078
+          "body": "## Companion\n### Companion ownership\nPublished `BottomBarCompanion` owns geometry, viewport/safe-area clamps, motion, outside dismissal, Escape and mount handling. Its Portal uses the explicit Activity overlay host, never `document.body`. The collapsed field is centered; bounded detail grows upward without changing body geometry. Running work cannot prevent collapse or destination interaction.\n\n### Activity Terminal footer\nDesktop Activity Terminal supplies a 24-pixel anchor in its 28-pixel footer, centered in the terminal column with a shrinkable 360-pixel maximum width. Workbench/mobile terminals supply none. Terminal supplies its reactive background/foreground alongside the anchor. Only the collapsed footer entry uses that palette: a restrained tinted surface, visible border and monochrome Flower icon. Expanded Flower keeps the shell theme; palette changes never replace its editor. Placement does not create another Flower instance, alter transport or route Flower input through the terminal.\n\n### Stable Flower placement\nAfter first access readiness, one retained `EnvAIPage`/`FlowerSurface` moves among explicit hosts. Visibility drives `hidden`, `aria-hidden` and `inert` together. Available unfiltered Workbench placement survives deselection; canvas selection governs input/focus only. [Settings](flower-setup-and-settings.md#retained-panels) own retained panels/forms.\n\n### Contextual Ask Flower\nNew companion conversations may capture the desktop Activity origin using its read-only page reader. [Turn launcher](flower-turn-launcher.md#submission) owns sending/context actions.\n\n### Presence and summary\n[Presence](flower-companion-presence.md#presence) owns collapsed priority, live tails, completion feedback, composer precedence and workspace observation.\n\n### Dismissal, focus, and reads\nOutside capture includes shell, anchor and classified Flower-owned Portals. Trusted cross-origin plugin bridge events join host pointer/focus dismissal without consuming the destination. Shared SSE summaries are activity-only; initial/reconnect read baselines and later read envelopes are scoped to the same `UserPublicID`.\n\nA floating window's geometry controls inherit ownership only from its direct published surface. Flower preview resize handles retain the companion; unrelated windows still dismiss it.\n\n## Contextual window\n### Shared question card\nDesktop environment cards and every Env App contextual entry use one `FlowerAskCard` through the shared launcher. This is a brief question surface, not a conversation window: no `FloatingWindow`, fixed conversation height, draggable title bar, resize handles or maximize controls. The 512-pixel maximum width fits the visible viewport; height follows the question, editor, bounded reference strip and explicit errors. The single outer surface owns the input focus border. References and Send share a compact bottom row; text grows naturally with a bounded editor scroll area.\n\n### Host boundary and motion\nThe host measures the visible Shell header's client-space bottom edge and the Desktop titlebar safe area. The product card places beside the supplied point, flips upward when necessary and clamps to published Floe `observeViewport` bounds, including soft keyboard occlusion and CSS zoom. Without a point it rests in the upper central content area. Position uses layout size, never animated bounds.\n\nPublished `createFloatingPresence` owns mounting, exit completion and reversal. The card supplies its own gentle origin-based scale/translation and short flower-mark rotation. Reduced motion removes both. Exiting content retains the last intent, anchor and draft, becomes inert immediately and unmounts after the transition. Reversing an unfinished close for the same intent preserves editor and request identity.\n\n### Interaction continuity\nOpening focuses the editor unless the caller disables autofocus. Escape and Close restore the initiating control; outside pointer dismissal leaves destination interaction intact. IME composition and nested previews retain their Escape ownership. Related context previews and their direct geometry controls count as inside; unrelated windows remain outside. Sending blocks duplicate submission and dismissal. Existing exact-request retry, unknown admission, reference removal, localization and panel-placement footer contracts remain with the shared launcher.",
+          "char_count": 4376
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The Workbench Flower widget retains its existing window, canvas, and focus contracts while contributing only a placement host for the Env App-owned Flower product.\n\nThe companion never auto-expands for completion, failure, approval, or user input. Showing an available, unfiltered Workbench Flower widget moves the retained product tree into that widget without starting a second list load or live stream, and later canvas deselection does not move it away.\n\nRedeven supplies the Ask Flower placement policy and host measurements; published Floe owns dragging, resizing, clamping, and maximize controls. Host insets must not be duplicated in an alternate drag controller. These constraints apply to the contextual launcher, not the main Flower surface or other floating windows.",
-          "char_count": 778
+          "body": "The Workbench Flower widget retains its existing window, canvas, and focus contracts while contributing only a placement host for the Env App-owned Flower product.\n\nThe companion never auto-expands for completion, failure, approval, or user input. Showing an available, unfiltered Workbench Flower widget moves the retained product tree into that widget without starting a second list load or live stream, and later canvas deselection does not move it away.\n\nRedeven owns Ask Flower identity, content, compact placement and motion styling; published Floe owns visible viewport facts and presence lifecycle. The card adds no window management or durable state. These constraints apply to the contextual launcher, not the main Flower surface or other floating windows.",
+          "char_count": 766
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Tests.\n\n- `redeven:desktop/src/shared/askFlowerWindowViewport.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Source.",
-          "char_count": 336
+          "body": "- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Tests.\n\n- `redeven:desktop/src/shared/askFlowerWindowViewport.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Source.\n\n- `redeven:internal/flower_ui/src/FlowerAskCard.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx` - Browser continuity and viewport acceptance.\n- `redeven:desktop/scripts/check-flower-ask-card.mjs` - Real Desktop entry acceptance across locales, themes and widths.",
+          "char_count": 666
         }
       ],
       "evidence": [
@@ -21128,9 +21128,24 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx:0:source.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/FlowerAskCard.tsx:0:source.",
+          "source": "redeven:internal/flower_ui/src/FlowerAskCard.tsx",
+          "description": "Source."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx:0:browser continuity and viewport acceptance.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx",
+          "description": "Browser continuity and viewport acceptance."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-flower-ask-card.mjs:0:real desktop entry acceptance across locales, themes and widths.",
+          "source": "redeven:desktop/scripts/check-flower-ask-card.mjs",
+          "description": "Real Desktop entry acceptance across locales, themes and widths."
         }
       ],
-      "snippet": "One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion/window geometry, motion and dismissal; product adapters supply safe-area measurements and focus handoffs. Placement creates nei",
+      "snippet": "One retained Flower surface moves between authorized Activity and Workbench hosts. Published Floe owns companion geometry and presence; product adapters supply safe-area measurements and focus handoffs. Contextual Ask Flower uses its own co",
       "links": [
         {
           "label": "Presence",
@@ -21641,7 +21656,7 @@
           "label": "Activity companion",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         },
         {
           "label": "shared surface material",
@@ -21657,10 +21672,10 @@
           "title": "Redeven OKF Bundle"
         },
         {
-          "label": "Flower Activity companion and contextual window placement",
+          "label": "Flower Activity companion and contextual Ask Flower placement",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         }
       ]
     },
@@ -23100,7 +23115,7 @@
           "label": "companion",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         },
         {
           "label": "Provider configuration",
@@ -23116,10 +23131,10 @@
           "title": "Redeven OKF Bundle"
         },
         {
-          "label": "Flower Activity companion and contextual window placement",
+          "label": "Flower Activity companion and contextual Ask Flower placement",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         }
       ]
     },
@@ -23970,10 +23985,10 @@
           "title": "Redeven OKF Bundle"
         },
         {
-          "label": "Flower Activity companion and contextual window placement",
+          "label": "Flower Activity companion and contextual Ask Flower placement",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         },
         {
           "label": "Flower incremental live state",
@@ -24174,7 +24189,7 @@
           "label": "Activity companion",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         },
         {
           "label": "conversation sidebar",
@@ -25629,7 +25644,7 @@
           "label": "Activity companion",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         },
         {
           "label": "Page loading",
@@ -25726,7 +25741,7 @@
           "label": "Activity companion",
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
-          "title": "Flower Activity companion and contextual window placement"
+          "title": "Flower Activity companion and contextual Ask Flower placement"
         }
       ],
       "backlinks": [
@@ -25744,5 +25759,5 @@
       ]
     }
   ],
-  "source_sha256": "e6d17f09e14b000df9ad652c3f3ae197323f83a8cd046596b681f3a83e5b60c2"
+  "source_sha256": "0e0f144be2dff76ac971c4bfc5f33b70e066cae46bb6d9839a6500ea5eb3cdfe"
 }

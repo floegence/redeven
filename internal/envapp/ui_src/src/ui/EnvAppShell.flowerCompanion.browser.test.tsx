@@ -1399,7 +1399,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(fixture.product.getClientRects()).toHaveLength(0);
     expect(fixture.textarea.getClientRects()).toHaveLength(0);
   });
-  it('preserves the Ask Flower window and draft when clicking the shell mode tabs', async () => {
+  it('preserves the Ask Flower card and draft when clicking the shell mode tabs', async () => {
     await page.viewport(1440, 900);
     testRealFlowerLauncher = true;
     await mountShell();
@@ -1415,9 +1415,9 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       await flushAsync();
       expect(document.querySelector('.flower-turn-launcher-window textarea')).toBe(editor);
       expect(editor.value).toBe('Keep my context while switching display modes');
-      expect(document.querySelector('[data-floe-floating-window-control="close"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="flower-ask-card-close"]')).toBeTruthy();
     }
-    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!);
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="flower-ask-card-close"]')!);
     await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window')).toBeNull());
   });
 

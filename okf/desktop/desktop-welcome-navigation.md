@@ -37,17 +37,18 @@ Welcome consumes published Floe presence and menu/tooltip CSS. Each surface has 
 | File preview encoding/worksheet selectors and find/info/cell details | Published `Select` and a retained shared-presence preview panel |
 | Compaction detail tooltip | Shared tooltip presence; text remains selectable while open |
 | Embedded Flower thread/transcript context menus | `FlowerContextMenu`; callers retain the current presentation through the shared exit |
-| Command palette, feedback disclosure, dialogs and drawers, working-directory picker and Ask Flower window | Published Floe components retain their own presence and focus lifecycle; the launcher retains its presentation when the caller clears its intent |
+| Command palette, feedback disclosure, dialogs and drawers, working-directory picker | Published Floe components retain their own presence and focus lifecycle |
+| Contextual Ask Flower | Dedicated content-sized `FlowerAskCard`, published presence/viewport facts, and product-specific entrance/exit motion |
 
 Action popovers opt into published Floe `observeDialogHeight`; their content clip adds no second fill, border or shadow. The outer rounded surface owns material and height, while top placement anchors its bottom edge so expansion preserves the trigger gap without scaling text. Geometry observes the inner clip, below the height owner, to avoid ResizeObserver feedback. Closing during resize freezes the painted height through exit; reduced motion commits the natural size immediately.
 
 An Environment split action retains one primary button and one anchor across admission, progress, recovery and completion. Localized transient labels use `StableText`; Floe's slow color tokens ease the inverse fill and foreground together. Tooltip availability cannot remount the control, and its existing action authority and progress disclosure behavior remain unchanged.
 
-Do not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. No native visible select popup or local popup animation recipe remains in Welcome or its embedded Flower surfaces.
+Do not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. Selects use the published popup contract. Ask Flower deliberately owns its compact card appearance and motion recipe while consuming published presence.
 
 # Boundaries
 
-Navigation grants no Runtime authority. [Ask Flower windows](../ui/flower-activity-companion.md#contextual-window) owns contextual placement.
+Navigation grants no Runtime authority. [Ask Flower cards](../ui/flower-activity-companion.md#contextual-window) owns contextual placement.
 
 # Evidence
 

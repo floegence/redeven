@@ -24,6 +24,11 @@ const fileStreamReaderMock = vi.hoisted(() => ({
   readFileBytesOnce: vi.fn(),
 }));
 
+vi.mock('solid-js/web', async (importOriginal) => ({
+  ...await importOriginal<typeof import('solid-js/web')>(),
+  Portal: (props: { children: import('solid-js').JSX.Element }) => props.children,
+}));
+
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
   resolveFloatingWindowViewport: (await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>()).resolveFloatingWindowViewport,
   createFloatingPresence: (options: { open: () => boolean }) => ({
@@ -231,7 +236,7 @@ afterEach(() => {
 });
 
 describe('FlowerTurnLauncherWindow', () => {
-  it('uses the shared floating-window band and keeps its intended geometry', () => {
+  it('uses the shared layer band with an independent content-sized ask card', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -244,12 +249,11 @@ describe('FlowerTurnLauncherWindow', () => {
       />
     ), host);
 
-    const floatingWindow = host.querySelector('[data-testid="floating-window"]');
-
-    expect(floatingWindow?.getAttribute('data-z-index')).toBe('1000');
-    expect(floatingWindow?.getAttribute('data-default-width')).toBe('560');
-    expect(floatingWindow?.getAttribute('data-default-height')).toBe('592');
-    expect(host.querySelector('[data-testid="floating-window-footer"]')).toBeNull();
+    const card = host.querySelector('[data-flower-ask-card]');
+    expect(card).not.toBeNull();
+    expect((card?.parentElement as HTMLElement).style.zIndex).toBe('1000');
+    expect(card?.getAttribute('role')).toBe('dialog');
+    expect(host.querySelector('[data-testid="floating-window"]')).toBeNull();
     expect(host.querySelector('.flower-turn-launcher-footer')).toBeNull();
   });
 
@@ -450,7 +454,7 @@ describe('FlowerTurnLauncherWindow', () => {
     const textarea = composePrompt(host, 'Inspect this project');
     const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
     const contextButton = host.querySelector('.flower-composer-context-reference button') as HTMLButtonElement;
-    const closeButton = host.querySelector('[data-testid="floating-window-close"]') as HTMLButtonElement;
+    const closeButton = host.querySelector('[data-testid="flower-ask-card-close"]') as HTMLButtonElement;
 
     sendButton.click();
 

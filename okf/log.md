@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Replace contextual [Ask Flower windows](ui/flower-activity-companion.md#contextual-window) with one content-sized card, integrated editor, compact context actions and reversible origin-based motion; retain preview ownership, request identity and viewport/focus acceptance.
+
 - 2026-11-05: Polish [Flower directory navigation](ui/flower-thread-sidebar.md#directory-view) with native Floe controls, stable workspace columns/search, global pins in every view, summary-derived collapsed running indicators, retained focus/motion and pointer-following directory reorder feedback.
 
 - 2026-11-05: Refine [Flower directory navigation](ui/flower-thread-sidebar.md#directory-view) with durable host preferences, compact workspace cards, selection reveal, retained pin focus and reversible disclosure motion; qualify real Electron restart persistence.

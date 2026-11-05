@@ -15,7 +15,7 @@ export default defineConfig({
     conditions: ['node'],
     alias: [
       { find: /^@floegence[/]floe-webapp-core[/](window-status|progress-shimmer)[.]css[?]raw$/, replacement: `${coreDist}$1.css?raw` },
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|diagrams|file-browser|html-preview|icons|layout|loading|markdown|ui)$/, replacement: `${coreDist}$1.js` },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|diagrams|file-browser|html-preview|icons|layout|loading|markdown|ui|viewport)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },
       { find: /^lucide-solid$/, replacement: fileURLToPath(new URL('./node_modules/lucide-solid/dist/source/lucide-solid.jsx', import.meta.url)) },
       { find: /^marked$/, replacement: markedDist },
