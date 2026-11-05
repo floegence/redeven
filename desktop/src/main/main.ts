@@ -1,3 +1,4 @@
+import { attachDesktopEditContextMenu } from './editContextMenu';
 import { desktopRuntimeTargetKindFromID, desktopRuntimeTargetKey } from '../shared/desktopRuntimePlacement';
 import { decodeGatewayClientAccessPackage } from './gatewayClientAccess';
 import { createRuntimeFlowerReadOwner, awaitRuntimeFlowerRead } from './runtimeFlowerReadOwner';
@@ -8137,6 +8138,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     },
   });
   const trackedWindow = trackBrowserWindow(win);
+  attachDesktopEditContextMenu(win, () => desktopLanguageState().getSnapshot().resolved_locale);
 
   if (usesDesktopChrome) {
     desktopThemeState().registerWindow(win);

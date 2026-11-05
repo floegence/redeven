@@ -1,4 +1,12 @@
 {
+  "editContextMenu": {
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴",
+    "selectAll": "全选"
+  },
   "gatewayWorkspace": {
     "addresses": "访问地址",
     "editAddress": "编辑",

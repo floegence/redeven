@@ -8451,7 +8451,7 @@ button.flower-composer-context-source:focus-visible,
   background: var(--primary);
 }
 
-/* Point-triggered menus share Floe presence with anchored menus. The stable
+/* Point-triggered menus appear immediately like the published Files menu.
  * SurfaceFloatingLayer owns placement; touch targets stay roomy. */
 .flower-thread-context-menu {
   width: min(15rem, calc(100vw - 1rem));
@@ -8479,8 +8479,8 @@ button.flower-composer-context-source:focus-visible,
   cursor: pointer;
 }
 
-.flower-thread-menu-item:hover,
-.flower-thread-menu-item:focus-visible {
+.flower-thread-menu-item:not(:disabled):not([aria-disabled="true"]):hover,
+.flower-thread-menu-item:not(:disabled):not([aria-disabled="true"]):focus-visible {
   background: var(--floe-state-hover);
   color: var(--floe-ink);
   outline: none;
@@ -8498,13 +8498,13 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-thread-menu-item-destructive {
-  color: var(--redeven-status-error-foreground, var(--destructive));
+  color: var(--error);
 }
 
-.flower-thread-menu-item-destructive:hover,
-.flower-thread-menu-item-destructive:focus-visible {
-  background: color-mix(in srgb, var(--destructive) 10%, transparent);
-  color: var(--destructive);
+.flower-thread-menu-item-destructive:not(:disabled):not([aria-disabled="true"]):hover,
+.flower-thread-menu-item-destructive:not(:disabled):not([aria-disabled="true"]):focus-visible {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error);
 }
 
 .flower-thread-menu-separator {

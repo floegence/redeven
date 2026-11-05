@@ -1,12 +1,10 @@
 import type { JSX } from 'solid-js';
 import { createEffect, createMemo, onCleanup } from 'solid-js';
 import { useResizeObserver } from '@floegence/floe-webapp-core';
-import { SurfaceFloatingLayer, type FloatingPresenceState } from '@floegence/floe-webapp-core/ui';
+import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 /** Flower menus share projected placement and keyboard/focus ownership. */
 export function FlowerContextMenu(props: Readonly<{
-  presenceState: FloatingPresenceState;
-  onPanelRef: (element: HTMLDivElement | undefined) => void;
   x: number;
   y: number;
   label: string;
@@ -16,7 +14,6 @@ export function FlowerContextMenu(props: Readonly<{
 }>): JSX.Element {
   let menuRef: HTMLDivElement | undefined;
   let disposed = false;
-  const exiting = createMemo(() => props.presenceState === 'exiting');
   const contentSize = useResizeObserver(() => menuRef);
   const menuSize = createMemo(() => {
     if (!contentSize() || !menuRef) return undefined;
@@ -46,7 +43,6 @@ export function FlowerContextMenu(props: Readonly<{
     return path.includes(node) || (event.target instanceof Node && node.contains(event.target));
   };
   createEffect(() => {
-    if (exiting()) return;
     disposed = false;
     const onPointerDown = (event: PointerEvent) => {
       if (eventPathContains(event, menuRef)) return;
@@ -109,15 +105,10 @@ export function FlowerContextMenu(props: Readonly<{
       <div
         ref={element => {
           menuRef = element;
-          props.onPanelRef(element);
-          onCleanup(() => props.onPanelRef(undefined));
         }}
-        data-floating-presence={props.presenceState}
-        inert={exiting()}
-        aria-hidden={exiting() ? 'true' : undefined}
         role="menu"
         tabIndex={-1}
-        class="flower-thread-context-menu floe-floating-presence floe-floating-menu"
+        class="flower-thread-context-menu"
         data-floe-surface="floating"
         aria-label={props.label}
         onFocusOut={(event) => {

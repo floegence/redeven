@@ -42,6 +42,21 @@ async function fixture(overrides: Partial<FlowerSurfaceAdapter> = {}) {
 }
 
 describe('Flower working directory actions', () => {
+  it('copies a message through its existing copy boundary without selecting text first', async () => {
+    const selected = thread({ thread_id: 'directory-a', title: 'Message menu', working_dir: '/workspace/a', messages: [{
+      id: 'answer', role: 'assistant', content: 'A **formatted** answer', created_at_ms: 1, status: 'complete',
+    }] });
+    const { surface } = await fixture({ listThreads: async () => [selected], loadThread: async () => liveBootstrap(selected) });
+    const row = surface.querySelector<HTMLElement>('[data-flower-message-id="answer"]')!;
+    expect(row).not.toBeNull();
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    window.getSelection()?.removeAllRanges();
+    openMenu(row.querySelector<HTMLElement>('.flower-message-bubble') ?? row);
+    menuAction('Copy message').click();
+    await flush();
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('A **formatted** answer');
+  });
   it('opens the loaded conversation directory from the header without copying or reclaiming focus', async () => {
     const { surface, a, openFiles } = await fixture();
     await waitFor(() => document.activeElement === surface.querySelector('textarea'));

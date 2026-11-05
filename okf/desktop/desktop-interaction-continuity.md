@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Desktop interaction continuity
 tags: [desktop, interaction, accessibility, testing]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -23,6 +23,9 @@ Deferred initial focus never overrides a user-selected menu item.
 The interaction-continuity package command runs required state and real component suites, including the production snapshot subscription and observer. The cached commit group runs affected staged sources; bounded integration checks affected base-to-tip paths.
 
 Synthetic composition verifies DOM continuity; it does not prove physical operating-system IME behavior.
+
+## Native edit context menus
+Desktop-owned BrowserWindows attach a localized native edit menu for unhandled Chromium context requests. Editable surfaces expose Undo, Redo, Cut, Copy, Paste and Select all with Chromium edit flags; reading selections expose Copy. Native roles preserve the originating frame, selection, undo stack and the existing paste event path (including Flower attachment handling). No renderer clipboard-read bridge is introduced. Renderer-owned menus prevent the native fallback, so conversation/file/terminal menus remain authoritative. Navigation and window close dismiss pending native menus. Browser-hosted editors retain their browser-native menu.
 
 # Boundaries
 

@@ -48,6 +48,28 @@ function mount(scope = `directory-test-${++scopeID}`, storage?: Pick<Storage, 'g
 }
 
 describe('Flower directory navigation', () => {
+  it('distinguishes open and closed folder icons while keeping header geometry stable', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const header = ui.header('/one/project');
+    const toggle = header.querySelector<HTMLButtonElement>('.flower-directory-toggle')!;
+    const openIcon = header.querySelector<HTMLElement>('.flower-directory-icon')!;
+    const width = openIcon.getBoundingClientRect().width;
+    const paths = openIcon.innerHTML;
+    const nameLeft = header.querySelector('.flower-directory-name')!.getBoundingClientRect().left;
+    expect(openIcon.getAttribute('data-state')).toBe('open');
+    await userEvent.click(toggle);
+    const closedIcon = header.querySelector<HTMLElement>('.flower-directory-icon')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(closedIcon.getAttribute('data-state')).toBe('closed');
+    expect(closedIcon.innerHTML).not.toBe(paths);
+    expect(closedIcon.getBoundingClientRect().width).toBe(width);
+    expect(header.querySelector('.flower-directory-name')!.getBoundingClientRect().left).toBe(nameLeft);
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(header.querySelector('.flower-directory-icon')!.innerHTML).toBe(paths);
+  });
+
   it('batches conversations and resets only the collapsed directory', async () => {
     const ui = mount();
     await userEvent.click(page.getByRole("radio", { name: copy.viewByDirectory }).element() as HTMLButtonElement);

@@ -1,4 +1,12 @@
 {
+  "editContextMenu": {
+    "undo": "Desfazer",
+    "redo": "Refazer",
+    "cut": "Recortar",
+    "copy": "Copiar",
+    "paste": "Colar",
+    "selectAll": "Selecionar tudo"
+  },
   "gatewayWorkspace": {
     "addresses": "Endereços de acesso",
     "editAddress": "Editar",

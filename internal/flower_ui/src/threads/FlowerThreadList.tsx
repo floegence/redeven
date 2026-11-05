@@ -1,10 +1,10 @@
-import { Card, Dialog, DialogPlacementProvider, StableText, Input, SegmentedControl, createFloatingPresence, type FloatingPresenceState } from '@floegence/floe-webapp-core/ui';
+import { Card, Dialog, DialogPlacementProvider, StableText, Input, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, GitBranch, Grid, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, FolderOpen, GitBranch, Grid, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import { FlowerPinIcon } from '../icons/FlowerPinIcon';
 import { animateFlowerThreadRowsChange, flowerThreadMotionDuration, FlowerThreadRows } from './FlowerThreadRows';
@@ -199,8 +199,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
 };
 
 type FlowerThreadContextMenuProps = Readonly<{
-  presenceState: FloatingPresenceState;
-  onPanelRef: (element: HTMLDivElement | undefined) => void;
   item: FlowerThreadListItem;
   x: number;
   y: number;
@@ -255,8 +253,6 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
   };
   return (
     <FlowerContextMenu
-      presenceState={props.presenceState}
-      onPanelRef={props.onPanelRef}
       x={props.x}
       y={props.y}
       label={props.copy.contextMenuLabel(props.item.title.trim())}
@@ -708,10 +704,6 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     const item = itemByID().get(state.threadID);
     return item ? { ...state, item } : null;
   });
-  const [menuPanel, setMenuPanel] = createSignal<HTMLDivElement>();
-  const menuPresence = createFloatingPresence({ open: () => Boolean(menuPresentation()), element: menuPanel });
-  const presentedMenu = createMemo<ReturnType<typeof menuPresentation>>(previous => menuPresentation()
-    ?? (menuPresence.mounted() ? previous ?? null : null));
   const warmupRows = [0, 1, 2, 3, 4, 5] as const;
   const showLoadingSkeleton = createMemo(() => (props.warmup === true || props.loading === true) && props.items.length === 0);
   const showLoadError = createMemo(() => Boolean(props.error?.trim()) && !showLoadingSkeleton());
@@ -895,7 +887,12 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                       onClick={() => toggleDirectory(path)}
                       onKeyDown={event => moveDirectoryWithKeyboard(event, path)}>
                       <ChevronRight class="flower-directory-chevron h-3 w-3 shrink-0" />
-                      <Folder class="h-3.5 w-3.5 shrink-0" /><span class="flower-directory-name" data-full-path={duplicateDirectoryNames().has(directoryLabel(path)) ? 'true' : undefined}>{duplicateDirectoryNames().has(directoryLabel(path)) ? path : directoryLabel(path)}</span><span class="flower-directory-count">{group()?.threadIDs.length}</span>
+                      <span class="flower-directory-icon h-3.5 w-3.5 shrink-0" aria-hidden="true" data-state={collapsed().has(path) ? 'closed' : 'open'}>
+                        <Show when={!collapsed().has(path)} fallback={<Folder class="h-full w-full" />}>
+                          <FolderOpen class="h-full w-full" />
+                        </Show>
+                      </span>
+                      <span class="flower-directory-name" data-full-path={duplicateDirectoryNames().has(directoryLabel(path)) ? 'true' : undefined}>{duplicateDirectoryNames().has(directoryLabel(path)) ? path : directoryLabel(path)}</span><span class="flower-directory-count">{group()?.threadIDs.length}</span>
                     </button>
                     <Show when={collapsed().has(path) && (group()?.runningCount ?? 0) > 0}>
                       <span class="flower-directory-running" data-flower-thread-indicator="wave" role="img" aria-label={copy().statuses.running} title={copy().statuses.running}><FlowerThreadWave /></span>
@@ -1027,11 +1024,9 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           </div>
         </Dialog>
       </DialogPlacementProvider>
-      <Show when={menuPresence.mounted() && presentedMenu()}>
+      <Show when={menuPresentation()}>
         {(state) => (
           <FlowerThreadContextMenu
-            presenceState={menuPresence.state()}
-            onPanelRef={setMenuPanel}
             item={state().item}
             workingDirectory={state().workingDirectory}
             directoryActions={props.directoryActions}

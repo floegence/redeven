@@ -148,3 +148,27 @@ it('remains immediate with reduced motion and enlarged text', async () => {
   expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(992);
   expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(752);
 });
+
+
+it.each(['light', 'dark'])('paints destructive hover and keyboard selection in %s mode', async theme => {
+  await page.viewport(1000, 760);
+  document.documentElement.classList.add(theme);
+  const menu = (await mount()).open();
+  await frame();
+  const item = menu.querySelector<HTMLElement>('.flower-thread-menu-item-destructive')!;
+  const resting = getComputedStyle(item).backgroundColor;
+  await userEvent.hover(item);
+  const hovered = getComputedStyle(item);
+  expect(hovered.backgroundColor).not.toBe(resting);
+  expect(hovered.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  const probe = document.createElement('span');
+  probe.style.color = 'var(--error)';
+  menu.append(probe);
+  expect(hovered.color).toBe(getComputedStyle(probe).color);
+  const hoverBackground = hovered.backgroundColor;
+  await userEvent.unhover(item);
+  await userEvent.keyboard('{End}');
+  expect(document.activeElement).toBe(item);
+  expect(getComputedStyle(item).backgroundColor).toBe(hoverBackground);
+  await page.screenshot({ element: menu, path: `__screenshots__/flower-context-menu-delete-${theme}.png` });
+});

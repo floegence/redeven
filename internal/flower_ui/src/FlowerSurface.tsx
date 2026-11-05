@@ -4784,6 +4784,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       restoreThreadMenuFocus(restore);
     }
   };
+  const transcriptMessageCopy = new WeakMap<HTMLElement, () => string>();
   const [transcriptMenu, setTranscriptMenu] = createSignal<Readonly<{
     target: FlowerWorkingDirectoryOpenRequest | null;
     title: string;
@@ -4791,11 +4792,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     y: number;
     restore: HTMLElement;
     selection: string;
+    messageText: string;
   }> | null>(null);
-  const [transcriptMenuPanel, setTranscriptMenuPanel] = createSignal<HTMLDivElement>();
-  const transcriptMenuPresence = createFloatingPresence({ open: () => Boolean(transcriptMenu()), element: transcriptMenuPanel });
-  const presentedTranscriptMenu = createMemo<ReturnType<typeof transcriptMenu>>(previous => transcriptMenu()
-    ?? (transcriptMenuPresence.mounted() ? previous ?? null : null));
   const closeTranscriptMenu = (restoreFocus = true) => {
     const restore = transcriptMenu()?.restore;
     setTranscriptMenu(null);
@@ -4814,6 +4812,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? selection.toString() : '';
     const threadID = selectedThreadID();
     if (!threadID && !text) return;
+    const messageRow = target.closest<HTMLElement>('[data-flower-message-id]');
     event.preventDefault();
     event.stopPropagation();
     const rect = viewport.getBoundingClientRect();
@@ -4824,6 +4823,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       y: event instanceof MouseEvent ? event.clientY : rect.top + 18,
       restore: viewport,
       selection: text,
+      messageText: messageRow && viewport.contains(messageRow) ? transcriptMessageCopy.get(messageRow)?.() ?? '' : '',
     });
   };
   createEffect(() => {
@@ -12472,6 +12472,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             message().role === 'user' ? 'flower-message-row-user' : 'flower-message-row-assistant',
           )}
           data-flower-message-id={message().id}
+          ref={element => transcriptMessageCopy.set(element, copyText)}
           data-flower-message-role={message().role}
           data-flower-message-status={message().status}
           data-flower-pending-message={pendingDelivery()?.requestId}
@@ -15220,11 +15221,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </DialogPlacementProvider>
       </Show>
       </Show>
-      <Show when={transcriptMenuPresence.mounted() && presentedTranscriptMenu()}>
+      <Show when={transcriptMenu()}>
         {(menu) => (
           <FlowerContextMenu
-            presenceState={transcriptMenuPresence.state()}
-            onPanelRef={setTranscriptMenuPanel}
             x={menu().x}
             y={menu().y}
             label={copy().threadList.contextMenuLabel(menu().title)}
@@ -15236,16 +15235,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <FlowerGoalIcon class="h-3.5 w-3.5" strokeWidth={1.65} aria-hidden="true" /><span>/goal</span>
               </button>
             </Show>
-            <Show when={menu().selection}>
+            <Show when={menu().selection || menu().messageText}>
               <button type="button" role="menuitem" class="flower-thread-menu-item" onClick={() => {
                 const state = menu();
                 setTranscriptMenu(null);
-                void writeTextToClipboard(state.selection)
+                void writeTextToClipboard(state.selection || state.messageText)
                   .catch((error) => notifyThreadActionError(getErrorMessage(error)))
                   .finally(() => restoreThreadMenuFocus(state.restore));
               }}>
                 <Copy class="h-3.5 w-3.5" />
-                <span>{copy().threadList.copySelectedText}</span>
+                <span>{menu().selection ? copy().threadList.copySelectedText : copy().chat.copyMessage}</span>
               </button>
             </Show>
             <Show when={menu().target}>
