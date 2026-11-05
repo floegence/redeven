@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Polish [Flower directory navigation](ui/flower-thread-sidebar.md#directory-view) with native Floe controls, stable workspace columns/search, leading pins, retained exit motion and pointer-following directory reorder feedback.
+
 - 2026-11-05: Refine [Flower directory navigation](ui/flower-thread-sidebar.md#directory-view) with durable host preferences, compact workspace cards, selection reveal, retained pin focus and reversible disclosure motion; qualify real Electron restart persistence.
 
 - 2026-11-04: Unify [Welcome popups and dropdowns](desktop/desktop-welcome-navigation.md#popup-and-dropdown-ownership) on published Floe presence, including settings selectors and embedded Flower context menus; retain exit input revocation, geometry and reversal acceptance.

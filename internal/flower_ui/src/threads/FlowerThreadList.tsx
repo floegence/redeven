@@ -1,9 +1,10 @@
 import { Card, Dialog, DialogPlacementProvider, StableText, Input, SegmentedControl, createFloatingPresence, type FloatingPresenceState } from '@floegence/floe-webapp-core/ui';
 import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, GitBranch, Grid, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, GitBranch, Grid, GripVertical, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import { FlowerPinIcon } from '../icons/FlowerPinIcon';
 import { animateFlowerThreadRowsChange, FlowerThreadRows } from './FlowerThreadRows';
@@ -83,6 +84,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const itemCanPin = createMemo(() => canPinThreadItem(props.item));
   const titleDraggable = () => Boolean(props.item.pinned && props.reorderable && props.onDragStart);
   const progressLabel = () => flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel;
+  const leadingPin = () => props.showPinnedBadge && props.item.pinned && indicator().visual === 'none';
   const ariaLabel = () => [
     title(),
     indicator().ariaStatus,
@@ -94,6 +96,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   return (
     <div
       data-flower-thread-card
+      data-flower-pin-action={props.onPin && itemCanPin() ? 'true' : undefined}
       data-pinned={props.item.pinned ? 'true' : 'false'}
       data-flower-thread-dragging={props.dragging ? 'true' : undefined}
       data-flower-thread-drop={props.dropPosition}
@@ -136,6 +139,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
             <FlowerThreadWave />
           </Show>
           <div class="flower-thread-status-dot h-1.5 w-1.5 rounded-full" />
+          <Show when={leadingPin()}><FlowerPinIcon pinned class="flower-thread-leading-pin" /></Show>
         </div>
         <span
           class="flower-thread-list-title flex-1 truncate"
@@ -150,7 +154,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       </Show>
       <div class="flower-thread-card-trailing" data-has-timestamp={!indicator().actionRequired && !progressLabel() ? 'true' : undefined}>
         <div class="flower-thread-card-summary" aria-hidden="true">
-          <Show when={props.showPinnedBadge && props.item.pinned}><FlowerPinIcon pinned class="flower-directory-pinned-icon" /></Show>
+          <Show when={props.showPinnedBadge && props.item.pinned && !leadingPin()}><FlowerPinIcon pinned class="flower-directory-pinned-icon" /></Show>
           <Show when={indicator().actionRequired} fallback={
             <span class="flower-thread-card-time" data-progress={progressLabel() ? 'true' : undefined} title={progressLabel()}>{progressLabel() || fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
           }>
@@ -390,6 +394,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   const [drag, setDrag] = createSignal<{ threadID: string; keys: readonly string[]; target?: FlowerThreadPinPosition } | null>(null);
   const [directoryDrag, setDirectoryDrag] = createSignal<{ path: string; target?: { path: string; placement: 'before' | 'after' } } | null>(null);
   const [reorderAnnouncement, setReorderAnnouncement] = createSignal('');
+  let directoryDragPreview: HTMLDivElement | undefined;
   let stopDirectoryGesture: (() => void) | undefined;
   let suppressDirectoryClick = false;
   const directoryReorderable = () => !props.query.trim() && allDirectoryGroups().length > 1;
@@ -401,7 +406,9 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     const current = allDirectoryGroups().map(group => group.path);
     const order = moveFlowerDirectory(current, path, anchor, placement);
     if (order.every((value, index) => value === current[index])) return;
-    updatePreferences({ ...preferences(), order: [...order, ...preferences().order.filter(value => !order.includes(value))] });
+    animateFlowerThreadRowsChange(scrollRef?.querySelector<HTMLElement>('.flower-thread-rows'), () => {
+      updatePreferences({ ...preferences(), order: [...order, ...preferences().order.filter(value => !order.includes(value))] });
+    });
     setReorderAnnouncement(`${directoryLabel(path)}: ${order.indexOf(path) + 1} / ${order.length}`);
   };
   const directoryLabel = (path: string) => path ? flowerDirectoryName(path) : copy().noDirectory;
@@ -418,7 +425,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       ? Array.from(workspaceGrid?.querySelectorAll<HTMLElement>('[data-flower-workspace]') ?? []).find(node => node.dataset.flowerWorkspace === path)?.querySelector<HTMLElement>('.flower-workspace-threads')
       : scrollRef?.querySelector<HTMLElement>('.flower-thread-rows');
     const changeRows = () => animateFlowerThreadRowsChange(container, () => { if (panel) setWorkspaceLimits(update); else setLimits(update); });
-    if (panel) animateFlowerThreadRowsChange(container?.closest<HTMLElement>('.flower-workspaces-grid'), changeRows);
+    if (panel) animateFlowerThreadRowsChange(container?.closest<HTMLElement>('.flower-workspaces-column'), changeRows);
     else changeRows();
   };
   const togglePin = (item: FlowerThreadListItem, restore?: HTMLElement, panel = false) => {
@@ -438,7 +445,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     if (restore) props.onMenuAction?.('pin', item, restore);
     else props.onMenuAction?.('pin', item);
     if (panel || preferences().mode === 'directory') requestAnimationFrame(() => {
-      const viewport = panel ? workspaceGrid?.closest<HTMLElement>('.flower-workspaces-dialog-content') : scrollRef;
+      const viewport = panel ? workspaceGrid?.closest<HTMLElement>('.flower-workspaces-scroll') : scrollRef;
       const row = Array.from(viewport?.querySelectorAll<HTMLElement>(panel ? '[data-flower-workspace-thread-id]' : '[data-flower-thread-card]') ?? [])
         .find(node => (panel ? node.dataset.flowerWorkspaceThreadId : node.dataset.threadId) === item.thread_id);
       if (!row || !viewport || !row.isConnected) return;
@@ -474,57 +481,85 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     });
     onCleanup(() => cancelAnimationFrame(frame));
   });
+  const moveDirectoryWithKeyboard = (event: KeyboardEvent, path: string) => {
+    if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') || !directoryReorderable()) return;
+    event.preventDefault();
+    const paths = allDirectoryGroups().map(entry => entry.path);
+    const direction = event.key === 'ArrowUp' ? -1 : 1;
+    const anchor = paths[paths.indexOf(path) + direction];
+    if (anchor !== undefined) commitDirectoryMove(path, anchor, direction < 0 ? 'before' : 'after');
+  };
   const beginDirectoryGesture = (event: PointerEvent, path: string) => {
-    if (!directoryReorderable() || !event.isPrimary || event.button !== 0 || stopDirectoryGesture) return;
+    if (!directoryReorderable() || !event.isPrimary || event.button !== 0 || stopDirectoryGesture || !scrollRef) return;
+    for (const animation of scrollRef.getAnimations({ subtree: true })) {
+      if (animation.id === 'flower-thread-layout' || animation.id === 'flower-thread-exit') animation.finish();
+    }
     const startX = event.clientX, startY = event.clientY, pointerID = event.pointerId;
+    const source = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-flower-directory-header]')!;
+    const sourceRect = source.getBoundingClientRect();
+    const grabY = startY - sourceRect.top;
+    const width = Math.min(sourceRect.width, 280);
+    const grabX = Math.min(startX - sourceRect.left, width - 12);
+    const ends = new Map(Array.from(scrollRef.querySelectorAll<HTMLElement>('[data-flower-directory-end]')).map(node => [node.dataset.flowerDirectoryEnd, node]));
+    const groups = Array.from(scrollRef.querySelectorAll<HTMLElement>('[data-flower-directory-header]')).map(header => ({ header, end: ends.get(header.dataset.flowerDirectoryHeader) }));
     let active = false;
-    let touchReady = event.pointerType !== 'touch';
-    let latestY = startY;
+    let latestX = startX, latestY = startY;
     let scrollFrame: number | undefined;
-    let timer: number | undefined = event.pointerType === 'touch' ? window.setTimeout(() => { touchReady = true; active = true; suppressDirectoryClick = true; setDirectoryDrag({ path }); }, 350) : undefined;
-    const targetAt = (y: number) => {
+    let timer: number | undefined;
+    const targetAt = () => {
       const state = directoryDrag();
       if (!state || !scrollRef) return;
-      const headers = Array.from(scrollRef.querySelectorAll<HTMLElement>('[data-flower-directory-header]'));
-      const header = headers.find(element => {
-        const end = Array.from(scrollRef!.querySelectorAll<HTMLElement>('[data-flower-directory-end]')).find(node => node.dataset.flowerDirectoryEnd === element.dataset.flowerDirectoryHeader);
-        return y <= (end?.getBoundingClientRect().bottom ?? element.getBoundingClientRect().bottom);
-      }) ?? headers.at(-1);
-      if (!header) return;
-      const anchor = header.dataset.flowerDirectoryHeader ?? '';
-      const end = Array.from(scrollRef.querySelectorAll<HTMLElement>('[data-flower-directory-end]')).find(node => node.dataset.flowerDirectoryEnd === anchor);
-      const top = header.getBoundingClientRect().top, bottom = end?.getBoundingClientRect().bottom ?? header.getBoundingClientRect().bottom;
-      const target = anchor === path ? undefined : { path: anchor, placement: y < (top + bottom) / 2 ? 'before' as const : 'after' as const };
+      const bounds = scrollRef.getBoundingClientRect();
+      let target: { path: string; placement: 'before' | 'after' } | undefined;
+      if (latestX >= bounds.left - 32 && latestX <= bounds.right + 32) {
+        const rectangles = groups.map(group => ({ ...group, top: group.header.getBoundingClientRect().top, bottom: (group.end ?? group.header).getBoundingClientRect().bottom }));
+        const group = rectangles.find(group => latestY <= group.bottom) ?? rectangles.at(-1);
+        const anchor = group?.header.dataset.flowerDirectoryHeader;
+        if (group && anchor !== undefined && anchor !== path) target = { path: anchor, placement: latestY < (group.top + group.bottom) / 2 ? 'before' : 'after' };
+      }
       if (state.target?.path !== target?.path || state.target?.placement !== target?.placement) setDirectoryDrag({ path, target });
     };
-    const move = (next: PointerEvent) => {
-      if (next.pointerId !== pointerID) return;
-      const distance = Math.hypot(next.clientX - startX, next.clientY - startY);
-      if (!touchReady && distance > 8) { stopDirectoryGesture?.(); return; }
-      if (!active && touchReady && distance > 5) { active = true; setDirectoryDrag({ path }); }
-      if (active) {
-        next.preventDefault();
-        suppressDirectoryClick = true;
-        latestY = next.clientY;
-        targetAt(latestY);
-        if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(scroll);
-      }
+    const paintPreview = () => {
+      if (!directoryDragPreview) return;
+      directoryDragPreview.style.width = `${width}px`;
+      directoryDragPreview.style.transform = `translate3d(${Math.max(8, Math.min(window.innerWidth - width - 8, latestX - grabX))}px, ${latestY - grabY + 16}px, 0)`;
     };
     const scroll = () => {
       scrollFrame = undefined;
       if (!active || !scrollRef) return;
+      paintPreview();
       const rect = scrollRef.getBoundingClientRect();
-      const distance = latestY < rect.top + 32 ? latestY - rect.top - 32 : latestY > rect.bottom - 32 ? latestY - rect.bottom + 32 : 0;
-      if (!distance) return;
-      scrollRef.scrollTop += Math.max(-12, Math.min(12, distance / 3));
-      targetAt(latestY);
-      scrollFrame = requestAnimationFrame(scroll);
+      const distance = latestY < rect.top + 40 ? latestY - rect.top - 40 : latestY > rect.bottom - 40 ? latestY - rect.bottom + 40 : 0;
+      const previous = scrollRef.scrollTop;
+      if (latestX >= rect.left - 32 && latestX <= rect.right + 32) scrollRef.scrollTop += Math.max(-14, Math.min(14, distance / 3));
+      targetAt();
+      if (scrollRef.scrollTop !== previous) scrollFrame = requestAnimationFrame(scroll);
+    };
+    const activate = () => {
+      active = true;
+      document.documentElement.style.cursor = 'grabbing';
+      suppressDirectoryClick = true;
+      setDirectoryDrag({ path });
+      paintPreview();
+      targetAt();
+    };
+    if (event.pointerType === 'touch') timer = window.setTimeout(activate, 350);
+    const move = (next: PointerEvent) => {
+      if (next.pointerId !== pointerID) return;
+      latestX = next.clientX; latestY = next.clientY;
+      const distance = Math.hypot(latestX - startX, latestY - startY);
+      if (!active && event.pointerType === 'touch' && distance > 8) { stopDirectoryGesture?.(); return; }
+      if (!active && event.pointerType !== 'touch' && distance > 5) activate();
+      if (!active) return;
+      next.preventDefault();
+      if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(scroll);
     };
     const preventTouchScroll = (next: TouchEvent) => { if (active) next.preventDefault(); };
     const finish = (next?: PointerEvent) => {
       if (next && next.pointerId !== pointerID) return;
       if (next?.type === 'pointerup' && active) {
-        targetAt(next.clientY);
+        latestX = next.clientX; latestY = next.clientY;
+        targetAt();
         const target = directoryDrag()?.target;
         if (target) commitDirectoryMove(path, target.path, target.placement);
       }
@@ -533,10 +568,11 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     };
     const cancel = () => finish();
     const selection = (next: Event) => { if (active) next.preventDefault(); };
+    const originalCursor = document.documentElement.style.cursor;
     stopDirectoryGesture = () => {
       stopDirectoryGesture = undefined;
+      if (active) window.setTimeout(() => { suppressDirectoryClick = false; }, 0);
       if (timer !== undefined) window.clearTimeout(timer);
-      timer = undefined;
       if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', finish);
@@ -545,6 +581,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       window.removeEventListener('touchmove', preventTouchScroll);
       document.removeEventListener('selectstart', selection, true);
       document.removeEventListener('contextmenu', selection, true);
+      document.documentElement.style.cursor = originalCursor;
       setDirectoryDrag(null);
     };
     window.addEventListener('pointermove', move, { passive: false });
@@ -567,6 +604,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     const state = drag();
     if (!state || !scrollRef) return;
     const rows = Array.from(scrollRef.querySelectorAll<HTMLElement>('[data-flower-thread-card][data-pinned="true"]'))
+      .filter(row => !row.dataset.flowerThreadExiting)
       .filter(row => preferences().mode === 'time' || itemByID().get(row.dataset.threadId ?? '')?.working_dir.trim() === itemByID().get(state.threadID)?.working_dir.trim());
     const target = rows.find((row) => y <= row.getBoundingClientRect().bottom) ?? rows.at(-1);
     if (!target) return;
@@ -710,7 +748,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   });
 
   return (
-    <div ref={listRef} class="flower-thread-list flex min-h-0 flex-col gap-2 p-2">
+    <div ref={listRef} class="flower-thread-list flex min-h-0 flex-col gap-2 p-2" data-view={preferences().mode}>
       <div class="flower-thread-list-toolbar flex flex-col gap-2">
         <div class="flower-thread-list-header flex items-center gap-2">
           <div class="flower-thread-list-heading min-w-0 flex-1">
@@ -719,10 +757,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
               <p class="sr-only" role="status">{copy().warmupDescription}</p>
             </Show>
           </div>
-          <SegmentedControl class="flower-thread-view-switch" role="radiogroup" aria-label={copy().title} size="sm"
-            value={preferences().mode} onChange={mode => updatePreferences({ ...preferences(), mode: mode === 'directory' ? 'directory' : 'time' })}
-            options={[{ value: 'time', label: copy().viewByTime, icon: Clock }, { value: 'directory', label: copy().viewByDirectory, icon: Folder }]} />
-          <button ref={workspaceTrigger} type="button" class="flower-thread-workspaces-button" aria-label={copy().workspaces} title={copy().workspaces}
+          <button ref={workspaceTrigger} type="button" class="flower-thread-workspaces-button" aria-haspopup="dialog" aria-expanded={workspacesOpen()} aria-label={copy().workspaces} title={copy().workspaces}
             disabled={showLoadingSkeleton()} onClick={() => { setMenu(null); setWorkspaceQuery(''); setWorkspaceLimits(new Map()); restoreWorkspaceFocus = true; setWorkspacesOpen(true); }}><Grid class="h-3.5 w-3.5" /></button>
           <button
             type="button"
@@ -736,6 +771,18 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             <Refresh class={cn('h-3.5 w-3.5', (props.refreshing || props.warmup || props.loading) && 'animate-spin')} />
           </button>
         </div>
+        <SegmentedControl class="flower-thread-view-switch" role="radiogroup" aria-label={copy().title} size="sm"
+          value={preferences().mode} onChange={mode => {
+            updatePreferences({ ...preferences(), mode: mode === 'directory' ? 'directory' : 'time' });
+            const rows = scrollRef?.querySelector<HTMLElement>('.flower-thread-rows');
+            if (rows && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+              for (const animation of rows.getAnimations()) if (animation.id === 'flower-thread-view') animation.cancel();
+              const style = getComputedStyle(rows);
+              const animation = rows.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: parseFloat(style.getPropertyValue('--floe-duration-fast')) || 140, easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out' });
+              animation.id = 'flower-thread-view';
+            }
+          }}
+          options={[{ value: 'time', label: copy().viewByTime, icon: Clock }, { value: 'directory', label: copy().viewByDirectory, icon: Folder }]} />
         <label class="relative block">
           <Search class="flower-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <Input
@@ -825,22 +872,17 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                       title={path || copy().noDirectory} aria-label={path || copy().noDirectory} aria-description={directoryReorderable() ? copy().reorderDirectory : undefined}
                       onPointerDown={event => beginDirectoryGesture(event, path)}
                       onClick={() => toggleDirectory(path)}
-                      onKeyDown={event => {
-                        if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') || !directoryReorderable()) return;
-                        event.preventDefault();
-                        const paths = allDirectoryGroups().map(entry => entry.path);
-                        const direction = event.key === 'ArrowUp' ? -1 : 1;
-                        const anchor = paths[paths.indexOf(path) + direction];
-                        if (anchor !== undefined) commitDirectoryMove(path, anchor, direction < 0 ? 'before' : 'after');
-                      }}>
+                      onKeyDown={event => moveDirectoryWithKeyboard(event, path)}>
                       <ChevronRight class="flower-directory-chevron h-3 w-3 shrink-0" />
                       <Folder class="h-3.5 w-3.5 shrink-0" /><span class="flower-directory-name" data-full-path={duplicateDirectoryNames().has(directoryLabel(path)) ? 'true' : undefined}>{duplicateDirectoryNames().has(directoryLabel(path)) ? path : directoryLabel(path)}</span><span class="flower-directory-count">{group()?.threadIDs.length}</span>
                     </button>
+                    <Show when={directoryReorderable()}><button type="button" class="flower-directory-drag-handle" aria-label={`${copy().reorderDirectory}: ${path || copy().noDirectory}`} title={copy().reorderDirectory}
+                      onPointerDown={event => beginDirectoryGesture(event, path)} onKeyDown={event => moveDirectoryWithKeyboard(event, path)}><GripVertical class="h-3.5 w-3.5" /></button></Show>
                     <Show when={path && props.onNewInDirectory}><button type="button" class="flower-directory-new" aria-label={copy().newInDirectory(path)}
                       title={copy().newInDirectory(path)} disabled={props.warmup || props.loading} onClick={() => props.onNewInDirectory?.(path)}><Plus class="h-3.5 w-3.5" /></button></Show>
                   </div>;
                 }
-                return <h3 class="flower-thread-group-label px-1 text-[11px] font-semibold uppercase tracking-[0.08em]">
+                return <h3 class="flower-thread-group-label px-1 text-[11px] font-semibold" data-pinned-group={group()?.kind === 'pinned' ? 'true' : undefined}>
                   {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
                 </h3>;
               }
@@ -870,13 +912,13 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                 onRename={props.onMenuAction ? (value) => props.onMenuAction?.('rename', value) : undefined}
                 onPin={props.canPin && props.onMenuAction ? value => togglePin(value) : undefined}
                 pinBusy={props.pinBusy}
-                showPinnedBadge={preferences().mode === 'directory'}
+                showPinnedBadge
                 reorderable={canReorder()}
                 onDragStart={props.onMovePinned ? startDrag : undefined}
                 onDragOver={overDrag}
                 onDragEnd={cancelDrag}
                 onDrop={dropDrag}
-                dragging={drag()?.threadID === threadID}
+                dragging={drag()?.threadID === threadID || directoryDrag()?.path === item().working_dir.trim()}
                 dropPosition={drag()?.target?.anchor_thread_id === threadID ? drag()?.target?.placement : undefined}
               />;
             }} />
@@ -884,9 +926,15 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           </Show>
         </Show>
       </div>
+      <Show when={directoryDrag()}>{state => <Portal>
+        <div ref={directoryDragPreview} class="flower-directory-drag-preview" data-flower-directory-drag-preview data-floe-surface="floating" aria-hidden="true">
+          <GripVertical class="h-3.5 w-3.5" /><Folder class="h-4 w-4" />
+          <span>{directoryLabel(state().path)}</span><span class="flower-directory-count">{allDirectoryGroups().find(group => group.path === state().path)?.threads.length}</span>
+        </div>
+      </Portal>}</Show>
       <DialogPlacementProvider mode="global">
-        <Dialog open={workspacesOpen() && props.visible !== false} onOpenChange={setWorkspacesOpen} title={copy().workspaces} closeLabel={copy().closeWorkspaces}
-          class="flower-workspaces-dialog" contentClass="flower-workspaces-dialog-content" onPresenceChange={present => {
+        <Dialog open={workspacesOpen() && props.visible !== false} onOpenChange={setWorkspacesOpen} title={<span class="flower-workspaces-title"><Grid class="h-4 w-4" />{copy().workspaces}</span>} closeLabel={copy().closeWorkspaces}
+          class="flower-workspaces-dialog" contentClass="flower-workspaces-dialog-content overflow-hidden" onPresenceChange={present => {
             if (!present && !workspacesOpen() && restoreWorkspaceFocus) queueMicrotask(() => {
               if (document.activeElement === document.body) workspaceTrigger?.focus({ preventScroll: true });
             });
@@ -896,56 +944,61 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             <Input class="pl-9" value={workspaceQuery()} placeholder={copy().searchPlaceholder} aria-label={copy().searchPlaceholder}
               onInput={event => { setWorkspaceQuery(event.currentTarget.value); setWorkspaceLimits(new Map()); }} />
           </label>
-          <div ref={workspaceGrid} class="flower-workspaces-grid">
-            <Show when={workspacePaths().length > 0} fallback={<div class="flower-workspaces-empty">{copy().empty}</div>}>
-              <For each={workspacePaths()}>{path => {
-                const threads = () => workspaceGroupByPath().get(path)?.threads ?? [];
-                return <Card variant="well" class="flower-workspace-card" role="group" aria-label={path || copy().noDirectory} data-flower-workspace={path}>
-                  <div class="flower-workspace-heading">
-                    <div class="flower-workspace-icon"><Folder class="h-4 w-4" /></div>
-                    <div class="flower-workspace-identity">
-                      <div class="flower-workspace-name" title={path || copy().noDirectory}>{directoryLabel(path)}</div>
-                      <Show when={path}><div class="flower-workspace-path" title={path}>{path}</div></Show>
-                    </div>
-                    <span class="flower-directory-count">{threads().length}</span>
-                    <Show when={path && props.onNewInDirectory}><button type="button" class="flower-directory-new" aria-label={copy().newInDirectory(path)}
-                      title={copy().newInDirectory(path)} disabled={props.warmup || props.loading}
-                      onClick={() => { restoreWorkspaceFocus = false; setWorkspacesOpen(false); props.onNewInDirectory?.(path); }}><Plus class="h-4 w-4" /></button></Show>
-                  </div>
-                  <FlowerThreadRows class="flower-workspace-threads" keys={[
-                    ...threads().slice(0, workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE).map(item => `thread:${item.thread_id}`),
-                    ...(threads().length > (workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE) ? ['more'] : []),
-                  ]} render={key => {
-                    if (key === 'more') return <button type="button" class="flower-directory-more" onClick={() => showMore(path, true)}>
-                      {copy().showMoreThreads(Math.min(FLOWER_DIRECTORY_PAGE_SIZE, threads().length - (workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE)))}
-                    </button>;
-                    const threadID = key.slice('thread:'.length);
-                    const item = createMemo<FlowerThreadListItem>(previous => itemByID().get(threadID) ?? previous!);
-                    const indicator = () => flowerThreadIndicator(item(), copy());
-                    return <div class="flower-workspace-thread" data-flower-workspace-thread-id={threadID} data-active={props.activeThreadID === threadID ? 'true' : undefined}>
-                      <button type="button" class="flower-workspace-thread-select" aria-current={props.activeThreadID === threadID ? 'true' : undefined}
-                        aria-label={[item().title, indicator().ariaStatus, indicator().attention === 'unread' ? copy().unread : '', item().pinned ? copy().pinnedGroup : ''].filter(Boolean).join(', ')}
-                        onClick={() => {
-                          restoreWorkspaceFocus = false;
-                          setWorkspacesOpen(false);
-                          setLocalRevealThreadID(threadID);
-                          if (props.onSelectFromWorkspace) props.onSelectFromWorkspace(threadID); else props.onSelect(threadID);
-                        }}>
-                        <span class="flower-workspace-indicator" title={indicator().title} aria-hidden="true">
-                          <Show when={indicator().visual === 'wave'}><FlowerThreadWave /></Show>
-                          <Show when={indicator().visual === 'dot'}><span class="flower-workspace-unread" /></Show>
-                          <Show when={indicator().actionRequired}><Show when={item().status === 'waiting_approval'} fallback={<MessageSquare class="h-3 w-3" />}><ShieldCheck class="h-3 w-3" /></Show></Show>
-                        </span>
-                        <span class="flower-workspace-thread-title">{item().title}</span><span class="flower-workspace-thread-time">{fmtFlowerShortTime(item().created_at_ms, copy())}</span>
-                      </button>
-                      <Show when={props.canPin && props.onMenuAction && canPinThreadItem(item())}><button type="button" class="flower-workspace-thread-pin" aria-label={`${item().pinned ? copy().unpin : copy().pin}: ${item().title}`}
-                        title={item().pinned ? copy().unpin : copy().pin} aria-pressed={item().pinned} disabled={props.pinBusy} onClick={() => togglePin(item(), undefined, true)}>
-                        <FlowerPinIcon pinned={item().pinned} class="h-3.5 w-3.5" /></button></Show>
-                    </div>;
-                  }} />
-                </Card>;
-              }}</For>
-            </Show>
+          <div class="flower-workspaces-scroll">
+            <div ref={workspaceGrid} class="flower-workspaces-grid">
+              <Show when={workspacePaths().length > 0} fallback={<div class="flower-workspaces-empty">{copy().empty}</div>}>
+                <For each={[0, 1]}>{column => <div class="flower-workspaces-column">
+                  <For each={workspacePaths().slice(column * Math.ceil(workspacePaths().length / 2), (column + 1) * Math.ceil(workspacePaths().length / 2))}>{path => {
+                    const threads = () => workspaceGroupByPath().get(path)?.threads ?? [];
+                    return <Card variant="well" class="flower-workspace-card" role="group" aria-label={path || copy().noDirectory} data-flower-workspace={path}>
+                      <div class="flower-workspace-heading">
+                        <div class="flower-workspace-icon"><Folder class="h-4 w-4" /></div>
+                        <div class="flower-workspace-identity">
+                          <div class="flower-workspace-name" title={path || copy().noDirectory}>{directoryLabel(path)}</div>
+                          <Show when={path}><div class="flower-workspace-path" title={path}>{path}</div></Show>
+                        </div>
+                        <span class="flower-directory-count">{threads().length}</span>
+                        <Show when={path && props.onNewInDirectory}><button type="button" class="flower-directory-new" aria-label={copy().newInDirectory(path)}
+                          title={copy().newInDirectory(path)} disabled={props.warmup || props.loading}
+                          onClick={() => { restoreWorkspaceFocus = false; setWorkspacesOpen(false); props.onNewInDirectory?.(path); }}><Plus class="h-4 w-4" /></button></Show>
+                      </div>
+                      <FlowerThreadRows class="flower-workspace-threads" keys={[
+                        ...threads().slice(0, workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE).map(item => `thread:${item.thread_id}`),
+                        ...(threads().length > (workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE) ? ['more'] : []),
+                      ]} render={key => {
+                        if (key === 'more') return <button type="button" class="flower-directory-more" onClick={() => showMore(path, true)}>
+                          {copy().showMoreThreads(Math.min(FLOWER_DIRECTORY_PAGE_SIZE, threads().length - (workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE)))}
+                        </button>;
+                        const threadID = key.slice('thread:'.length);
+                        const item = createMemo<FlowerThreadListItem>(previous => itemByID().get(threadID) ?? previous!);
+                        const indicator = () => flowerThreadIndicator(item(), copy());
+                        return <div class="flower-workspace-thread" data-flower-workspace-thread-id={threadID} data-flower-thread-indicator={indicator().visual} data-pinned={item().pinned ? 'true' : undefined} data-active={props.activeThreadID === threadID ? 'true' : undefined}>
+                          <button type="button" class="flower-workspace-thread-select" aria-current={props.activeThreadID === threadID ? 'true' : undefined}
+                            aria-label={[item().title, indicator().ariaStatus, indicator().attention === 'unread' ? copy().unread : '', item().pinned ? copy().pinnedGroup : ''].filter(Boolean).join(', ')}
+                            onClick={() => {
+                              restoreWorkspaceFocus = false;
+                              setWorkspacesOpen(false);
+                              setLocalRevealThreadID(threadID);
+                              if (props.onSelectFromWorkspace) props.onSelectFromWorkspace(threadID); else props.onSelect(threadID);
+                            }}>
+                            <span class="flower-workspace-indicator" title={indicator().title} aria-hidden="true">
+                              <Show when={indicator().visual === 'wave'}><FlowerThreadWave /></Show>
+                              <Show when={indicator().visual === 'dot'}><span class="flower-workspace-unread" /></Show>
+                              <Show when={item().pinned && indicator().visual === 'none'}><FlowerPinIcon pinned class="flower-workspace-leading-pin" /></Show>
+                              <Show when={indicator().actionRequired}><Show when={item().status === 'waiting_approval'} fallback={<MessageSquare class="h-3 w-3" />}><ShieldCheck class="h-3 w-3" /></Show></Show>
+                            </span>
+                            <span class="flower-workspace-thread-title">{item().title}</span><span class="flower-workspace-thread-time">{fmtFlowerShortTime(item().created_at_ms, copy())}</span>
+                          </button>
+                          <Show when={props.canPin && props.onMenuAction && canPinThreadItem(item())}><button type="button" class="flower-workspace-thread-pin" aria-label={`${item().pinned ? copy().unpin : copy().pin}: ${item().title}`}
+                            title={item().pinned ? copy().unpin : copy().pin} aria-pressed={item().pinned} disabled={props.pinBusy} onClick={() => togglePin(item(), undefined, true)}>
+                            <FlowerPinIcon pinned={item().pinned} class="h-3.5 w-3.5" /></button></Show>
+                        </div>;
+                      }} />
+                    </Card>;
+                  }}</For>
+                </div>}</For>
+              </Show>
+            </div>
           </div>
         </Dialog>
       </DialogPlacementProvider>

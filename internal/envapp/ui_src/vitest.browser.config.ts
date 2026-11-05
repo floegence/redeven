@@ -993,6 +993,26 @@ export default mergeConfig(viteConfig, defineConfig({
             await session.detach();
           }
         },
+        dragFlowerDirectoryWithMouse: async ({ page }) => {
+          const frame = await frameForSelector(page, '[data-flower-directory-header="/two/project"]');
+          const handle = frame.locator('[data-flower-directory-header="/two/project"] .flower-directory-drag-handle');
+          await handle.hover();
+          const start = await handle.boundingBox();
+          const target = await frame.locator('[data-flower-directory-header="/one/project"]').boundingBox();
+          if (!start || !target) throw new Error('Directory drag targets are unavailable');
+          try {
+            await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(target.x + target.width / 2, target.y + 2, { steps: 12 });
+            await frame.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+            const preview = await frame.locator('[data-flower-directory-drag-preview]').count();
+            const indicator = await frame.locator('[data-flower-directory-header="/one/project"]').getAttribute('data-drop-before');
+            await page.mouse.up();
+            return { preview, indicator, order: await frame.locator('[data-flower-directory-header]').evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.flowerDirectoryHeader)),
+              expanded: await frame.locator('[data-flower-directory-header="/two/project"] .flower-directory-toggle').getAttribute('aria-expanded'),
+              previewAfter: await frame.locator('[data-flower-directory-drag-preview]').count() };
+          } finally { await page.mouse.up(); }
+        },
         dragFlowerDirectoryWithTouch: async ({ page }) => {
           const frame = await frameForSelector(page, '[data-flower-directory-header="/two/project"]');
           const session = await page.context().newCDPSession(page);
