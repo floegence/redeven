@@ -88,6 +88,8 @@ import type {
   FlowerTurnLauncherIntent,
   FlowerTurnLauncherSubmitInput,
   FlowerTurnLaunchInput,
+  FlowerEmbeddedConversation,
+  FlowerConversationParts,
 } from '../../../../flower_ui/src';
 import { prepareFlowerNewConversationInput } from '../../../../flower_ui/src/conversationPreferences';
 import { flowerTurnAdmissionFailureKind } from '../../../../flower_ui/src/flowerTurnAdmission';
@@ -1962,6 +1964,18 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     setPluginCreationProjectID('');
     setPluginCreationThreadID(undefined);
   };
+  const pluginCreationConversation = (): FlowerEmbeddedConversation => ({
+    get scope() { return `plugin-creation:${pluginCreationProjectID()}`; },
+    get threadID() { return pluginCreationThreadID(); },
+    placeholder: i18n.t('uiCopy.plugin.flowerCreationPlaceholder'),
+    onAccepted: (receipt) => setPluginCreationThreadID(receipt.thread_id),
+    render: (parts: FlowerConversationParts) => (
+      <div class="plugin-creation-flower-surface" data-plugin-creation-flower>
+        <div class="plugin-creation-flower-conversation">{parts.conversation}</div>
+        <div class="plugin-creation-flower-composer">{parts.composer}</div>
+      </div>
+    ),
+  });
   const renderPluginCreation = () => <PluginCreationWorkspace
     open={pluginCreationOpen()}
     mode={pluginCreationMode()}
@@ -1972,6 +1986,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     onDeleteProject={deletePluginCreation}
     renderFlower={() => <EnvAIPage
       draftCoordinator={flowerDraftCoordinator}
+      embeddedConversation={pluginCreationConversation()}
       presentation="full"
       engaged={pluginCreationOpen()}
       transcriptVisible={pluginCreationOpen()}
@@ -5255,7 +5270,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       <Show when={auditOpen()}>
         <AuditLogDialog open envId={envId()} onClose={() => setAuditOpen(false)} />
       </Show>
-      {renderPluginCreation()}
       <Show when={fileBrowserSurfaceHostRequested()}>
         <FileBrowserSurfaceHost />
       </Show>
@@ -5305,7 +5319,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           {renderPluginCenter(true)}
         </PluginCenterDrawer>
       </Show>
-      {renderPluginCreation()}
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>
         <Show
           when={accessGatePhase() === 'unlock_required'}
@@ -5358,6 +5371,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const renderMainShell = () => (
     <>
+      <Show when={pluginCreationOpen()} fallback={(
+      <>
       <AppViewport>
         <div
           class="flex h-full min-h-0 flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
@@ -5446,6 +5461,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       </For>
       {renderNotesOverlay()}
       <PluginConfirmationDialog queue={pluginConfirmationQueue} />
+      </>
+      )}>
+        <AppViewport>
+          <div class="relative h-full min-h-0 overflow-hidden" data-redeven-plugin-creation-page>
+            {renderPluginCreation()}
+          </div>
+        </AppViewport>
+      </Show>
     </>
   );
 
