@@ -52,4 +52,3 @@ Navigation grants no Runtime authority. [Ask Flower windows](../ui/flower-activi
 - `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.
 - `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.
 - `redeven:desktop/scripts/check-office-preview.mjs` - Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.
-- `floe-webapp:scripts/check-select-motion-browser.mjs` - Select/Combobox/MultiSelect motion and collision checks in Chromium, WebKit and Firefox.

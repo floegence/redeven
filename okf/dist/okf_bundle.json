@@ -16598,7 +16598,7 @@
         "title": "Desktop Welcome navigation",
         "type": "UI Contract"
       },
-      "body_length": 5229,
+      "body_length": 5082,
       "summary": "Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Visited pages retain state; readiness gates Flower requests, not navigation. Explicit Environment tab changes may animate cards, while refresh/return preserves headers and skips entrance replay.",
       "sections": [
         {
@@ -16619,8 +16619,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:desktop/src/welcome/App.tsx` - Source.\n- `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.\n- `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.\n- `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.\n- `redeven:desktop/scripts/check-office-preview.mjs` - Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.\n- `floe-webapp:scripts/check-select-motion-browser.mjs` - Select/Combobox/MultiSelect motion and collision checks in Chromium, WebKit and Firefox.",
-          "char_count": 774
+          "body": "- `redeven:desktop/src/welcome/App.tsx` - Source.\n- `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.\n- `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.\n- `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.\n- `redeven:desktop/scripts/check-office-preview.mjs` - Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.",
+          "char_count": 627
         }
       ],
       "evidence": [
@@ -16648,11 +16648,6 @@
           "id": "redeven:desktop/scripts/check-office-preview.mjs:0:electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.",
           "source": "redeven:desktop/scripts/check-office-preview.mjs",
           "description": "Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity."
-        },
-        {
-          "id": "floe-webapp:scripts/check-select-motion-browser.mjs:0:select/combobox/multiselect motion and collision checks in chromium, webkit and firefox.",
-          "source": "floe-webapp:scripts/check-select-motion-browser.mjs",
-          "description": "Select/Combobox/MultiSelect motion and collision checks in Chromium, WebKit and Firefox."
         }
       ],
       "snippet": "Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Visited pages retain state; readiness gates Flower requests, not navigation. Explicit Environment tab changes may animate cards, while refresh/retur",
@@ -25692,5 +25687,5 @@
       ]
     }
   ],
-  "source_sha256": "235097c160808ac6aad0d0edd7cd9ddf584f7de49191ecd9f6e1a3c6c45e92b5"
+  "source_sha256": "e3768a30ca6eee48d691e3a4cab7ce66569d90047a5626f6e0903a6d17612498"
 }
