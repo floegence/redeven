@@ -8123,7 +8123,6 @@
     "unlockHint": "Le mode déverrouillage n’envoie que les événements physiques du clavier et du pointeur. Presse-papiers, collage, raccourcis et commandes normales restent désactivés.",
     "startUnlock": "Commencer le déverrouillage",
     "unlocking": "Déverrouillage de l’hôte…",
-    "unlockRateLimited": "Trop d’actions sur l’écran verrouillé. Attendez une minute avant de réessayer.",
     "unlockPhysicalOnly": "Le mode déverrouillage accepte uniquement le clavier et le pointeur physiques.",
     "unlockFailed": "Échec du déverrouillage. L’hôte reste verrouillé ; réessayez ou annulez.",
     "deployPlatformUnsupported": "Ce système d’exploitation ne prend pas en charge l’installation du bureau à distance via SSH.",

@@ -8123,7 +8123,6 @@
     "unlockHint": "解锁模式只发送物理键盘和指针事件。剪贴板、粘贴、快捷键及普通控制均已禁用。",
     "startUnlock": "开始解锁",
     "unlocking": "正在解锁主机…",
-    "unlockRateLimited": "锁屏操作过于频繁，请等待一分钟后重试。",
     "unlockPhysicalOnly": "解锁模式仅接受物理键盘和指针输入。",
     "unlockFailed": "解锁失败。主机仍处于锁定状态，可重试或取消。",
     "deployPlatformUnsupported": "此操作系统暂不支持通过 SSH 部署远程桌面。",

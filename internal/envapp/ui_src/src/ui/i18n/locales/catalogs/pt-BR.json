@@ -8123,7 +8123,6 @@
     "unlockHint": "O modo de desbloqueio envia apenas eventos físicos de teclado e ponteiro. Área de transferência, colagem, atalhos e controles normais ficam desativados.",
     "startUnlock": "Iniciar desbloqueio",
     "unlocking": "Desbloqueando o host…",
-    "unlockRateLimited": "Muitas ações na tela de bloqueio. Aguarde um minuto e tente novamente.",
     "unlockPhysicalOnly": "O modo de desbloqueio aceita apenas teclado e ponteiro físicos.",
     "unlockFailed": "Falha ao desbloquear. O host continua bloqueado; tente novamente ou cancele.",
     "deployPlatformUnsupported": "Este sistema operacional não oferece suporte à instalação da área de trabalho remota por SSH.",

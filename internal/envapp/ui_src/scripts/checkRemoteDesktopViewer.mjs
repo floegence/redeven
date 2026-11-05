@@ -1212,9 +1212,6 @@ await session.run(async () => {
       assert(await page.locator('#connection').isHidden(), 'painted lock screen retained the connection overlay');
       assert(await page.locator('#clipboard').isDisabled(), 'lock screen exposed clipboard');
       assert(await page.locator('#shortcuts').isDisabled(), 'lock screen exposed shortcuts');
-      control.send(JSON.stringify({ version: 1, type: 'error', code: 'UNLOCK_RATE_LIMITED' }));
-      await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('Wait one minute'));
-      assert(!((await page.locator('#notice').textContent()) ?? '').includes('failed'), 'rate limiting was reported as a password failure');
       const beforeUnlock = messages.length;
       assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock must keep the local text editor disabled');
       assert(

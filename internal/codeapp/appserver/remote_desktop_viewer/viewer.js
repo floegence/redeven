@@ -342,7 +342,6 @@ async function connect() {
         }
         else if (['DISPLAY_DISCONNECTED', 'DISPLAY_INACTIVE', 'GPU_SCANOUT_UNSUPPORTED', 'LOGIN_SESSION_UNSUPPORTED', 'LOGIN_SESSION_STALE_RUNTIME', 'LOGIN_SESSION_COMPOSITOR_CHANGED', 'LOGIN_SESSION_COMPOSITOR_MISSING', 'LOGIN_SESSION_COMPOSITOR_AMBIGUOUS', 'LOGIN_SESSION_NO_ACTIVE_SEAT', 'LOGIN_SESSION_TTY_MISMATCH', 'SERVICE_UPDATE_REQUIRED'].includes(message.code)) showUnavailable(message.code);
         else if (/PERMISSION|AUTHORIZATION|HOST_ACTION/.test(message.code)) updateState({ ...message, state: 'permission_required' });
-        else if (message.code === 'UNLOCK_RATE_LIMITED') notice('unlockRateLimited');
         else if (/UNLOCK|LOGIN_SERVICE/.test(message.code)) { status('locked', 'unlockFailed'); notice('unlockFailed'); updateTransitionControls(); }
         else notice(message.code.includes('CLIPBOARD') ? 'clipboardFailed' : 'failure');
       }

@@ -8119,7 +8119,6 @@
     "unlockHint": "解鎖模式只會傳送實體鍵盤與指標事件。剪貼簿、貼上、快速鍵及一般控制均已停用。",
     "startUnlock": "開始解鎖",
     "unlocking": "正在解鎖主機…",
-    "unlockRateLimited": "鎖定畫面操作過於頻繁，請等待一分鐘後重試。",
     "unlockPhysicalOnly": "解鎖模式只接受實體鍵盤與指標輸入。",
     "unlockFailed": "解鎖失敗。主機仍保持鎖定，可重試或取消。",
     "deployPlatformUnsupported": "此作業系統暫不支援透過 SSH 部署遠端桌面。",

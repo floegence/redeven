@@ -8123,7 +8123,6 @@
     "unlockHint": "Im Entsperrmodus werden nur physische Tastatur- und Zeigerereignisse gesendet. Zwischenablage, Einfügen, Tastenkürzel und normale Steuerung bleiben deaktiviert.",
     "startUnlock": "Entsperren starten",
     "unlocking": "Host wird entsperrt…",
-    "unlockRateLimited": "Zu viele Sperrbildschirm-Aktionen. Warte eine Minute und versuche es erneut.",
     "unlockPhysicalOnly": "Im Entsperrmodus sind nur physische Tastatur- und Zeigereingaben möglich.",
     "unlockFailed": "Entsperren fehlgeschlagen. Der Host bleibt gesperrt; erneut versuchen oder abbrechen.",
     "deployPlatformUnsupported": "Die Einrichtung des Remotedesktops über SSH wird auf diesem Betriebssystem nicht unterstützt.",

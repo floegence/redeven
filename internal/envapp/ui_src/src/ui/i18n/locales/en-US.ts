@@ -229,7 +229,6 @@ export const enUS = defineDictionary({
     ,"unlockHint": "Unlock mode sends only physical keyboard and pointer events. Clipboard, paste, shortcuts, and ordinary controls stay disabled."
     ,"startUnlock": "Start unlocking"
     ,"unlocking": "Unlocking host…"
-    ,"unlockRateLimited": "Too many lock screen actions. Wait one minute and try again."
     ,"unlockPhysicalOnly": "Unlock mode accepts physical keyboard and pointer input only."
     ,"unlockFailed": "The unlock attempt failed. The host remains locked; try again or cancel."
 },
