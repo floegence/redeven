@@ -13,7 +13,7 @@ import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 import type { EnvAppTranslationKey } from './i18n/locales';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
-import { adapter, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, composerModelTrigger, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
 
 it.each([390, 1280])('keeps model search and management visible at %s px', async (width) => {
   await page.viewport(width, 900);
@@ -82,7 +82,7 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
   const attributes = ['class', 'style', 'data-floe-shell-theme'].map(name => [name, root.getAttribute(name)] as const);
   onTestFinished(() => { for (const [name, value] of attributes) { if (value === null) root.removeAttribute(name); else root.setAttribute(name, value); } });
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('Flash') === true);
-  const trigger = document.querySelector<HTMLButtonElement>(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')!;
+  const trigger = await composerModelTrigger(surface);
   trigger.click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
   for (const theme of ['paper', 'porcelain-dark']) {
