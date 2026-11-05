@@ -44,20 +44,20 @@ When it is missing or mismatched, install the exact published module:
 ```sh
 GOWORK=off go install github.com/floegence/redevplugin/v3/cmd/redevplugin@v{{REDEVPLUGIN_PLATFORM_VERSION}}
 redevplugin version
-redevplugin init dev.example.notes "Notes" notes --template data
+redevplugin init dev.example.notes "Notes" notes
 cd notes
 npm install
-redevplugin doctor .
-redevplugin check .
-redevplugin dev . --state ../notes-development --manual
+redevplugin dev .
 ```
 
 The initialization commands are an example for a new project; do not run init
 over an existing project. Invoke the installed binary by its actual path if
-GOBIN or GOPATH/bin is not on PATH. Node 26 is required; only Workers need Rust
-1.98.0 and the wasm32-unknown-unknown target. Use doctor diagnostics to resolve
-missing dependencies. Doctor inspects readiness without running author commands;
-check runs the configured typecheck, build, business tests, and package validation.
+GOBIN or GOPATH/bin is not on PATH. Generated projects require Node 26; Worker
+projects also need Rust 1.98.0 and the wasm32-unknown-unknown target. Dev checks
+readiness before starting and reports missing dependencies. Use
+`redevplugin doctor .` for environment diagnostics without running author commands;
+`redevplugin check .` runs configured typechecking, build, business tests, and
+package validation.
 
 ## Standalone CLI preview
 
@@ -65,8 +65,14 @@ These CLI steps apply only outside a dedicated Plugin Center draft. Inside a
 draft, the workspace owns preview and installation; never launch another dev server.
 
 Open the local preview URL printed by dev. Keep one development process for the
-chosen project and use its output to diagnose failures. An explicit state directory
-outside the source project preserves application data and grants across restarts;
+chosen project and use its output to diagnose failures. For persistent data and
+explicit candidate review, run:
+
+```sh
+redevplugin dev . --state ../notes-development --manual
+```
+
+An explicit state directory outside the source project preserves application data and grants across restarts;
 each restart creates fresh session authority. Manual mode stages successful builds
 until Apply update is confirmed, so the active frame and unsaved drafts remain
 available while editing. Save drafts before applying or reloading: the replacement
