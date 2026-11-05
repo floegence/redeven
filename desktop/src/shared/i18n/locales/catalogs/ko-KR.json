@@ -1063,6 +1063,7 @@
       "goalSet": "목표 설정됨",
       "goalDeleted": "목표 삭제됨",
       "commandGoal": "목표를 설정하여 작업 시작 또는 업데이트",
+      "commandPlugin": "플러그인 만들기",
       "goalUnavailable": "이 환경에서는 목표를 관리할 수 없습니다.",
       "goalReviewIncomplete": "목표 미완료",
       "goalReviewBlocked": "목표 진행이 막힘",

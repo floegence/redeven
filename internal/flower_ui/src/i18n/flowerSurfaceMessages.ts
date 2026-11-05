@@ -217,6 +217,7 @@ export const flowerSurfaceEnUS = {
     goalSet: "Goal set",
     goalDeleted: "Goal deleted",
     commandGoal: "Set a goal to start or update work",
+    commandPlugin: 'Create a plugin',
     goalUnavailable: "Goal management is unavailable in this environment.",
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact context and continue an unfinished Goal, if any',

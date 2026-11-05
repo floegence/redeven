@@ -580,6 +580,7 @@ export type FlowerSurfaceCopy = Readonly<{
     goalSet: string;
     goalDeleted: string;
     commandGoal: string;
+    commandPlugin: string;
     goalUnavailable: string;
     commandMenuLabel: string;
     commandCompactContext: string;
@@ -1101,6 +1102,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     goalSet: "Goal set",
     goalDeleted: "Goal deleted",
     commandGoal: "Set a goal to start or update work",
+    commandPlugin: 'Create a plugin',
     goalUnavailable: "Goal management is unavailable in this environment.",
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact context and continue an unfinished Goal, if any',

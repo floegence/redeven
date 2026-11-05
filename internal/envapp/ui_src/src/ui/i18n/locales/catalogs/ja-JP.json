@@ -5982,6 +5982,7 @@
       "goalSet": "目標を設定",
       "goalDeleted": "目標を削除",
       "commandGoal": "目標を設定して作業を開始・更新",
+      "commandPlugin": "プラグインを作成",
       "goalUnavailable": "この環境では目標を管理できません。",
       "goalReviewIncomplete": "目標は未達成です",
       "goalReviewBlocked": "目標の達成が妨げられています",

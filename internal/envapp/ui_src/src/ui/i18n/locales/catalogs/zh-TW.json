@@ -5982,6 +5982,7 @@
       "goalSet": "已設定目標",
       "goalDeleted": "已刪除目標",
       "commandGoal": "設定目標，開始或更新任務",
+      "commandPlugin": "建立外掛程式",
       "goalUnavailable": "目前環境無法管理目標。",
       "goalReviewIncomplete": "目標尚未完成",
       "goalReviewBlocked": "目標受阻",

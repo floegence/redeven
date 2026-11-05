@@ -38,7 +38,7 @@ it.each(['/', '/com', '/compac', '  /com  '])('clears accepted command prefix %j
   expect(base.launchTurn).not.toHaveBeenCalled();
   pending.resolve(accepted());
   await waitFor(() => input.value === '');
-  expect(surface.querySelector('.flower-composer-command-menu')).toBeNull();
+  expect(surface.querySelector('.flower-composer-command-menu:not([inert])')).toBeNull();
   expect(input.getAttribute('aria-expanded')).not.toBe('true');
   expect(document.activeElement).toBe(input);
   expect(input.disabled).toBe(false);
@@ -61,7 +61,7 @@ it.each(['suggestion', 'primary'] as const)('uses the same accepted prefix throu
   await userEvent.click(button);
   await waitFor(() => compact.mock.calls.length === 1 && input.value === '');
   expect(base.launchTurn).not.toHaveBeenCalled();
-  expect(surface.querySelector('.flower-composer-command-menu')).toBeNull();
+  expect(surface.querySelector('.flower-composer-command-menu:not([inert])')).toBeNull();
 });
 
 it('keeps partial commands editable during composition and Shift+Enter', async () => {
@@ -80,7 +80,7 @@ it('keeps partial commands editable during composition and Shift+Enter', async (
   expect(base.launchTurn).not.toHaveBeenCalled();
   await userEvent.keyboard('{Backspace}{Enter}');
   await waitFor(() => compact.mock.calls.length === 1 && input.value === '');
-  expect(surface.querySelector('.flower-composer-command-menu')).toBeNull();
+  expect(surface.querySelector('.flower-composer-command-menu:not([inert])')).toBeNull();
 });
 
 it('routes canvas compaction independently and preserves edited draft and canvas reference', async () => {
@@ -376,7 +376,37 @@ it.each([{ theme: 'light', width: 1100 }, { theme: 'dark', width: 1100 }, { them
   } finally { document.documentElement.classList.remove('dark', 'light'); }
 });
 
-it.each(['pointer', 'keyboard'])('offers pure compaction through the same command menu with %s', async method => {
+it.each([1000, 375])('shows a compact, uniquely identified command menu at %ipx', async width => {
+  await page.viewport(width, 850);
+  const surface = renderSurfaceWithAdapterProps(adapter(true), { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
+  const input = surface.querySelector<HTMLTextAreaElement>('textarea')!;
+  input.value = '/';
+  input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '/' }));
+  input.focus();
+  await waitFor(() => surface.querySelectorAll('.flower-composer-command-item').length >= 3);
+  const items = [...surface.querySelectorAll<HTMLElement>('.flower-composer-command-item')];
+  expect(items.map(item => item.querySelector('.flower-composer-command-token')?.textContent)).toEqual(['/compact', '/goal', '/plugin']);
+  expect(items.map(item => item.querySelector('.flower-composer-command-description')?.textContent)).toEqual([
+    'Compact context and continue an unfinished Goal, if any',
+    'Set a goal to start or update work',
+    'Create a plugin',
+  ]);
+  expect(new Set(items.map(item => item.id)).size).toBe(3);
+  const menu = surface.querySelector<HTMLElement>('.flower-composer-command-menu')!;
+  await waitFor(() => menu.dataset.floatingPresence === 'open');
+  expect(menu.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+  expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+  for (const item of items) {
+    expect(item.getBoundingClientRect().height).toBeLessThanOrEqual(64);
+    expect(item.scrollWidth).toBeLessThanOrEqual(item.clientWidth);
+    const description = item.querySelector<HTMLElement>('.flower-composer-command-description')!;
+    expect(description.scrollWidth).toBeLessThanOrEqual(description.clientWidth);
+  }
+  await page.screenshot({ element: surface, path: `__screenshots__/slash-menu-${width}.png` });
+});
+
+it.each(['pointer', 'keyboard'])('offers one compaction command with %s', async method => {
   const compact = vi.fn(async (_id: string, _input: { continue_goal?: boolean }) => accepted());
   const base = adapter(true);
   const surface = renderSurfaceWithAdapterProps({ ...base, compactThreadContext: compact }, { focusThreadRequest: focus });
@@ -385,14 +415,28 @@ it.each(['pointer', 'keyboard'])('offers pure compaction through the same comman
   input.value = '/compact';
   input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '/compact' }));
   input.focus();
-  await waitFor(() => Boolean(surface.querySelector('[data-flower-compact-only]')));
-  expect(surface.textContent).toContain('continue an unfinished Goal');
-  if (method === 'pointer') await page.screenshot({ element: surface, path: '__screenshots__/redeven-compaction-command-menu.png' });
-  if (method === 'pointer') surface.querySelector<HTMLButtonElement>('[data-flower-compact-only]')!.click();
-  else await userEvent.keyboard('{ArrowDown}{Enter}');
+  await waitFor(() => Boolean(surface.querySelector('.flower-composer-command-item')));
+  expect(surface.querySelectorAll('.flower-composer-command-item')).toHaveLength(1);
+  if (method === 'pointer') surface.querySelector<HTMLButtonElement>('.flower-composer-command-item')!.click();
+  else await userEvent.keyboard('{Enter}');
   await waitFor(() => compact.mock.calls.length === 1 && input.value === '');
-  expect(compact.mock.calls[0]![1].continue_goal).toBe(false);
+  expect(compact.mock.calls[0]![1].continue_goal).toBe(true);
   expect(base.launchTurn).not.toHaveBeenCalled();
+});
+
+it('opens plugin creation through keyboard selection', async () => {
+  const openPlugin = vi.fn();
+  const surface = renderSurfaceWithAdapterProps(adapter(true), { focusThreadRequest: focus, onOpenPluginCreation: openPlugin });
+  await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
+  const input = surface.querySelector<HTMLTextAreaElement>('textarea')!;
+  input.value = '/';
+  input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '/' }));
+  input.focus();
+  await waitFor(() => surface.querySelectorAll('.flower-composer-command-item').length === 3);
+  await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+  expect(input.getAttribute('aria-activedescendant')).toBe('flower-composer-command-plugin');
+  await userEvent.keyboard('{Enter}');
+  expect(openPlugin).toHaveBeenCalledWith({ threadID: 'thread-1' });
 });
 
 it('allows Escape to dismiss an exact compaction command without dispatch', async () => {
@@ -401,10 +445,10 @@ it('allows Escape to dismiss an exact compaction command without dispatch', asyn
   await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
   const input = surface.querySelector<HTMLTextAreaElement>('textarea')!;
   input.value = '/compact'; input.dispatchEvent(new InputEvent('input', { bubbles: true })); input.focus();
-  await waitFor(() => Boolean(surface.querySelector('[data-flower-compact-only]')));
+  await waitFor(() => Boolean(surface.querySelector('.flower-composer-command-item')));
   await userEvent.keyboard('{Escape}');
   expect(input.value).toBe('');
-  expect(surface.querySelector('.flower-composer-command-menu')).toBeNull();
+  expect(surface.querySelector('.flower-composer-command-menu:not([inert])')).toBeNull();
   expect(compact).not.toHaveBeenCalled();
 });
 

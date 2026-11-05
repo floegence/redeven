@@ -5982,6 +5982,7 @@
       "goalSet": "Ziel gesetzt",
       "goalDeleted": "Ziel gelöscht",
       "commandGoal": "Ziel setzen und Arbeit starten oder aktualisieren",
+      "commandPlugin": "Plugin erstellen",
       "goalUnavailable": "Die Zielverwaltung ist in dieser Umgebung nicht verfügbar.",
       "goalReviewIncomplete": "Ziel noch nicht erreicht",
       "goalReviewBlocked": "Ziel blockiert",

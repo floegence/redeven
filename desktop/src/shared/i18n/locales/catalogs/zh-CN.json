@@ -1063,6 +1063,7 @@
       "goalSet": "已设置目标",
       "goalDeleted": "已删除目标",
       "commandGoal": "设置目标，开始或更新任务",
+      "commandPlugin": "创建插件",
       "goalUnavailable": "当前环境无法管理目标。",
       "goalReviewIncomplete": "目标尚未完成",
       "goalReviewBlocked": "目标受阻",

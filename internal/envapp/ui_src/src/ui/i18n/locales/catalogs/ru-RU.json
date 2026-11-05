@@ -6101,6 +6101,7 @@
       "goalSet": "Цель задана",
       "goalDeleted": "Цель удалена",
       "commandGoal": "Задать цель и начать или обновить работу",
+      "commandPlugin": "Создать плагин",
       "goalUnavailable": "В этой среде управление целями недоступно.",
       "goalReviewIncomplete": "Цель ещё не достигнута",
       "goalReviewBlocked": "Работа над целью заблокирована",

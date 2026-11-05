@@ -805,6 +805,7 @@
     "goalSet": "Goal set",
     "goalDeleted": "Goal deleted",
     "commandGoal": "Set a goal to start or update work",
+    "commandPlugin": "Create a plugin",
     "goalUnavailable": "Goal management is unavailable in this environment.",
     "goalReviewIncomplete": "Goal not yet complete",
     "goalReviewBlocked": "Goal blocked",

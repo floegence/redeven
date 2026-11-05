@@ -28,6 +28,8 @@ Dedicated pages retain top editing inset and equal8px side/bottom upload/send in
 
 Model/permission/reasoning/More/reference/command/Goal/context/conversation layers use published material/presence. Exiting panels immediately become inert/accessibility-hidden; visual exit can reverse on reopening. Context menus keep first-frame appearance. Hover context retains content/scroll/expansion while hidden.
 
+Slash commands use compact Floe menu rows with visible localized descriptions that wrap on narrow surfaces. One `/compact` entry requests Goal continuation when an unfinished Goal exists; pointer and keyboard selection share the same action.
+
 Model/permission lifetimes are surface-owned across toolbar/More placement. Published anchored layers constrain/measure before first paint and resolve opening side before motion; above-composer menus travel from/back to edge, flipping travel/origin together. Reduced motion suppresses travel; no product popup-motion override. Eye/ShieldCheck/Unlock consistently identify modes, including measurement copy. Moving open controls into More retains editor/focus; reactive More updates the existing anchor before focus restoration.
 
 Background catalog availability retains configured unavailable models, disabled for admission, without setup replacement or loss of draft/search/focus. Hidden Activity pages retain transcript gutter/toolbar allocation; apply saved rail width before visible layout and never resize composer from a zero-width hidden measurement.

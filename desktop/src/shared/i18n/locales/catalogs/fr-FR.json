@@ -1063,6 +1063,7 @@
       "goalSet": "Objectif défini",
       "goalDeleted": "Objectif supprimé",
       "commandGoal": "Définir un objectif et démarrer ou actualiser le travail",
+      "commandPlugin": "Créer un plugin",
       "goalUnavailable": "La gestion des objectifs n’est pas disponible dans cet environnement.",
       "goalReviewIncomplete": "Objectif non atteint",
       "goalReviewBlocked": "Objectif bloqué",

@@ -450,7 +450,7 @@ const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
 const FLOWER_PERMISSION_ICONS = { readonly: Eye, approval_required: ShieldCheck, full_access: Unlock } satisfies Record<FlowerPermissionType, typeof Eye>;
 const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
-const flowerComposerCommandOptionID = (command: string) => command === '/goal' ? 'flower-composer-command-goal' : command === 'compact-only' ? 'flower-composer-command-compact-only' : 'flower-composer-command-compact-context';
+const flowerComposerCommandOptionID = (command: string) => `flower-composer-command-${command.slice(1)}`;
 const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['permission', 'model_reasoning', 'read_only'];
 const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['model_reasoning', 'read_only', 'permission'];
 const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
@@ -7775,7 +7775,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     void requestThreadDetail(result.thread_id, 'user_action', true).catch(() => undefined);
   };
-  const executeComposerCommand = (suggested?: '/compact' | '/goal' | '/plugin' | 'compact-only') => {
+  const executeComposerCommand = (suggested?: '/compact' | '/goal' | '/plugin') => {
     if (!settingsReady()) return;
     if (goalCommand()) {
       const text = goalCommand()!.text.trim();
@@ -7784,7 +7784,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const command = composerSlashCommand();
     const choice = suggested ?? composerCommandSuggested();
-    if (choice === 'compact-only') { void executeCompactContextCommand(selectedThread(), () => true, false); return; }
     const parsed = suggested || command.kind === 'suggest' ? parseFlowerSlashCommand(choice) : command;
     if (parsed.kind !== 'intent') return;
     if (parsed.command === '/compact') { void executeCompactContextCommand(); return; }
@@ -9770,7 +9769,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerCommandChoices = createMemo(() => {
     const parsed = composerSlashCommand();
     const query = parsed.kind === 'suggest' ? parsed.query : parsed.kind === 'intent' ? parsed.command.slice(1) : '';
-    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND, FLOWER_PLUGIN_COMMAND, 'compact-only'] as const).filter(command => (command === 'compact-only' ? 'compact' : command.slice(1)).startsWith(query) && (!(selectedInputRequest() || selectedComposerApprovalDisplayAction()) || command === FLOWER_GOAL_COMMAND));
+    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND, FLOWER_PLUGIN_COMMAND] as const).filter(command => command.slice(1).startsWith(query) && (!(selectedInputRequest() || selectedComposerApprovalDisplayAction()) || command === FLOWER_GOAL_COMMAND));
   });
   createEffect(() => { composerChatDraftText(); setComposerCommandIndex(0); });
   const composerCommandSuggested = createMemo(() => composerCommandChoices()[composerCommandIndex()] ?? FLOWER_COMPACT_CONTEXT_COMMAND);
@@ -9798,7 +9797,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'send'
   ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (composerSlashCommand().kind === 'intent' && (composerSlashCommand() as { command?: string }).command === '/goal' ? copy().chat.goalTitle : composerCommandSuggested() === 'compact-only' ? copy().chat.compactContextOnly : copy().chat.compactContext) : copy().chat.send);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (goalCommand() || composerCommandSuggested() === '/goal' ? copy().chat.goalTitle : composerCommandSuggested() === '/plugin' ? '/plugin' : copy().chat.compactContext) : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (goalCommand()) return !settingsReady() || !goalCommand()!.text.trim() || goalPending() || !props.adapter.manageGoal || props.adapter.canMutate === false || selectedThreadReadOnly();
     if (composerTakingBackQueuedTurn()) return true;
@@ -14141,16 +14140,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       id={flowerComposerCommandOptionID(command)}
                       type="button"
                       role="option"
-                      data-flower-compact-only={command === 'compact-only' ? '' : undefined}
                       aria-selected={composerCommandSuggested() === command}
                       class="flower-composer-command-item"
                       onPointerDown={(event) => event.preventDefault()}
                       onPointerMove={() => setComposerCommandIndex(composerCommandChoices().indexOf(command))}
                       onClick={() => executeComposerCommand(command)}
                     >
-                      <Show when={command === '/goal'} fallback={<Clock class="h-3.5 w-3.5" aria-hidden="true" />}><FlowerGoalIcon class="h-3.5 w-3.5" strokeWidth={1.65} aria-hidden="true" /></Show>
-                      <Show when={command !== 'compact-only'}><span class="flower-composer-command-token">{command}</span></Show>
-                      <span class="flower-composer-command-description">{command === '/goal' ? copy().chat.commandGoal : command === 'compact-only' ? copy().chat.compactContextOnly : copy().chat.commandCompactContext}</span>
+                      <Switch>
+                        <Match when={command === '/goal'}><FlowerGoalIcon class="h-3.5 w-3.5" strokeWidth={1.65} aria-hidden="true" /></Match>
+                        <Match when={command === '/plugin'}><Workflow class="h-3.5 w-3.5" aria-hidden="true" /></Match>
+                        <Match when={command === '/compact'}><Clock class="h-3.5 w-3.5" aria-hidden="true" /></Match>
+                      </Switch>
+                      <span class="flower-composer-command-content">
+                        <span class="flower-composer-command-token">{command}</span>
+                        <span class="flower-composer-command-description">{command === '/compact' ? copy().chat.commandCompactContext : command === '/goal' ? copy().chat.commandGoal : copy().chat.commandPlugin}</span>
+                      </span>
                     </button>}</For>
                   </div>
                 </Show>

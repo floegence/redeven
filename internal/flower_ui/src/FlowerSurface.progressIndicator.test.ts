@@ -293,7 +293,6 @@ describe('Flower progress indicator', () => {
     const anchorRule = cssRule(css, '.flower-composer-anchor');
     const menuRule = cssRule(css, '.flower-composer-command-menu');
     const itemRule = cssRule(css, '.flower-composer-command-item');
-    const descriptionRule = cssRule(css, '.flower-composer-command-description');
     const pillRule = cssRule(css, '.flower-compaction-divider-pill');
     const dividerRunningRule = cssRule(css, '.flower-compaction-divider-pill-running');
     const dividerIconRule = cssRule(css, '.flower-compaction-divider-running-clock');
@@ -304,17 +303,14 @@ describe('Flower progress indicator', () => {
     expect(anchorRule).toContain('flex-direction: column');
     expect(menuRule).toContain('position: absolute');
     expect(menuRule).toContain('bottom: calc(100% + 0.625rem)');
-    expect(menuRule).toContain('background: var(--card)');
+    expect(menuRule).toContain('background: var(--floe-plane-float)');
     expect(menuRule).not.toContain('backdrop-filter');
     expect(menuRule).not.toContain('box-shadow');
     expect(surfaceSource()).toMatch(/id=\{FLOWER_COMPOSER_COMMAND_MENU_ID\}\s+data-floe-surface="floating"/);
-    expect(itemRule).toContain('grid-template-columns: auto minmax(0, 1fr)');
-    expect(itemRule).toContain('grid-template-rows: auto auto');
+    expect(itemRule).toContain('min-height: var(--floe-row-height)');
     expect(css).toContain(".flower-composer-command-item[aria-selected='true'],");
     expect(css).toContain('.flower-composer-command-item:hover,');
     expect(cssRule(css, '.flower-composer-command-item:hover,\n.flower-composer-command-item:focus-visible')).not.toContain('transform:');
-    expect(descriptionRule).toContain('font-size: 0.74rem');
-    expect(descriptionRule).toContain('white-space: nowrap');
     expect(dividerRunningRule).toContain('color: color-mix');
     expect(dividerIconRule).toContain('display: inline-block');
     expect(dividerIconRule).toContain('border-radius: 9999px');

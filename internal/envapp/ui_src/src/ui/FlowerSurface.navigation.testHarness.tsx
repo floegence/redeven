@@ -1051,6 +1051,7 @@ const mountFlowerSurface = (
     companionCopy?: FlowerThreadSwitcherCopy;
     companionSummary?: FlowerSurfaceProps['companionSummary'];
     onCompanionOpenRequest?: (threadID?: string) => void;
+    onOpenPluginCreation?: FlowerSurfaceProps['onOpenPluginCreation'];
     onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
@@ -1083,6 +1084,7 @@ const mountFlowerSurface = (
       companionCopy={props.companionCopy}
       companionSummary={props.companionSummary}
       onCompanionOpenRequest={props.onCompanionOpenRequest}
+      onOpenPluginCreation={props.onOpenPluginCreation}
       onPresenceChange={props.onPresenceChange}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
       onThreadSelectionEvent={props.onThreadSelectionEvent}
@@ -1161,6 +1163,7 @@ export function renderSurfaceWithAdapterProps(
     companionCopy?: FlowerThreadSwitcherCopy;
     companionSummary?: FlowerSurfaceProps['companionSummary'];
     onCompanionOpenRequest?: (threadID?: string) => void;
+    onOpenPluginCreation?: FlowerSurfaceProps['onOpenPluginCreation'];
     onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
