@@ -54,7 +54,7 @@ Read confirmation and loaded-content revisions follow the canonical [read-state 
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Tests.
-- `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.
+- `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --motion-only: production Electron frame sampling for both slider directions and directory disclosure, minified CSS timing, reduced motion, no summary fetches and owned cleanup. --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/threads/threadListModel.ts` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerThreadList.directory.browser.test.tsx` - Native mouse/touch reorder, preview/cancellation/edge scroll, retained disclosure reversal, natural row spacing, measured early/middle and uninterrupted painted disclosure frames in both themes, fixed search and columns, running pins, localized light/dark desktop/mobile capture and preference persistence.

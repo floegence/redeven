@@ -231,6 +231,19 @@ describe('Flower directory navigation', () => {
     expect(control.bottom).toBeLessThanOrEqual(header.bottom);
   });
 
+  it('retains view and reorder timing when production CSS uses seconds', async () => {
+    const ui = mount();
+    ui.host.style.setProperty('--floe-duration-fast', '.14s');
+    ui.host.style.setProperty('--floe-duration-base', '.2s');
+    (page.getByRole('radio', { name: copy.viewByDirectory }).element() as HTMLButtonElement).click();
+    const rows = ui.host.querySelector<HTMLElement>('.flower-thread-rows')!;
+    expect(rows.getAnimations().find(animation => animation.id === 'flower-thread-view')?.effect?.getTiming().duration).toBe(140);
+    ui.header('/two/project').querySelector('button')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true }));
+    const moving = rows.getAnimations({ subtree: true }).filter(animation => animation.id === 'flower-thread-layout');
+    expect(moving.length).toBeGreaterThan(0);
+    expect(moving.every(animation => animation.effect?.getTiming().duration === 200)).toBe(true);
+  });
+
   it('slides the shared selected face without moving the title row or interrupting rapid reversal', async () => {
     const ui = mount(); ui.host.style.width = '300px';
     ui.host.style.setProperty('--floe-duration-slow', '.28s');

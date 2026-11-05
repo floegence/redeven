@@ -23576,7 +23576,7 @@
         "title": "Flower conversation sidebar",
         "type": "UI Contract"
       },
-      "body_length": 9816,
+      "body_length": 9994,
       "summary": "Desktop and Env App share one Flower sidebar with ThreadID-owned rows and endpoint-owned pin order. Selection, running work, unread attention and pending actions remain distinct. Live summaries preserve row/menu/focus identity. Resizing and pin feedback are ephemeral presentation over the canonical ThreadCache.",
       "sections": [
         {
@@ -23597,8 +23597,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - Tests.\n- `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Tests.\n- `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.\n- `redeven:internal/flower_ui/src/threads/threadListModel.ts` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerThreadList.directory.browser.test.tsx` - Native mouse/touch reorder, preview/cancellation/edge scroll, retained disclosure reversal, natural row spacing, measured early/middle and uninterrupted painted disclosure frames in both themes, fixed search and columns, running pins, localized light/dark desktop/mobile capture and preference persistence.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Workspace selection reveals the conversation when reopening the mobile drawer.\n- `redeven:scripts/check_flower_directory_persistence.mjs` - Real Electron restart with production Desktop storage/preload and an ephemeral renderer partition; owned processes, ports and state are cleaned up.",
-          "char_count": 1257
+          "body": "- `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - Tests.\n- `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Tests.\n- `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --motion-only: production Electron frame sampling for both slider directions and directory disclosure, minified CSS timing, reduced motion, no summary fetches and owned cleanup. --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.\n- `redeven:internal/flower_ui/src/threads/threadListModel.ts` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerThreadList.directory.browser.test.tsx` - Native mouse/touch reorder, preview/cancellation/edge scroll, retained disclosure reversal, natural row spacing, measured early/middle and uninterrupted painted disclosure frames in both themes, fixed search and columns, running pins, localized light/dark desktop/mobile capture and preference persistence.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Workspace selection reveals the conversation when reopening the mobile drawer.\n- `redeven:scripts/check_flower_directory_persistence.mjs` - Real Electron restart with production Desktop storage/preload and an ephemeral renderer partition; owned processes, ports and state are cleaned up.",
+          "char_count": 1435
         }
       ],
       "evidence": [
@@ -23613,9 +23613,9 @@
           "description": "Tests."
         },
         {
-          "id": "redeven:scripts/check_flower_sidebar_responsiveness.mjs:0:--resize-only: real electron drag, bounded styles, one save, retained markdown/draft/scroll during streaming.",
+          "id": "redeven:scripts/check_flower_sidebar_responsiveness.mjs:0:--motion-only: production electron frame sampling for both slider directions and directory disclosure, minified css timing, reduced motion, no summary fetches and owned cleanup. --resize-only: real electron drag, bounded styles, one save, retained markdown/draft/scroll during streaming.",
           "source": "redeven:scripts/check_flower_sidebar_responsiveness.mjs",
-          "description": "--resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming."
+          "description": "--motion-only: production Electron frame sampling for both slider directions and directory disclosure, minified CSS timing, reduced motion, no summary fetches and owned cleanup. --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx:0:tests.",
@@ -25764,5 +25764,5 @@
       ]
     }
   ],
-  "source_sha256": "dc337c0fb265b3c79738989890cdcbc2d7b507c066ce7dfc389b4ff414580340"
+  "source_sha256": "364395b6bb7e38587149d87f23c9ade813727b0e6676e6d312f17cc1692ed207"
 }

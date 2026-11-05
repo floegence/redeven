@@ -1,5 +1,6 @@
 import { createDesktopTestSession } from './desktop_test_session.mjs';
 import { qualifyFlowerSidebarResize } from './qualify_flower_sidebar_resize.mjs';
+import { qualifyFlowerSidebarMotion } from './qualify_flower_sidebar_motion.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -76,6 +77,12 @@ await session.run(async () => {
   await page.waitForFunction(() => !!window.flowerSidebar);
   const version = await app.evaluate(() => process.versions);
   assert.equal(version.electron, JSON.parse(await readFile(path.join(root, 'desktop/package.json'))).devDependencies.electron);
+  if (process.argv.includes('--motion-only')) {
+    await qualifyFlowerSidebarMotion({ page, session, output, version });
+    assert.deepEqual(pageErrors, []);
+    await session.closeElectron(app);
+    return;
+  }
   if (process.argv.includes('--resize-only')) {
     await qualifyFlowerSidebarResize({ app, page, session, output, version });
     assert.deepEqual(pageErrors, []);
