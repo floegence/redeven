@@ -15,9 +15,9 @@ import type { FlowerThreadListItem } from '../../../../flower_ui/src/contracts/f
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY.threadList;
 const disposers: (() => void)[] = [];
-const media = commands as unknown as { dragFlowerDirectoryWithMouse: () => Promise<{ preview: number; indicator: string | null; order: string[]; expanded: string; previewAfter: number }>; dragFlowerDirectoryWithTouch: () => Promise<{ indicator: string | null; order: string[] }>; scrollFlowerDirectoryWithTouch: () => Promise<number>; emulateMediaPreferences: (value: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+const media = commands as unknown as { dragFlowerDirectoryWithMouse: () => Promise<{ preview: number; indicator: string | null; order: string[]; expanded: string; previewAfter: number }>; dragFlowerDirectoryWithTouch: () => Promise<{ indicator: string | null; order: string[] }>; scrollFlowerDirectoryWithTouch: () => Promise<number>; emulateTouchInput: (enabled: boolean) => Promise<void>; emulateMediaPreferences: (value: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
 let scopeID = 0;
-afterEach(async () => { while (disposers.length) disposers.pop()?.(); document.body.replaceChildren(); document.documentElement.removeAttribute('style'); document.documentElement.removeAttribute('data-floe-shell-theme'); document.documentElement.classList.remove('light', 'dark'); await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); });
+afterEach(async () => { while (disposers.length) disposers.pop()?.(); document.body.replaceChildren(); document.documentElement.removeAttribute('style'); document.documentElement.removeAttribute('data-floe-shell-theme'); document.documentElement.classList.remove('light', 'dark'); await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); await media.emulateTouchInput(false); });
 async function frame() { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); }
 function item(id: string, path: string, index: number, pinned = false): FlowerThreadListItem {
   return { thread_id: id, title: id, title_status: 'ready', model_id: 'model', working_dir: path, pinned, pin_rank: pinned ? 10 : 0,
@@ -55,7 +55,7 @@ describe('Flower directory navigation', () => {
     expect(ui.header('/one/project').querySelector('.flower-directory-name')?.textContent).toBe('/one/project');
     expect(ui.header('/two/project').querySelector('.flower-directory-name')?.textContent).toBe('/two/project');
     expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(9);
-    expect(ui.host.querySelector('[data-thread-id="alpha-14"] [data-flower-pin-head]')).not.toBeNull();
+    expect(ui.host.querySelector('[data-thread-id="alpha-14"] .flower-thread-indicator svg')).toBeNull();
     await userEvent.click(ui.host.querySelector<HTMLButtonElement>('.flower-directory-more')!);
     expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(15);
     await userEvent.click(ui.header('/one/project').querySelector('button')!);
@@ -221,29 +221,128 @@ describe('Flower directory navigation', () => {
     localStorage.removeItem(key);
   });
 
+  it('keeps the view switch in the title row without persistent pin badges', async () => {
+    const ui = mount();
+    expect(ui.host.querySelector('.flower-thread-list-header .flower-thread-view-switch')).not.toBeNull();
+    expect(ui.host.querySelector('[data-thread-id="alpha-14"] .flower-thread-indicator svg')).toBeNull();
+    const header = ui.host.querySelector('.flower-thread-list-header')!.getBoundingClientRect();
+    const control = ui.host.querySelector('.flower-thread-view-switch')!.getBoundingClientRect();
+    expect(control.top).toBeGreaterThanOrEqual(header.top);
+    expect(control.bottom).toBeLessThanOrEqual(header.bottom);
+  });
+
+  it('slides the shared selected face without moving the title row or interrupting rapid reversal', async () => {
+    const ui = mount(); ui.host.style.width = '300px';
+    await frame(); await frame();
+    const header = ui.host.querySelector<HTMLElement>('.flower-thread-list-header')!;
+    const pill = ui.host.querySelector<HTMLElement>('.floe-segmented-control__pill')!;
+    const before = header.getBoundingClientRect().height;
+    const start = pill.getBoundingClientRect().left;
+    (page.getByRole('radio', { name: copy.viewByDirectory }).element() as HTMLButtonElement).click();
+    const animation = pill.getAnimations().find(value => value.id === 'floe-segmented-selection')!;
+    expect(animation).toBeDefined(); animation.pause(); animation.currentTime = 80;
+    const middle = pill.getBoundingClientRect().left;
+    expect(middle).toBeGreaterThan(start);
+    (page.getByRole('radio', { name: copy.viewByTime }).element() as HTMLButtonElement).click();
+    expect(pill.getBoundingClientRect().left).toBeCloseTo(middle, 0);
+    expect(header.getBoundingClientRect().height).toBe(before);
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    (page.getByRole('radio', { name: copy.viewByDirectory }).element() as HTMLButtonElement).click();
+    expect(pill.getAnimations().filter(value => value.playState === 'running')).toHaveLength(0);
+  });
+
+  it('continuously collapses row height and reverses from the visible position', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+    const height = row.getBoundingClientRect().height;
+    ui.header('/one/project').querySelector<HTMLButtonElement>('button')!.click();
+    const animation = row.getAnimations().find(value => value.id === 'flower-thread-exit')!;
+    animation.pause(); animation.currentTime = 0;
+    expect(row.getBoundingClientRect().height).toBeCloseTo(height, 0);
+    animation.currentTime = Number(animation.effect!.getTiming().duration) / 2;
+    const middle = row.getBoundingClientRect().height;
+    expect(middle).toBeGreaterThan(0);
+    expect(middle).toBeLessThan(height - 1);
+    ui.header('/one/project').querySelector<HTMLButtonElement>('button')!.click();
+    expect(row.getBoundingClientRect().height).toBeCloseTo(middle, 0);
+    expect(row.inert).toBe(false);
+  });
+
+  it('keeps successive directory headers below the collapsing content on every frame', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const header = ui.header('/two/project');
+    const rows = [...ui.host.querySelectorAll<HTMLElement>('[data-flower-thread-card]')].filter(row => row.dataset.threadId?.startsWith('alpha-') && row.dataset.pinned === 'false');
+    const before = header.getBoundingClientRect().top;
+    await userEvent.click(ui.header('/one/project').querySelector<HTMLButtonElement>('button')!);
+    const samples: number[] = [];
+    for (let i = 0; i < 16; i++) {
+      samples.push(header.getBoundingClientRect().top);
+      for (const row of rows) if (row.isConnected) expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(header.getBoundingClientRect().top + 1);
+      await frame();
+    }
+    const after = header.getBoundingClientRect().top;
+    expect(samples.some(top => top < before - 1 && top > after + 1)).toBe(true);
+    expect(after).toBeLessThan(before - 100);
+    expect(ui.host.querySelector('[data-flower-thread-exiting]')).toBeNull();
+  });
+
+  it('expands conversations and the more control from zero to their natural height', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('button')!;
+    const naturalHeight = ui.host.querySelector('.flower-directory-more')!.getBoundingClientRect().height;
+    toggle.click();
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id === 'flower-thread-exit') animation.finish();
+    await frame();
+    toggle.click();
+    const more = ui.host.querySelector<HTMLElement>('.flower-directory-more')!;
+    const animation = more.getAnimations().find(value => value.id === 'flower-thread-disclosure')!;
+    expect(animation).toBeDefined();
+    animation.pause(); animation.currentTime = 0;
+    expect(more.getBoundingClientRect().height).toBe(0);
+    animation.currentTime = 80;
+    expect(more.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(more.getBoundingClientRect().height).toBeLessThan(naturalHeight);
+    animation.finish(); await frame();
+    expect(more.getBoundingClientRect().height).toBe(naturalHeight);
+    expect(more.style.overflow).toBe('');
+  });
+
+  it('settles outgoing disclosure immediately when background summaries replace the rows', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    ui.header('/one/project').querySelector<HTMLButtonElement>('button')!.click();
+    const outgoing = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+    expect(outgoing.inert).toBe(true);
+    ui.setItems(ui.items().filter(entry => entry.working_dir !== '/one/project'));
+    expect(outgoing.isConnected).toBe(false);
+    expect(ui.host.querySelector('[data-flower-thread-exiting]')).toBeNull();
+    expect(ui.host.getAnimations({ subtree: true }).some(animation => animation.id === 'flower-thread-exit')).toBe(false);
+  });
+
   it('animates explicit disclosure reversals and respects reduced motion', async () => {
     const ui = mount();
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
     const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('.flower-directory-toggle')!;
-    toggle.click();
-    const second = ui.header('/two/project');
-    expect(second.getAnimations().some(animation => animation.id === 'flower-thread-layout')).toBe(true);
     const retainedRow = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+    toggle.click();
     expect(retainedRow.inert).toBe(true);
     expect(retainedRow.getAttribute('aria-hidden')).toBe('true');
-    const closing = second.getAnimations().find(animation => animation.id === 'flower-thread-layout')!;
-    closing.pause(); closing.currentTime = 80;
+    const exits = [...ui.host.querySelectorAll<HTMLElement>('[data-flower-thread-exiting]')];
+    for (const row of exits) for (const animation of row.getAnimations()) { animation.pause(); animation.currentTime = 80; }
+    const second = ui.header('/two/project');
     const beforeReverse = second.getBoundingClientRect().top;
     toggle.click();
-    expect(second.getAnimations().some(animation => animation.id === 'flower-thread-layout')).toBe(true);
     expect(Math.abs(second.getBoundingClientRect().top - beforeReverse)).toBeLessThan(1);
     expect(ui.host.querySelector('[data-thread-id="alpha-0"]')).toBe(retainedRow);
     expect(retainedRow.inert).toBe(false);
     expect(retainedRow.hasAttribute('aria-hidden')).toBe(false);
     await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
-    for (const animation of second.getAnimations()) animation.finish();
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
     toggle.click();
-    expect(second.getAnimations().some(animation => animation.id === 'flower-thread-layout' && animation.playState === 'running')).toBe(false);
+    expect(ui.host.getAnimations({ subtree: true }).some(animation => animation.id === 'flower-thread-disclosure')).toBe(false);
     expect(retainedRow.isConnected).toBe(false);
   });
 
@@ -254,7 +353,11 @@ describe('Flower directory navigation', () => {
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
     const active = page.getByRole('radio', { name: copy.viewByDirectory }).element();
     const inactive = page.getByRole('radio', { name: copy.viewByTime }).element();
-    expect(getComputedStyle(active).backgroundColor).not.toBe(getComputedStyle(inactive).backgroundColor);
+    const face = ui.host.querySelector<HTMLElement>('.floe-segmented-control__pill')!;
+    for (const animation of face.getAnimations()) animation.finish();
+    expect(getComputedStyle(face).backgroundColor).not.toBe(getComputedStyle(inactive).backgroundColor);
+    expect(face.getBoundingClientRect().left).toBeCloseTo(active.getBoundingClientRect().left, 0);
+    expect(face.getBoundingClientRect().width).toBeCloseTo(active.getBoundingClientRect().width, 0);
     const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"] .flower-thread-list-title')!;
     const more = ui.host.querySelector<HTMLElement>('.flower-thread-rows > .flower-directory-more')!;
     expect(Math.abs((more.getBoundingClientRect().left + parseFloat(getComputedStyle(more).paddingLeft)) - row.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
@@ -626,19 +729,46 @@ describe('Flower directory navigation', () => {
     }
   });
 
-  it('keeps the header usable for every shipped language at minimum width', async () => {
-    const ui = mount(); ui.host.style.width = '220px';
-    const translations = [['Time', 'Directory'], ['时间', '目录'], ['時間', '目錄'], ['時間', 'フォルダー'], ['시간', '폴더'],
-      ['Zeit', 'Ordner'], ['Date', 'Dossier'], ['Fecha', 'Carpeta'], ['Data', 'Pasta'], ['Время', 'Папка']];
-    const buttons = ui.host.querySelectorAll<HTMLElement>('.flower-thread-view-switch button span');
-    const header = ui.host.querySelector<HTMLElement>('.flower-thread-list-toolbar')!;
-    for (const [time, directory] of translations) {
-      buttons[0].textContent = time; buttons[1].textContent = directory;
-      await frame();
-      const bounds = header.getBoundingClientRect();
-      for (const button of Array.from(header.querySelectorAll<HTMLElement>('button'))) {
-        expect(button.getBoundingClientRect().right, `${time} / ${directory}`).toBeLessThanOrEqual(bounds.right + 1);
+  it('keeps every shipped language legible across compact and wide rails', async () => {
+    for (const locale of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'] as const) {
+      const i18n = createTestI18nHelpers(locale);
+      const localized = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) }).threadList;
+      const ui = mount(undefined, undefined, undefined, localized);
+      const header = ui.host.querySelector<HTMLElement>('.flower-thread-list-header')!;
+      for (const width of [220, 272, 300, 380]) {
+        ui.host.style.width = `${width}px`; await frame();
+        const bounds = header.getBoundingClientRect();
+        expect(ui.host.querySelector('.flower-thread-list-heading')!.getBoundingClientRect().width, `${locale} ${width}`).toBeGreaterThan(24);
+        for (const button of header.querySelectorAll<HTMLButtonElement>('button')) {
+          expect(button.getBoundingClientRect().right, `${locale} ${width}`).toBeLessThanOrEqual(bounds.right + 1);
+          const label = button.querySelector<HTMLElement>('.floe-segmented-control__label');
+          if (!label) continue;
+          expect(button.title).toBe(button.getAttribute('aria-label'));
+          if (getComputedStyle(label).display === 'none') continue;
+          expect(label.getBoundingClientRect().right, `${locale} ${width}`).toBeLessThanOrEqual(button.getBoundingClientRect().right);
+          expect(label.scrollWidth, `${locale} ${width}`).toBeLessThanOrEqual(label.clientWidth + 1);
+        }
       }
+      disposers.pop()?.(); ui.host.remove();
+    }
+  });
+
+  it.each([272, 300])('keeps inline controls usable by touch in a %ipx rail', async width => {
+    await media.emulateTouchInput(true);
+    const ui = mount(); ui.host.style.width = `${width}px`;
+    await frame(); await frame();
+    const header = ui.host.querySelector<HTMLElement>('.flower-thread-list-header')!;
+    expect(ui.host.querySelector('.flower-thread-list-heading')!.getBoundingClientRect().width).toBeGreaterThan(24);
+    const buttons = [...header.querySelectorAll<HTMLButtonElement>('button')];
+    for (const [index, button] of buttons.entries()) {
+      const bounds = button.getBoundingClientRect();
+      expect(bounds.width).toBeGreaterThanOrEqual(44);
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      expect(bounds.right).toBeLessThanOrEqual(header.getBoundingClientRect().right);
+      if (index) expect(bounds.left).toBeGreaterThanOrEqual(buttons[index - 1].getBoundingClientRect().right);
+    }
+    for (const button of buttons.filter(button => button.getAttribute('role') === 'radio')) {
+      expect(button.title).toBe(button.getAttribute('aria-label'));
     }
   });
 

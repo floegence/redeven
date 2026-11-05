@@ -15,7 +15,8 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => ({
+vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>(),
   MessageSquare: () => <span data-icon="reply" />,
   ShieldCheck: () => <span data-icon="approval" />,
   Copy: () => <span data-icon="copy" />,
@@ -73,6 +74,15 @@ function thread(): FlowerThreadListItem {
 async function settleMenuFocus(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await Promise.resolve();
+}
+
+async function expectMenuClosed(host: HTMLElement): Promise<void> {
+  const menu = host.querySelector<HTMLElement>('[role="menu"]');
+  if (menu) {
+    expect(menu.getAttribute('aria-hidden')).toBe('true');
+    expect(menu.inert).toBe(true);
+  }
+  await vi.waitFor(() => expect(host.querySelector('[role="menu"]')).toBeNull());
 }
 
 function renderList(showDeleteAction = true, initialItems: readonly FlowerThreadListItem[] = [thread()]) {
@@ -188,14 +198,14 @@ describe('FlowerThreadList deletion entry', () => {
     await open();
     setQuery('release');
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
 
     setQuery('');
     await Promise.resolve();
     await open();
     setActiveThreadID('another-thread');
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
 
     setActiveThreadID('thread-delete');
     await Promise.resolve();
@@ -204,22 +214,22 @@ describe('FlowerThreadList deletion entry', () => {
     document.body.appendChild(outside);
     outside.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
 
     await open();
     outside.focus();
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
 
     await open();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
 
     await open();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
 
     await open();
     window.dispatchEvent(new Event('scroll'));
@@ -231,12 +241,12 @@ describe('FlowerThreadList deletion entry', () => {
     expect(host.querySelector('[role="menu"]')).toBeTruthy();
     (host.querySelector('.flower-scroll') as HTMLElement).dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }));
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
 
     await open();
     window.dispatchEvent(new Event('resize'));
     await Promise.resolve();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
   });
 
   it('restores focus to the current trigger after metadata moves a thread between groups', async () => {
@@ -253,7 +263,7 @@ describe('FlowerThreadList deletion entry', () => {
 
     const currentTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
     expect(currentTrigger).toBe(originalTrigger);
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
     expect(document.activeElement).toBe(currentTrigger);
   });
 
@@ -266,7 +276,7 @@ describe('FlowerThreadList deletion entry', () => {
     setItems([{ ...thread(), thread_id: 'thread-replacement', title: 'Replacement' }]);
     await Promise.resolve();
 
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    await expectMenuClosed(host);
   });
 
   it('opens the same menu from the keyboard and exposes its trigger while focused', async () => {

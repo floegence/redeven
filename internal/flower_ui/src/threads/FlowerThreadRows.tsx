@@ -2,12 +2,17 @@ import { children, createEffect, createRoot, getOwner, onCleanup, untrack, type 
 
 // Only explicit list interactions retain departing rows. Background updates and
 // search never acquire motion ownership or delay removal.
-const animatedChanges = new WeakSet<HTMLElement>();
+const animatedChanges = new WeakMap<HTMLElement, 'layout' | 'disclosure'>();
 
 /** Animate an explicit disclosure without remounting retained conversation rows. */
-export function animateFlowerThreadRowsChange(container: HTMLElement | null | undefined, change: () => void): void {
+export function animateFlowerThreadRowsChange(container: HTMLElement | null | undefined, change: () => void, motion: 'layout' | 'disclosure' = 'layout'): void {
   if (!container || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
     change();
+    return;
+  }
+  if (motion === 'disclosure') {
+    animatedChanges.set(container, motion);
+    try { change(); } finally { animatedChanges.delete(container); }
     return;
   }
   const bounds = container.getBoundingClientRect();
@@ -17,7 +22,7 @@ export function animateFlowerThreadRowsChange(container: HTMLElement | null | un
   const easing = style.getPropertyValue('--floe-ease-out').trim() || 'ease-out';
   const before = new Map(Array.from(container.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
     .map(element => [element, { rect: element.getBoundingClientRect(), opacity: getComputedStyle(element).opacity }] as const));
-  animatedChanges.add(container);
+  animatedChanges.set(container, motion);
   try { change(); } finally { animatedChanges.delete(container); }
   const after = container.getBoundingClientRect();
   for (const element of Array.from(container.children)) {
@@ -72,71 +77,97 @@ export function FlowerThreadRows(props: Readonly<{
   render: (key: string) => JSX.Element;
 }>): JSX.Element {
   const owner = getOwner();
-  type MountedRow = { element: HTMLElement; dispose: () => void; exit?: Animation; style?: string | null };
+  type MountedRow = { element: HTMLElement; dispose: () => void; exit?: Animation; enter?: Animation; style?: string | null };
   const mounted = new Map<string, MountedRow>();
   const container = <div class={props.class ?? 'flower-thread-rows'} /> as HTMLDivElement;
   const remove = (key: string, row: MountedRow) => {
     row.exit?.cancel();
+    row.enter?.cancel();
     row.dispose();
     row.element.remove();
     mounted.delete(key);
+  };
+  const restoreStyle = (row: MountedRow) => {
+    if (row.style == null) row.element.removeAttribute('style'); else row.element.setAttribute('style', row.style);
+    row.style = undefined;
+  };
+  const disclose = (row: MountedRow, height: number, opacity: string, exiting: boolean, removeRow?: () => void) => {
+    row.style ??= row.element.getAttribute('style');
+    const targetHeight = exiting ? 0 : row.element.getBoundingClientRect().height;
+    Object.assign(row.element.style, { minHeight: '0', overflow: 'clip', flexShrink: '0' });
+    const style = getComputedStyle(row.element);
+    const animation = row.element.animate([
+      { height: `${height}px`, opacity },
+      { height: `${targetHeight}px`, opacity: exiting ? 0 : 1 },
+    ], { duration: parseFloat(style.getPropertyValue('--floe-duration-base')) || 200,
+      easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out', fill: 'both' });
+    animation.id = exiting ? 'flower-thread-exit' : 'flower-thread-disclosure';
+    if (exiting) row.exit = animation; else row.enter = animation;
+    animation.onfinish = () => {
+      if (exiting) { if (row.exit === animation) removeRow?.(); }
+      else if (row.enter === animation) { row.enter = undefined; animation.cancel(); restoreStyle(row); }
+    };
   };
   createEffect(() => {
     const keys = props.keys;
     const targets = props.targets;
     untrack(() => {
       const retained = new Set(keys);
-      const departing = new Map(Array.from(mounted.entries())
-        .filter(([key, row]) => !retained.has(key) && !row.exit && animatedChanges.has(row.element.parentElement!))
-        .map(([key, row]) => [key, { rect: row.element.getBoundingClientRect(), opacity: getComputedStyle(row.element).opacity }] as const));
+      const entering = new Map<string, { height: number; opacity: string }>();
+      const exitingParents = new Set<HTMLElement>();
       for (const [key, row] of mounted) {
-        const container = row.element.parentElement!;
+        const parent = row.element.parentElement!;
         if (retained.has(key)) {
           if (row.exit) {
-            row.exit.cancel();
-            row.exit = undefined;
-            if (row.style == null) row.element.removeAttribute('style'); else row.element.setAttribute('style', row.style);
+            const snapshot = { height: row.element.getBoundingClientRect().height, opacity: getComputedStyle(row.element).opacity };
+            row.exit.cancel(); row.exit = undefined; restoreStyle(row);
             delete row.element.dataset.flowerThreadExiting;
-            row.element.inert = false;
-            row.element.removeAttribute('aria-hidden');
+            row.element.inert = false; row.element.removeAttribute('aria-hidden');
+            if (animatedChanges.get(parent) === 'disclosure') entering.set(key, snapshot);
           }
           continue;
         }
         if (row.exit) {
-          if (!animatedChanges.has(container)) remove(key, row);
+          if (!animatedChanges.has(parent)) remove(key, row);
+          else exitingParents.add(parent);
           continue;
         }
-        const hadFocus = row.element.contains(document.activeElement);
-        const neighbour = row.element.nextElementSibling ?? row.element.previousElementSibling;
-        if (hadFocus) neighbour?.querySelector<HTMLElement>('button:not(:disabled)')?.focus({ preventScroll: true });
-        const snapshot = departing.get(key);
-        if (!snapshot) { remove(key, row); continue; }
-        const { rect, opacity } = snapshot;
-        const viewport = container.closest('.flower-scroll, .flower-workspaces-scroll')?.getBoundingClientRect();
-        if (!animatedChanges.has(container) || (viewport && (rect.bottom < viewport.top || rect.top > viewport.bottom))) {
-          remove(key, row);
-          continue;
+        if (row.element.contains(document.activeElement)) {
+          (row.element.nextElementSibling ?? row.element.previousElementSibling)?.querySelector<HTMLElement>('button:not(:disabled)')?.focus({ preventScroll: true });
         }
-        const bounds = container.getBoundingClientRect();
-        for (const animation of row.element.getAnimations()) if (animation.id === 'flower-thread-layout') animation.cancel();
-        row.style = row.element.getAttribute('style');
-        Object.assign(row.element.style, { position: 'absolute', left: `${rect.left - bounds.left}px`, top: `${rect.top - bounds.top}px`, width: `${rect.width}px`, margin: '0', pointerEvents: 'none' });
-        row.element.inert = true;
-        row.element.setAttribute('aria-hidden', 'true');
+        if (animatedChanges.get(parent) !== 'disclosure') { remove(key, row); continue; }
+        const height = row.element.getBoundingClientRect().height, opacity = getComputedStyle(row.element).opacity;
+        row.enter?.cancel(); row.enter = undefined;
+        if (row.style !== undefined) restoreStyle(row);
+        row.element.inert = true; row.element.setAttribute('aria-hidden', 'true');
         row.element.dataset.flowerThreadExiting = 'true';
-        const style = getComputedStyle(container);
-        const exit = row.element.animate([{ opacity, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-4px)' }], {
-          duration: parseFloat(style.getPropertyValue('--floe-duration-fast')) || 140,
-          easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out', fill: 'forwards',
-        });
-        row.exit = exit;
-        exit.id = 'flower-thread-exit';
-        exit.onfinish = () => { if (row.exit === exit) remove(key, row); };
+        disclose(row, height, opacity, true, () => remove(key, row));
+        exitingParents.add(parent);
       }
+      // Exiting rows keep their original slots until their height reaches zero.
+      // Absolute positioning would collapse the group immediately and overlap
+      // the next directory while the outgoing conversations are still visible.
+      const keyByElement = exitingParents.size ? new Map(Array.from(mounted, ([key, row]) => [row.element, key])) : undefined;
+      const exitsBefore = new Map<string | undefined, string[]>();
+      for (const parent of exitingParents) {
+        let next: string | undefined;
+        for (const element of Array.from(parent.children).reverse()) {
+          const key = keyByElement!.get(element as HTMLElement);
+          if (!key) continue;
+          if (retained.has(key)) next = key;
+          else if (mounted.get(key)?.exit) {
+            const pending = exitsBefore.get(next) ?? []; pending.unshift(key); exitsBefore.set(next, pending);
+          }
+        }
+      }
+      const ordered = exitingParents.size
+        ? keys.flatMap(key => [...(exitsBefore.get(key) ?? []), key]).concat(exitsBefore.get(undefined) ?? [])
+        : keys;
       const beforeByParent = new Map<HTMLElement, Node>();
-      for (let index = keys.length - 1; index >= 0; index--) {
-        const key = keys[index];
+      for (let index = ordered.length - 1; index >= 0; index--) {
+        const key = ordered[index];
         let row = mounted.get(key);
+        const parent = row?.exit ? row.element.parentElement! : targets?.get(key) ?? container;
         if (!row) {
           row = createRoot((dispose) => {
             const element = children(() => props.render(key))();
@@ -144,11 +175,12 @@ export function FlowerThreadRows(props: Readonly<{
             return { element, dispose };
           }, owner);
           mounted.set(key, row);
+          if (animatedChanges.get(parent) === 'disclosure') entering.set(key, { height: 0, opacity: '0' });
         }
-        const parent = targets?.get(key) ?? container;
         moveFlowerThreadRow(parent, row.element, beforeByParent.get(parent) ?? null);
         beforeByParent.set(parent, row.element);
       }
+      for (const [key, snapshot] of entering) disclose(mounted.get(key)!, snapshot.height, snapshot.opacity, false);
     });
   });
   onCleanup(() => { for (const [key, row] of mounted) remove(key, row); });

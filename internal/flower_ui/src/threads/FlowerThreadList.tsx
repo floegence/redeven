@@ -70,7 +70,6 @@ export type FlowerThreadCardProps = Readonly<{
   reorderable?: boolean;
   dragging?: boolean;
   dropPosition?: 'before' | 'after';
-  showPinnedBadge?: boolean;
   onDragStart?: (event: DragEvent, item: FlowerThreadListItem) => void;
   onDragOver?: (event: DragEvent, item: FlowerThreadListItem) => void;
   onDrop?: (event: DragEvent) => void;
@@ -85,7 +84,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const itemCanPin = createMemo(() => canPinThreadItem(props.item));
   const titleDraggable = () => Boolean(props.item.pinned && props.reorderable && props.onDragStart);
   const progressLabel = () => flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel;
-  const leadingPin = () => props.showPinnedBadge && props.item.pinned && indicator().visual === 'none';
   const ariaLabel = () => [
     title(),
     indicator().ariaStatus,
@@ -140,7 +138,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
             <FlowerThreadWave />
           </Show>
           <div class="flower-thread-status-dot h-1.5 w-1.5 rounded-full" />
-          <Show when={leadingPin()}><FlowerPinIcon pinned class="flower-thread-leading-pin" /></Show>
         </div>
         <span
           class="flower-thread-list-title flex-1 truncate"
@@ -155,7 +152,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       </Show>
       <div class="flower-thread-card-trailing" data-has-timestamp={!indicator().actionRequired && !progressLabel() ? 'true' : undefined}>
         <div class="flower-thread-card-summary" aria-hidden="true">
-          <Show when={props.showPinnedBadge && props.item.pinned && !leadingPin()}><FlowerPinIcon pinned class="flower-directory-pinned-icon" /></Show>
           <Show when={indicator().actionRequired} fallback={
             <span class="flower-thread-card-time" data-progress={progressLabel() ? 'true' : undefined} title={progressLabel()}>{progressLabel() || fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
           }>
@@ -446,16 +442,14 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     animateFlowerThreadRowsChange(scrollRef?.querySelector<HTMLElement>('.flower-thread-rows'), () => {
       setCollapsed(previous => { const next = new Set(previous); if (next.has(path)) next.delete(path); else next.add(path); return next; });
       setLimits(previous => { const next = new Map(previous); next.delete(path); return next; });
-    });
+    }, 'disclosure');
   };
   const showMore = (path: string, panel = false) => {
     const update = (previous: ReadonlyMap<string, number>) => new Map(previous).set(path, (previous.get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE) + FLOWER_DIRECTORY_PAGE_SIZE);
     const container = panel
       ? Array.from(workspaceGrid?.querySelectorAll<HTMLElement>('[data-flower-workspace]') ?? []).find(node => node.dataset.flowerWorkspace === path)?.querySelector<HTMLElement>('.flower-workspace-threads')
       : scrollRef?.querySelector<HTMLElement>('.flower-thread-rows');
-    const changeRows = () => animateFlowerThreadRowsChange(container, () => { if (panel) setWorkspaceLimits(update); else setLimits(update); });
-    if (panel) animateFlowerThreadRowsChange(container?.closest<HTMLElement>('.flower-workspaces-column'), changeRows);
-    else changeRows();
+    animateFlowerThreadRowsChange(container, () => { if (panel) setWorkspaceLimits(update); else setLimits(update); }, 'disclosure');
   };
   const togglePin = (item: FlowerThreadListItem, restore?: HTMLElement, panel = false) => {
     if (item.pinned && (panel || preferences().mode === 'directory')) {
@@ -520,7 +514,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   const beginDirectoryGesture = (event: PointerEvent, path: string) => {
     if (!directoryReorderable() || !event.isPrimary || event.button !== 0 || stopDirectoryGesture || !scrollRef) return;
     for (const animation of scrollRef.getAnimations({ subtree: true })) {
-      if (animation.id === 'flower-thread-layout' || animation.id === 'flower-thread-exit') animation.finish();
+      if (animation.id === 'flower-thread-layout' || animation.id === 'flower-thread-exit' || animation.id === 'flower-thread-disclosure') animation.finish();
     }
     const startX = event.clientX, startY = event.clientY, pointerID = event.pointerId;
     const source = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-flower-directory-header]')!;
@@ -784,6 +778,18 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
               <p class="sr-only" role="status">{copy().warmupDescription}</p>
             </Show>
           </div>
+          <SegmentedControl class="flower-thread-view-switch" role="radiogroup" aria-label={copy().title} size="sm"
+            value={preferences().mode} onChange={mode => {
+              updatePreferences({ ...preferences(), mode: mode === 'directory' ? 'directory' : 'time' });
+              const rows = scrollRef?.querySelector<HTMLElement>('.flower-thread-rows');
+              if (rows && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                for (const animation of rows.getAnimations()) if (animation.id === 'flower-thread-view') animation.cancel();
+                const style = getComputedStyle(rows);
+                const animation = rows.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: parseFloat(style.getPropertyValue('--floe-duration-fast')) || 140, easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out' });
+                animation.id = 'flower-thread-view';
+              }
+            }}
+            options={[{ value: 'time', label: copy().viewByTime, icon: Clock }, { value: 'directory', label: copy().viewByDirectory, icon: Folder }]} />
           <button ref={workspaceTrigger} type="button" class="flower-thread-workspaces-button" aria-haspopup="dialog" aria-expanded={workspacesOpen()} aria-label={copy().workspaces} title={copy().workspaces}
             disabled={showLoadingSkeleton()} onClick={() => { setMenu(null); setWorkspaceQuery(''); setWorkspaceLimits(new Map()); restoreWorkspaceFocus = true; setWorkspacesOpen(true); }}><Grid class="h-3.5 w-3.5" /></button>
           <button
@@ -798,18 +804,6 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             <Refresh class={cn('h-3.5 w-3.5', (props.refreshing || props.warmup || props.loading) && 'animate-spin')} />
           </button>
         </div>
-        <SegmentedControl class="flower-thread-view-switch" role="radiogroup" aria-label={copy().title} size="sm"
-          value={preferences().mode} onChange={mode => {
-            updatePreferences({ ...preferences(), mode: mode === 'directory' ? 'directory' : 'time' });
-            const rows = scrollRef?.querySelector<HTMLElement>('.flower-thread-rows');
-            if (rows && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-              for (const animation of rows.getAnimations()) if (animation.id === 'flower-thread-view') animation.cancel();
-              const style = getComputedStyle(rows);
-              const animation = rows.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: parseFloat(style.getPropertyValue('--floe-duration-fast')) || 140, easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out' });
-              animation.id = 'flower-thread-view';
-            }
-          }}
-          options={[{ value: 'time', label: copy().viewByTime, icon: Clock }, { value: 'directory', label: copy().viewByDirectory, icon: Folder }]} />
         <label class="relative block">
           <Search class="flower-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <Input
@@ -942,7 +936,6 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                 onRename={props.onMenuAction ? (value) => props.onMenuAction?.('rename', value) : undefined}
                 onPin={props.canPin && props.onMenuAction ? value => togglePin(value) : undefined}
                 pinBusy={props.pinBusy}
-                showPinnedBadge
                 reorderable={canReorder()}
                 onDragStart={props.onMovePinned ? startDrag : undefined}
                 onDragOver={overDrag}
@@ -1024,7 +1017,6 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                   <span class="flower-workspace-indicator" title={indicator().title} aria-hidden="true">
                     <Show when={indicator().visual === 'wave'}><FlowerThreadWave /></Show>
                     <Show when={indicator().visual === 'dot'}><span class="flower-workspace-unread" /></Show>
-                    <Show when={item().pinned && indicator().visual === 'none'}><FlowerPinIcon pinned class="flower-workspace-leading-pin" /></Show>
                     <Show when={indicator().actionRequired}><Show when={item().status === 'waiting_approval'} fallback={<MessageSquare class="h-3 w-3" />}><ShieldCheck class="h-3 w-3" /></Show></Show>
                   </span>
                   <span class="flower-workspace-thread-title">{item().title}</span><span class="flower-workspace-thread-time">{fmtFlowerShortTime(item().created_at_ms, copy())}</span>
