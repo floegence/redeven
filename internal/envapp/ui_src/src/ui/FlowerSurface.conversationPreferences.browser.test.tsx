@@ -73,7 +73,7 @@ describe('Flower personal new-conversation preferences', () => {
     const f = fixture();
     const surface = renderSurfaceWithDraftCoordinator(f.base, f.drafts);
     await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
-    surface.querySelector<HTMLButtonElement>(`[aria-label="${DEFAULT_FLOWER_SURFACE_COPY.threadList.viewByDirectory}"]`)!.click();
+    await userEvent.click(page.getByRole('radio', { name: DEFAULT_FLOWER_SURFACE_COPY.threadList.viewByDirectory }));
     const header = Array.from(surface.querySelectorAll<HTMLElement>('[data-flower-directory-header]')).find(node => node.dataset.flowerDirectoryHeader === '/project-b')!;
     header.querySelector<HTMLButtonElement>('.flower-directory-new')!.click();
     expect(f.drafts.read('__new_thread__').value.working_dir_override).toBe('/project-b');

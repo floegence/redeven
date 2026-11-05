@@ -336,6 +336,35 @@ it('lets the host toggle a retained mobile drawer and keeps search state through
   await vi.waitFor(() => expect(open()).toBe(false));
 });
 
+it('reveals a workspace selection when the mobile conversation drawer is reopened', async () => {
+  await page.viewport(393, 720);
+  const [open, setOpen] = createSignal(false);
+  const threads = Array.from({ length: 14 }, (_, index) => thread({ thread_id: `workspace-${index}`, title: `Workspace conversation ${index}`, working_dir: '/workspace/mobile', created_at_ms: 1000 - index }));
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => threads,
+    loadThread: async id => liveBootstrap(threads.find(item => item.thread_id === id)!) }, {
+    get mobileThreadsOpen() { return open(); }, onMobileThreadsOpenChange: setOpen,
+  });
+  Object.assign(runtime.style, { height: '100%', width: '100%' });
+  await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
+  setOpen(true);
+  await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
+  await userEvent.click(page.getByRole('radio', { name: DEFAULT_FLOWER_SURFACE_COPY.threadList.viewByDirectory }));
+  await userEvent.click(runtime.querySelector<HTMLButtonElement>(`[aria-label="${DEFAULT_FLOWER_SURFACE_COPY.threadList.workspaces}"]`)!);
+  await vi.waitFor(() => expect(document.querySelector('[data-flower-workspace="/workspace/mobile"]')).not.toBeNull());
+  const workspace = document.querySelector<HTMLElement>('[data-flower-workspace="/workspace/mobile"]')!;
+  await userEvent.click(workspace.querySelector<HTMLButtonElement>('.flower-directory-more')!);
+  await userEvent.click(Array.from(workspace.querySelectorAll<HTMLButtonElement>('.flower-workspace-thread-select')).find(button => button.textContent?.includes('Workspace conversation 10'))!);
+  await vi.waitFor(() => expect(open()).toBe(false));
+  setOpen(true);
+  await vi.waitFor(() => expect(runtime.querySelector('[data-thread-id="workspace-10"]')).not.toBeNull());
+  await vi.waitFor(() => {
+    const row = runtime.querySelector<HTMLElement>('[data-thread-id="workspace-10"]')!.getBoundingClientRect();
+    const viewport = runtime.querySelector<HTMLElement>('.flower-thread-list .flower-scroll')!.getBoundingClientRect();
+    expect(row.top).toBeGreaterThanOrEqual(viewport.top - 1);
+    expect(row.bottom).toBeLessThanOrEqual(viewport.bottom + 1);
+  });
+});
+
 
 it('defers read acknowledgement while the mobile thread drawer covers a newly loaded body', async () => {
   await page.viewport(393, 720);

@@ -238,6 +238,7 @@ import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
+import type { FlowerDirectoryPreferenceStorage } from './threads/directoryPreferences';
 import { FlowerThreadWave } from './FlowerThreadWave';
 import { comparePinnedFlowerThreads } from './threads/threadListModel';
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
@@ -647,6 +648,8 @@ export type FlowerSurfaceProps = Readonly<{
   filesystemScopeKey?: string;
   /** Stable host identity for local sidebar preferences. */
   threadListPreferenceScope?: string;
+  /** Durable renderer-local storage supplied by the host. */
+  threadListPreferenceStorage?: FlowerDirectoryPreferenceStorage;
   filesystemScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement>;
   approvalScrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties } & Readonly<Record<`data-${string}`, string>>;
   approvalReadingProps?: JSX.HTMLAttributes<HTMLDivElement> & Readonly<Record<`data-${string}`, string>>;
@@ -6999,6 +7002,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPendingThreadSelection(tid);
     scheduleThreadSelectionAfterPaint(tid, claimedSequence, focusOwner);
   });
+  const [threadListRevealID, setThreadListRevealID] = createSignal('');
 
   let embeddedSessionKey = '';
   createEffect(() => {
@@ -15003,6 +15007,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <FlowerThreadList
           items={sidebarListItems()}
           preferenceScope={props.threadListPreferenceScope ?? props.adapter.runtime.runtime_id}
+          preferenceStorage={props.threadListPreferenceStorage}
           activeThreadID={pendingThreadSelection() || (sidePanel() === 'chat' ? selectedThreadID() : '')}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
@@ -15014,7 +15019,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           copy={copy().threadList}
           onQueryChange={setHistoryFilter}
           onRefresh={() => void refreshThreads()}
-          onSelect={selectThread}
+          onSelect={threadID => { setThreadListRevealID(''); selectThread(threadID); }}
+          onSelectFromWorkspace={threadID => { setThreadListRevealID(threadID); selectThread(threadID); }}
+          revealThreadID={threadListRevealID()}
+          onRevealComplete={threadID => { if (threadListRevealID() === threadID) setThreadListRevealID(''); }}
+          navigationVisible={!navigationOverlay() || threadDrawerOpen()}
           onNewInDirectory={startComposeInDirectory}
           referenceDisabledReason={threadReferenceDisabledReason()}
           canFork={!!props.adapter.forkThread}

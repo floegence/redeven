@@ -6755,6 +6755,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                         draftCoordinator={flowerDraftCoordinator}
                         filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
                         threadListPreferenceScope={environmentID}
+                        threadListPreferenceStorage={desktopStateStorageBridge() ?? undefined}
                         adapter={adapter}
                         notify={(notice) => {
                           showActionToast(notice.message, notice.tone, {

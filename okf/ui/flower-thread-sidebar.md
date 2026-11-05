@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 tags: [flower, sidebar, navigation, pins, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -32,12 +32,14 @@ Sidebar and transcript context menus are fully visible on the first frame, witho
 Localized reply/approval labels appear beside the title with bounded status/progress width. Background updates use the workspace stream without selection.
 
 ## Pin ordering
-The stable `.flower-thread-rows` owner contains inline size for real/skeleton rows; movable cards cannot be size containers. Keyboard order matches visible search/pin-overlay order. Failed pin operations undo only their own presentation and reconcile via the existing summary stream or one explicit command read.
+The stable `.flower-thread-rows` owner contains inline size for real/skeleton rows; movable cards cannot be size containers. Keyboard order matches visible search/pin-overlay order. Directory-view keyboard/menu moves use pinned neighbours in the same directory while retaining the canonical global pin order. A pinned row has one visible pin: its summary badge yields to the interactive action on hover/focus. Pinning and unpinning retain the row and focus, expanding its batch when necessary. Failed pin operations undo only their own presentation and reconcile via the existing summary stream or one explicit command read.
 
 ## Directory view
-The compact header switches between the existing creation-time groups and full working-directory groups. Directory groups keep canonical pinned order ahead of other conversations. Search includes the full path; duplicate directory names expose their distinct paths. Each group shows six conversations, adds six per request and resets that limit on collapse. The directory's new-conversation action starts a draft in that directory without changing personal defaults.
+The compact header uses the published Floe segmented control to switch between the existing creation-time groups and full working-directory groups, with a primary-filled selected segment. Directory groups keep canonical pinned order ahead of other conversations. Search includes the full path; duplicate directory names expose their distinct paths. Each group shows six conversations, adds six per request and resets that limit on collapse. The incremental-load label aligns with conversation titles. Explicit disclosure uses short position/opacity animations, retains mounted rows and running waves, supports reversal, and respects reduced motion. The directory's new-conversation action starts a draft in that directory without changing personal defaults.
 
-Directory order and the selected view are local preferences scoped to the host environment. Dragging a directory header displays an insertion line at the whole group's boundary; Alt+Up/Down and touch long-press provide equivalent movement. Search disables reordering. The workspace dialog displays every group and its conversations with selection, pinning, incremental loading and directory creation. Storage failure leaves the current interaction usable.
+Directory order and the selected view are local preferences scoped to the host environment. Desktop supplies its existing durable state-storage bridge so preferences survive ephemeral renderer partitions and complete process restarts; Env App supplies its UI storage adapter. Hosts migrate a previously saved renderer preference when their own storage has none. Storage failure leaves the current preference and interaction usable. Dragging a directory header displays an insertion line at the whole group's boundary; Alt+Up/Down and touch long-press provide equivalent movement. Search disables reordering.
+
+The workspace dialog uses published Floe Dialog/Card surfaces and theme tokens. Compact cards flow down two independent columns in directory order (down the first column, then the second), without equal-height row gaps; narrow screens use one column and touch controls retain 44px targets. It displays every group with searchable conversations, pinning, incremental loading and directory creation. Cards and rows retain path/ThreadID identity across summary and pin updates. Choosing a conversation clears an obstructing sidebar filter, opens its directory, extends only the required batch and scrolls the row into view. In a mobile drawer this reveal waits until navigation is shown again. Ordinary background updates do not scroll the sidebar.
 
 ## Stable presentation and convergence
 Key rows by ThreadID and group labels separately. ThreadCache owns summaries; each batch publishes once under existing title/revision rules, preserving menus, focus and running-wave continuity.
@@ -56,3 +58,5 @@ Read confirmation and loaded-content revisions follow the canonical [read-state 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/threads/threadListModel.ts` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerThreadList.directory.browser.test.tsx` - Directory view and workspace interactions.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Workspace selection reveals the conversation when reopening the mobile drawer.
+- `redeven:scripts/check_flower_directory_persistence.mjs` - Real Electron restart with production Desktop storage/preload and an ephemeral renderer partition; owned processes, ports and state are cleaned up.

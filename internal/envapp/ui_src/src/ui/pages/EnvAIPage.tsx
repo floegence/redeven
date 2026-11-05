@@ -33,7 +33,10 @@ import { openConnectionCenter, openFlowerSettings } from '../services/desktopShe
 import '../flower-feature.css';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS, REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
+import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import type { EnvSurfaceId } from '../envViewMode';
+
+const threadListPreferenceStorage = { getItem: readUIStorageItem, setItem: writeUIStorageItem };
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -213,6 +216,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
         onCleanup(() => lifetime.abort());
         const adapter = createAdapter(lifetime.signal);
         return <FlowerSurface renderTaskFilePreviewContent={FlowerTaskFilePreviewContent}
+          threadListPreferenceStorage={threadListPreferenceStorage}
           embeddedConversation={props.embeddedConversation}
           captureNewConversationContext={props.captureNewConversationContext}
           renderContextSnapshotPreview={FlowerContextSnapshotPreview}
