@@ -424,7 +424,7 @@ func TestExtensionUnavailableEventRetiresExactTabBeforeNextReply(t *testing.T) {
 
 func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *testing.T) {
 	host, _, store, _ := computerBindingFixture(t)
-	hub, _, peer := extensionFixture(t, host)
+	hub, client, peer := extensionFixture(t, host)
 	host.extension = hub
 	sourceHost, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		var request struct{ ID, Method string }
@@ -496,7 +496,7 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 	failures := make(chan error, 2)
 	for _, thread := range []string{"thread-first", "thread-second"} {
 		go func() {
-			planned, err := host.ResolveTargetForThread(t.Context(), thread, "current")
+			planned, err := host.ConnectBrowser(t.Context(), ComputerBrowserConnection{ExtensionProfileID: client.profile.ID, NewTab: true})
 			if err == nil {
 				planned, err = host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, RunID: thread, TurnID: "turn", ToolName: "computer.select_target"}, planned)
 			}

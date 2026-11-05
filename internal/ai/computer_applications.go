@@ -88,7 +88,7 @@ type computerApplicationSelection struct {
 func (e *computerApplicationSelection) Unwrap() error { return e.cause }
 
 func (e *computerApplicationSelection) Error() string {
-	return "Application opened; choose an accessible window (" + e.state + ")"
+	return "Application opened (" + e.state + ")"
 }
 
 func (r *ComputerUseRuntime) selectComputerApplication(ctx context.Context, call TargetToolCall, candidate ComputerCandidate, policy ToolTargetPolicy) (TargetDescriptor, error) {
@@ -168,16 +168,11 @@ func (r *ComputerUseRuntime) selectComputerApplication(ctx context.Context, call
 		}
 		selection.candidates = append(selection.candidates, view)
 	}
-	if len(windows) == 1 {
-		selected, err := r.selectComputerTarget(ctx, call, windows[0])
-		if err != nil {
-			selection.state, selection.cause = "selection_failed", err
-			return selected, selection
-		}
-		return selected, nil
+	if len(windows) > 0 {
+		selection.state = "windows_available"
 	}
-	if len(windows) > 1 {
-		selection.state = "choose_window"
+	if err := r.authorizeComputerCall(ctx, &call); err != nil {
+		selection.state, selection.cause = "selection_failed", err
 	}
 	return target, selection
 }

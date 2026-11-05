@@ -43,32 +43,29 @@ export class BrowserComputerController {
       safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
   }
   async readObservation(read, stage = 'semantic_read', identity = this.page.observationIdentity()) {
-    const deadline = Date.now() + 1000;
-    // Only a measured viewport mismatch has a bounded settling window.
-    // Unknown failures stop this read; no input or privacy state is replayed.
-    for (;;) {
-      try {
-        const result = await read();
-        // Confirmed privacy evidence wins over a concurrent frame change.
-        if (stage === 'safety_scan' && result.level === 'takeover') return result;
-        if (!this.page.identityCurrent(identity)) throw this.page.identityFailure(identity);
-        return result;
-      } catch (error) {
-        if (this.page.invalid || this.page.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
-        if(error instanceof BrowserObservationInvalidated){error.observationStage ||= stage;error.invalidation={...error.invalidation,scope:stage==='safety_scan'?'safety':'content'};throw error;}
-        if(rejections.has(error.message))throw error;
-        if (error.observationReason === 'viewport_unstable') {
-          if (Date.now() >= deadline) throw error;
-          // Sample again within the invocation budget without replaying input
-          // or resetting the privacy latch. Cancellation interrupts the delay.
-          await this.page.delay(Math.min(32, deadline - Date.now()));
-          if (!this.page.identityCurrent(identity)) throw this.page.identityFailure(identity);
-          continue;
-        }
-        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage, ...(error.observationReason === 'reference_not_retained' ? {observationReason:error.observationReason} : {protocolDiagnostic: error.protocolDiagnostic || adapterFailure(stage, 'internal_error').protocolDiagnostic}) });
+    // A read samples once. Callers that need temporal sampling can use the
+    // explicit wait/condition primitives; this layer must not choose a wait.
+    const scope = ['safety_scan','frame_inventory'].includes(stage) ? 'safety' : 'content';
+    try {
+      const result = await read();
+      // Confirmed privacy evidence wins over concurrent inventory changes.
+      if (stage === 'safety_scan' && result.level === 'takeover') return result;
+      if (!this.page.identityCurrent(identity)) throw this.page.identityFailure(identity);
+      return result;
+    } catch (error) {
+      if (this.page.invalid || this.page.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
+      if (error instanceof BrowserObservationInvalidated) {
+        error.observationStage ||= stage;
+        error.invalidation = {...error.invalidation,scope};
+        throw error;
       }
+      if (rejections.has(error.message)) throw error;
+      const reason = ['reference_not_retained','viewport_unstable'].includes(error.observationReason) ? error.observationReason : undefined;
+      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), {observationStage:stage,
+        ...(reason ? {observationReason:reason} : {protocolDiagnostic:error.protocolDiagnostic || adapterFailure(stage,'internal_error').protocolDiagnostic})});
     }
   }
+
   async execute(request) {
     const beforeEffects = this.page.effectCount;
     this.actionCompleted = false;

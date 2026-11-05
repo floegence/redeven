@@ -1,8 +1,11 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"strings"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -17,9 +20,9 @@ type computerNavigationError struct {
 
 func (e *computerNavigationError) Error() string {
 	if e.code == aitools.ErrorCodeNavigationTimeout {
-		return "Browser acknowledged navigation, but the page did not finish loading. Observe the page before choosing the next action."
+		return "Browser acknowledged navigation, but the page did not finish loading."
 	}
-	return "Browser navigation failed (" + e.reason + "). Observe the page before choosing the next action."
+	return "Browser navigation failed (" + e.reason + ")."
 }
 
 func (e *computerNavigationError) facts() map[string]any {
@@ -51,9 +54,19 @@ func computerBrowserExchangeFailure(call TargetToolCall, private bool, err error
 		if errors.As(err, &failure) {
 			reason = failure.reason
 		}
-		return TargetToolResult{TargetID: call.TargetID, Result: map[string]any{
+		facts := map[string]any{
 			"stage": "helper_exchange", "reason": reason, "needs_observation": true,
-		}}, errComputerEffectUnknown
+		}
+		// Preserve typed causes without publishing raw transport messages.
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			facts["stop_reason"] = "deadline_exceeded"
+		case errors.Is(err, context.Canceled):
+			facts["stop_reason"] = "cancelled"
+		case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, net.ErrClosed):
+			facts["stop_reason"] = "connection_closed"
+		}
+		return TargetToolResult{TargetID: call.TargetID, Result: facts}, errors.Join(errComputerEffectUnknown, err)
 	}
 	return TargetToolResult{}, err
 }

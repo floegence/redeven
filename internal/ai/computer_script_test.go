@@ -708,7 +708,7 @@ func TestComputerScriptUnknownEffectWithTakeoverDiscardsContent(t *testing.T) {
 }
 
 func TestComputerNativeDragHelpDescribesTimingContract(t *testing.T) {
-	for _, topic := range []string{"core", "visual"} {
+	for _, topic := range []string{"visual"} {
 		help, ok := computerScriptHelp(topic, false)
 		if !ok {
 			t.Fatalf("missing native %s help", topic)
@@ -767,7 +767,7 @@ func TestComputerPausedScriptRetainsPartialInputReceipt(t *testing.T) {
 func TestComputerRoleNameDiagnosticAndHelpStayFactual(t *testing.T) {
 	for _, topic := range []string{"core", "legacy"} {
 		help, _ := computerScriptHelp(topic, true)
-		if !strings.Contains(help, "do not infer roles from a control's business purpose") || strings.Contains(help, "search inputs are searchbox") {
+		if strings.Contains(help, "search inputs are searchbox") || strings.Contains(help, "do not infer roles from a control's business purpose") {
 			t.Fatalf("role guidance guesses page semantics: %s", topic)
 		}
 	}

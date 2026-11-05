@@ -89,14 +89,14 @@ func computerOperationDiagnostic(value any) (out map[string]any) {
 		}
 		return out
 	}
-	if raw["phase"] == "read" && raw["recovery"] == "choose_supported_read" {
+	if raw["phase"] == "read" {
 		method, expected := anyToString(raw["method"]), anyToString(raw["expected"])
 		if method == "locator.attribute" && expected == "attribute_max_2000" || method == "locator.text" && expected == "html_element" {
-			return map[string]any{"phase": "read", "method": method, "expected": expected, "recovery": "choose_supported_read"}
+			return map[string]any{"phase": "read", "method": method, "expected": expected}
 		}
 		return nil
 	}
-	if raw["phase"] != "validation" && raw["phase"] != "execution" || raw["recovery"] != "correct_arguments" {
+	if raw["phase"] != "validation" && raw["phase"] != "execution" {
 		return nil
 	}
 	field := anyToString(raw["field"])
@@ -107,7 +107,7 @@ func computerOperationDiagnostic(value any) (out map[string]any) {
 	if !slices.Contains([]string{"documented_fields", "documented_arity", "documented_selector", "canonical_role_or_observed_ref", "key_chord", "finite_number", "nonnegative_coordinates", "text_max_20000", "integer_0_5000", "integer_0_30000", "visible_hidden_enabled", "documented_condition", "condition_text_max_2000", "supported_action", "image_pixels_with_frame", "inside_image", "readable_attribute", "attribute_name", "integer_1_200", "current_cursor", "integer_1_1000", "string", "boolean", "navigation_lifecycle", "throw_or_return", "precise_attribute_read"}, expected) {
 		return nil
 	}
-	out = map[string]any{"phase": raw["phase"], "field": field, "expected": expected, "recovery": "correct_arguments"}
+	out = map[string]any{"phase": raw["phase"], "field": field, "expected": expected}
 	if method := anyToString(raw["method"]); slices.Contains([]string{"ui.snapshot", "ui.observe", "ui.screenshot", "ui.help", "ui.type", "ui.doubleClick", "ui.scroll", "ui.scrollAt", "ui.getByRole", "ui.ref", "ui.click", "ui.drag", "ui.key", "locator.node", "locator.snapshot", "locator.read", "locator.query", "locator.count", "locator.rows", "locator.attribute", "locator.linkSummary", "locator.getAttribute", "locator.click", "locator.fill", "locator.press", "locator.scroll", "locator.waitFor", "locator.requireState", "browser.navigate", "browser.waitForDownload", "ui.budget", "ui.assert", "locator.text", "browser.back", "browser.reload", "browser.saveDownload", "browser.readDownload", "browser.downloadCursor", "image.click", "image.doubleClick", "image.drag", "image.scroll", "downloadCursor.wait"}, method) {
 		out["method"] = method
 	}
@@ -121,7 +121,7 @@ func computerOperationDiagnostic(value any) (out map[string]any) {
 		out["example"] = "Meta+= or Enter"
 	}
 	if expected == "canonical_role_or_observed_ref" {
-		out["example"] = "Use a documented canonical role; other is ref-only: ui.ref(observedRef)"
+		out["example"] = "ui.ref(observedRef)"
 	}
 	return out
 }

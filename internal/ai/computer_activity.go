@@ -28,7 +28,7 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 		rows = append(rows, toolDetailRow(title, meta, content, format, "", false))
 	}
 	if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil {
-		for _, key := range []string{"phase", "method", "reason", "checkpoint", "code", "field", "expected", "example", "recovery"} {
+		for _, key := range []string{"phase", "method", "reason", "checkpoint", "code", "field", "expected", "example"} {
 			if value, exists := diagnostic[key]; exists {
 				add(key, "", toolDetailValue(value), fltools.StructuredActivityRowFormatText)
 			}
@@ -41,10 +41,16 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			}
 		}
 	}
+	if actionability := computerActionabilityFacts(payload["actionability"]); actionability != nil {
+		// Preserve measured dispatch conditions for the model and activity
+		// viewer. This is a bounded fact projection; it does not infer a cause
+		// or suggest a recovery action.
+		add("actionability", "", toolDetailValue(actionability), fltools.StructuredActivityRowFormatCode)
+	}
 	if diagnostic, ok := payload["connection_diagnostic"].(map[string]any); ok {
 		add("connection_diagnostic", "", toolDetailValue(diagnostic), fltools.StructuredActivityRowFormatCode)
 	}
-	for _, key := range []string{"reason", "stage", "target_state", "observation_stage"} {
+	for _, key := range []string{"reason", "stage", "stop_reason", "target_state", "observation_stage"} {
 		if value := computerDiagnosticValue(key, payload[key]); value != "" {
 			add(key, "", value, fltools.StructuredActivityRowFormatText)
 		}
@@ -66,21 +72,6 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 	}
 	if tool == "computer.targets" {
 		candidates := toAnySlice(payload["candidates"])
-		defaultRef := anyToString(payload["default_candidate_ref"])
-		// Keep the default visible in the initial three-row preview.
-		slices.SortStableFunc(candidates, func(a, b any) int {
-			left, _ := a.(map[string]any)
-			right, _ := b.(map[string]any)
-			if defaultRef != "" {
-				if left["candidate_ref"] == defaultRef && right["candidate_ref"] != defaultRef {
-					return -1
-				}
-				if right["candidate_ref"] == defaultRef && left["candidate_ref"] != defaultRef {
-					return 1
-				}
-			}
-			return 0
-		})
 		for _, item := range candidates {
 			candidate, _ := item.(map[string]any)
 			name := strings.TrimSpace(anyToString(candidate["display_name"]))
@@ -91,9 +82,6 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			meta := ""
 			if candidate["new_tab"] == true {
 				meta = "new_tab"
-			}
-			if defaultRef != "" && candidate["candidate_ref"] == defaultRef {
-				meta = strings.TrimSpace("default " + meta)
 			}
 			if state := anyToString(candidate["state"]); state != "" && state != "ready" {
 				meta = strings.TrimSpace(meta + " unavailable")
@@ -276,6 +264,7 @@ func computerDiagnosticValue(key string, value any) string {
 	allowed := map[string][]string{
 		"stage":             {"preparation", "focus", "input_delivery", "input_release", "input_observed", "action", "helper_exchange"},
 		"reason":            {"unavailable", "not_focusable", "receipt_timeout", "cancelled", "target_unavailable", "target_not_ready", "permission_required", "invalid_request", "action_failed", "response_unavailable", "helper_rejected", "invalid_response", "viewport_unstable", "document_changed", "candidate_changed", "reference_not_retained"},
+		"stop_reason":       {"deadline_exceeded", "cancelled", "connection_closed"},
 		"target_state":      {"available", "unavailable", "unknown"},
 		"observation_stage": {"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata", "hit_test"},
 	}

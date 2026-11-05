@@ -27,7 +27,7 @@ export async function createComputerScript({ browser = true } = {}) {
   };
   install('__budget', () => vm.newString(JSON.stringify({remaining_ms:Math.max(0, active.deadline-Date.now()),remaining_operations:Math.max(0,50-active.count),remaining_log_bytes:65536-active.outputBytes,log_limit_bytes:65536})));
   install('__invalidArgument', (method, field, expected) => {
-    if (active) { active.sealed = true; active.diagnostic = 'SCRIPT_ARGUMENT_ERROR'; active.argumentDiagnostic={method:vm.getString(method),field:vm.getString(field),expected:vm.getString(expected),recovery:'correct_arguments'}; }
+    if (active) { active.sealed = true; active.diagnostic = 'SCRIPT_ARGUMENT_ERROR'; active.argumentDiagnostic={method:vm.getString(method),field:vm.getString(field),expected:vm.getString(expected)}; }
     return { error: vm.newError('SCRIPT_ARGUMENT_ERROR') };
   });
   install('__conditionTimeout', (state, timeout) => {

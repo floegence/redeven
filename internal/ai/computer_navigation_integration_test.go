@@ -59,7 +59,7 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 			if value["navigation_stage"] == "response" && value["network_error"] == "ERR_SSL_PROTOCOL_ERROR" {
 				diagnosis = true
 			}
-			if ref, _ := value["default_candidate_ref"].(string); ref != "" {
+			if ref, _ := value["candidate_ref"].(string); ref != "" && value["new_tab"] == true && value["kind"] == "browser.managed" {
 				candidate = ref
 			}
 			if value["code"] == "NAVIGATION_FAILED" {

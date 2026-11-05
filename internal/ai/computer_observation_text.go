@@ -6,7 +6,6 @@ import (
 )
 
 const computerObservationTextBudget = 32 << 10
-const computerObservationRecovery = "Read a narrower root_ref; source() enumerates complete AX/DOM fields and paged child refs; rows/query/text read selected content. full:true requests structured details."
 
 // Product presentation never replaces validated semantic authority or guest reads.
 func compactComputerObservation(current map[string]any) map[string]any {
@@ -19,9 +18,6 @@ func compactComputerObservation(current map[string]any) map[string]any {
 		if v, ok := current[key]; ok {
 			metadata[key] = v
 		}
-	}
-	if current["truncated"] == true {
-		metadata["recovery"] = computerObservationRecovery
 	}
 	// Browser titles and addresses are outside the semantic-node field budget.
 	// Bound their encoded representation explicitly without changing document IDs.
@@ -38,7 +34,7 @@ func compactComputerObservation(current map[string]any) map[string]any {
 				used += cost
 			}
 			metadata[key], metadata[key+"_truncated"] = prefix.String(), true
-			metadata["truncated"], metadata["output_truncated"], metadata["recovery"] = true, true, computerObservationRecovery
+			metadata["truncated"], metadata["output_truncated"] = true, true
 		}
 	}
 
@@ -77,7 +73,7 @@ func compactComputerObservation(current map[string]any) map[string]any {
 			out["focus_ref"] = focus
 		}
 		if count < len(nodes) {
-			out["truncated"], out["output_truncated"], out["recovery"] = true, true, computerObservationRecovery
+			out["truncated"], out["output_truncated"] = true, true
 		}
 		return out
 	}

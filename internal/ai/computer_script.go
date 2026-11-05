@@ -39,7 +39,7 @@ type computerScriptMessage struct {
 	Error           string          `json:"error"`
 }
 
-var errComputerEffectUnknown = errors.New("computer effect outcome is unknown; inspect the target without replaying the action")
+var errComputerEffectUnknown = errors.New("computer effect outcome is unknown")
 
 func (r *ComputerUseRuntime) scriptProcess(key computerScriptKey) (*computerScriptProcess, error) {
 	r.mu.Lock()
@@ -257,15 +257,16 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				output.Attachments = nil
 			}
 			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations), "remaining_log_bytes": max(0, 65536-logBytes), "log_limit_bytes": 65536}
-			if !errors.Is(outputErr, errComputerEffectUnknown) {
-				switch {
-				case errors.Is(outputErr, context.DeadlineExceeded), payload["script_error"] == "SCRIPT_TIMEOUT":
-					payload["budget_exhausted"] = "time"
-				case payload["script_error"] == "SCRIPT_OPERATION_LIMIT":
-					payload["budget_exhausted"] = "operations"
-				case payload["script_error"] == "SCRIPT_OUTPUT_LIMIT" && computerOutputLimitFacts(payload["output_limit"]) != nil:
-					payload["budget_exhausted"] = "output"
-				}
+			// Resource exhaustion and effect certainty are independent facts. A
+			// transport failure can consume the remaining deadline while the
+			// operation's effect is still unknown; retain both facts.
+			switch {
+			case errors.Is(outputErr, context.DeadlineExceeded), payload["script_error"] == "SCRIPT_TIMEOUT":
+				payload["budget_exhausted"] = "time"
+			case payload["script_error"] == "SCRIPT_OPERATION_LIMIT":
+				payload["budget_exhausted"] = "operations"
+			case payload["script_error"] == "SCRIPT_OUTPUT_LIMIT" && computerOutputLimitFacts(payload["output_limit"]) != nil:
+				payload["budget_exhausted"] = "output"
 			}
 			if failureStage != "" {
 				payload["stage"] = failureStage
@@ -368,7 +369,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					reserve = 4 * 1024
 				}
 				if emittedBytes+reserve > 384*1024 {
-					result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_OUTPUT_LIMIT", "output_limit": map[string]any{"stage": "before_observation", "delivered_observations": len(emittedObservations), "recovery": "Continue remaining reads in another computer.exec; this observation was not dispatched."}}
+					result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_OUTPUT_LIMIT", "output_limit": map[string]any{"stage": "before_observation", "delivered_observations": len(emittedObservations), "dispatch_status": "not_dispatched"}}
 					return result, &computerScriptExecutionError{code: "SCRIPT_OUTPUT_LIMIT"}
 				}
 			}
@@ -414,7 +415,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					}
 					result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
 					payload := result.Result.(map[string]any)
-					for _, key := range []string{"stage", "reason", "target_state", "observation"} {
+					for _, key := range []string{"stage", "reason", "stop_reason", "target_state", "observation"} {
 						if value, found := facts[key]; found {
 							payload[key] = value
 						}
@@ -580,7 +581,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 								return result, encodeErr
 							}
 							if emittedBytes+len(encoded) > 384*1024 {
-								result.Result = map[string]any{"completed": false, "script_error": "SCRIPT_OUTPUT_LIMIT", "output_limit": map[string]any{"stage": "after_observation", "delivered_observations": len(emittedObservations), "recovery": "Read a smaller subtree or use source() chunks; this observation was not emitted."}}
+								result.Result = map[string]any{"completed": false, "script_error": "SCRIPT_OUTPUT_LIMIT", "output_limit": map[string]any{"stage": "after_observation", "delivered_observations": len(emittedObservations), "observation_emitted": false}}
 								return result, &computerScriptExecutionError{code: "SCRIPT_OUTPUT_LIMIT"}
 							}
 							p.observations = nextObservations
@@ -694,7 +695,6 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					}
 				}
 				healthy = stopped == nil && msg.Result["context_reusable"] == true && ctx.Err() == nil
-				result.Result.(map[string]any)["recovery"] = "Inspect current state and completed_actions before deciding what remains; do not replay input."
 				return result, &computerScriptExecutionError{code: code}
 			}
 			healthy = true

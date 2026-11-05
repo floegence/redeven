@@ -84,7 +84,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 		var defaultRef, childRef string
 		popup, observed := false, false
 		computerProviderObjects(body["input"], func(value map[string]any) {
-			if ref, _ := value["default_candidate_ref"].(string); ref != "" {
+			if ref, _ := value["candidate_ref"].(string); ref != "" && value["new_tab"] == true && value["kind"] == "browser.managed" {
 				defaultRef = ref
 			}
 			if value["url"] == site.URL+"/child" {

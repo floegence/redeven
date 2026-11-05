@@ -1378,7 +1378,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_failure_phase", Label: "phase", Value: phase})
 			}
 		}
-		if status == toolResultStatusError && !result.effectUncertain && (rawPayload["budget_exhausted"] == "time" || rawPayload["budget_exhausted"] == "operations" || rawPayload["budget_exhausted"] == "output") {
+		if status == toolResultStatusError && (rawPayload["budget_exhausted"] == "time" || rawPayload["budget_exhausted"] == "operations" || rawPayload["budget_exhausted"] == "output") {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_budget", Label: "budget", Value: anyToString(rawPayload["budget_exhausted"])})
 		}
 		if status == toolResultStatusError && result.Error != nil && result.Error.Code == aitools.ErrorCodeTargetObservationUnavailable {

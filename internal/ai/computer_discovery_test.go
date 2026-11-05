@@ -85,42 +85,17 @@ func TestComputerCandidateSelectionPreservesBindingWhenBusyOrStale(t *testing.T)
 	}
 }
 
-func TestComputerDefaultBrowserPlansAreIsolatedAndReadOnly(t *testing.T) {
+func TestComputerUnboundThreadRequiresExplicitSelection(t *testing.T) {
 	host, executor, store, _ := computerBindingFixture(t)
-	first, err := host.ResolveTargetForThread(t.Context(), "thread-first", "current")
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := host.ResolveTargetForThread(t.Context(), "thread-second", "current")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.ID == second.ID || first.ID == "browser-main" || first.connection == nil || second.connection == nil {
-		t.Fatalf("default pages are not isolated: %+v %+v", first, second)
+	_, err := host.ResolveTargetForThread(t.Context(), "thread-first", "current")
+	var failure *targetToolPolicyError
+	if !errors.As(err, &failure) || failure.code != "missing_target_id" {
+		t.Fatalf("unbound current did not remain factual: %v", err)
 	}
 	selected, err := store.GetComputerTarget(t.Context(), "thread-first")
 	if err != nil || selected != "" || len(executor.calls) != 0 {
-		t.Fatalf("resource planning performed execution: %s %v", selected, err)
+		t.Fatalf("unbound resolution changed target state: %s %v", selected, err)
 	}
-	if err := store.SetComputerTarget(t.Context(), "thread-first", first.ID); err != nil {
-		t.Fatal(err)
-	}
-	for _, alias := range []string{"current", first.ID} {
-		if _, err := host.ResolveTargetForThread(t.Context(), "thread-first", alias); err == nil {
-			t.Fatalf("lost stored page was silently recreated through %q", alias)
-		}
-	}
-
-	host.extension = &computerExtensionHub{profiles: map[string]*computerExtensionClient{"personal": {profile: ComputerExtensionProfile{ID: "personal", Name: "Personal"}}}}
-	personal, err := host.defaultThreadBrowser("thread-first")
-	if err != nil || personal.connection.ExtensionProfileID != "personal" || personal.ID == first.ID {
-		t.Fatalf("personal browser not preferred: %+v %v", personal, err)
-	}
-	host.extension.profiles["work"] = &computerExtensionClient{profile: ComputerExtensionProfile{ID: "work", Name: "Work"}}
-	if _, err := host.defaultThreadBrowser("thread-first"); err == nil {
-		t.Fatal("ambiguous personal profiles were chosen arbitrarily")
-	}
-	host.extension = nil
 }
 
 func TestComputerScriptReturnsPopupProgressWithoutUserInput(t *testing.T) {
@@ -326,12 +301,12 @@ func TestComputerAutonomousCDPPagesPreserveExistingTab(t *testing.T) {
 	original := host.executors[connected.ID]
 	ids := []string{}
 	for _, thread := range []string{"thread-first", "thread-second"} {
-		planned, err := host.ResolveTargetForThread(t.Context(), thread, "current")
+		planned, err := host.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: adapter.CDPURL, ProfileID: adapter.BrowserContextID, NewTab: true})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if planned.Kind != "browser.connected" {
-			t.Fatalf("personal CDP browser was not preferred: %+v", planned)
+			t.Fatalf("explicit personal CDP connection changed: %+v", planned)
 		}
 		target, err := host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, TurnID: "turn", RunID: thread, ToolName: "computer.select_target"}, planned)
 		if err != nil {

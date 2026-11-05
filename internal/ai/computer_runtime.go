@@ -160,30 +160,13 @@ func (r *ComputerUseRuntime) ResolveTargetForThread(ctx context.Context, threadI
 			return TargetDescriptor{}, err
 		}
 		if bound == "" {
-			return r.defaultThreadBrowser(threadID)
+			return TargetDescriptor{}, &targetToolPolicyError{code: "missing_target_id", target: alias}
 		}
 		return r.registry.ResolveTarget(ctx, bound)
 	}
 	if strings.HasPrefix(alias, "task-browser-") {
 		if existing, err := r.registry.ResolveTarget(ctx, alias); err == nil {
 			return existing, nil
-		}
-		// Only an unbound invocation may materialize its frozen default plan.
-		// A lost durable page must not be recreated by naming its old ID.
-		bindings := r.targetBindings()
-		if bindings == nil {
-			return TargetDescriptor{}, errors.New("computer target binding store is unavailable")
-		}
-		bound, err := bindings.GetComputerTarget(ctx, threadID)
-		if err != nil {
-			return TargetDescriptor{}, err
-		}
-		if bound != "" {
-			return TargetDescriptor{}, errTargetNotRegistered
-		}
-		planned, err := r.defaultThreadBrowser(threadID)
-		if err == nil && planned.ID == alias {
-			return planned, nil
 		}
 		return TargetDescriptor{}, errTargetNotRegistered
 	}
@@ -392,7 +375,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	if call.ToolName == "computer.action" {
 		resolved, err := resolveComputerCanonicalSelector(call)
 		if err != nil {
-			return TargetToolResult{Result: map[string]any{"action_executed": false, "diagnostic": map[string]any{"phase": "validation", "field": "selector", "expected": "canonical_role_or_observed_ref", "recovery": "correct_arguments"}}}, err
+			return TargetToolResult{Result: map[string]any{"action_executed": false, "diagnostic": map[string]any{"phase": "validation", "field": "selector", "expected": "canonical_role_or_observed_ref"}}}, err
 		}
 		call = resolved
 	}

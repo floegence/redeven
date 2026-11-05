@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -299,8 +298,6 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 			profiles = append(profiles, computerBrowserProfile{name: profile.Name, kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: profile.ID, NewTab: true}})
 		}
 	}
-	defaultProfile, _ := defaultComputerBrowserProfile(profiles)
-
 	for _, profile := range profiles {
 		connection := profile.connection
 		profileName := profile.name
@@ -320,9 +317,6 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		if allowNewPages {
 			if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profileName, NewTab: true, State: state}, &connection); err != nil {
 				return inventory, err
-			}
-			if (state == "ready" || state == "installation_required") && computerProfileIdentity(connection) == computerProfileIdentity(defaultProfile.connection) {
-				inventory.DefaultCandidateRef = inventory.Candidates[len(inventory.Candidates)-1].CandidateRef
 			}
 		}
 		for _, tab := range tabs {
@@ -350,12 +344,6 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 			if err := r.appendComputerCandidate(&inventory, call.ThreadID, view, &tabConnection); err != nil {
 				return inventory, err
 			}
-		}
-	}
-	for _, candidate := range inventory.Candidates {
-		if candidate.TargetID == selected && strings.HasPrefix(candidate.Kind, "browser.") && candidate.State == "ready" {
-			inventory.DefaultCandidateRef = candidate.CandidateRef
-			break
 		}
 	}
 	if source == "system" {
@@ -593,7 +581,7 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	if err != nil {
 		var application *computerApplicationSelection
 		if errors.As(err, &application) {
-			return toolExecutionOutput{Payload: map[string]any{"selected": false, "action_executed": true, "state": application.state, "candidates": application.candidates, "next_step": "The application was opened. Select a returned window candidate when permitted; if none exists, discover again or report that no accessible window is available. Do not repeat the launch."}}, application.cause
+			return toolExecutionOutput{Payload: map[string]any{"selected": false, "action_executed": true, "state": application.state, "candidates": application.candidates}}, application.cause
 		}
 		var connectionFailure *computerConnectionError
 		if errors.As(err, &connectionFailure) {
@@ -646,25 +634,6 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	return toolExecutionOutput{facts: observed.executionFacts, TargetID: target.ID, Payload: payload, Attachments: toolAttachmentsFromTarget(observed.Attachments)}, observeErr
 }
 
-// Default selection describes a new task page without launching anything. The
-// profile participates in the identity, so a changed connection cannot replace
-// an already authorized resource between planning and execution.
-func (r *ComputerUseRuntime) defaultThreadBrowser(threadID string) (TargetDescriptor, error) {
-	profiles := r.personalBrowserProfiles()
-	if r.managedBrowserEnabled() {
-		profiles = append(profiles, computerBrowserProfile{name: "Default", kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}})
-	}
-	selected, err := defaultComputerBrowserProfile(profiles)
-	if err != nil {
-		return TargetDescriptor{}, err
-	}
-	connection := selected.connection
-	kind, name, profile := selected.kind, computerBrowserDisplayName(selected), computerProfileIdentity(connection)
-
-	digest := sha256.Sum256([]byte(threadID + "\x00" + profile))
-	return TargetDescriptor{ID: "task-browser-" + hex.EncodeToString(digest[:16]), Kind: kind, DisplayName: name, Locality: "local", State: "stopped", Capabilities: []string{"observe", "interaction"}, connection: &connection}, nil
-}
-
 func (r *ComputerUseRuntime) requireComputerSelectionOpen(call TargetToolCall) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -692,30 +661,6 @@ func computerBrowserDisplayName(profile computerBrowserProfile) string {
 		return "Headless Chromium — " + profile.name
 	}
 	return "Connected browser — " + profile.name
-}
-
-// One rule for both discovery and direct first-use planning.
-func defaultComputerBrowserProfile(profiles []computerBrowserProfile) (computerBrowserProfile, error) {
-	var personal []computerBrowserProfile
-	var managed computerBrowserProfile
-	for _, profile := range profiles {
-		if profile.kind == "browser.connected" {
-			personal = append(personal, profile)
-		}
-		if profile.connection.ManagedProfileID == "browser-main" {
-			managed = profile
-		}
-	}
-	if len(personal) > 1 {
-		return computerBrowserProfile{}, &targetToolPolicyError{code: "target_ambiguous"}
-	}
-	if len(personal) == 1 {
-		return personal[0], nil
-	}
-	if managed.kind != "" {
-		return managed, nil
-	}
-	return computerBrowserProfile{}, &targetToolPolicyError{code: "target_connection_required"}
 }
 
 func (r *ComputerUseRuntime) appendComputerCandidate(inventory *ComputerTargetInventory, threadID string, view ComputerCandidate, connection *ComputerBrowserConnection) error {

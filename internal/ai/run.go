@@ -1552,7 +1552,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) || errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown) {
 			outcome.effectUncertain = true
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "The external effect is unconfirmed. Inspect current state and completed facts before deciding the next action; do not blindly repeat this operation.", Retryable: false}, partial)
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "The external effect outcome is unconfirmed.", Retryable: false}, partial)
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.Canceled) {
@@ -3251,7 +3251,7 @@ func (e *targetToolPolicyError) Error() string {
 	case "target_observation_unavailable":
 		return "The page could not be inspected."
 	case "recovery_observation_required":
-		return "Computer actions are paused until a fresh observation is available. Completed actions must not be repeated."
+		return "Computer actions are paused pending a current authorized observation."
 	case "frame_unavailable":
 		return "The screenshot is unavailable."
 	case "invalid_computer_arguments":
@@ -3260,13 +3260,13 @@ func (e *targetToolPolicyError) Error() string {
 		}
 		return "The computer action has invalid arguments."
 	case "element_not_actionable":
-		return "The control is hidden, disabled, moving or covered. Inspect its current state before trying again."
+		return "The requested input did not meet the measured actionability conditions."
 	case "ambiguous_download":
-		return "Multiple downloads started after the cursor. Inspect their exact IDs before choosing a download."
+		return "Multiple downloads started after the cursor."
 	case "target_action_failed":
 		return "The computer action failed."
 	case "interaction_takeover_required":
-		return "computer interaction is paused; inspect the reported safety reasons before continuing"
+		return "computer interaction is paused"
 	default:
 		return "target tool policy denied the tool call"
 	}

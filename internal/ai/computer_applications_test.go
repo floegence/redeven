@@ -53,22 +53,16 @@ func TestComputerApplicationSelectionUsesExactCandidateAndReportsWindows(t *test
 		t.Run(string(rune('0'+count)), func(t *testing.T) {
 			host, call, candidate, marker := applicationProtocolFixture(t, count)
 			target, err := host.SelectComputerCandidate(computerPermissionContext(t, "full_access"), call, candidate.CandidateRef, ToolTargetPolicy{})
-			if count == 1 {
-				if err != nil || target.ID != "macos-window-a" {
-					t.Fatalf("selection: %+v %v", target, err)
-				}
-			} else {
-				var choice *computerApplicationSelection
-				if !errors.As(err, &choice) || len(choice.candidates) != count {
-					t.Fatalf("ambiguous/no window: %+v %v", target, err)
-				}
+			var choice *computerApplicationSelection
+			if !errors.As(err, &choice) || len(choice.candidates) != count || target.ID != "" {
+				t.Fatalf("launch inferred a window selection: %+v %v", target, err)
 			}
 			data, e := os.ReadFile(marker)
 			if e != nil || string(data) != "launch" {
 				t.Fatal("launch must occur exactly once", e)
 			}
 			bound, _ := host.targetBindings().GetComputerTarget(t.Context(), call.ThreadID)
-			if (count == 1) != (bound != "") {
+			if bound != "" {
 				t.Fatal("unresolved application changed binding")
 			}
 		})

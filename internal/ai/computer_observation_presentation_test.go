@@ -158,8 +158,8 @@ func TestComputerOutputBudgetPresentationPreservesDeliveryFacts(t *testing.T) {
 				found = true
 			}
 		}
-		if found == uncertain {
-			t.Fatalf("uncertainty hidden or output budget absent: %#v", activity.Chips)
+		if !found {
+			t.Fatalf("output budget absent: %#v", activity.Chips)
 		}
 		rows := activity.Payload.(fltools.StructuredActivityPayload).Rows
 		for _, title := range []string{"output_limit", "read_outcomes"} {

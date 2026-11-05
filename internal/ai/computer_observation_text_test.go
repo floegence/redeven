@@ -38,7 +38,7 @@ func TestComputerObservationTruncationRetainsExplicitReadChoices(t *testing.T) {
 		"read_options": []string{"source", "rows", "query"}, "nodes": []any{map[string]any{"ref": "root", "role": "table", "name": "Data"}}}
 	var output computerObservationOutput
 	value := output.render(tree, "scope", false).(map[string]any)
-	if value["source_truncated"] != true || value["recovery"] != computerObservationRecovery || value["root_ref"] != "root" || value["read_options"] == nil {
+	if value["source_truncated"] != true || value["recovery"] != nil || value["root_ref"] != "root" || value["read_options"] == nil {
 		t.Fatalf("lost source scope or continuation: %#v", value)
 	}
 }

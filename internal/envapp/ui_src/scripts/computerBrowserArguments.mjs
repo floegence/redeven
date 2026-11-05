@@ -2,7 +2,7 @@ import { browserKey } from './computerBrowserKeys.mjs';
 
 // This vocabulary contains product-authored diagnostics only, never page text.
 export const argumentFailure = (field, expected) => Object.assign(new Error('INVALID_REQUEST'), {
-  diagnostic: { phase: 'validation', field, expected, recovery: 'correct_arguments' },
+  diagnostic: { phase: 'validation', field, expected },
 });
 export function validateBrowserAction(args, privateInput = false) {
   const fields = {

@@ -275,15 +275,15 @@ func TestComputerActivityResultFactsAndSafeResources(t *testing.T) {
 		map[string]any{"display_name": "Chrome", "candidate_ref": "other", "url": "https://user:secret@example.test/weather?token=private#fragment"},
 		map[string]any{"display_name": "Chrome", "candidate_ref": "default", "new_tab": true, "state": "ready"},
 	}})
-	if rows[0].Meta != "default new_tab" {
-		t.Fatalf("default lost from initial preview: %+v", rows)
+	if rows[0].Meta != "" || rows[1].Meta != "new_tab" {
+		t.Fatalf("candidate facts were reordered or annotated: %+v", rows)
 	}
 	body, _ := json.Marshal(fltools.StructuredActivityPayload{Rows: rows, RowsProvided: true})
 	var record map[string]any
 	_ = json.Unmarshal(body, &record)
 	public, ok := sanitizeActivityPayloadValue(record, fltools.ActivityRendererStructured, "computer.targets")
 	encoded, _ := json.Marshal(public)
-	if !ok || !strings.Contains(string(encoded), "https://example.test/weather") || !strings.Contains(string(encoded), "default new_tab") {
+	if !ok || !strings.Contains(string(encoded), "https://example.test/weather") || !strings.Contains(string(encoded), "new_tab") {
 		t.Fatalf("public candidate facts lost: %s", encoded)
 	}
 	for _, private := range []string{"secret", "private", "fragment", "candidate_ref"} {

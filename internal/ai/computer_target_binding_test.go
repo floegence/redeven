@@ -120,7 +120,7 @@ func TestComputerTargetBindingRestoresWithoutRestoringReadiness(t *testing.T) {
 	if err != nil || target.ID != "desktop-main" || target.Ready {
 		t.Fatalf("restored target=%+v err=%v", target, err)
 	}
-	if target, err := restored.ResolveTargetForThread(t.Context(), "thread-second", "current"); err != nil || target.ID == "desktop-main" {
+	if target, err := restored.ResolveTargetForThread(t.Context(), "thread-second", "current"); err == nil || target.ID != "" {
 		t.Fatalf("another thread inherited desktop: %+v %v", target, err)
 	}
 }
@@ -184,8 +184,8 @@ func (bindingTakeoverGate) AssessInteraction(context.Context, TargetToolCall, Ta
 func TestComputerTargetResolutionDoesNotPersistSelection(t *testing.T) {
 	runtime, _, store, _ := computerBindingFixture(t)
 	for _, alias := range []string{"", "current", "desktop.screen"} {
-		if _, err := runtime.ResolveTargetForThread(t.Context(), "thread-first", alias); err != nil {
-			t.Fatal(err)
+		if _, err := runtime.ResolveTargetForThread(t.Context(), "thread-first", alias); (err != nil) != (alias != "desktop.screen") {
+			t.Fatalf("resolution %q: %v", alias, err)
 		}
 	}
 	if target, err := store.GetComputerTarget(t.Context(), "thread-first"); err != nil || target != "" {

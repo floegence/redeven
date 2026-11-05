@@ -22,10 +22,8 @@ func TestComputerRecoveryRejectsWritesUntilFreshObservation(t *testing.T) {
 	if !errors.As(err, &policy) || policy.code != "recovery_observation_required" {
 		t.Fatalf("write before observation returned %v", err)
 	}
-	for _, instruction := range []string{"fresh observation", "Completed actions must not be repeated"} {
-		if !strings.Contains(err.Error(), instruction) {
-			t.Fatalf("model feedback omitted %q: %v", instruction, err)
-		}
+	if !strings.Contains(err.Error(), "paused pending a current authorized observation") {
+		t.Fatalf("model feedback omitted the pause fact: %v", err)
 	}
 	if strings.Contains(err.Error(), "computer.targets") || strings.Contains(err.Error(), "computer.select_target") {
 		t.Fatalf("recovery gate prescribed a tool route: %v", err)

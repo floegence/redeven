@@ -765,7 +765,7 @@ export class BrowserComputerPage {
       if(this.references.size>=2000&&!this.references.has(cell.ref))this.references.delete(this.references.keys().next().value);
       this.references.set(cell.ref,cellsByRef.get(cell.ref));
     }
-    return page;
+    return {...page,source:'browser_ax',property:'name'};
   }
 
   async attribute(element, name) {
@@ -789,7 +789,7 @@ export class BrowserComputerPage {
       } catch { /* Preserve exact non-URL source values. */ }
     }
     if (value !== null && Array.from(value).length > 2000) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
-      diagnostic: {phase:'read', method:'locator.attribute', expected:'attribute_max_2000', recovery:'choose_supported_read'},
+      diagnostic: {phase:'read', method:'locator.attribute', expected:'attribute_max_2000'},
     });
     return {attribute:name,value,...(redacted?{redacted}:{})};
   }
@@ -802,7 +802,7 @@ export class BrowserComputerPage {
       const result = await evaluate(session, 'Runtime.callFunctionOn', {objectId:object.objectId, returnByValue:true,
         functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.innerText,metadata={url:this.ownerDocument.URL,title:this.ownerDocument.title};let text="",count=0;for(const character of source){if(count++===12000)return {...metadata,text,truncated:true,scope:"element",source:"browser_dom",property:"innerText"};text+=character;}return {...metadata,text,truncated:false,scope:"element",source:"browser_dom",property:"innerText"};}'}, value => value?.unsupported === true || (typeof value?.text === 'string' && typeof value.truncated === 'boolean' && value.scope === 'element' && value.property === 'innerText'));
       if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
-        diagnostic: {phase:'read', method:'locator.text', expected:'html_element', recovery:'choose_supported_read'},
+        diagnostic: {phase:'read', method:'locator.text', expected:'html_element'},
       });
       return {...result,url:redactedNavigationURL(result.url),...this.sourceIdentity(element),document_id:this.prefix+':'+this.revision,ref:element.ref};
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }
@@ -913,7 +913,9 @@ export class BrowserComputerPage {
     const before=await this.elementState(element);
     if(!allowed(before))throw this.actionabilityFailure({...before,failed_checks:['connected',hitTest?'rendered':'visible',...(action==='hover'?[]:['enabled']),...(hitTest?[]:['editable'])].filter(key=>!before[key])},'precondition');
     if(!hitTest)return;
-    const preparation={scroll_into_view:options.scroll_into_view??true,stability_timeout_ms:options.stability_timeout_ms??1000};
+    // Pointer actions are direct by default. Scrolling and stability sampling
+    // can change page state and therefore require an explicit request.
+    const preparation={scroll_into_view:options.scroll_into_view??false,stability_timeout_ms:options.stability_timeout_ms??0};
     const started=performance.now();
     if(preparation.scroll_into_view)await this.effect(()=>element.frame.session.send('DOM.scrollIntoViewIfNeeded',{backendNodeId:element.backendNodeId}),'preparation');
     const deadline=performance.now()+preparation.stability_timeout_ms;
