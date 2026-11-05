@@ -583,7 +583,7 @@ try {
   const pluginBrowser = path.join(temporary, 'plugin-web.js');
   if (process.env.REDEVEN_PLUGIN_WEB_QUALIFICATION === '1') {
     pluginPackage = (await readFile(await buildPluginWebQualification(temporary))).toString('base64');
-    await build({ entryPoints: [path.join(root, 'internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts')], outfile: pluginBrowser, bundle: true, platform: 'browser', format: 'iife', globalName: 'PluginWebAcceptance' });
+    await build({ entryPoints: [path.join(root, 'internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts')], outfile: pluginBrowser, bundle: true, platform: 'browser', format: 'iife', globalName: 'PluginWebAcceptance', nodePaths: [path.join(root, 'internal/envapp/ui_src/node_modules')] });
   }
   browser = await browserType.launch({ headless: process.env.REDEVEN_CENTER_HEADED !== '1', ...(process.env.REDEVEN_CENTER_BROWSER_CHANNEL ? {channel:process.env.REDEVEN_CENTER_BROWSER_CHANNEL} : {}) });
   report.channel = process.env.REDEVEN_CENTER_BROWSER_CHANNEL ?? 'bundled';
