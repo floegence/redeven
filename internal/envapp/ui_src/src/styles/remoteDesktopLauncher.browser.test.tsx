@@ -123,7 +123,7 @@ it('keeps login-screen deployment inside the same connection dialog flow', async
   await expect.poll(() => state.create.mock.calls.length).toBe(1);
 });
 
-it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, width }))))('shows concrete preparation tasks and motion in $locale at $width px', async ({ locale, width }) => {
+it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, width }))))('shows concrete preparation tasks with restrained motion in $locale at $width px', async ({ locale, width }) => {
   state.locale = locale;
   state.ssh = true;
   state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
@@ -140,9 +140,10 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   expect(dialog.textContent).toContain('25%');
   const progress = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-progress')!;
   const marker = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-marker')!;
-  const label = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-label')!;
-  expect(getComputedStyle(marker, '::before').animationName).toBe('remote-desktop-flow-spin');
-  expect(getComputedStyle(label).animationName).toBe('floe-progress-shimmer');
+  expect(getComputedStyle(marker, '::before').animationName).toBe('none');
+  expect(dialog.querySelector('.remote-desktop-flow-spinner, [data-floe-progress-shimmer]')).toBeNull();
+  expect(getComputedStyle(progress.querySelector('[data-floe-surface-part=progress-fill]')!, '::after').animationName).toBe('none');
+  expect(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations === Infinity)).toHaveLength(0);
   expect(progress.getAttribute('aria-valuenow')).toBe('2500000');
   expect(dialog.textContent).toContain(copy.t('remoteDesktop.deployDownloadDetail'));
   const content = dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
@@ -160,6 +161,8 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   expect(progress.hasAttribute('aria-valuenow')).toBe(false);
   expect(dialog.querySelector('.remote-desktop-progress-values')).toBeNull();
   expect(dialog.querySelector('.remote-desktop-preparation-current .animate-indeterminate')).not.toBeNull();
+  expect(Number.parseFloat(getComputedStyle(progress.querySelector('.animate-indeterminate')!).animationDuration)).toBeGreaterThanOrEqual(3.6);
+  expect(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations === Infinity)).toHaveLength(1);
   expect(document.activeElement).toBe(cancel);
   await expect.poll(() => Math.abs(cancel.getBoundingClientRect().y - before.y)).toBeLessThan(1);
   report({ stage: 'preparing_media', media_state: 'ready', received_bytes: 10000000, expected_bytes: 10000000 });

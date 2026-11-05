@@ -533,14 +533,14 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
           <Show when={['preparing','canceling'].includes(deploymentPhase())}>
             <div class="remote-desktop-flow-stage" data-phase="applying">
               <div class="remote-desktop-flow-transition">
-                <span class="remote-desktop-flow-spinner" aria-hidden="true" />
+                <span class="remote-desktop-flow-activity" aria-hidden="true" />
                 <div><h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t(cancelingDeployment() ? 'remoteDesktop.deployRollback' : 'remoteDesktop.installStep')}</h4></div>
               </div>
               <Show when={operation() === 'ensure' && !cancelingDeployment() && preparationStep() >= 0} fallback={<div class="remote-desktop-deployment-progress" role="status"><p>{i18n.t(deploymentStageCopy())}</p><progress aria-label={i18n.t(deploymentStageCopy())} /></div>}>
                 <ol class="remote-desktop-preparation-steps" aria-label={i18n.t('remoteDesktop.installStep')}>
                   <For each={preparationSteps}>{(key, index) => <li data-state={index() < preparationStep() ? 'complete' : index() === preparationStep() ? 'active' : 'upcoming'} aria-current={index() === preparationStep() ? 'step' : undefined}>
                     <span class="remote-desktop-preparation-marker" aria-hidden="true"><Show when={index() < preparationStep()} fallback={index() + 1}><Check size={12} /></Show></span>
-                    <div class="remote-desktop-preparation-detail"><span class="remote-desktop-preparation-label" data-floe-progress-shimmer={index() === preparationStep() ? 'text' : undefined}>{i18n.t(key)}</span>
+                    <div class="remote-desktop-preparation-detail"><span class="remote-desktop-preparation-label">{i18n.t(key)}</span>
                     </div>
                   </li>}</For>
                 </ol>

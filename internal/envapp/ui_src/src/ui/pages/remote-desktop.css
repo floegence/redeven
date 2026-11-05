@@ -74,16 +74,13 @@
 .remote-desktop-preparation-steps li[data-state=complete] .remote-desktop-preparation-marker { border-color: transparent; color: var(--primary-foreground); background: var(--primary); }
 .remote-desktop-preparation-steps li[data-state=complete] .remote-desktop-preparation-marker > svg { animation: remote-desktop-step-complete var(--floe-duration-slow) var(--floe-ease-spring) both; }
 .remote-desktop-preparation-steps li[data-state=active] .remote-desktop-preparation-marker { border-color: var(--floe-line-strong); color: var(--floe-ink); background: var(--floe-well); }
-.remote-desktop-preparation-steps li[data-state=active] .remote-desktop-preparation-marker::before { content: ''; position: absolute; inset: -1px; border: 1.5px solid transparent; border-top-color: var(--primary); border-inline-end-color: var(--primary); border-radius: inherit; animation: remote-desktop-flow-spin 1.2s linear infinite; }
 .remote-desktop-preparation-detail { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .remote-desktop-preparation-current { margin-top: 16px; padding: 14px; border-radius: var(--floe-radius-group); background: var(--floe-well); }
 .remote-desktop-preparation-current > p { min-height: calc(3 * 1.6em); margin: 0 0 14px; color: var(--floe-ink-soft); font-size: var(--floe-type-supporting); line-height: 1.6; }
 .remote-desktop-preparation-current > p > span { display: grid !important; }
 .remote-desktop-preparation-progress { height: 4px; }
 .remote-desktop-preparation-metrics { min-height: calc(10px + 1.6em); font-size: var(--floe-type-caption); line-height: 1.6; }
-.remote-desktop-preparation-current .animate-indeterminate { animation-duration: 1.8s; }
-.remote-desktop-preparation-current [data-floe-surface-part=progress-fill]:not(.animate-indeterminate) { position: relative; overflow: hidden; }
-.remote-desktop-preparation-current [data-floe-surface-part=progress-fill]:not(.animate-indeterminate)::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary-foreground) 28%, transparent), transparent); animation: remote-desktop-download-sweep 2.4s var(--floe-ease-in-out) infinite; }
+.remote-desktop-preparation-current .animate-indeterminate { animation-duration: 3.6s; }
 .remote-desktop-deployment-result { margin-top: 16px; }
 
 .remote-desktop-deployment-flow {
@@ -120,6 +117,7 @@
 .remote-desktop-flow-transition > div { min-width: 0; }
 .remote-desktop-flow-transition p { margin: 6px 0 0; color: var(--muted-foreground); line-height: 1.6; }
 .remote-desktop-flow-transition code { display: block; margin-top: 12px; font-size: 11px; overflow-wrap: anywhere; }
+.remote-desktop-flow-activity { width: 7px; height: 7px; flex: 0 0 auto; margin: 6px 7px 0 4px; border-radius: 50%; background: var(--primary); }
 .remote-desktop-flow-spinner { width: 22px; height: 22px; flex: 0 0 auto; border: 2px solid color-mix(in srgb, var(--primary) 24%, transparent); border-top-color: var(--primary); border-radius: 50%; animation: remote-desktop-flow-spin 800ms linear infinite; }
 .remote-desktop-flow-status-icon { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border-radius: 50%; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, transparent); }
 .remote-desktop-flow-status-icon[data-success] { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
@@ -131,22 +129,20 @@
 @keyframes remote-desktop-flow-content-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes remote-desktop-flow-spin { to { transform: rotate(360deg); } }
 @keyframes remote-desktop-step-complete { from { opacity: 0; transform: scale(.65); } to { opacity: 1; transform: scale(1); } }
-@keyframes remote-desktop-download-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) {
   .remote-desktop-deployment-flow, .remote-desktop-flow-stage, .remote-desktop-inline-step, .remote-desktop-flow-transition { animation: none; }
   .remote-desktop-flow-spinner { animation: none; }
   .remote-desktop-flow-step-index { transition: none; }
   .remote-desktop-preparation-marker, .remote-desktop-preparation-steps li::after, .remote-desktop-preparation-current [data-floe-surface-part=progress-fill] { transition: none; }
-  .remote-desktop-preparation-marker::before, .remote-desktop-preparation-marker > svg, .remote-desktop-preparation-current .animate-indeterminate, .remote-desktop-preparation-current [data-floe-surface-part=progress-fill]::after { animation: none !important; }
+  .remote-desktop-preparation-marker > svg, .remote-desktop-preparation-current .animate-indeterminate { animation: none !important; }
   .remote-desktop-preparation-current .animate-indeterminate { width: 100%; opacity: .5; }
 }
 @media (forced-colors: active) {
   .remote-desktop-preparation-marker { border-color: CanvasText; }
   .remote-desktop-preparation-steps li[data-state=active] .remote-desktop-preparation-marker { outline: 1px solid Highlight; outline-offset: 2px; }
-  .remote-desktop-preparation-marker::before, .remote-desktop-preparation-marker > svg, .remote-desktop-preparation-current .animate-indeterminate { animation: none !important; }
+  .remote-desktop-preparation-marker > svg, .remote-desktop-preparation-current .animate-indeterminate { animation: none !important; }
   .remote-desktop-preparation-current [data-floe-surface-part=progress-track] { border: 1px solid CanvasText; }
   .remote-desktop-preparation-current [data-floe-surface-part=progress-fill] { background: Highlight; }
-  .remote-desktop-preparation-current [data-floe-surface-part=progress-fill]::after { content: none; }
 }
 @media (max-width: 380px) {
   .remote-desktop-flow-content { height: 420px; }

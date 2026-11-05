@@ -201,7 +201,7 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     await expect.poll(() => flow.querySelector('[data-phase="applying"]')).not.toBeNull();
     expect(flow.querySelector('input[type=password]')).toBeNull();
     expect(flow.querySelector('[aria-current=step]')?.textContent).toContain('Prepare host');
-    expect(getComputedStyle(flow.querySelector('.remote-desktop-flow-spinner')!).animationName).toBe(reducedMotion === 'reduce' ? 'none' : 'remote-desktop-flow-spin');
+    expect(getComputedStyle(flow.querySelector('.remote-desktop-flow-activity')!).animationName).toBe('none');
     expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
     const action = flow.querySelector('.remote-desktop-flow-footer > button:last-child')!;
     expect(Math.abs(action.getBoundingClientRect().width - actionWidth)).toBeLessThan(1);
