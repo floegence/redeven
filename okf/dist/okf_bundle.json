@@ -10686,15 +10686,15 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 3071,
+      "body_length": 3122,
       "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Manifest/lock pins define the consumed release; Floe owns asset monitoring and per-view recovery, while Redeven supplies authenticated product integration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.90.12, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
-          "char_count": 1567
+          "body": "Pins: Floe Boot/Core/Protocol v0.91.4, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "char_count": 1618
         },
         {
           "id": "boundaries",
@@ -25764,5 +25764,5 @@
       ]
     }
   ],
-  "source_sha256": "364395b6bb7e38587149d87f23c9ade813727b0e6676e6d312f17cc1692ed207"
+  "source_sha256": "7e669908e5d5232955c0c820ac253bcf128136884b8cc818c604b8f29c4dda0e"
 }
