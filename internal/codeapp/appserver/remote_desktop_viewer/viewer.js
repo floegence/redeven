@@ -203,7 +203,7 @@ function startUnlock() {
   armUnlock();
 }
 function armUnlock() {
-  if (unlockPaused || state !== 'locked' || !painted || !session.unlock || lockedFrame <= 0) return;
+  if (unlocking || unlockPaused || state !== 'locked' || !painted || !session.unlock || lockedFrame <= 0) return;
   unlocking = true; input.bindTarget(unlockAuthorized(generation) ? generation : null); input.focus(); status('unlocking', 'unlockPhysicalOnly'); updateTransitionControls();
 }
 function cancelUnlock() {
@@ -290,7 +290,14 @@ async function connect() {
     media = new windowTransport.WebSocket(address('media'), ['redeven-desktop-v1', result.data.token]);
     media.binaryType = 'arraybuffer';
     player ??= new HostDesktopPlayer(canvas, {
-      acknowledge(g, frame) { if (!awaitingState && (state === 'active' || state === 'locked') && g === generation) { if (state === 'locked') lockedFrame = frame; command('frame_ack', { frame_id: frame }); } },
+      acknowledge(g, frame) {
+        if (!awaitingState && (state === 'active' || state === 'locked') && g === generation) {
+          if (state === 'locked') lockedFrame = frame;
+          command('frame_ack', { frame_id: frame });
+          // A batched receipt may follow the painted callback.
+          if (state === 'locked') armUnlock();
+        }
+      },
       painted(g) {
         if (awaitingState || g !== generation || state !== 'active' && state !== 'locked') return;
         clearTimeout(recoveryTimer); painted = true; canvas.setAttribute('data-painted', '');

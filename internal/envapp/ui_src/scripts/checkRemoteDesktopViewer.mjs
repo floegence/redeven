@@ -37,6 +37,7 @@ await session.run(async () => {
         : 'x11';
   const noVP9 = process.argv.includes('--no-vp9');
   const noAV1 = process.argv.includes('--no-av1');
+  const delayReceipt = process.argv.includes('--delay-receipt');
   const codecOnly = process.argv.includes('--codec-only');
   let offeredFrameWindow = backend === 'macos' || process.argv.includes('--legacy-window') ? 0 : 6;
   const hostInputOnly = process.argv.includes('--host-input-only');
@@ -153,7 +154,14 @@ await session.run(async () => {
         : path.join(assets, name);
     try {
       response.setHeader('Content-Type', name.endsWith('.css') ? 'text/css' : 'text/javascript');
-      response.end(readFileSync(source));
+      let data = readFileSync(source);
+      if (delayReceipt && name === 'host_desktop_player.mjs') {
+        const original = 'this.acknowledge(header.generation, header.frame_id);';
+        const text = data.toString();
+        assert(text.includes(original), 'player receipt fixture no longer matches the published player');
+        data = text.replace(original, 'setTimeout(() => this.acknowledge(header.generation, header.frame_id), 200);');
+      }
+      response.end(data);
     } catch {
       response.writeHead(404).end();
     }
@@ -1193,6 +1201,10 @@ await session.run(async () => {
       await page.waitForFunction(() => !document.querySelector('#unlock-bar').hidden);
       assert(await page.locator('#start-unlock').isDisabled(), 'unlock accepted an unpainted lock screen');
       paint();
+      if (delayReceipt) {
+        await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted'));
+        assert(await page.locator('#cancel-unlock').isHidden(), 'paint alone must not authorize before the frame receipt');
+      }
       await page.waitForFunction(() => !document.querySelector('#start-unlock').disabled && !document.querySelector('#cancel-unlock').hidden);
       assert(await page.locator('#connection').isHidden(), 'painted lock screen retained the connection overlay');
       assert(await page.locator('#clipboard').isDisabled(), 'lock screen exposed clipboard');
@@ -1203,6 +1215,11 @@ await session.run(async () => {
         await page.locator('#desktop').evaluate((element) => element === document.activeElement),
         'unlock must focus the non-editable desktop',
       );
+      await page.locator('#settings').focus();
+      paint();
+      await page.waitForTimeout(delayReceipt ? 300 : 100);
+      assert(await page.locator('#settings').evaluate((element) => element === document.activeElement), 'later receipts must not steal focus');
+      await page.locator('#desktop').focus();
       await page.locator('#desktop').evaluate((element) => {
         element.dispatchEvent(
           new KeyboardEvent('keydown', { key: 'Process', code: 'KeyT', isComposing: true, bubbles: true, cancelable: true }),

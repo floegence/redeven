@@ -9,12 +9,14 @@ reviewed_at: "2026-11-04"
 
 Published input/playback and session contracts own current-frame authority. Separate cursors permit immediate movement; embedded cursors hide local pointer. Recovery keeps controls usable; disconnect stops media/input with confirmed removal or Retry. Frozen pixels never imply connection.
 
-When a painted lock-screen frame is available in control mode, the viewer arms the
-physical-only unlock input automatically. The lock-screen button is a recovery
-control that pauses and re-arms this input; it is not an authorization boundary.
-Opening a panel, losing the socket, changing generation or mode, and every
-unpainted transition revoke the armed target. Backend frame, generation, control
-owner and physical-input checks remain mandatory for every unlock event.
+When a lock-screen frame is painted and acknowledged in control mode, the viewer
+arms physical-only unlock input automatically. Paint and acknowledgement may
+arrive in either order; both paths attempt arming, and subsequent acknowledgements
+must not steal focus. The lock-screen button pauses and re-arms input as a recovery
+control; it is not an authorization boundary. Opening a panel, losing the socket,
+changing generation or mode, and every unpainted transition revoke the armed
+target. Backend frame, generation, control owner and physical-input checks remain
+mandatory for every unlock event.
 
 # Contract
 
