@@ -103,7 +103,7 @@
 .remote-desktop-flow-step-index { z-index: 1; display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid var(--border); border-radius: 999px; background: var(--background); color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; transition: color 220ms ease, border-color 220ms ease, background 220ms ease, transform 220ms ease; }
 .remote-desktop-flow-step[data-state=active] .remote-desktop-flow-step-index { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 13%, transparent); transform: scale(1.04); }
 .remote-desktop-flow-step[data-state=complete] .remote-desktop-flow-step-index { border-color: color-mix(in srgb, var(--primary) 60%, var(--border)); color: var(--primary); }
-.remote-desktop-flow-content { height: 340px; box-sizing: border-box; overflow: auto; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--floe-line); }
+.remote-desktop-flow-content { height: 400px; box-sizing: border-box; overflow: auto; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--floe-line); }
 .remote-desktop-flow-copy { color: var(--foreground); line-height: 1.65; }
 .remote-desktop-flow-copy p { margin: 0; }
 .remote-desktop-flow-note { margin-top: 10px !important; color: var(--muted-foreground); font-size: 12px; }

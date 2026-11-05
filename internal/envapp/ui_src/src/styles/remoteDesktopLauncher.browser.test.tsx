@@ -145,6 +145,10 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   expect(getComputedStyle(label).animationName).toBe('floe-progress-shimmer');
   expect(progress.getAttribute('aria-valuenow')).toBe('2500000');
   expect(dialog.textContent).toContain(copy.t('remoteDesktop.deployDownloadDetail'));
+  const content = dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
+  const metrics = dialog.querySelector<HTMLElement>('.remote-desktop-progress-values')!;
+  expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom);
+  expect(dialog.querySelector<HTMLElement>('.remote-desktop-preparation-current')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom);
   const cancel = dialog.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:first-child')!;
   cancel.focus();
   await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.effect?.getTiming().iterations !== Infinity).length).toBe(0);
