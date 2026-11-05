@@ -342,6 +342,13 @@ type computerConnectionError struct {
 	diagnostic map[string]any
 }
 
+// A browser adapter received confirmation that a new tab was created before
+// a later selection step failed. The wrapped error retains its own identity.
+type computerTabCreatedError struct{ cause error }
+
+func (e *computerTabCreatedError) Error() string { return e.cause.Error() }
+func (e *computerTabCreatedError) Unwrap() error { return e.cause }
+
 func (e *computerConnectionError) Error() string { return e.cause.Error() }
 func (e *computerConnectionError) Unwrap() error { return e.cause }
 func computerConnectionDiagnostic(raw map[string]any) map[string]any {

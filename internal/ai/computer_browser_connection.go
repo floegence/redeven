@@ -195,7 +195,13 @@ func (r *ComputerUseRuntime) disconnectBrowser(ctx context.Context, targetID str
 
 // CDP endpoint/profile identities originate in the authenticated connection UI.
 // Each actual tab has one adapter; selecting another tab never replaces it.
-func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (TargetDescriptor, error) {
+func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (_ TargetDescriptor, resultErr error) {
+	createdTab := false
+	defer func() {
+		if createdTab && resultErr != nil {
+			resultErr = &computerTabCreatedError{cause: resultErr}
+		}
+	}()
 	command := "inventory"
 	if connection.NewTab {
 		command = "new_tab"
@@ -203,6 +209,12 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 	tabs, err := r.cdpBrowserTabs(ctx, connection.CDPURL, command, connection.ProfileID)
 	if err != nil {
 		return TargetDescriptor{}, err
+	}
+	if connection.NewTab {
+		if len(tabs) == 0 || tabs[0].ID == "" {
+			return TargetDescriptor{}, errBrowserOutcomeUnknown
+		}
+		createdTab = true
 	}
 	tabs, err = r.browserInventoryPrivacy(ctx, connection.CDPURL, tabs)
 	if err != nil {

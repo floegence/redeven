@@ -231,6 +231,9 @@ func (p *managedBrowserProfile) request(ctx context.Context, command string) (ma
 	p.writeMu.Unlock()
 	if err != nil {
 		p.close()
+		if command == "new_tab" {
+			return managedBrowserReply{}, errors.Join(errBrowserOutcomeUnknown, err)
+		}
 		return managedBrowserReply{}, err
 	}
 	var reply managedBrowserReply
@@ -248,6 +251,9 @@ func (p *managedBrowserProfile) request(ctx context.Context, command string) (ma
 		return managedBrowserReply{}, errors.New("managed browser disconnected")
 	}
 	if reply.Error != "" {
+		if command == "new_tab" {
+			return managedBrowserReply{}, errBrowserOutcomeUnknown
+		}
 		return managedBrowserReply{}, errors.New("managed browser command failed")
 	}
 	return reply, nil
@@ -446,7 +452,13 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	r.startManagedBrowserMaintenanceLocked()
 	return profile, nil
 }
-func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (TargetDescriptor, error) {
+func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (_ TargetDescriptor, resultErr error) {
+	createdTab := false
+	defer func() {
+		if createdTab && resultErr != nil {
+			resultErr = &computerTabCreatedError{cause: resultErr}
+		}
+	}()
 	profile, err := r.managedProfileLocked(ctx, connection.ManagedProfileID)
 	if err != nil {
 		return TargetDescriptor{}, err
@@ -459,6 +471,12 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 	tabs, err := profile.call(ctx, command)
 	if err != nil {
 		return TargetDescriptor{}, err
+	}
+	if connection.NewTab {
+		if len(tabs) == 0 || tabs[0].ID == "" {
+			return TargetDescriptor{}, errBrowserOutcomeUnknown
+		}
+		createdTab = true
 	}
 	tabs, err = r.browserInventoryPrivacy(ctx, profile.endpoint, tabs)
 	if err != nil {

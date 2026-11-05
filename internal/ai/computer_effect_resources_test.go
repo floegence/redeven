@@ -88,6 +88,15 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 				if !result.IsError || result.Structured["error"].(map[string]any)["code"] != wantCode || !strings.Contains(result.Text, "Tool execution has not started") || dispatches != 0 || handlers != 0 || len(executor.calls) != 0 {
 					t.Fatalf("failure reached execution or lost facts: %+v dispatches=%d handlers=%d effects=%+v", result, dispatches, handlers, executor.calls)
 				}
+				var model map[string]any
+				if err := json.Unmarshal([]byte(result.Text), &model); err != nil {
+					t.Fatalf("model preparation facts: %s (%v)", result.Text, err)
+				}
+				modelError, _ := model["error"].(map[string]any)
+				execution, _ := model["execution"].(map[string]any)
+				if modelError["code"] != wantCode || execution["started"] != false {
+					t.Fatalf("model preparation facts: %s", result.Text)
+				}
 				if strings.Contains(result.Text, "computer.targets") || strings.Contains(result.Text, "computer.select_target:") {
 					t.Fatalf("resource error prescribes a route: %s", result.Text)
 				}

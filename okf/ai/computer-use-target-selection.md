@@ -38,7 +38,10 @@ Selection returns version 2 with exact backend availability and the shared core
 script guide and one bounded initial observation through the normal runtime gate.
 Observation failure retains selected:true and needs_observation; private pauses
 retain selection without leaking content. Confirmed app opening remains
-action_executed:true. ui.help discloses read, visual and download details on demand.
+action_executed:true. Confirmed new-tab creation remains action_executed:true
+even if a later selection step fails; an unconfirmed creation is reported as an
+unknown effect, never as an unexecuted action. Startup error types survive the
+model-facing result. ui.help discloses read, visual and download details on demand.
 The earlier verbose capability fields are superseded by this model-facing guide;
 there are no product consumers of those fields. It is not a new registry or authorization source. Native adapters reject
 browser-only query, attribute and image-coordinate operations before dispatch.

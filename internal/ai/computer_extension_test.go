@@ -525,6 +525,75 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 	}
 }
 
+func TestExtensionNewTabSelectionFailurePreservesCreationFacts(t *testing.T) {
+	for _, mode := range []string{"confirmed", "unknown"} {
+		t.Run(mode, func(t *testing.T) {
+			host, _, store, _ := computerBindingFixture(t)
+			hub, client, peer := extensionFixture(t, host)
+			host.extension = hub
+			sourceHost, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {})
+			host.browserHost = sourceHost
+			connection := &ComputerBrowserConnection{ExtensionProfileID: client.profile.ID, NewTab: true}
+			candidate, err := host.rememberComputerCandidate("thread-first", ComputerCandidate{Kind: "browser.connected"}, connection)
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan int, 1)
+			go func() {
+				count := 0
+				defer func() { done <- count }()
+				for {
+					raw, readErr := browserbridge.ReadMessage(peer, 1<<20)
+					if readErr != nil {
+						return
+					}
+					var request struct{ ID, Command string }
+					if json.Unmarshal(raw, &request) != nil {
+						return
+					}
+					count++
+					if mode == "unknown" {
+						_ = peer.Close()
+						return
+					}
+					var response map[string]any
+					if request.Command == "new_tab" {
+						response = map[string]any{"id": request.ID, "result": map[string]any{"tab_id": "7", "native_target_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
+					} else {
+						response = map[string]any{"id": request.ID, "error": "EXTENSION_COMMAND_FAILED"}
+					}
+					if browserbridge.WriteMessage(peer, response, 1<<20) != nil {
+						return
+					}
+				}
+			}()
+			r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
+			bindTargetTestRun(t, r)
+			value, failure := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer.select_target"), "select", "computer.select_target", map[string]any{"candidate_ref": candidate.CandidateRef})
+			output, ok := value.(toolExecutionOutput)
+			if !ok || failure == nil {
+				t.Fatalf("missing failure facts: %#v %v", value, failure)
+			}
+			payload := output.Payload.(map[string]any)
+			if payload["selected"] != false {
+				t.Fatalf("selection facts: %#v", payload)
+			}
+			if mode == "confirmed" && (payload["action_executed"] != true || len(extractStringSlice(payload["completed_actions"])) != 1 || errors.Is(failure, errBrowserOutcomeUnknown)) {
+				t.Fatalf("confirmed creation lost: %#v %v", payload, failure)
+			}
+			if mode == "unknown" && (payload["effect_outcome_unknown"] != true || payload["action_executed"] != nil || !errors.Is(failure, errBrowserOutcomeUnknown)) {
+				t.Fatalf("unknown creation misrepresented: %#v %v", payload, failure)
+			}
+			selected, _ := store.GetComputerTarget(t.Context(), "thread-first")
+			_ = peer.Close()
+			count := <-done
+			if selected != "" || count != 1 {
+				t.Fatalf("selection or replay changed: selected=%q commands=%d", selected, count)
+			}
+		})
+	}
+}
+
 func TestExtensionObservationFailurePreservesOnlyConfirmedProgress(t *testing.T) {
 	for _, executed := range []any{false, true, "unconfirmed"} {
 		t.Run(fmt.Sprint(executed), func(t *testing.T) {

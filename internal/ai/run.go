@@ -1523,7 +1523,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	outcome.executionFacts = toolExecutionFacts{callID: toolID, toolName: toolName,
-		completed: !errors.Is(toolErrRaw, context.Canceled) && !errors.Is(toolErrRaw, context.DeadlineExceeded) && !errors.Is(toolErrRaw, errComputerEffectUnknown) && !errors.Is(toolErrRaw, errMCPEffectUnknown) && !errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown)}
+		completed: !errors.Is(toolErrRaw, context.Canceled) && !errors.Is(toolErrRaw, context.DeadlineExceeded) && !errors.Is(toolErrRaw, errComputerEffectUnknown) && !errors.Is(toolErrRaw, errBrowserOutcomeUnknown) && !errors.Is(toolErrRaw, errMCPEffectUnknown) && !errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown)}
 	if target, ok := result.(toolExecutionOutput); ok {
 		outcome.executionFacts.targetID = target.TargetID
 		outcome.executionFacts.completedActions = append([]string(nil), target.facts.completedActions...)
@@ -1550,7 +1550,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			partial = target.Payload
 			outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 		}
-		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) || errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown) {
+		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errBrowserOutcomeUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) || errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown) {
 			outcome.effectUncertain = true
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "The external effect outcome is unconfirmed.", Retryable: false}, partial)
 			return outcome, nil
@@ -1571,6 +1571,15 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if errors.As(toolErrRaw, &navigationErr) {
 			setToolError(&aitools.ToolError{Code: navigationErr.code, Message: navigationErr.Error(), Retryable: false}, partial)
 			return outcome, nil
+		}
+		var startup *TargetStartupError
+		if isComputerUseTool(toolName) && errors.As(toolErrRaw, &startup) {
+			switch startup.Code {
+			case "TARGET_CONNECTION_REQUIRED", "TARGET_PERMISSION_REQUIRED", "TARGET_SETUP_REQUIRED", "TARGET_NOT_READY", "TARGET_EXECUTOR_UNAVAILABLE":
+				failure := &targetToolPolicyError{code: strings.ToLower(startup.Code)}
+				setToolError(aitools.ClassifyError(failure), partial)
+				return outcome, nil
+			}
 		}
 		var scriptErr *computerScriptExecutionError
 		if errors.As(toolErrRaw, &scriptErr) {

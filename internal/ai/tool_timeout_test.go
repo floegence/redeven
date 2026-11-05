@@ -65,3 +65,36 @@ func TestToolFailureUsesClassifierAndPreservesPartialExecution(t *testing.T) {
 		})
 	}
 }
+
+func TestComputerTypedStartupAndUnknownEffectReachModel(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		err       error
+		code      aitools.ErrorCode
+		uncertain bool
+	}{
+		{"startup", &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}, aitools.ErrorCodeTargetConnectionRequired, false},
+		{"unknown", errors.Join(errBrowserOutcomeUnknown, context.Canceled), aitools.ErrorCodeUnknown, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			executor := &partialComputerResultExecutor{failure: tc.err}
+			r := newRun(runOptions{SessionMeta: testSendTurnMeta()})
+			r.toolTargetPolicy = ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "fixture"}
+			r.targetResolver = staticTargetResolver{target: TargetDescriptor{ID: "fixture", Ready: true, Capabilities: []string{"observe", "interaction"}}}
+			r.targetToolExecutor = executor
+			bindTargetTestRun(t, r)
+			snapshot := buildPermissionSnapshot(FlowerPermissionFullAccess, builtInToolDefinitions(), nil)
+			snapshot.SnapshotID = "facts-fixture"
+			ctx := contextWithToolAuthorizationSnapshot(t.Context(), snapshot)
+			ctx = contextWithFloretToolExecutionAuthorization(ctx, "call", "computer.exec", "attempt", snapshot, ApprovalDecisionAllow, true, nil)
+			outcome, err := r.handleToolCall(ctx, "call", "computer.exec", map[string]any{"target": "fixture"})
+			if err != nil || outcome.ToolError.Code != tc.code || outcome.effectUncertain != tc.uncertain || executor.calls.Load() != 1 {
+				t.Fatalf("unexpected execution: %+v, %v, calls=%d", outcome, err, executor.calls.Load())
+			}
+			result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "call", ToolName: "computer.exec", Status: toolResultStatusError, Error: outcome.ToolError, Data: outcome.Result, effectUncertain: outcome.effectUncertain})
+			if err != nil || !strings.Contains(result.Text, string(tc.code)) {
+				t.Fatalf("model result: %+v, %v", result, err)
+			}
+		})
+	}
+}

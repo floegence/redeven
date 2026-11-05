@@ -17,6 +17,54 @@ import (
 	"testing"
 )
 
+func TestComputerAnimationProviderEvidenceQualification(t *testing.T) {
+	if os.Getenv("REDEVEN_COMPUTER_RELIABILITY_E2E") != "1" {
+		t.Skip("explicit real-browser qualification required")
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper, _ := filepath.Abs("../envapp/ui_src/scripts/redevenComputerHost.mjs")
+	registry := NewTargetRegistry()
+	target := TargetDescriptor{ID: "browser-main", Kind: "browser.managed", Capabilities: []string{"observe", "interaction"}}
+	if err := registry.Register(target); err != nil {
+		t.Fatal(err)
+	}
+	host := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{target.ID: NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
+	configureBrowserFixture(t, host)
+	defer host.Close()
+	target, err = host.PrepareTarget(t.Context(), target)
+	if err != nil || !target.Ready {
+		t.Fatalf("browser readiness: %+v %v", target, err)
+	}
+	fixture := filepath.Join(t.TempDir(), "animation.html")
+	if err := os.WriteFile(fixture, []byte(`<title>Animation evidence</title><svg role="img" aria-label="Flower animation"></svg><button onclick="document.querySelector('output').textContent='Animation paused';document.querySelector('output').setAttribute('aria-label','Animation paused')">Pause animation</button><output role="status" aria-label="Animation running">Animation running</output>`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	url, _ := json.Marshal("file://" + fixture)
+	call := TargetToolCall{ThreadID: "animation", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "animation", ToolName: "computer.exec", fullAccess: true, revalidate: func(ctx context.Context) error { return ctx.Err() }}
+	result, err := executeTestScript(t.Context(), host, call, "await browser.navigate("+string(url)+"); await ui.getByRole('button',{name:'Pause animation',exact:true}).click(); await ui.observe({full:true});")
+	if err != nil {
+		t.Fatalf("animation: %+v %v", result, err)
+	}
+	published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "animation", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, notice, err := prepareModelImage(t.Context(), ContentPart{Type: "image", MimeType: "image/png", FileURI: testModelImageURI(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, _ := json.Marshal([]any{map[string]any{"type": "function_call_output", "call_id": "animation", "output": []any{map[string]any{"type": "input_text", "text": published.Text + "\n" + notice}}}})
+	parser, _ := filepath.Abs("../envapp/ui_src/scripts/computerFileAcceptance.mjs")
+	command := exec.Command(node, "--input-type=module", "-e", `const {fileAnimationFacts}=await import(process.argv[1]); let raw='';for await(const chunk of process.stdin)raw+=chunk;const facts=fileAnimationFacts(JSON.parse(raw));if(!facts.some(f=>f.animation_state==='paused'&&f.action_executed&&f.image_observed))throw Error('Missing animation evidence: '+raw);`, parser)
+	command.Stdin = bytes.NewReader(input)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("provider evidence parser: %v\n%s", err, output)
+	}
+}
+
 // This qualification executes the authored examples through QuickJS, Runtime,
 // the shared browser host and installed Chromium, with no model-authored result.
 func TestComputerScriptExamplesQualification(t *testing.T) {

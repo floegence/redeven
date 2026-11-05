@@ -17,7 +17,7 @@ import { qualifyComputerRecovery } from './computerRecoveryQualification.mjs';
 import { webtopRuntimeQualification } from './webtopRuntimeQualification.mjs';
 import { forwardQualificationResponse } from '../../../../scripts/qualification_response_stream.mjs';
 import { createComputerTask, configureComputerTask, openComputerStage, collectComputerActivities } from './computerTaskQualification.mjs';
-import { fileAnimationFacts, assertFileAnimationEvidence, providerStreamCompleted } from './computerFileAcceptance.mjs';
+import { fileAnimationFacts, assertFileAnimationEvidence, providerStreamCompleted, parseComputerModelOutput } from './computerFileAcceptance.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -217,6 +217,19 @@ const proxy = http.createServer(async (request, response) => {
       assert((body.tools ?? []).every((tool) => tool.type === 'function'));
       record = { model: body.model, wireBytes: raw.length, toolCount: body.tools?.length ?? 0, tools: (body.tools ?? []).map((tool) => tool.name),
         animationFacts: fileAnimationFacts(body.input),
+        animationOutputShapes: scenario === 'file-animation' ? (body.input ?? []).filter(item => item.type === 'function_call_output').flatMap(item => {
+          const texts = typeof item.output === 'string' ? [item.output] : (item.output ?? []).filter(part => part.type === 'input_text').map(part => part.text);
+          return texts.map(text => {
+            const value = parseComputerModelOutput(text);
+            if (!value) return { call_id: item.call_id, json: false, error_prefix: text.startsWith('ERROR: ') };
+            const data = value.data;
+            const observation = data?.observation ?? data?.observations?.[data?.current_observation_index]?.observation;
+            return { call_id: item.call_id, json: true, data_keys: Object.keys(data ?? {}), completed: data?.completed, status: value.status, index: data?.current_observation_index,
+              observations: data?.observations?.map(entry => ({keys: Object.keys(entry), observation_keys: Object.keys(entry.observation ?? {})})),
+              observation_keys: Object.keys(observation ?? {}), nodes: observation?.nodes?.length, roles: [...new Set((observation?.nodes ?? []).map(node => node.canonical_role ?? node.role))],
+              truncated: observation?.truncated, document: Boolean(observation?.document_id), action_executed: data?.action_executed };
+          });
+        }) : undefined,
         calls: (body.input ?? []).filter(item => item.type === 'function_call').map(item => {
           const args = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : item.arguments;
           let urlType;
@@ -359,7 +372,7 @@ try {
       await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
       await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', `file animation turn ${index + 1}`, 180000, true);
     }
-    const confirmed = assertFileAnimationEvidence(protocol);
+    const confirmed = assertFileAnimationEvidence(protocol, model);
     assert.deepEqual(protocolErrors, [], 'provider protocol assertions failed');
     const runConfig = JSON.parse(await readFile(path.join(output, '../run-config.json'), 'utf8'));
     const bundleBytes = await readFile(path.join(output, '../bundle-manifest.json'));

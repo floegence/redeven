@@ -609,6 +609,7 @@ func (client *computerExtensionClient) tabs(ctx context.Context) ([]ComputerBrow
 
 func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connection ComputerBrowserConnection, targetID string) (_ TargetDescriptor, resultErr error) {
 	stage, generation := "profile_lookup", ""
+	createdTab := false
 	traceID := browserTraceRequest(ctx)
 	ctx = context.WithValue(ctx, browserTraceRequestKey{}, traceID)
 	started := time.Now()
@@ -635,6 +636,9 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 		var connectionFailure *computerConnectionError
 		if errors.As(resultErr, &connectionFailure) && connectionFailure.diagnostic != nil {
 			detail["extension"] = connectionFailure.diagnostic
+		}
+		if createdTab {
+			resultErr = &computerTabCreatedError{cause: resultErr}
 		}
 		resultErr = &computerConnectionError{cause: resultErr, diagnostic: detail}
 		slog.Warn("browser source connection failed", "stage", stage, "reason", reason, "target_id", targetID, "binding", generation, "request", traceID, "duration_ms", time.Since(started).Milliseconds())
@@ -673,6 +677,7 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 			return TargetDescriptor{}, errBrowserOutcomeUnknown
 		}
 		connection.TabID, connection.nativeTargetID = created.TabID, created.Native
+		createdTab = true
 	}
 	if connection.TabID == "" {
 		return TargetDescriptor{}, errors.New("select a browser tab")

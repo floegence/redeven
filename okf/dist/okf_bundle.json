@@ -5740,7 +5740,7 @@
         "title": "Chrome connection diagnostics and recovery",
         "type": "Runtime and Product Contract"
       },
-      "body_length": 2109,
+      "body_length": 2120,
       "summary": "Runtime owns readiness/handshakes; both carriers provide host-specific recovery. Installed Chrome/accepted launch proves neither control nor continuation. Distinguish resource/session/launch/status failures; only compatible live profiles enter Floret Respond, without browser substitution.",
       "sections": [
         {
@@ -5761,8 +5761,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/ai/computer_extension_diagnostics.go` - Source.\n- `redeven:internal/ai/computer_extension_onboarding.go` - Source.\n- `redeven:internal/ai/computer_extension_diagnostics_test.go` - Tests.\n\nConnection failure carries stage, known reason or unknown, elapsed time and binding when available; extension tab lookup/restoration/debugger attachment/validation facts survive transport. Source closure reports explicit removal, owner close, browser disconnect or host shutdown, without treating a read failure as closure. Resource preparation uses published Floret PreparationError with execution.started:false before handler/authorization; retired registry targets classify TARGET_UNAVAILABLE. None authorizes replay.",
-          "char_count": 728
+          "body": "- `redeven:internal/ai/computer_extension_diagnostics.go` - Source.\n- `redeven:internal/ai/computer_extension_onboarding.go` - Source.\n- `redeven:internal/ai/computer_extension_diagnostics_test.go` - Tests.\n\nConnection failure carries stage, known reason or unknown, elapsed time and binding when available; extension tab lookup/restoration/debugger attachment/validation facts survive transport. Source closure reports explicit removal, owner close, browser disconnect or host shutdown, without treating a read failure as closure. Published Floret PreparationError exposes execution.started:false and the typed error in model text before handler/authorization; retired registry targets classify TARGET_UNAVAILABLE. None authorizes replay.",
+          "char_count": 739
         }
       ],
       "evidence": [
@@ -6955,15 +6955,15 @@
         "title": "Computer target selection across threads",
         "type": "AI Tool Contract"
       },
-      "body_length": 3248,
+      "body_length": 3484,
       "summary": "ComputerUseRuntime owns discovery/selection over product settings. Users describe work; Flower locates page/window without mandatory settings binding. Selection is working position, not authority. Stale/disconnected/occupied targets fail explicitly while retaining previous selection.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Discovery and selection\n`computer.targets` lists browser profiles/pages and application windows without a preselected target. Explicit system/personal-browser tasks use `system`, which excludes managed and native window candidates and never starts a managed profile.\n\nSet application to a name or bundle ID for bounded installed-app discovery,\nincluding apps not running. Discovery never launches. Selecting an application\ncandidate opens/restores that exact catalog entry; one accessible window is\nselected, while zero or multiple windows return launch facts and window candidates.\nApp and foreground grants, current target ownership and private pause boundaries\nare checked before launch. Launch uncertainty never authorizes automatic replay.\n\nA changed title/URL requires fresh discovery rather than a silent substitute.\n\n## Default work and explicit switching\nFor `current`, the Runtime reads the thread's `computer_target_id`. An existing selection must still resolve to that exact resource.\n\nEmpty, failed and pending inventory reads retain cancellation, return and close controls.\n\n## Persistence and fork\nThe migrated product store remains the only selection store.\n\nA lost task page fails until an authorized candidate is selected. Deleting product settings removes the selection and grants; a later bind never recreates a deleted thread.\n\n## Binding contract and observation identity\nSelection returns version 2 with exact backend availability and the shared core\nscript guide and one bounded initial observation through the normal runtime gate.\nObservation failure retains selected:true and needs_observation; private pauses\nretain selection without leaking content. Confirmed app opening remains\naction_executed:true. ui.help discloses read, visual and download details on demand.\nThe earlier verbose capability fields are superseded by this model-facing guide;\nthere are no product consumers of those fields. It is not a new registry or authorization source. Native adapters reject\nbrowser-only query, attribute and image-coordinate operations before dispatch.\n\ndiscovery_name is the discovery label. target_name comes from this call's\nobserved title, or the stable target ID if no title was observed;\nobservation_status distinguishes current observation from no new observation.\nA failed or zero-operation script must not present an old about:blank label as a\ncurrent page. Flower activity shows localized validation/preparation/confirmed or\nunknown-effect guidance from returned facts. These facts do not create retry authority.",
-          "char_count": 2546
+          "body": "## Discovery and selection\n`computer.targets` lists browser profiles/pages and application windows without a preselected target. Explicit system/personal-browser tasks use `system`, which excludes managed and native window candidates and never starts a managed profile.\n\nSet application to a name or bundle ID for bounded installed-app discovery,\nincluding apps not running. Discovery never launches. Selecting an application\ncandidate opens/restores that exact catalog entry; one accessible window is\nselected, while zero or multiple windows return launch facts and window candidates.\nApp and foreground grants, current target ownership and private pause boundaries\nare checked before launch. Launch uncertainty never authorizes automatic replay.\n\nA changed title/URL requires fresh discovery rather than a silent substitute.\n\n## Default work and explicit switching\nFor `current`, the Runtime reads the thread's `computer_target_id`. An existing selection must still resolve to that exact resource.\n\nEmpty, failed and pending inventory reads retain cancellation, return and close controls.\n\n## Persistence and fork\nThe migrated product store remains the only selection store.\n\nA lost task page fails until an authorized candidate is selected. Deleting product settings removes the selection and grants; a later bind never recreates a deleted thread.\n\n## Binding contract and observation identity\nSelection returns version 2 with exact backend availability and the shared core\nscript guide and one bounded initial observation through the normal runtime gate.\nObservation failure retains selected:true and needs_observation; private pauses\nretain selection without leaking content. Confirmed app opening remains\naction_executed:true. Confirmed new-tab creation remains action_executed:true\neven if a later selection step fails; an unconfirmed creation is reported as an\nunknown effect, never as an unexecuted action. Startup error types survive the\nmodel-facing result. ui.help discloses read, visual and download details on demand.\nThe earlier verbose capability fields are superseded by this model-facing guide;\nthere are no product consumers of those fields. It is not a new registry or authorization source. Native adapters reject\nbrowser-only query, attribute and image-coordinate operations before dispatch.\n\ndiscovery_name is the discovery label. target_name comes from this call's\nobserved title, or the stable target ID if no title was observed;\nobservation_status distinguishes current observation from no new observation.\nA failed or zero-operation script must not present an old about:blank label as a\ncurrent page. Flower activity shows localized validation/preparation/confirmed or\nunknown-effect guidance from returned facts. These facts do not create retry authority.",
+          "char_count": 2782
         },
         {
           "id": "boundaries",
@@ -25729,5 +25729,5 @@
       ]
     }
   ],
-  "source_sha256": "290f2bed4f6cf79cbdba7d4dcb47d4e635791c4b730f4ca1fca5cae749295280"
+  "source_sha256": "3eb8b514e03247ba89cd4318ca71b4437605da24dfd64466097027b2b58c5435"
 }

@@ -397,7 +397,13 @@ func (r *ComputerUseRuntime) managedTabTargetID(endpoint, tabID string) string {
 	return ""
 }
 
-func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call TargetToolCall, ref string, policy ToolTargetPolicy) (TargetDescriptor, error) {
+func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call TargetToolCall, ref string, policy ToolTargetPolicy) (_ TargetDescriptor, resultErr error) {
+	createdTab := false
+	defer func() {
+		if createdTab && resultErr != nil {
+			resultErr = &computerTabCreatedError{cause: resultErr}
+		}
+	}()
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
 		return TargetDescriptor{}, err
 	}
@@ -447,6 +453,7 @@ func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call T
 			return target, err
 		}
 		target, err = r.ConnectBrowser(ctx, connection)
+		createdTab = err == nil && connection.NewTab
 	} else {
 		if candidate.view.TargetID == "" {
 			return target, &targetToolPolicyError{code: "target_setup_required"}
@@ -577,15 +584,28 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	}
 	candidate, candidateErr := host.computerCandidate(call.ThreadID, ref)
 	applicationOpened := candidateErr == nil && candidate.view.ApplicationID != ""
+	newTab := candidateErr == nil && candidate.connection != nil && candidate.connection.NewTab
 	target, err := host.SelectComputerCandidate(ctx, call, ref, r.toolTargetPolicy)
 	if err != nil {
 		var application *computerApplicationSelection
 		if errors.As(err, &application) {
 			return toolExecutionOutput{Payload: map[string]any{"selected": false, "action_executed": true, "state": application.state, "candidates": application.candidates}}, application.cause
 		}
+		payload := map[string]any{"selected": false}
+		var created *computerTabCreatedError
+		if errors.As(err, &created) {
+			payload["action_executed"] = true
+			payload["completed_actions"] = []string{"new_tab"}
+		}
+		if errors.Is(err, errBrowserOutcomeUnknown) {
+			payload["effect_outcome_unknown"] = true
+		}
 		var connectionFailure *computerConnectionError
 		if errors.As(err, &connectionFailure) {
-			return toolExecutionOutput{Payload: map[string]any{"selected": false, "connection_diagnostic": connectionFailure.diagnostic}}, err
+			payload["connection_diagnostic"] = connectionFailure.diagnostic
+		}
+		if len(payload) > 1 {
+			return toolExecutionOutput{Payload: payload}, err
 		}
 		return nil, err
 	}
@@ -597,7 +617,7 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	if takeoverResult(observed, observeErr) {
 		blocked, failure := computerBlockedExecution(call, target, computerPauseSafety(observed, observeErr), observed)
 		if payload, ok := blocked.Payload.(map[string]any); ok {
-			payload["selected"], payload["action_executed"] = true, applicationOpened
+			payload["selected"], payload["action_executed"] = true, applicationOpened || newTab
 		}
 		return blocked, failure
 	}
@@ -625,7 +645,7 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 		observation["nodes"] = nodes
 		payload["observation"] = observation
 	}
-	if applicationOpened {
+	if applicationOpened || newTab {
 		payload["action_executed"] = true
 	}
 	if observeErr != nil {
