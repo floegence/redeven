@@ -124,3 +124,13 @@ func TestComputerBrowserInstallationRejectsMalformedAndUnboundedRequests(t *test
 		}
 	}
 }
+
+func TestComputerDesktopVerificationRejectsCommandsAndMalformedRequests(t *testing.T) {
+	srv, origin, _ := newUploadRouteServer(t)
+	for _, body := range []string{`{"command":"arbitrary"}`, `{"target_id":"other"}`, `{} {}`, `{"padding":"` + strings.Repeat("x", 1024) + `"}`, `null`} {
+		response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/computer/desktop/verify", origin, body)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid json") {
+			t.Fatalf("invalid verification request: %d %s", response.Code, response.Body.String())
+		}
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/floegence/floret/v7/observation"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 func TestComputerBlockingFactsDoNotCreateQuestionsOrSuccess(t *testing.T) {
@@ -43,6 +44,82 @@ func TestComputerBlockingFactsDoNotCreateQuestionsOrSuccess(t *testing.T) {
 				t.Fatalf("reason lost: %+v", public.Presentation)
 			}
 		})
+	}
+}
+
+func TestDesktopSetupAssistanceRequiresConfirmedUndispatchedPrivateTarget(t *testing.T) {
+	for _, variant := range []string{"confirmed", "executed", "unknown", "other-target", "other-kind", "success", "uncertain", "no-error", "other-error"} {
+		t.Run(variant, func(t *testing.T) {
+			data := map[string]any{"desktop_setup_required": true, "action_executed": false, "target_id": "xvfb-main", "target_kind": "xvfb.desktop"}
+			result := ToolResult{ToolID: "blocked", ToolName: "computer.exec", Status: toolResultStatusError, Data: data, Error: &aitools.ToolError{Code: aitools.ErrorCodeTargetSetupRequired}}
+			switch variant {
+			case "executed":
+				data["action_executed"] = true
+			case "unknown":
+				delete(data, "action_executed")
+			case "other-target":
+				data["target_id"] = "other"
+			case "other-kind":
+				data["target_kind"] = "browser.managed"
+			case "success":
+				result.Status = toolResultStatusSuccess
+				result.Error = nil
+			case "uncertain":
+				result.effectUncertain = true
+			case "no-error":
+				result.Error = nil
+			case "other-error":
+				result.Error = &aitools.ToolError{Code: aitools.ErrorCodeUnknown}
+			}
+			presentation, err := floretActivityForToolResult(nil, result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, chip := range presentation.Chips {
+				found = found || chip.Kind == "computer_assistance" && chip.Value == "desktop_setup"
+			}
+			if found != (variant == "confirmed") {
+				t.Fatalf("setup assistance = %t", found)
+			}
+			encoded, err := floretToolResultFromFlower(nil, result)
+			if err != nil || encoded.InputRequired != nil {
+				t.Fatalf("failure invented a question: %+v %v", encoded.InputRequired, err)
+			}
+			if variant == "confirmed" && (!strings.Contains(encoded.Text, `"desktop_setup_required":true`) || !strings.Contains(encoded.Text, `"action_executed":false`)) {
+				t.Fatalf("model-visible facts lost: %s", encoded.Text)
+			}
+		})
+	}
+}
+
+func TestDesktopSetupFailurePreservesEvidenceWithoutDispatch(t *testing.T) {
+	host, executor, store, _ := computerBindingFixture(t)
+	executor.readinessErr = &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "window_manager_missing"}
+	if err := host.registry.Register(TargetDescriptor{ID: "xvfb-main", Kind: "xvfb.desktop", State: "stopped"}); err != nil {
+		t.Fatal(err)
+	}
+	host.executors["xvfb-main"] = executor
+	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
+	bindTargetTestRun(t, r)
+	result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "blocked", "computer.exec"), "blocked", "computer.exec", map[string]any{"target": "xvfb-main", "code": "await ui.click(1,1)"})
+	if err == nil {
+		t.Fatal("missing desktop reported success")
+	}
+	output, ok := result.(toolExecutionOutput)
+	if !ok {
+		t.Fatalf("missing execution facts: %#v", result)
+	}
+	data, ok := output.Payload.(map[string]any)
+	if !ok || data["desktop_setup_required"] != true || data["action_executed"] != false || data["target_id"] != "xvfb-main" {
+		t.Fatalf("wrong readiness facts: %#v", output.Payload)
+	}
+	if len(executor.calls) != 0 {
+		t.Fatal("input dispatched before desktop readiness")
+	}
+	bound, err := store.GetComputerTarget(t.Context(), "thread-first")
+	if err != nil || bound != "" {
+		t.Fatalf("readiness failure changed selection: %q %v", bound, err)
 	}
 }
 

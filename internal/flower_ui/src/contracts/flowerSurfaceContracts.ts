@@ -1666,7 +1666,11 @@ export type FlowerComputerInventory = Readonly<{
   current_target_id: string; default_candidate_ref?: string; candidates: readonly FlowerComputerCandidate[];
 }>;
 
-export type FlowerComputerCapability = Readonly<{ state: 'ready' | 'on_demand' | 'setup_required' | 'permission_required' | 'disabled' | 'installation_required' | 'system_preparation_required' | 'unavailable'; reason?: string }>;
+export type FlowerComputerCapability = Readonly<{
+  state: 'ready' | 'on_demand' | 'setup_required' | 'permission_required' | 'disabled' | 'installation_required' | 'system_preparation_required' | 'unavailable' | 'in_use';
+  reason?: string; missing?: readonly string[]; components?: readonly Readonly<{ id: string; path: string; overridden?: boolean }>[];
+  repair?: 'ubuntu_apt' | 'custom_path' | 'unsupported_platform'; packages?: readonly string[]; setup_command?: string;
+}>;
 export type FlowerComputerEnvironment = Readonly<{
   hostname: string; platform: string;
   managed: FlowerComputerCapability; desktop: FlowerComputerCapability;
@@ -1704,6 +1708,7 @@ export type FlowerComputerManagement = Readonly<{
   subscribeBrowserInstallation?: (listener: (status: FlowerBrowserInstallationSnapshot) => void) => () => void;
 
   loadEnvironment?: () => Promise<FlowerComputerEnvironment>;
+  verifyDesktop?: () => Promise<FlowerComputerCapability>;
   discoverBrowser?: (threadID: string, endpoint: string) => Promise<FlowerComputerInventory>;
   revealTarget?: (threadID: string, targetID: string) => Promise<void>;
   listCandidates: (threadID: string) => Promise<FlowerComputerInventory>;

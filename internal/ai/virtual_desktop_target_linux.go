@@ -23,6 +23,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/acobaugh/osrelease"
 )
 
 // XvfbTargetExecutor owns a private X11 display, its window manager, and input
@@ -42,17 +44,22 @@ type XvfbTargetExecutor struct {
 }
 
 type x11Paths struct{ xvfb, windowManager, input, capture, auth, properties, dbus, atspi string }
+
+func defaultX11Paths() x11Paths {
+	return x11Paths{
+		xvfb: "/usr/bin/Xvfb", windowManager: "/usr/bin/openbox", input: "/usr/bin/xdotool",
+		capture: "/usr/bin/import", auth: "/usr/bin/xauth", properties: "/usr/bin/xprop",
+		dbus: "/usr/bin/dbus-daemon", atspi: "/usr/libexec/at-spi-bus-launcher",
+	}
+}
+
 type x11Process struct {
 	cmd  *exec.Cmd
 	done chan struct{}
 }
 
 func NewXvfbTargetExecutor(stateDirectory string) *XvfbTargetExecutor {
-	paths := x11Paths{
-		xvfb: "/usr/bin/Xvfb", windowManager: "/usr/bin/openbox", input: "/usr/bin/xdotool",
-		capture: "/usr/bin/import", auth: "/usr/bin/xauth", properties: "/usr/bin/xprop",
-		dbus: "/usr/bin/dbus-daemon", atspi: "/usr/libexec/at-spi-bus-launcher",
-	}
+	paths := defaultX11Paths()
 	// Packaged Linux runtimes may ship these binaries beside the Runtime. An
 	// explicit absolute override keeps that bundle deterministic while avoiding
 	// PATH-dependent discovery in production.
@@ -70,24 +77,112 @@ func (e *XvfbTargetExecutor) CheckComputerSetup() error {
 	defer e.mu.Unlock()
 	return e.checkSetupLocked()
 }
+
+// InspectComputerSetup never starts a display or modifies system packages.
+func (e *XvfbTargetExecutor) InspectComputerSetup() ComputerCapability {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.inspectComputerSetupLocked()
+}
+
+func (e *XvfbTargetExecutor) missingComponentsLocked() []ComputerComponent {
+	defaults := defaultX11Paths()
+	var missing []ComputerComponent
+	for _, dependency := range []struct{ name, path, defaultPath string }{
+		{"xvfb", e.paths.xvfb, defaults.xvfb}, {"window_manager", e.paths.windowManager, defaults.windowManager},
+		{"x11_input", e.paths.input, defaults.input}, {"x11_capture", e.paths.capture, defaults.capture},
+		{"xauth", e.paths.auth, defaults.auth}, {"x11_properties", e.paths.properties, defaults.properties},
+		{"private_dbus", e.paths.dbus, defaults.dbus}, {"atspi", e.paths.atspi, defaults.atspi},
+	} {
+		info, err := os.Stat(dependency.path)
+		if !filepath.IsAbs(dependency.path) || err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+			missing = append(missing, ComputerComponent{ID: dependency.name, Path: dependency.path, Overridden: dependency.path != dependency.defaultPath})
+		}
+	}
+	return missing
+}
+
+func x11RepairPlan(components []ComputerComponent, release map[string]string) (string, []string, string) {
+	if len(components) == 0 {
+		return "", nil, ""
+	}
+	for _, component := range components {
+		if component.Overridden {
+			return "custom_path", nil, ""
+		}
+	}
+	if strings.Trim(release["ID"], "'\"") != "ubuntu" || strings.Trim(release["VERSION_ID"], "'\"") != "26.04" {
+		return "unsupported_platform", nil, ""
+	}
+	packagesByComponent := map[string]string{"xvfb": "xvfb", "window_manager": "openbox", "x11_input": "xdotool", "x11_capture": "imagemagick-7.q16", "xauth": "xauth", "x11_properties": "x11-utils", "private_dbus": "dbus-daemon", "atspi": "at-spi2-core"}
+	var packages []string
+	for _, component := range components {
+		pkg := packagesByComponent[component.ID]
+		if pkg == "" {
+			return "unsupported_platform", nil, ""
+		}
+		packages = append(packages, pkg)
+	}
+	return "ubuntu_apt", packages, "sudo apt-get install --reinstall --no-install-recommends --no-remove " + strings.Join(packages, " ")
+}
+
+func (e *XvfbTargetExecutor) inspectComputerSetupLocked() ComputerCapability {
+	if e.closed {
+		return computerCapabilityFailure(&TargetStartupError{Code: "TARGET_NOT_READY", Reason: "x11_closed"})
+	}
+	components := e.missingComponentsLocked()
+	if len(components) > 0 {
+		result := computerCapabilityFailure(&TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: components[0].ID + "_missing"})
+		result.Components = components
+		for _, component := range components {
+			result.Missing = append(result.Missing, component.ID)
+		}
+		release, _ := osrelease.Read()
+		result.Repair, result.Packages, result.SetupCommand = x11RepairPlan(components, release)
+		return result
+	}
+	if !filepath.IsAbs(e.directory) {
+		return computerCapabilityFailure(&TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_state_path_not_absolute"})
+	}
+	return ComputerCapability{State: "on_demand"}
+}
+
 func (e *XvfbTargetExecutor) checkSetupLocked() error {
 	if e.closed {
 		return &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "x11_closed"}
 	}
-	for _, dependency := range []struct{ name, path string }{
-		{"xvfb", e.paths.xvfb}, {"window_manager", e.paths.windowManager}, {"x11_input", e.paths.input},
-		{"x11_capture", e.paths.capture}, {"xauth", e.paths.auth}, {"x11_properties", e.paths.properties},
-		{"private_dbus", e.paths.dbus}, {"atspi", e.paths.atspi},
-	} {
-		info, err := os.Stat(dependency.path)
-		if !filepath.IsAbs(dependency.path) || err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
-			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: dependency.name + "_missing"}
-		}
+	if missing := e.missingComponentsLocked(); len(missing) > 0 {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: missing[0].ID + "_missing"}
 	}
 	if !filepath.IsAbs(e.directory) {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_state_path_not_absolute"}
 	}
 	return nil
+}
+
+// VerifyComputerSetup exercises the actual private session without selecting a
+// target or dispatching application input. Existing owned sessions stay alive.
+func (e *XvfbTargetExecutor) VerifyComputerSetup(ctx context.Context) ComputerCapability {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if result := e.inspectComputerSetupLocked(); result.State != "on_demand" {
+		return result
+	}
+	if err := e.ensureLocked(ctx); err != nil {
+		return computerCapabilityFailure(err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if _, err := e.command(ctx, e.paths.input, nil, 4096, "getdisplaygeometry"); err != nil {
+		return computerCapabilityFailure(&TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_geometry_failed"})
+	}
+	if _, err := e.atspi.children(ctx, e.atspi.root); err != nil {
+		return computerCapabilityFailure(&TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "atspi_connection_failed"})
+	}
+	if _, _, err := e.capture(ctx, "x11-readiness"); err != nil {
+		return computerCapabilityFailure(&TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_capture_failed"})
+	}
+	return ComputerCapability{State: "ready"}
 }
 
 func (e *XvfbTargetExecutor) EnsureTargetReady(ctx context.Context, _ string) error {

@@ -180,6 +180,8 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 				allowed = (ComputerAccess{Apps: []string{resource}}).Validate() == nil
 			case "computer_browser_source":
 				allowed = resource == "system"
+			case "computer_desktop_setup":
+				allowed = resource == "xvfb-main"
 			case "computer_foreground":
 				allowed = resource == "foreground"
 			}

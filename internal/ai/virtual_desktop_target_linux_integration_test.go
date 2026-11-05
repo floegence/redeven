@@ -24,8 +24,8 @@ func TestXvfbTargetExecutorRealDisplay(t *testing.T) {
 	e := NewXvfbTargetExecutor(state)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	if err := e.EnsureTargetReady(ctx, "xvfb-main"); err != nil {
-		t.Fatal(err)
+	if result := e.VerifyComputerSetup(ctx); result.State != "ready" {
+		t.Fatalf("desktop verification: %+v", result)
 	}
 	defer e.Close()
 	// Exercise an actual window and verify the effect of typed input, rather

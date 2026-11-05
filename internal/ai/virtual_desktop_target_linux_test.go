@@ -7,8 +7,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestX11ActionRejectsUnsafeCoordinatesAndKeys(t *testing.T) {
@@ -73,5 +76,72 @@ func TestX11SetupInspectionDoesNotStartDesktop(t *testing.T) {
 	var startup *TargetStartupError
 	if err := e.CheckComputerSetup(); !errors.As(err, &startup) || startup.Reason != "xauth_missing" {
 		t.Fatalf("missing dependency: %v", err)
+	}
+}
+
+func TestX11SetupReportsEveryMissingComponent(t *testing.T) {
+	e := NewXvfbTargetExecutor(t.TempDir())
+	for _, path := range []*string{&e.paths.xvfb, &e.paths.windowManager, &e.paths.input, &e.paths.capture, &e.paths.auth, &e.paths.properties, &e.paths.dbus, &e.paths.atspi} {
+		*path = "/bin/sh"
+	}
+	missing := t.TempDir()
+	e.paths.windowManager = filepath.Join(missing, "openbox")
+	e.paths.input = filepath.Join(missing, "xdotool")
+	e.paths.capture = filepath.Join(missing, "import")
+	registry := NewTargetRegistry()
+	r := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"xvfb-main": e}, t.TempDir())
+	t.Cleanup(func() { _ = r.Close() })
+	env, err := r.ComputerEnvironment(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"window_manager", "x11_input", "x11_capture"}
+	if !slices.Equal(env.Desktop.Missing, want) {
+		t.Fatalf("missing components = %v, want %v", env.Desktop.Missing, want)
+	}
+	if len(e.processes) != 0 || e.sessionDirectory != "" {
+		t.Fatal("inspection started a private desktop")
+	}
+}
+
+func TestX11RepairPlanUsesOnlyKnownUbuntuPackagesAndDefaultPaths(t *testing.T) {
+	defaults := defaultX11Paths()
+	components := []ComputerComponent{{ID: "window_manager", Path: defaults.windowManager}, {ID: "x11_input", Path: defaults.input}, {ID: "x11_capture", Path: defaults.capture}}
+	ubuntu := map[string]string{"ID": "ubuntu", "VERSION_ID": "26.04"}
+	repair, packages, command := x11RepairPlan(components, ubuntu)
+	if repair != "ubuntu_apt" || !slices.Equal(packages, []string{"openbox", "xdotool", "imagemagick-7.q16"}) || command != "sudo apt-get install --reinstall --no-install-recommends --no-remove openbox xdotool imagemagick-7.q16" {
+		t.Fatalf("unexpected repair: %q %v %q", repair, packages, command)
+	}
+	for _, release := range []map[string]string{nil, {"ID": "debian", "VERSION_ID": "26.04"}, {"ID": "ubuntu", "VERSION_ID": "24.04"}} {
+		if repair, _, command := x11RepairPlan(components, release); repair != "unsupported_platform" || command != "" {
+			t.Fatalf("unsupported system received command: %q %q", repair, command)
+		}
+	}
+	components[1].Overridden = true
+	components[1].Path = "/tmp/xdotool; arbitrary command"
+	if repair, _, command := x11RepairPlan(components, ubuntu); repair != "custom_path" || command != "" {
+		t.Fatalf("overridden path received command: %q %q", repair, command)
+	}
+	components[1] = ComputerComponent{ID: "unexpected", Path: "/usr/bin/unknown"}
+	if _, _, command := x11RepairPlan(components, ubuntu); command != "" {
+		t.Fatal("unknown component entered command")
+	}
+}
+
+func TestVerifyComputerDesktopRejectsUnauthorizedAndBusy(t *testing.T) {
+	e := NewXvfbTargetExecutor(t.TempDir())
+	r := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"xvfb-main": e}, t.TempDir())
+	t.Cleanup(func() { _ = r.Close() })
+	s := &Service{targetToolExecutor: r}
+	for _, meta := range []*session.Meta{nil, {CanRead: true}, {CanRead: true, CanWrite: true}} {
+		if _, err := s.VerifyComputerDesktop(t.Context(), meta); err == nil {
+			t.Fatal("verification accepted insufficient permission")
+		}
+	}
+	control := r.controlForTarget("xvfb-main")
+	control.threadID = "another-task"
+	result, err := s.VerifyComputerDesktop(t.Context(), &session.Meta{CanRead: true, CanWrite: true, CanExecute: true})
+	if err != nil || result.State != "in_use" || len(e.processes) != 0 {
+		t.Fatalf("busy verification: %+v %v", result, err)
 	}
 }

@@ -105,7 +105,7 @@ func resolveComputerInputEvidence(view flruntime.ThreadView, interaction flrunti
 					continue
 				}
 				switch chip.Value {
-				case "access", "captcha", "verification", "login", "private_input", "untrusted_content", "paused", "connection", "installation":
+				case "access", "captcha", "verification", "login", "private_input", "untrusted_content", "paused", "connection", "installation", "desktop_setup":
 					evidence.kind = chip.Value
 				case "inspection":
 					if legacy {
@@ -117,7 +117,16 @@ func resolveComputerInputEvidence(view flruntime.ThreadView, interaction flrunti
 				continue
 			}
 			for _, target := range activity.Presentation.TargetRefs {
+				if evidence.kind == "desktop_setup" && target.Kind == "computer_desktop_setup" && target.ResourceRef == "xvfb-main" {
+					if evidence.call.TargetID != "" {
+						return nil
+					}
+					evidence.call.TargetID = target.ResourceRef
+				}
 				if target.Kind == "computer_control" && target.ResourceRef != "" {
+					if evidence.kind == "desktop_setup" {
+						return nil
+					}
 					if evidence.call.TargetID != "" {
 						return nil
 					}
@@ -152,7 +161,7 @@ func resolveComputerInputEvidence(view flruntime.ThreadView, interaction flrunti
 
 func computerControlCall(view flruntime.ThreadView, interaction flruntime.ThreadInteraction) (TargetToolCall, bool, error) {
 	evidence := resolveComputerInputEvidence(view, interaction)
-	if evidence == nil || evidence.kind == "connection" || evidence.kind == "installation" {
+	if evidence == nil || evidence.kind == "connection" || evidence.kind == "installation" || evidence.kind == "desktop_setup" {
 		return TargetToolCall{}, false, nil
 	}
 	if evidence.call.TargetID == "" {

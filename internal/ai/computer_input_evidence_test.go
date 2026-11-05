@@ -69,6 +69,39 @@ func TestComputerInputEvidenceUsesOneCanonicalSource(t *testing.T) {
 	}
 }
 
+func TestDesktopSetupEvidenceRequiresCurrentExactBlockedCall(t *testing.T) {
+	for _, variant := range []string{"current", "wrong-target", "duplicate", "stale", "wrong-turn"} {
+		t.Run(variant, func(t *testing.T) {
+			view, interaction := computerEvidenceFixture()
+			presentation := view.Items[0].Activity.Presentation
+			presentation.Chips[0].Value = "desktop_setup"
+			presentation.TargetRefs = []fltools.ActivityTargetRef{{Kind: "computer_desktop_setup", ResourceRef: "xvfb-main"}, {Kind: "computer_target", ResourceRef: "xvfb-main"}}
+			switch variant {
+			case "wrong-target":
+				presentation.TargetRefs[0].ResourceRef = "other"
+			case "duplicate":
+				presentation.TargetRefs = append(presentation.TargetRefs, presentation.TargetRefs[0])
+			case "stale":
+				view.Items = append(view.Items, flruntime.ThreadItem{TurnID: interaction.TurnID, Activity: &observation.ActivityItem{ToolName: "computer.observe", Presentation: &fltools.ActivityPresentation{TargetRefs: []fltools.ActivityTargetRef{{Kind: "computer_target", ResourceRef: "xvfb-main"}}}}})
+			case "wrong-turn":
+				view.Items[0].TurnID = "other"
+			}
+			evidence := resolveComputerInputEvidence(view, interaction)
+			if (evidence != nil) != (variant == "current") {
+				t.Fatalf("evidence = %+v", evidence)
+			}
+			if evidence != nil {
+				if evidence.kind != "desktop_setup" || evidence.call.TargetID != "xvfb-main" {
+					t.Fatalf("wrong evidence: %+v", evidence)
+				}
+				if _, control, err := computerControlCall(view, interaction); control || err != nil {
+					t.Fatal("setup incorrectly acquired private control")
+				}
+			}
+		})
+	}
+}
+
 func TestComputerEvidenceProjectionPreservesIndependentQuestions(t *testing.T) {
 	view, _ := computerEvidenceFixture()
 	wire, err := flowerCurrentJSON(view)

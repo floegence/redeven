@@ -1431,10 +1431,13 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		if mode := anyToString(rawPayload["execution_mode"]); mode == "foreground" || mode == "background" {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
 		}
-		if rawPayload["browser_installation_required"] == true || rawPayload["connection_required"] == true || rawPayload["safety"] != nil {
+		if rawPayload["browser_installation_required"] == true || rawPayload["connection_required"] == true || rawPayload["desktop_setup_required"] == true || rawPayload["safety"] != nil {
 			if rawPayload["browser_installation_required"] == true {
 				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_browser_install", ResourceRef: "managed", Label: "Built-in browser"})
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "installation", Tone: "info"})
+			} else if status == toolResultStatusError && result.Error != nil && result.Error.Code == aitools.ErrorCodeTargetSetupRequired && !result.effectUncertain && rawPayload["desktop_setup_required"] == true && rawPayload["action_executed"] == false && rawPayload["target_kind"] == "xvfb.desktop" && anyToString(rawPayload["target_id"]) == "xvfb-main" {
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_desktop_setup", ResourceRef: "xvfb-main", Label: "Private desktop"})
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "desktop_setup", Tone: "warning"})
 			} else if rawPayload["connection_required"] == true && rawPayload["browser_source"] == "system" {
 				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_browser_source", ResourceRef: "system", Label: "System browser"})
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "connection", Tone: "warning"})

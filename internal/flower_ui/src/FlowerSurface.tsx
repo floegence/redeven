@@ -7138,7 +7138,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const selectedTimelineEntries = createMemo(() => selectedTimelineDocument().entries);
   const selectedTimelineThread = createFlowerThreadSubscription(() => selectedTimelineDocument().thread);
-  const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | null>(null);
+  const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | 'desktop_setup' | null>(null);
   createEffect(on([activeThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
   const [computerStageRestoreFocus, setComputerStageRestoreFocus] = createSignal<HTMLElement>();
@@ -7180,7 +7180,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     restoreComputerStage(source); setPrivateControlRequested(true); resumeComputerViewer();
   });
   const [computerControlError, setComputerControlError] = createSignal(false);
-  const isComputerInput = (request: FlowerInputRequest | null | undefined) => Boolean(request?.computer_assistance?.target_id);
+  const isComputerInput = (request: FlowerInputRequest | null | undefined) => Boolean(request?.computer_assistance?.target_id && request.computer_assistance.kind !== 'desktop_setup');
+  const isDesktopSetupInput = (request: FlowerInputRequest | null | undefined) => request?.computer_assistance?.kind === 'desktop_setup';
   const isBrowserConnectionInput = (request: FlowerInputRequest | null | undefined) => request?.computer_assistance?.kind === 'connection';
   const isBrowserInstallInput = (request: FlowerInputRequest | null | undefined) => request?.computer_assistance?.kind === 'installation';
   const isComputerAssistanceInput = (request: FlowerInputRequest | null | undefined) => Boolean(request?.computer_assistance);
@@ -7271,6 +7272,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (status !== 'running' && status !== 'waiting_user' && status !== 'waiting_approval');
   });
   const selectedComputerAssistance = createMemo(() => {
+    if (isDesktopSetupInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'desktop_setup' });
     if (isBrowserInstallInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'installation' });
     if (isBrowserConnectionInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'connection' });
     return computerAssistance(selectedComputerStage()?.item, copy().computer, undefined, selectedThread()?.permission_type === 'full_access');
@@ -10245,12 +10247,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
               <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('settings')}>{copy().computer.title}</Button></Show>
-              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target' && computerResourceStatus()?.state !== 'unavailable'}>
+              <Show when={selectedComputerAssistance().kind === 'desktop_setup'}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('desktop_setup')}>{copy().computer.diagnostics}</Button></Show>
+              <Show when={selectedComputerAssistance().kind !== 'desktop_setup' && selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target' && computerResourceStatus()?.state !== 'unavailable'}>
               <Button variant="secondary" data-computer-control-action="take" disabled={computerResponseSubmitting() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               </Show>
               <Show when={selectedComputerAssistance().kind === 'installation'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('installation')}>{copy().computer.browserInstallTitle}</Button></Show>
               <Show when={selectedComputerAssistance().kind === 'connection'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('connection')}>{copy().computer.connectionTitle}</Button></Show>
-              <Show when={isToolOriginComputerInput(inputRequest()) && selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation'}><Button variant="primary" icon={selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'authorized' ? Check : Refresh} data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
+              <Show when={isToolOriginComputerInput(inputRequest()) && selectedComputerAssistance().kind !== 'desktop_setup' && selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation'}><Button variant="primary" icon={selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'authorized' ? Check : Refresh} data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
                 if (!question || !choice) return;
@@ -14850,6 +14853,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
  <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
       <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
         continuationKey={`${activeThreadID()}:${selectedInputRequest()?.prompt_id ?? ''}`}
+        desktopSetup={computerDialog() === 'desktop_setup'}
         connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {
           if (pendingThreadSelection()) return;
           const request = selectedInputRequest();

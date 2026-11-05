@@ -22,6 +22,7 @@ export function computerAssistance(item: FlowerActivityItem | undefined, copy: F
   const messages: Record<string, readonly [string, string]> = {
     connection: [copy.connectionTitle, copy.connectionHint],
     installation: [copy.browserInstallTitle, copy.browserInstallHint],
+    desktop_setup: [copy.desktopInstallTitle, copy.desktopMissingHint],
     authorized: [copy.fullAccessTitle, copy.authorizedHint],
     access: [requested.origin ? copy.siteTitle : copy.accessTitle, copy.accessHint],
     target: [copy.targetTitle, copy.targetHint],

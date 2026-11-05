@@ -195,6 +195,9 @@ func TestTargetReadinessErrorMetadata(t *testing.T) {
 	if got := targetRepairAction(permission); got != "grant_target_permission" {
 		t.Fatalf("permission repair = %q", got)
 	}
+	if got := targetRepairAction(TargetDescriptor{Kind: "xvfb.desktop", State: "setup_required"}); got != "" {
+		t.Fatalf("private desktop reported browser repair = %q", got)
+	}
 }
 
 func bindTargetTestRun(t *testing.T, r *run) {

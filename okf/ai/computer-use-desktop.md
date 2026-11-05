@@ -3,7 +3,7 @@ type: Desktop Integration Contract
 title: Semantic desktop operations and explicit control
 tags: [ai, computer-use, accessibility, desktop]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -56,6 +56,12 @@ unsupported application controls fail explicitly.
 
 ## Linux private desktop
 The Xvfb owner starts a private session D-Bus and AT-SPI bus. The executor rejects socket or environment paths leading outside that private desktop; it never discovers or attaches to another logged-in user's session.
+
+Environment inspection is read-only and reports all missing configured executables and their actual paths. On Ubuntu 26.04, default-path omissions produce a fixed, user-run APT reinstall command; custom paths and other systems receive administrator guidance instead. APT presents the package transaction for terminal confirmation, may upgrade dependencies and change system alternatives, and cannot remove packages through this command. The Runtime neither accepts a password nor reports installation completion on the terminal's behalf. Interrupted operations require package-manager inspection before a new attempt.
+
+An explicit RWX-authorized verification serializes with target control, refuses an occupied desktop, and checks X11, private D-Bus, AT-SPI and screenshot capture without changing the conversation target or sending input. Passive refresh never starts the desktop. Previously failed target snapshots become selectable after a fresh successful resource check; selection still performs its normal readiness handshake.
+
+A failed private-desktop readiness check reports that input was not dispatched. Only exact, current canonical evidence in an agent-authored question exposes the setup entry; verification leaves that question unanswered and never replays the failed action. Linux application discovery is not implied by private desktop availability.
 
 Product target preferences and canonical historical results follow their existing owners.
 

@@ -12,8 +12,19 @@ import (
 // Environment capability is a current, read-only observation. It never grants
 // access, creates a browser page, or starts a private desktop.
 type ComputerCapability struct {
-	State  string `json:"state"`
-	Reason string `json:"reason,omitempty"`
+	State        string              `json:"state"`
+	Reason       string              `json:"reason,omitempty"`
+	Missing      []string            `json:"missing,omitempty"`
+	Components   []ComputerComponent `json:"components,omitempty"`
+	Repair       string              `json:"repair,omitempty"`
+	Packages     []string            `json:"packages,omitempty"`
+	SetupCommand string              `json:"setup_command,omitempty"`
+}
+
+type ComputerComponent struct {
+	ID         string `json:"id"`
+	Path       string `json:"path"`
+	Overridden bool   `json:"overridden,omitempty"`
 }
 
 type ComputerEnvironment struct {
@@ -101,13 +112,45 @@ func (r *ComputerUseRuntime) ComputerEnvironment(ctx context.Context) (ComputerE
 		} else {
 			result.Desktop = ComputerCapability{State: "ready"}
 		}
-	} else if checker, ok := private.(interface{ CheckComputerSetup() error }); ok {
-		if err := checker.CheckComputerSetup(); err != nil {
-			result.Desktop = computerCapabilityFailure(err)
-		} else {
-			result.Desktop = ComputerCapability{State: "on_demand"}
-		}
+	} else if inspector, ok := private.(interface{ InspectComputerSetup() ComputerCapability }); ok {
+		result.Desktop = inspector.InspectComputerSetup()
 	}
+	return result, ctx.Err()
+}
+
+// Verification is an explicit user action. It does not change a conversation's
+// selected target or interrupt a task already using the private desktop.
+func (s *Service) VerifyComputerDesktop(ctx context.Context, meta *session.Meta) (ComputerCapability, error) {
+	if err := requireRWX(meta); err != nil {
+		return ComputerCapability{}, err
+	}
+	r, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return ComputerCapability{}, errors.New("computer runtime unavailable")
+	}
+	control := r.controlForTarget("xvfb-main")
+	select {
+	case <-ctx.Done():
+		return ComputerCapability{}, ctx.Err()
+	case control.gate <- struct{}{}:
+	}
+	defer func() { <-control.gate }()
+	control.mu.Lock()
+	busy := control.threadID != "" || control.pause != nil
+	control.mu.Unlock()
+	if busy {
+		return ComputerCapability{State: "in_use", Reason: "desktop_in_use"}, nil
+	}
+	r.mu.RLock()
+	executor, closed := r.executors["xvfb-main"], r.closed
+	r.mu.RUnlock()
+	verifier, ok := executor.(interface {
+		VerifyComputerSetup(context.Context) ComputerCapability
+	})
+	if closed || !ok {
+		return ComputerCapability{}, errors.New("private desktop unavailable")
+	}
+	result := verifier.VerifyComputerSetup(ctx)
 	return result, ctx.Err()
 }
 

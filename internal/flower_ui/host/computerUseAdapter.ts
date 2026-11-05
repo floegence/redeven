@@ -16,6 +16,7 @@ export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | '
     saveBrowserEnabled: enabled => browser.setEnabled(enabled),
     installBrowser: body => browser.install(body),
     loadEnvironment: () => request('GET', `${path}/environment`),
+    verifyDesktop: () => request('POST', `${path}/desktop/verify`, {}),
     discoverBrowser: (threadID, cdpURL) => request('POST', `${path}/candidates`, { thread_id: threadID, cdp_url: cdpURL }),
     revealTarget: async (threadID, targetID) => { await request('POST', `${path}/reveal`, { thread_id: threadID, target_id: targetID }); },
     listCandidates: threadID => request('GET', `${path}/candidates?thread_id=${encodeURIComponent(threadID)}`),

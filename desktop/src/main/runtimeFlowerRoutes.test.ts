@@ -99,7 +99,7 @@ describe('Desktop computer management routes', () => {
     }
   });
   it.each<[string, RuntimeFlowerRequestMethod[]]>([
-    ['/environment', ['GET']], ['/candidates', ['POST']], ['/candidates?thread_id=thread-1', ['GET']], ['/select', ['POST']], ['/reveal', ['POST']],
+    ['/environment', ['GET']], ['/desktop/verify', ['POST']], ['/candidates', ['POST']], ['/candidates?thread_id=thread-1', ['GET']], ['/select', ['POST']], ['/reveal', ['POST']],
     ['/targets', ['GET']], ['/tabs', ['POST']], ['/disconnect', ['POST']],
     ['/target?thread_id=thread-1', ['GET']], ['/target', ['PUT']],
     ['/access?thread_id=thread-1', ['GET', 'PUT']],
@@ -116,7 +116,7 @@ describe('Desktop computer management routes', () => {
   });
 
   it.each([
-    '/environment?thread_id=a', '/candidates?thread_id=', '/candidates?thread_id=a&thread_id=b', '/candidates?thread_id=a&cdp_url=x', '/select?thread_id=a', '/reveal?target_id=a',
+    '/environment?thread_id=a', '/desktop/verify?command=id', '/desktop/verify/extra', '/candidates?thread_id=', '/candidates?thread_id=a&thread_id=b', '/candidates?thread_id=a&cdp_url=x', '/select?thread_id=a', '/reveal?target_id=a',
     '/access', '/access?thread_id=', '/access?thread_id=a&thread_id=b',
     '/access?thread_id=a&target_id=b', '/access?thread_id=%20',
     '/access?thread_id=' + 'a'.repeat(513), '/target?profile_id=a',

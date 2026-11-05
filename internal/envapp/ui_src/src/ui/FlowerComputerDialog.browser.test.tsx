@@ -11,7 +11,7 @@ import deDE from './i18n/locales/catalogs/de-DE.json';
 import ruRU from './i18n/locales/catalogs/ru-RU.json';
 import zhTW from './i18n/locales/catalogs/zh-TW.json';
 import { computerUseEnUS as copy, type FlowerComputerCopy } from '../../../../flower_ui/src/computerUseCopy';
-import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerEnvironment } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerCapability, FlowerComputerEnvironment } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 let dispose: (() => void) | undefined;
 afterEach(async () => { dispose?.(); dispose = undefined; document.documentElement.classList.remove('dark'); await page.viewport(1280, 720); });
@@ -29,6 +29,7 @@ const manyTargets = () => [
 function mount(options: { current?: string; fullAccess?: boolean; readonly?: boolean; connectionOnly?: boolean; copy?: FlowerComputerCopy; environment?: FlowerComputerEnvironment } = {}) {
   const management = {
     loadEnvironment: vi.fn().mockResolvedValue(options.environment ?? environment),
+    verifyDesktop: vi.fn<() => Promise<FlowerComputerCapability>>().mockResolvedValue({ state: 'ready' }),
     listCandidates: vi.fn().mockResolvedValue({ current_target_id: options.current ?? 'lost-page', candidates: [
       { candidate_ref: 'next', target_id: 'next-page', kind: 'browser.connected', display_name: 'Work', title: 'Existing draft', state: 'ready', url: 'https://example.test' },
       { candidate_ref: 'window', target_id: 'notes', kind: 'desktop.window', display_name: 'Notes — Project', app_bundle_id: 'dev.fixture.Notes', state: 'ready' },
@@ -57,6 +58,54 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
 }
 async function ready() { await waitFor(() => !!button(copy.switchTarget) && !button(copy.switchTarget).disabled); }
 async function picker() { button(copy.switchTarget).click(); await waitFor(() => radios().length > 0 && !radios()[0].disabled); }
+
+for (const width of [1000, 390]) {
+  it(`guides missing Ubuntu desktop components through repair and explicit verification at ${width}px`, async () => {
+    await page.viewport(width, 800);
+    const labels = zhCN.flowerSurface.computer;
+    const command = 'sudo apt-get install --reinstall --no-install-recommends --no-remove openbox xdotool imagemagick-7.q16';
+    const missing: FlowerComputerEnvironment = { ...environment, hostname: 'udesk26', platform: 'linux', desktop: { state: 'setup_required', reason: 'window_manager_missing', repair: 'ubuntu_apt', setup_command: command,
+      components: [{ id: 'window_manager', path: '/usr/bin/openbox' }, { id: 'x11_input', path: '/usr/bin/xdotool' }, { id: 'x11_capture', path: '/usr/bin/import' }] } };
+    const { management } = mount({ copy: labels, environment: missing });
+    await waitFor(() => !!button(labels.details));
+    button(labels.details).click();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.innerText).toContain('/usr/bin/openbox');
+    expect(dialog.innerText).toContain('/usr/bin/xdotool');
+    expect(dialog.innerText).toContain('/usr/bin/import');
+    expect(dialog.innerText).toContain(labels.desktopInstallImpact);
+    expect(dialog.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${labels.desktopCommand}"]`)?.value).toBe(command);
+    expect(management.verifyDesktop).not.toHaveBeenCalled();
+    expect(button(labels.desktopVerify)).toBeUndefined();
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/desktop-missing-${width}.png` });
+    management.loadEnvironment.mockResolvedValue({ ...missing, desktop: { state: 'on_demand' } });
+    button(labels.refresh).click();
+    await waitFor(() => !!button(labels.desktopVerify));
+    expect(management.verifyDesktop).not.toHaveBeenCalled();
+    button(labels.desktopVerify).click();
+    await waitFor(() => dialog.innerText.includes(labels.desktopVerified));
+    expect(management.verifyDesktop).toHaveBeenCalledTimes(1);
+    expect(management.selectCandidate).not.toHaveBeenCalled();
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/desktop-setup-${width}.png` });
+  });
+}
+
+it('keeps unsupported, custom-path, busy, and verification failure states distinct', async () => {
+  const custom: FlowerComputerEnvironment = { ...environment, platform: 'linux', desktop: { state: 'setup_required', reason: 'x11_input_missing', repair: 'custom_path', components: [{ id: 'x11_input', path: '/custom/xdotool', overridden: true }] } };
+  const { management } = mount({ environment: custom });
+  await ready(); button(copy.details).click();
+  expect(document.body.textContent).toContain(copy.desktopCustomPath);
+  expect(document.body.textContent).not.toContain(copy.desktopInstallTitle);
+  management.loadEnvironment.mockResolvedValue({ ...custom, desktop: { ...custom.desktop, repair: 'unsupported_platform' } });
+  button(copy.refresh).click(); await waitFor(() => document.body.textContent?.includes(copy.desktopManualRepair) === true);
+  management.loadEnvironment.mockResolvedValue({ ...custom, desktop: { state: 'on_demand' } });
+  button(copy.refresh).click(); await waitFor(() => !!button(copy.desktopVerify));
+  management.verifyDesktop.mockResolvedValueOnce({ state: 'in_use', reason: 'desktop_in_use' }).mockResolvedValueOnce({ state: 'setup_required', reason: 'atspi_connection_failed' });
+  button(copy.desktopVerify).click(); await waitFor(() => document.body.textContent?.includes(copy.desktopVerifyInUse) === true);
+  button(copy.desktopVerify).click(); await waitFor(() => document.body.textContent?.includes(copy.desktopVerifyFailed) === true);
+  expect(document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${copy.diagnostics}"]`)?.value).toContain('atspi_connection_failed');
+});
 
 for (const width of [1000, 390]) {
   it(`shows the actual Chrome blocker once above the unchanged installation guide at ${width}px`, async () => {
@@ -386,6 +435,20 @@ it('only refreshes diagnostics and never creates profiles or configures Chrome',
   expect(management.setupExtension).not.toHaveBeenCalled();
   expect(management.createManagedProfile).not.toHaveBeenCalled();
   expect(management.selectCandidate).not.toHaveBeenCalled();
+});
+
+it('allows retrying a private desktop after dependencies were repaired', async () => {
+  const { management } = mount({ environment: { ...environment, platform: 'linux', desktop: { state: 'on_demand' } } });
+  management.listCandidates.mockResolvedValue({ current_target_id: 'lost-page', candidates: [
+    { candidate_ref: 'private', target_id: 'xvfb-main', kind: 'xvfb.desktop', display_name: 'Private desktop', state: 'setup_required' },
+  ] });
+  await ready();
+  button(copy.switchTarget).click();
+  await waitFor(() => radios().length === 1);
+  expect(radios()[0].disabled).toBe(false);
+  radios()[0].click();
+  button(copy.confirmTarget).click();
+  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
 });
 it('discovers advanced pages into the same staged selector without binding', async () => {
   const { management } = mount(); await ready();

@@ -7,7 +7,7 @@ import type { FlowerBrowserInstallationSnapshot, FlowerComputerUserInput, Flower
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'installation' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
+async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'installation' | 'desktop_setup' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
   await page.viewport(1280, 900);
   const threadID = 'assistance-fixture';
   const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: kind === 'connection' ? 'computer.targets' : 'browser.navigate', renderer: 'structured', status: 'success',
@@ -25,7 +25,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
     if (!entry.activity) return entry;
     const { label, description, renderer, payload, chips, target_refs, ...facts } = entry.activity;
     return { ...entry, activity: { ...facts, presentation: { label, description, renderer, payload, chips, target_refs } } };
-  }), interactions: [{ computer_assistance: { kind, tool_call_id: 'navigate', ...(kind === 'connection' || kind === 'installation' ? {} : {target_id: 'browser-main'}) }, id: 'tool-input:step', kind: 'input' as const, turn_id: 'turn-control', run_id: 'run-control', tool_call_id: 'navigate',
+  }), interactions: [{ computer_assistance: { kind, tool_call_id: 'navigate', ...(kind === 'connection' || kind === 'installation' ? {} : {target_id: kind === 'desktop_setup' ? 'xvfb-main' : 'browser-main'}) }, id: kind === 'desktop_setup' ? 'ask:desktop' : 'tool-input:step', kind: 'input' as const, turn_id: 'turn-control', run_id: 'run-control', tool_call_id: 'navigate',
     input: { summary: 'Specific external step', questions: [{ id: kind === 'installation' ? 'browser_install' : kind === 'connection' ? 'browser_connection' : 'computer_control', prompt: 'Inspect the selected page.', kind: 'select', options: kind === 'installation' ? ['Continue with installed browser', 'Continue without built-in browser'] : [kind === 'connection' ? 'Continue with connected browser' : 'Return control to Flower'] }] },
   }] };
   const gate = deferred<void>();
@@ -39,6 +39,8 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   const browser = { storage_bytes: 600000, enabled: true, state: 'not_installed' as const, launch: { state: 'installation_required' as const }, directory: '/state/browser', received_bytes: 0,
     package: { name: 'Chrome for Testing', id: 'fixture', version: '148', platform: 'linux', architecture: 'amd64', url: 'https://cdn.playwright.dev/fixture.zip', sha256: '0'.repeat(64), size_bytes: 180000000, installed_bytes: 390000000 } };
   const loadBrowserInstallation = vi.fn().mockResolvedValue(browser);
+  const loadEnvironment = vi.fn().mockResolvedValue({ hostname: 'udesk26', platform: 'linux', managed: { state: 'on_demand' }, desktop: { state: 'on_demand' }, chrome: { installations: [], profiles: [] } });
+  const verifyDesktop = vi.fn().mockResolvedValue({ state: 'ready' });
   let receiveInstallation: ((value: FlowerBrowserInstallationSnapshot) => void) | undefined;
   const unsubscribeInstallation = vi.fn();
   const subscribeBrowserInstallation = vi.fn((listener: (value: FlowerBrowserInstallationSnapshot) => void) => {
@@ -50,7 +52,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
   const publishStatus = (computer_status: NonNullable<FlowerLiveStreamEnvelope['computer_status']>, thread_id = computer_status.thread_id) => deliver({ schema_version: 3, kind: 'computer.status', thread_id, computer_status });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput, inputComputerControl, setComputerViewer,
-    computerManagement: { loadBrowserInstallation, subscribeBrowserInstallation, installBrowser, saveBrowserEnabled: vi.fn(), openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
+    computerManagement: { loadEnvironment, verifyDesktop, loadBrowserInstallation, subscribeBrowserInstallation, installBrowser, saveBrowserEnabled: vi.fn(), openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 3 as const, kind: 'ready' as const, baseline_complete: true, observer_id: 'assistance-observer', summaries: [snapshot, other] };
@@ -66,8 +68,23 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   }, { focusThreadRequest: { request_id: 'select-assistance', thread_id: threadID }, layout: true });
   Object.assign(surface.style, { width: '1200px', height: '800px' });
   await waitFor(() => !!surface.querySelector('.flower-computer-control-heading'));
-  return { surface, gate, saveAccess, loadAccess, submitInput, inputComputerControl, setComputerViewer, publishStatus, loadExtensionStatus, loadBrowserInstallation, installBrowser, browser, publishInstallation, unsubscribeInstallation };
+  return { surface, gate, saveAccess, loadAccess, submitInput, inputComputerControl, setComputerViewer, publishStatus, loadExtensionStatus, loadBrowserInstallation, installBrowser, browser, publishInstallation, unsubscribeInstallation, verifyDesktop };
 }
+
+it('opens desktop repair for the current evidence and leaves the original question unanswered after verification', async () => {
+  const s = await setup('desktop_setup');
+  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
+  expect(card.textContent).toContain('Install system components');
+  [...card.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === 'Environment diagnostics')!.click();
+  await waitFor(() => !![...document.querySelectorAll('button')].find(item => item.textContent?.trim() === 'Verify desktop'));
+  [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === 'Verify desktop')!.click();
+  await waitFor(() => document.body.textContent?.includes('Private desktop verified:') === true);
+  expect(s.verifyDesktop).toHaveBeenCalledTimes(1);
+  expect(s.submitInput).not.toHaveBeenCalled();
+  expect(s.inputComputerControl).not.toHaveBeenCalled();
+  expect(s.setComputerViewer).not.toHaveBeenCalled();
+  expect(card.textContent).toContain('Inspect the selected page.');
+});
 
 it('explains the exact site grant and grants it once before continuing without manual browser control', async () => {
   const s = await setup();

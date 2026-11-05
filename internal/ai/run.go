@@ -3038,10 +3038,14 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		}
 	}
 	if !target.Ready {
-		return nil, &targetToolPolicyError{
+		failure := &targetToolPolicyError{
 			code: targetReadinessErrorCode(target), tool: toolName, target: targetID,
 			targetKind: target.Kind, targetState: target.State, repairAction: targetRepairAction(target),
 		}
+		if target.Kind == "xvfb.desktop" && target.State == "setup_required" {
+			return toolExecutionOutput{TargetID: targetID, Payload: map[string]any{"target_id": targetID, "target_kind": target.Kind, "desktop_setup_required": true, "action_executed": false}}, failure
+		}
+		return nil, failure
 	}
 	forwardedArgs := StripTargetToolArgs(args)
 	rawArgs, err := json.Marshal(forwardedArgs)
@@ -3226,7 +3230,10 @@ func targetRepairAction(target TargetDescriptor) string {
 	case "connection_required":
 		return "connect_current_browser"
 	default:
-		return "start_managed_browser"
+		if target.Kind == "browser.managed" {
+			return "start_managed_browser"
+		}
+		return ""
 	}
 }
 

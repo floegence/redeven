@@ -3859,6 +3859,24 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: environment})
 		return
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/desktop/verify":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+		var body map[string]json.RawMessage
+		if dec.Decode(&body) != nil || body == nil || len(body) != 0 || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		result, err := aiSvc.VerifyComputerDesktop(r.Context(), meta)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_desktop_verification_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/candidates":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {
