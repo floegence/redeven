@@ -52,6 +52,10 @@ preparations. The Desktop bridge does not claim native usage measurement proof
 that was not transferred and validated across the RPC boundary. Floret's logical
 preparation context releases Desktop handles after settlement or discard, while
 single-attempt close preserves replay for as long as that context remains active.
+Floret v7.107.4 verifies saved DeepSeek assistant boundaries even inside
+Runtime-grouped messages when Retry follows retained reasoning with a new tool
+call. Desktop forwards opaque state unchanged; confirmed effects and native
+history survive restart and Fork without replaying the tool.
 
 RPC v6 applies one-part request credit, bounded response reassembly and per-request
 cancellation. Prepared handles transfer ownership only after the client acknowledges
