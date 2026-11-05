@@ -1898,8 +1898,6 @@
   z-index: 3;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  width: min(36rem, 100%);
-  margin: 0 auto;
   gap: 0;
   border: 1px solid var(--floe-line);
   border-radius: var(--floe-radius-panel);

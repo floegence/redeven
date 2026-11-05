@@ -395,6 +395,11 @@ it.each([1000, 375])('shows a compact, uniquely identified command menu at %ipx'
   expect(new Set(items.map(item => item.id)).size).toBe(3);
   const menu = surface.querySelector<HTMLElement>('.flower-composer-command-menu')!;
   await waitFor(() => menu.dataset.floatingPresence === 'open');
+  await Promise.all(menu.getAnimations().map(animation => animation.finished));
+  const composerBounds = surface.querySelector<HTMLElement>('.flower-composer')!.getBoundingClientRect();
+  const menuBounds = menu.getBoundingClientRect();
+  expect(Math.abs(menuBounds.left - composerBounds.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(menuBounds.right - composerBounds.right)).toBeLessThanOrEqual(1);
   expect(menu.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
   expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(width);
   for (const item of items) {
