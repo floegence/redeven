@@ -10681,15 +10681,15 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 2868,
+      "body_length": 2963,
       "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Manifest/lock pins define the consumed release; Floe owns asset monitoring and per-view recovery, while Redeven supplies authenticated product integration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.90.9 (Env App Core v0.90.9), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
-          "char_count": 1364
+          "body": "Pins: Floe Boot/Core/Protocol v0.90.10 (Env App Core v0.90.10), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "char_count": 1459
         },
         {
           "id": "boundaries",
@@ -25697,5 +25697,5 @@
       ]
     }
   ],
-  "source_sha256": "55fef45cbfa95b15798e7c2256b094e845325c656ed27a0384c4769d04941fdf"
+  "source_sha256": "abd7250b46bdf291ddfe381348968d8815f7bf4276493bf0e53afc15532e8d8d"
 }

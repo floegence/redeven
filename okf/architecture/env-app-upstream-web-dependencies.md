@@ -12,7 +12,7 @@ Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floet
 
 # Contract
 
-Pins: Floe Boot/Core/Protocol v0.90.9 (Env App Core v0.90.9), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.
+Pins: Floe Boot/Core/Protocol v0.90.10 (Env App Core v0.90.10), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.
 
 ## Mechanism
 
