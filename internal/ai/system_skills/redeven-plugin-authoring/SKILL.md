@@ -124,6 +124,8 @@ Package the validated output directory from `redevplugin.project.json` with
 `redevplugin package <output-directory> <destination.redevplugin>`, then validate
 the resulting package. Keep source and final deliverables at the user-selected
 project or destination and report the checks that actually ran. Installation in
-Redeven goes through Plugin Center's inspect, review, and confirm flow. Plugin
-installation, execution permissions, signing trust, and automatic updates remain
-separate facts; creating a plugin grants none of them implicitly.
+Redeven goes through Plugin Center's inspect, review, and confirm flow. Ordinary
+plugin packages require no signature or publisher registration. Wait for the
+durable installation receipt before reporting success. Installation, execution
+permissions, and automatic-update consent remain separate; creating a plugin
+grants none of them implicitly.
