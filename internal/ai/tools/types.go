@@ -43,6 +43,7 @@ const (
 	ErrorCodeCommandFailed                ErrorCode = "COMMAND_FAILED"
 	ErrorCodeTerminalRuntimeFailure       ErrorCode = "TERMINAL_RUNTIME_FAILURE"
 	ErrorCodeScriptFailed                 ErrorCode = "SCRIPT_FAILED"
+	ErrorCodeScriptOutputLimit            ErrorCode = "SCRIPT_OUTPUT_LIMIT"
 	ErrorCodeTargetActionFailed           ErrorCode = "TARGET_ACTION_FAILED"
 	ErrorCodeNavigationFailed             ErrorCode = "NAVIGATION_FAILED"
 	ErrorCodeNavigationTimeout            ErrorCode = "NAVIGATION_TIMEOUT"

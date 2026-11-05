@@ -553,6 +553,11 @@ function repeatsItemError(item: FlowerActivityItem, value: string): boolean {
 
 function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): Extract<FlowerActivityDetailBlock, { kind: 'error' }> | null {
   if (item.approval_state === 'rejected') return null;
+	// Output exhaustion is a bounded delivery interruption. The canonical item
+	// remains an error and retains its error code/data, while the activity body
+	// presents the confirmed prefix and budget fact instead of a generic failure
+	// block. This keeps the user-visible state factual without hiding the cause.
+	if (computerObservationInterruption(item) === 'output') return null;
   const message = errorMessageFromPayload(payload);
   if (!message) return null;
   const error = asRecord(payload?.error);

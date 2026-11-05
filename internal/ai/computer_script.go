@@ -815,6 +815,8 @@ func computerScriptErrorCode(code string) aitools.ErrorCode {
 		return aitools.ErrorCodeInvalidArguments
 	case "TARGET_ACTION_FAILED":
 		return aitools.ErrorCodeTargetActionFailed
+	case "SCRIPT_OUTPUT_LIMIT":
+		return aitools.ErrorCodeScriptOutputLimit
 	case "TAKEOVER_REQUIRED":
 		return aitools.ErrorCodeTakeoverRequired
 	case "TARGET_CONNECTION_REQUIRED":

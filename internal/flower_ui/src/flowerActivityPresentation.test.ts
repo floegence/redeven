@@ -2004,8 +2004,16 @@ it('shows output exhaustion as a budget interruption while preserving canonical 
   const source=item({tool_name:'computer.exec',renderer:'structured',status:'error',chips:[{kind:'computer_budget',label:'budget',value:'output'}],payload:{error:{code:'SCRIPT_FAILED',message:'Output limit reached'}}});
   const result=presentFlowerActivityItem(source);
   expect(result.meta).toBe(toolActivityEnUS.computerOutputLimitReached);
-  expect(result.detailBlocks.find(block=>block.kind==='error')).toMatchObject({error:{code:'SCRIPT_FAILED',budget_interruption:true}});
+  expect(result.detailBlocks.find(block=>block.kind==='error')).toBeUndefined();
   expect(source.status).toBe('error');
+});
+
+it('presents the stable output-limit code as retained partial work', () => {
+  const source=item({tool_name:'computer.exec',renderer:'structured',status:'error',payload:{error:{code:'SCRIPT_OUTPUT_LIMIT',message:'Computer script stopped before completion (SCRIPT_OUTPUT_LIMIT)'},rows:[{title:'completed_reads',content:'snapshot',format:'code'}],rows_provided:true}});
+  const result=presentFlowerActivityItem(source);
+  expect(result.meta).toBe(toolActivityEnUS.computerOutputLimitReached);
+  expect(result.detailBlocks.find(block=>block.kind==='error')).toBeUndefined();
+  expect(result.detailBlocks.some(block=>block.kind==='structured_rows')).toBe(true);
 });
 
 it.each([

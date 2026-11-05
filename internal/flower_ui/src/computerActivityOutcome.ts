@@ -10,7 +10,7 @@ export function computerObservationInterruption(item: FlowerActivityItem): 'unav
     || item.requires_approval && item.approval_state !== 'approved' || item.approval_state && item.approval_state !== 'approved') return;
   const error = item.payload?.error;
   const code = error && typeof error === 'object' && !Array.isArray(error) ? (error as Record<string, unknown>).code : undefined;
-  if ((code === undefined || ['SCRIPT_OUTPUT_LIMIT','SCRIPT_FAILED'].includes(String(code))) && chips.some(chip => chip.kind === 'computer_budget' && chip.value === 'output')) return 'output';
+	if (code === 'SCRIPT_OUTPUT_LIMIT' || ((code === undefined || code === 'SCRIPT_FAILED') && chips.some(chip => chip.kind === 'computer_budget' && chip.value === 'output'))) return 'output';
   if ((code === undefined || ['TIMEOUT','SCRIPT_FAILED'].includes(String(code))) && chips.some(chip => chip.kind === 'computer_budget' && ['time','operations'].includes(chip.value ?? ''))) return 'budget';
   if (phase === 'effect_confirmed' && chips.some(chip=>chip.kind==='computer_failed_read' && ['snapshot','observe','screenshot','read','text','query','table','attribute','source','geometry','selection','capabilities'].includes(chip.value??''))
     && (code===undefined || ['ELEMENT_NOT_FOUND','AMBIGUOUS_ELEMENT','TARGET_CAPABILITY_UNAVAILABLE'].includes(String(code)))) return 'read_failed';

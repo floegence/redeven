@@ -53,6 +53,9 @@ func TestComputerScriptErrorClassifications(t *testing.T) {
 	if computerScriptErrorCode("SCRIPT_STOPPED") != aitools.ErrorCodeScriptFailed {
 		t.Fatal("known script failure became an unknown effect")
 	}
+	if computerScriptErrorCode("SCRIPT_OUTPUT_LIMIT") != aitools.ErrorCodeScriptOutputLimit {
+		t.Fatal("output exhaustion lost its stable error code")
+	}
 }
 
 func TestComputerNavigationDefinitionMatchesRuntime(t *testing.T) {

@@ -6,6 +6,8 @@
 
 Concepts own current contracts and original qualification outcomes; Git retains change history.
 
+- 2026-11-04: Computer script output exhaustion now uses the stable SCRIPT_OUTPUT_LIMIT fact; confirmed reads and bounded prefixes remain visible to the model and Flower presents the interruption without a generic failure block.
+
 - 2026-11-04: [Flower Goals](ai/flower-goals.md) share the editor's first line box and clear converted native command text; browser and Desktop acceptance measure entry/typing/exit geometry and localized placeholders.
 - 2026-11-04: Consolidate overlapping concepts under their owners, repair boundaries/navigation and remove repeated prose. Retain contracts, acceptance thresholds, adverse qualification outcomes and unqualified scopes; regenerate the bundle with unchanged quality budgets. Preserve narrative Evidence in embedded sections so search and explicit paginated opening can retrieve retained qualification results.
 - 2026-11-04: [Provider tool names](ai/model-provider-surface-and-history.md) explain canonical-to-callable mappings in detached tool descriptions before freezing; preserve canonical content, return identities and retry bytes.

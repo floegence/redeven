@@ -39,6 +39,21 @@ func TestComputerObservationPresentationPreservesDiagnosis(t *testing.T) {
 	}
 }
 
+func TestComputerOutputLimitUsesStablePresentationCode(t *testing.T) {
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError,
+		Error: &aitools.ToolError{Code: aitools.ErrorCodeScriptOutputLimit, Message: "Computer script stopped before completion (SCRIPT_OUTPUT_LIMIT)"},
+		Data:  map[string]any{"budget_exhausted": "output", "completed_reads": []any{map[string]any{"action": "snapshot", "status": "completed"}}, "output_limit": map[string]any{"stage": "log", "limit_bytes": int64(65536)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, chip := range activity.Chips {
+		if chip.Kind == "computer_budget" && chip.Value == "output" {
+			return
+		}
+	}
+	t.Fatalf("output budget fact missing: %#v", activity.Chips)
+}
+
 func TestComputerScriptNavigationReceiptAndReadFailureKeepIndependentOutcomes(t *testing.T) {
 	for _, failedRead := range []bool{false, true} {
 		t.Run(fmt.Sprint(failedRead), func(t *testing.T) {
