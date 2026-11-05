@@ -2416,8 +2416,6 @@ async function inspectRuntimePlacementTargetState(
     hostAccess: DesktopRuntimeHostAccess;
     placement: DesktopRuntimePlacement;
     sshPassword?: string;
-    // Explicit connection requests may use a live transport or OpenSSH credentials without a saved password.
-    allowUnsavedSSHAuthentication?: boolean;
     signal?: AbortSignal;
   }>,
 ): Promise<RuntimePlacementInspectionState> {
@@ -2427,16 +2425,6 @@ async function inspectRuntimePlacementTargetState(
   }
   if (target.placement.kind === 'host_process' && target.hostAccess.kind === 'ssh_host') {
     const sshPassword = target.sshPassword ?? '';
-    if (target.hostAccess.ssh.auth_mode === 'password' && sshPassword === '' && !target.allowUnsavedSSHAuthentication) {
-      return {
-        running: false,
-        local_ui_url: '',
-        runtime_control_status: desktopRuntimeControlStatusMissing('auth_required', 'Status detection waits for manual SSH authentication.'),
-        maintenance: runtimePlacementMaintenanceByTargetID.get(target.targetID),
-        placement: target.placement,
-        runtime_target_available: false,
-      };
-    }
     const details = sshDetailsFromRuntimePlacement(target.hostAccess, target.placement);
     const runtimeKey = sshDesktopSessionKey(details);
     const status = await probeManagedSSHRuntimeStatus({
@@ -2663,16 +2651,6 @@ async function inspectRuntimePlacementTargetState(
     };
   }
   const sshPassword = target.sshPassword ?? '';
-  if (target.hostAccess.kind === 'ssh_host' && target.hostAccess.ssh.auth_mode === 'password' && sshPassword === '' && !target.allowUnsavedSSHAuthentication) {
-    return {
-      running: false,
-      local_ui_url: '',
-      runtime_control_status: desktopRuntimeControlStatusMissing('auth_required', 'Auto detection waits for manual authentication.'),
-      maintenance: runtimePlacementMaintenanceByTargetID.get(target.targetID),
-      placement: target.placement,
-      runtime_target_available: false,
-    };
-  }
   const commandOptions = () => ({
     ...(target.signal ? { signal: target.signal } : {}),
   });
@@ -5264,8 +5242,7 @@ async function acquireEnvironmentManagementConnection(environmentID: string, own
     throw new RuntimeControlError('SETTINGS_RUNTIME_PREPARING', 'Runtime is preparing. Retry when it is ready.');
   }
   const inspection = await inspectRuntimePlacementTargetState({ targetID: target.id, environmentID, label: target.label,
-    hostAccess: target.host_access, placement: target.placement, sshPassword: sshPassword ?? target.ssh_password,
-    allowUnsavedSSHAuthentication: true, signal });
+    hostAccess: target.host_access, placement: target.placement, sshPassword: sshPassword ?? target.ssh_password, signal });
   const ready = runtimePlacementReadyByTargetID.get(target.id);
   if (!ready && owner.startsWith('gateway:') && inspection.runtime_control_status.state === 'missing'
     && ['not_started', 'container_not_running'].includes(inspection.runtime_control_status.reason_code)) {

@@ -11,10 +11,8 @@ import { RuntimeControlError } from './runtimeControlClient';
 import { requireEnvironmentManagementAvailable } from './environmentAccessSettings';
 import { EnvironmentManagementConnections } from './environmentManagementConnections';
 import { DesktopSSHTransportAuthenticationError } from './sshTransportManager';
-import { DesktopWelcomeRuntimeHealthStore } from './desktopWelcomeRuntimeHealth';
 import { buildDesktopWelcomeSnapshot } from './desktopWelcomeState';
 import { runtimeGatewayAccessFixture } from '../testSupport/runtimeGatewayAccessFixture';
-import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccessPresentation';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import { desktopRuntimeControlStatusMissing } from '../shared/desktopRuntimePresence';
 import { RuntimePlacementBridgeRegistry, type RuntimePlacementBridgeRecord } from './runtimePlacementBridgeRegistry';
@@ -70,7 +68,7 @@ describe('Runtime Gateway launcher ownership', () => {
     expect(registry.size).toBe(0);
   });
 
-  it.each(['ssh', 'ssh_container'] as const)('explicitly inspects %s with available OpenSSH authentication before requiring a password', async kind => {
+  it.each(['ssh', 'ssh_container'] as const)('probes %s with available OpenSSH authentication before requiring a password', async kind => {
     const original = runtimeGatewayAccessFixture(kind).inputs.preferences.saved_runtime_targets[0];
     if (original.host_access.kind !== 'ssh_host') throw new Error('SSH fixture required');
     const target = { ...original, host_access: { ...original.host_access, ssh: { ...original.host_access.ssh, auth_mode: 'password' } } };
@@ -95,7 +93,7 @@ describe('Runtime Gateway launcher ownership', () => {
       clearRuntimePlacementTargetRecords: vi.fn(), runtimeControlReasonCodeForContainerResolution: (status: string) => status,
     });
     const input = { targetID: target.id, environmentID: target.id, label: target.label,
-      hostAccess: target.host_access, placement: target.placement, allowUnsavedSSHAuthentication: true };
+      hostAccess: target.host_access, placement: target.placement };
     expect(await inspect(input)).toMatchObject({ running: true, runtime_target_available: true });
     expect(ready.has(target.id)).toBe(true);
     if (kind === 'ssh') {
@@ -191,42 +189,6 @@ describe('Runtime Gateway launcher ownership', () => {
     expect(JSON.stringify(preferences)).toBe(before);
     expect(JSON.stringify(context.launcherOperations.finishCurrentAttempt.mock.calls)).not.toContain('temporary password');
   });
-  it.each(['ssh', 'ssh_container'] as const)('preserves unsaved-password %s authentication through the production probe and snapshot', async kind => {
-    const fixture = runtimeGatewayAccessFixture(kind);
-    const original = fixture.inputs.preferences.saved_runtime_targets[0];
-    if (original.host_access.kind !== 'ssh_host') throw new Error('SSH fixture required');
-    const target = { ...original, ssh_password: '', ssh_password_configured: false,
-      host_access: { ...original.host_access, ssh: { ...original.host_access.ssh, auth_mode: 'password' as const } } };
-    const inspect = productionBoundary('inspectRuntimePlacementTargetState', {
-      runtimePlacementInspectionFromBridge: async () => null, runtimePlacementMaintenanceByTargetID: new Map(),
-      desktopRuntimeControlStatusMissing,
-    });
-    const health = productionBoundary('runtimeTargetHealthFromState', {
-      runtimeTargetProbeSource: () => 'ssh_runtime_probe',
-      runtimeTargetOfflineReasonCode: (state: { runtime_control_status: { reason_code: string } }) => state.runtime_control_status.reason_code,
-      offlineRuntimeHealth: (source: string, offline_reason_code: string, offline_reason: string) => ({
-        status: 'offline', checked_at_unix_ms: Date.now(), source, offline_reason_code, offline_reason,
-      }),
-    });
-    const probe = productionBoundary('probeSavedRuntimeTargetHealth', {
-      inspectSavedRuntimeTargetState: () => inspect({ targetID: target.id, environmentID: target.id,
-        hostAccess: target.host_access, placement: target.placement }),
-      runtimeTargetHealthFromState: health, runtimeTargetPresenceFromState: vi.fn(),
-    });
-    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
-    await store.refresh([{ key: target.id, environment_id: target.id, slot: 'runtime_target', auto_refresh_enabled: false,
-      checking_health: { status: 'offline', checked_at_unix_ms: 0, source: 'ssh_runtime_probe' },
-      probe: () => probe(target) as Promise<{ health: DesktopRuntimeHealth }>,
-    }]);
-    const snapshot = buildDesktopWelcomeSnapshot({ ...fixture.inputs, ...store.snapshot(),
-      preferences: { ...fixture.inputs.preferences, saved_runtime_targets: [target] } });
-    const entry = snapshot.environments.find(entry => entry.id === target.id)!;
-    expect(store.snapshot().managedRuntimePresenceByTargetID).toEqual({});
-    expect(entry.runtime_health.offline_reason_code).toBe('auth_required');
-    expect(entry.runtime_connection_target?.runtime_control_status).toMatchObject({ state: 'missing', reason_code: 'auth_required' });
-    expect(entry.runtime_connection_target?.can_connect_cloud).toBe(false);
-    expect(runtimeGatewayAccessPresentation(entry)).toMatchObject({ phase: 'connection_required' });
-  });
   it('binds transient authentication and cancellation to the originating Desktop window', async () => {
     let active = true;
     const release = vi.fn(async () => { active = false; });
@@ -276,7 +238,7 @@ describe('Runtime Gateway launcher ownership', () => {
     }) as (id: string, owner: string) => Promise<unknown>;
     await connect(target.id, 'runtime-connections');
     expect(inspect).toHaveBeenCalledOnce();
-    expect(inspect).toHaveBeenCalledWith(expect.objectContaining({ allowUnsavedSSHAuthentication: true }));
+    expect(inspect).toHaveBeenCalledWith(expect.not.objectContaining({ allowUnsavedSSHAuthentication: expect.anything() }));
     expect(acquire).toHaveBeenCalledExactlyOnceWith(ready, 'runtime-connections', undefined, undefined);
   });
   it('passes a transient password to both the host inspection and bridge without saving it', async () => {
