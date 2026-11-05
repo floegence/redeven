@@ -4,6 +4,13 @@ import { children, createEffect, createRoot, getOwner, onCleanup, untrack, type 
 // search never acquire motion ownership or delay removal.
 const animatedChanges = new WeakMap<HTMLElement, 'layout' | 'disclosure'>();
 
+/** Minified production CSS can express the same duration in seconds. */
+export function flowerThreadMotionDuration(style: CSSStyleDeclaration, token: string, fallback: number): number {
+  const value = style.getPropertyValue(token).trim();
+  const duration = parseFloat(value) * (value.endsWith('ms') ? 1 : 1000);
+  return Number.isFinite(duration) ? duration : fallback;
+}
+
 /** Animate an explicit disclosure without remounting retained conversation rows. */
 export function animateFlowerThreadRowsChange(container: HTMLElement | null | undefined, change: () => void, motion: 'layout' | 'disclosure' = 'layout'): void {
   if (!container || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
@@ -18,7 +25,7 @@ export function animateFlowerThreadRowsChange(container: HTMLElement | null | un
   const bounds = container.getBoundingClientRect();
   const viewport = container.closest('.flower-scroll, .flower-workspaces-scroll')?.getBoundingClientRect() ?? bounds;
   const style = getComputedStyle(container);
-  const duration = parseFloat(style.getPropertyValue('--floe-duration-base')) || 200;
+  const duration = flowerThreadMotionDuration(style, '--floe-duration-base', 200);
   const easing = style.getPropertyValue('--floe-ease-out').trim() || 'ease-out';
   const before = new Map(Array.from(container.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
     .map(element => [element, { rect: element.getBoundingClientRect(), opacity: getComputedStyle(element).opacity }] as const));
@@ -115,7 +122,7 @@ export function FlowerThreadRows(props: Readonly<{
         { height: `${targetHeight}px`, opacity: exiting ? 0 : 1, offset: 1 },
       ];
       offset += naturalHeight;
-      const animation = row.element.animate(keyframes, { duration: parseFloat(style.getPropertyValue('--floe-duration-slow')) || 280,
+      const animation = row.element.animate(keyframes, { duration: flowerThreadMotionDuration(style, '--floe-duration-slow', 280),
         easing: style.getPropertyValue('--floe-ease-in-out').trim() || 'ease-in-out', fill: 'both' });
       animation.id = exiting ? 'flower-thread-exit' : 'flower-thread-disclosure';
       if (exiting) row.exit = animation; else row.enter = animation;

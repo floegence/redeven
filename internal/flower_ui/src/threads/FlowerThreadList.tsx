@@ -7,7 +7,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, GitBranch, Grid, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import { FlowerPinIcon } from '../icons/FlowerPinIcon';
-import { animateFlowerThreadRowsChange, FlowerThreadRows } from './FlowerThreadRows';
+import { animateFlowerThreadRowsChange, flowerThreadMotionDuration, FlowerThreadRows } from './FlowerThreadRows';
 import { FlowerThreadWave } from '../FlowerThreadWave';
 import type { FlowerThreadPinPosition } from '../contracts/flowerSurfaceContracts';
 import { FlowerContextMenu } from '../FlowerContextMenu';
@@ -785,7 +785,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
               if (rows && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
                 for (const animation of rows.getAnimations()) if (animation.id === 'flower-thread-view') animation.cancel();
                 const style = getComputedStyle(rows);
-                const animation = rows.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: parseFloat(style.getPropertyValue('--floe-duration-fast')) || 140, easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out' });
+                const animation = rows.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: flowerThreadMotionDuration(style, '--floe-duration-fast', 140), easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out' });
                 animation.id = 'flower-thread-view';
               }
             }}

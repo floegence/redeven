@@ -233,6 +233,7 @@ describe('Flower directory navigation', () => {
 
   it('slides the shared selected face without moving the title row or interrupting rapid reversal', async () => {
     const ui = mount(); ui.host.style.width = '300px';
+    ui.host.style.setProperty('--floe-duration-slow', '.28s');
     await frame(); await frame();
     const header = ui.host.querySelector<HTMLElement>('.flower-thread-list-header')!;
     const pill = ui.host.querySelector<HTMLElement>('.floe-segmented-control__pill')!;
@@ -332,6 +333,7 @@ describe('Flower directory navigation', () => {
   it.each(['porcelain-light', 'porcelain-dark'])('paints sustained disclosure travel without overlapping groups in %s', async theme => {
     const ui = mount(undefined, undefined, theme);
     ui.host.style.width = '240px';
+    ui.host.style.setProperty('--floe-duration-slow', '.28s');
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
     const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('button')!;
     const next = ui.header('/two/project');
@@ -437,6 +439,25 @@ describe('Flower directory navigation', () => {
     expect(row.style.overflow).toBe('');
     expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(9);
     expect(ui.host.querySelector('[data-flower-thread-exiting]')).toBeNull();
+  });
+
+  it('keeps earlier opening rows alive when requesting another batch', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('.flower-directory-toggle')!;
+    toggle.click();
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
+    await frame();
+    toggle.click();
+    const first = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id === 'flower-thread-disclosure') { animation.pause(); animation.currentTime = 170; }
+    ui.host.querySelector<HTMLButtonElement>('.flower-directory-more')!.click();
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
+    await frame();
+    expect(first.style.overflow).toBe('');
+    expect(first.getAnimations().filter(animation => animation.id === 'flower-thread-disclosure')).toHaveLength(0);
+    expect(ui.host.querySelector('[data-thread-id="alpha-0"]')).toBe(first);
+    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(15);
   });
 
   it.each(['porcelain-light', 'porcelain-dark'])('uses legible workspace geometry in %s', async theme => {
