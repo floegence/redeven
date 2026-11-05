@@ -5,7 +5,7 @@ import { FeedbackIndicator, type FeedbackIndicatorEntry, StableText, Button, Inp
 import './plugin-center-compact.css';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, Check, Filter, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, Check, Filter, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, Wand, X } from '@floegence/floe-webapp-core/icons';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { OfficialPluginAccessReview } from './OfficialPluginAccessReview';
@@ -75,6 +75,7 @@ export type PluginCenterViewProps = {
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
+  onCreatePlugin?: (mode: 'chat' | 'direct') => void;
 };
 
 type PluginSourceFilter = 'all' | 'official' | 'external';
@@ -784,6 +785,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       canManage={canManage()}
       focusRequest={props.selectedInventoryKey ? undefined : props.focusRequest}
       onInstallExternal={() => openExternalDialog()}
+      onCreatePlugin={props.onCreatePlugin}
       onClose={props.onClose}
       feedback={allItems().length > 0 && errorMessage() ? [{ id: 'inventory', severity: 'error', summary: errorMessage()!, detail: <Show when={!canManage()}><p>{i18n.t('uiCopy.plugin.permissionsAdminRequired')}</p></Show>, actions: <Button size="sm" variant="outline" disabled={loading() || refreshPending()} onClick={() => void refreshInventory()}>{i18n.t('common.actions.retry')}</Button> }] : []}
       runtimeRecovery={props.runtimeRecovery}
@@ -1334,6 +1336,7 @@ export function PluginCenterShell(props: {
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   focusRequest?: number;
   onInstallExternal: () => void;
+  onCreatePlugin?: (mode: 'chat' | 'direct') => void;
   onClose?: () => void;
   children: JSX.Element;
 }): JSX.Element {
@@ -1436,6 +1439,10 @@ export function PluginCenterShell(props: {
             items={[...filterGroups.map(group => ({ id: group.id, label: i18n.t('uiCopy.plugin.filterSelection', { dimension: group.dimension, value: group.items.find(item => item.id === group.value)?.label ?? '' }), children: group.items.map(item => ({ ...item, id: `${group.id}:${item.id}`, icon: () => item.id === group.value ? <Check class="h-4 w-4" /> : <span class="h-4 w-4" /> })) })), { id: 'clear', label: i18n.t('uiCopy.plugin.clearFilters'), disabled: !props.filtersActive }]}
             onSelect={id => { if (id === 'clear') props.onClearFilters(); else { const [groupID, value] = id.split(':'); filterGroups.find(group => group.id === groupID)?.onSelect(value); } }} /></div>
           <div class="plugin-center-management ml-auto flex shrink-0 items-center gap-1.5">
+            <Show when={props.canManage && props.onCreatePlugin}>
+              <Button variant="default" size="sm" data-plugin-center-create-plugin onClick={() => props.onCreatePlugin?.('chat')}><Wand class="mr-1 h-3.5 w-3.5" />{i18n.t('uiCopy.plugin.createWithFlower')}</Button>
+              <Button variant="ghost" size="sm" data-plugin-center-create-plugin-direct onClick={() => props.onCreatePlugin?.('direct')}>{i18n.t('uiCopy.plugin.createDirect')}</Button>
+            </Show>
             <FeedbackIndicator label={i18n.t('uiCopy.plugin.centerTitle')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => searchRef} entries={props.feedback ?? []} />
             <Show when={props.filtersActive}>
               <Button

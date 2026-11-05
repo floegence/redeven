@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { FLOWER_COMPACT_CONTEXT_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
+import { FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_PLUGIN_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
 
 describe('Flower slash commands', () => {
   it('parses only the exact compact command as an intent', () => {
@@ -16,6 +16,13 @@ describe('Flower slash commands', () => {
   it('rejects arguments and unknown commands', () => {
     expect(parseFlowerSlashCommand('/compact now')).toEqual({ kind: 'invalid', reason: 'arguments', command: '/compact' });
     expect(parseFlowerSlashCommand('/unknown')).toEqual({ kind: 'invalid', reason: 'unknown', command: '/unknown' });
+  });
+
+  it('opens plugin creation only for the exact plugin command', () => {
+    expect(parseFlowerSlashCommand('/plugin')).toEqual({ kind: 'intent', command: FLOWER_PLUGIN_COMMAND });
+    expect(parseFlowerSlashCommand('/pl')).toEqual({ kind: 'suggest', query: 'pl' });
+    expect(parseFlowerSlashCommand('/plugin now')).toEqual({ kind: 'invalid', reason: 'arguments', command: FLOWER_PLUGIN_COMMAND });
+    expect(parseFlowerSlashCommand('/plugin new')).toEqual({ kind: 'invalid', reason: 'arguments', command: FLOWER_PLUGIN_COMMAND });
   });
 
   it('leaves ordinary messages alone', () => {

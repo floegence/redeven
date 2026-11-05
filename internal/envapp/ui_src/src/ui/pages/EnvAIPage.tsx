@@ -76,6 +76,7 @@ export type EnvAIPageProps = Readonly<{
   onMobileThreadsOpenChange?: (open: boolean) => void;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
   onCompanionOpenRequest?: (threadID?: string) => void;
+  onOpenPluginCreation?: (input: { threadID?: string }) => void;
   companionCopy?: Omit<FlowerThreadSwitcherCopy, 'threadList'>;
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
@@ -254,6 +255,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
             ? props.onFocusThreadRequestConsumed
             : env.consumeAIThreadFocusRequest}
           onCompanionOpenRequest={props.onCompanionOpenRequest}
+          onOpenPluginCreation={props.onOpenPluginCreation}
           onThreadSelectionEvent={createUIPresentationEventRecorder({
             surface: 'flower',
             source: (event) => event.metadata?.source ?? 'thread-list',

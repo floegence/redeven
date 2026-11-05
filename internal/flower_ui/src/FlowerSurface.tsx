@@ -206,7 +206,7 @@ import {
 } from './flowerSubagentProjection';
 import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 import type { FlowerModelDirectory } from './contracts/flowerSurfaceContracts';
-import { FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
+import { FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND, FLOWER_PLUGIN_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
 import {
   pendingApprovalCommandForActivityItem,
   presentFlowerActivityItem,
@@ -682,6 +682,8 @@ export type FlowerSurfaceProps = Readonly<{
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
   onCompanionOpenRequest?: (threadID?: string) => void;
+  /** Host-owned handoff for the single plugin creation command. */
+  onOpenPluginCreation?: (input: { threadID?: string }) => void;
   onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   class?: string;
 }>;
@@ -7773,7 +7775,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     void requestThreadDetail(result.thread_id, 'user_action', true).catch(() => undefined);
   };
-  const executeComposerCommand = (suggested?: '/compact' | '/goal' | 'compact-only') => {
+  const executeComposerCommand = (suggested?: '/compact' | '/goal' | '/plugin' | 'compact-only') => {
     if (!settingsReady()) return;
     if (goalCommand()) {
       const text = goalCommand()!.text.trim();
@@ -7786,6 +7788,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const parsed = suggested || command.kind === 'suggest' ? parseFlowerSlashCommand(choice) : command;
     if (parsed.kind !== 'intent') return;
     if (parsed.command === '/compact') { void executeCompactContextCommand(); return; }
+    if (parsed.command === FLOWER_PLUGIN_COMMAND) {
+      updateComposerText('');
+      props.onOpenPluginCreation?.({ threadID: selectedThreadID() || undefined });
+      return;
+    }
     if (parsed.operation === 'open') {
       if (command.kind === 'intent' || command.kind === 'suggest') updateComposerText('');
       enterGoalCommand();
@@ -9763,7 +9770,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerCommandChoices = createMemo(() => {
     const parsed = composerSlashCommand();
     const query = parsed.kind === 'suggest' ? parsed.query : parsed.kind === 'intent' ? parsed.command.slice(1) : '';
-    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND, 'compact-only'] as const).filter(command => (command === 'compact-only' ? 'compact' : command.slice(1)).startsWith(query) && (!(selectedInputRequest() || selectedComposerApprovalDisplayAction()) || command === FLOWER_GOAL_COMMAND));
+    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND, FLOWER_PLUGIN_COMMAND, 'compact-only'] as const).filter(command => (command === 'compact-only' ? 'compact' : command.slice(1)).startsWith(query) && (!(selectedInputRequest() || selectedComposerApprovalDisplayAction()) || command === FLOWER_GOAL_COMMAND));
   });
   createEffect(() => { composerChatDraftText(); setComposerCommandIndex(0); });
   const composerCommandSuggested = createMemo(() => composerCommandChoices()[composerCommandIndex()] ?? FLOWER_COMPACT_CONTEXT_COMMAND);

@@ -137,6 +137,7 @@ import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
 import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
 import { PluginCenterDrawer } from './plugins/PluginCenterDrawer';
+import { PluginCreationWorkspace, type PluginCreationMode } from './plugins/PluginCreationWorkspace';
 import type { PluginSurfaceResolution } from './plugins/PluginSurfaceContainer';
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
@@ -1942,6 +1943,42 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
   const workbenchPluginCenterBlocking = () => workbenchPluginCenterOpen() || workbenchPluginCenterPresent();
   const [workbenchPluginCenterVisited, setWorkbenchPluginCenterVisited] = createSignal(false);
+  const [pluginCreationOpen, setPluginCreationOpen] = createSignal(false);
+  const [pluginCreationMode, setPluginCreationMode] = createSignal<PluginCreationMode>('chat');
+  const [pluginCreationProjectID, setPluginCreationProjectID] = createSignal('');
+  const [pluginCreationThreadID, setPluginCreationThreadID] = createSignal<string>();
+  const openPluginCreation = (mode: PluginCreationMode = 'chat', threadID?: string) => {
+    setPluginCreationMode(mode);
+    setPluginCreationProjectID(previous => previous || `plugin-creation-${Date.now().toString(36)}`);
+    setPluginCreationThreadID(threadID);
+    setPluginCreationOpen(true);
+    setWorkbenchPluginCenterOpen(false);
+    updatePluginPanel({ open: false });
+  };
+  const deletePluginCreation = () => {
+    // The workspace owns the confirmation; clear the host mapping after the
+    // user confirms so a future /plugin starts with a fresh project/thread.
+    setPluginCreationOpen(false);
+    setPluginCreationProjectID('');
+    setPluginCreationThreadID(undefined);
+  };
+  const renderPluginCreation = () => <PluginCreationWorkspace
+    open={pluginCreationOpen()}
+    mode={pluginCreationMode()}
+    projectID={pluginCreationProjectID()}
+    threadID={pluginCreationThreadID()}
+    onOpenChange={setPluginCreationOpen}
+    onModeChange={setPluginCreationMode}
+    onDeleteProject={deletePluginCreation}
+    renderFlower={() => <EnvAIPage
+      draftCoordinator={flowerDraftCoordinator}
+      presentation="full"
+      engaged={pluginCreationOpen()}
+      transcriptVisible={pluginCreationOpen()}
+      focusRequestScope="workbench"
+      onOpenPluginCreation={({ threadID }) => openPluginCreation('chat', threadID)}
+    />}
+  />;
   const [pluginWidgetCounts, setPluginWidgetCounts] = createSignal<Record<string, number>>({});
   const refreshPluginWidgetCounts = async () => {
     const { getWorkbenchLayoutSnapshot } = await import('./services/workbenchLayoutApi');
@@ -3945,6 +3982,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           onCommitExternal={commitExternalPluginPackage}
           onRefreshInstalled={refetchPluginInventory}
           onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
+          onCreatePlugin={openPluginCreation}
           onClose={closePluginCenter}
         />
   );
@@ -5046,6 +5084,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 if (threadID) focusActivityFlowerThread(threadID);
                 openActivityFlowerCompanion();
               }}
+              onOpenPluginCreation={({ threadID }) => openPluginCreation('chat', threadID)}
               companionCopy={activityFlowerCompanionCopy()}
               headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
               onPresenceChange={handleActivityFlowerPresenceChange}
@@ -5216,6 +5255,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       <Show when={auditOpen()}>
         <AuditLogDialog open envId={envId()} onClose={() => setAuditOpen(false)} />
       </Show>
+      {renderPluginCreation()}
       <Show when={fileBrowserSurfaceHostRequested()}>
         <FileBrowserSurfaceHost />
       </Show>
@@ -5265,6 +5305,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           {renderPluginCenter(true)}
         </PluginCenterDrawer>
       </Show>
+      {renderPluginCreation()}
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>
         <Show
           when={accessGatePhase() === 'unlock_required'}
