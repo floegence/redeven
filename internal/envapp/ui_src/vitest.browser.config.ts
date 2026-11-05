@@ -1039,6 +1039,7 @@ export default mergeConfig(viteConfig, defineConfig({
           const session = await page.context().newCDPSession(page);
           try {
             await session.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+            await frame.locator('[data-flower-directory-header="/one/project"] .flower-directory-toggle').scrollIntoViewIfNeeded();
             const header = await frame.locator('[data-flower-directory-header="/one/project"] .flower-directory-toggle').boundingBox();
             if (!header) throw new Error('Directory scroll target is unavailable');
             const x = header.x + header.width / 2, y = header.y + header.height / 2;

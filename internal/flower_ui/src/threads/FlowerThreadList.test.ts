@@ -61,7 +61,7 @@ describe('groupFlowerThreadItems', () => {
 });
 
 describe('directory grouping', () => {
-  it('uses full paths, keeps canonical pins first, and respects the saved directory order', () => {
+  it('uses full paths, excludes global pins, and respects the saved directory order', () => {
     const groups = groupFlowerThreadsByDirectory([
       thread({ thread_id: 'a', working_dir: '/one/project', created_at_ms: 30 }),
       thread({ thread_id: 'b', working_dir: '/two/project', created_at_ms: 20 }),
@@ -69,8 +69,19 @@ describe('directory grouping', () => {
       thread({ thread_id: 'd', working_dir: '', created_at_ms: 5 }),
     ], ['/two/project', '/missing']);
     expect(groups.map(group => group.path)).toEqual(['/two/project', '/one/project', '']);
-    expect(groups[1].threads.map(item => item.thread_id)).toEqual(['c', 'a']);
+    expect(groups[1].threads.map(item => item.thread_id)).toEqual(['a']);
     expect(moveFlowerDirectory(groups.map(group => group.path), '/two/project', '/one/project', 'after')).toEqual(['/one/project', '/two/project', '']);
+  });
+
+  it('aggregates only unpinned running summaries, including threads beyond the visible batch', () => {
+    const groups = groupFlowerThreadsByDirectory([
+      ...Array.from({ length: 100 }, (_, i) => thread({ thread_id: `idle-${i}`, working_dir: '/one' })),
+      thread({ thread_id: 'running', working_dir: '/one', status: 'running' }),
+      thread({ thread_id: 'pin', working_dir: '/one', pinned: true, status: 'running' }),
+      thread({ thread_id: 'only-pin', working_dir: '/two', pinned: true, status: 'running' }),
+    ], []);
+    expect(groups.find(group => group.path === '/one')).toMatchObject({ runningCount: 1 });
+    expect(groups.find(group => group.path === '/two')).toMatchObject({ runningCount: 0, threads: [] });
   });
 
   it('matches complete working directory paths', () => {

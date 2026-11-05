@@ -35,16 +35,16 @@ function mount(scope = `directory-test-${++scopeID}`, storage?: Pick<Storage, 'g
   const [query, setQuery] = createSignal('');
   const [active, setActive] = createSignal('');
   const [activeScope, setScope] = createSignal(scope);
-  const onSelect = vi.fn(), onNew = vi.fn(), onMenu = vi.fn(), onMove = vi.fn();
+  const onSelect = vi.fn(), onNew = vi.fn(), onMenu = vi.fn(), onMove = vi.fn(), onRefresh = vi.fn();
   function Theme() { const context = useTheme(); onMount(() => context.selectShellTheme(theme!.includes('dark') ? 'dark' : 'light', theme!)); return null; }
   const list = () => <FlowerThreadList items={items()} activeThreadID={active()} preferenceScope={activeScope()} query={query()} copy={localizedCopy}
     preferenceStorage={storage}
-    onQueryChange={setQuery} onSelect={onSelect} onRefresh={() => undefined} onNewInDirectory={onNew} canPin canRename
+    onQueryChange={setQuery} onSelect={onSelect} onRefresh={onRefresh} onNewInDirectory={onNew} canPin canRename
     onMenuAction={onMenu} onMovePinned={onMove} />;
   disposers.push(render(() => theme ? <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets, defaultSurfaceStyle: 'soft-neumorphic' } }}><Theme />{list()}</FloeProvider> : list(), host));
   const header = (path: string) => Array.from(host.querySelectorAll<HTMLElement>('[data-flower-directory-header]')).find(node => node.dataset.flowerDirectoryHeader === path)!;
   const order = () => Array.from(host.querySelectorAll<HTMLElement>('[data-flower-directory-header]')).map(node => node.dataset.flowerDirectoryHeader);
-  return { host, items, setItems, setActive, setQuery, setScope, onSelect, onNew, onMenu, onMove, header, order, scope };
+  return { host, items, setItems, setActive, setQuery, setScope, onSelect, onNew, onMenu, onMove, onRefresh, header, order, scope };
 }
 
 describe('Flower directory navigation', () => {
@@ -54,19 +54,86 @@ describe('Flower directory navigation', () => {
     expect(ui.order()).toEqual(['/one/project', '/two/project', '']);
     expect(ui.header('/one/project').querySelector('.flower-directory-name')?.textContent).toBe('/one/project');
     expect(ui.header('/two/project').querySelector('.flower-directory-name')?.textContent).toBe('/two/project');
-    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(8);
+    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(9);
     expect(ui.host.querySelector('[data-thread-id="alpha-14"] [data-flower-pin-head]')).not.toBeNull();
     await userEvent.click(ui.host.querySelector<HTMLButtonElement>('.flower-directory-more')!);
-    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(14);
+    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(15);
     await userEvent.click(ui.header('/one/project').querySelector('button')!);
-    await expect.poll(() => ui.host.querySelectorAll('[data-flower-thread-card]').length).toBe(2);
+    await expect.poll(() => ui.host.querySelectorAll('[data-flower-thread-card]').length).toBe(3);
     await userEvent.click(ui.header('/one/project').querySelector('button')!);
-    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(8);
+    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(9);
     await userEvent.click(ui.header('/two/project').querySelector<HTMLButtonElement>('.flower-directory-new')!);
     expect(ui.onNew).toHaveBeenCalledExactlyOnceWith('/two/project');
     ui.setQuery('/two');
     expect(ui.order()).toEqual(['/two/project']);
     ui.setQuery('');
+  });
+
+  it('keeps global pins above collapsed directories and aggregates only hidden unpinned running work', async () => {
+    const ui = mount();
+    ui.setItems(ui.items().map(entry => ['alpha-10', 'alpha-14', 'beta'].includes(entry.thread_id) ? { ...entry, status: 'running', pinned: entry.thread_id !== 'alpha-10' } : entry));
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const rows = ui.host.querySelector('.flower-thread-rows')!;
+    expect(Array.from(rows.children).slice(0, 3).map(node => node.getAttribute('data-thread-id'))).toEqual([null, 'alpha-14', 'beta']);
+    expect(ui.host.querySelectorAll('[data-thread-id="alpha-14"]')).toHaveLength(1);
+    expect(ui.header('/one/project').querySelector('.flower-directory-running')).toBeNull();
+    await userEvent.click(ui.header('/one/project').querySelector('button')!);
+    await userEvent.click(ui.header('/two/project').querySelector('button')!);
+    const running = ui.header('/one/project').querySelector<HTMLElement>('.flower-directory-running')!;
+    expect(running?.getAttribute('aria-label')).toBe(copy.statuses.running);
+    expect(running?.nextElementSibling?.classList.contains('flower-directory-new')).toBe(true);
+    expect(ui.header('/two/project').querySelector('.flower-directory-running')).toBeNull();
+    expect(ui.host.querySelector('[data-thread-id="alpha-14"]')).not.toBeNull();
+    ui.setItems(ui.items().map(entry => entry.thread_id === 'alpha-10' ? { ...entry, pinned: true } : entry));
+    expect(ui.header('/one/project').querySelector('.flower-directory-running')).toBeNull();
+    ui.setItems(ui.items().map(entry => entry.thread_id === 'alpha-14' ? { ...entry, pinned: false } : entry));
+    expect(ui.header('/one/project').querySelector('.flower-directory-running')).not.toBeNull();
+    ui.setItems(ui.items().map(entry => ({ ...entry, status: 'success' })));
+    expect(ui.host.querySelector('.flower-directory-running')).toBeNull();
+    expect(ui.onSelect).not.toHaveBeenCalled();
+    expect(ui.onMenu).not.toHaveBeenCalled();
+    expect(ui.onRefresh).not.toHaveBeenCalled();
+  });
+
+  it('unpins into a collapsed directory without losing the focused row', async () => {
+    const ui = mount();
+    ui.onMenu.mockImplementation((_action, changed: FlowerThreadListItem) => ui.setItems(ui.items().map(entry => entry.thread_id === changed.thread_id ? { ...entry, pinned: false } : entry)));
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    await userEvent.click(ui.header('/one/project').querySelector('button')!);
+    const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-14"]')!;
+    const pin = row.querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!;
+    pin.focus(); pin.click(); await frame();
+    expect(ui.header('/one/project').querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(ui.host.querySelector('[data-thread-id="alpha-14"]')).toBe(row);
+    expect(document.activeElement).toBe(pin);
+    expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(ui.host.querySelector('.flower-scroll')!.getBoundingClientRect().bottom + 1);
+  });
+
+  it('keeps the global panel pin region searchable and preserves running animation across containers', async () => {
+    const ui = mount();
+    ui.setItems(ui.items().map(entry => entry.thread_id === 'alpha-14' ? { ...entry, status: 'running' } : entry));
+    ui.onMenu.mockImplementation((_action, changed: FlowerThreadListItem) => ui.setItems(ui.items().map(entry => entry.thread_id === changed.thread_id ? { ...entry, pinned: !entry.pinned } : entry)));
+    await userEvent.click(ui.host.querySelector<HTMLButtonElement>(`[aria-label="${copy.workspaces}"]`)!);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const row = dialog.querySelector<HTMLElement>('[data-flower-workspace-thread-id="alpha-14"]')!;
+    const pin = row.querySelector<HTMLButtonElement>('.flower-workspace-thread-pin')!;
+    const wave = row.querySelector<HTMLElement>('.flower-thread-wave-bar')!;
+    expect(row.closest('.flower-workspace-pins')).not.toBeNull();
+    expect(dialog.querySelector('[data-flower-workspace] [data-pinned="true"]')).toBeNull();
+    await frame();
+    const animation = wave.getAnimations()[0];
+    animation.currentTime = 1000;
+    pin.focus(); pin.click(); await frame();
+    expect(dialog.querySelector('[data-flower-workspace-thread-id="alpha-14"]')).toBe(row);
+    expect(row.closest('[data-flower-workspace]')).not.toBeNull();
+    expect(wave.getAnimations()[0].currentTime as number).toBeGreaterThanOrEqual(1000);
+    expect(document.activeElement).toBe(pin);
+    pin.click(); await frame();
+    expect(row.closest('.flower-workspace-pins')).not.toBeNull();
+    expect(wave.getAnimations()[0].currentTime as number).toBeGreaterThanOrEqual(1000);
+    await userEvent.fill(dialog.querySelector<HTMLInputElement>('.flower-workspaces-search input')!, 'beta');
+    expect(getComputedStyle(dialog.querySelector('.flower-workspace-pins')!).visibility).toBe('hidden');
+    expect(dialog.querySelector('[data-flower-workspace-thread-id="alpha-14"]')).toBeNull();
   });
 
   it('shows the insertion boundary before release, commits there, cancels, and supports the keyboard', async () => {
@@ -115,9 +182,9 @@ describe('Flower directory navigation', () => {
     await userEvent.click(workspace.querySelector<HTMLButtonElement>('.flower-directory-more')!);
     expect(workspace.querySelectorAll('.flower-workspace-thread')).toHaveLength(12);
     await userEvent.click(workspace.querySelector<HTMLButtonElement>('.flower-workspace-thread-pin')!);
-    expect(ui.onMenu).toHaveBeenCalledWith('pin', expect.objectContaining({ thread_id: 'alpha-14' }));
+    expect(ui.onMenu).toHaveBeenCalledWith('pin', expect.objectContaining({ thread_id: 'alpha-0' }));
     await userEvent.click(workspace.querySelector<HTMLButtonElement>('.flower-workspace-thread-select')!);
-    expect(ui.onSelect).toHaveBeenCalledWith('alpha-14');
+    expect(ui.onSelect).toHaveBeenCalledWith('alpha-0');
   });
 
   it('restores view and order from host storage after the renderer is recreated', async () => {
@@ -257,7 +324,7 @@ describe('Flower directory navigation', () => {
     expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(scroll.getBoundingClientRect().bottom + 1);
   });
 
-  it('keeps one visible pin and moves pins only among their directory neighbours', async () => {
+  it('keeps one visible pin and moves pins across directories in global order', async () => {
     const ui = mount();
     ui.setItems([...ui.items(), { ...item('other-pin', '/two/project', 22, true), pin_rank: 9 }, { ...item('second-pin', '/one/project', 23, true), pin_rank: 8 }]);
     await userEvent.click(page.getByRole("radio", { name: copy.viewByDirectory }).element() as HTMLButtonElement);
@@ -267,7 +334,22 @@ describe('Flower directory navigation', () => {
     await userEvent.click(row.querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!);
     await frame();
     await userEvent.click(page.getByRole('menuitem', { name: copy.movePinnedDown, exact: true }));
-    expect(ui.onMove).toHaveBeenCalledExactlyOnceWith('alpha-14', { anchor_thread_id: 'second-pin', placement: 'after' });
+    expect(ui.onMove).toHaveBeenCalledExactlyOnceWith('alpha-14', { anchor_thread_id: 'other-pin', placement: 'after' });
+  });
+
+  it('drags a global pin across directory boundaries', async () => {
+    const ui = mount();
+    ui.setItems([...ui.items(), { ...item('other-pin', '/two/project', 22, true), pin_rank: 9 }]);
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const source = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-14"] .flower-thread-list-title')!;
+    const target = ui.host.querySelector<HTMLElement>('[data-thread-id="other-pin"]')!;
+    const dataTransfer = new DataTransfer();
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+    const bounds = target.getBoundingClientRect();
+    target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientY: bounds.bottom - 2 }));
+    expect(target.dataset.flowerThreadDrop).toBe('after');
+    target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientY: bounds.bottom - 2 }));
+    expect(ui.onMove).toHaveBeenCalledExactlyOnceWith('alpha-14', { anchor_thread_id: 'other-pin', placement: 'after' });
   });
 
   it('keeps a newly pinned or unpinned row rendered and focused beyond the initial batch', async () => {
@@ -296,20 +378,25 @@ describe('Flower directory navigation', () => {
   it('keeps a panel conversation and its focused pin control when unpinning moves it past the visible batch', async () => {
     const ui = mount();
     ui.setItems(ui.items().map(entry => entry.working_dir === '/one/project'
-      ? { ...entry, pinned: Number(entry.thread_id.slice(6)) < 7, pin_rank: 20 - Number(entry.thread_id.slice(6)) } : entry));
+      ? { ...entry, pinned: Number(entry.thread_id.slice(6)) >= 7, pin_rank: 20 - Number(entry.thread_id.slice(6)) } : entry));
     ui.onMenu.mockImplementation((_action, changed: FlowerThreadListItem) => ui.setItems(ui.items().map(entry => entry.thread_id === changed.thread_id
       ? { ...entry, pinned: !entry.pinned, pin_rank: entry.pinned ? 0 : 1 } : entry)));
     await userEvent.click(ui.host.querySelector<HTMLButtonElement>(`[aria-label="${copy.workspaces}"]`)!);
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const workspace = Array.from(dialog.querySelectorAll<HTMLElement>('[data-flower-workspace]')).find(node => node.dataset.flowerWorkspace === '/one/project')!;
-    const pin = workspace.querySelector<HTMLButtonElement>(`[aria-label="${copy.unpin}: alpha-0"]`)!;
+    const pin = dialog.querySelector<HTMLButtonElement>(`[aria-label="${copy.unpin}: alpha-10"]`)!;
     const row = pin.parentElement!;
     pin.focus(); pin.click();
     await frame();
     expect(workspace.isConnected).toBe(true);
     expect(row.isConnected).toBe(true);
+    expect(row.closest('[data-flower-workspace]')).toBe(workspace);
     expect(document.activeElement).toBe(pin);
     expect(pin.getAttribute('aria-pressed')).toBe('false');
+    pin.click(); await frame();
+    expect(row.closest('.flower-workspace-pins')).not.toBeNull();
+    expect(document.activeElement).toBe(pin);
+    expect(dialog.querySelectorAll('[data-flower-workspace-thread-id="alpha-10"]')).toHaveLength(1);
   });
 
   it('reveals a pin appended past the first batch after other conversations become pinned', async () => {
@@ -406,6 +493,11 @@ describe('Flower directory navigation', () => {
     await userEvent.click(page.getByRole('radio', { name: localized.viewByDirectory }));
     for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
     await page.screenshot({ element: ui.host, path: `__screenshots__/flower-navigation-zh-${theme}.png` });
+    await userEvent.click(ui.header('/workspace/floegence/redeven').querySelector('button')!);
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
+    await page.screenshot({ element: ui.host, path: `__screenshots__/flower-collapsed-running-zh-${theme}.png` });
+    await userEvent.click(ui.header('/workspace/floegence/redeven').querySelector('button')!);
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
     const handle = ui.header('/workspace/floegence/floe-webapp').querySelector<HTMLButtonElement>('.flower-directory-drag-handle')!;
     const from = handle.getBoundingClientRect(), target = ui.header('/workspace/floegence/redeven').getBoundingClientRect();
     handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, pointerId: 9, button: 0, clientX: from.x + 6, clientY: from.y + 10 }));

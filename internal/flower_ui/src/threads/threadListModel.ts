@@ -19,6 +19,7 @@ export type FlowerThreadGroup =
 export type FlowerDirectoryGroup = Readonly<{
   path: string;
   threads: FlowerThreadListItem[];
+  runningCount: number;
 }>;
 
 export const FLOWER_DIRECTORY_PAGE_SIZE = 6;
@@ -29,20 +30,23 @@ export function flowerDirectoryName(path: string): string {
 }
 
 export function groupFlowerThreadsByDirectory(threads: readonly FlowerThreadListItem[], order: readonly string[]): FlowerDirectoryGroup[] {
-  const byPath = new Map<string, FlowerThreadListItem[]>();
+  const byPath = new Map<string, { path: string; threads: FlowerThreadListItem[]; runningCount: number }>();
   const sorted = [...threads].sort((a, b) => b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id));
   for (const thread of sorted) {
     const path = thread.working_dir.trim();
-    const group = byPath.get(path) ?? [];
-    group.push(thread);
-    byPath.set(path, group);
+    let group = byPath.get(path);
+    if (!group) { group = { path, threads: [], runningCount: 0 }; byPath.set(path, group); }
+    // Pins have one global owner. Keep their workspace available for new chats,
+    // but never duplicate their rows or count their visible activity as hidden.
+    if (thread.pinned) continue;
+    group.threads.push(thread);
+    if (thread.status === 'running' || flowerThreadIsStopping(thread)) group.runningCount++;
   }
-  const paths = [...byPath.keys()];
-  const ordered = [...order.filter((path, index) => byPath.has(path) && order.indexOf(path) === index), ...paths.filter(path => !order.includes(path))];
-  return ordered.map(path => ({ path, threads: byPath.get(path)!.sort((a, b) => (
-    Number(b.pinned) - Number(a.pinned)
-      || (a.pinned && b.pinned ? comparePinnedFlowerThreads(a, b) : b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id))
-  )) }));
+  const remaining = new Set(byPath.keys());
+  const ordered: FlowerDirectoryGroup[] = [];
+  for (const path of order) if (remaining.delete(path)) ordered.push(byPath.get(path)!);
+  for (const path of remaining) ordered.push(byPath.get(path)!);
+  return ordered;
 }
 
 export function moveFlowerDirectory(order: readonly string[], path: string, anchor: string, placement: 'before' | 'after'): string[] {

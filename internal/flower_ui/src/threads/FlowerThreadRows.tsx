@@ -42,7 +42,7 @@ export function animateFlowerThreadRowsChange(container: HTMLElement | null | un
 export function moveFlowerThreadRow(parent: HTMLElement, row: HTMLElement, before: Node | null): void {
   if (row.parentNode === parent && row.nextSibling === before) return;
   const moveBefore = (parent as HTMLElement & { moveBefore?: (node: Node, child: Node | null) => void }).moveBefore;
-  if (row.parentNode === parent && typeof moveBefore === 'function') {
+  if (row.isConnected && parent.isConnected && typeof moveBefore === 'function') {
     moveBefore.call(parent, row, before);
     return;
   }
@@ -62,12 +62,13 @@ export function moveFlowerThreadRow(parent: HTMLElement, row: HTMLElement, befor
 }
 
 /**
- * One sidebar owner retains root row elements across both order and group changes.
+ * One owner retains row elements across order, group and workspace-container changes.
  * Solid's ordinary keyed insertion retains nodes but restarts CSS animations on moves.
  */
 export function FlowerThreadRows(props: Readonly<{
   class?: string;
   keys: readonly string[];
+  targets?: ReadonlyMap<string, HTMLElement>;
   render: (key: string) => JSX.Element;
 }>): JSX.Element {
   const owner = getOwner();
@@ -82,12 +83,14 @@ export function FlowerThreadRows(props: Readonly<{
   };
   createEffect(() => {
     const keys = props.keys;
+    const targets = props.targets;
     untrack(() => {
       const retained = new Set(keys);
-      const departing = new Map((animatedChanges.has(container) ? Array.from(mounted.entries()) : [])
-        .filter(([key, row]) => !retained.has(key) && !row.exit)
+      const departing = new Map(Array.from(mounted.entries())
+        .filter(([key, row]) => !retained.has(key) && !row.exit && animatedChanges.has(row.element.parentElement!))
         .map(([key, row]) => [key, { rect: row.element.getBoundingClientRect(), opacity: getComputedStyle(row.element).opacity }] as const));
       for (const [key, row] of mounted) {
+        const container = row.element.parentElement!;
         if (retained.has(key)) {
           if (row.exit) {
             row.exit.cancel();
@@ -130,7 +133,7 @@ export function FlowerThreadRows(props: Readonly<{
         exit.id = 'flower-thread-exit';
         exit.onfinish = () => { if (row.exit === exit) remove(key, row); };
       }
-      let before: Node | null = null;
+      const beforeByParent = new Map<HTMLElement, Node>();
       for (let index = keys.length - 1; index >= 0; index--) {
         const key = keys[index];
         let row = mounted.get(key);
@@ -142,8 +145,9 @@ export function FlowerThreadRows(props: Readonly<{
           }, owner);
           mounted.set(key, row);
         }
-        moveFlowerThreadRow(container, row.element, before);
-        before = row.element;
+        const parent = targets?.get(key) ?? container;
+        moveFlowerThreadRow(parent, row.element, beforeByParent.get(parent) ?? null);
+        beforeByParent.set(parent, row.element);
       }
     });
   });

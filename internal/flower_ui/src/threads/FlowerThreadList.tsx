@@ -16,7 +16,7 @@ import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAvailability } from '
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
-import { filterFlowerThreadItems, flowerDirectoryName, flowerThreadIndicator, groupFlowerThreadItems, groupFlowerThreadsByDirectory, moveFlowerDirectory, FLOWER_DIRECTORY_PAGE_SIZE, type FlowerThreadGroup } from './threadListModel';
+import { comparePinnedFlowerThreads, filterFlowerThreadItems, flowerDirectoryName, flowerThreadIndicator, groupFlowerThreadItems, groupFlowerThreadsByDirectory, moveFlowerDirectory, FLOWER_DIRECTORY_PAGE_SIZE, type FlowerThreadGroup } from './threadListModel';
 import { canForkThreadItem, canPinThreadItem, canRenameThreadItem, canStopThreadItem } from './threadListActions';
 import { loadFlowerDirectoryPreferences, saveFlowerDirectoryPreferences, type FlowerDirectoryPreferenceStorage } from './directoryPreferences';
 
@@ -29,6 +29,7 @@ type FlowerThreadRenderGroup = Readonly<{
   kind: FlowerThreadGroup['kind'] | 'directory';
   group?: TimeGroup;
   path?: string;
+  runningCount?: number;
   threadIDs: readonly string[];
 }>;
 
@@ -344,6 +345,14 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   let restoreWorkspaceFocus = true;
   let workspaceTrigger: HTMLButtonElement | undefined;
   let workspaceGrid: HTMLDivElement | undefined;
+  const [workspaceContainers, setWorkspaceContainers] = createSignal<ReadonlyMap<string, HTMLElement>>(new Map());
+  const registerWorkspaceRows = (key: string, element: HTMLElement) => {
+    setWorkspaceContainers(previous => new Map(previous).set(key, element));
+    onCleanup(() => setWorkspaceContainers(previous => {
+      if (previous.get(key) !== element) return previous;
+      const next = new Map(previous); next.delete(key); return next;
+    }));
+  };
   createEffect(on(() => props.preferenceScope ?? 'default', scope => {
     setPreferences(loadFlowerDirectoryPreferences(scope, props.preferenceStorage));
     setCollapsed(new Set<string>());
@@ -356,11 +365,33 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   };
   const filtered = createMemo(() => filterFlowerThreadItems(props.items, props.query));
   const itemByID = createMemo(() => new Map(props.items.map((item) => [item.thread_id, item] as const)));
-  const directoryGroups = createMemo(() => groupFlowerThreadsByDirectory(filtered(), preferences().order));
+  const pinnedItems = createMemo(() => props.items.filter(item => item.pinned).sort(comparePinnedFlowerThreads));
+  const filteredPins = createMemo(() => filterFlowerThreadItems(pinnedItems(), props.query));
+  const workspaceFiltered = createMemo(() => filterFlowerThreadItems(props.items, workspaceQuery()));
+  const workspacePins = createMemo(() => filterFlowerThreadItems(pinnedItems(), workspaceQuery()));
+  // Unfiltered sidebar and overview share the same summary grouping and activity counts.
   const allDirectoryGroups = createMemo(() => groupFlowerThreadsByDirectory(filterFlowerThreadItems(props.items, ''), preferences().order));
-  const workspaceGroups = createMemo(() => groupFlowerThreadsByDirectory(filterFlowerThreadItems(props.items, workspaceQuery()), preferences().order));
+  const directoryGroups = createMemo(() => props.query.trim() ? groupFlowerThreadsByDirectory(filtered(), preferences().order) : allDirectoryGroups());
+  const workspaceGroups = createMemo(() => workspaceQuery().trim() ? groupFlowerThreadsByDirectory(workspaceFiltered(), preferences().order) : allDirectoryGroups());
   const workspaceGroupByPath = createMemo(() => new Map(workspaceGroups().map(group => [group.path, group] as const)));
   const workspacePaths = createMemo(() => workspaceGroups().map(group => group.path));
+  const workspaceRowGroups = createMemo(() => [
+    { key: 'pinned', keys: workspacePins().map(item => `thread:${item.thread_id}`) },
+    ...workspaceGroups().map(group => ({ key: `directory:${group.path}`, keys: [
+      ...group.threads.slice(0, workspaceLimits().get(group.path) ?? FLOWER_DIRECTORY_PAGE_SIZE).map(item => `thread:${item.thread_id}`),
+      ...(group.threads.length > (workspaceLimits().get(group.path) ?? FLOWER_DIRECTORY_PAGE_SIZE) ? [`more:${group.path}`] : []),
+    ] })),
+  ]);
+  const workspaceRowKeys = createMemo(() => workspaceRowGroups().flatMap(group => group.keys));
+  const workspaceRowTargets = createMemo(() => {
+    const containers = workspaceContainers();
+    const targets = new Map<string, HTMLElement>();
+    for (const group of workspaceRowGroups()) {
+      const container = containers.get(group.key);
+      if (container) for (const key of group.keys) targets.set(key, container);
+    }
+    return targets;
+  });
   const duplicateDirectoryNames = createMemo(() => {
     const counts = new Map<string, number>();
     for (const group of allDirectoryGroups()) if (group.path) {
@@ -370,7 +401,10 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     return new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
   });
   const groups = createMemo<readonly FlowerThreadRenderGroup[]>(() => preferences().mode === 'directory'
-    ? directoryGroups().map(group => ({ key: `directory:${group.path}`, kind: 'directory', path: group.path, threadIDs: group.threads.map(thread => thread.thread_id) }))
+    ? [
+      ...(filteredPins().length ? [{ key: 'pinned', kind: 'pinned' as const, threadIDs: filteredPins().map(thread => thread.thread_id) }] : []),
+      ...directoryGroups().map(group => ({ key: `directory:${group.path}`, kind: 'directory' as const, path: group.path, runningCount: group.runningCount, threadIDs: group.threads.map(thread => thread.thread_id) })),
+    ]
     : groupFlowerThreadItems(filtered()).map((group) => (
     group.kind === 'pinned'
       ? { key: 'pinned', kind: group.kind, threadIDs: group.threads.map((thread) => thread.thread_id) }
@@ -384,12 +418,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     return [`group:${group.key}`, ...shown.map(id => `thread:${id}`),
       ...(!collapsed().has(path) && shown.length < group.threadIDs.length ? [`more:${group.key}`] : []), `end:${group.key}`];
   }));
-  const pinnedIDs = createMemo(() => groupFlowerThreadItems(props.items).find((group) => group.kind === 'pinned')?.threads.map((item) => item.thread_id) ?? []);
-  const pinnedNeighbours = (threadID: string) => {
-    if (preferences().mode === 'time') return pinnedIDs();
-    const path = itemByID().get(threadID)?.working_dir.trim();
-    return allDirectoryGroups().find(group => group.path === path)?.threads.filter(item => item.pinned).map(item => item.thread_id) ?? [];
-  };
+  const pinnedIDs = createMemo(() => pinnedItems().map(item => item.thread_id));
   const canReorder = createMemo(() => Boolean(props.onMovePinned && !props.pinBusy && !props.query.trim() && pinnedIDs().length > 1));
   const [drag, setDrag] = createSignal<{ threadID: string; keys: readonly string[]; target?: FlowerThreadPinPosition } | null>(null);
   const [directoryDrag, setDirectoryDrag] = createSignal<{ path: string; target?: { path: string; placement: 'before' | 'after' } } | null>(null);
@@ -429,13 +458,12 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     else changeRows();
   };
   const togglePin = (item: FlowerThreadListItem, restore?: HTMLElement, panel = false) => {
-    if (panel || preferences().mode === 'directory') {
+    if (item.pinned && (panel || preferences().mode === 'directory')) {
       const path = item.working_dir.trim();
       const projected = props.items.map(value => value.thread_id === item.thread_id ? { ...value, pinned: false } : value);
       const group = groupFlowerThreadsByDirectory(filterFlowerThreadItems(projected, panel ? workspaceQuery() : props.query), preferences().order).find(value => value.path === path);
-      // A new pin appends after the existing pins; unpinning restores creation order.
-      const index = item.pinned ? group?.threads.findIndex(value => value.thread_id === item.thread_id) ?? -1
-        : group?.threads.filter(value => value.pinned).length ?? -1;
+      const index = group?.threads.findIndex(value => value.thread_id === item.thread_id) ?? -1;
+      if (!panel && collapsed().has(path)) setCollapsed(previous => { const next = new Set(previous); next.delete(path); return next; });
       const currentLimits = panel ? workspaceLimits() : limits();
       if (index >= (currentLimits.get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE)) {
         const update = (previous: ReadonlyMap<string, number>) => new Map(previous).set(path, Math.ceil((index + 1) / FLOWER_DIRECTORY_PAGE_SIZE) * FLOWER_DIRECTORY_PAGE_SIZE);
@@ -460,7 +488,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     const item = itemByID().get(threadID);
     if (!item) return;
     if (props.query.trim()) { props.onQueryChange(''); return; }
-    if (preferences().mode === 'directory') {
+    if (preferences().mode === 'directory' && !item.pinned) {
       const path = item.working_dir.trim();
       const index = allDirectoryGroups().find(group => group.path === path)?.threads.findIndex(thread => thread.thread_id === threadID) ?? -1;
       if (index < 0) return;
@@ -604,8 +632,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     const state = drag();
     if (!state || !scrollRef) return;
     const rows = Array.from(scrollRef.querySelectorAll<HTMLElement>('[data-flower-thread-card][data-pinned="true"]'))
-      .filter(row => !row.dataset.flowerThreadExiting)
-      .filter(row => preferences().mode === 'time' || itemByID().get(row.dataset.threadId ?? '')?.working_dir.trim() === itemByID().get(state.threadID)?.working_dir.trim());
+      .filter(row => !row.dataset.flowerThreadExiting);
     const target = rows.find((row) => y <= row.getBoundingClientRect().bottom) ?? rows.at(-1);
     if (!target) return;
     const id = target.dataset.threadId!;
@@ -657,7 +684,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   };
   const moveNeighbour = (threadID: string, direction: -1 | 1) => {
     if (!canReorder()) return;
-    const ids = pinnedNeighbours(threadID);
+    const ids = pinnedIDs();
     const index = ids.indexOf(threadID);
     const anchor = index < 0 ? undefined : ids[index + direction];
     if (anchor) props.onMovePinned?.(threadID, { anchor_thread_id: anchor, placement: direction < 0 ? 'before' : 'after' });
@@ -878,6 +905,9 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                     </button>
                     <Show when={directoryReorderable()}><button type="button" class="flower-directory-drag-handle" aria-label={`${copy().reorderDirectory}: ${path || copy().noDirectory}`} title={copy().reorderDirectory}
                       onPointerDown={event => beginDirectoryGesture(event, path)} onKeyDown={event => moveDirectoryWithKeyboard(event, path)}><GripVertical class="h-3.5 w-3.5" /></button></Show>
+                    <Show when={collapsed().has(path) && (group()?.runningCount ?? 0) > 0}>
+                      <span class="flower-directory-running" data-flower-thread-indicator="wave" role="img" aria-label={copy().statuses.running} title={copy().statuses.running}><FlowerThreadWave /></span>
+                    </Show>
                     <Show when={path && props.onNewInDirectory}><button type="button" class="flower-directory-new" aria-label={copy().newInDirectory(path)}
                       title={copy().newInDirectory(path)} disabled={props.warmup || props.loading} onClick={() => props.onNewInDirectory?.(path)}><Plus class="h-3.5 w-3.5" /></button></Show>
                   </div>;
@@ -918,7 +948,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                 onDragOver={overDrag}
                 onDragEnd={cancelDrag}
                 onDrop={dropDrag}
-                dragging={drag()?.threadID === threadID || directoryDrag()?.path === item().working_dir.trim()}
+                dragging={drag()?.threadID === threadID || (!item().pinned && directoryDrag()?.path === item().working_dir.trim())}
                 dropPosition={drag()?.target?.anchor_thread_id === threadID ? drag()?.target?.placement : undefined}
               />;
             }} />
@@ -945,6 +975,10 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
               onInput={event => { setWorkspaceQuery(event.currentTarget.value); setWorkspaceLimits(new Map()); }} />
           </label>
           <div class="flower-workspaces-scroll">
+            <section class="flower-workspace-pins" aria-label={copy().pinnedGroup}>
+              <h3 class="flower-thread-group-label" data-pinned-group="true">{copy().pinnedGroup}</h3>
+              <div class="flower-workspace-threads" ref={element => registerWorkspaceRows('pinned', element)} />
+            </section>
             <div ref={workspaceGrid} class="flower-workspaces-grid">
               <Show when={workspacePaths().length > 0} fallback={<div class="flower-workspaces-empty">{copy().empty}</div>}>
                 <For each={[0, 1]}>{column => <div class="flower-workspaces-column">
@@ -962,43 +996,44 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                           title={copy().newInDirectory(path)} disabled={props.warmup || props.loading}
                           onClick={() => { restoreWorkspaceFocus = false; setWorkspacesOpen(false); props.onNewInDirectory?.(path); }}><Plus class="h-4 w-4" /></button></Show>
                       </div>
-                      <FlowerThreadRows class="flower-workspace-threads" keys={[
-                        ...threads().slice(0, workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE).map(item => `thread:${item.thread_id}`),
-                        ...(threads().length > (workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE) ? ['more'] : []),
-                      ]} render={key => {
-                        if (key === 'more') return <button type="button" class="flower-directory-more" onClick={() => showMore(path, true)}>
-                          {copy().showMoreThreads(Math.min(FLOWER_DIRECTORY_PAGE_SIZE, threads().length - (workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE)))}
-                        </button>;
-                        const threadID = key.slice('thread:'.length);
-                        const item = createMemo<FlowerThreadListItem>(previous => itemByID().get(threadID) ?? previous!);
-                        const indicator = () => flowerThreadIndicator(item(), copy());
-                        return <div class="flower-workspace-thread" data-flower-workspace-thread-id={threadID} data-flower-thread-indicator={indicator().visual} data-pinned={item().pinned ? 'true' : undefined} data-active={props.activeThreadID === threadID ? 'true' : undefined}>
-                          <button type="button" class="flower-workspace-thread-select" aria-current={props.activeThreadID === threadID ? 'true' : undefined}
-                            aria-label={[item().title, indicator().ariaStatus, indicator().attention === 'unread' ? copy().unread : '', item().pinned ? copy().pinnedGroup : ''].filter(Boolean).join(', ')}
-                            onClick={() => {
-                              restoreWorkspaceFocus = false;
-                              setWorkspacesOpen(false);
-                              setLocalRevealThreadID(threadID);
-                              if (props.onSelectFromWorkspace) props.onSelectFromWorkspace(threadID); else props.onSelect(threadID);
-                            }}>
-                            <span class="flower-workspace-indicator" title={indicator().title} aria-hidden="true">
-                              <Show when={indicator().visual === 'wave'}><FlowerThreadWave /></Show>
-                              <Show when={indicator().visual === 'dot'}><span class="flower-workspace-unread" /></Show>
-                              <Show when={item().pinned && indicator().visual === 'none'}><FlowerPinIcon pinned class="flower-workspace-leading-pin" /></Show>
-                              <Show when={indicator().actionRequired}><Show when={item().status === 'waiting_approval'} fallback={<MessageSquare class="h-3 w-3" />}><ShieldCheck class="h-3 w-3" /></Show></Show>
-                            </span>
-                            <span class="flower-workspace-thread-title">{item().title}</span><span class="flower-workspace-thread-time">{fmtFlowerShortTime(item().created_at_ms, copy())}</span>
-                          </button>
-                          <Show when={props.canPin && props.onMenuAction && canPinThreadItem(item())}><button type="button" class="flower-workspace-thread-pin" aria-label={`${item().pinned ? copy().unpin : copy().pin}: ${item().title}`}
-                            title={item().pinned ? copy().unpin : copy().pin} aria-pressed={item().pinned} disabled={props.pinBusy} onClick={() => togglePin(item(), undefined, true)}>
-                            <FlowerPinIcon pinned={item().pinned} class="h-3.5 w-3.5" /></button></Show>
-                        </div>;
-                      }} />
+                      <div class="flower-workspace-threads" ref={element => registerWorkspaceRows(`directory:${path}`, element)} />
                     </Card>;
                   }}</For>
                 </div>}</For>
               </Show>
             </div>
+            <FlowerThreadRows class="flower-workspace-row-owner" keys={workspaceRowKeys()} targets={workspaceRowTargets()} render={key => {
+              if (key.startsWith('more:')) {
+                const path = key.slice('more:'.length);
+                return <button type="button" class="flower-directory-more" onClick={() => showMore(path, true)}>
+                  {copy().showMoreThreads(Math.min(FLOWER_DIRECTORY_PAGE_SIZE, (workspaceGroupByPath().get(path)?.threads.length ?? 0) - (workspaceLimits().get(path) ?? FLOWER_DIRECTORY_PAGE_SIZE)))}
+                </button>;
+              }
+              const threadID = key.slice('thread:'.length);
+              const item = createMemo<FlowerThreadListItem>(previous => itemByID().get(threadID) ?? previous!);
+              const indicator = () => flowerThreadIndicator(item(), copy());
+              return <div class="flower-workspace-thread" data-flower-workspace-thread-id={threadID} data-flower-thread-indicator={indicator().visual} data-pinned={item().pinned ? 'true' : undefined} data-active={props.activeThreadID === threadID ? 'true' : undefined}>
+                <button type="button" class="flower-workspace-thread-select" aria-current={props.activeThreadID === threadID ? 'true' : undefined}
+                  aria-label={[item().title, indicator().ariaStatus, indicator().attention === 'unread' ? copy().unread : '', item().pinned ? copy().pinnedGroup : ''].filter(Boolean).join(', ')}
+                  onClick={() => {
+                    restoreWorkspaceFocus = false;
+                    setWorkspacesOpen(false);
+                    setLocalRevealThreadID(threadID);
+                    if (props.onSelectFromWorkspace) props.onSelectFromWorkspace(threadID); else props.onSelect(threadID);
+                  }}>
+                  <span class="flower-workspace-indicator" title={indicator().title} aria-hidden="true">
+                    <Show when={indicator().visual === 'wave'}><FlowerThreadWave /></Show>
+                    <Show when={indicator().visual === 'dot'}><span class="flower-workspace-unread" /></Show>
+                    <Show when={item().pinned && indicator().visual === 'none'}><FlowerPinIcon pinned class="flower-workspace-leading-pin" /></Show>
+                    <Show when={indicator().actionRequired}><Show when={item().status === 'waiting_approval'} fallback={<MessageSquare class="h-3 w-3" />}><ShieldCheck class="h-3 w-3" /></Show></Show>
+                  </span>
+                  <span class="flower-workspace-thread-title">{item().title}</span><span class="flower-workspace-thread-time">{fmtFlowerShortTime(item().created_at_ms, copy())}</span>
+                </button>
+                <Show when={props.canPin && props.onMenuAction && canPinThreadItem(item())}><button type="button" class="flower-workspace-thread-pin" aria-label={`${item().pinned ? copy().unpin : copy().pin}: ${item().title}`}
+                  title={item().pinned ? copy().unpin : copy().pin} aria-pressed={item().pinned} disabled={props.pinBusy} onClick={() => togglePin(item(), undefined, true)}>
+                  <FlowerPinIcon pinned={item().pinned} class="h-3.5 w-3.5" /></button></Show>
+              </div>;
+            }} />
           </div>
         </Dialog>
       </DialogPlacementProvider>
@@ -1018,8 +1053,8 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             canRename={!!props.canRename}
             canPin={!!props.canPin}
             pinBusy={props.pinBusy === true}
-            canMoveUp={canReorder() && pinnedNeighbours(state().threadID).indexOf(state().threadID) > 0}
-            canMoveDown={canReorder() && pinnedNeighbours(state().threadID).indexOf(state().threadID) >= 0 && pinnedNeighbours(state().threadID).indexOf(state().threadID) < pinnedNeighbours(state().threadID).length - 1}
+            canMoveUp={canReorder() && pinnedIDs().indexOf(state().threadID) > 0}
+            canMoveDown={canReorder() && pinnedIDs().indexOf(state().threadID) >= 0 && pinnedIDs().indexOf(state().threadID) < pinnedIDs().length - 1}
             showStopAction={props.showStopAction === true}
             showDeleteAction={props.showDeleteAction === true}
             actionsBusy={!!props.actionsBusy}

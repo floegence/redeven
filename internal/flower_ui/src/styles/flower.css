@@ -8066,8 +8066,8 @@ button.flower-composer-context-source:focus-visible,
 .flower-directory-count { flex: 0 0 auto; color: var(--muted-foreground); font-size: var(--floe-type-caption); font-variant-numeric: tabular-nums; }
 .flower-directory-toggle > .flower-directory-count { margin-left: auto; padding-left: 4px; }
 .flower-directory-pinned-icon, .flower-thread-leading-pin, .flower-workspace-leading-pin { flex: 0 0 auto; width: 12px; height: 12px; color: var(--primary); }
-.flower-thread-list[data-view='directory'] .flower-thread-rows > .flower-thread-card { margin-left: 16px; width: calc(100% - 16px); }
-.flower-thread-list[data-view='directory'] .flower-thread-rows > .flower-thread-card::before {
+.flower-thread-list[data-view='directory'] .flower-thread-rows > .flower-thread-card:not([data-pinned='true']) { margin-left: 16px; width: calc(100% - 16px); }
+.flower-thread-list[data-view='directory'] .flower-thread-rows > .flower-thread-card:not([data-pinned='true'])::before {
   content: ''; position: absolute; left: -5px; top: 0; bottom: 0; width: 1px; background: var(--floe-line); pointer-events: none;
 }
 .flower-thread-card[data-flower-pin-action='true']:hover .flower-thread-leading-pin, .flower-thread-card[data-flower-pin-action='true']:focus-within .flower-thread-leading-pin { opacity: 0; }
@@ -8127,6 +8127,15 @@ button.flower-composer-context-source:focus-visible,
 .flower-workspace-thread-pin:hover { background: var(--floe-state-hover); color: var(--foreground); }
 .flower-workspace-thread-pin[aria-pressed='true'] { color: var(--primary); }
 .flower-workspace-threads > .flower-directory-more { align-self: flex-start; margin-left: 19px; }
+
+/* Pinned conversations share one leading region in every navigation view. */
+.flower-workspace-pins { margin-bottom: 16px; }
+/* Keep the destination rendered: display:none would restart a wave moved here. */
+.flower-workspace-pins:not(:has(.flower-workspace-thread)) { height: 0; margin: 0; overflow: hidden; visibility: hidden; }
+.flower-workspace-pins > .flower-thread-group-label { margin: 0 8px 6px; }
+.flower-workspace-row-owner { display: contents; }
+.flower-directory-running { display: flex; width: 18px; height: 24px; flex: 0 0 18px; align-items: center; justify-content: center; color: var(--primary); }
+
 .flower-workspaces-empty { grid-column: 1 / -1; padding: 32px; color: var(--muted-foreground); text-align: center; font-size: var(--floe-type-body); }
 @media (max-width: 720px) {
   .flower-workspaces-dialog { width: calc(100vw - 1rem); max-width: calc(100vw - 1rem); }
