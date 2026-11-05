@@ -135,6 +135,10 @@ func TestOpenAIWebSocketContinuationUsesCompletePreparedHistory(t *testing.T) {
 		if string(body["tools"]) != string(frozen["tools"]) || !strings.Contains(string(body["tools"]), `"properties":{"file_path":`) {
 			t.Fatalf("WebSocket tool declaration differs from frozen request: %s", body["tools"])
 		}
+		var cacheKey string
+		if err := json.Unmarshal(body["prompt_cache_key"], &cacheKey); err != nil || cacheKey == "" || len(cacheKey) > 64 {
+			t.Fatalf("invalid WebSocket prompt cache key %s: %v", body["prompt_cache_key"], err)
+		}
 		if body["stream"] != nil || body["background"] != nil || string(body["type"]) != `"response.create"` || string(body["store"]) != "false" {
 			t.Fatalf("invalid socket body: %+v", body)
 		}
@@ -395,16 +399,119 @@ func TestOpenAIConnectionPoolBoundsWaitAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestOpenAICacheIdentityAndSupplementalIsolation(t *testing.T) {
+func TestOpenAIPromptCacheKeyIdentity(t *testing.T) {
 	identity := openAIConnectionIdentity{"profile", "https://api.openai.com/v1", "account"}
-	key := openAIPromptCacheKey("scope", identity)
-	if len(key) > 128 || key != openAIPromptCacheKey("scope", identity) || strings.Contains(key, "account") {
-		t.Fatal(key)
+	namespace := strings.Repeat("long-namespace-", 100)
+	key := openAIPromptCacheKey(namespace, identity)
+	if key == "" || len(key) > 64 || key != openAIPromptCacheKey(namespace, identity) {
+		t.Fatalf("cache key is empty, too long, or unstable: %q", key)
 	}
-	identity.Account = "other"
-	if key == openAIPromptCacheKey("scope", identity) {
-		t.Fatal("account keys collide")
+	for _, value := range []string{namespace, identity.Provider, identity.Endpoint, identity.Account} {
+		if strings.Contains(key, value) {
+			t.Fatalf("cache key exposes an input: %q", key)
+		}
 	}
+	for _, tc := range []struct {
+		name      string
+		namespace string
+		identity  openAIConnectionIdentity
+	}{
+		{"namespace", "different", identity},
+		{"provider", namespace, openAIConnectionIdentity{"other", identity.Endpoint, identity.Account}},
+		{"endpoint", namespace, openAIConnectionIdentity{identity.Provider, "https://other.example/v1", identity.Account}},
+		{"account", namespace, openAIConnectionIdentity{identity.Provider, identity.Endpoint, "other"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if key == openAIPromptCacheKey(tc.namespace, tc.identity) {
+				t.Fatal("different identities share a cache key")
+			}
+		})
+	}
+}
+
+func TestOpenAIPromptCacheKeyHTTPRequests(t *testing.T) {
+	for _, protocol := range []string{"openai-responses", "openai-chat-completions"} {
+		t.Run(protocol, func(t *testing.T) {
+			type request struct {
+				path string
+				key  *string
+			}
+			requests := make(chan request, 5)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body struct {
+					Key *string `json:"prompt_cache_key"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				requests <- request{path: r.URL.Path, key: body.Key}
+				if body.Key != nil && len(*body.Key) > 64 {
+					w.WriteHeader(http.StatusBadRequest)
+					fmt.Fprint(w, `{"error":{"message":"prompt_cache_key exceeds 64 characters","type":"invalid_request_error","param":"prompt_cache_key"}}`)
+					return
+				}
+				if protocol == "openai-responses" {
+					writeOpenAIResponsesSSE(w, r, "gpt-4o", "resp_test", "ok")
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, "data: {\"id\":\"chat-test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+			}))
+			defer server.Close()
+			adapter, err := newProviderAdapter("openai", server.URL+"/v1", "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := adapter.(*openAIProvider)
+			configureOpenAIConnections(p, "profile", "https://api.openai.com/v1", "api_key:account", nil)
+			req := testOpenAISocketRequest("scope")
+			req.Protocol = protocol
+			req.Model = "gpt-4o"
+			var keys []string
+			for i := 0; i < 5; i++ {
+				p.officialOpenAI = i != 4
+				if i == 2 {
+					req.ReusePolicy.PromptCacheNamespace = "another-namespace"
+				}
+				if i == 3 {
+					req.ReusePolicy.PromptCacheEnabled = false
+				}
+				if i == 4 {
+					req.ReusePolicy.PromptCacheEnabled = true
+				}
+				result, err := p.StreamTurn(t.Context(), req, nil)
+				if err != nil {
+					t.Fatalf("request %d: %v", i, err)
+				}
+				got := <-requests
+				wantPath := "/v1/responses"
+				if protocol == "openai-chat-completions" {
+					wantPath = "/v1/chat/completions"
+				}
+				if got.path != wantPath || result.Text != "ok" {
+					t.Fatalf("request %d: path=%q result=%q", i, got.path, result.Text)
+				}
+				if i >= 3 {
+					if got.key != nil {
+						t.Fatalf("request %d unexpectedly enabled cache: %q", i, *got.key)
+					}
+					continue
+				}
+				if got.key == nil || *got.key == "" || len(*got.key) > 64 {
+					t.Fatalf("request %d has invalid cache key: %v", i, got.key)
+				}
+				keys = append(keys, *got.key)
+			}
+			if keys[0] != keys[1] || keys[0] == keys[2] {
+				t.Fatalf("cache key did not preserve namespace reuse: %q", keys)
+			}
+		})
+	}
+}
+
+func TestOpenAISupplementalIsolation(t *testing.T) {
 	pool := newOpenAIResponsesPool()
 	defer pool.Close()
 	var upgrades atomic.Int32

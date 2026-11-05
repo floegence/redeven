@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -63,7 +64,7 @@ func isOfficialOpenAIEndpoint(provider, endpoint string) bool {
 func openAIPromptCacheKey(namespace string, identity openAIConnectionIdentity) string {
 	raw, _ := json.Marshal([]string{"redeven-openai-v1", namespace, identity.Provider, identity.Endpoint, identity.Account})
 	sum := sha256.Sum256(raw)
-	return "rdv_" + hex.EncodeToString(sum[:])
+	return "rdv_" + base64.RawURLEncoding.EncodeToString(sum[:])
 }
 func openAIHash(value any) string {
 	raw, _ := json.Marshal(value)

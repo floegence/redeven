@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model request reuse
 tags: [ai, providers, cache, usage]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -14,6 +14,13 @@ Floret owns reuse decisions/canonical state; Redeven runs one prepared request/R
 Runtime/Desktop epoch 68 and model-source RPC v4 preserve Floret's effective request reuse policy. Adapters cannot broaden it.
 
 Full input always owns estimates and fingerprints.
+
+Official OpenAI Responses and Chat Completions requests use a deterministic,
+URL-safe prompt cache key bounded to 64 ASCII characters. Redeven derives it
+from Floret's namespace and the provider, normalized endpoint and account
+identity without sending those values in plaintext. Disabled reuse and
+non-official endpoints do not receive this key. A key-format change creates a
+new provider cache namespace; it does not change canonical conversation state.
 
 ## Responses continuation configuration
 `config.AIProvider.EffectiveResponsesContinuation` is the sole provider-level decision. Complete canonical input remains available when the ID is omitted.
@@ -37,4 +44,5 @@ rotation separately invalidates the live connection before another request.
 # Evidence
 
 - `redeven:internal/ai/model_gateway_openai_connections.go` - Source.
+- `redeven:internal/ai/model_gateway_openai_cache_integration_test.go` - Floret thread acceptance.
 - `redeven:internal/ai/openai_continuation_test.go` - Tests.

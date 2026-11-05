@@ -9221,7 +9221,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "ai",
           "cache",
@@ -9231,15 +9231,15 @@
         "title": "Model request reuse",
         "type": "AI Runtime Contract"
       },
-      "body_length": 1882,
+      "body_length": 2438,
       "summary": "Floret owns reuse decisions/canonical state; Redeven runs one prepared request/Responses consumer. In-memory transport reuse requires matching next canonical state and complete input. Failure follows ordinary turn recovery; supplemental context never enables reuse.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime/Desktop epoch 68 and model-source RPC v4 preserve Floret's effective request reuse policy. Adapters cannot broaden it.\n\nFull input always owns estimates and fingerprints.\n\n## Responses continuation configuration\n`config.AIProvider.EffectiveResponsesContinuation` is the sole provider-level decision. Complete canonical input remains available when the ID is omitted.\n\nNo gateway-specific retry or alternative history owner is introduced.\n\n## Cache usage presentation\nThe existing context tooltip shows the latest completed request and cumulative session cache hit rates. Recent counters project Floret's canonical confirmed usage directly and clear with its existing model/compaction boundaries. Historical cumulative usage is neither rewritten nor backfilled.",
-          "char_count": 768
+          "body": "Runtime/Desktop epoch 68 and model-source RPC v4 preserve Floret's effective request reuse policy. Adapters cannot broaden it.\n\nFull input always owns estimates and fingerprints.\n\nOfficial OpenAI Responses and Chat Completions requests use a deterministic,\nURL-safe prompt cache key bounded to 64 ASCII characters. Redeven derives it\nfrom Floret's namespace and the provider, normalized endpoint and account\nidentity without sending those values in plaintext. Disabled reuse and\nnon-official endpoints do not receive this key. A key-format change creates a\nnew provider cache namespace; it does not change canonical conversation state.\n\n## Responses continuation configuration\n`config.AIProvider.EffectiveResponsesContinuation` is the sole provider-level decision. Complete canonical input remains available when the ID is omitted.\n\nNo gateway-specific retry or alternative history owner is introduced.\n\n## Cache usage presentation\nThe existing context tooltip shows the latest completed request and cumulative session cache hit rates. Recent counters project Floret's canonical confirmed usage directly and clear with its existing model/compaction boundaries. Historical cumulative usage is neither rewritten nor backfilled.",
+          "char_count": 1225
         },
         {
           "id": "boundaries",
@@ -9252,8 +9252,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/ai/model_gateway_openai_connections.go` - Source.\n- `redeven:internal/ai/openai_continuation_test.go` - Tests.",
-          "char_count": 130
+          "body": "- `redeven:internal/ai/model_gateway_openai_connections.go` - Source.\n- `redeven:internal/ai/model_gateway_openai_cache_integration_test.go` - Floret thread acceptance.\n- `redeven:internal/ai/openai_continuation_test.go` - Tests.",
+          "char_count": 229
         }
       ],
       "evidence": [
@@ -9261,6 +9261,11 @@
           "id": "redeven:internal/ai/model_gateway_openai_connections.go:0:source.",
           "source": "redeven:internal/ai/model_gateway_openai_connections.go",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/ai/model_gateway_openai_cache_integration_test.go:0:floret thread acceptance.",
+          "source": "redeven:internal/ai/model_gateway_openai_cache_integration_test.go",
+          "description": "Floret thread acceptance."
         },
         {
           "id": "redeven:internal/ai/openai_continuation_test.go:0:tests.",
@@ -25759,5 +25764,5 @@
       ]
     }
   ],
-  "source_sha256": "f94e5af6442df355a49c418f50d28616e974dd825c0ae985ba28fb9ba0093c25"
+  "source_sha256": "f50b9968ecc0cd860a4c3cbd7b3f3e666028a56ea7ea2038922d15a81437c911"
 }
