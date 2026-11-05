@@ -1,14 +1,16 @@
 import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 import {
+  PluginPlatformRequestError,
   type PluginExecution,
+  type PluginInspectedInstallOperation,
   type PluginPlatformClient,
 } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { fetchLocalApi, fetchLocalApiJSONResponse } from '../services/localApi';
-import { connectPluginMarketEventStream, createPluginLifecycleAPI, loadPluginMarketDetail } from './pluginApi';
+import { connectPluginMarketEventStream, createPluginLifecycleAPI, ExternalPackageInspectionTerminalError, loadPluginMarketDetail } from './pluginApi';
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
-import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
+import { EXAMPLE_PLUGIN_PACKAGE, exampleInspection } from './examplePluginPackage.test-fixture';
 import type { ReDevPluginRecord } from './pluginTypes';
 
 vi.mock('../services/localApi', () => ({
@@ -19,30 +21,20 @@ vi.mock('../services/localApi', () => ({
 }));
 
 const examplePlugin = OFFICIAL_PLUGIN_CATALOG_SEED[0];
-const officialInstallCommand = {
-  type: 'install' as const,
-  pluginID: examplePlugin.pluginID,
-  source: 'official_catalog' as const,
-  pluginInstanceID: examplePlugin.pluginInstanceID,
-  releaseRef: examplePlugin.installPreview!.release_ref,
-  releaseIdentityDigest: examplePlugin.installPreview!.release_identity_digest,
-  manifestSHA256: examplePlugin.installPreview!.manifest_sha256,
-  contractSetSHA256: examplePlugin.installPreview!.contract_set_sha256,
-  summarySHA256: examplePlugin.installPreview!.summary_sha256,
-};
-
 function createClientHarness() {
   const mocks = {
     catalog: vi.fn(async (): Promise<{ plugins: ReDevPluginRecord[] }> => ({ plugins: [] })),
     listPermissions: vi.fn(async (): ReturnType<PluginPlatformClient['listPermissions']> => ({ permissions: [] })),
     listSecurityPolicies: vi.fn(async (): ReturnType<PluginPlatformClient['listSecurityPolicies']> => ({ security_policies: [] })),
-    installReleaseRef: vi.fn(async () => ({})),
-    startReleaseInstallExecution: vi.fn(async () => releaseInstallExecution()),
+    startInspectedInstall: vi.fn(async (_request: Parameters<PluginPlatformClient['startInspectedInstall']>[0]) => installReceipt()),
+    getInspectedInstall: vi.fn(async () => installReceipt()),
+    listInspectedInstalls: vi.fn(async (): Promise<{ operations: PluginInspectedInstallOperation[]; next_cursor: number }> => ({ operations: [], next_cursor: 0 })),
+    inspectPluginUpdate: vi.fn(async () => exampleInspection()),
+    listRepositoryPlugins: vi.fn(async () => []),
+    setAutomaticUpdates: vi.fn(async () => generatedMetricsRecord),
     listExecutions: vi.fn(async () => ({ executions: [] as PluginExecution[] })),
-    listReleaseInstallExecutions: vi.fn(async (): ReturnType<PluginPlatformClient['listReleaseInstallExecutions']> => ({ executions: [] as PluginExecution[] })),
     getExecution: vi.fn(async () => releaseInstallExecution()),
     listExecutionEvents: vi.fn(async () => ({ execution_id: 'release_install_4c9d48a3', events: [], cursor: 1 })),
-    updateReleaseRef: vi.fn(async () => ({})),
     enablePlugin: vi.fn(async () => ({})),
     disablePlugin: vi.fn(async () => ({})),
     uninstallPlugin: vi.fn(async () => ({})),
@@ -50,27 +42,14 @@ function createClientHarness() {
     revokePermission: vi.fn(async () => ({})),
     getPermissionRequirements: vi.fn(async ({ plugin_instance_id }: { plugin_instance_id: string }): ReturnType<PluginPlatformClient['getPermissionRequirements']> => ({
       plugin_instance_id,
-      plugin_version: EXAMPLE_PLUGIN_RELEASE_REF.version,
-      active_fingerprint: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
+      plugin_version: EXAMPLE_PLUGIN_PACKAGE.version,
+      active_fingerprint: `sha256:${EXAMPLE_PLUGIN_PACKAGE.package_sha256}`,
       management_revision: 23,
       required_permissions: [],
       contracts: [],
     })),
-    inspectReleasePackage: vi.fn(async () => ({
-      plugin_instance_id: examplePlugin.pluginInstanceID,
-      release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
-      inspected_hashes: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes,
-      presentation: generatedMetricsRecord.presentation,
-      presentation_sha256: 'sha256:' + 'a'.repeat(64),
-      security_summary: {
-        summary_sha256: 'sha256:' + 'b'.repeat(64),
-        permissions: [{ permission_id: 'metrics.read', methods: ['metrics.list'], required: true, effects: ['read'] }],
-        methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
-      },
-    })),
     inspectExternalPackage: vi.fn(async () => ({})),
     inspectUploadedExternalPackage: vi.fn(async () => ({})),
-    installInspectedPackage: vi.fn(async () => ({})),
     recoverEnabled: vi.fn(async (): ReturnType<PluginPlatformClient['recoverEnabled']> => ({ revision: 1, complete: true, results: [] })),
     retryRecovery: vi.fn(async () => ({ plugin_instance_id: examplePlugin.pluginInstanceID, active_fingerprint: generatedMetricsRecord.active_fingerprint, installed_at: generatedMetricsRecord.installed_at, management_revision: generatedMetricsRecord.management_revision, status: 'ready' as const })),
     listRetainedData: vi.fn(async () => ({ retained_data: [{
@@ -113,20 +92,13 @@ const generatedMetricsRecord: ReDevPluginRecord = {
   plugin_instance_id: generatedMetricsInstanceID,
   publisher_id: examplePlugin.publisherID,
   plugin_id: examplePlugin.pluginID,
-  version: EXAMPLE_PLUGIN_RELEASE_REF.version,
-  active_fingerprint: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
-  package_hash: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
-  manifest_hash: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,
-  entries_hash: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.entries_sha256,
-  trust_state: 'untrusted',
-  trust_assessment: {
-    trust_state: 'untrusted',
-    verified_hashes: {
-      package_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
-      manifest_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,
-      entries_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.entries_sha256,
-    },
-  },
+  version: EXAMPLE_PLUGIN_PACKAGE.version,
+  active_fingerprint: `sha256:${EXAMPLE_PLUGIN_PACKAGE.package_sha256}`,
+  package_hash: `sha256:${EXAMPLE_PLUGIN_PACKAGE.package_sha256}`,
+  manifest_hash: `sha256:${EXAMPLE_PLUGIN_PACKAGE.manifest_sha256}`,
+  entries_hash: `sha256:${EXAMPLE_PLUGIN_PACKAGE.entries_sha256}`,
+  source_provenance: { kind: 'github_repository', repository_id: '1289352675', release_id: '21', asset_id: '22', repository_url: 'https://github.com/example/example-plugins', owner: 'example', repository: 'example-plugins', resolved_commit_sha: 'a'.repeat(40), release_tag: 'metrics-v4.4.9', asset_name: 'metrics-4.4.9.redevplugin', package_sha256: `sha256:${EXAMPLE_PLUGIN_PACKAGE.package_sha256}`, resolved_at: '2026-11-05T00:00:00Z' },
+  automatic_updates: false,
   enable_state: 'enabled',
   policy_revision: 3,
   management_revision: 23,
@@ -136,7 +108,7 @@ const generatedMetricsRecord: ReDevPluginRecord = {
     publisher: { publisher_id: examplePlugin.publisherID, display_name: examplePlugin.publisher },
     plugin: {
       plugin_id: examplePlugin.pluginID, display_name: examplePlugin.displayName,
-      version: EXAMPLE_PLUGIN_RELEASE_REF.version,
+      version: EXAMPLE_PLUGIN_PACKAGE.version,
     },
     api: { major: 1 },
     permissions: [],
@@ -246,11 +218,6 @@ describe('plugin lifecycle client integration', () => {
     mocks.catalog.mockResolvedValue({
       plugins: [{
         ...generatedMetricsRecord,
-        trust_state: 'verified',
-        trust_assessment: {
-          ...generatedMetricsRecord.trust_assessment,
-          trust_state: 'verified',
-        },
       }],
     });
     mocks.listPermissions.mockResolvedValue({
@@ -274,8 +241,8 @@ describe('plugin lifecycle client integration', () => {
     });
     mocks.getPermissionRequirements.mockResolvedValue({
       plugin_instance_id: generatedMetricsInstanceID,
-      plugin_version: EXAMPLE_PLUGIN_RELEASE_REF.version,
-      active_fingerprint: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
+      plugin_version: EXAMPLE_PLUGIN_PACKAGE.version,
+      active_fingerprint: `sha256:${EXAMPLE_PLUGIN_PACKAGE.package_sha256}`,
       management_revision: 23,
       required_permissions: ['metrics.read'],
       contracts: [],
@@ -593,150 +560,117 @@ describe('plugin lifecycle client integration', () => {
     });
   });
 
-  it('starts the generated signed release installation with one stable request id', async () => {
+  it('starts only the exact inspected package with a stable request id', async () => {
     const { lifecycle, mocks } = createClientHarness();
-
-    await expect(lifecycle.installOfficialRelease(officialInstallCommand, releaseInstallRequestID)).resolves.toMatchObject({
-      status: 'completed',
-    });
-
-    expect(mocks.startReleaseInstallExecution).toHaveBeenCalledWith({
-      request_id: releaseInstallRequestID,
-      plugin_instance_id: examplePlugin.pluginInstanceID,
-      release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
-      release_identity_digest: examplePlugin.installPreview!.release_identity_digest,
-      manifest_sha256: examplePlugin.installPreview!.manifest_sha256,
-      contract_set_sha256: examplePlugin.installPreview!.contract_set_sha256,
-      summary_sha256: examplePlugin.installPreview!.summary_sha256,
-    }, {});
-    expect(mocks.installReleaseRef).not.toHaveBeenCalled();
-    expect(mocks.listExecutionEvents).not.toHaveBeenCalled();
-    expect(mocks.getExecution).not.toHaveBeenCalled();
-    expect(EXAMPLE_PLUGIN_RELEASE_REF).toMatchObject({
-      publisher_id: examplePlugin.publisherID,
-      plugin_id: examplePlugin.pluginID,
-      version: examplePlugin.stableVersion,
-    });
+    const inspection = exampleInspection();
+    await lifecycle.startInspectedInstall(inspection, releaseInstallRequestID);
+    expect(mocks.startInspectedInstall).toHaveBeenCalledExactlyOnceWith({ request_id: releaseInstallRequestID, inspection_id: inspection.inspection_id, expected_package_sha256: inspection.inspected_hashes.package_sha256 }, {});
   });
 
-  it('returns an already terminal release installation execution', async () => {
+  it('shares a single submission for concurrent requests for the same inspection', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    mocks.startReleaseInstallExecution.mockResolvedValueOnce(releaseInstallExecution({
-      status: 'failed',
-      failure_code: 'PLUGIN_RELEASE_NETWORK',
-    }));
-
-    await expect(lifecycle.installOfficialRelease(officialInstallCommand, releaseInstallRequestID)).resolves.toMatchObject({
-      status: 'failed',
-      failure_code: 'PLUGIN_RELEASE_NETWORK',
-    });
-    expect(mocks.listExecutionEvents).not.toHaveBeenCalled();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
+    let finish!: (receipt: PluginInspectedInstallOperation) => void;
+    mocks.startInspectedInstall.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const inspection = exampleInspection();
+    const first = lifecycle.installExternalPackage(inspection);
+    const second = lifecycle.installExternalPackage(inspection);
+    expect(first).toBe(second);
+    finish(installReceipt());
+    await Promise.all([first, second]);
+    expect(mocks.startInspectedInstall).toHaveBeenCalledTimes(1);
   });
 
-  it('lists and reads release installation executions through the unified client helpers', async () => {
+  it('lists durable receipts until the explicit zero cursor', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    const execution = releaseInstallExecution();
-    mocks.listReleaseInstallExecutions
-      .mockResolvedValueOnce({ executions: [execution], next_cursor: 101 })
-      .mockResolvedValueOnce({ executions: [] });
-    mocks.getExecution.mockResolvedValueOnce(execution);
-
-    await expect(lifecycle.listReleaseInstallExecutions()).resolves.toEqual([execution]);
-    await expect(lifecycle.getReleaseInstallExecution(execution.execution_id)).resolves.toEqual(execution);
-    await expect(lifecycle.listReleaseInstallExecutionEvents(execution.execution_id, 0)).resolves.toMatchObject({ cursor: 1 });
-
-    expect(mocks.listReleaseInstallExecutions).toHaveBeenNthCalledWith(1, { limit: 500 }, {});
-    expect(mocks.listReleaseInstallExecutions).toHaveBeenNthCalledWith(2, { limit: 500, cursor: 101 }, {});
-    expect(mocks.getExecution).toHaveBeenCalledWith(execution.execution_id, {});
-    expect(mocks.listExecutionEvents).toHaveBeenCalledWith(execution.execution_id, { after_cursor: 0, limit: 1_000 }, {});
+    const receipt = installReceipt();
+    mocks.listInspectedInstalls.mockResolvedValueOnce({ operations: [receipt], next_cursor: 101 }).mockResolvedValueOnce({ operations: [], next_cursor: 0 });
+    expect(await lifecycle.listInspectedInstalls()).toEqual([receipt]);
+    expect(mocks.listInspectedInstalls).toHaveBeenNthCalledWith(1, { limit: 500, cursor: 0 }, {});
+    expect(mocks.listInspectedInstalls).toHaveBeenNthCalledWith(2, { limit: 500, cursor: 101 }, {});
   });
 
-  it('deletes the exact retained data revision before an incompatible-data reinstall', async () => {
+  it('reconciles a lost submission response without submitting a second operation', async () => {
     const { lifecycle, mocks } = createClientHarness();
-
-    const revision = await lifecycle.getIncompatibleRetainedDataRevision(examplePlugin.pluginInstanceID);
-    await lifecycle.deleteIncompatibleRetainedData(examplePlugin.pluginInstanceID, revision);
-
-    expect(mocks.listRetainedData).toHaveBeenNthCalledWith(1, {
-      plugin_instance_id: examplePlugin.pluginInstanceID,
-    }, {});
-    expect(mocks.listRetainedData).toHaveBeenNthCalledWith(2, {
-      plugin_instance_id: examplePlugin.pluginInstanceID,
-    }, {});
-    expect(mocks.deleteRetainedData).toHaveBeenCalledWith({
-      plugin_instance_id: examplePlugin.pluginInstanceID,
-      expected_binding_revision: 4,
-    }, {});
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
+    mocks.startInspectedInstall.mockRejectedValueOnce(new Error('lost response'));
+    expect((await lifecycle.installExternalPackage(exampleInspection())).plugin).toBe(generatedMetricsRecord);
+    expect(mocks.startInspectedInstall).toHaveBeenCalledTimes(1);
+    expect(mocks.getInspectedInstall).toHaveBeenCalledTimes(1);
   });
 
-  it('treats an already absent confirmed retained binding as a reconciled delete', async () => {
+  it('honors committed receipt outcome even when execution failed after commit', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    mocks.listRetainedData.mockResolvedValueOnce({ retained_data: [] });
-
-    await lifecycle.deleteIncompatibleRetainedData(examplePlugin.pluginInstanceID, 4);
-
-    expect(mocks.deleteRetainedData).not.toHaveBeenCalled();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
+    const receipt = installReceipt(); receipt.execution.status = 'failed';
+    mocks.startInspectedInstall.mockResolvedValue(receipt);
+    expect((await lifecycle.installExternalPackage(exampleInspection())).operation.mutation_outcome).toBe('committed');
   });
 
-  it('rejects deleting retained data when the confirmed revision changed', async () => {
+  it('never replays an unknown durable outcome', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    mocks.listRetainedData.mockResolvedValueOnce({ retained_data: [{
-      plugin_instance_id: examplePlugin.pluginInstanceID,
-      generation_id: 'gen-new',
-      state: 'retained',
-      revision: 5,
-      shape_hash: 'b'.repeat(64),
-    }] });
-
-    await expect(lifecycle.deleteIncompatibleRetainedData(
-      examplePlugin.pluginInstanceID,
-      4,
-    )).rejects.toThrow('changed after confirmation');
-    expect(mocks.deleteRetainedData).not.toHaveBeenCalled();
+    const receipt = installReceipt(); receipt.execution.status = 'orphaned'; receipt.mutation_outcome = 'unknown';
+    mocks.startInspectedInstall.mockResolvedValue(receipt); mocks.getInspectedInstall.mockResolvedValue(receipt);
+    const inspection = exampleInspection();
+    await expect(lifecycle.installExternalPackage(inspection)).rejects.toMatchObject({ mutationOutcome: 'unknown' });
+    await expect(lifecycle.installExternalPackage(inspection)).rejects.toMatchObject({ mutationOutcome: 'unknown' });
+    expect(mocks.startInspectedInstall).toHaveBeenCalledTimes(1);
   });
 
-  it('updates the exact installed instance with its management revision and generated release ref', async () => {
+  it('requires new review when the original absent request is definitively rejected', async () => {
     const { lifecycle, mocks } = createClientHarness();
-
-    await lifecycle.execute({
-      type: 'update',
-      pluginID: examplePlugin.pluginID,
-      pluginInstanceID: examplePlugin.pluginInstanceID,
-      expectedManagementRevision: 17,
-      targetVersion: EXAMPLE_PLUGIN_RELEASE_REF.version,
-      releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
-    });
-
-    expect(mocks.updateReleaseRef).toHaveBeenCalledWith({
-      plugin_instance_id: examplePlugin.pluginInstanceID,
-      expected_management_revision: 17,
-      release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
-    }, {});
+    const inspection = exampleInspection();
+    const receipt = installReceipt(); receipt.execution.status = 'orphaned'; receipt.mutation_outcome = 'unknown';
+    mocks.startInspectedInstall.mockResolvedValueOnce(receipt);
+    await expect(lifecycle.installExternalPackage(inspection)).rejects.toMatchObject({ mutationOutcome: 'unknown' });
+    mocks.getInspectedInstall.mockRejectedValueOnce(new PluginPlatformRequestError('PLUGIN_EXECUTION_NOT_FOUND', 'absent'));
+    mocks.startInspectedInstall.mockRejectedValueOnce(new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', 'expired', {}, 'not_committed'));
+    await expect(lifecycle.installExternalPackage(inspection)).rejects.toBeInstanceOf(ExternalPackageInspectionTerminalError);
+    expect(mocks.startInspectedInstall.mock.calls[0]![0].request_id).toBe(mocks.startInspectedInstall.mock.calls[1]![0].request_id);
+  });
+  it('checks updates through the saved original source', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    await lifecycle.inspectExternalPackage({ sourceKind: 'installed_source', pluginInstanceID: 'instance-1', expectedManagementRevision: 17 });
+    expect(mocks.inspectPluginUpdate).toHaveBeenCalledExactlyOnceWith({ plugin_instance_id: 'instance-1', expected_management_revision: 17 }, {});
   });
 
-  it('rejects an update whose requested version is not the signed release version', async () => {
+  it('requires fresh review when an unsubmitted inspection has expired', async () => {
     const { lifecycle, mocks } = createClientHarness();
-
-    await expect(lifecycle.execute({
-      type: 'update',
-      pluginID: examplePlugin.pluginID,
-      pluginInstanceID: examplePlugin.pluginInstanceID,
-      expectedManagementRevision: 17,
-      targetVersion: '1.9.9',
-      releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
-    })).rejects.toThrow('does not match its signed release reference');
-    expect(mocks.updateReleaseRef).not.toHaveBeenCalled();
+    await expect(lifecycle.installExternalPackage(exampleInspection({ expires_at: '2000-01-01T00:00:00Z' })))
+      .rejects.toBeInstanceOf(ExternalPackageInspectionTerminalError);
+    expect(mocks.startInspectedInstall).not.toHaveBeenCalled();
   });
 
-  it('rejects a same-version release replacement before invoking the mutation', async () => {
+  it('returns the committed receipt when the inventory request fails', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    const error = await lifecycle.execute({
-      type: 'update', pluginID: examplePlugin.pluginID, pluginInstanceID: examplePlugin.pluginInstanceID,
-      expectedManagementRevision: 17, targetVersion: EXAMPLE_PLUGIN_RELEASE_REF.version,
-      releaseRef: { ...EXAMPLE_PLUGIN_RELEASE_REF, release_metadata_sha256: 'f'.repeat(64) },
-    }).catch((error: unknown) => error);
-    expect(error).toMatchObject({ mutationOutcome: 'not_committed' });
-    expect(mocks.updateReleaseRef).not.toHaveBeenCalled();
+    mocks.catalog.mockRejectedValueOnce(new Error('inventory unavailable'));
+    const result = await lifecycle.installExternalPackage(exampleInspection());
+    expect(result.operation.mutation_outcome).toBe('committed');
+    expect(result.plugin).toBeUndefined();
+    expect(mocks.startInspectedInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires fresh review after a terminal not-committed receipt', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const receipt = installReceipt();
+    receipt.execution.status = 'failed';
+    receipt.mutation_outcome = 'not_committed';
+    mocks.startInspectedInstall.mockResolvedValueOnce(receipt);
+    await expect(lifecycle.installExternalPackage(exampleInspection())).rejects.toBeInstanceOf(ExternalPackageInspectionTerminalError);
+  });
+
+  it('queries an admitted receipt after inspection expiry without resubmitting', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const inspection = exampleInspection();
+    const receipt = installReceipt();
+    receipt.execution.status = 'orphaned'; receipt.mutation_outcome = 'unknown';
+    mocks.startInspectedInstall.mockResolvedValueOnce(receipt);
+    await expect(lifecycle.installExternalPackage(inspection)).rejects.toMatchObject({ mutationOutcome: 'unknown' });
+    mocks.catalog.mockResolvedValueOnce({ plugins: [generatedMetricsRecord] });
+    const result = await lifecycle.installExternalPackage({ ...inspection, expires_at: '2000-01-01T00:00:00Z' });
+    expect(result.operation.mutation_outcome).toBe('committed');
+    expect(mocks.startInspectedInstall).toHaveBeenCalledTimes(1);
+    expect(mocks.getInspectedInstall).toHaveBeenCalledTimes(1);
   });
 
   it('propagates management revisions through enable, disable, and uninstall mutations', async () => {
@@ -842,7 +776,7 @@ describe('plugin lifecycle client integration', () => {
         plugin_instance_id: 'plugini_external_12345678',
         expected_management_revision: 9,
       },
-      source: { kind: 'github_repository', url: 'https://github.com/example/toolbox', tag: 'v1.2.3' },
+      source: { kind: 'github_repository', host: 'redeven', url: 'https://github.com/example/toolbox', tag: 'v1.2.3' },
     }, { signal });
   });
 
@@ -862,58 +796,16 @@ describe('plugin lifecycle client integration', () => {
     expect(mocks.inspectExternalPackage).not.toHaveBeenCalled();
   });
 
-  it('installs a fresh inspection with its exact digest and the confirmed activation intent', async () => {
+  it('commits inspected updates without granting permissions', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    const inspection = {
-      inspection_id: 'inspection_external_12345678',
-      inspected_hashes: {
-        package_sha256: '684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
-        manifest_sha256: '1'.repeat(64),
-        entries_sha256: '2'.repeat(64),
-      },
-      intent: { action: 'install' as const },
-      security_summary: {
-        permissions: [
-          { permission_id: 'metrics.read', methods: ['metrics.list'] },
-          { permission_id: 'metrics.execute', methods: ['metrics.start'] },
-        ],
-      },
-    };
-    const installed = { plugin: { plugin_instance_id: 'plugini_external_12345678' } };
-    mocks.installInspectedPackage.mockResolvedValue(installed);
-
-    await expect(lifecycle.installExternalPackage(inspection as never)).resolves.toBe(installed);
-
-    expect(mocks.installInspectedPackage).toHaveBeenCalledWith({
-      inspection_id: inspection.inspection_id,
-      expected_package_sha256: inspection.inspected_hashes.package_sha256,
-    }, {});
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
+    const inspection = exampleInspection({ intent: { action: 'update', plugin_instance_id: generatedMetricsInstanceID, expected_management_revision: 9 } });
+    await lifecycle.installExternalPackage(inspection);
+    expect(mocks.grantPermission).not.toHaveBeenCalled();
+    expect(mocks.enablePlugin).not.toHaveBeenCalled();
+    expect(mocks.startInspectedInstall).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ inspection_id: inspection.inspection_id, expected_package_sha256: inspection.inspected_hashes.package_sha256 }), {});
   });
 
-  it('commits an external update without changing its enable intent or adding grants', async () => {
-    const { lifecycle, mocks } = createClientHarness();
-    const inspection = {
-      inspection_id: 'inspection_external_update_12345678',
-      inspected_hashes: {
-        package_sha256: '684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
-      },
-      intent: {
-        action: 'update' as const,
-        plugin_instance_id: 'plugini_external_12345678',
-        expected_management_revision: 9,
-      },
-      security_summary: {
-        permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'] }],
-      },
-    };
-
-    await lifecycle.installExternalPackage(inspection as never);
-
-    expect(mocks.installInspectedPackage).toHaveBeenCalledWith({
-      inspection_id: inspection.inspection_id,
-      expected_package_sha256: inspection.inspected_hashes.package_sha256,
-    }, {});
-  });
 });
 
 let releaseTestTransport: (() => void) | undefined;
@@ -947,3 +839,7 @@ it('forwards exact recovery targets, reviewed plans and cancellation through the
   expect(client.getRetainedRecoveryStatus).toHaveBeenCalledWith(inspection, options);
   expect(client.commitRetainedRecovery).toHaveBeenCalledTimes(1);
 });
+
+function installReceipt(): PluginInspectedInstallOperation {
+  return { execution: { ...releaseInstallExecution(), plugin_instance_id: generatedMetricsInstanceID }, request_id: releaseInstallRequestID, inspection_id: 'inspection-1', plugin_id: EXAMPLE_PLUGIN_PACKAGE.plugin_id, version: EXAMPLE_PLUGIN_PACKAGE.version, package_sha256: `sha256:${EXAMPLE_PLUGIN_PACKAGE.package_sha256}`, mutation_outcome: 'committed' };
+}

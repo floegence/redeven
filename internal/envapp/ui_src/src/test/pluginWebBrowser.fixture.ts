@@ -1,4 +1,5 @@
 import { PluginPlatformClient, PluginSurfaceSlot, createPluginSurfaceScope, createReDevPluginSurfaceTransport, type FetchLike, type PluginSurfaceHost } from '@floegence/redevplugin-ui';
+import { createPluginLifecycleAPI } from '../ui/plugins/pluginApi';
 import { prepareCenterPluginOrigin } from '../ui/services/pluginWebOrigin';
 import { openRuntimeSession } from '../../../../../desktop/scripts/fixtures/gateway-runtime-browser';
 
@@ -48,16 +49,18 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
   try {
     const bytes = Uint8Array.from(atob(packageBase64), value => value.charCodeAt(0));
     const inspection = await client.inspectUploadedExternalPackage({ action: 'install' }, new Blob([bytes]));
-    const installed = await client.installInspectedPackage({ inspection_id: inspection.inspection_id, expected_package_sha256: inspection.inspected_hashes.package_sha256 });
+    const installed = await createPluginLifecycleAPI(client, []).installExternalPackage(inspection);
+    if (!installed.plugin) throw new Error('Committed plugin is absent from inventory');
     pluginID = installed.plugin.plugin_instance_id;
     require(installed.plugin.enable_state === 'enabled', 'Explicit install was not enabled');
+    const managementRevision = installed.plugin.management_revision;
     const open = async (expectedRevision: number) => {
       const container = document.createElement('div');
       container.style.cssText = 'width:50%;height:400px';
       stage.append(container);
       const slot = PluginSurfaceSlot.create({ stage: container });
       slots.push(slot);
-      const host = await client.openSurfaceInSlot(slot, { plugin_instance_id: pluginID!, surface_id: 'web.view', expected_management_revision: installed.plugin.management_revision }, {
+      const host = await client.openSurfaceInSlot(slot, { plugin_instance_id: pluginID!, surface_id: 'web.view', expected_management_revision: managementRevision }, {
         prepareWebOrigin: center ? prepareCenterPluginOrigin : undefined,
         confirmClose: () => { confirmations++; return consent; },
       });

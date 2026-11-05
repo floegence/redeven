@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
@@ -286,26 +286,21 @@ export async function ensureEnabledWorkerRuntime({ request, plugins }) {
   };
 }
 
-export function releaseRefFromInstalledPlugin(plugin) {
-  const binding = plugin?.release_trust_binding;
-  const expectedHashes = {
-    package_sha256: plugin?.package_hash,
-    manifest_sha256: plugin?.manifest_hash,
-    entries_sha256: plugin?.entries_hash,
-  };
-  if (!binding || Object.values(expectedHashes).some((value) => typeof value !== 'string' || value.length === 0)) {
-    throw new Error('installed official plugin does not expose its verified release binding');
-  }
-  return {
-    source_id: binding.source_id,
-    channel: binding.channel,
-    release_metadata_ref: binding.release_metadata_ref,
-    release_metadata_sha256: binding.release_metadata_sha256,
-    publisher_id: binding.publisher_id,
-    plugin_id: binding.plugin_id,
-    version: binding.version,
-    expected_hashes: expectedHashes,
-  };
+export async function installInspectedPackage(request, inspection) {
+  const requestID = randomUUID();
+  const body = { request_id: requestID, inspection_id: inspection.inspection_id, expected_package_sha256: inspection.inspected_hashes.package_sha256 };
+  let receipt;
+  try { receipt = await request('/_redevplugin/api/plugins/external-packages/install-operations', body); }
+  catch { receipt = await request('/_redevplugin/api/plugins/external-packages/install-operations/query', { request_id: requestID }); }
+  receipt = await waitFor(async () => {
+    if (!['completed', 'failed', 'canceled', 'orphaned'].includes(receipt.execution.status)) {
+      receipt = await request('/_redevplugin/api/plugins/external-packages/install-operations/query', { request_id: requestID });
+      return null;
+    }
+    if (receipt.mutation_outcome !== 'committed') throw new Error(`Installation outcome: ${receipt.mutation_outcome}`);
+    return receipt;
+  }, 120_000, 'durable inspected installation');
+  return receipt;
 }
 
 async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, pluginResponses) {
@@ -319,7 +314,7 @@ async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, 
   const mutate = async (pathname, body) => {
     const response = await requestPluginJSON(page, pathname, body, sessionHeaders);
     pluginResponses.push({ method: 'POST', pathname, ...response });
-    if (response.status !== 200) throw new Error(`${pathname} failed with status ${response.status}`);
+    if (response.status !== 200 && response.status !== 202) throw new Error(`${pathname} failed with status ${response.status}`);
     return response.body?.data ?? response.body;
   };
 
@@ -340,18 +335,21 @@ async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, 
     (plugin) => plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id,
   );
 
-  await mutate('/_redevplugin/api/plugins/update-release-ref', {
+  const inspection = await mutate('/_redevplugin/api/plugins/updates/inspect', {
     plugin_instance_id: disabled.plugin_instance_id,
     expected_management_revision: disabled.management_revision,
-    release_ref: releaseRefFromInstalledPlugin(disabled),
   });
+  const updateApplied = inspection.inspected_hashes.package_sha256 !== disabled.package_hash;
+  if (updateApplied) await installInspectedPackage(mutate, inspection);
   const preservedCatalog = await waitFor(async () => {
     const response = await queryCatalog();
     if (response.status !== 200) return null;
     const catalog = response.body?.data ?? response.body;
     const plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_instance_id === disabled.plugin_instance_id);
-    return plugin?.enable_state === 'disabled_by_user' && plugin.management_revision > disabled.management_revision ? catalog : null;
-  }, 120_000, 'disabled intent after signed release update');
+    return plugin?.enable_state === 'disabled_by_user' && (updateApplied
+      ? plugin.management_revision > disabled.management_revision
+      : plugin.management_revision === disabled.management_revision) ? catalog : null;
+  }, 120_000, 'disabled intent after inspected update');
   const preserved = installedPlugins(preservedCatalog).find(
     (plugin) => plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id,
   );
@@ -375,6 +373,7 @@ async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, 
     plugin_instance_id: initiallyEnabled.plugin_instance_id,
     before_revision: initiallyEnabled.management_revision,
     disabled_revision: disabled.management_revision,
+    update_applied: updateApplied,
     updated_revision: preserved.management_revision,
     updated_enable_state: preserved.enable_state,
     restored_revision: restored.management_revision,
@@ -406,17 +405,17 @@ async function installUploadedSmokePlugin(page, sessionHeaders, config, pluginRe
   pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/upload/inspect', ...inspectionResponse });
   if (inspectionResponse.status !== 200) throw new Error(`I/O package inspection failed: ${JSON.stringify(inspectionResponse)}`);
   const inspection = inspectionResponse.body?.data ?? inspectionResponse.body;
-  const installResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/external-packages/install', {
-    inspection_id: inspection.inspection_id,
-    expected_package_sha256: inspection.inspected_hashes.package_sha256,
-  }, sessionHeaders);
-  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/install', ...installResponse });
-  if (installResponse.status !== 200) throw new Error(`I/O package install failed: ${JSON.stringify(installResponse)}`);
+  const receipt = await installInspectedPackage(async (pathname, body) => {
+    const response = await requestPluginJSON(page, pathname, body, sessionHeaders);
+    pluginResponses.push({ method: 'POST', pathname, ...response });
+    if (response.status !== 200 && response.status !== 202) throw new Error(`I/O package installation failed: ${response.status}`);
+    return response.body?.data ?? response.body;
+  }, inspection);
   return {
     performed: true,
     enabledCount: 1,
     package_sha256: inspection.inspected_hashes.package_sha256,
-    plugin_instance_id: installResponse.body?.data?.plugin?.plugin_instance_id ?? installResponse.body?.plugin?.plugin_instance_id,
+    plugin_instance_id: receipt.execution.plugin_instance_id,
   };
 }
 

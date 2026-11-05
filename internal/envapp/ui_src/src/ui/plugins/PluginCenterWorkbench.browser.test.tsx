@@ -16,7 +16,7 @@ const item: PluginInventoryItem = {
   description: 'Local forecasts for your workspace.', publisher: 'Example Publisher',
   iconFallback: 'generic', category: 'development', searchKeywords: [],
   version: '1.0.0', managementRevision: 1, lifecycleState: 'enabled',
-  trustBadge: 'community', pinned: false,
+  sourceKind: 'community', pinned: false,
   defaultLaunchTarget: {
     pluginID: 'com.example.weather', pluginInstanceID: 'weather',
     surfaceID: 'forecast', displayName: 'Weather', expectedManagementRevision: 1,

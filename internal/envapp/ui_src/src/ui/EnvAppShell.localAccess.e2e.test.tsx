@@ -8,7 +8,7 @@ import { For, Show, Suspense, createContext, createEffect, createSignal, onClean
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PluginPlatformRequestError, type PluginExecutionEventList, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
-import { EXAMPLE_PLUGIN_RELEASE_REF } from './plugins/examplePluginRelease.test-fixture';
+import { EXAMPLE_PLUGIN_PACKAGE, exampleInspection } from './plugins/examplePluginPackage.test-fixture';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 
 const getLocalRuntimeMock = vi.fn();
@@ -101,16 +101,9 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     ...exampleRecoveryIdentity(), plugin_instance_id: pluginInstanceID, status: 'ready',
   }));
   const execute = vi.fn(async (_command: any) => ({}));
-  const installOfficialRelease = vi.fn(async (
-    _command: any,
-    _requestID: string,
-    _options: { signal?: AbortSignal },
-  ) => ({}));
-  const listReleaseInstallExecutions = vi.fn(async () => []);
-  const getReleaseInstallExecution = vi.fn(async () => ({}));
-  const listReleaseInstallExecutionEvents = vi.fn(async (): Promise<PluginExecutionEventList> => ({ execution_id: '', events: [], cursor: 0 }));
-  const getIncompatibleRetainedDataRevision = vi.fn(async () => 1);
-  const deleteIncompatibleRetainedData = vi.fn(async () => undefined);
+  const listInspectedInstalls = vi.fn(async () => []);
+  const getInspectedInstall = vi.fn(async () => ({}));
+  const listInstallExecutionEvents = vi.fn(async (): Promise<PluginExecutionEventList> => ({ execution_id: '', events: [], cursor: 0 }));
   const inspectExternalPackage = vi.fn(async (_request: any) => ({}));
   const installExternalPackage = vi.fn(async (_inspection: any, _options: any) => ({}));
   const dispose = vi.fn();
@@ -126,12 +119,9 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     recoverEnabled,
     retryRecovery,
     execute,
-    installOfficialRelease,
-    listReleaseInstallExecutions,
-    getReleaseInstallExecution,
-    listReleaseInstallExecutionEvents,
-    getIncompatibleRetainedDataRevision,
-    deleteIncompatibleRetainedData,
+    listInspectedInstalls,
+    getInspectedInstall,
+    listInstallExecutionEvents,
     inspectExternalPackage,
     installExternalPackage,
     createPluginLifecycleAPI: vi.fn(() => ({
@@ -142,12 +132,9 @@ const pluginLifecycleMocks = vi.hoisted(() => {
       recoverEnabled,
       retryRecovery,
       execute,
-      installOfficialRelease,
-      listReleaseInstallExecutions,
-      getReleaseInstallExecution,
-      listReleaseInstallExecutionEvents,
-      getIncompatibleRetainedDataRevision,
-      deleteIncompatibleRetainedData,
+      listInspectedInstalls,
+      getInspectedInstall,
+      listInstallExecutionEvents,
       inspectExternalPackage,
       installExternalPackage,
       dispose,
@@ -225,29 +212,27 @@ const pluginPlatformMocks = vi.hoisted(() => {
 const examplePluginCatalog = {
   pluginID: 'com.example.metrics',
   publisherID: 'com.example',
+  sourceKind: 'official',
   pluginInstanceID: 'plugin_example_metrics',
   displayName: 'Metrics',
   description: 'Review neutral runtime metrics through the general plugin platform.',
   publisher: 'Redeven',
   latestVersion: '2.0.0',
   stableVersion: '2.0.0',
-  minRedevenVersion: '0.9.0',
-  minReDevPluginVersion: '3.0.0',
   rolloutState: 'stable',
   iconFallback: 'generic',
   category: 'infrastructure',
   searchKeywords: ['metrics', 'monitoring'],
-  trustedSigningKeyIDs: ['redeven-official-signing-2026'],
   installPreview: {
-    release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
-    security_summary: { permissions: [] },
+    release: EXAMPLE_PLUGIN_PACKAGE,
+    security_summary: exampleInspection().security_summary,
     release_identity_digest: 'sha256:' + 'a'.repeat(64),
-    manifest_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,
+    manifest_sha256: EXAMPLE_PLUGIN_PACKAGE.manifest_sha256,
     contract_set_sha256: 'sha256:' + 'b'.repeat(64),
     summary_sha256: 'sha256:' + 'c'.repeat(64),
   },
   distribution: {
-    releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
+    release: EXAMPLE_PLUGIN_PACKAGE,
     installSource: {
       sourceKind: 'package_url',
       url: 'https://plugins.example.test/metrics.redevplugin',
@@ -294,7 +279,7 @@ function examplePluginProjection(
       searchKeywords: examplePluginCatalog.searchKeywords,
       publisher: examplePluginCatalog.publisher,
       lifecycleState: state,
-      trustBadge: 'official',
+      sourceKind: 'official',
       pinned: false,
       ...(state === 'disabled' ? { attentionReason: 'disabled' as const } : {}),
       ...(state === 'update_available' ? { attentionReason: 'update_required' as const } : {}),
@@ -332,7 +317,7 @@ function activityPluginProjection(count: number): PluginInventoryProjection {
         version: '1.0.0',
         managementRevision: 1,
         lifecycleState: 'enabled' as const,
-        trustBadge: 'unsigned' as const,
+        sourceKind: 'community' as const,
         pinned: false,
         defaultLaunchTarget: {
           pluginID,
@@ -1674,16 +1659,10 @@ beforeEach(async () => {
   }));
   pluginLifecycleMocks.execute.mockReset();
   pluginLifecycleMocks.execute.mockImplementation(async (_command: any) => ({}));
-  pluginLifecycleMocks.installOfficialRelease.mockReset();
-  pluginLifecycleMocks.installOfficialRelease.mockImplementation(async () => ({}));
-  pluginLifecycleMocks.listReleaseInstallExecutions.mockReset();
-  pluginLifecycleMocks.listReleaseInstallExecutions.mockResolvedValue([]);
-  pluginLifecycleMocks.getReleaseInstallExecution.mockReset();
-  pluginLifecycleMocks.listReleaseInstallExecutionEvents.mockReset();
-  pluginLifecycleMocks.getIncompatibleRetainedDataRevision.mockReset();
-  pluginLifecycleMocks.getIncompatibleRetainedDataRevision.mockResolvedValue(1);
-  pluginLifecycleMocks.deleteIncompatibleRetainedData.mockReset();
-  pluginLifecycleMocks.deleteIncompatibleRetainedData.mockResolvedValue(undefined);
+  pluginLifecycleMocks.listInspectedInstalls.mockReset();
+  pluginLifecycleMocks.listInspectedInstalls.mockResolvedValue([]);
+  pluginLifecycleMocks.getInspectedInstall.mockReset();
+  pluginLifecycleMocks.listInstallExecutionEvents.mockReset();
   pluginLifecycleMocks.inspectExternalPackage.mockReset();
   pluginLifecycleMocks.installExternalPackage.mockReset();
   pluginLifecycleMocks.dispose.mockClear();
@@ -2065,12 +2044,12 @@ describe('EnvAppShell environment entry affordances', () => {
 
     try {
       await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 1, 40);
-      expect(pluginLifecycleMocks.listReleaseInstallExecutions).not.toHaveBeenCalled();
+      expect(pluginLifecycleMocks.listInspectedInstalls).not.toHaveBeenCalled();
 
       resolveInventory(examplePluginProjection('enabled'));
-      await flushUntil(() => pluginLifecycleMocks.listReleaseInstallExecutions.mock.calls.length === 1, 40);
+      await flushUntil(() => pluginLifecycleMocks.listInspectedInstalls.mock.calls.length === 1, 40);
 
-      expect(pluginLifecycleMocks.listReleaseInstallExecutions).toHaveBeenCalledOnce();
+      expect(pluginLifecycleMocks.listInspectedInstalls).toHaveBeenCalledOnce();
     } finally {
       dispose();
     }
@@ -2607,7 +2586,7 @@ describe('EnvAppShell environment entry affordances', () => {
     pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
     pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: false, results: [
       { ...exampleRecoveryIdentity(), status: 'failed', reason: 'unknown', action: 'retry' },
-      { ...exampleRecoveryIdentity(), plugin_instance_id: siblingID, status: 'failed', reason: 'trust_revoked', action: 'reinstall' },
+      { ...exampleRecoveryIdentity(), plugin_instance_id: siblingID, status: 'failed', reason: 'unknown', action: 'reinstall' },
     ] } satisfies PluginRecoverySnapshot);
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const host = document.createElement('div'); document.body.appendChild(host);
@@ -2626,7 +2605,7 @@ describe('EnvAppShell environment entry affordances', () => {
       currentProjection = { items: [reinstalled, sibling] };
       await pluginCenterViewState.lastProps.onRefresh(); await flushAsync();
       expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]).toBeUndefined();
-      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[siblingID]).toMatchObject({ state: 'failed', reason: 'trust_revoked' });
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[siblingID]).toMatchObject({ state: 'failed', reason: 'unknown' });
       expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(1);
       expect(pluginLifecycleMocks.retryRecovery).not.toHaveBeenCalled();
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
@@ -2989,7 +2968,7 @@ describe('EnvAppShell environment entry affordances', () => {
           ...exampleRecoveryIdentity(),
           plugin_instance_id: 'plugin_example_metrics',
           status: 'failed',
-          reason: 'trust_revoked',
+          reason: 'unknown',
           action: 'reinstall',
         }],
       } satisfies PluginRecoverySnapshot)
@@ -3022,8 +3001,8 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
       expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID.plugin_example_metrics).toEqual({
         state: 'failed',
-        error: 'This plugin release is no longer trusted.',
-        reason: 'trust_revoked',
+        error: 'Plugin runtime recovery failed.',
+        reason: 'unknown',
         action: 'reinstall',
       });
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
@@ -3195,7 +3174,7 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   }, 10000);
 
-  it('keeps official installation observation alive when Plugin Center closes', async () => {
+  it('keeps durable installation observation alive when Plugin Center closes', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     let currentProjection = examplePluginProjection();
@@ -3204,100 +3183,39 @@ describe('EnvAppShell environment entry affordances', () => {
     let finishObservation!: () => void;
     const observationGate = new Promise<void>((resolve) => { finishObservation = resolve; });
     let observationSignal: AbortSignal | undefined;
-    pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(async (
-      _command: any,
-      _requestID: string,
-      options: { signal?: AbortSignal },
-    ) => {
-      observationSignal = options.signal;
-      return {
-        execution_id: 'release_install_shell_test',
-        plugin_instance_id: examplePluginCatalog.pluginInstanceID,
-        kind: 'operation',
-        status: 'running',
-        cursor: 1,
-        cancelable: true,
-        created_at: '2026-08-05T08:00:00Z',
-        updated_at: '2026-08-05T08:00:01Z',
-      };
-    });
-    pluginLifecycleMocks.listReleaseInstallExecutionEvents.mockImplementationOnce(async () => {
+    const receipt = {
+      request_id: 'request-shell-test', inspection_id: 'inspection-shell-test',
+      package_sha256: 'sha256:' + 'a'.repeat(64), plugin_id: examplePluginCatalog.pluginID,
+      version: '2.0.0', mutation_outcome: 'not_committed',
+      execution: { execution_id: 'install_shell_test', plugin_instance_id: examplePluginCatalog.pluginInstanceID,
+        kind: 'operation', status: 'running', cursor: 0, cancelable: false,
+        created_at: '2026-11-05T08:00:00Z', updated_at: '2026-11-05T08:00:01Z' },
+    };
+    pluginLifecycleMocks.listInspectedInstalls.mockResolvedValue([receipt] as never);
+    pluginLifecycleMocks.listInstallExecutionEvents.mockImplementationOnce(async (...args: any[]) => {
+      observationSignal = args[2]?.signal;
       await observationGate;
-      return {
-        execution_id: 'release_install_shell_test',
-        cursor: 1,
-        events: [{
-          execution_id: 'release_install_shell_test',
-          sequence: 1,
-          kind: 'terminal',
-          payload: {
-            install_progress: {
-              task_id: 'release_install_shell_test',
-              request_id: 'request-shell-test',
-              stage: 'enable',
-              status: 'completed',
-            },
-          },
-        }],
-      };
+      return { execution_id: receipt.execution.execution_id, cursor: 0, events: [] };
     });
-    pluginLifecycleMocks.getReleaseInstallExecution.mockResolvedValueOnce({
-      execution_id: 'release_install_shell_test',
-      plugin_instance_id: examplePluginCatalog.pluginInstanceID,
-      kind: 'operation',
-      status: 'completed',
-      cursor: 1,
-      cancelable: false,
-      created_at: '2026-08-05T08:00:00Z',
-      updated_at: '2026-08-05T08:00:02Z',
-      terminal_at: '2026-08-05T08:00:02Z',
-    });
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
+    pluginLifecycleMocks.getInspectedInstall.mockResolvedValue({ ...receipt, mutation_outcome: 'committed', execution: { ...receipt.execution, status: 'completed' } });
+    const host = document.createElement('div'); document.body.appendChild(host);
     const { EnvAppShell } = await import('./EnvAppShell');
     const dispose = render(() => <EnvAppShell />, host);
-
     try {
-      await flushAsync();
-      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
-      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
-
-      const viewController = new AbortController();
-      const install = pluginCenterViewState.lastProps.onCommand({
-        type: 'install',
-        pluginID: examplePluginCatalog.pluginID,
-        source: 'official_catalog',
-        pluginInstanceID: examplePluginCatalog.pluginInstanceID,
-        releaseRef: examplePluginCatalog.installPreview.release_ref,
-        releaseIdentityDigest: examplePluginCatalog.installPreview.release_identity_digest,
-        manifestSHA256: examplePluginCatalog.installPreview.manifest_sha256,
-        contractSetSHA256: examplePluginCatalog.installPreview.contract_set_sha256,
-        summarySHA256: examplePluginCatalog.installPreview.summary_sha256,
-      }, viewController.signal);
-      await flushUntil(() => pluginLifecycleMocks.installOfficialRelease.mock.calls.length === 1);
-
-      expect(pluginCenterViewState.lastProps.installOperations[0]).toMatchObject({
-        pluginInstanceID: examplePluginCatalog.pluginInstanceID,
-        observation: 'watching',
-        execution: { execution_id: 'release_install_shell_test', status: 'running' },
-        progress: [],
-      });
+      await flushUntil(() => pluginCenterViewState.lastProps?.installOperations?.length === 1, 40);
+      expect(pluginCenterViewState.lastProps.installOperations[0]).toMatchObject({ pluginInstanceID: examplePluginCatalog.pluginInstanceID, observation: 'watching' });
       pluginCenterViewState.lastProps.onClose();
-      viewController.abort('Plugin Center disposed');
       expect(observationSignal?.aborted).toBe(false);
-
       currentProjection = examplePluginProjection('enabled');
       finishObservation();
-      await expect(install).resolves.toBeUndefined();
-      await flushUntil(() => pluginCenterViewState.lastProps.installOperations.length === 0, 40);
-      expect(pluginCenterViewState.lastProps.installOperations).toEqual([]);
-    } finally {
-      dispose();
-    }
+      await vi.waitFor(() => expect(pluginCenterViewState.lastProps.installOperations).toHaveLength(0));
+      expect(pluginLifecycleMocks.installExternalPackage).not.toHaveBeenCalled();
+      expect(pluginLifecycleMocks.execute).not.toHaveBeenCalled();
+    } finally { dispose(); }
   }, 10000);
 
   it('keeps a successful management mutation ahead of a queued stale Workbench open', async () => {
@@ -4613,14 +4531,12 @@ describe('EnvAppShell environment entry affordances', () => {
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-    const updateFailed = new Error('external update failed');
+    const updateFailed = new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', 'external update failed', {}, 'not_committed');
     pluginLifecycleMocks.installExternalPackage.mockImplementationOnce(async (
       _inspection: any,
       _options: any,
-      onProgress?: (result: any) => void,
+      _automatic?: boolean,
     ) => {
-      onProgress?.({ status: 'in_progress' });
-      onProgress?.({ status: 'failed' });
       throw updateFailed;
     });
 
@@ -4678,9 +4594,8 @@ describe('EnvAppShell environment entry affordances', () => {
     pluginLifecycleMocks.installExternalPackage.mockImplementationOnce((
       _inspection: any,
       _options: any,
-      onProgress?: (result: any) => void,
+      _automatic?: boolean,
     ) => {
-      onProgress?.({ status: 'in_progress' });
       return new Promise((_resolve, reject) => { rejectCommit = reject; });
     });
 

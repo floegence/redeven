@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 function inspection(
-  signatureState: ExternalPluginInspection['signature_assessment']['state'] = 'absent',
+  mode: 'manual' | 'automatic' = 'manual',
   approvalState: ExternalPluginInspection['execution_approval']['state'] = 'pending',
 ): ExternalPluginInspection {
   return {
@@ -64,16 +64,6 @@ function inspection(
       package_sha256: packageHash,
       manifest_sha256: manifestHash,
       entries_sha256: entriesHash,
-    },
-    signature_assessment: {
-      state: signatureState,
-      reason_codes: [],
-      assessed_hashes: {
-        package_sha256: packageHash,
-        manifest_sha256: manifestHash,
-        entries_sha256: entriesHash,
-      },
-      assessed_at: '2026-07-24T10:00:00Z',
     },
     source_provenance: {
       kind: 'package_url',
@@ -89,7 +79,7 @@ function inspection(
       assessed_at: '2026-07-24T10:00:00Z',
     },
     update_eligibility: {
-      state: signatureState === 'verified' ? 'automatic_eligible' : 'manual_only',
+      state: mode === 'automatic' ? 'automatic_eligible' : 'manual_only',
       reason_codes: [],
       assessed_at: '2026-07-24T10:00:00Z',
     },
@@ -120,16 +110,11 @@ function committedResult(source: ExternalPluginInspection): ExternalPluginCommit
       package_hash: packageHash,
       manifest_hash: manifestHash,
       entries_hash: entriesHash,
-      trust_state: 'unsigned_local',
-      trust_assessment: {
-        trust_state: 'unsigned_local',
-        verified_hashes: source.inspected_hashes,
-      },
-      signature_assessment: source.signature_assessment,
       source_provenance: source.source_provenance,
       execution_approval: { ...source.execution_approval, state: 'user_approved' },
       update_eligibility: source.update_eligibility,
       security_summary: source.security_summary,
+      automatic_updates: false,
       enable_state: 'enabled',
       policy_revision: 1,
       management_revision: 1,
@@ -153,11 +138,7 @@ function committedResult(source: ExternalPluginInspection): ExternalPluginCommit
       installed_at: '2026-07-24T10:01:00Z',
       updated_at: '2026-07-24T10:01:00Z',
     },
-    signature_assessment: source.signature_assessment,
-    source_provenance: source.source_provenance,
-    execution_approval: { ...source.execution_approval, state: 'user_approved' },
-    update_eligibility: source.update_eligibility,
-    security_summary: source.security_summary,
+    operation: { request_id: 'request-1', inspection_id: source.inspection_id, package_sha256: packageHash, plugin_id: source.plugin_id, version: source.version, mutation_outcome: 'committed', execution: { execution_id: 'execution-1', plugin_instance_id: source.intent.plugin_instance_id, kind: 'operation', status: 'completed', cancelable: false, cursor: 0, created_at: '2026-11-05T00:00:00Z', updated_at: '2026-11-05T00:00:00Z' } },
   };
 }
 
@@ -177,10 +158,9 @@ function externalUpdateItem(
     version: '1.2.3',
     managementRevision: 9,
     lifecycleState: 'disabled',
-    trustBadge: 'unsigned',
+    sourceKind: 'community',
     pinned: false,
     externalPackage: {
-      signatureAssessment: source.signature_assessment,
       sourceProvenance: {
         kind: 'package_upload',
         upload_id: 'upload_previous_12345678',
@@ -234,18 +214,17 @@ async function flush(): Promise<void> {
 }
 
 describe('ExternalPluginInstallDialog', () => {
-  it('rejects inspected bytes that differ from the selected community release', async () => {
-    const catalog = { ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!, sourceKind: 'reviewed-third-party' as const };
+  it('passes the exact market source and digests to platform inspection', async () => {
+    const catalog = { ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!, sourceKind: 'community' as const };
     const item = { inventoryKey: 'catalog:test', pluginID: catalog.pluginID, displayName: catalog.displayName, officialCatalog: catalog } as PluginInventoryItem;
     const onCommit = vi.fn();
-    renderDialog({ updateItem: item, sourcePreset: { sourceKind: 'package_url', url: 'https://plugins.example.com/toolbox.redevplugin' }, onCommit });
-    button('Review package').click();
+    const props = renderDialog({ updateItem: item, sourcePreset: catalog.distribution.installSource, onCommit });
     await flush();
-    expect(document.querySelector('[data-external-plugin-identity]')).toBeNull();
+    expect(props.onInspect).toHaveBeenCalledWith(expect.objectContaining({ expected: expect.objectContaining({ release: expect.objectContaining({ plugin_id: 'com.example.metrics' }) }) }), expect.any(AbortSignal));
     expect(onCommit).not.toHaveBeenCalled();
   });
   it('leads with verified author presentation and keeps technical review behind disclosure', async () => {
-    const inspected = inspection('verified');
+    const inspected = inspection('automatic');
     inspected.presentation = { default_locale: 'en-US', locales: [{ locale: 'en-US', plugin_name: 'Weather', publisher_name: 'Redeven Official', summary: 'Local weather', description: [], highlights: [], keywords: [], surfaces: [], settings: [] }] };
     inspected.security_summary.network = [{ connector_id: 'forecast', configurable: false, surface_access: [], transport: 'http', scope: 'user', destinations: ['https://api.open-meteo.com'], auth_declared: false, tls_declared: true, method_access: [] }];
     renderDialog({ onInspect: vi.fn(async () => inspected) });
@@ -264,7 +243,7 @@ describe('ExternalPluginInstallDialog', () => {
     expect(document.querySelector('[data-external-plugin-confirmation] span span')).toBeNull();
   });
   it('keeps internal worker details out of the decision while exposing dangerous and unknown effects', async () => {
-    const inspected = inspection('verified');
+    const inspected = inspection('automatic');
     const workerMethod = (name: string, effect: 'delete' | 'read', dangerous: boolean) => ({
       method: name, route: { kind: 'worker' as const, worker_id: 'editor' }, effect,
       dangerous, execution: 'sync' as const, preflight_only: false, required_permissions: [],
@@ -289,7 +268,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('omits an empty access section for ordinary application methods', async () => {
-    const inspected = inspection('verified');
+    const inspected = inspection('automatic');
     inspected.security_summary.methods = [{
       method: 'editor.selection.read', route: { kind: 'worker', worker_id: 'editor' }, effect: 'read',
       dangerous: false, execution: 'sync', preflight_only: false, required_permissions: [],
@@ -306,7 +285,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('renders author presentation with required empty arrays', async () => {
-    const inspected = inspection('verified');
+    const inspected = inspection('automatic');
     inspected.presentation = { default_locale: 'en-US', locales: [{ locale: 'en-US', plugin_name: 'Weather', publisher_name: 'Redeven Official', summary: 'Weather', description: ['Weather'], highlights: [], keywords: ['Weather'], surfaces: [], settings: [] }] };
     renderDialog({ onInspect: vi.fn(async () => inspected) });
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/weather.redevplugin');
@@ -317,7 +296,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('groups concrete network destinations under one access title', async () => {
-    const inspected = inspection('verified');
+    const inspected = inspection('automatic');
     inspected.security_summary.network = ['api.example.com:443', 'search.example.com:443'].map((destination, index) => ({
       connector_id: 'connector-' + index, configurable: false, surface_access: [],
       transport: 'http' as const, scope: 'user' as const, destinations: [destination],
@@ -334,8 +313,8 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('marks storage, process and background changes on their visible access rows', async () => {
-    const previous = inspection('verified');
-    const inspected = inspection('verified');
+    const previous = inspection('automatic');
+    const inspected = inspection('automatic');
     inspected.security_summary.storage = [{
       store_id: 'settings', kind: 'kv', scope: 'user', schema_version: 1,
       quota_bytes: 1024, method_access: [],
@@ -354,7 +333,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('reviews settings-only Surface access before installation', async () => {
-    const inspected = inspection('verified');
+    const inspected = inspection('automatic');
     const surface: PluginExternalPackageSecuritySummary['surfaces'][number] = { surface_id: 'preferences.view', kind: 'view' as const, intent: 'primary', label: 'Preferences', entry: 'ui/index.html', settings: ['get', 'patch'] };
     inspected.security_summary.surfaces = [surface];
     const props = renderDialog({ onInspect: vi.fn(async () => inspected) });
@@ -367,8 +346,8 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('marks Surface data access changes on the saved-data row', async () => {
-    const previous = inspection('verified');
-    const inspected = inspection('verified');
+    const previous = inspection('automatic');
+    const inspected = inspection('automatic');
     const surface: PluginExternalPackageSecuritySummary['surfaces'][number] = { surface_id: 'notes.view', kind: 'view' as const, intent: 'primary', label: 'Notes', entry: 'ui/index.html', storage: [{ store_id: 'notes', operations: ['get'] }] };
     const store = { store_id: 'notes', kind: 'kv' as const, scope: 'user' as const, schema_version: 1, quota_bytes: 1024, method_access: [] };
     previous.security_summary.storage = inspected.security_summary.storage = [store];
@@ -478,9 +457,9 @@ describe('ExternalPluginInstallDialog', () => {
       'Use a valid, compatible ReDevPlugin package',
     ],
     [
-      new PluginPlatformRequestError('PLUGIN_RELEASE_REF_POLICY_DENIED', 'This release source is blocked by policy'),
-      'PLUGIN_RELEASE_REF_POLICY_DENIED',
-      'conflicts with host trust policy',
+      new PluginPlatformRequestError('PLUGIN_ACTION_DENIED', 'This release source is blocked by policy'),
+      'PLUGIN_ACTION_DENIED',
+      'blocked by environment policy',
     ],
     [
       new PluginTransportError('Plugin package request failed', new TypeError('offline')),
@@ -534,10 +513,10 @@ describe('ExternalPluginInstallDialog', () => {
     }, expect.any(AbortSignal));
   });
 
-  it.each(['absent', 'unknown_signer', 'unavailable'] as const)(
-    'requires digest confirmation before committing an install with %s signature status',
-    async (signatureState) => {
-      const inspected = inspection(signatureState);
+  it.each(['manual', 'automatic'] as const)(
+    'requires exact review before committing an install in %s update mode',
+    async (mode) => {
+      const inspected = inspection(mode);
       const props = renderDialog({
         onInspect: vi.fn(async () => inspected),
         onCommit: vi.fn(async () => committedResult(inspected)),
@@ -564,26 +543,26 @@ describe('ExternalPluginInstallDialog', () => {
   );
 
   it('explains why exact-package confirmation is required without exposing approval jargon', async () => {
-    const inspected = inspection('absent', 'pending');
-    inspected.execution_approval.reason_codes = ['unsigned_package_requires_user_confirmation'];
+    const inspected = inspection('manual', 'pending');
+    inspected.execution_approval.reason_codes = ['explicit_user_confirmation'];
     renderDialog({ onInspect: vi.fn(async () => inspected) });
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
 
     button('Review package').click();
     await flush();
 
-    const trustReview = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    const trustReview = document.querySelector<HTMLElement>('[data-external-plugin-review]')!;
     const confirmation = document.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
-    expect(controlText(trustReview)).toContain('Confirm this package source');
-    expect(controlText(trustReview)).toContain('This package is unsigned');
+    expect(controlText(trustReview)).toContain('Declared access');
+    expect(controlText(trustReview)).not.toContain('signature');
     expect(controlText(trustReview)).not.toContain('Update mode');
     expect(controlText(trustReview)).not.toContain('Waiting for your approval');
     expect(controlText(trustReview)).not.toContain('execution_approval=pending');
-    expect(controlText(trustReview)).not.toContain('unsigned_package_requires_user_confirmation');
+    expect(controlText(trustReview)).not.toContain('explicit_user_confirmation');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     expect(report.open).toBe(false);
     expect(controlText(report)).toContain('execution_approval=pending');
-    expect(controlText(report)).toContain('unsigned_package_requires_user_confirmation');
+    expect(controlText(report)).toContain('explicit_user_confirmation');
     expect(controlText(report)).toContain(inspected.inspection_id);
     expect(controlText(report)).toContain(inspected.expires_at);
     expect(controlText(report)).toContain('action=install');
@@ -598,24 +577,10 @@ describe('ExternalPluginInstallDialog', () => {
     expect(document.activeElement).toBe(inputWithPlaceholder('https://example.com/plugin.redevplugin'));
   });
 
-  it('keeps verified trust distinct from pending user approval', async () => {
-    const inspected = inspection('verified', 'pending');
-    renderDialog({ onInspect: vi.fn(async () => inspected) });
-    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
-    button('Review package').click();
-    await flush();
-
-    const decision = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
-    expect(controlText(decision)).toContain('Publisher identity verified');
-    expect(controlText(decision)).not.toContain('Review the permissions');
-    expect(controlText(decision)).not.toContain('Waiting for your approval');
-    expect(button('Install plugin').disabled).toBe(true);
-  });
-
   it.each(['pending', 'user_approved', 'policy_approved'] as const)(
     'requires exact-package confirmation when execution approval is %s',
     async (approvalState) => {
-      const inspected = inspection('verified', approvalState);
+      const inspected = inspection('automatic', approvalState);
       renderDialog({ onInspect: vi.fn(async () => inspected) });
       typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
       button('Review package').click();
@@ -629,7 +594,7 @@ describe('ExternalPluginInstallDialog', () => {
   );
 
   it('presents one concise access-impact summary and keeps raw methods in the report', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     const method = (name: string, effect: 'read' | 'write' | 'execute' | 'delete' | 'admin', dangerous = false, preflightOnly = false) => ({
       method: name,
       route: { kind: 'capability' as const, binding_id: 'workspace-v1', target_method: name },
@@ -671,7 +636,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('distinguishes no declarations from standard declarations without claiming safety', async () => {
-    renderDialog({ onInspect: vi.fn(async () => inspection('absent')) });
+    renderDialog({ onInspect: vi.fn(async () => inspection('manual')) });
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/empty.redevplugin');
     button('Review package').click();
     await flush();
@@ -680,7 +645,7 @@ describe('ExternalPluginInstallDialog', () => {
 
     dispose?.();
     document.body.innerHTML = '';
-    const standard = inspection('absent');
+    const standard = inspection('manual');
     standard.security_summary.permissions = [{ permission_id: 'workspace.read', methods: ['workspace.list'], required: true, effects: ['read'] }];
     renderDialog({ onInspect: vi.fn(async () => standard) });
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/standard.redevplugin');
@@ -695,9 +660,9 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('identifies standard added access by category before the full report', async () => {
-    const previous = inspection('absent');
+    const previous = inspection('manual');
     const updateItem = externalUpdateItem(previous);
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     inspected.intent = {
       action: 'update',
       plugin_instance_id: updateItem.pluginInstanceID,
@@ -722,7 +687,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('discloses every security declaration and highlights update deltas before confirmation', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     inspected.source_provenance = {
       kind: 'package_url',
       source_origin: 'https://plugins.example.com',
@@ -811,10 +776,9 @@ describe('ExternalPluginInstallDialog', () => {
       version: '1.2.2',
       managementRevision: 9,
       lifecycleState: 'disabled',
-      trustBadge: 'unsigned',
+      sourceKind: 'community',
       pinned: false,
       externalPackage: {
-        signatureAssessment: inspected.signature_assessment,
         sourceProvenance: inspected.source_provenance,
         executionApproval: inspected.execution_approval,
         updateEligibility: inspected.update_eligibility,
@@ -868,7 +832,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('explains declared capability purposes before collapsed technical evidence', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     inspected.security_summary = {
       ...inspected.security_summary,
       permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'], required: true, effects: ['read'] }],
@@ -907,11 +871,9 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it.each([
-    ['invalid', 'pending'],
-    ['revoked', 'pending'],
-    ['absent', 'policy_blocked'],
-  ] as const)('blocks commit for signature %s and approval %s', async (signatureState, approvalState) => {
-    const inspected = inspection(signatureState, approvalState);
+    ['manual', 'policy_blocked'],
+  ] as const)('blocks commit only for %s policy approval %s', async (mode, approvalState) => {
+    const inspected = inspection(mode, approvalState);
     if (approvalState === 'policy_blocked') {
       inspected.execution_approval.reason_codes = ['enterprise_source_policy'];
     }
@@ -935,7 +897,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('keeps the exact inspection and offers reconciliation after an unknown commit outcome', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     const committed = committedResult(inspected);
     const onCommit = vi.fn()
       .mockRejectedValueOnce(new Error('query transport unavailable'))
@@ -961,7 +923,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('distinguishes a confirmed not-committed failure from an unknown outcome', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     const onCommit = vi.fn(async () => {
       throw new PluginTransportError('request was not sent', new TypeError('offline'), 'not_committed');
     });
@@ -980,7 +942,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('cannot close during commit and refreshes inventory after a successful result', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     let resolveCommit!: (result: ExternalPluginCommitResult) => void;
     const onCommit = vi.fn(() => new Promise<ExternalPluginCommitResult>((resolve) => { resolveCommit = resolve; }));
     const onOpenChange = vi.fn();
@@ -1008,7 +970,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('keeps a committed install terminal when the inventory refresh callback fails', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     const committed = committedResult(inspected);
     const onCommit = vi.fn(async () => committed);
     const onCommitted = vi.fn()
@@ -1037,7 +999,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('requires a fresh inspection after the current inspection reaches failed terminal state', async () => {
-    const inspected = inspection('absent');
+    const inspected = inspection('manual');
     const onCommit = vi.fn(async () => {
       throw new ExternalPackageInspectionTerminalError('inspect again');
     });
@@ -1058,10 +1020,9 @@ describe('ExternalPluginInstallDialog', () => {
 
   it('starts an upload update from a fresh file selection and inspection bound to the installed revision', async () => {
     const updateItem = externalUpdateItem();
-    const inspectionBase = inspection('verified', 'user_approved');
-    inspectionBase.signature_assessment.algorithm = 'ed25519';
-    inspectionBase.signature_assessment.key_id = 'example-signing-key';
-    inspectionBase.signature_assessment.assessment_epoch = '42';
+    const inspectionBase = inspection('automatic', 'user_approved');
+
+
     inspectionBase.execution_approval.approved_at = '2026-07-24T10:01:00Z';
     const nextInspection = {
       ...inspectionBase,
@@ -1094,6 +1055,7 @@ describe('ExternalPluginInstallDialog', () => {
         action: 'update',
         plugin_instance_id: 'plugini_external_12345678',
         expected_management_revision: 9,
+        allow_source_change: false,
       },
     }, expect.any(AbortSignal));
     expect(controlText(document.body)).toContain(confirmationDigest);
@@ -1105,9 +1067,6 @@ describe('ExternalPluginInstallDialog', () => {
     expect(controlText(hashes)).toContain(packageHash);
     expect(controlText(hashes)).toContain(manifestHash);
     expect(controlText(hashes)).toContain(entriesHash);
-    expect(controlText(report)).toContain('algorithm=ed25519');
-    expect(controlText(report)).toContain('key_id=example-signing-key');
-    expect(controlText(report)).toContain('assessment_epoch=42');
     expect(controlText(report)).toContain('approved_at=2026-07-24T10:01:00Z');
   });
 
@@ -1194,7 +1153,7 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     expect(controlText(document.querySelector('[data-external-plugin-identity]'))).toContain('Same version, different package · v1.2.3');
-    expect(button('Replace with inspected package').disabled).toBe(true);
+    expect([...document.querySelectorAll('button')].some((element) => controlText(element) === 'Replace with inspected package')).toBe(false);
     expect(controlText(document.body)).not.toContain('latest version');
   });
 
@@ -1212,7 +1171,7 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     expect(controlText(document.querySelector('[data-external-plugin-identity]'))).toContain('Same version, package match unknown · v1.2.3');
-    expect(button('Install inspected package').disabled).toBe(true);
+    expect([...document.querySelectorAll('button')].some((element) => controlText(element) === 'Install inspected package')).toBe(false);
   });
 
   it('retains Host-managed enabled state and existing grants during update', async () => {
@@ -1225,7 +1184,7 @@ describe('ExternalPluginInstallDialog', () => {
       expected_management_revision: updateItem.managementRevision,
     };
     const result = committedResult(inspected);
-    result.plugin.enable_state = 'enabled';
+    result.plugin!.enable_state = 'enabled';
     renderDialog({ updateItem, onInspect: vi.fn(async () => inspected), onCommit: vi.fn(async () => result) });
     const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
     Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['update'], 'toolbox-1.2.4.redevplugin')] });
@@ -1259,10 +1218,9 @@ describe('ExternalPluginInstallDialog', () => {
       version: '1.2.3',
       managementRevision: 9,
       lifecycleState: 'disabled',
-      trustBadge: 'unsigned',
+      sourceKind: 'community',
       pinned: false,
       externalPackage: {
-        signatureAssessment: inspected.signature_assessment,
         sourceProvenance: {
           kind: 'github_repository' as const,
           repository_id: '123',
@@ -1310,10 +1268,9 @@ describe('ExternalPluginInstallDialog', () => {
       version: '1.2.3',
       managementRevision: 9,
       lifecycleState: 'disabled',
-      trustBadge: 'unsigned',
+      sourceKind: 'community',
       pinned: false,
       externalPackage: {
-        signatureAssessment: inspected.signature_assessment,
         sourceProvenance: {
           kind: 'package_url' as const,
           source_origin: 'https://plugins.example.com',

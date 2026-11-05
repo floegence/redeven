@@ -1,3 +1,5 @@
+import compareSemVer from 'semver/functions/compare.js';
+import validSemVer from 'semver/functions/valid.js';
 import { backgroundScheduleLabel } from './PluginBackgroundStatus';
 import { StableText, Button, Input, Tabs } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
@@ -51,6 +53,7 @@ type ExternalPluginInstallDialogProps = {
   sourcePreset?: ExternalPluginSourcePreset;
   onOpenChange: (open: boolean) => void;
   onInspect: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
+  onListRepository?: (url: string, signal: AbortSignal) => Promise<readonly { plugin_id: string }[]>;
   onCommit: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onCommitted: (result: ExternalPluginCommitResult) => Promise<unknown> | unknown;
 };
@@ -72,6 +75,9 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   const [url, setURL] = createSignal('');
   const [tag, setTag] = createSignal('');
   const [file, setFile] = createSignal<File | null>(null);
+  const [repositoryPlugins, setRepositoryPlugins] = createSignal<readonly { plugin_id: string }[]>([]);
+  const [selectedPluginID, setSelectedPluginID] = createSignal('');
+  const [allowSourceChange, setAllowSourceChange] = createSignal(false);
   const [inspection, setInspection] = createSignal<ExternalPluginInspection | null>(null);
   const [committed, setCommitted] = createSignal<ExternalPluginCommitResult | null>(null);
   const [confirmed, setConfirmed] = createSignal(false);
@@ -109,6 +115,9 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     setURL(preset?.url ?? (provenance?.kind === 'github_repository' ? provenance.repository_url : ''));
     setTag(preset?.sourceKind === 'github_repository' ? preset.tag ?? '' : '');
     setFile(null);
+    setRepositoryPlugins([]);
+    setSelectedPluginID(preset?.sourceKind === 'github_repository' ? preset.pluginID ?? '' : '');
+    setAllowSourceChange(false);
     setInspection(null);
     setCommitted(null);
     setConfirmed(false);
@@ -117,6 +126,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     setCommitNeedsReconciliation(false);
     setRefreshPending(false);
     setRefreshFailed(false);
+    if (preset?.sourceKind === 'github_repository' && preset.expected) queueMicrotask(() => { void inspect(); });
   });
 
   onCleanup(() => operation?.abort('External plugin dialog disposed'));
@@ -134,27 +144,33 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     setPending(true);
     setError(null);
     try {
+      let pluginID = selectedPluginID();
+      if (sourceKind() === 'github_repository' && !pluginID && props.onListRepository) {
+        const plugins = await props.onListRepository(url().trim(), controller.signal);
+        if (controller.signal.aborted) return;
+        setRepositoryPlugins(plugins);
+        if (plugins.length !== 1) {
+          if (plugins.length === 0) setError({ summary: i18n.t('uiCopy.plugin.distribution.noRepositoryPlugins') });
+          return;
+        }
+        pluginID = plugins[0]!.plugin_id;
+        setSelectedPluginID(pluginID);
+      }
       const intent = isUpdate()
         ? {
             action: 'update' as const,
             plugin_instance_id: props.updateItem!.pluginInstanceID!,
             expected_management_revision: props.updateItem!.managementRevision!,
+            allow_source_change: allowSourceChange(),
           }
         : { action: 'install' as const };
       const request: ExternalPluginInspectionRequest = sourceKind() === 'package_upload'
         ? { sourceKind: 'package_upload', file: file()!, intent }
         : sourceKind() === 'github_repository'
-          ? { sourceKind: 'github_repository', url: url().trim(), tag: tag().trim() || undefined, intent }
+          ? { ...(props.sourcePreset?.sourceKind === 'github_repository' && props.sourcePreset.url === url().trim() && (props.sourcePreset.tag ?? '') === tag().trim() && props.sourcePreset.pluginID === pluginID ? props.sourcePreset : {}), sourceKind: 'github_repository', url: url().trim(), tag: tag().trim() || undefined, pluginID: pluginID || undefined, intent }
           : { sourceKind: 'package_url', url: url().trim(), intent };
       const next = await props.onInspect(request, controller.signal);
-      const expected = props.updateItem?.officialCatalog?.sourceKind === 'reviewed-third-party'
-        ? props.updateItem.officialCatalog.distribution.releaseRef : undefined;
-      if (expected && (next.plugin_id !== expected.plugin_id || next.publisher_id !== expected.publisher_id || next.version !== expected.version
-        || next.inspected_hashes.package_sha256 !== expected.expected_hashes.package_sha256
-        || next.inspected_hashes.manifest_sha256 !== expected.expected_hashes.manifest_sha256
-        || next.inspected_hashes.entries_sha256 !== expected.expected_hashes.entries_sha256)) {
-        throw new Error('Inspected package does not match the selected market release');
-      }
+      if (controller.signal.aborted) return;
       setInspection(next);
       setConfirmed(false);
       setCommitNeedsReconciliation(false);
@@ -172,7 +188,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
 
   const commit = async () => {
     const current = inspection();
-    if (!current || !confirmed() || pending()) return;
+    if (!current || !confirmed() || pending() || reviewBlocked()) return;
     const controller = new AbortController();
     operation?.abort('External package commit superseded');
     operation = controller;
@@ -182,6 +198,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     setCommitNeedsReconciliation(false);
     try {
       const result = await props.onCommit(current, controller.signal);
+      if (controller.signal.aborted) return;
       setCommitted(result);
       setStage('complete');
       await refreshCommitted(result);
@@ -233,7 +250,13 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
 
   const reviewBlocked = createMemo(() => {
     const current = inspection();
-    return current ? inspectionBlocked(current) : false;
+    if (!current) return false;
+    if (inspectionBlocked(current)) return true;
+    const installed = props.updateItem;
+    if (!installed?.pluginInstanceID) return false;
+    if (!installed.version || validSemVer(installed.version) !== installed.version || validSemVer(current.version) !== current.version) return true;
+    const comparison = compareSemVer(current.version, installed.version);
+    return comparison < 0 || (comparison === 0 && installed.externalPackage?.sourceProvenance.package_sha256 !== current.inspected_hashes.package_sha256);
   });
 
   const returnToSource = () => {
@@ -348,11 +371,21 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
             tag={tag()}
             file={file()}
             pending={pending()}
-            onSourceKind={setSourceKind}
-            onURL={setURL}
+            onSourceKind={(value) => { setSourceKind(value); setRepositoryPlugins([]); setSelectedPluginID(''); setAllowSourceChange(false); }}
+            onURL={(value) => { setURL(value); setRepositoryPlugins([]); setSelectedPluginID(''); }}
             onTag={setTag}
             onFile={setFile}
           />
+          <Show when={repositoryPlugins().length > 1}>
+            <label class="mt-4 block space-y-2 text-sm">
+              <span>{i18n.t('uiCopy.plugin.distribution.choosePlugin')}</span>
+              <select class="h-11 w-full rounded-md border bg-background px-3" value={selectedPluginID()} disabled={pending()} onChange={(event) => setSelectedPluginID(event.currentTarget.value)}>
+                <option value="">{i18n.t('uiCopy.plugin.distribution.choosePlugin')}</option>
+                <For each={repositoryPlugins()}>{(plugin) => <option value={plugin.plugin_id}>{plugin.plugin_id}</option>}</For>
+              </select>
+            </label>
+          </Show>
+          <Show when={isUpdate()}><label class="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={allowSourceChange()} onChange={(event) => setAllowSourceChange(event.currentTarget.checked)} /><span>{i18n.t('uiCopy.plugin.distribution.allowSourceChange')}</span></label></Show>
         </Show>
         <Show when={stage() === 'review' && inspection()}>
           {(current) => (
@@ -377,14 +410,14 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
                 <div>
                   <div class="font-semibold">{i18n.t(
                     reviewOperationCompletionKey(reviewOperation()),
-                    { plugin: result().plugin.manifest.plugin.display_name },
+                    { plugin: result().plugin?.manifest.plugin.display_name ?? (inspection()!.presentation ? resolveAuthorPresentation(inspection()!.presentation!, i18n.locale()).plugin_name : props.updateItem?.displayName ?? inspection()!.plugin_id) },
                   )}</div>
-                  <div class="mt-1 text-[length:var(--floe-type-body)] text-muted-foreground">{result().plugin.publisher_id} · v{result().plugin.version}</div>
+                  <div class="mt-1 text-[length:var(--floe-type-body)] text-muted-foreground">{inspection()!.publisher_id} · v{result().operation.version}</div>
                 </div>
               </div>
               <PostInstallFacts
-                updateEligibility={result().update_eligibility.state}
-                committedEnableState={result().plugin.enable_state}
+                updateEligibility={result().plugin?.update_eligibility?.state ?? inspection()!.update_eligibility.state}
+                committedEnableState={result().plugin?.enable_state}
               />
             </div>
           )}
@@ -463,7 +496,6 @@ function inspectionRecovery(
     case 'package_invalid':
     case 'package_too_large':
     case 'package_path_forbidden': return i18n.t('uiCopy.plugin.external.inspectPackageRecovery');
-    case 'trust':
     case 'denied': return i18n.t('uiCopy.plugin.external.inspectPolicyRecovery');
     case 'runtime_unavailable':
     case 'runtime_incompatible': return i18n.t('uiCopy.plugin.external.inspectRuntimeRecovery');
@@ -653,16 +685,15 @@ function InspectionReview(props: {
     ? resolveAuthorPresentation(props.inspection.presentation, i18n.locale())
     : undefined);
   const summary = () => props.inspection.security_summary;
-  const signature = () => props.inspection.signature_assessment.state;
   const blocked = () => inspectionBlocked(props.inspection);
   const declarations = createMemo(() => securityDeclarations(summary(), props.previousSummary));
   const changes = createMemo(() => declarations().filter((declaration) => Boolean(declaration.change)));
   const reportCategories = createMemo(() => securityCategoryOrder.filter((category) => (
     declarations().some((declaration) => declaration.category === category)
   )));
-  const tone = () => blocked() ? 'blocked' : signature() === 'verified' ? 'positive' : 'caution';
-  const decisionTitle = () => trustDecisionTitle(props.inspection, i18n);
-  const decisionGuidance = () => trustDecisionGuidance(props.inspection, i18n);
+  const tone = (): 'blocked' | 'positive' => blocked() ? 'blocked' : 'positive';
+  const decisionTitle = () => inspectionDecisionTitle(props.inspection, i18n);
+  const decisionGuidance = () => inspectionDecisionGuidance(props.inspection, i18n);
   return (
     <div class="redeven-plugin-enter-up space-y-4 animate-in fade-in duration-200 motion-reduce:animate-none">
       <div data-external-plugin-identity class="flex items-start gap-3">
@@ -681,13 +712,12 @@ function InspectionReview(props: {
         </div>
       </div>
       <section
-        data-external-plugin-trust-review
+        data-external-plugin-review
         role={blocked() ? 'alert' : undefined}
         class={cn(
           'outline-none',
           tone() !== 'positive' && 'rounded-md border px-3 py-3',
           tone() === 'blocked' && 'border-destructive bg-destructive/5',
-          tone() === 'caution' && 'border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)]',
           tone() === 'positive' && 'text-muted-foreground',
         )}
       >
@@ -695,7 +725,6 @@ function InspectionReview(props: {
           <span class={cn(
             'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center',
             tone() === 'blocked' && 'border-destructive text-destructive',
-            tone() === 'caution' && 'border-[var(--redeven-status-warning-foreground)] text-[var(--redeven-status-warning-foreground)]',
             tone() === 'positive' && 'border-[var(--redeven-status-success-foreground)] text-[var(--redeven-status-success-foreground)]',
           )}>
             {blocked() ? <AlertTriangle class="h-4 w-4" /> : tone() === 'positive' ? <Check class="h-4 w-4" /> : <Shield class="h-4 w-4" />}
@@ -882,28 +911,8 @@ function InspectionReport(props: {
         <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" />
       </summary>
       <div class="redeven-plugin-disclosure-content space-y-5 pb-1 pt-3">
-        <section class="space-y-3" data-external-plugin-report-trust>
-          <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.trust')}</h3>
-          <ReportFact
-            primary={signatureReviewLabel(props.inspection.signature_assessment.state, i18n)}
-            technical={[
-              `signature=${props.inspection.signature_assessment.state}`,
-              ...(props.inspection.signature_assessment.algorithm !== undefined
-                ? [`algorithm=${props.inspection.signature_assessment.algorithm}`]
-                : []),
-              ...(props.inspection.signature_assessment.key_id !== undefined
-                ? [`key_id=${props.inspection.signature_assessment.key_id}`]
-                : []),
-              `assessed_at=${props.inspection.signature_assessment.assessed_at}`,
-              ...(props.inspection.signature_assessment.assessment_epoch !== undefined
-                ? [`assessment_epoch=${props.inspection.signature_assessment.assessment_epoch}`]
-                : []),
-              `assessed_package_sha256=${props.inspection.signature_assessment.assessed_hashes.package_sha256}`,
-              `assessed_manifest_sha256=${props.inspection.signature_assessment.assessed_hashes.manifest_sha256}`,
-              `assessed_entries_sha256=${props.inspection.signature_assessment.assessed_hashes.entries_sha256}`,
-              ...props.inspection.signature_assessment.reason_codes,
-            ]}
-          />
+        <section class="space-y-3" data-external-plugin-report-authorization>
+          <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccess')}</h3>
           <ReportFact
             primary={executionApprovalReviewLabel(props.inspection.execution_approval.state, i18n)}
             technical={[
@@ -1099,9 +1108,7 @@ function AuditFact(props: { label: string; value: string }): JSX.Element {
 }
 
 function inspectionBlocked(inspection: ExternalPluginInspection): boolean {
-  return inspection.signature_assessment.state === 'invalid'
-    || inspection.signature_assessment.state === 'revoked'
-    || inspection.execution_approval.state === 'policy_blocked';
+  return inspection.execution_approval.state === 'policy_blocked';
 }
 
 function executionApprovalReviewLabel(
@@ -1118,7 +1125,7 @@ function executionApprovalReviewLabel(
 
 function PostInstallFacts(props: {
   updateEligibility: ExternalPluginInspection['update_eligibility']['state'];
-  committedEnableState?: ExternalPluginCommitResult['plugin']['enable_state'];
+  committedEnableState?: NonNullable<ExternalPluginCommitResult['plugin']>['enable_state'];
 }): JSX.Element {
   const i18n = useI18n();
   return <div class="space-y-1 text-xs text-muted-foreground" data-external-plugin-install-outcome>
@@ -1324,43 +1331,10 @@ function reviewOperationCompletionKey(
   }
 }
 
-function trustDecisionTitle(
-  inspection: ExternalPluginInspection,
-  i18n: ReturnType<typeof useI18n>,
-): string {
-  if (inspection.execution_approval.state === 'policy_blocked') return i18n.t('uiCopy.plugin.external.reviewPolicyBlocked');
-  if (inspection.signature_assessment.state === 'invalid' || inspection.signature_assessment.state === 'revoked') {
-    return i18n.t('uiCopy.plugin.external.reviewBlocked');
-  }
-  return inspection.signature_assessment.state === 'verified'
-    ? i18n.t('uiCopy.plugin.external.reviewIdentityVerified')
-    : i18n.t('uiCopy.plugin.external.reviewSourceConfirmation');
+function inspectionDecisionTitle(inspection: ExternalPluginInspection, i18n: ReturnType<typeof useI18n>): string {
+  return i18n.t(inspectionBlocked(inspection) ? 'uiCopy.plugin.external.reviewPolicyBlocked' : 'uiCopy.plugin.external.declaredAccess');
 }
 
-function trustDecisionGuidance(
-  inspection: ExternalPluginInspection,
-  i18n: ReturnType<typeof useI18n>,
-): string {
-  if (inspection.execution_approval.state === 'policy_blocked') return i18n.t('uiCopy.plugin.external.policyBlockedGuidance');
-  switch (inspection.signature_assessment.state) {
-    case 'verified': return i18n.t('uiCopy.plugin.external.signatureVerifiedGuidance');
-    case 'absent': return i18n.t('uiCopy.plugin.external.signatureAbsentGuidance');
-    case 'unknown_signer': return i18n.t('uiCopy.plugin.external.signatureUnknownGuidance');
-    case 'unavailable': return i18n.t('uiCopy.plugin.external.signatureUnavailableGuidance');
-    case 'invalid': return i18n.t('uiCopy.plugin.external.signatureInvalidGuidance');
-    case 'revoked': return i18n.t('uiCopy.plugin.external.signatureRevokedGuidance');
-    default: return i18n.t('uiCopy.plugin.external.signatureUnavailableGuidance');
-  }
-}
-
-function signatureReviewLabel(state: ExternalPluginInspection['signature_assessment']['state'], i18n: ReturnType<typeof useI18n>): string {
-  switch (state) {
-    case 'verified': return i18n.t('uiCopy.plugin.external.signatureVerified');
-    case 'absent': return i18n.t('uiCopy.plugin.external.signatureAbsent');
-    case 'unknown_signer': return i18n.t('uiCopy.plugin.external.signatureUnknown');
-    case 'unavailable': return i18n.t('uiCopy.plugin.external.signatureUnavailable');
-    case 'invalid': return i18n.t('uiCopy.plugin.external.signatureInvalid');
-    case 'revoked': return i18n.t('uiCopy.plugin.external.signatureRevoked');
-    default: return i18n.t('uiCopy.plugin.external.signatureUnavailable');
-  }
+function inspectionDecisionGuidance(inspection: ExternalPluginInspection, i18n: ReturnType<typeof useI18n>): string {
+  return i18n.t(inspectionBlocked(inspection) ? 'uiCopy.plugin.external.policyBlockedGuidance' : 'uiCopy.plugin.external.declaredAccessGuidance');
 }

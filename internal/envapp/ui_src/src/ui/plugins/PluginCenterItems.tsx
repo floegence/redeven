@@ -6,7 +6,7 @@ import { CheckCircle, Download, MoreHorizontal, Play, Refresh, RefreshIcon } fro
 import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, pluginPendingActionLabels, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
-import { PluginIcon, PluginProcessStatusBadge, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
+import { PluginIcon, PluginProcessStatusBadge, PluginStatusBadge, PluginSourceBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginPinButton } from './PluginPinButton';
 import { PluginInstallSummary } from './PluginInstallStatus';
@@ -35,7 +35,6 @@ export function PluginCenterItem(props: {
   onSetActivityPin?: (pinned: boolean) => void | Promise<void>;
   onRetryInstall?: () => void;
   onReviewInstall?: () => void;
-  onResolveRetainedData?: () => void;
 }): JSX.Element {
   return <PluginDirectoryCard {...props} />;
 }
@@ -72,9 +71,10 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
       case 'enable': return i18n.t('uiCopy.plugin.enable');
       case 'review_update': return i18n.t('uiCopy.plugin.reviewUpdate');
       case 'open': return i18n.t('common.actions.open');
+      case 'view_permissions': return i18n.t('uiCopy.plugin.reviewPermissions');
       case 'view_policy': return i18n.t('uiCopy.plugin.viewPolicyRestriction');
       case 'view_runtime': return i18n.t('uiCopy.plugin.viewRuntimeRequirement');
-      case 'view_trust': return i18n.t('uiCopy.plugin.viewTrustDetails');
+      case 'view_attention': return i18n.t('uiCopy.plugin.viewIssue');
       case 'view_diagnostics': return i18n.t('uiCopy.plugin.viewIssue');
       default: return i18n.t('uiCopy.plugin.viewDetails');
     }
@@ -134,7 +134,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           <span class="min-w-0 flex-1 pt-0.5">
             <span class="line-clamp-2 break-words text-[length:var(--floe-type-control)] font-medium leading-5" title={displayName()} lang={presentation()?.resolved_locale} dir="auto">{displayName()}</span>
             <span class="mt-1 flex flex-wrap gap-1">
-              <PluginTrustBadge item={props.item} />
+              <PluginSourceBadge item={props.item} />
             </span>
           </span>
         </span>
@@ -193,7 +193,6 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               onOpenDetails={props.onOpenDetails}
               onRetry={props.onRetryInstall}
               onReviewAgain={props.onReviewInstall}
-              onResolveRetainedData={props.onResolveRetainedData}
             />
           )}
         </Show>

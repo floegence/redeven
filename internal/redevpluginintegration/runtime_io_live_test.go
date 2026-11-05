@@ -23,6 +23,22 @@ import (
 	"github.com/floegence/redevplugin/v3/pkg/sessionctx"
 )
 
+// TestPublishedOfficialMindMapRunsThroughRedevenRuntime accepts only an explicit
+// downloaded release package and executes its storage-backed WASM method.
+func TestPublishedOfficialMindMapRunsThroughRedevenRuntime(t *testing.T) {
+	invoke := openLivePluginWorker(t, "REDEVEN_TEST_OFFICIAL_PLUGIN_PACKAGE", "mind-map.editor")
+	for range 2 {
+		result, err := invoke("mindmap.workspace.load", map[string]any{})
+		if err != nil {
+			t.Fatalf("load official workspace: %v", err)
+		}
+		data, ok := result.Data.(map[string]any)
+		if !ok || data["workspace_dsl"] == nil || data["revision"] == nil {
+			t.Fatalf("official worker returned an invalid workspace: %#v", result.Data)
+		}
+	}
+}
+
 func TestPublishedAuthorWorkerRunsThroughRedevenRuntime(t *testing.T) {
 	invoke := openLivePluginWorker(t, "REDEVEN_TEST_AUTHOR_PLUGIN_PACKAGE", "dev.redeven.qualification.worker.view")
 	result, err := invoke("worker.echo", map[string]any{"message": "published author workflow"})
@@ -283,31 +299,22 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string, captu
 	if err != nil {
 		t.Fatalf("inspect v9 package: %v", err)
 	}
-	installed, err := integration.host.InstallInspectedPackage(ctx, host.InstallInspectedPackageRequest{
-		InspectionID: inspection.InspectionID, ExpectedPackageSHA256: inspection.InspectedHashes.PackageSHA256,
-		Now: now.Add(time.Second),
-	})
-	if err != nil {
-		t.Fatalf("install v9 package: %v", err)
-	}
-	if installed.Plugin == nil {
-		t.Fatal("installed package has no plugin record")
-	}
+	installed := installInspectedTestPackage(t, ctx, integration.host, inspection.InspectionID, inspection.InspectedHashes.PackageSHA256)
 	// Installation and execution grants are independent platform decisions.
 	for _, permission := range inspection.SecuritySummary.Permissions {
 		granted, err := integration.host.GrantPermission(ctx, host.GrantPermissionRequest{
-			PluginInstanceID: installed.Plugin.PluginInstanceID, PermissionID: permission.PermissionID,
-			ExpectedPolicyRevision:     installed.Plugin.PolicyRevision,
-			ExpectedManagementRevision: installed.Plugin.ManagementRevision,
-			ExpectedRevokeEpoch:        installed.Plugin.RevokeEpoch,
+			PluginInstanceID: installed.PluginInstanceID, PermissionID: permission.PermissionID,
+			ExpectedPolicyRevision:     installed.PolicyRevision,
+			ExpectedManagementRevision: installed.ManagementRevision,
+			ExpectedRevokeEpoch:        installed.RevokeEpoch,
 			Now:                        now.Add(2 * time.Second),
 		})
 		if err != nil {
 			t.Fatalf("grant execution permission: %v", err)
 		}
-		installed.Plugin.PolicyRevision = granted.Revisions.PolicyRevision
-		installed.Plugin.ManagementRevision = granted.Revisions.ManagementRevision
-		installed.Plugin.RevokeEpoch = granted.Revisions.RevokeEpoch
+		installed.PolicyRevision = granted.Revisions.PolicyRevision
+		installed.ManagementRevision = granted.Revisions.ManagementRevision
+		installed.RevokeEpoch = granted.Revisions.RevokeEpoch
 	}
 	if surfaceID == "io.view" {
 		for _, connector := range []struct{ id, scheme, port, suffix string }{
@@ -318,7 +325,7 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string, captu
 			if os.Getenv("REDEVEN_TEST_PLUGIN_IO_FULL") == "1" {
 				port = os.Getenv(connector.port)
 			}
-			req := host.ReviewConnectionRequest{PluginInstanceID: installed.Plugin.PluginInstanceID, ConnectorID: "smoke." + connector.id, Destination: fmt.Sprintf("%s://127.0.0.1:%s%s", connector.scheme, port, connector.suffix), PrivatePrefixes: []string{"127.0.0.1/32"}}
+			req := host.ReviewConnectionRequest{PluginInstanceID: installed.PluginInstanceID, ConnectorID: "smoke." + connector.id, Destination: fmt.Sprintf("%s://127.0.0.1:%s%s", connector.scheme, port, connector.suffix), PrivatePrefixes: []string{"127.0.0.1/32"}}
 			if connector.id == "http" {
 				req.HTTPMethods = []string{"GET", "POST"}
 			}
@@ -326,12 +333,12 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string, captu
 			if err != nil {
 				t.Fatalf("review %s: %v", connector.id, err)
 			}
-			if _, err := integration.host.ApproveConnection(ctx, host.ConnectionReviewRequest{PluginInstanceID: installed.Plugin.PluginInstanceID, ReviewID: review.ReviewID}); err != nil {
+			if _, err := integration.host.ApproveConnection(ctx, host.ConnectionReviewRequest{PluginInstanceID: installed.PluginInstanceID, ReviewID: review.ReviewID}); err != nil {
 				t.Fatalf("approve %s: %v", connector.id, err)
 			}
 		}
 	}
-	if recovery, err := integration.host.RetryPluginRecovery(ctx, installed.Plugin.PluginInstanceID); err != nil {
+	if recovery, err := integration.host.RetryPluginRecovery(ctx, installed.PluginInstanceID); err != nil {
 		t.Fatalf("retry runtime recovery: %v", err)
 	} else if recovery.Status != host.PluginRecoveryReady {
 		t.Fatalf("runtime recovery = %+v", recovery)
@@ -340,8 +347,8 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string, captu
 	const surfaceInstanceID = "surface_runtime_io_live"
 	const bridgeChannelID = "bridge_runtime_io_live"
 	bootstrap, err := integration.host.OpenSurface(ctx, host.OpenSurfaceRequest{
-		PluginInstanceID:           installed.Plugin.PluginInstanceID,
-		ExpectedManagementRevision: installed.Plugin.ManagementRevision,
+		PluginInstanceID:           installed.PluginInstanceID,
+		ExpectedManagementRevision: installed.ManagementRevision,
 		SurfaceID:                  surfaceID, SurfaceInstanceID: surfaceInstanceID, Now: now.Add(2 * time.Second),
 	})
 	if err != nil {
@@ -369,18 +376,18 @@ func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string, captu
 	}
 
 	for _, callback := range capture {
-		callback(integration, ctx, installed.Plugin.PluginInstanceID, installed.Plugin.ManagementRevision)
+		callback(integration, ctx, installed.PluginInstanceID, installed.ManagementRevision)
 	}
 	return func(method string, params map[string]any) (host.CallMethodResult, error) {
 		callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		result, callErr := integration.host.CallPluginMethod(callCtx, host.CallMethodRequest{
-			PluginInstanceID:  installed.Plugin.PluginInstanceID,
+			PluginInstanceID:  installed.PluginInstanceID,
 			SurfaceInstanceID: surfaceInstanceID, BridgeChannelID: bridgeChannelID,
 			GatewayToken: gateway.GatewayToken, Method: method, Params: params,
 		})
 		if callErr != nil {
-			events, diagnosticErr := integration.host.ListDiagnosticEvents(ctx, host.ListDiagnosticEventsRequest{PluginInstanceID: installed.Plugin.PluginInstanceID, Limit: 50})
+			events, diagnosticErr := integration.host.ListDiagnosticEvents(ctx, host.ListDiagnosticEventsRequest{PluginInstanceID: installed.PluginInstanceID, Limit: 50})
 			t.Logf("invocation diagnostics: %+v error: %v", events, diagnosticErr)
 		}
 		return result, callErr

@@ -6,8 +6,6 @@ import type {
   PluginAuthorPresentation,
   PluginMarketDetail,
   PluginPresentationCategory,
-  PluginInventoryItem,
-  PluginOfficialInstallCommand,
 } from './pluginTypes';
 import { resolvePresentation } from '@floegence/redevplugin-contracts';
 
@@ -15,23 +13,6 @@ export function officialPluginCatalog(
   snapshot?: PluginMarketSnapshot,
 ): readonly OfficialPluginCatalogItem[] {
   return Object.freeze(snapshot ? projectMarketSnapshot(snapshot) : []);
-}
-
-export function buildOfficialInstallCommand(item: PluginInventoryItem): PluginOfficialInstallCommand | undefined {
-  const official = item.officialCatalog;
-  const preview = official?.installPreview;
-  if (!official || !preview) return undefined;
-  return {
-    type: 'install',
-    pluginID: item.pluginID,
-    source: 'official_catalog',
-    pluginInstanceID: official.pluginInstanceID,
-    releaseRef: preview.release_ref,
-    releaseIdentityDigest: preview.release_identity_digest,
-    manifestSHA256: preview.manifest_sha256,
-    contractSetSHA256: preview.contract_set_sha256,
-    summarySHA256: preview.summary_sha256,
-  };
 }
 
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
@@ -45,7 +26,7 @@ function normalizedInstallPreview(
     || !SHA256_DIGEST.test(preview.manifest_sha256)
     || !SHA256_DIGEST.test(preview.contract_set_sha256)
     || !SHA256_DIGEST.test(preview.summary_sha256)) return undefined;
-  const release = preview.release_ref;
+  const release = preview.release;
   if (!release || release.plugin_id !== plugin.plugin_id || release.publisher_id !== plugin.publisher_id
     || release.channel !== plugin.latest.channel || release.version !== plugin.latest.version) return undefined;
   return preview;
@@ -75,11 +56,6 @@ function normalizedPermissions(
     });
   }
   return [...byID.values()];
-}
-
-function packageURL(preview: PluginMarketInstallPreview): string {
-  const packageAsset = preview.transport_assets?.find((asset) => asset.locator.endsWith('/package.redevplugin'));
-  return packageAsset?.url ?? preview.release?.asset.url ?? '';
 }
 
 function permissionGroup(
@@ -181,11 +157,11 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
   return snapshot.plugins.flatMap((plugin) => {
     const installPreview = normalizedInstallPreview(plugin);
     if (plugin.latest.channel !== 'stable' || !installPreview) return [];
-    const releaseRef = installPreview.release_ref;
-    if (releaseRef.publisher_id !== plugin.publisher_id
-      || releaseRef.plugin_id !== plugin.plugin_id
-      || releaseRef.channel !== plugin.latest.channel
-      || releaseRef.version !== plugin.latest.version) return [];
+    const release = installPreview.release;
+    if (release.publisher_id !== plugin.publisher_id
+      || release.plugin_id !== plugin.plugin_id
+      || release.channel !== plugin.latest.channel
+      || release.version !== plugin.latest.version) return [];
     const presentation = plugin.presentation;
     if (!presentation) return [];
     const defaultLocale = presentation.locales.find((locale) => locale.locale === presentation.default_locale);
@@ -202,21 +178,23 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
       marketGeneration: snapshot.generation,
       latestVersion: plugin.latest.version,
       stableVersion: plugin.latest.version,
-      minRedevenVersion: installPreview.compatibility?.min_redeven_version ?? installPreview.release?.compatibility.min_redeven_version ?? '-',
-      minReDevPluginVersion: installPreview.compatibility?.min_redevplugin_version ?? installPreview.release?.compatibility.min_redevplugin_version ?? '-',
       rolloutState: marketRolloutState(plugin.latest.availability_status),
       iconURL: validatedMarketIcon(presentation.icon, plugin.plugin_id),
       iconFallback: 'generic' as const,
       category: marketCategory(plugin.categories),
       searchKeywords: [...new Set(presentation.locales.flatMap((locale) => locale.keywords))],
-      trustedSigningKeyIDs: installPreview.release?.signer_key_id ? [installPreview.release.signer_key_id] : [],
       permissions: normalizedPermissions(installPreview),
       installPreview,
       distribution: {
-        releaseRef,
         installSource: {
-          sourceKind: 'package_url' as const,
-          url: packageURL(installPreview),
+          sourceKind: 'github_repository' as const,
+          url: `https://github.com/${release.source.repository_owner}/${release.source.repository_name}`,
+          tag: release.source.tag,
+          pluginID: release.plugin_id,
+          repositoryID: String(release.source.repository_id),
+          releaseID: String(release.source.release_id),
+          assetID: String(release.asset.asset_id),
+          expected: installPreview,
         },
       },
     }];

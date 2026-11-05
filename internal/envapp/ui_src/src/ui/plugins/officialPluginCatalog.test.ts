@@ -1,27 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
 import { officialPluginCatalog, resolvePluginPresentation } from './officialPluginCatalog';
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 
 describe('official plugin catalog contracts', () => {
-  it('pins a neutral example release identity', () => {
-    expect(EXAMPLE_PLUGIN_RELEASE_REF).toEqual({
-      source_id: 'example_market',
-      channel: 'stable',
-      release_metadata_ref: 'plugins/com.example/com.example.metrics/4.4.9/release.json',
-      release_metadata_sha256: '7f36244ce5fe5f80751051f1aa2adcb49d049eab2f748d751ae7021cbf074a15',
-      publisher_id: 'com.example',
-      plugin_id: 'com.example.metrics',
-      version: '4.4.9',
-      expected_hashes: {
-        package_sha256: 'sha256:954894fbc63c3490fe011c9a6baf8985258a3c9c98a16827ed8342aaf438ed32',
-        manifest_sha256: 'sha256:ab8c23c53758bba5165fd4d50c7972e94791dd1ccff75de02c51c554767fb12b',
-        entries_sha256: 'sha256:8b043db413f20ae08be6252f74bbd82fc17a82592192d40c9947a5fcb9983c0f',
-      },
-    });
-  });
-
   it('uses verified market icon metadata and cached declaration permissions', () => {
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]).toMatchObject({ iconFallback: 'generic' });
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.example.metrics/icon');
@@ -35,22 +17,21 @@ describe('official plugin catalog contracts', () => {
     next.generation = 3;
     next.plugins[0]!.latest.version = '4.2.0';
     next.plugins[0]!.release!.version = '4.2.0';
-    next.plugins[0]!.release!.publisher_release_ref.release_ref.version = '4.2.0';
-    next.plugins[0]!.latest.install_preview!.release_ref.version = '4.2.0';
+    next.plugins[0]!.latest.install_preview!.release.version = '4.2.0';
 
     expect(officialPluginCatalog(next)[0]).toMatchObject({
       latestVersion: '4.2.0',
       stableVersion: '4.2.0',
       distribution: {
-        releaseRef: { version: '4.2.0' },
+        installSource: { expected: { release: { version: '4.2.0' } } },
       },
     });
   });
 
   it('preserves the reviewed third-party source classification', () => {
     const next = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
-    next.plugins[0]!.source_kind = 'reviewed-third-party';
-    expect(officialPluginCatalog(next)[0]?.sourceKind).toBe('reviewed-third-party');
+    next.plugins[0]!.source_kind = 'community';
+    expect(officialPluginCatalog(next)[0]?.sourceKind).toBe('community');
   });
 
   it('projects utility plugins and network access without mislabeling method effects', () => {

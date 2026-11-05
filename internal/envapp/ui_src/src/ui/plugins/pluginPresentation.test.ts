@@ -17,7 +17,7 @@ function plugin(overrides: Partial<PluginInventoryItem> = {}): PluginInventoryIt
     version: '1.0.0',
     managementRevision: 4,
     lifecycleState: 'disabled',
-    trustBadge: 'unsigned',
+    sourceKind: 'community',
     pinned: false,
     ...overrides,
   };
@@ -43,16 +43,16 @@ function authorization(options: { missing?: boolean; policyBlocked?: boolean } =
 
 describe('presentPlugin', () => {
   it.each<readonly [string, PluginInventoryItem, PluginPrimaryAction]>([
-    ['offers review and install for an available package', plugin({ pluginInstanceID: undefined, lifecycleState: 'not_installed', trustBadge: 'official' }), 'install'],
-    ['enables and completes required access for a disabled plugin', plugin({ authorization: authorization({ missing: true }) }), 'enable'],
+    ['offers review and install for an available package', plugin({ pluginInstanceID: undefined, lifecycleState: 'not_installed', sourceKind: 'official' }), 'install'],
+    ['enables a disabled plugin without granting permissions', plugin({ authorization: authorization({ missing: true }) }), 'enable'],
     ['enables a disabled plugin after required access is granted', plugin({ authorization: authorization() }), 'enable'],
     ['opens an enabled ready plugin in Activity', plugin({ lifecycleState: 'enabled', defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4 } }), 'open'],
     ['reviews an update before allowing open', plugin({ lifecycleState: 'update_available' }), 'review_update'],
     ['shows a policy restriction before a lifecycle action', plugin({ lifecycleState: 'disabled', attentionReason: 'policy_restricted', authorization: authorization({ policyBlocked: true }) }), 'view_policy'],
     ['shows a missing runtime requirement', plugin({ lifecycleState: 'needs_attention', attentionReason: 'runtime_missing' }), 'view_runtime'],
-    ['fails closed for revoked trust even if lifecycle says enabled', plugin({ lifecycleState: 'enabled', trustBadge: 'revoked', defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4 } }), 'view_trust'],
-    ['fails closed for policy-blocked execution approval', plugin({ externalPackage: { executionApproval: { state: 'policy_blocked', reason_codes: ['blocked'], assessed_at: '2026-07-25T00:00:00Z' } } as PluginInventoryItem['externalPackage'] }), 'view_trust'],
-    ['offers executable enable recovery if a stale lifecycle says enabled without its required access', plugin({ lifecycleState: 'enabled', authorization: authorization({ missing: true }), defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4 } }), 'enable'],
+    ['source classification never blocks an authorized surface', plugin({ lifecycleState: 'enabled', sourceKind: 'community', defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4 } }), 'open'],
+    ['fails closed for policy-blocked execution approval', plugin({ externalPackage: { executionApproval: { state: 'policy_blocked', reason_codes: ['blocked'], assessed_at: '2026-07-25T00:00:00Z' } } as PluginInventoryItem['externalPackage'] }), 'view_attention'],
+    ['preserves the Host-authorized surface when another capability lacks a grant', plugin({ lifecycleState: 'enabled', authorization: authorization({ missing: true }), defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4 } }), 'open'],
   ])('%s', (_name, item, action) => {
     expect(presentPlugin(item).primaryAction).toBe(action);
   });

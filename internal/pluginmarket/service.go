@@ -34,22 +34,18 @@ type IconAsset struct {
 }
 
 type ServiceOptions struct {
-	Origin             string
-	CachePath          string
-	HTTPClient         *http.Client
-	Now                func() time.Time
-	RedevenVersion     string
-	ReDevPluginVersion string
+	Origin     string
+	CachePath  string
+	HTTPClient *http.Client
+	Now        func() time.Time
 }
 
 type Service struct {
-	origin             *url.URL
-	cachePath          string
-	httpClient         *http.Client
-	closeIdle          func()
-	now                func() time.Time
-	redevenVersion     string
-	redevpluginVersion string
+	origin     *url.URL
+	cachePath  string
+	httpClient *http.Client
+	closeIdle  func()
+	now        func() time.Time
 
 	mu   sync.RWMutex
 	last *Snapshot
@@ -81,17 +77,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 	}
 	return &Service{
 		origin: origin, cachePath: cachePath, httpClient: client, now: now, closeIdle: closeIdle,
-		redevenVersion:     compatibilityVersion(options.RedevenVersion, "1.0.0"),
-		redevpluginVersion: compatibilityVersion(options.ReDevPluginVersion, "0.0.0"),
 	}, nil
-}
-
-func compatibilityVersion(value, fallback string) string {
-	value = strings.TrimPrefix(strings.TrimSpace(value), "v")
-	if semverPattern.MatchString(value) {
-		return value
-	}
-	return fallback
 }
 
 func validMarketOrigin(origin *url.URL) bool {
@@ -239,8 +225,6 @@ func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 		query := endpoint.Query()
 		query.Set("channel", "stable")
 		query.Set("limit", "100")
-		query.Set("redeven_version", service.redevenVersion)
-		query.Set("redevplugin_version", service.redevpluginVersion)
 		if cursor != "" {
 			query.Set("cursor", cursor)
 		}
@@ -314,7 +298,6 @@ func (service *Service) getJSON(parent context.Context, endpoint url.URL, destin
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "Redeven")
-	request.Header.Set("X-Redeven-Market-Capabilities", "source-kind-v1")
 	response, err := service.httpClient.Do(request)
 	if err != nil {
 		return "", err
@@ -435,14 +418,11 @@ func cloneLatestRelease(release *LatestRelease) *LatestRelease {
 		return nil
 	}
 	result := *release
-	result.PublisherReleaseRef.Files = slices.Clone(release.PublisherReleaseRef.Files)
-	result.TransportAssets = slices.Clone(release.TransportAssets)
 	if release.InstallPreview != nil {
 		preview := *release.InstallPreview
 		previewRelease := preview.Release
 		previewRelease.InstallPreview = nil
 		preview.Release = *cloneLatestRelease(&previewRelease)
-		preview.TransportAssets = slices.Clone(preview.TransportAssets)
 		preview.SecuritySummary.Permissions = slices.Clone(preview.SecuritySummary.Permissions)
 		preview.SecuritySummary.Methods = slices.Clone(preview.SecuritySummary.Methods)
 		preview.SecuritySummary.CapabilityContracts = slices.Clone(preview.SecuritySummary.CapabilityContracts)

@@ -3,46 +3,41 @@ type: UI Contract
 title: Plugin package review, installation and saved-data recovery
 tags: [ui, plugins, review, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Released ReDevPlugin owns exact inspection, atomic install/update and retained-data recovery. Product dialogs present source, scope and consent while preserving drafts and authoritative identity. Unknown effects reconcile rather than replay; closing management never cancels admitted platform execution.
+All plugin sources share released package inspection, exact review and durable installation. Official/community classification changes display only. Permissions remain independent explicit decisions; unknown effects reconcile from durable receipts without replay.
 
 # Contract
 
 ## Package review
-### Updates
-Review update opens exact intent without mutation/navigation. Official updates show validated preview immediately, never refresh the market/download externally; missing previews read selected same-generation/release detail only. External packages use released inspection.
 
-Confirm full release ref, metadata/package digests and installed management revision. Changed generation/ref/revision invalidates consent; same-version substitution is forbidden. After submission refresh installed inventory only; canceled/superseded reads cannot replace the dialog.
+Market installs automatically inspect the selected repository/release/asset and expected package/security/contract hashes. Direct installation accepts HTTPS, GitHub repository or uploaded `.redevplugin` bytes. Multi-plugin repositories expose one selection step. No plugin signature, publisher trust badge, official-only wizard or separate client protocol exists.
 
-Bounded content-height dialogs retain identity/versions through preparation/submission/completion, with long review scrolling above fixed footer. Show destinations/process/background access once; collapse technical limits. Closing completion keeps Updates, clears obsolete selection and shows All plugins are up to date when empty.
+Updates inspect the installed original source before presenting a candidate. Changing source requires explicit consent. Same-version changed contents and downgrades are blocked in update review. Changed revision/identity or expired inspection invalidates consent. Missing or changed security evidence requires explicit review; no market preview substitutes for current Host inspection.
 
-### External packages
-Admins choose compatible public HTTPS, GitHub Release/optional tag or local .redevplugin. Submit source/intent to released inspector; browser never downloads/parses remote packages, selects trust or invents provenance. Failed post-install refresh offers inventory Retry, never reinstall.
+Lead with verified localized identity and versions. Show access changes and saved-data conversion once; collapse technical declarations, limits, hashes and source facts. Worker/storage methods imply no broad host access.
 
-Lead with verified localized author/publisher/version, not available names replaced by technical IDs. Verified stays quiet; unverified/blocked/revoked warn. Omit introductory/four-step timelines but retain accessible progress.
+Dialogs provide scrollable content, visible actions, keyboard focus, localization, touch targets and reduced motion. Progress retains identity. Cancellation fences late replies; source edits clear repository selection and market expectations.
 
-Before consent show destinations, host permissions, credentials, processes, background and host methods. Ordinary Worker/plugin-storage methods cannot become broad delete-content counters; dangerous/unknown effects remain visible regardless of route. Keyboard details retain declarations/diffs/source/hash/binding. Network changes share one heading; storage/process/background changes stay on rows, including removed declarations.
-
-Saved-data uses released security summary, including settings-only/no-Worker packages; Surface/store/operation details collapse. Resource changes mark rows, label-only changes do not. Writable Surface resources are sensitive declarations, never filesystem permission/automatic grants.
-
-One short checkbox confirms exact package; signature cannot replace consent. Review proves no completed install/grant; enabled proves no grant. Unknown outcomes retain inspection/reconciliation. Wrap long names/locales, preserve mobile targets/footer. External install grants nothing and explains later access management; official install retains reviewed permissions.
+One concise consent confirms the exact package. Installation enables the plugin without granting permissions. Both official and community packages direct later access decisions to installed details. Surface launch targets come only from Host `action_state` and per-Surface authority; missing permission leads to permission review, never a synthetic Enable/grant sequence.
 
 ## Installation progress
-One target-owned flow is `idle`→`review_ready`→`installing`→`installed`; only shared install projection owns task failures. Cards/inspector share accessible aria-busy/live status/alerts/progress.
 
-Install/update share official access presentation and bounded content-height review/progress/error/completion dialogs with scrolling body/fixed footer. Completion retains installed identity/setup attention without claiming access. Admitted Execution survives management closure; lost replies cannot reinstall. Only current inventory exposes launch; failed setup preserves layout.
+The Shell observes owner-scoped durable receipts and Execution progress. First installations can be recovered without an installed inventory row. Closing Plugin Center does not cancel admitted execution. Owner changes clear observers; reconnect restores receipts. Concurrent submits share one request, and lost replies query the same request ID.
+
+A committed receipt remains committed even if post-commit execution or inventory refresh fails. Refresh retries only reconciliation. Unknown outcomes neither replay nor erase data. Definite failure requires a new review. Retained data uses the dedicated released recovery APIs, never automatic deletion followed by install.
+
+Both update paths close affected slots, retire authority, preserve layout and reconcile inventory through the placement coordinator. Completion offers opening only when current inventory permits it.
 
 # Boundaries
 
-[Surfaces](plugin-surfaces.md#discovery-and-surfaces) owns discovery/navigation. Released ReDevPlugin owns package/trust/execution/permissions and exact inspection/commit identities. UI adds no parser, mutation receipt store, grant, stale candidate, trust-derived permission or uncertain replay.
+[Surfaces](plugin-surfaces.md#discovery-and-surfaces) owns navigation and placement. [Package lifecycle](../architecture/redevplugin-package-lifecycle.md) owns source and automatic-update rules. ReDevPlugin owns package validation, durable receipts, permissions and execution; UI adds no parser, receipt database, implicit grants or uncertain replay.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Source.
-
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApprovedInstallSetup.ts:1` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx` - Unified installation review.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx` - Update review.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts` - Durable receipt presentation.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Responsive and accessible review acceptance.

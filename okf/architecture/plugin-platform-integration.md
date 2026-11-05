@@ -4,15 +4,15 @@ title: Plugin platform integration
 tags: [architecture, plugins, local-ui, redevplugin]
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/trust/execution. Unproven identity fails closed.
+Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/execution. Unproven identity fails closed.
 
 # Contract
 
-Mount one released Host/HTTP namespace/client/scope at explicit state root with core,official-release,runtime,connectivity,secret,capability,external modules. Sources are bounded publicHTTPS/GitHub Release/upstream signature assessment. [Adapters](redevplugin-redeven-adapters.md) owns product mappings.
+Mount one released Host/HTTP namespace/client/scope at an explicit root. [Adapters](redevplugin-redeven-adapters.md) owns module composition and product mappings; [lifecycle](redevplugin-package-lifecycle.md) owns package inspection.
 
 Session close uses released durable four-hash drain;remove authentication after exact acknowledgement. Local generations cancel replaced waits/fence late credentials. Shutdown closes Local UI/hijacked admission,cancels Agent sessions,drains leases/handlers,then idempotent Host close. Runtime binds canonical sibling executable,target,published IPC/WASM ABI,exact build,lease replay and limits. [Package](redevplugin-package-lifecycle.md),[process](plugin-process-sessions.md),[background](plugin-background-entries.md),[recovery](redevplugin-surface-recovery.md) own lifecycle;[containers](container-resources-capability.md) is separate.
 

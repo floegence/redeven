@@ -24,8 +24,6 @@ import (
 	"github.com/floegence/redevplugin/v3/pkg/host"
 	"github.com/floegence/redevplugin/v3/pkg/manifest"
 	"github.com/floegence/redevplugin/v3/pkg/observability"
-	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/v3/pkg/registry"
 	"github.com/floegence/redevplugin/v3/pkg/sessionctx"
 	"github.com/floegence/redevplugin/v3/pkg/websecurity"
 )
@@ -229,10 +227,10 @@ func TestExternalPackageAdmissionUsesExplicitPermissionTiers(t *testing.T) {
 }
 
 func TestReleaseInstallUsesExplicitPermissionTiers(t *testing.T) {
-	if permissionsAllowAction(sessionPermissions{read: true}, host.ManagementActionInstallReleaseRef) {
+	if permissionsAllowAction(sessionPermissions{read: true}, host.ManagementActionInstallInspectedPackage) {
 		t.Fatal("release install start accepted read-only session")
 	}
-	if !permissionsAllowAction(sessionPermissions{admin: true}, host.ManagementActionInstallReleaseRef) {
+	if !permissionsAllowAction(sessionPermissions{admin: true}, host.ManagementActionInstallInspectedPackage) {
 		t.Fatal("release install start denied admin session")
 	}
 	for _, action := range []host.ManagementAction{
@@ -509,46 +507,6 @@ func TestWebSecurityGuardRejectsUntrustedRouteRole(t *testing.T) {
 	}
 }
 
-func TestPackageTrustVerifierUsesV5Provenance(t *testing.T) {
-	verifier, err := newPackageTrustVerifier()
-	if err != nil {
-		t.Fatal(err)
-	}
-	unsignedLocal, err := verifier.VerifyPackageTrust(context.Background(), host.PackageTrustVerificationRequest{LocalImport: true})
-	if err != nil {
-		t.Fatalf("unsigned local trust error = %v", err)
-	}
-	if unsignedLocal.TrustState != registry.TrustUnsignedLocal {
-		t.Fatalf("unsigned local trust = %s, want %s", unsignedLocal.TrustState, registry.TrustUnsignedLocal)
-	}
-
-	unclassified, err := verifier.VerifyPackageTrust(context.Background(), host.PackageTrustVerificationRequest{})
-	if err != nil {
-		t.Fatalf("unclassified package trust error = %v", err)
-	}
-	if unclassified.TrustState != registry.TrustUntrusted {
-		t.Fatalf("unclassified trust = %s, want %s", unclassified.TrustState, registry.TrustUntrusted)
-	}
-
-	incompleteRelease, err := verifier.VerifyPackageTrust(context.Background(), host.PackageTrustVerificationRequest{Action: host.PackageTrustActionInstall})
-	if err != nil {
-		t.Fatalf("incomplete release trust error = %v", err)
-	}
-	if incompleteRelease.TrustState != registry.TrustUntrusted {
-		t.Fatalf("incomplete release trust = %s, want %s", incompleteRelease.TrustState, registry.TrustUntrusted)
-	}
-
-	assessment, err := verifier.AssessExternalPackageSignature(context.Background(), host.ExternalPackageSignatureAssessmentRequest{
-		Package: pluginpkg.Package{},
-	})
-	if err != nil {
-		t.Fatalf("unsigned external package assessment error = %v", err)
-	}
-	if assessment.Status != registry.SignatureAbsent {
-		t.Fatalf("unsigned external package assessment = %s, want %s", assessment.Status, registry.SignatureAbsent)
-	}
-}
-
 func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 	stateDir := t.TempDir()
 	integration, err := New(context.Background(), ownerScopeTestOptions(t, stateDir))
@@ -581,7 +539,7 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 	}
 }
 
-func TestNewKeepsOfficialReleasePlatformModuleAvailableWhileMarketIsOffline(t *testing.T) {
+func TestNewKeepsPackageInspectionAvailableWhileMarketIsOffline(t *testing.T) {
 	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
 		Origin:    "https://plugins.redeven.com",
 		CachePath: filepath.Join(t.TempDir(), "market-lkg.json"),
@@ -638,11 +596,11 @@ func TestNewKeepsOfficialReleasePlatformModuleAvailableWhileMarketIsOffline(t *t
 		t.Fatalf("features response = %s", response.Body.String())
 	}
 	for _, feature := range payload.Data {
-		if feature == string(host.FeatureRelease) {
+		if feature == string(host.FeatureExternalPackage) {
 			return
 		}
 	}
-	t.Fatalf("official release platform module is missing: %v", payload.Data)
+	t.Fatalf("external package platform module is missing: %v", payload.Data)
 }
 
 func ownerScopeTestOptions(t *testing.T, stateDir string) Options {
@@ -1203,7 +1161,7 @@ func authenticatedRequest(method, path, channelID string) *http.Request {
 	return WithRouteRole(req, RouteRoleEnvTrusted)
 }
 
-func TestNewKeepsRemoteReleaseAvailableWithUnusableDocumentCache(t *testing.T) {
+func TestNewDoesNotTouchRetiredReleaseDocumentCache(t *testing.T) {
 	options := ownerScopeTestOptions(t, t.TempDir())
 	cachePath := filepath.Join(options.StateDir, "release-documents.sqlite")
 	original := []byte("unknown cache format")
@@ -1222,8 +1180,8 @@ func TestNewKeepsRemoteReleaseAvailableWithUnusableDocumentCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if integration.releaseProvider == nil || integration.releaseProvider.documentCache != nil {
-		t.Fatal("remote release fallback unavailable")
+	if integration.host == nil {
+		t.Fatal("plugin host unavailable")
 	}
 	if err := integration.Close(); err != nil {
 		t.Fatal(err)

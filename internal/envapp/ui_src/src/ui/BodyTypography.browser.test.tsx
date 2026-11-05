@@ -85,7 +85,7 @@ it.each([false, true])('keeps plugin source fields and actions on their roles, t
   if (touch) expect(document.querySelector('[data-external-plugin-inspect]')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 });
 it('keeps plugin update status at the body scale', async () => {
-  await mount(() => <PluginUpdateReviewDialog open canManage onOpenChange={noop} onInspect={resolved} onCommitExternal={resolved} onOfficialUpdate={resolved} onRefresh={resolved} onCommitted={noop} onOpenSurface={noop} onViewPermissions={noop} />);
+  await mount(() => <PluginUpdateReviewDialog open canManage onOpenChange={noop} onInspect={resolved} onCommitExternal={resolved} onRefresh={resolved} onCommitted={noop} onOpenSurface={noop} onViewPermissions={noop} />);
   await expectSize('[data-plugin-update-dialog] [role="status"]');
 });
 it.each([false, true])('separates narrow Plugin Center search from touch, touch=%s', async touch => {

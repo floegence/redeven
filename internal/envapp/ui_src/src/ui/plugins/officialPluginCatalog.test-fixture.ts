@@ -1,4 +1,4 @@
-import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
+import { EXAMPLE_PLUGIN_PACKAGE } from './examplePluginPackage.test-fixture';
 import { officialPluginCatalog } from './officialPluginCatalog';
 import type { OfficialPluginPermission, PluginMarketDetail, PluginMarketSnapshot } from './pluginTypes';
 
@@ -12,6 +12,7 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   plugins: [{
     plugin_id: 'com.example.metrics',
     publisher_id: 'com.example',
+    source_kind: 'official',
     presentation: {
       default_locale: 'en-US',
       icon: {
@@ -101,12 +102,12 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
       version: '4.4.9',
       availability_status: 'visible',
       install_preview: {
-        release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
-        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.5' },
         security_summary: {
+          summary_sha256: 'sha256:' + 'b'.repeat(64),
+          methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
           permissions: [
             { permission_id: 'metrics.read', methods: ['metrics.status', 'metrics.list'], required: true, effects: ['read'] },
-            { permission_id: 'metrics.execute', methods: ['metrics.start'], required: false, effects: ['execute'] },
+            { permission_id: 'metrics.execute', methods: ['metrics.start'], required: true, effects: ['execute'] },
           ],
           process: {
             resource_limits: { output_buffer_bytes: 65536, max_runtime_ms: 60000 },
@@ -115,31 +116,13 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
           background: { strategy: 'runtime_start', worker_id: 'metrics_background' },
         },
         release_identity_digest: 'sha256:824e51f410a597845d546835e61271b8a530044c51e2d14a098eb847adf1e181',
-        manifest_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,
+        manifest_sha256: `sha256:${EXAMPLE_PLUGIN_PACKAGE.manifest_sha256}`,
         contract_set_sha256: 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab',
         summary_sha256: 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673',
-        release: {
-          plugin_id: 'com.example.metrics',
-          channel: 'stable',
-          version: '4.4.9',
-          asset: { url: 'https://github.com/example/example-plugins/releases/download/v4.4.9/metrics-4.4.9.redevplugin' },
-          publisher_release_ref: { release_ref: EXAMPLE_PLUGIN_RELEASE_REF },
-          signer_key_id: 'example_signing_key_2026',
-          compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.5' },
-        },
+        release: EXAMPLE_PLUGIN_PACKAGE,
       },
     },
-    release: {
-      plugin_id: 'com.example.metrics',
-      channel: 'stable',
-      version: '4.4.9',
-      asset: {
-        url: 'https://github.com/example/example-plugins/releases/download/v4.4.9/metrics-4.4.9.redevplugin',
-      },
-      publisher_release_ref: { release_ref: EXAMPLE_PLUGIN_RELEASE_REF },
-      signer_key_id: 'example_signing_key_2026',
-      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.5' },
-    },
+    release: EXAMPLE_PLUGIN_PACKAGE,
   }],
 };
 
@@ -168,7 +151,6 @@ export const OFFICIAL_PLUGIN_MARKET_DETAIL: PluginMarketDetail = {
     name: 'example-plugins',
     url: 'https://github.com/example/example-plugins',
   },
-  compatibility: exampleMarketPlugin.release!.compatibility,
   status: 'active',
   latest: [exampleMarketPlugin.latest],
 };

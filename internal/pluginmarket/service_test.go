@@ -22,6 +22,7 @@ const validCatalogResponse = `{
   "data": [{
     "plugin_id": "com.example.metrics",
     "publisher_id": "com.redeven.official",
+    "source_kind": "official",
     "presentation": {
       "default_locale": "en-US",
       "icon": {
@@ -54,106 +55,34 @@ const validLatestResponse = `{
       "repository_owner": "floegence",
       "repository_name": "redeven-official-plugins",
       "release_id": 363464766,
-      "tag": "v4.0.0",
+      "tag": "metrics-v4.0.0",
       "target_commit": "6c446e9a72986a52ed57fe52ac0f52423a201edb"
     },
     "asset": {
       "asset_id": 497702097,
       "name": "metrics-4.0.0.redevplugin",
-      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.redevplugin",
+      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/metrics-v4.0.0/metrics-4.0.0.redevplugin",
       "size": 409266,
       "sha256": "3dd8cc3fc30c347d6276b88ece0913ad8f15cd762704e7902ba6290351bb5e3c"
     },
-    "release_ref": {
-      "asset_id": 497702092,
-      "name": "metrics-4.0.0.release-ref.json",
-      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.release-ref.json",
-      "size": 13225,
-      "sha256": "47c919f9f629132ecd3a4f852df0d3d129167307a188b9ae3cdb4113d3eddbdb"
-    },
-    "trust_root": {
-      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/root.public.json",
-      "sha256": "5a625b201d0cc898932742daa69920aca1986567b145f477750a3f73540c3e7f"
-    },
-    "publisher_release_ref": {
-      "schema_version": "redevplugin.publisher_release_ref.v1",
-      "release_ref": {
-        "source_id": "redeven_official",
-        "channel": "stable",
-        "release_metadata_ref": "plugins/com.redeven.official/com.example.metrics/4.0.0/release.json",
-        "release_metadata_sha256": "921d7a2ca42e8faf52a26f2b0ca7768e62317c2d0859ceea5858cce218d2dadd",
-        "publisher_id": "com.redeven.official",
-        "plugin_id": "com.example.metrics",
-        "version": "4.0.0",
-        "expected_hashes": {
-          "package_sha256": "sha256:8bc0bf9dc43c2f183e532e3f0d4d5921d3d103d40d6aca918958b3337563359a",
-          "manifest_sha256": "sha256:79a512b3749024e1306cdb4ecc14c77684f180c07fdc32c2bbe59589c617767a",
-          "entries_sha256": "sha256:5b5b5a0c16196cae96bed838aa22ebbacf09b14c9462d1dac1abffe56f27d639"
-        }
-      },
-      "root": {
-        "algorithm": "ed25519",
-        "key_id": "redeven_official_root_2026",
-        "public_key": "2nZtMCZWoIVm4ivB7e64IjRsQqYnlSug1XTiAlH1C9Y="
-      },
-      "files": [
-        {
-          "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/package.redevplugin",
-          "asset_name": "metrics-4.0.0.redevplugin",
-          "sha256": "3dd8cc3fc30c347d6276b88ece0913ad8f15cd762704e7902ba6290351bb5e3c",
-          "size": 409266
-        },
-        {
-          "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/release.json",
-          "asset_name": "metrics-4.0.0.release.json",
-          "sha256": "921d7a2ca42e8faf52a26f2b0ca7768e62317c2d0859ceea5858cce218d2dadd",
-          "size": 3026
-        },
-        {
-          "locator": "sources/redeven_official/root/current.json",
-          "asset_name": "trust-root.json",
-          "sha256": "8aef41598f631df76b79b1428376cd983347c31ffd7f30daa087c3588b3b32ae",
-          "size": 842
-        }
-      ]
-    },
-    "transport_assets": [
-      {
-        "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/package.redevplugin",
-        "asset_id": 497702097,
-        "name": "metrics-4.0.0.redevplugin",
-        "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.redevplugin",
-        "size": 409266,
-        "sha256": "3dd8cc3fc30c347d6276b88ece0913ad8f15cd762704e7902ba6290351bb5e3c"
-      },
-      {
-        "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/release.json",
-        "asset_id": 497702096,
-        "name": "metrics-4.0.0.release.json",
-        "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.release.json",
-        "size": 3026,
-        "sha256": "921d7a2ca42e8faf52a26f2b0ca7768e62317c2d0859ceea5858cce218d2dadd"
-      },
-      {
-        "locator": "sources/redeven_official/root/current.json",
-        "asset_id": 497702138,
-        "name": "trust-root.json",
-        "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/trust-root.json",
-        "size": 842,
-        "sha256": "8aef41598f631df76b79b1428376cd983347c31ffd7f30daa087c3588b3b32ae"
-      }
-    ],
-    "signer_key_id": "redeven_official_signing_2026_08",
-    "compatibility": {"min_redeven_version": "1.0.0", "min_redevplugin_version": "0.6.22"},
-    "release_identity_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    "release_identity_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "publisher_id": "com.redeven.official",
+    "package_sha256": "8bc0bf9dc43c2f183e532e3f0d4d5921d3d103d40d6aca918958b3337563359a",
+    "manifest_sha256": "79a512b3749024e1306cdb4ecc14c77684f180c07fdc32c2bbe59589c617767a",
+    "entries_sha256": "5b5b5a0c16196cae96bed838aa22ebbacf09b14c9462d1dac1abffe56f27d639"
   },
-  "meta": {"request_id": "req_latest", "generation": 7, "stale": false}
+  "meta": {
+    "request_id": "req_latest",
+    "generation": 7,
+    "stale": false
+  }
 }`
 
 const validDetailResponse = `{
   "data": {
     "plugin_id": "com.example.metrics",
     "publisher_id": "com.redeven.official",
+    "source_kind": "official",
     "presentation": {
       "default_locale": "en-US",
       "icon": {
@@ -168,7 +97,6 @@ const validDetailResponse = `{
     "categories": ["monitoring"],
     "channels": ["stable"],
     "repository": {"provider": "github", "repository_id": 1289352675, "owner": "floegence", "name": "redeven-official-plugins", "url": "https://github.com/floegence/redeven-official-plugins"},
-    "compatibility": {"min_redeven_version": "1.0.0", "min_redevplugin_version": "0.7.1"},
     "status": "active",
     "latest": [{"channel": "stable", "version": "4.1.0", "availability_status": "visible"}]
   },
@@ -199,12 +127,9 @@ func catalogResponseWithInstallPreview(t *testing.T) string {
 	}
 	preview := InstallPreview{
 		Release:               latest.Data,
-		ReleaseRef:            latest.Data.PublisherReleaseRef.ReleaseRef,
-		TransportAssets:       slices.Clone(latest.Data.TransportAssets),
-		Compatibility:         latest.Data.Compatibility,
 		SecuritySummary:       host.ExternalPackageSecuritySummary{SummarySHA256: "sha256:" + strings.Repeat("a", 64)},
 		ReleaseIdentityDigest: latest.Data.ReleaseIdentityDigest,
-		ManifestSHA256:        "sha256:" + strings.Repeat("b", 64),
+		ManifestSHA256:        "sha256:79a512b3749024e1306cdb4ecc14c77684f180c07fdc32c2bbe59589c617767a",
 		ContractSetSHA256:     "sha256:" + strings.Repeat("c", 64),
 		SummarySHA256:         "sha256:" + strings.Repeat("a", 64),
 	}
@@ -225,12 +150,9 @@ func TestValidateLatestReleaseAcceptsInstallPreviewEvidence(t *testing.T) {
 	}
 	preview := InstallPreview{
 		Release:               release,
-		ReleaseRef:            release.PublisherReleaseRef.ReleaseRef,
-		TransportAssets:       slices.Clone(release.TransportAssets),
-		Compatibility:         release.Compatibility,
 		SecuritySummary:       host.ExternalPackageSecuritySummary{SummarySHA256: "sha256:" + strings.Repeat("a", 64)},
 		ReleaseIdentityDigest: release.ReleaseIdentityDigest,
-		ManifestSHA256:        "sha256:" + strings.Repeat("b", 64),
+		ManifestSHA256:        "sha256:79a512b3749024e1306cdb4ecc14c77684f180c07fdc32c2bbe59589c617767a",
 		ContractSetSHA256:     "sha256:" + strings.Repeat("c", 64),
 		SummarySHA256:         "sha256:" + strings.Repeat("a", 64),
 	}
@@ -253,6 +175,7 @@ func TestValidateLatestReleaseAcceptsReviewedPluginTag(t *testing.T) {
 	}
 	release := response.Data
 	release.Source.Tag = "weather-v" + release.Version
+	release.Asset.URL = strings.Replace(release.Asset.URL, "metrics-v4.0.0", release.Source.Tag, 1)
 	if err := validateLatestReleaseWithPreview(release, false); err != nil {
 		t.Fatalf("prefixed tag rejected: %v", err)
 	}
@@ -264,6 +187,18 @@ func TestValidateLatestReleaseAcceptsReviewedPluginTag(t *testing.T) {
 	}
 }
 
+func TestMarketAcceptsCommunityWithoutClientNegotiation(t *testing.T) {
+	var catalog CatalogResponse
+	if err := json.Unmarshal([]byte(validCatalogResponse), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Data[0].SourceKind = "community"
+	catalog.Data[0].Categories = []string{}
+	if err := validatePluginSummary(catalog.Data[0]); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServiceRefreshesAndKeepsValidatedCacheSeparate(t *testing.T) {
 	t.Parallel()
 	cachePath := filepath.Join(t.TempDir(), "plugin-market-lkg.json")
@@ -271,7 +206,7 @@ func TestServiceRefreshesAndKeepsValidatedCacheSeparate(t *testing.T) {
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/v1/catalog":
-			if request.URL.Query().Get("redeven_version") != "1.2.3" || request.URL.Query().Get("redevplugin_version") != "3.0.9" {
+			if request.URL.Query().Has("redeven_version") || request.URL.Query().Has("redevplugin_version") || request.Header.Get("X-Redeven-Market-Capabilities") != "" {
 				t.Fatalf("catalog compatibility query = %q", request.URL.RawQuery)
 			}
 			return response(http.StatusOK, catalogResponseWithInstallPreview(t), http.Header{"Etag": {`"catalog-g7"`}}), nil
@@ -280,12 +215,10 @@ func TestServiceRefreshesAndKeepsValidatedCacheSeparate(t *testing.T) {
 		}
 	})
 	service, err := NewService(ServiceOptions{
-		Origin:             "https://plugins.redeven.com",
-		CachePath:          cachePath,
-		HTTPClient:         &http.Client{Transport: transport},
-		Now:                func() time.Time { return now },
-		RedevenVersion:     "v1.2.3",
-		ReDevPluginVersion: "3.0.9",
+		Origin:     "https://plugins.redeven.com",
+		CachePath:  cachePath,
+		HTTPClient: &http.Client{Transport: transport},
+		Now:        func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -652,7 +585,7 @@ func validFullPresentationForTest() PresentationFull {
 	}
 }
 
-func TestCatalogInstallPreviewBuildsCompleteRemoteProjection(t *testing.T) {
+func TestCatalogInstallPreviewRetainsExactOrdinaryPackage(t *testing.T) {
 	t.Parallel()
 	service, err := NewService(ServiceOptions{
 		Origin:    "https://plugins.redeven.com",
@@ -675,14 +608,7 @@ func TestCatalogInstallPreviewBuildsCompleteRemoteProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LatestRelease() error = %v", err)
 	}
-	ref, assets, err := release.RemoteProjection()
-	if err != nil {
-		t.Fatalf("RemoteProjection() error = %v", err)
-	}
-	if ref.SourceID != "redeven_official" || ref.Version != "4.0.0" || len(assets) != 3 {
-		t.Fatalf("unexpected remote projection: ref=%#v assets=%#v", ref, assets)
-	}
-	if assets[0].Locator >= assets[1].Locator {
-		t.Fatalf("remote assets are not stable-sorted: %#v", assets)
+	if release.PackageSHA256 == release.Asset.SHA256 || release.Version != "4.0.0" {
+		t.Fatalf("package and transport digests must remain distinct: %#v", release)
 	}
 }

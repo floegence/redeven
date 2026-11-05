@@ -109,16 +109,8 @@ func TestOrdinaryPluginSettingsPersistThroughProductRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	installed, err := integration.host.InstallInspectedPackage(ctx, host.InstallInspectedPackageRequest{
-		InspectionID: inspected.InspectionID, ExpectedPackageSHA256: inspected.InspectedHashes.PackageSHA256,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if installed.Plugin == nil {
-		t.Fatal("installed plugin missing")
-	}
-	path := "/" + installed.Plugin.PluginInstanceID + "/settings"
+	installed := installInspectedTestPackage(t, ctx, integration.host, inspected.InspectionID, inspected.InspectedHashes.PackageSHA256)
+	path := "/" + installed.PluginInstanceID + "/settings"
 	before := request(http.MethodPost, path+"/query", map[string]any{"scope": "user"})
 	assertValue := func(snapshot map[string]any, value bool) {
 		t.Helper()

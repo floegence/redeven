@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import type { PluginExecution } from '@floegence/redevplugin-ui';
+import type { PluginExecution, PluginInspectedInstallOperation } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PluginInstallStatus, PluginInstallSummary } from './PluginInstallStatus';
@@ -55,7 +55,7 @@ describe('PluginInstallStatus', () => {
     host.remove();
   });
 
-  it('offers retry for a retryable failed Execution', () => {
+  it('requires fresh review after a failed Execution', () => {
     const onRetry = vi.fn();
     const host = document.createElement('div');
     document.body.append(host);
@@ -64,9 +64,9 @@ describe('PluginInstallStatus', () => {
         observation: 'failed',
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_RELEASE_NETWORK' }),
         progress: [],
-        failure: { source: 'execution', code: 'PLUGIN_RELEASE_NETWORK', stage: 'download', retryable: true, recovery: 'retry_install' },
+        failure: { source: 'execution', code: 'PLUGIN_RELEASE_NETWORK', stage: 'download', retryable: true, recovery: 'review_again' },
       })}
-      onRetry={onRetry}
+      onReviewAgain={onRetry}
     />, host);
 
     (host.querySelector('button') as HTMLButtonElement).click();
@@ -75,7 +75,7 @@ describe('PluginInstallStatus', () => {
     host.remove();
   });
 
-  it('keeps an unknown platform failure actionable with one retry', () => {
+  it('keeps a terminal platform failure actionable with fresh review', () => {
     const onRetry = vi.fn();
     const host = document.createElement('div');
     document.body.append(host);
@@ -83,12 +83,12 @@ describe('PluginInstallStatus', () => {
       projection={projection({
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_INTERNAL_FAILURE' }),
         progress: [],
-        failure: { source: 'execution', code: 'PLUGIN_INTERNAL_FAILURE', stage: 'download', retryable: true, recovery: 'retry_install' },
+        failure: { source: 'execution', code: 'PLUGIN_INTERNAL_FAILURE', stage: 'download', retryable: true, recovery: 'review_again' },
       })}
-      onRetry={onRetry}
+      onReviewAgain={onRetry}
     />, host);
 
-    const retry = host.querySelector('[data-plugin-install-retry]') as HTMLButtonElement;
+    const retry = host.querySelector('[data-plugin-install-review-again]') as HTMLButtonElement;
     expect(retry).not.toBeNull();
     retry.click();
     expect(onRetry).toHaveBeenCalledOnce();
@@ -131,20 +131,20 @@ describe('PluginInstallStatus', () => {
   });
 
   it('offers the retained-data recovery action only for incompatible historical data', () => {
-    const onResolveRetainedData = vi.fn();
+    const onReviewAgain = vi.fn();
     const host = document.createElement('div');
     document.body.append(host);
     const dispose = render(() => <PluginInstallStatus
       projection={projection({
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE' }),
         progress: [],
-        failure: { source: 'execution', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', stage: 'install', retryable: false, recovery: 'erase_retained_data' },
+        failure: { source: 'execution', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', stage: 'install', retryable: false, recovery: 'review_again' },
       })}
-      onResolveRetainedData={onResolveRetainedData}
+      onReviewAgain={onReviewAgain}
     />, host);
 
-    (host.querySelector('[data-plugin-install-resolve-retained-data]') as HTMLButtonElement).click();
-    expect(onResolveRetainedData).toHaveBeenCalledOnce();
+    (host.querySelector('[data-plugin-install-review-again]') as HTMLButtonElement).click();
+    expect(onReviewAgain).toHaveBeenCalledOnce();
     expect(host.textContent).toContain('historical data');
     expect(host.textContent).not.toContain('internal plugin platform failure');
     dispose();
@@ -180,13 +180,13 @@ describe('PluginInstallStatus', () => {
       projection={projection({
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_INTERNAL_FAILURE' }),
         progress: [],
-        failure: { source: 'execution', code: 'PLUGIN_INTERNAL_FAILURE', retryable: true, recovery: 'retry_install' },
+        failure: { source: 'execution', code: 'PLUGIN_INTERNAL_FAILURE', retryable: true, recovery: 'review_again' },
       })}
-      onRetry={vi.fn()}
+      onReviewAgain={vi.fn()}
     />, host);
 
     expect(host.querySelectorAll('[data-plugin-install-stage-status="failed"]')).toHaveLength(0);
-    expect(host.querySelector('[data-plugin-install-retry]')).not.toBeNull();
+    expect(host.querySelector('[data-plugin-install-review-again]')).not.toBeNull();
     dispose();
     host.remove();
   });
@@ -253,23 +253,20 @@ describe('PluginInstallSummary', () => {
     dispose();
   });
 
-  it.each(['review_again', 'erase_retained_data'] as const)('preserves the exact %s recovery action', (recovery) => {
+  it('routes terminal failure to review without retrying or deleting data', () => {
     const host = document.createElement('div');
     document.body.append(host);
     const onReviewAgain = vi.fn();
-    const onResolveRetainedData = vi.fn();
     const onRetry = vi.fn();
     const dispose = render(() => <PluginInstallSummary projection={projection({
       observation: 'failed', execution: execution({ status: 'failed' }),
-      failure: { source: 'execution', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', retryable: false, recovery },
-    })} onOpenDetails={vi.fn()} onRetry={onRetry} onReviewAgain={onReviewAgain} onResolveRetainedData={onResolveRetainedData} />, host);
-    const action = host.querySelector<HTMLButtonElement>(recovery === 'review_again' ? '[data-plugin-install-review-again]' : '[data-plugin-install-resolve-retained-data]')!;
-    expect(action.getAttribute('aria-label')).toBeTruthy();
-    action.click();
-    expect(recovery === 'review_again' ? onReviewAgain : onResolveRetainedData).toHaveBeenCalledOnce();
+      failure: { source: 'execution', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', retryable: false, recovery: 'review_again' },
+    })} onOpenDetails={vi.fn()} onRetry={onRetry} onReviewAgain={onReviewAgain} />, host);
+    host.querySelector<HTMLButtonElement>('[data-plugin-install-review-again]')!.click();
+    expect(onReviewAgain).toHaveBeenCalledOnce();
     expect(onRetry).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-plugin-install-resolve-retained-data]')).toBeNull();
     dispose();
-    host.remove();
   });
 
   it('keeps terminal failures readable in details without offering an unsupported retry', () => {
@@ -277,10 +274,23 @@ describe('PluginInstallSummary', () => {
     const dispose = render(() => <PluginInstallSummary projection={projection({
       observation: 'failed', execution: execution({ status: 'failed', failure_code: 'PLUGIN_MANIFEST_INVALID' }),
       failure: { source: 'execution', code: 'PLUGIN_MANIFEST_INVALID', retryable: false, recovery: 'none' },
-    })} onOpenDetails={vi.fn()} onRetry={vi.fn()} />, host);
+    })} onOpenDetails={vi.fn()} onReviewAgain={vi.fn()} />, host);
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
-    expect(host.querySelector('[data-plugin-install-retry]')).toBeNull();
+    expect(host.querySelector('[data-plugin-install-review-again]')).toBeNull();
     expect(host.querySelector<HTMLButtonElement>('[data-plugin-center-install-summary]')?.title).toContain('manifest format');
     dispose();
   });
+});
+
+it('uses a committed receipt while reconciling an interrupted execution', () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const value = projection({
+    observation: 'finalizing', execution: execution({ status: 'orphaned' }),
+    receipt: { mutation_outcome: 'committed' } as PluginInspectedInstallOperation,
+  });
+  const dispose = render(() => <><PluginInstallStatus projection={value} /><PluginInstallSummary projection={value} onOpenDetails={() => undefined} /></>, host);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(host.querySelector('[role="status"]')?.getAttribute('aria-busy')).toBe('true');
+  expect(host.querySelectorAll('[data-plugin-install-stage-status="completed"]')).toHaveLength(4);
+  dispose(); host.remove();
 });

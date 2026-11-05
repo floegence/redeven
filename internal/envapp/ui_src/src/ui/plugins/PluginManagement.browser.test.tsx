@@ -102,7 +102,7 @@ const metricsItem: PluginInventoryItem = {
   managementRevision: 7,
   canDisable: true,
   lifecycleState: 'enabled',
-  trustBadge: 'official',
+  sourceKind: 'official',
   pinned: true,
   presentation: metricsHostPresentation,
   defaultLaunchTarget: {
@@ -147,7 +147,7 @@ const toolboxItem: PluginInventoryItem = {
   version: '1.2.3',
   managementRevision: 4,
   lifecycleState: 'disabled',
-  trustBadge: 'community',
+  sourceKind: 'community',
   pinned: false,
 };
 
@@ -166,7 +166,7 @@ const updateDialogItem: PluginInventoryItem = {
   version: '4.0.0',
   managementRevision: 18,
   lifecycleState: 'update_available',
-  trustBadge: 'unsigned',
+  sourceKind: 'community',
   installedPackage: {
     packageHash: 'sha256:previous-package',
     manifestHash: 'sha256:previous-manifest',
@@ -435,12 +435,12 @@ async function mountUpdateReviewDialog(inspection: ExternalPluginInspection = br
   disposers.push(render(() => (
     <PluginUpdateReviewDialog
       open
-      item={{ ...updateDialogItem, officialCatalog: undefined }}
+      item={{ ...updateDialogItem, officialCatalog: undefined, externalPackage: undefined }}
       canManage
       onOpenChange={() => undefined}
       onInspect={async () => inspection}
       onCommitExternal={async () => unavailableCommit()}
-      onOfficialUpdate={async () => undefined}
+
       onRefresh={() => undefined}
       onCommitted={() => undefined}
       onOpenSurface={() => undefined}
@@ -501,16 +501,15 @@ function mountLoadingUpdateReviewDialog(): {
   disposers.push(render(() => (
     <PluginUpdateReviewDialog
       open={open()}
-      item={{ ...updateDialogItem, officialCatalog: { ...updateDialogItem.officialCatalog!, installPreview: undefined } }}
+      item={{ ...updateDialogItem, externalPackage: { sourceProvenance: { ...browserInspection().source_provenance, kind: 'package_url' } as never, securitySummary: browserInspection().security_summary, executionApproval: browserInspection().execution_approval, updateEligibility: browserInspection().update_eligibility } }}
       canManage
       onOpenChange={setOpen}
-      onInspect={vi.fn()}
-      onLoadMarketDetail={async (_pluginID, _generation, signal) => {
+      onInspect={async (_request, signal) => {
         inspectionSignal = signal;
         return new Promise<never>(() => undefined);
       }}
       onCommitExternal={async () => unavailableCommit()}
-      onOfficialUpdate={async () => undefined}
+
       onRefresh={() => undefined}
       onCommitted={() => undefined}
       onOpenSurface={() => undefined}
@@ -566,12 +565,6 @@ function browserInspection(): ExternalPluginInspection {
     plugin_id: 'com.example.toolbox',
     version: '1.2.3',
     inspected_hashes: { package_sha256: packageHash, manifest_sha256: manifestHash, entries_sha256: entriesHash },
-    signature_assessment: {
-      state: 'absent',
-      reason_codes: [],
-      assessed_hashes: { package_sha256: packageHash, manifest_sha256: manifestHash, entries_sha256: entriesHash },
-      assessed_at: '2026-07-25T10:00:00Z',
-    },
     source_provenance: {
       kind: 'package_url',
       source_origin: 'https://plugins.example.com',
@@ -859,18 +852,22 @@ describe('plugin management browser geometry and interaction', () => {
     const item: PluginInventoryItem = { ...metricsItem, inventoryKey: 'catalog:upgrade', pluginInstanceID: undefined, version: undefined, managementRevision: undefined, defaultLaunchTarget: undefined, authorization: undefined, lifecycleState: 'not_installed', officialCatalog: { ...catalog, installPreview: { ...preview, security_summary: { ...preview.security_summary, process: undefined, background: undefined, data_upgrade: { from: [{ version: '1.0.0', shape_sha256: 'b'.repeat(64) }], method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000 } } } } };
     const host = fixedHost();
     const onCommand = vi.fn();
-    disposers.push(render(() => <PluginCenterView projection={{ items: [item] }} loading={false} canManagePlugins canOpenPluginSurfaces onRefresh={() => undefined} onCommand={onCommand} />, host));
+    const onInspectExternal = vi.fn(async () => ({ ...browserInspection(), security_summary: item.officialCatalog!.installPreview!.security_summary }));
+    const onCommitExternal = vi.fn();
+    disposers.push(render(() => <PluginCenterView projection={{ items: [item] }} loading={false} canManagePlugins canOpenPluginSurfaces onRefresh={() => undefined} onCommand={onCommand} onInspectExternal={onInspectExternal} onCommitExternal={onCommitExternal} />, host));
     await settle();
     host.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:upgrade"]')!.click();
-    await vi.waitFor(() => expect(document.querySelector('[data-plugin-install-data-upgrade]')).not.toBeNull());
-    const review = document.querySelector<HTMLElement>('[data-plugin-install-data-upgrade]')!;
-    const details = review.querySelector<HTMLDetailsElement>('details')!;
+    await vi.waitFor(() => expect(document.querySelector('[data-external-plugin-report]')).not.toBeNull());
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const details = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     expect(details.open).toBe(false);
     details.querySelector('summary')!.click();
     await settle();
-    expect(details.textContent).toContain('method=data.convert');
-    expectNoHorizontalOverflow(review);
-    expectInsideViewport(document.querySelector<HTMLElement>('[data-plugin-install-review-confirm]')!, viewport);
+    expect(details.textContent).toContain('data.convert');
+    expectNoHorizontalOverflow(dialog);
+    expectInsideViewport(dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!, viewport);
+    expect(onInspectExternal).toHaveBeenCalledOnce();
+    expect(onCommitExternal).not.toHaveBeenCalled();
     expect(onCommand).not.toHaveBeenCalled();
   });
 
@@ -1190,10 +1187,9 @@ describe('plugin management browser geometry and interaction', () => {
     expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(getComputedStyle(item).boxShadow).toBe('none');
     const filterTriggers = Array.from(host.querySelectorAll<HTMLElement>('[data-plugin-center-filter]'));
-    expect(filterTriggers).toHaveLength(4);
+    expect(filterTriggers).toHaveLength(3);
     expect(filterTriggers.map((trigger) => trigger.textContent)).toEqual(expect.arrayContaining([
       expect.stringContaining('Plugin source: All'),
-      expect.stringContaining('Trust: All'),
       expect.stringContaining('Lifecycle: All'),
     ]));
     filterTriggers.forEach((trigger) => expect(trigger.querySelector('svg')).not.toBeNull());
@@ -1266,7 +1262,7 @@ describe('plugin management browser geometry and interaction', () => {
         },
         progress: [{ task_id: 'task', request_id: 'request', stage: 'download', status: 'running', completed: 256, total: 512 }],
         ...(observation === 'failed' ? {
-          failure: { source: 'execution' as const, code: 'PLUGIN_RELEASE_NETWORK', retryable: true, recovery: 'retry_install' as const },
+          failure: { source: 'execution' as const, code: 'PLUGIN_RELEASE_NETWORK', retryable: false, recovery: 'review_again' as const },
         } : {}),
       }]);
       await settle();
@@ -1404,7 +1400,7 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
     const source = host.querySelector<HTMLElement>('[data-plugin-center-filter="source"]')!;
     const sourceTrigger = source.closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
-    const trustTrigger = host.querySelector<HTMLElement>('[data-plugin-center-filter="trust"]')!
+    const lifecycleTrigger = host.querySelector<HTMLElement>('[data-plugin-center-filter="lifecycle"]')!
       .closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
     expect(source.matches('button, [role="button"]')).toBe(false);
     expect(source.tabIndex).toBe(-1);
@@ -1418,7 +1414,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(sourceTrigger.getAttribute('aria-expanded')).not.toBe('true');
     expect(document.activeElement).toBe(sourceTrigger);
     await userEvent.tab();
-    expect(document.activeElement).toBe(trustTrigger);
+    expect(document.activeElement).toBe(lifecycleTrigger);
   });
 
   it.each(viewportCases.filter(({ width }) => width <= 390))(
@@ -1757,7 +1753,6 @@ describe('plugin management browser geometry and interaction', () => {
     await page.viewport(viewport.width, viewport.height);
     document.documentElement.classList.add(viewport.theme);
     const inspection = browserInspection();
-    inspection.signature_assessment.state = 'verified';
     inspection.presentation = {
       default_locale: 'en-US', locales: [{
         locale: 'en-US', plugin_name: 'Weather', publisher_name: 'Example Publisher',
@@ -1799,22 +1794,22 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const consent = dialog.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
-    const trustReview = dialog.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    const packageReview = dialog.querySelector<HTMLElement>('[data-external-plugin-review]')!;
     const highlights = dialog.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
     const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     const footer = dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!;
-    expect(trustReview.textContent).toContain('Confirm this package source');
-    expect(trustReview.textContent).not.toContain('Waiting for your approval');
+    expect(packageReview.textContent).toContain('Declared access');
+    expect(packageReview.textContent).not.toContain('Waiting for your approval');
     expect(highlights.textContent).toContain('api.github.com:443');
     expect(highlights.textContent).toContain('Access');
     expect(highlights.textContent).not.toContain('Other access to review');
     expect(highlights.textContent).not.toContain('declares no plugin capabilities or access');
     expect(report.open).toBe(false);
-    expect(document.activeElement).toBe(trustReview.querySelector('[data-external-plugin-review-heading]'));
+    expect(document.activeElement).toBe(packageReview.querySelector('[data-external-plugin-review-heading]'));
     expect(footer.contains(consent)).toBe(true);
     expectInsideViewport(dialog, viewport);
     expectNoHorizontalOverflow(consent);
-    expectNoHorizontalOverflow(trustReview);
+    expectNoHorizontalOverflow(packageReview);
     expectNoHorizontalOverflow(highlights);
     expectNoHorizontalOverflow(report);
     expectNoHorizontalOverflow(footer);
@@ -1843,15 +1838,15 @@ describe('plugin management browser geometry and interaction', () => {
     dialog.querySelector<HTMLButtonElement>('[data-external-plugin-inspect]')!.click();
     await settle();
 
-    const trustReview = dialog.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    const packageReview = dialog.querySelector<HTMLElement>('[data-external-plugin-review]')!;
     const highlights = dialog.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
     const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     const reportSummary = report.querySelector<HTMLElement>('summary')!;
     const footer = dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!;
     expect(document.documentElement.lang).toBe('de-DE');
-    expect(document.activeElement).toBe(trustReview.querySelector('[data-external-plugin-review-heading]'));
+    expect(document.activeElement).toBe(packageReview.querySelector('[data-external-plugin-review-heading]'));
     expectInsideViewport(dialog, viewport);
-    [dialog, trustReview, highlights, report, footer].forEach(expectNoHorizontalOverflow);
+    [dialog, packageReview, highlights, report, footer].forEach(expectNoHorizontalOverflow);
 
     reportSummary.focus();
     expect(document.activeElement).toBe(reportSummary);

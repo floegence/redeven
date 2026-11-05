@@ -1,14 +1,14 @@
 import { readSessionEvents } from '../services/sessionHTTP';
 import {
   PluginPlatformRequestError,
-  type PluginExecution,
+  pluginPlatformErrorCodes,
+  type PluginInspectedInstallOperation,
   type PluginPlatformClient,
   type PluginRequestOptions,
   type PluginRetainedRecoveryInspection,
   type PluginRetainedRecoveryInspectOptions,
 } from '@floegence/redevplugin-ui';
 
-import { sameReleaseRef } from './pluginUpdateProjection';
 import { officialPluginCatalog } from './officialPluginCatalog';
 import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
@@ -20,7 +20,6 @@ import type {
   ExternalPluginInspectionRequest,
   PluginInventoryProjection,
   PluginManagementCommand,
-  PluginOfficialInstallCommand,
   ReDevPluginRecord,
   PluginMarketRefreshEvent,
   PluginMarketSnapshot,
@@ -39,7 +38,9 @@ export type PluginMarketCatalogResult = Readonly<{
 
 export type PluginLifecycleAPI = ReturnType<typeof createPluginLifecycleAPI>;
 
-export class ExternalPackageInspectionTerminalError extends Error {}
+export class ExternalPackageInspectionTerminalError extends PluginPlatformRequestError {
+  constructor(message: string) { super('PLUGIN_INVALID_REQUEST', message, {}, 'not_committed'); }
+}
 
 export function createPluginLifecycleAPI(
   client: PluginPlatformClient,
@@ -50,7 +51,6 @@ export function createPluginLifecycleAPI(
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
   let marketUnavailable = false;
   let marketGeneration: number | undefined;
-  const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
   const listInstalledPlugins = async (options: PluginRequestOptions = {}): Promise<ReDevPluginRecord[]> => {
     const result = await client.catalog(options);
     return result.plugins;
@@ -209,101 +209,128 @@ export function createPluginLifecycleAPI(
     request: ExternalPluginInspectionRequest,
     options: PluginRequestOptions = {},
   ): Promise<ExternalPluginInspection> => {
+    if (request.sourceKind === 'installed_source') {
+      return client.inspectPluginUpdate({ plugin_instance_id: request.pluginInstanceID, expected_management_revision: request.expectedManagementRevision }, options);
+    }
     if (request.sourceKind === 'package_upload') {
       return client.inspectUploadedExternalPackage(request.intent, request.file, options);
     }
     return client.inspectExternalPackage({
       intent: request.intent,
+      ...(request.sourceKind === 'github_repository' && request.expected ? {
+        expected_plugin_id: request.expected.release.plugin_id,
+        expected_publisher_id: request.expected.release.publisher_id,
+        expected_version: request.expected.release.version,
+        expected_package_sha256: `sha256:${request.expected.release.package_sha256}`,
+        expected_security_summary_sha256: request.expected.summary_sha256,
+        expected_contract_set_sha256: request.expected.contract_set_sha256,
+      } : {}),
       source: request.sourceKind === 'package_url'
         ? { kind: 'package_url', url: request.url }
         : {
             kind: 'github_repository',
             url: request.url,
+            host: 'redeven',
             ...(request.tag?.trim() ? { tag: request.tag.trim() } : {}),
+            ...(request.pluginID ? { plugin_id: request.pluginID } : {}),
+            ...(request.repositoryID ? { repository_id: request.repositoryID } : {}),
+            ...(request.releaseID ? { release_id: request.releaseID } : {}),
+            ...(request.assetID ? { asset_id: request.assetID } : {}),
           },
     }, options);
   };
 
-  const installExternalPackage = async (
+  const requestByInspection = new Map<string, string>();
+  const activeInstalls = new Map<string, Promise<ExternalPluginCommitResult>>();
+  const startInspectedInstall = (
     inspection: ExternalPluginInspection,
-    options: PluginRequestOptions = {},
-  ): Promise<ExternalPluginCommitResult> => (
-    client.installInspectedPackage({
-      inspection_id: inspection.inspection_id,
-      expected_package_sha256: inspection.inspected_hashes.package_sha256,
-    }, options)
-  );
-
-  const installOfficialRelease = async (
-    command: PluginOfficialInstallCommand,
     requestID: string,
     options: PluginRequestOptions = {},
-  ): Promise<PluginExecution> => (
-    client.startReleaseInstallExecution({
-      request_id: requestID,
-      plugin_instance_id: command.pluginInstanceID,
-      release_ref: command.releaseRef,
-      release_identity_digest: command.releaseIdentityDigest,
-      manifest_sha256: command.manifestSHA256,
-      contract_set_sha256: command.contractSetSHA256,
-      summary_sha256: command.summarySHA256,
-    } as Parameters<PluginPlatformClient['startReleaseInstallExecution']>[0], options)
-  );
+    automatic = false,
+  ): Promise<PluginInspectedInstallOperation> => client.startInspectedInstall({
+    request_id: requestID,
+    inspection_id: inspection.inspection_id,
+    expected_package_sha256: inspection.inspected_hashes.package_sha256,
+    ...(automatic ? { automatic: true } : {}),
+  }, options);
 
-  const listReleaseInstallExecutions = async (
-    options: PluginRequestOptions = {},
-  ): Promise<PluginExecution[]> => {
-    const executions: PluginExecution[] = [];
-    let cursor: number | undefined;
+  const listInspectedInstalls = async (options: PluginRequestOptions = {}): Promise<PluginInspectedInstallOperation[]> => {
+    const operations: PluginInspectedInstallOperation[] = [];
+    let cursor = 0;
     do {
-      const page = await client.listReleaseInstallExecutions({
-        limit: 500,
-        ...(cursor === undefined ? {} : { cursor }),
-      }, options);
-      executions.push(...page.executions);
+      const page = await client.listInspectedInstalls({ limit: 500, cursor }, options);
+      operations.push(...page.operations);
+      if (page.next_cursor !== 0 && page.next_cursor <= cursor) throw new Error('Invalid installation cursor');
       cursor = page.next_cursor;
-    } while (cursor !== undefined);
-    return executions;
+    } while (cursor !== 0);
+    return operations;
   };
 
-  const getReleaseInstallExecution = (
-    executionID: string,
-    options: PluginRequestOptions = {},
-  ): Promise<PluginExecution> => (
-    client.getExecution(executionID, options)
-  );
+  const getInspectedInstall = (requestID: string, options: PluginRequestOptions = {}) => client.getInspectedInstall(requestID, options);
+  const listInstallExecutionEvents = (executionID: string, cursor: number, options: PluginRequestOptions = {}) => client.listExecutionEvents(executionID, { after_cursor: cursor, limit: 1_000 }, options);
 
-  const listReleaseInstallExecutionEvents = (
-    executionID: string,
-    cursor: number,
+  const performInspectedInstall = async (
+    inspection: ExternalPluginInspection,
     options: PluginRequestOptions = {},
-  ) => client.listExecutionEvents(executionID, { after_cursor: cursor, limit: 1_000 }, options);
-
-  const getIncompatibleRetainedDataRevision = async (
-    pluginInstanceID: string,
-    options: PluginRequestOptions = {},
-  ): Promise<number> => {
-    const result = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
-    if (result.retained_data.length !== 1) {
-      throw new Error('The incompatible retained plugin data is no longer available');
+    automatic = false,
+  ): Promise<ExternalPluginCommitResult> => {
+    let requestID = requestByInspection.get(inspection.inspection_id);
+    const existingRequest = requestID !== undefined;
+    const requireCurrentInspection = () => {
+      if (!(Date.parse(inspection.expires_at) > Date.now())) {
+        throw new ExternalPackageInspectionTerminalError('Inspect the package again before installing');
+      }
+    };
+    if (!existingRequest) requireCurrentInspection();
+    requestID ??= crypto.randomUUID();
+    requestByInspection.set(inspection.inspection_id, requestID);
+    const startOrReconcile = async (): Promise<PluginInspectedInstallOperation> => {
+      try { return await startInspectedInstall(inspection, requestID, options, automatic); }
+      catch (error) {
+        if (error instanceof PluginPlatformRequestError && error.mutationOutcome === 'not_committed') {
+          requestByInspection.delete(inspection.inspection_id);
+          if (error.errorCode === 'PLUGIN_INVALID_REQUEST') throw new ExternalPackageInspectionTerminalError('Inspect the package again before installing');
+          throw error;
+        }
+        return getInspectedInstall(requestID, options);
+      }
+    };
+    let receipt: PluginInspectedInstallOperation;
+    if (existingRequest) {
+      // Reconcile the original operation; never invent a retry after an uncertain write.
+      try { receipt = await getInspectedInstall(requestID, options); }
+      catch (error) {
+        if (!(error instanceof PluginPlatformRequestError) || error.errorCode !== 'PLUGIN_EXECUTION_NOT_FOUND') throw error;
+        requireCurrentInspection();
+        receipt = await startOrReconcile();
+      }
+    } else receipt = await startOrReconcile();
+    const deadline = Date.now() + 120_000;
+    while (!['completed', 'failed', 'canceled', 'orphaned'].includes(receipt.execution.status)) {
+      if (Date.now() >= deadline) throw new PluginPlatformRequestError('PLUGIN_INSTALL_INTERRUPTED', 'Installation is still being reconciled', {}, 'unknown');
+      await waitForInstall(300, options.signal);
+      receipt = await getInspectedInstall(requestID, options);
     }
-    return result.retained_data[0]!.revision;
+    if (receipt.mutation_outcome !== 'committed') {
+      if (receipt.mutation_outcome === 'not_committed') throw new ExternalPackageInspectionTerminalError('Inspect the package again after the failed installation');
+      throw new PluginPlatformRequestError(pluginPlatformErrorCodes.find((code) => code === receipt.execution.failure_code) ?? 'PLUGIN_INSTALL_INTERRUPTED', 'Plugin installation did not commit', {}, receipt.mutation_outcome);
+    }
+    // The durable receipt owns the mutation outcome. Inventory is a subsequent
+    // read and cannot change a committed installation into an unknown mutation.
+    const installed = await listInstalledPlugins(options).catch(() => []);
+    const plugin = installed.find((item) => item.plugin_instance_id === receipt.execution.plugin_instance_id && item.package_hash === receipt.package_sha256);
+    return { plugin, operation: receipt };
   };
 
-  const deleteIncompatibleRetainedData = async (
-    pluginInstanceID: string,
-    expectedRevision: number,
-    options: PluginRequestOptions = {},
-  ): Promise<void> => {
-    const result = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
-    if (result.retained_data.length === 0) return;
-    if (result.retained_data.length !== 1 || result.retained_data[0]!.revision !== expectedRevision) {
-      throw new Error('The retained plugin data changed after confirmation');
-    }
-    await client.deleteRetainedData({
-      plugin_instance_id: pluginInstanceID,
-      expected_binding_revision: expectedRevision,
-    }, options);
+  const installExternalPackage = (inspection: ExternalPluginInspection, options: PluginRequestOptions = {}, automatic = false): Promise<ExternalPluginCommitResult> => {
+    const pending = activeInstalls.get(inspection.inspection_id);
+    if (pending) return pending;
+    const request = performInspectedInstall(inspection, options, automatic);
+    const tracked = request.finally(() => {
+      if (activeInstalls.get(inspection.inspection_id) === tracked) activeInstalls.delete(inspection.inspection_id);
+    });
+    activeInstalls.set(inspection.inspection_id, tracked);
+    return tracked;
   };
 
   const listRecoverableData = (targetPluginInstanceID: string, options: PluginRequestOptions = {}) =>
@@ -352,18 +379,6 @@ export function createPluginLifecycleAPI(
           expected_management_revision: command.expectedManagementRevision,
           delete_data: command.dataRetention === 'delete_data',
         }, options);
-      case 'update': {
-        const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
-        if (command.targetVersion !== command.releaseRef.version
-          || !sameReleaseRef(command.releaseRef, official.distribution.releaseRef)) {
-          throw new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', 'Official plugin update target does not match its signed release reference', {}, 'not_committed');
-        }
-        return client.updateReleaseRef({
-          plugin_instance_id: command.pluginInstanceID,
-          expected_management_revision: command.expectedManagementRevision,
-          release_ref: command.releaseRef,
-        }, options);
-      }
       case 'grant_permission':
         return grantPermission(command, options);
       case 'revoke_permission':
@@ -393,12 +408,12 @@ export function createPluginLifecycleAPI(
     loadMarketDetail: loadPluginMarketDetail,
     inspectExternalPackage,
     installExternalPackage,
-    installOfficialRelease,
-    listReleaseInstallExecutions,
-    getReleaseInstallExecution,
-    listReleaseInstallExecutionEvents,
-    getIncompatibleRetainedDataRevision,
-    deleteIncompatibleRetainedData,
+    startInspectedInstall,
+    listInspectedInstalls,
+    getInspectedInstall,
+    listInstallExecutionEvents,
+    listRepositoryPlugins: (url: string, options: PluginRequestOptions = {}) => client.listRepositoryPlugins({ url, host: 'redeven' }, options),
+    setAutomaticUpdates: (...args: Parameters<PluginPlatformClient['setAutomaticUpdates']>) => client.setAutomaticUpdates(...args),
     listRecoverableData,
     inspectRetainedRecovery,
     commitRetainedRecovery,
@@ -491,17 +506,15 @@ export async function loadPluginMarketDetail(pluginID: string, generation: numbe
   };
 }
 
-function requireOfficialPlugin(
-  catalog: ReadonlyMap<string, OfficialPluginCatalogItem>,
-  pluginID: string,
-): OfficialPluginCatalogItem {
-  const item = catalog.get(pluginID);
-  if (!item) {
-    throw new Error('Official plugin release is unavailable');
-  }
-  return item;
-}
-
 function assertNever(value: never): never {
   throw new Error(`Unsupported plugin lifecycle command: ${JSON.stringify(value)}`);
+}
+
+function waitForInstall(delay: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, delay);
+    const abort = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); reject(signal?.reason); };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 }

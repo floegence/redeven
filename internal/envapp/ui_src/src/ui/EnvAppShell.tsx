@@ -102,6 +102,7 @@ import { classifyFilePreviewError, getFilePreviewErrorMeta } from './widgets/fil
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
+import { startPluginAutomaticUpdates } from './plugins/pluginAutomaticUpdates';
 import { PluginCenterView } from './plugins/PluginCenterView';
 import { PluginPanel } from './plugins/PluginPanel';
 import {
@@ -119,7 +120,6 @@ import {
   createPluginInstallCoordinator,
   type PluginInstallCoordinator,
 } from './plugins/pluginInstallCoordinator';
-import { completeApprovedOfficialInstall } from './plugins/pluginApprovedInstallSetup';
 import {
   PluginConfirmationDialog,
   createPluginConfirmationQueue,
@@ -1705,26 +1705,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: refetchPluginInventory,
-    completeApprovedInstall: async (pluginInstanceID, inventory, signal) => {
-      const result = await completeApprovedOfficialInstall({
-        pluginInstanceID,
-        lifecycle: pluginLifecycle,
-        refreshInventory: refetchPluginInventory,
-        inventory,
-        signal,
-      });
-      return result;
+    completeApprovedInstall: async (pluginInstanceID, inventory) => {
+      if (!inventory.items.some((item) => item.pluginInstanceID === pluginInstanceID)) throw new Error('Installed plugin is missing from inventory');
+      // Permissions remain independent user decisions after installation.
     },
-    createRequestID: () => createClientId(),
-    resolvePluginID: (pluginInstanceID) => (
-      pluginInventoryProjection()?.items.find((item) => (
-        item.pluginInstanceID === pluginInstanceID
-        || item.officialCatalog?.pluginInstanceID === pluginInstanceID
-      ))?.pluginID
-    ),
-    isPluginInstalled: (pluginInstanceID) => Boolean(
-      pluginInventoryProjection()?.items.some((item) => item.pluginInstanceID === pluginInstanceID),
-    ),
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
@@ -1858,6 +1842,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
   let pluginInstallResumeEligible = false;
   createEffect(() => {
+    pluginInventorySource();
+    pluginInstallCoordinator?.reset();
+    pluginInstallResumeEligible = false;
+  });
+  createEffect(() => {
     const eligible = protocol.status() === 'connected'
       && canAdmin()
       && (!isLocalMode() || pluginSessionReady())
@@ -1869,7 +1858,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
     if (pluginInstallResumeEligible) return;
     pluginInstallResumeEligible = true;
-    void pluginInstallCoordinator?.resume();
+    void pluginInstallCoordinator?.resume().catch(() => { pluginInstallResumeEligible = false; });
   });
   createEffect(() => {
     if (!pluginInventorySource()) {
@@ -2246,7 +2235,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
 
   const performPluginCenterManagementCommand = async (
-    command: Exclude<PluginLifecycleCommand, { type: 'open_surface' } | { type: 'install' }>,
+    command: Exclude<PluginLifecycleCommand, { type: 'open_surface' }>,
     signal: AbortSignal,
   ) => {
     const owner = pluginInventorySource();
@@ -2309,11 +2298,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         expectedManagementRevision: command.expectedManagementRevision,
       });
     }
-    if (command.type === 'install') {
-      return pluginInstallCoordinator!.start(
-        command,
-      );
-    }
     return serializePluginPlacementOperation(async () => {
       await performPluginCenterManagementCommand(command, signal);
       if (command.type === 'uninstall') {
@@ -2325,8 +2309,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const commitExternalPluginPackage = (
     inspection: ExternalPluginInspection,
     signal: AbortSignal,
-  ): Promise<ExternalPluginCommitResult> => serializePluginPlacementOperation(async () => {
-    if (inspection.intent.action !== 'update') return pluginLifecycle.installExternalPackage(inspection, { signal });
+    automatic = false,
+  ): Promise<ExternalPluginCommitResult> => {
+    const requestedOwner = pluginInventorySource();
+    return serializePluginPlacementOperation(async () => {
+    if (!requestedOwner || pluginInventorySource() !== requestedOwner || signal.aborted) throw new PluginPlatformRequestError('PLUGIN_ACTION_DENIED', 'Plugin installation owner changed', {}, 'not_committed');
+    if (inspection.intent.action !== 'update') return pluginLifecycle.installExternalPackage(inspection, { signal }, automatic);
     const owner = pluginInventorySource();
     const id = inspection.intent.plugin_instance_id;
     const expectedRevision = inspection.intent.expected_management_revision;
@@ -2335,7 +2323,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     let mutationError: unknown;
     try {
       await pluginSurfaceCoordinator.closePlugin(id);
-      result = await pluginLifecycle.installExternalPackage(inspection, { signal });
+      result = await pluginLifecycle.installExternalPackage(inspection, { signal }, automatic);
     } catch (error) { mutationError = error; }
     if (pluginInventorySource() !== owner) throw mutationError ?? new Error(i18n.t('uiCopy.plugin.continuity.loading'));
     const outcome = mutationError === undefined ? 'committed' : pluginMutationOutcome(mutationError);
@@ -2358,9 +2346,40 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       setPluginSurfacePhase(id);
     };
     pluginSurfaceReconciliations.set(id, reconcile);
-    try { await reconcile(); } catch (error) { if (!mutationError) throw error; }
+    try { await reconcile(); } catch (error) {
+      if (!mutationError && !result) throw error;
+      // The durable receipt already proves commit. Surface/list reconciliation
+      // remains pending and must not turn that result into an unknown mutation.
+    }
     if (mutationError) throw mutationError;
     return result!;
+    }).finally(() => {
+      if (requestedOwner && pluginInventorySource() === requestedOwner) {
+        void pluginInstallCoordinator?.resume().catch(() => undefined);
+      }
+    });
+  };
+
+  createEffect(() => {
+    const owner = pluginInventorySource();
+    if (!owner || !canAdmin()) return;
+    const controller = new AbortController();
+    const stop = startPluginAutomaticUpdates({
+      lifecycle: pluginLifecycle,
+      signal: controller.signal,
+      commit: (inspection, signal) => commitExternalPluginPackage(inspection, signal, true),
+      onReviewRequired: (id) => {
+        if (pluginInventorySource() !== owner) return;
+        const item = pluginInventoryProjection()?.items.find((entry) => entry.pluginInstanceID === id);
+        if (item) notify.info(i18n.t('uiCopy.plugin.updateAvailable'), item.displayName);
+      },
+      onSettled: async () => {
+        if (pluginInventorySource() !== owner) return;
+        await refetchPluginInventory();
+        await pluginInstallCoordinator?.resume();
+      },
+    });
+    onCleanup(() => { controller.abort('Automatic update owner changed'); stop(); });
   });
 
   const reportPluginNavigationFailure = (error: unknown) => {
@@ -3978,14 +3997,18 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           onRetryRuntimeRecovery={retryPluginRuntimeRecovery}
           installOperations={pluginInstallCoordinator?.projections() ?? []}
           onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
-          onReviewOfficialInstall={(pluginInstanceID) => pluginInstallCoordinator?.forget(pluginInstanceID)}
-          onDiscardRetainedDataAndRetry={(pluginInstanceID) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID)}
           onRefresh={async () => {
             await refreshPluginMarket();
             await pluginInstallCoordinator?.resume();
           }}
           onCommand={handlePluginCenterCommand}
           onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
+          onListRepository={(url, signal) => pluginLifecycle.listRepositoryPlugins(url, { signal })}
+          onSetAutomaticUpdates={async (item, enabled) => {
+            if (!item.pluginInstanceID || item.managementRevision === undefined) return;
+            await pluginLifecycle.setAutomaticUpdates({ plugin_instance_id: item.pluginInstanceID, expected_management_revision: item.managementRevision, enabled });
+            await refetchPluginInventory();
+          }}
           onCommitExternal={commitExternalPluginPackage}
           onRefreshInstalled={refetchPluginInventory}
           onLoadMarketDetail={pluginLifecycle.loadMarketDetail}

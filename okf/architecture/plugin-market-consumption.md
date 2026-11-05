@@ -3,35 +3,31 @@ type: Architecture Contract
 title: Plugin market consumption
 tags: [architecture, plugins, market, release]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Redeven atomically refreshes validated latest-only market metadata for trusted Env App. Catalog identifies GitHub releases but hosts no packages or grants. ReDevPlugin verifies exact assets. Invalid refresh fails; last-good data permits stale discovery, never automatic updates.
+Redeven consumes one complete public market representation. Official and community are display classifications, not admission privileges. Packages remain ordinary `.redevplugin` assets in GitHub Releases; every installation uses the released Host inspection and durable installation APIs.
 
 # Contract
 
-- Startup reads validated local cache without waiting for market. Fetch pages in order; every entry needs complete `install_preview`, with no per-plugin `/latest` fan-out or incomplete-entry fallback.
-- Keep one current release per plugin/channel. Disabled/revoked market entries constrain discovery/actions; upstream revocation evidence owns install/runtime admission.
-- Installed author/icon presentation must match its generation/identity; mismatches use a generic placeholder rather than newer copy/bytes.
-- Packages and signed trust transport come from GitHub Releases, never market Cloudflare storage. Installation/update requires normal product review and platform lifecycle; installation grants no permission/runtime access.
-- GitHub release tags are bounded safe names and may include a plugin-specific prefix. The signed release reference and verified package bind the version; the client does not infer it from the tag.
-- Source classification is requested explicitly from a capable market; older responses remain readable. Reviewed third-party listings use external package inspection and explicit confirmation, with publisher, plugin, version and all package hashes matched to the selected listing. Directory review does not confer official trust or automatic-update eligibility.
+- Startup reads the validated local cache without waiting for the market. Refresh uses ordered pages, one generation, complete inspection-derived previews, and atomic last-known-good replacement. No client capability headers, compatibility variants, per-plugin latest fan-out, or incomplete-entry fallback exists.
+- Discovery uses the `redevplugin` GitHub topic plus rechecks of already indexed repository identities. A fixed-commit `.redevplugin/index.json` selects ordinary packages in independent `<release-key>-v{version}` namespaces. No developer registration, plugin signatures, publisher trust, declaration approval, or separate third-party client path is required.
+- Ingest uses the released verifier and rechecks repository, release, tag commit, asset identity and bytes. Reject cross-repository plugin-ID takeover and same-version replacement. Failed scans retain the last valid projection.
+- Market retains one release per plugin/channel and bounded verified presentation/icons. It never proxies packages or grants lifecycle authority. Unavailable listings constrain discovery without revoking installations.
+- Inspection matches publisher/plugin/version, package/security/contract hashes and repository/release/asset identities. Both classifications share review and commit.
+- Installed presentation and permission requirements come from the installed package and Host-verified contracts. Newer market metadata cannot replace installed declarations or authorization facts.
 
 ## Network behavior
 
-The market client uses the same product network adapter as plugin package and
-release-document downloads. It follows current environment/system proxy policy
-and normal OS DNS/VPN routing. Startup remains cache-only; network errors affect
-refresh, detail or icon requests without blocking Runtime or changing verified
-installed state. The service releases only transports it creates; injected HTTP
-clients remain caller-owned.
+Market and package requests use the product network adapter, current environment/system proxy policy, and OS DNS/VPN routing. Startup stays cache-only. Singleflight, bounded backoff, jitter, cancellation, and generation reconciliation avoid request storms. Network failures cannot remove installed state or block ordinary Runtime startup. The service closes only transports it owns.
 
 # Boundaries
 
-Market owns reviewed metadata/publication. Redeven owns refresh, validated cache, trusted projection and official anchors. ReDevPlugin owns download, cryptographic trust, durable Executions/Events, install/update/rollback, revocation, registry, permissions and runtime. Market failure cannot remove installed plugins, block startup or authorize unverified content.
+Market owns discovery; Redeven owns presentation and authenticated scheduling. [Lifecycle](redevplugin-package-lifecycle.md) defines platform authority and distinguishes platform/runtime signatures from unsigned plugins.
 
 # Evidence
 
 - `redeven:internal/pluginmarket/service.go` - Source.
 - `redeven:internal/pluginmarket/contracts.go` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Unified lifecycle client.

@@ -13,7 +13,7 @@ import type { PluginInventoryItem } from './pluginTypes';
 const item: PluginInventoryItem = {
   inventoryKey: 'instance:network', pluginID: 'example.network', pluginInstanceID: 'network', displayName: 'Network',
   description: '', publisher: 'Example', iconFallback: 'generic', category: 'development', searchKeywords: [],
-  version: '1.0.0', managementRevision: 1, lifecycleState: 'enabled', trustBadge: 'community', pinned: false,
+  version: '1.0.0', managementRevision: 1, lifecycleState: 'enabled', sourceKind: 'community', pinned: false,
   networkConnectors: [{ connectorID: 'api', transport: 'http', configurable: true, httpMethods: ['GET', 'POST'] }],
 };
 const connection = { connector_id: 'api', revision: 0, scope: 'environment' as const, status: 'unconfigured' as const };

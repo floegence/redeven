@@ -23,7 +23,6 @@ import (
 	rpobservability "github.com/floegence/redevplugin/v3/pkg/observability"
 	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
 	processruntime "github.com/floegence/redevplugin/v3/pkg/process"
-	"github.com/floegence/redevplugin/v3/pkg/remoterelease"
 	"github.com/floegence/redevplugin/v3/pkg/secrets"
 )
 
@@ -55,7 +54,6 @@ type Integration struct {
 	runtimeAuthority       *RuntimeProcessAuthority
 	marketSnapshot         *pluginmarket.Snapshot
 	marketService          pluginMarketService
-	releaseProvider        *officialReleaseProvider
 	marketMu               sync.RWMutex
 	marketEvent            pluginmarket.RefreshEvent
 	marketSubscribers      map[int]chan pluginmarket.RefreshEvent
@@ -105,10 +103,6 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 	if err := opts.PermissionPolicy.Validate(); err != nil {
 		return nil, err
 	}
-	packageTrustVerifier, err := newPackageTrustVerifier()
-	if err != nil {
-		return nil, err
-	}
 
 	// ReDevPlugin v3 owns the control database and its current-only schema.
 	// Redeven supplies the selected state root and must not maintain a second
@@ -120,42 +114,11 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 
 	downloadTransport := hostnetwork.NewTransport(nil)
 	closers = append(closers, func() error { downloadTransport.CloseIdleConnections(); return nil })
-	var releaseModule *host.ReleaseModule
-	var releaseProvider *officialReleaseProvider
 	var marketSnapshot *pluginmarket.Snapshot
 	if opts.PluginMarket != nil {
-		releaseStage, releaseErr := externalsource.NewStageStore(filepath.Join(root, "release-artifacts"))
-		if releaseErr != nil {
-			return nil, releaseErr
-		}
-		closers = append(closers, releaseStage.Close)
-		releaseFetcher, releaseErr := externalsource.NewFetcher(externalsource.FetcherOptions{
-			Stage: releaseStage, SourceID: "redeven.official-release", Transport: downloadTransport,
-		})
-		if releaseErr != nil {
-			return nil, releaseErr
-		}
-		// This disposable byte cache is owned and validated by ReDevPlugin. An
-		// unavailable cache must not prevent the verified remote path from opening.
-		documentCache, cacheErr := remoterelease.OpenDocumentCache(ctx, filepath.Join(root, "release-documents.sqlite"))
-		if cacheErr == nil {
-			closers = append(closers, documentCache.Close)
-		} else if opts.Diagnostics != nil {
-			opts.Diagnostics.Append(diagnostics.Event{
-				Scope: pluginDiagScope, Kind: pluginDiagKind,
-				Message: "Release document cache unavailable; using verified remote transport",
-				Detail:  map[string]any{"operation": "open_release_document_cache"},
-			})
-		}
-		releaseModule, releaseProvider, releaseErr = newOfficialReleaseModulePending(releaseFetcher, documentCache)
-		if releaseErr != nil {
-			return nil, releaseErr
-		}
 		if snapshot, ok := opts.PluginMarket.CachedSnapshot(); ok {
-			if err := releaseProvider.setSnapshot(snapshot); err == nil {
-				frozen := snapshot.Clone()
-				marketSnapshot = &frozen
-			}
+			frozen := snapshot.Clone()
+			marketSnapshot = &frozen
 		}
 	}
 
@@ -219,15 +182,13 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 	hostConfig := host.Config{
 		StateRoot: root,
 		Core: host.CoreAdapters{
-			Policy:               sessions,
-			Authorization:        sessions,
-			PackageTrustVerifier: packageTrustVerifier,
-			Audit:                observability,
-			SecurityAudit:        observabilityStore,
-			Diagnostics:          observability,
-			Assets:               assetStore,
+			Policy:        sessions,
+			Authorization: sessions,
+			Audit:         observability,
+			SecurityAudit: observabilityStore,
+			Diagnostics:   observability,
+			Assets:        assetStore,
 		},
-		Release: releaseModule,
 		Runtime: runtimeModule,
 		IO:      ioModule,
 		Web:     &host.WebModule{Origins: surfaceOriginAdapter{}},
@@ -240,10 +201,9 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		Process:    &host.ProcessModule{Supervisor: processSupervisor},
 		Background: &host.BackgroundModule{RunnerFactory: host.NewBackgroundWorkerRunner, Policy: newBackgroundPolicyAdapter(opts.PermissionPolicy)},
 		ExternalPackage: &host.ExternalPackageModule{
-			SignatureAssessor: packageTrustVerifier,
-			SourceID:          "redeven.external-package",
-			Transport:         downloadTransport,
-			GitHub:            externalsource.GitHubRESTReleaseClientOptions{UserAgent: "Redeven"},
+			SourceID:  "redeven.external-package",
+			Transport: downloadTransport,
+			GitHub:    externalsource.GitHubRESTReleaseClientOptions{UserAgent: "Redeven"},
 		},
 	}
 	h, err := host.Open(ctx, hostConfig)
@@ -273,7 +233,6 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		runtimeAuthority: opts.RuntimeAuthority,
 		marketSnapshot:   marketSnapshot,
 		marketService:    opts.PluginMarket,
-		releaseProvider:  releaseProvider,
 		closers:          closers,
 	}
 	if integration.marketService != nil {

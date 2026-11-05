@@ -2,16 +2,16 @@ import { For, Show, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, CheckCircle, RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import type { PluginReleaseInstallProgressEvent } from '@floegence/redevplugin-ui';
+import type { PluginInstallProgressEvent } from '@floegence/redevplugin-ui';
 
 import { useI18n, type I18nHelpers } from '../i18n';
 import { pluginFailureCategory } from './pluginInstallFailure';
 import type { PluginInstallExecutionProjection } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
 
-type InstallStage = PluginReleaseInstallProgressEvent['stage'];
-type InstallProgress = Pick<PluginReleaseInstallProgressEvent, 'stage' | 'status'>
-  & Partial<Pick<PluginReleaseInstallProgressEvent, 'completed' | 'total'>>;
+type InstallStage = PluginInstallProgressEvent['stage'];
+type InstallProgress = Pick<PluginInstallProgressEvent, 'stage' | 'status'>
+  & Partial<Pick<PluginInstallProgressEvent, 'completed' | 'total'>>;
 const INSTALL_STAGES: readonly InstallStage[] = ['download', 'verify', 'install', 'enable'];
 
 export function PluginInstallStatus(props: {
@@ -19,18 +19,15 @@ export function PluginInstallStatus(props: {
   pluginName?: string;
   onRetry?: () => void;
   onReviewAgain?: () => void;
-  onResolveRetainedData?: () => void;
   compact?: boolean;
 }): JSX.Element {
   const i18n = useI18n();
   const execution = () => props.projection.execution;
   const failed = () => Boolean(props.projection.failure)
-    || execution()?.status === 'failed'
-    || execution()?.status === 'canceled'
-    || execution()?.status === 'orphaned';
+    || (props.projection.receipt?.mutation_outcome !== 'committed'
+      && ['failed', 'canceled', 'orphaned'].includes(execution()?.status ?? ''));
   const active = () => !failed()
     && props.projection.observation !== 'refresh_failed'
-    && props.projection.observation !== 'activation_failed'
     && (
       props.projection.observation === 'finalizing'
       || props.projection.observation === 'reconnecting'
@@ -40,7 +37,7 @@ export function PluginInstallStatus(props: {
   const progress = () => latestProgress(props.projection);
   const label = () => installStatusLabel(props.projection, i18n, progress());
   const statusIcon = () => (
-    failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed'
+    failed() || props.projection.observation === 'refresh_failed'
       ? AlertTriangle
       : props.projection.observation === 'finalizing'
         || props.projection.observation === 'reconnecting'
@@ -53,12 +50,12 @@ export function PluginInstallStatus(props: {
   return (
     <section
       data-plugin-install-execution={props.projection.pluginInstanceID}
-      role={failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed' ? 'alert' : 'status'}
-      aria-live={failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed' ? 'assertive' : 'polite'}
+      role={failed() || props.projection.observation === 'refresh_failed' ? 'alert' : 'status'}
+      aria-live={failed() || props.projection.observation === 'refresh_failed' ? 'assertive' : 'polite'}
       aria-busy={active()}
       class={cn(
         'min-w-0',
-        failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed'
+        failed() || props.projection.observation === 'refresh_failed'
           ? 'text-destructive'
           : 'text-foreground',
         PLUGIN_ENTER_MOTION_CLASS,
@@ -80,14 +77,11 @@ export function PluginInstallStatus(props: {
         action={recovery()}
         actionLabel={props.projection.observation === 'refresh_failed'
           ? i18n.t('uiCopy.plugin.installOperation.retryRefresh')
-          : props.projection.observation === 'activation_failed'
-            ? i18n.t('uiCopy.plugin.installOperation.retryActivation')
             : recovery() === 'review_again'
               ? i18n.t('uiCopy.plugin.installOperation.reviewAgain')
               : i18n.t('common.actions.retry')}
         onRetry={props.onRetry}
         onReviewAgain={props.onReviewAgain}
-        onResolveRetainedData={props.onResolveRetainedData}
       />
     </section>
   );
@@ -99,16 +93,14 @@ export function PluginInstallSummary(props: {
   onOpenDetails: (target: HTMLButtonElement) => void;
   onRetry?: () => void;
   onReviewAgain?: () => void;
-  onResolveRetainedData?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   const execution = () => props.projection.execution;
   const failed = () => Boolean(props.projection.failure)
-    || execution()?.status === 'failed'
-    || execution()?.status === 'canceled'
-    || execution()?.status === 'orphaned'
+    || (props.projection.receipt?.mutation_outcome !== 'committed'
+      && ['failed', 'canceled', 'orphaned'].includes(execution()?.status ?? ''))
     || props.projection.observation === 'refresh_failed'
-    || props.projection.observation === 'activation_failed';
+   ;
   const active = () => !failed()
     && (props.projection.observation === 'finalizing'
       || props.projection.observation === 'reconnecting'
@@ -133,25 +125,14 @@ export function PluginInstallSummary(props: {
     ? new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(bytes()!.completed / bytes()!.total)
     : position() > 0 ? `${position()} / ${INSTALL_STAGES.length}` : '';
   const recovery = () => props.projection.failure?.recovery ?? 'none';
-  const actionVisible = () => (
-    (recovery() === 'replay_submission'
-      || recovery() === 'retry_install'
-      || recovery() === 'refresh_inventory'
-      || recovery() === 'retry_setup') && props.onRetry
-  ) || (recovery() === 'review_again' && props.onReviewAgain)
-    || (recovery() === 'erase_retained_data' && props.onResolveRetainedData);
+  const actionVisible = () => (recovery() === 'refresh_inventory' && props.onRetry) || (recovery() === 'review_again' && props.onReviewAgain);
   const actionLabel = () => props.projection.observation === 'refresh_failed'
     ? i18n.t('uiCopy.plugin.installOperation.retryRefresh')
-    : props.projection.observation === 'activation_failed'
-      ? i18n.t('uiCopy.plugin.installOperation.retryActivation')
       : recovery() === 'review_again'
         ? i18n.t('uiCopy.plugin.installOperation.reviewAgain')
-        : recovery() === 'erase_retained_data'
-          ? i18n.t('uiCopy.plugin.installOperation.resolveRetainedData')
           : i18n.t('common.actions.retry');
   const runAction = () => {
     if (recovery() === 'review_again') props.onReviewAgain?.();
-    else if (recovery() === 'erase_retained_data') props.onResolveRetainedData?.();
     else props.onRetry?.();
   };
   const statusIcon = () => failed() ? AlertTriangle : active() ? RefreshIcon : CheckCircle;
@@ -208,15 +189,14 @@ export function PluginInstallSummary(props: {
         <Show when={props.announce !== false && actionVisible()}>
           <button
             type="button"
-            data-plugin-install-retry={recovery() !== 'review_again' && recovery() !== 'erase_retained_data' ? '' : undefined}
+            data-plugin-install-retry={recovery() !== 'review_again' ? '' : undefined}
             data-plugin-install-review-again={recovery() === 'review_again' ? '' : undefined}
-            data-plugin-install-resolve-retained-data={recovery() === 'erase_retained_data' ? '' : undefined}
             aria-label={actionLabel()}
             title={actionLabel()}
             class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={runAction}
           >
-            <Show when={recovery() === 'erase_retained_data'} fallback={<RefreshIcon class="h-4 w-4" />}><AlertTriangle class="h-4 w-4" /></Show>
+            <RefreshIcon class="h-4 w-4" />
           </button>
         </Show>
     </section>
@@ -235,7 +215,6 @@ function installStatusLabel(
   if (projection.observation === 'starting') return i18n.t('uiCopy.plugin.installOperation.starting');
   if (projection.observation === 'reconnecting') return i18n.t('uiCopy.plugin.installOperation.reconnecting');
   if (projection.observation === 'finalizing') return i18n.t('uiCopy.plugin.installOperation.finalizing');
-  if (projection.observation === 'activation_failed') return i18n.t('uiCopy.plugin.installOperation.activationFailed');
   if (projection.observation === 'refresh_failed') return i18n.t('uiCopy.plugin.installOperation.refreshFailed');
   const execution = projection.execution;
   if (!execution) {
@@ -243,6 +222,7 @@ function installStatusLabel(
       ? installFailureLabel(projection.failure.code, i18n)
       : i18n.t('uiCopy.plugin.installOperation.starting');
   }
+  if (projection.receipt?.mutation_outcome === 'committed') return i18n.t('uiCopy.plugin.installOperation.complete');
   if (execution.status === 'failed' || execution.status === 'canceled' || execution.status === 'orphaned') {
     return installFailureLabel(execution.failure_code ?? 'PLUGIN_INTERNAL_FAILURE', i18n);
   }
@@ -257,7 +237,6 @@ export function PluginInstallSteps(props: {
   actionLabel?: string;
   onRetry?: () => void;
   onReviewAgain?: () => void;
-  onResolveRetainedData?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   const states = () => stageStates(props.projection);
@@ -302,12 +281,7 @@ export function PluginInstallSteps(props: {
           </li>
         )}</For>
       </ol>
-      <Show when={(
-        props.action === 'replay_submission'
-        || props.action === 'retry_install'
-        || props.action === 'refresh_inventory'
-        || props.action === 'retry_setup'
-      ) && props.onRetry}>
+      <Show when={props.action === 'refresh_inventory' && props.onRetry}>
         <button
           type="button"
           data-plugin-install-retry
@@ -333,19 +307,7 @@ export function PluginInstallSteps(props: {
           {props.actionLabel ?? i18n.t('uiCopy.plugin.installOperation.reviewAgain')}
         </button>
       </Show>
-      <Show when={props.action === 'erase_retained_data' && props.onResolveRetainedData}>
-        <button
-          type="button"
-          data-plugin-install-resolve-retained-data
-          class={cn(
-            'min-h-9 cursor-pointer rounded-md border border-current px-3 text-xs font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            PLUGIN_PRESS_MOTION_CLASS,
-          )}
-          onClick={() => props.onResolveRetainedData?.()}
-        >
-          {i18n.t('uiCopy.plugin.installOperation.resolveRetainedData')}
-        </button>
-      </Show>
+
     </section>
   );
 }
@@ -370,10 +332,10 @@ function stageStates(projection?: PluginInstallExecutionProjection): Array<Insta
       if (states.get(stage)?.status !== 'failed') states.set(stage, { stage, status: 'completed' });
     }
   }
-  if (projection.execution?.status === 'completed') {
+  if (projection.receipt?.mutation_outcome === 'committed' || projection.execution?.status === 'completed') {
     for (const stage of INSTALL_STAGES) states.set(stage, { stage, status: 'completed' });
   }
-  if (projection.execution?.status === 'failed' && ![...states.values()].some((stage) => stage.status === 'failed')) {
+  if (projection.receipt?.mutation_outcome !== 'committed' && projection.execution?.status === 'failed' && ![...states.values()].some((stage) => stage.status === 'failed')) {
     const failureStage = projection.failure?.stage;
     if (failureStage) {
       states.set(failureStage, { stage: failureStage, status: 'failed' });
@@ -397,7 +359,6 @@ function installFailureLabel(code: string, i18n: I18nHelpers): string {
     case 'retained_data_incompatible': return i18n.t('uiCopy.plugin.installOperation.failure.retainedDataIncompatible');
     case 'denied': return i18n.t('uiCopy.plugin.installOperation.failure.denied');
     case 'manifest_invalid': return i18n.t('uiCopy.plugin.installOperation.failure.manifestInvalid');
-    case 'trust': return i18n.t('uiCopy.plugin.installOperation.failure.trust');
     case 'package_invalid': return i18n.t('uiCopy.plugin.installOperation.failure.packageInvalid');
     case 'package_too_large': return i18n.t('uiCopy.plugin.installOperation.failure.packageTooLarge');
     case 'package_path_forbidden': return i18n.t('uiCopy.plugin.installOperation.failure.packagePathForbidden');

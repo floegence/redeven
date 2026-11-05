@@ -37,7 +37,7 @@ describe('PluginIcon', () => {
       searchKeywords: [],
       publisher: 'Redeven',
       lifecycleState: 'enabled',
-      trustBadge: 'official',
+      sourceKind: 'official',
       pinned: false,
     };
 
@@ -64,7 +64,7 @@ describe('PluginIcon', () => {
       searchKeywords: [],
       publisher: 'Redeven',
       lifecycleState: 'enabled',
-      trustBadge: 'official',
+      sourceKind: 'official',
       pinned: false,
     };
     iconLoaderMocks.acquireCachedPluginIcon.mockReturnValue(undefined);
@@ -91,7 +91,7 @@ describe('PluginIcon', () => {
       searchKeywords: [],
       publisher: 'Redeven',
       lifecycleState: 'enabled',
-      trustBadge: 'official',
+      sourceKind: 'official',
       pinned: false,
     };
     iconLoaderMocks.acquireCachedPluginIcon.mockReturnValue(undefined);

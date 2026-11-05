@@ -5,7 +5,7 @@ import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js'
 
 import { useI18n } from '../i18n';
 import type { PluginInventoryItem, PluginProcessStatusState } from './pluginTypes';
-import { pluginLifecycleLabel, pluginTrustLabel } from './pluginPresentation';
+import { pluginLifecycleLabel, pluginSourceLabel } from './pluginPresentation';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { acquireCachedPluginIcon, loadPluginIcon, type LoadedPluginIcon, type PluginIconLoadState } from './pluginIconLoader';
 
@@ -170,20 +170,12 @@ export function PluginProcessStatusBadge(props: { state: PluginProcessStatusStat
   );
 }
 
-export function PluginTrustBadge(props: { item: PluginInventoryItem; class?: string }): JSX.Element {
+export function PluginSourceBadge(props: { item: PluginInventoryItem; class?: string }): JSX.Element {
   const i18n = useI18n();
-  const tone = (): TagVariant => {
-    if (props.item.trustBadge === 'official' || props.item.trustBadge === 'verified') {
-      return 'primary';
-    }
-    if (props.item.trustBadge === 'blocked' || props.item.trustBadge === 'revoked') {
-      return 'error';
-    }
-    return 'warning';
-  };
+  const tone = (): TagVariant => props.item.sourceKind === 'official' ? 'primary' : 'neutral';
   return (
     <Tag variant={tone()} size="sm" class={props.class}>
-      {pluginTrustLabel(props.item, i18n)}
+      {pluginSourceLabel(props.item, i18n)}
     </Tag>
   );
 }
@@ -222,7 +214,7 @@ export function PluginIdentityHeader(props: {
           >
             {displayName()}
           </h2>
-          <Show when={!props.review}><PluginTrustBadge item={props.item} /><PluginStatusBadge item={props.item} /></Show>
+          <Show when={!props.review}><PluginSourceBadge item={props.item} /><PluginStatusBadge item={props.item} /></Show>
         </div>
         <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span class="truncate" lang={presentation()?.resolved_locale} dir="auto">{publisher()}</span>

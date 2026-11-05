@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin discovery, placement and layout continuity
 tags: [ui, plugins, activity, workbench, plugin-center]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -20,7 +20,7 @@ Tiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/
 Use environment-scoped Shell preferences with independent Activity/Workbench pins and synchronized selected/accessibility state. Pins grant no launch/enable/authority. Activity unpin first completes exact retirement; failed close retains pin/error. Other windows/siblings retain lifetimes.
 
 ### Recovery, installation and policy
-Authenticated session-ready invokes idempotent Host recoverEnabled without timers. Every placement consumes action_state; trust/grants/policy/recovery cannot derive can_open. [Installation](plugin-package-review.md#installation-progress) owns durable Execution/setup; [package review](plugin-package-review.md#package-review) external packages. Failure preserves placement. Plugin Center joins inventory/grants/Host requirements/policy. Method effects cannot rename capabilities; failure reloads authority/requires fresh confirmation.
+Authenticated session-ready invokes idempotent Host recoverEnabled without timers. Every placement consumes action_state; source classification/grants/policy/recovery cannot derive can_open. [Installation](plugin-package-review.md#installation-progress) owns durable Execution observation; [package review](plugin-package-review.md#package-review) external packages. Failure preserves placement. Plugin Center joins inventory/grants/Host requirements/policy. Method effects cannot rename capabilities; failure reloads authority/requires fresh confirmation.
 
 ### Activity pages/windows
 Allocate a fresh PluginSurfaceSlot only when placement and document are visible. Hidden unopened placements retain layout without iframe/authority; close requires no open/revoke round trip. Once opening starts, hiding retains independent slot/draft/selection/undo/pending work. Visible placements may open concurrently; each actual open captures current context revision and delivers later changes once. Windows use openSurfaceInSlot. Open/bridge failure replaces iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page.

@@ -6,29 +6,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/v3/pkg/execution"
 	"github.com/floegence/redevplugin/v3/pkg/host"
-	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/v3/pkg/releasecontract"
-	"github.com/floegence/redevplugin/v3/pkg/releasetrust"
-	platformversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
 
 // TestLiveOfficialMarketReleaseInstallCompletes proves the product integration
-// against a validated market snapshot and its real immutable release assets.
+// against a validated market snapshot and its ordinary release assets.
 // It is opt-in because it performs bounded public HTTPS downloads.
 func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	snapshotPath := os.Getenv("REDEVEN_LIVE_PLUGIN_MARKET_SNAPSHOT")
@@ -47,7 +39,7 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	if err := json.Unmarshal(raw, &snapshot); err != nil {
 		t.Fatal(err)
 	}
-	release, err := snapshot.LatestRelease(pluginID, officialReleaseChannel)
+	release, err := snapshot.LatestRelease(pluginID, "stable")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +54,6 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	}
 	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
 		Origin: "https://plugins.redeven.com", CachePath: cachePath,
-		RedevenVersion: "1.0.0", ReDevPluginVersion: platformversion.CurrentPlatformVersion(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -92,107 +83,71 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	})
 
 	preview := release.InstallPreview
-	verifyLiveRelease(t, integration.releaseProvider, preview.ReleaseRef)
-	startBody, err := json.Marshal(map[string]any{
-		"request_id":              "00000000-0000-4000-8000-000000000001",
-		"plugin_instance_id":      "catalog_" + officialPublisherID + "_" + pluginID,
-		"release_ref":             preview.ReleaseRef,
-		"release_identity_digest": preview.ReleaseIdentityDigest,
-		"manifest_sha256":         preview.ManifestSHA256,
-		"contract_set_sha256":     preview.ContractSetSHA256,
-		"summary_sha256":          preview.SummarySHA256,
+	inspectBody, err := json.Marshal(host.InspectExternalPackageRequest{
+		Intent: host.ExternalPackageIntent{Action: "install"},
+		Source: host.ExternalPackageSource{Kind: "github_repository", Host: "redeven", PluginID: pluginID,
+			URL: "https://github.com/" + release.Source.RepositoryOwner + "/" + release.Source.RepositoryName, Tag: release.Source.Tag},
+		ExpectedPublisherID: release.PublisherID, ExpectedPluginID: pluginID, ExpectedVersion: release.Version,
+		ExpectedPackageSHA256: "sha256:" + release.PackageSHA256, ExpectedSecuritySummarySHA256: preview.SummarySHA256,
+		ExpectedContractSetSHA256: preview.ContractSetSHA256,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	start := liveReleaseRequest(t, http.MethodPost, "/_redevplugin/api/plugins/executions/release-installs", channelID, startBody)
+	inspectedResponse := httptest.NewRecorder()
+	integration.Handler().ServeHTTP(inspectedResponse, liveReleaseRequest(t, http.MethodPost, "/_redevplugin/api/plugins/external-packages/inspect", channelID, inspectBody))
+	if inspectedResponse.Code != http.StatusOK {
+		t.Fatalf("inspect: %d %s", inspectedResponse.Code, inspectedResponse.Body.String())
+	}
+	var inspected struct {
+		OK   bool                           `json:"ok"`
+		Data host.ExternalPackageInspection `json:"data"`
+	}
+	if err := json.Unmarshal(inspectedResponse.Body.Bytes(), &inspected); err != nil || !inspected.OK {
+		t.Fatalf("inspection decode: %v", err)
+	}
+	startBody, err := json.Marshal(map[string]any{"request_id": "00000000-0000-4000-8000-000000000001", "inspection_id": inspected.Data.InspectionID, "expected_package_sha256": inspected.Data.InspectedHashes.PackageSHA256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := liveReleaseRequest(t, http.MethodPost, "/_redevplugin/api/plugins/external-packages/install-operations", channelID, startBody)
 	startResponse := httptest.NewRecorder()
 	integration.Handler().ServeHTTP(startResponse, start)
 	if startResponse.Code != http.StatusOK {
 		t.Fatalf("start release install status = %d body = %s", startResponse.Code, startResponse.Body.String())
 	}
 	var started struct {
-		OK   bool                `json:"ok"`
-		Data execution.Execution `json:"data"`
+		OK   bool                           `json:"ok"`
+		Data host.InspectedInstallOperation `json:"data"`
 	}
-	if err := json.Unmarshal(startResponse.Body.Bytes(), &started); err != nil || !started.OK || started.Data.ID == "" {
+	if err := json.Unmarshal(startResponse.Body.Bytes(), &started); err != nil || !started.OK || started.Data.Execution.ID == "" {
 		t.Fatalf("decode started execution: value=%#v error=%v", started, err)
 	}
 
 	deadline := time.Now().Add(3 * time.Minute)
 	for time.Now().Before(deadline) {
-		query := liveReleaseRequest(t, http.MethodPost, fmt.Sprintf("/_redevplugin/api/plugins/executions/%s/query", started.Data.ID), channelID, []byte(`{}`))
+		query := liveReleaseRequest(t, http.MethodPost, "/_redevplugin/api/plugins/external-packages/install-operations/query", channelID, []byte(`{"request_id":"00000000-0000-4000-8000-000000000001"}`))
 		response := httptest.NewRecorder()
 		integration.Handler().ServeHTTP(response, query)
 		if response.Code != http.StatusOK {
 			t.Fatalf("get release install status = %d body = %s", response.Code, response.Body.String())
 		}
 		var current struct {
-			OK   bool                `json:"ok"`
-			Data execution.Execution `json:"data"`
+			OK   bool                           `json:"ok"`
+			Data host.InspectedInstallOperation `json:"data"`
 		}
 		if err := json.Unmarshal(response.Body.Bytes(), &current); err != nil || !current.OK {
 			t.Fatalf("decode current execution: value=%#v error=%v", current, err)
 		}
-		if current.Data.TerminalAt != nil {
-			if current.Data.Status != execution.StatusCompleted {
-				t.Fatalf("release install terminal status = %s failure = %s", current.Data.Status, current.Data.FailureCode)
+		if current.Data.Execution.TerminalAt != nil {
+			if current.Data.MutationOutcome != "committed" {
+				t.Fatalf("release install terminal status = %s failure = %s", current.Data.Execution.Status, current.Data.Execution.FailureCode)
 			}
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("release install did not complete before deadline")
-}
-
-func verifyLiveRelease(t *testing.T, provider *officialReleaseProvider, ref host.PluginReleaseRef) {
-	t.Helper()
-	trust, err := newOfficialReleaseTrust(provider)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	prepared, err := trust.PrepareRelease(ctx, releasetrust.ReleaseIdentity{
-		SourceID: ref.SourceID, Channel: ref.Channel, ReleaseMetadataRef: ref.ReleaseMetadataRef,
-		ReleaseMetadataSHA256: ref.ReleaseMetadataSHA256, PublisherID: ref.PublisherID,
-		PluginID: ref.PluginID, Version: ref.Version,
-	})
-	if err != nil {
-		logLiveReleaseErrorTree(t, err, "")
-		t.Fatal("prepare live release trust failed")
-	}
-	resolved, err := provider.ResolveReleaseArtifact(ctx, host.ReleaseArtifactResolveRequest{
-		Action: host.PackageTrustActionInstall, ReleaseRef: ref, SourcePolicy: prepared.SourcePolicy(),
-		PluginInstanceID: "catalog_" + officialPublisherID + "_" + ref.PluginID, Now: time.Now().UTC(),
-	})
-	if err != nil {
-		logLiveReleaseErrorTree(t, err, "")
-		t.Fatal("resolve live release failed")
-	}
-	metadata, err := trust.VerifyReleaseMetadata(ctx, prepared, resolved.ReleaseMetadataBytes, resolved.ReleaseMetadataSignature)
-	if err != nil {
-		logLiveReleaseErrorTree(t, err, "")
-		t.Fatal("verify live release metadata failed")
-	}
-	pkg, err := pluginpkg.Read(ctx, resolved.Reader, resolved.Size, pluginpkg.DefaultReadLimits())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pkg.PackageSignature == nil {
-		t.Fatal("live official package has no package signature")
-	}
-	signature := *pkg.PackageSignature
-	if _, err := trust.VerifyPackage(ctx, metadata, releasecontract.PackageSignatureV1{
-		SchemaVersion: signature.SchemaVersion, Algorithm: signature.Algorithm, KeyID: signature.KeyID,
-		PublisherID: signature.PublisherID, PluginID: signature.PluginID,
-		PackageHash:  "sha256:" + strings.TrimPrefix(signature.PackageHash, "sha256:"),
-		ManifestHash: "sha256:" + strings.TrimPrefix(signature.ManifestHash, "sha256:"),
-		EntriesHash:  "sha256:" + strings.TrimPrefix(signature.EntriesHash, "sha256:"),
-		Signature:    signature.Signature, SignedAt: signature.SignedAt,
-	}); err != nil {
-		logLiveReleaseErrorTree(t, err, "")
-		t.Fatal("verify live package failed")
-	}
 }
 
 func liveReleaseRequest(t *testing.T, method, path, channelID string, body []byte) *http.Request {
@@ -209,19 +164,4 @@ func liveReleaseRequest(t *testing.T, method, path, channelID string, body []byt
 		t.Fatal(err)
 	}
 	return request
-}
-
-func logLiveReleaseErrorTree(t *testing.T, err error, indent string) {
-	t.Helper()
-	if err == nil {
-		return
-	}
-	t.Logf("%srelease cause: %T: %v", indent, err, err)
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, cause := range joined.Unwrap() {
-			logLiveReleaseErrorTree(t, cause, indent+"  ")
-		}
-		return
-	}
-	logLiveReleaseErrorTree(t, errors.Unwrap(err), indent+"  ")
 }

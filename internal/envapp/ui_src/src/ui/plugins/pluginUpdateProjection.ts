@@ -1,4 +1,5 @@
-import type { PluginReleaseRef } from '@floegence/redevplugin-ui';
+import compareSemVer from 'semver/functions/compare.js';
+import validSemVer from 'semver/functions/valid.js';
 import type {
   ExternalPluginInspection,
   PluginInventoryItem,
@@ -40,35 +41,6 @@ export function createExternalUpdateCandidate(
   });
 }
 
-export function sameReleaseRef(a: PluginReleaseRef, b: PluginReleaseRef): boolean {
-  return a.source_id === b.source_id && a.publisher_id === b.publisher_id && a.plugin_id === b.plugin_id
-    && a.channel === b.channel && a.version === b.version
-    && a.release_metadata_ref === b.release_metadata_ref && a.release_metadata_sha256 === b.release_metadata_sha256
-    && a.expected_hashes.package_sha256 === b.expected_hashes.package_sha256
-    && a.expected_hashes.manifest_sha256 === b.expected_hashes.manifest_sha256
-    && a.expected_hashes.entries_sha256 === b.expected_hashes.entries_sha256;
-}
-
-export function createOfficialUpdateCandidate(item: PluginInventoryItem): PluginUpdateCandidate {
-  const official = item.officialCatalog;
-  const preview = official?.installPreview;
-  if (!official || !preview || official.rolloutState !== 'stable'
-    || preview.release_ref.plugin_id !== item.pluginID
-    || preview.release_ref.publisher_id !== official.publisherID
-    || preview.release_ref.version !== official.latestVersion
-    || !sameReleaseRef(preview.release_ref, official.distribution.releaseRef)) {
-    throw new Error('Official update preview does not match its release');
-  }
-  const hashes = preview.release_ref.expected_hashes;
-  const target = packageIdentity(hashes.package_sha256, hashes.manifest_sha256, hashes.entries_sha256);
-  return Object.freeze({
-    intent: createPluginUpdateIntent(item), displayName: item.displayName, publisher: item.publisher,
-    installedVersion: item.version ?? '', targetVersion: preview.release_ref.version,
-    kind: classifyUpdate(item.version, preview.release_ref.version, item.installedPackage, target), target,
-    reviewEvidence: { kind: 'official_preview' as const, preview: structuredClone(preview), marketGeneration: official.marketGeneration },
-  });
-}
-
 export function samePackageIdentity(a: PluginPackageIdentity, b: PluginPackageIdentity): boolean {
   return a.packageHash === b.packageHash
     && a.manifestHash === b.manifestHash
@@ -84,13 +56,7 @@ export function candidateMatchesInventory(candidate: PluginUpdateCandidate, item
 
 export function candidateTargetIsCurrent(candidate: PluginUpdateCandidate, item: PluginInventoryItem | undefined): boolean {
   if (!candidateMatchesInventory(candidate, item)) return false;
-  if (candidate.reviewEvidence.kind === 'external_inspection') {
-    return Date.parse(candidate.reviewEvidence.inspection.expires_at) > Date.now();
-  }
-  const official = item?.officialCatalog;
-  return Boolean(official && official.rolloutState === 'stable'
-    && official.marketGeneration === candidate.reviewEvidence.marketGeneration
-    && sameReleaseRef(official.distribution.releaseRef, candidate.reviewEvidence.preview.release_ref));
+  return Date.parse(candidate.reviewEvidence.inspection.expires_at) > Date.now();
 }
 
 function classifyUpdate(
@@ -100,25 +66,11 @@ function classifyUpdate(
   target: PluginPackageIdentity,
 ): PluginUpdateCandidate['kind'] {
   if (installed && samePackageIdentity(installed, target)) return 'noop';
+  if (!installedVersion || validSemVer(installedVersion) !== installedVersion || validSemVer(targetVersion) !== targetVersion) return 'blocked';
   const comparison = compareSemVer(installedVersion, targetVersion);
   if (comparison > 0) return 'blocked';
   if (comparison < 0) return 'version_update';
-  return 'replace';
-}
-
-function compareSemVer(left: string | undefined, right: string): number {
-  const a = parseSemVer(left);
-  const b = parseSemVer(right);
-  if (!a || !b) return left === right ? 0 : -1;
-  for (let index = 0; index < 3; index += 1) {
-    if (a[index] !== b[index]) return a[index]! > b[index]! ? 1 : -1;
-  }
-  return 0;
-}
-
-function parseSemVer(value: string | undefined): readonly number[] | undefined {
-  const match = /^(?:v)?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u.exec(value ?? '');
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+  return 'blocked';
 }
 
 function packageIdentity(packageHash: string, manifestHash: string, entriesHash: string): PluginPackageIdentity {

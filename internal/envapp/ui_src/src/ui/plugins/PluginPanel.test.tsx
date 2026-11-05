@@ -31,7 +31,7 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
     version: '2.0.0',
     managementRevision: 23,
     lifecycleState: 'enabled',
-    trustBadge: 'official',
+    sourceKind: 'official',
     pinned: false,
     defaultLaunchTarget: {
       pluginID: 'com.example.metrics',

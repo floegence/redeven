@@ -401,11 +401,11 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionRevokeConnection:
 		return perms.admin && perms.read && perms.write && perms.execute
 	case host.ManagementActionImportLocalPackage,
-		host.ManagementActionInstallReleaseRef,
 		host.ManagementActionInspectExternalPackage,
+		host.ManagementActionListRepositoryPlugins,
+		host.ManagementActionSetAutomaticUpdates,
 		host.ManagementActionInstallInspectedPackage,
 		host.ManagementActionUpdateLocalPackage,
-		host.ManagementActionUpdateReleaseRef,
 		host.ManagementActionDowngradePlugin,
 		host.ManagementActionEnablePlugin,
 		host.ManagementActionDisablePlugin,

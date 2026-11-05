@@ -41,7 +41,6 @@ import (
 	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 	processruntime "github.com/floegence/redevplugin/v3/pkg/process"
-	redevpluginversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
 
 const (
@@ -384,10 +383,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
 	pluginIntegration, pluginErr := openPluginIntegration(ctx, func(pluginCtx context.Context) (*redevpluginintegration.Integration, error) {
 		pluginMarket, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
-			Origin:             strings.TrimSpace(os.Getenv("REDEVEN_PLUGIN_MARKET_ORIGIN")),
-			CachePath:          filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
-			RedevenVersion:     opts.RedevenVersion,
-			ReDevPluginVersion: redevpluginversion.CurrentPlatformVersion(),
+			Origin:    strings.TrimSpace(os.Getenv("REDEVEN_PLUGIN_MARKET_ORIGIN")),
+			CachePath: filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
 		})
 		if err != nil {
 			return nil, err

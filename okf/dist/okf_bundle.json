@@ -685,7 +685,7 @@
               "plugins",
               "ui"
             ],
-            "summary": "Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/trust/execution/state. Adapter faults stop at product boundary without implicit grants, copied platform state or substitute lifecycle.",
+            "summary": "Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/package integrity/execution/state. Adapter faults stop at product boundary without implicit grants, copied platform state or substitute lifecycle.",
             "section_count": 3
           },
           {
@@ -699,7 +699,7 @@
               "plugins",
               "redevplugin"
             ],
-            "summary": "Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/trust/execution. Unproven identity fails closed.",
+            "summary": "Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/execution. Unproven identity fails closed.",
             "section_count": 3
           },
           {
@@ -741,7 +741,7 @@
               "release",
               "runtime"
             ],
-            "summary": "ReDevPlugin owns trust, inspection, install, readiness, caches and durable lifecycle. Redeven supplies authenticated sources/review/localized outcomes. Every source requires inspection, explicit consent and released Host admission; stale/unverified/uncertain facts fail closed.",
+            "summary": "ReDevPlugin owns package inspection, installation, source identity, durable receipts, runtime readiness and retained data. Redeven supplies authenticated product policy and a single review experience for market, GitHub, HTTPS, uploaded and generated packages. Installation does not grant permissions.",
             "section_count": 3
           },
           {
@@ -769,7 +769,7 @@
               "plugins",
               "release"
             ],
-            "summary": "Redeven atomically refreshes validated latest-only market metadata for trusted Env App. Catalog identifies GitHub releases but hosts no packages or grants. ReDevPlugin verifies exact assets. Invalid refresh fails; last-good data permits stale discovery, never automatic updates.",
+            "summary": "Redeven consumes one complete public market representation. Official and community are display classifications, not admission privileges. Packages remain ordinary `.redevplugin` assets in GitHub Releases; every installation uses the released Host inspection and durable installation APIs.",
             "section_count": 3
           },
           {
@@ -905,7 +905,7 @@
               "plugins",
               "security"
             ],
-            "summary": "ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Provenance, signatures, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.",
+            "summary": "ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Source identity, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.",
             "section_count": 3
           }
         ]
@@ -1680,7 +1680,7 @@
               "review",
               "ui"
             ],
-            "summary": "Released ReDevPlugin owns exact inspection, atomic install/update and retained-data recovery. Product dialogs present source, scope and consent while preserving drafts and authoritative identity. Unknown effects reconcile rather than replay; closing management never cancels admitted platform execution.",
+            "summary": "All plugin sources share released package inspection, exact review and durable installation. Official/community classification changes display only. Permissions remain independent explicit decisions; unknown effects reconcile from durable receipts without replay.",
             "section_count": 3
           },
           {
@@ -12664,7 +12664,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "architecture",
           "market",
@@ -12674,29 +12674,29 @@
         "title": "Plugin market consumption",
         "type": "Architecture Contract"
       },
-      "body_length": 2548,
-      "summary": "Redeven atomically refreshes validated latest-only market metadata for trusted Env App. Catalog identifies GitHub releases but hosts no packages or grants. ReDevPlugin verifies exact assets. Invalid refresh fails; last-good data permits stale discovery, never automatic updates.",
+      "body_length": 2654,
+      "summary": "Redeven consumes one complete public market representation. Official and community are display classifications, not admission privileges. Packages remain ordinary `.redevplugin` assets in GitHub Releases; every installation uses the released Host inspection and durable installation APIs.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Startup reads validated local cache without waiting for market. Fetch pages in order; every entry needs complete `install_preview`, with no per-plugin `/latest` fan-out or incomplete-entry fallback.\n- Keep one current release per plugin/channel. Disabled/revoked market entries constrain discovery/actions; upstream revocation evidence owns install/runtime admission.\n- Installed author/icon presentation must match its generation/identity; mismatches use a generic placeholder rather than newer copy/bytes.\n- Packages and signed trust transport come from GitHub Releases, never market Cloudflare storage. Installation/update requires normal product review and platform lifecycle; installation grants no permission/runtime access.\n- GitHub release tags are bounded safe names and may include a plugin-specific prefix. The signed release reference and verified package bind the version; the client does not infer it from the tag.\n- Source classification is requested explicitly from a capable market; older responses remain readable. Reviewed third-party listings use external package inspection and explicit confirmation, with publisher, plugin, version and all package hashes matched to the selected listing. Directory review does not confer official trust or automatic-update eligibility.\n\n## Network behavior\n\nThe market client uses the same product network adapter as plugin package and\nrelease-document downloads. It follows current environment/system proxy policy\nand normal OS DNS/VPN routing. Startup remains cache-only; network errors affect\nrefresh, detail or icon requests without blocking Runtime or changing verified\ninstalled state. The service releases only transports it creates; injected HTTP\nclients remain caller-owned.",
-          "char_count": 1740
+          "body": "- Startup reads the validated local cache without waiting for the market. Refresh uses ordered pages, one generation, complete inspection-derived previews, and atomic last-known-good replacement. No client capability headers, compatibility variants, per-plugin latest fan-out, or incomplete-entry fallback exists.\n- Discovery uses the `redevplugin` GitHub topic plus rechecks of already indexed repository identities. A fixed-commit `.redevplugin/index.json` selects ordinary packages in independent `\u003crelease-key\u003e-v{version}` namespaces. No developer registration, plugin signatures, publisher trust, declaration approval, or separate third-party client path is required.\n- Ingest uses the released verifier and rechecks repository, release, tag commit, asset identity and bytes. Reject cross-repository plugin-ID takeover and same-version replacement. Failed scans retain the last valid projection.\n- Market retains one release per plugin/channel and bounded verified presentation/icons. It never proxies packages or grants lifecycle authority. Unavailable listings constrain discovery without revoking installations.\n- Inspection matches publisher/plugin/version, package/security/contract hashes and repository/release/asset identities. Both classifications share review and commit.\n- Installed presentation and permission requirements come from the installed package and Host-verified contracts. Newer market metadata cannot replace installed declarations or authorization facts.\n\n## Network behavior\n\nMarket and package requests use the product network adapter, current environment/system proxy policy, and OS DNS/VPN routing. Startup stays cache-only. Singleflight, bounded backoff, jitter, cancellation, and generation reconciliation avoid request storms. Network failures cannot remove installed state or block ordinary Runtime startup. The service closes only transports it owns.",
+          "char_count": 1889
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Market owns reviewed metadata/publication. Redeven owns refresh, validated cache, trusted projection and official anchors. ReDevPlugin owns download, cryptographic trust, durable Executions/Events, install/update/rollback, revocation, registry, permissions and runtime. Market failure cannot remove installed plugins, block startup or authorize unverified content.",
-          "char_count": 364
+          "body": "Market owns discovery; Redeven owns presentation and authenticated scheduling. [Lifecycle](redevplugin-package-lifecycle.md) defines platform authority and distinguishes platform/runtime signatures from unsigned plugins.",
+          "char_count": 220
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/pluginmarket/service.go` - Source.\n- `redeven:internal/pluginmarket/contracts.go` - Source.",
-          "char_count": 111
+          "body": "- `redeven:internal/pluginmarket/service.go` - Source.\n- `redeven:internal/pluginmarket/contracts.go` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Unified lifecycle client.",
+          "char_count": 202
         }
       ],
       "evidence": [
@@ -12709,9 +12709,22 @@
           "id": "redeven:internal/pluginmarket/contracts.go:0:source.",
           "source": "redeven:internal/pluginmarket/contracts.go",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:0:unified lifecycle client.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts",
+          "description": "Unified lifecycle client."
         }
       ],
-      "snippet": "Redeven atomically refreshes validated latest-only market metadata for trusted Env App. Catalog identifies GitHub releases but hosts no packages or grants. ReDevPlugin verifies exact assets. Invalid refresh fails; last-good data permits sta",
+      "snippet": "Redeven consumes one complete public market representation. Official and community are display classifications, not admission privileges. Packages remain ordinary `.redevplugin` assets in GitHub Releases; every installation uses the release",
+      "links": [
+        {
+          "label": "Lifecycle",
+          "path": "architecture/redevplugin-package-lifecycle.md",
+          "concept_id": "architecture.redevplugin-package-lifecycle",
+          "title": "Plugin package and runtime lifecycle"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -12734,7 +12747,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "architecture",
           "local-ui",
@@ -12744,15 +12757,15 @@
         "title": "Plugin platform integration",
         "type": "Architecture Contract"
       },
-      "body_length": 3129,
-      "summary": "Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/trust/execution. Unproven identity fails closed.",
+      "body_length": 3053,
+      "summary": "Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/execution. Unproven identity fails closed.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Mount one released Host/HTTP namespace/client/scope at explicit state root with core,official-release,runtime,connectivity,secret,capability,external modules. Sources are bounded publicHTTPS/GitHub Release/upstream signature assessment. [Adapters](redevplugin-redeven-adapters.md) owns product mappings.\n\nSession close uses released durable four-hash drain;remove authentication after exact acknowledgement. Local generations cancel replaced waits/fence late credentials. Shutdown closes Local UI/hijacked admission,cancels Agent sessions,drains leases/handlers,then idempotent Host close. Runtime binds canonical sibling executable,target,published IPC/WASM ABI,exact build,lease replay and limits. [Package](redevplugin-package-lifecycle.md),[process](plugin-process-sessions.md),[background](plugin-background-entries.md),[recovery](redevplugin-surface-recovery.md) own lifecycle;[containers](container-resources-capability.md) is separate.\n\nActivity gets fresh SDK slots in stable Shell-root windows;responsive chrome cannot remount/adopt iframe. Workbench uses projected widgets. Lost close replies reconcile exact authority,disposal alone no revocation. Each placement has independent iframe/slot using product-prepared origin and released WebSDK. HTML/CSS/ESM/Canvas/WebGL needs no product renderer;children cannot borrow parent credentials/management.\n\nPure Web resources use released KV/SQLite/files/settings directly. Product forwards binary requests without buffering/protocol translation or replacing Surface/session checks. Actions use existing Execution/Event bridge;backend/background uses Worker lifecycle. Atomic file staging/coalesced snapshot watches imply neither zero-copy nor change log.",
-          "char_count": 1709
+          "body": "Mount one released Host/HTTP namespace/client/scope at an explicit root. [Adapters](redevplugin-redeven-adapters.md) owns module composition and product mappings; [lifecycle](redevplugin-package-lifecycle.md) owns package inspection.\n\nSession close uses released durable four-hash drain;remove authentication after exact acknowledgement. Local generations cancel replaced waits/fence late credentials. Shutdown closes Local UI/hijacked admission,cancels Agent sessions,drains leases/handlers,then idempotent Host close. Runtime binds canonical sibling executable,target,published IPC/WASM ABI,exact build,lease replay and limits. [Package](redevplugin-package-lifecycle.md),[process](plugin-process-sessions.md),[background](plugin-background-entries.md),[recovery](redevplugin-surface-recovery.md) own lifecycle;[containers](container-resources-capability.md) is separate.\n\nActivity gets fresh SDK slots in stable Shell-root windows;responsive chrome cannot remount/adopt iframe. Workbench uses projected widgets. Lost close replies reconcile exact authority,disposal alone no revocation. Each placement has independent iframe/slot using product-prepared origin and released WebSDK. HTML/CSS/ESM/Canvas/WebGL needs no product renderer;children cannot borrow parent credentials/management.\n\nPure Web resources use released KV/SQLite/files/settings directly. Product forwards binary requests without buffering/protocol translation or replacing Surface/session checks. Actions use existing Execution/Event bridge;backend/background uses Worker lifecycle. Atomic file staging/coalesced snapshot watches imply neither zero-copy nor change log.",
+          "char_count": 1639
         },
         {
           "id": "boundaries",
@@ -12795,7 +12808,7 @@
           "description": "Opt-in published author Worker: build the released init --template worker project with plugin ID dev.redeven.qualification.worker, package its built output, and provide REDEVEN_TEST_AUTHOR_PLUGIN_PACKAGE plus the verified product-built REDEVEN_TEST_PLUGIN_RUNTIME. TestPublishedAuthorWorkerRunsThroughRedevenRuntime checks a real WASM result, structured plugin rejection and a successful subsequent invocation."
         }
       ],
-      "snippet": "Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/trust/execut",
+      "snippet": "Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/execution. U",
       "links": [
         {
           "label": "containers",
@@ -12823,6 +12836,12 @@
         },
         {
           "label": "Package",
+          "path": "architecture/redevplugin-package-lifecycle.md",
+          "concept_id": "architecture.redevplugin-package-lifecycle",
+          "title": "Plugin package and runtime lifecycle"
+        },
+        {
+          "label": "lifecycle",
           "path": "architecture/redevplugin-package-lifecycle.md",
           "concept_id": "architecture.redevplugin-package-lifecycle",
           "title": "Plugin package and runtime lifecycle"
@@ -13048,7 +13067,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "architecture",
           "dependencies",
@@ -13058,22 +13077,22 @@
         "title": "ReDevPlugin host integration boundary",
         "type": "Architecture Boundary"
       },
-      "body_length": 5396,
+      "body_length": 5882,
       "summary": "Redeven consumes coordinated released ReDevPlugin Go/npm/Rust/machine artifacts. Product owns sessions, source review, placement, runtime builds and business adapters. Missing or unverifiable platform contracts fail without copied mechanics, sibling imports or compatibility fallback.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Ownership\nUpstream owns validation/hash/trust, inspection/registry, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secrets, supervision/IPC/WASM, quotas/revocation, control state and releases/contracts. One coordinated release; frontend cannot downgrade independently. Manifests/dependency tests own pins; bootstrap retains bounded credentials before readiness. [Packages](redevplugin-package-lifecycle.md) owns admission/cache, [adapters](redevplugin-redeven-adapters.md) product modules/display.\n\n## Availability\nPlugin readiness cannot block Runtime/ordinary sessions. Market/package/runtime/storage/init failure stays local; retain files/terminal/Notes/Workbench. PLUGIN_RUNTIME_UNAVAILABLE executes nothing; rejected writes report not_committed. Localize faults; unreadable inventory is not empty, auto-failure never global interruption. Init budget10s; cancel fences results/closes integration. Error/panic unwinds construction without hiding host cancellation.\n\nChannel auth is separate: failed/panicked binding grants nothing and cannot close host channel. Request panic releases admission; HTTP contains failure. Incompatible opaque state stays unchanged, never reauthorized.\n\n## Network/history\nReDevPlugin3.12.0 separates routing/package verification/execution. Single-hop host transports honor explicit proxy,current macOS proxy/PAC,OS DNS/VPN for market/package/release. Synthetic/private addresses alone are not denial. Upstream validates URL/redirect/origin/size/cancel/hash/signature; downloads grant nothing.\n\nGranted HTTPS hostname connectors without private-prefix binding use released transport factory. Platform checks target/method/grant/revision,pools/quotas/revocation. Private prefixes,literal addresses/other protocols keep address-bound policy. Resolve configuration at request time; faults local.\n\n3.11.2 reads signed pre-Webv9 without changing manifest/hash/signature/generation. Incompatible install stays manageable,not executable/enabled. Explicit same-install Web update retains history; no VNode/invented declarations. Unknown/corrupt stays unchanged/local unavailable.\n\nPlatform owns Web admission/package modules/sandbox/bootstrap/bridge. Product allocates origins/mounts handlers; no DOM translation/VNode renderer/ambient parent credentials.\n\n## Runtime build ownership\nProduct prepares complete Rust/C/archiver/link tools before exact published-source builds; [target build tooling](../operations/redevplugin-cross-build.md) owns pinned Zig, early real probes, cache identity, cancellation and Desktop package acceptance. Upstream runtime semantics and containment stay unchanged.\n\n## Runtime performance boundary\nReleased 3.15 uses one Wasmtime actor/job path with fresh invocation state, bounded in-process compiled-module reuse, finite fuel and signed deadlines. Immutable manifest caching never replaces current permission or revocation checks. Product supplies fixed toolchain, runtime signing and placement policy; it does not add an executor, authorization cache or compatibility fallback. Cold module preparation remains separate from warm execution latency.\n\n## Authoring/execution\nPlatform owns config/manifest validation,bindings,build/test/package,diagnostics/watch,persistent preview,manual update candidates,connection review,verified dev runtime. Redeven version-derived skill invokes released CLI. Product owns intent/placement/review/install approval and build/signature/SBOM/publication proof; authoring grants no permissions/trust.\n\n3.13.0 owns manifest actions/direct Surface KV/SQLite/files/settings without Worker forwarding. Dedicated-origin binary/WebSocket handler requires exact handshake; Host checks session ceilings/scope/grants/quotas/revoke. Product mounts/presents,never new endpoints/manifest interpretation. SDK conflict/unknown cannot replay; coalesced watches are not logs.\n\nPrivate files1→chunked2 migration stays upstream, separate from control/author schemas. Snapshots/recovery opaque; no copied SQL/rewrite.3.12.2 retains ordinary packaging/SDK. Trusted parent query/event/cancel binds current surface gateway/plugin; pass exact scope via authenticated transport/released handler. Stale/malformed cannot broaden to management; plugin-origin direct calls denied.\n\nHost enforces read/write ceilings/read-only effects before process operations. SQLite authorizes compiled SQL,excludes host paths,bounds values/complexity/concurrency. Product maps sessions/process adapters only; no new manifest/data flags.",
-          "char_count": 4548
+          "body": "## Ownership\nUpstream owns validation/hash/source identity, inspection/registry, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secrets, supervision/IPC/WASM, quotas/revocation, control state and releases/contracts. One coordinated release; frontend cannot downgrade independently. Manifests/dependency tests own pins; bootstrap retains bounded credentials before readiness. [Packages](redevplugin-package-lifecycle.md) owns admission/cache, [adapters](redevplugin-redeven-adapters.md) product modules/display.\n\n## Availability\nPlugin readiness cannot block Runtime/ordinary sessions. Market/package/runtime/storage/init failure stays local; retain files/terminal/Notes/Workbench. PLUGIN_RUNTIME_UNAVAILABLE executes nothing; rejected writes report not_committed. Localize faults; unreadable inventory is not empty, auto-failure never global interruption. Init budget10s; cancel fences results/closes integration. Error/panic unwinds construction without hiding host cancellation.\n\nChannel auth is separate: failed/panicked binding grants nothing and cannot close host channel. Request panic releases admission; HTTP contains failure. Incompatible opaque state stays unchanged, never reauthorized.\n\n## Network/history\nReDevPlugin3.12.0 separates routing/package verification/execution. Single-hop host transports honor explicit proxy,current macOS proxy/PAC,OS DNS/VPN for market/package/release. Synthetic/private addresses alone are not denial. Upstream validates URL/redirect/origin/size/cancel/hash; downloads grant nothing.\n\nGranted HTTPS hostname connectors without private-prefix binding use released transport factory. Platform checks target/method/grant/revision,pools/quotas/revocation. Private prefixes,literal addresses/other protocols keep address-bound policy. Resolve configuration at request time; faults local.\n\nCurrent admission requires Web v9. Existing retained records and data remain upstream-owned; no host compatibility parser, VNode renderer, invented declaration or package rewrite is introduced. Unknown or corrupt state stays unchanged and locally unavailable.\n\nPlatform owns Web admission/package modules/sandbox/bootstrap/bridge. Product allocates origins/mounts handlers; no DOM translation/VNode renderer/ambient parent credentials.\n\n## Runtime build ownership\nProduct prepares complete Rust/C/archiver/link tools before exact published-source builds; [target build tooling](../operations/redevplugin-cross-build.md) owns pinned Zig, early real probes, cache identity, cancellation and Desktop package acceptance. Upstream runtime semantics and containment stay unchanged.\n\n## Runtime performance boundary\nReleased 3.15 uses one Wasmtime actor/job path with fresh invocation state, bounded in-process compiled-module reuse, finite fuel and signed deadlines. Immutable manifest caching never replaces current permission or revocation checks. Product supplies fixed toolchain, runtime signing and placement policy; it does not add an executor, authorization cache or compatibility fallback. Cold module preparation remains separate from warm execution latency.\n\n## Authoring/execution\nPlatform owns config/manifest validation,bindings,build/test/package,diagnostics/watch,persistent preview,manual update candidates,connection review,verified dev runtime. Redeven version-derived skill invokes released CLI. Product owns intent/placement/review/install approval and build/signature/SBOM/publication proof; authoring grants no permissions.\n\n3.13.0 owns manifest actions/direct Surface KV/SQLite/files/settings without Worker forwarding. Dedicated-origin binary/WebSocket handler requires exact handshake; Host checks session ceilings/scope/grants/quotas/revoke. Product mounts/presents,never new endpoints/manifest interpretation. SDK conflict/unknown cannot replay; coalesced watches are not logs.\n\nPrivate files1→chunked2 migration stays upstream, separate from control/author schemas. Snapshots/recovery opaque; no copied SQL/rewrite.3.12.2 retains ordinary packaging/SDK. Trusted parent query/event/cancel binds current surface gateway/plugin; pass exact scope via authenticated transport/released handler. Stale/malformed cannot broaden to management; plugin-origin direct calls denied.\n\nHost enforces read/write ceilings/read-only effects before process operations. SQLite authorizes compiled SQL,excludes host paths,bounds values/complexity/concurrency. Product maps sessions/process adapters only; no new manifest/data flags.\n\n## Open distribution\nOrdinary plugins require no signature, publisher trust, registration or manual directory admission. Official/community is display-only. All sources use inspection, exact consent, durable receipts and independent permissions. Product update scheduling uses the current authenticated session and upstream automatic-eligibility rules; it adds no host install state machine. Signed platform releases, product runtime identity and signed runtime leases remain separate platform/product protections.",
+          "char_count": 5040
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Never mutate opaque state,mint tokens/trust/grants. Wrong/legacy/drifted/tampered/future roots fail unchanged. Conversion/history binding remains upstream; host shows review/calls update,not converter interpretation,generation copies,DB migration or unknown-write retry. Durable scheduling/claims/restart/uncertainty upstream; host supplies cap adapter/summaries,not retained user sessions/timers/table access.",
-          "char_count": 410
+          "body": "Never mutate opaque state,mint tokens/grants. Wrong/legacy/drifted/tampered/future roots fail unchanged. Conversion/history binding remains upstream; host shows review/calls update,not converter interpretation,generation copies,DB migration or unknown-write retry. Durable scheduling/claims/restart/uncertainty upstream; host supplies cap adapter/summaries,not retained user sessions/timers/table access.",
+          "char_count": 404
         },
         {
           "id": "evidence",
@@ -13169,7 +13188,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "architecture",
           "plugins",
@@ -13179,47 +13198,61 @@
         "title": "Plugin package and runtime lifecycle",
         "type": "Architecture Contract"
       },
-      "body_length": 2399,
-      "summary": "ReDevPlugin owns trust, inspection, install, readiness, caches and durable lifecycle. Redeven supplies authenticated sources/review/localized outcomes. Every source requires inspection, explicit consent and released Host admission; stale/unverified/uncertain facts fail closed.",
+      "body_length": 4671,
+      "summary": "ReDevPlugin owns package inspection, installation, source identity, durable receipts, runtime readiness and retained data. Redeven supplies authenticated product policy and a single review experience for market, GitHub, HTTPS, uploaded and generated packages. Installation does not grant permissions.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Sources\nValidated latest-only market supplies entries;platform verifies publisher/plugin/version/hash/signature/revocation/source policy/Host requirements before registry mutation. GitHub without admin tag resolves latest eligible Release each inspection;resolved evidence is not durable user pin.\n\n## Retained data\nReleased3.9 owns target-filtered discovery/exact inspection/one-shot recovery/read-only reconciliation. Source is uninstalled compatible retained data,target explicitly disabled. Host checks owner,publisher/plugin,data shape,generation,management revision,active fingerprint;atomic reference swap retains both generations,never grants/secrets/enabled state. Pass SDK DTOs unchanged:Read discovery/inspection/status,Write commit,Admin disable. Unknown commit cannot replay;exact-plan reconciliation allows new explicit review only on confirmed pending,unknown stays read-only. Restart recovery upstream.\n\n## Upgrade/downgrade\n3.10 owns declared conversion,isolated generations,quotas/cancel and atomic package/data/history. Converter matches exact predecessor/version/shape. Failure/cancel preserves old bytes;committed/unknown uses update reconciliation,no replay. Downgrade restores exact historical package's last generation;control-store migration is opaque upstream.\n\nReview consumes verified security declaration:one concise saved-data notice,expandable method/predecessor/limits and ordinary added/changed/removed differences. Omit empty release notes/generic instructions;inspection binding stays evidence and unchanged grants appear once. No extra wizard,dispatcher,job or data copy.",
-          "char_count": 1610
+          "body": "## Inspection and installation\n\nThe Host validates ordinary package structure, hashes, manifest, capability contracts and source policy. Plugin signatures, publisher trust, signed release references, and official-only admission do not participate. GitHub repositories may expose several plugins through `.redevplugin/index.json`; the user selects a plugin before inspection. A package URL or upload uses the same inspection contract.\n\nReview binds exact inspected bytes, intended instance/revision, owner and session. Submission uses one request ID and the released durable `StartInspectedInstall` API. A lost response queries that same request; it never invents a replacement operation. The Shell restores owner-scoped receipts, including first-install failures with no inventory row. Closing Plugin Center does not stop observation; changing the authenticated owner cancels and clears it.\n\nExecution status and mutation outcome are distinct. A committed outcome requires inventory reconciliation even if final execution reports failure. Unknown outcomes stay read-only. A definite failure requires a fresh review; the UI never silently erases retained data, grants access, or retries uncertain effects. Installation enables the plugin while missing grants remain separate action-level authorization boundaries.\n\n## Updates\n\nManual checks inspect the installed original source. GitHub provenance uses immutable repository identity, not a mutable owner/name or a market replacement. Source changes require explicit consent. Older versions use the separate downgrade lifecycle; same-version changed bytes are rejected. A market disappearance does not change installed authority.\n\nAutomatic updates are an explicit per-installation preference, off by default. While an authorized session is active, Redeven checks enabled installations after a bounded delay and at bounded intervals. It uses the same original-source inspection and durable installation path, only when the Host reports automatic eligibility: a higher version, same source and unchanged security declarations. New capabilities require manual review. Uploaded packages have no automatic remote source. No synthetic session, unattended host scheduler, or new product persistence entity is introduced.\n\nBefore automatic submission, owner-scoped durable receipts are reconciled. Pending or unknown operations prevent replay; a previous failed attempt at the same candidate requires review. Surface shutdown and inventory reconciliation use the existing placement coordinator. Neither automatic nor manual update grants permissions or overrides user-disabled state.\n\n## Retained data and downgrade\n\nThe released Host owns target-filtered retained-data discovery, exact inspection, one-shot recovery and read-only reconciliation. Recovery binds owner, publisher/plugin, data shape, generation, management revision and active fingerprint. Atomic generation swaps preserve prior data and do not restore grants, secrets or enabled state. Discovery/inspection/status require Read; commit requires Write; disable requires Admin.\n\nDeclared data conversion runs in isolated bounded generations. Failure/cancellation preserves old bytes; committed/unknown outcomes reconcile without replay. Downgrade restores the exact historical package's retained generation. Redeven never copies opaque data, interprets converter code, or implements platform-store migrations.\n\nReview shows concise saved-data impact and expandable verified differences. Permission grants remain independent explicit choices. No duplicate install wizard, dispatcher, package parser, or destructive retry path exists.",
+          "char_count": 3636
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven does not parse plugin bytes, persist inspection receipts, implement a second install state machine, or start workers outside the released Host. Product review and runtime presentation remain separate from platform trust and durable lifecycle.",
-          "char_count": 250
+          "body": "ReDevPlugin owns durable lifecycle and execution; Redeven owns presentation and authenticated product scheduling. Platform publication signatures, product runtime signing, runtime lease signatures, sandboxing, WASM containment, permission checks and revocation remain in force.",
+          "char_count": 277
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/redevpluginintegration/integration.go:240` - Source.\n- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Source.\n- redeven:internal/redevpluginintegration/adapters_test.go:1",
-          "char_count": 207
+          "body": "- `redeven:internal/redevpluginintegration/integration.go` - Host construction.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Exact inspection and durable request recovery.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts` - Receipt observation.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginAutomaticUpdates.ts` - Authenticated update scheduling.",
+          "char_count": 403
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/redevpluginintegration/integration.go:240:source.",
+          "id": "redeven:internal/redevpluginintegration/integration.go:0:host construction.",
           "source": "redeven:internal/redevpluginintegration/integration.go",
-          "line": 240,
-          "description": "Source."
+          "description": "Host construction."
         },
         {
-          "id": "redeven:internal/redevpluginintegration/runtime_module.go:1:source.",
-          "source": "redeven:internal/redevpluginintegration/runtime_module.go",
-          "line": 1,
-          "description": "Source."
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:0:exact inspection and durable request recovery.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts",
+          "description": "Exact inspection and durable request recovery."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts:0:receipt observation.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts",
+          "description": "Receipt observation."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginAutomaticUpdates.ts:0:authenticated update scheduling.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginAutomaticUpdates.ts",
+          "description": "Authenticated update scheduling."
         }
       ],
-      "snippet": "ReDevPlugin owns trust, inspection, install, readiness, caches and durable lifecycle. Redeven supplies authenticated sources/review/localized outcomes. Every source requires inspection, explicit consent and released Host admission; stale/un",
+      "snippet": "ReDevPlugin owns package inspection, installation, source identity, durable receipts, runtime readiness and retained data. Redeven supplies authenticated product policy and a single review experience for market, GitHub, HTTPS, uploaded and ",
       "backlinks": [
+        {
+          "label": "Plugin market consumption",
+          "path": "architecture/plugin-market-consumption.md",
+          "concept_id": "architecture.plugin-market-consumption",
+          "title": "Plugin market consumption"
+        },
         {
           "label": "Plugin platform integration",
           "path": "architecture/plugin-platform-integration.md",
@@ -13242,6 +13275,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Plugin package review, installation and saved-data recovery",
+          "path": "ui/plugin-package-review.md",
+          "concept_id": "ui.plugin-package-review",
+          "title": "Plugin package review, installation and saved-data recovery"
         }
       ]
     },
@@ -13258,7 +13297,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-03",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "adapters",
           "architecture",
@@ -13268,28 +13307,28 @@
         "title": "ReDevPlugin Redeven adapters",
         "type": "Architecture Boundary"
       },
-      "body_length": 3640,
-      "summary": "Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/trust/execution/state. Adapter faults stop at product boundary without implicit grants, copied platform state or substitute lifecycle.",
+      "body_length": 3258,
+      "summary": "Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/package integrity/execution/state. Adapter faults stop at product boundary without implicit grants, copied platform state or substitute lifecycle.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Host modules\nConstruct released Host with core,official-release,runtime,connectivity,secrets,capability,external-package modules. Product supplies authenticated session/policy/web-security/trust/source/observability/secret/business adapters,never edits registry/inspection/token/lease/revoke/plugin-data state. Signed official release-ref remains stricter.\n\n## Network\nhostnetwork constructs without I/O. Explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY either case,including empty/direct,plus standard NO_PROXY hostname/IP/CIDR. Otherwise macOS uses CFNetwork/bounded cancellable PAC,Linux normal OS routing;remote Runtime its own environment. Preserve configured route order. Only bodyless GET/HEAD may advance after pre-connection dial failure;no invented direct fallback,TLS/protocol/unknown retry or write replay even with idempotency header. Writes use freshHTTP1;transport cap8requests/read pool2idle per origin/30s.\n\nMarket owns default transport;integration closes caller-owned package transport on failure/shutdown. Connector transports independently follow upstream pool lifecycle. Keep TLS/system roots;proxy credentials stay proxy-hop only.\n\n## Reviewed connections\nInventory requires effective Read;review/approve/cancel/revoke authenticated admin+RWX. Exact cached session/nonempty private prefixes pass published destination classifier;deny metadata/unspecified/blanket prefixes. Upstream binds address/destination/revision/expiry/lease/revoke;install grants no connection.\n\nPlugin Center reviews verified installed declarations with exact destination/methods/prefixes/secret reference and connection/review expiry. Owner/package/revision/policy changes retire pending UI. Unknown approval never replays;list authority before another write,failed reconciliation keeps writes disabled until explicit successful refresh. Close awaits pending cancellation;generation fences late replies. Market failure cannot suppress installed reconciliation. Released1MiB request/response quotas stay:64MiB fixture uses64one-MiB requests/direction and rejects oversize,not a single64MiB claim.\n\n## Surfaces and origins\nOne Shell PluginPlatformClient/authenticated transport/shared scope owns placement. surface.methods receiver uses opening Read authority and registers/polls/responds only within validated surface/gateway/bridge/frame generation. Each intent still checks effect/policy/schema/confirmation;receiver grants no write authority. Placement/recovery cannot become identity,permission or second opening/catchup gate.\n\nDerive origins only from trusted product entry and released origin key. Local UI/AppServer strip parent credentials before released handler;Desktop/Gateway/Center route product transport. Platform owns assets/tickets/bridge. Ordinary HTTP loopback uses same isolated handler with exact current public parent/listener port,not management authority/private-bridge fallback.",
-          "char_count": 2895
+          "body": "## Host modules\nConstruct the released Host with Core, Runtime, IO, Web, Connectivity, Secrets, Process, Background and ExternalPackage modules. Product adapters supply authenticated identity, policy and resources. All sources share package inspection and durable installation; platform state stays opaque.\n\n## Network\nhostnetwork constructs without I/O. Explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY either case,including empty/direct,plus standard NO_PROXY hostname/IP/CIDR. Otherwise macOS uses CFNetwork/bounded cancellable PAC,Linux normal OS routing;remote Runtime its own environment. Preserve configured route order. Only bodyless GET/HEAD may advance after pre-connection dial failure;no invented direct fallback,TLS/protocol/unknown retry or write replay even with idempotency header. Writes use freshHTTP1;transport cap8requests/read pool2idle per origin/30s.\n\nMarket owns default transport;integration closes caller-owned package transport on failure/shutdown. Connector transports independently follow upstream pool lifecycle. Keep TLS/system roots;proxy credentials stay proxy-hop only.\n\n## Reviewed connections\nInventory requires effective Read;review/approve/cancel/revoke authenticated admin+RWX. Exact cached session/nonempty private prefixes pass published destination classifier;deny metadata/unspecified/blanket prefixes. Upstream binds address/destination/revision/expiry/lease/revoke;install grants no connection.\n\nReview installed destinations, methods, prefixes, secret references and expiry. Owner/package/revision/policy changes retire pending UI. Unknown approval requires authoritative refresh before further writes. Close awaits cancellation and fences late replies. Market failure cannot suppress reconciliation. The 64MiB fixture uses 64 one-MiB requests per direction; released per-request quotas still apply.\n\n## Surfaces and origins\nOne Shell PluginPlatformClient/authenticated transport/shared scope owns placement. surface.methods receiver uses opening Read authority and registers/polls/responds only within validated surface/gateway/bridge/frame generation. Each intent still checks effect/policy/schema/confirmation;receiver grants no write authority. Placement/recovery cannot become identity,permission or second opening/catchup gate.\n\nDerive origins only from trusted product entry and released origin key. Local UI/AppServer strip parent credentials before released handler;Desktop/Gateway/Center route product transport. Platform owns assets/tickets/bridge. Ordinary HTTP loopback uses same isolated handler with exact current public parent/listener port,not management authority/private-bridge fallback.",
+          "char_count": 2645
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "These adapters map product identity and presentation into released ReDevPlugin APIs. Package and runtime ownership remains in [ReDevPlugin host integration boundary](redevplugin-boundary.md) and [Plugin package and runtime lifecycle](redevplugin-package-lifecycle.md).",
-          "char_count": 268
+          "body": "[Host boundary](redevplugin-boundary.md) and [lifecycle](redevplugin-package-lifecycle.md) define package/runtime ownership.",
+          "char_count": 124
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/redevpluginintegration/integration.go:240` - Source.\n- `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Source.",
+          "body": "- `redeven:internal/redevpluginintegration/integration.go:240` - Source.\n- `redeven:internal/redevpluginintegration/session_adapter.go` - Source.",
           "char_count": 145
         }
       ],
@@ -13301,22 +13340,21 @@
           "description": "Source."
         },
         {
-          "id": "redeven:internal/redevpluginintegration/trust_adapter.go:1:source.",
-          "source": "redeven:internal/redevpluginintegration/trust_adapter.go",
-          "line": 1,
+          "id": "redeven:internal/redevpluginintegration/session_adapter.go:0:source.",
+          "source": "redeven:internal/redevpluginintegration/session_adapter.go",
           "description": "Source."
         }
       ],
-      "snippet": "Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/trust/execution/state. Adapter faults stop at product boundary without implicit grants, copied pl",
+      "snippet": "Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/package integrity/execution/state. Adapter faults stop at product boundary without implicit grant",
       "links": [
         {
-          "label": "ReDevPlugin host integration boundary",
+          "label": "Host boundary",
           "path": "architecture/redevplugin-boundary.md",
           "concept_id": "architecture.redevplugin-boundary",
           "title": "ReDevPlugin host integration boundary"
         },
         {
-          "label": "Plugin package and runtime lifecycle",
+          "label": "lifecycle",
           "path": "architecture/redevplugin-package-lifecycle.md",
           "concept_id": "architecture.redevplugin-package-lifecycle",
           "title": "Plugin package and runtime lifecycle"
@@ -19647,7 +19685,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-03",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "local-ui",
           "permissions",
@@ -19657,15 +19695,15 @@
         "title": "Plugin platform integration security",
         "type": "Security Contract"
       },
-      "body_length": 4917,
-      "summary": "ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Provenance, signatures, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.",
+      "body_length": 4987,
+      "summary": "ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Source identity, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Sessions and permissions\nprocess.local is an explicit high-risk grant, rechecked by method on every Worker Process Broker call. Hosts inherit neither the complete Redeven environment nor session cookies/plugin tokens/credentials. [Process sessions](../architecture/plugin-process-sessions.md) owns lifecycle.\n\nResolve only stored channel metadata with exact nonempty channel/user/environment identities. Cache by owner-session hash; all four hashes must match. No guessed owner sweeps or local teardown registries.\n\nCanonical HTTP route: /_redevplugin/api/plugins. Resolve method effects before local policy clamps; shared runtime management stays admin-only. Plugin Center reads grants and explicit policies via released APIs, never registry writes/default catalog grants. Catalog identity is not permission; only verified catalog trust receives Official, without changing actual trust badges.\n\n## Package and network admission\nInstall/update requires exact source policy, revocation evidence, publisher/plugin/version, signed release metadata, package hashes and Host requirement. Reject browser trust, arbitrary bytes, rollback, unknown publishers, invalid/revoked signatures and fabricated provenance. Retain existing official release-ref verification; add no authorization workflow.\n\nVPN/proxy/enterprise DNS is routing, not evidence of malice. Package downloads retain source/redirect/integrity checks through normal host routing. Authorized HTTPS connectors use released transport after grants; routing grants no extra destinations/methods, private-prefix bypass or ambient credentials. Proxy discovery/timeouts/TLS failures reject only their operation. Construction performs no discovery; plugin readiness cannot gate core Runtime. Keep TLS validation; proxy credentials stay on that hop. Never retry writes with unknown outcomes.\n\n## Confirmation and runtime trust\nValidate capability preflight against the Host-known response schema before confirmation. Reserved redevplugin.capability.risk_plan.* values must satisfy strict v1: reject unknown/malformed reserved versions without generic fallback. Replacement/replay needs new confirmation.\n\nDescriptors bind version/target/IPC/WASM ABI/artifact hash. Darwin Developer ID signing precedes product digest/Sigstore evidence; Desktop signing preserves those nested bytes. Startup cannot trust a digest computed from its own field binary.\n\nBusiness adapters run only after platform lifecycle/permission/confirmation/lease/quota/revocation/audit resolution. Never expose raw errors, tokens/secrets/cookies/query strings/absolute paths/full URLs in public or durable diagnostics.\n\n## Web isolation\nPlugin documents use distinct product origins and the published surface handler. Local UI/AppServer strip parent auth before delegation. Desktop binds private bridge credentials to actual frame origin. Frame-less workers instead require Electron's initiator origin in the owning Runtime partition, matching the exact private origin; missing/opaque origins fail. Present frames remain authoritative. Workers inherit no frame-only host-access/Tessiven claims. Center binds child routes to authenticated parents and cancels preparation on revocation; Gateway checks expected namespace/target.\n\nPlugin DOM/rendering freedom grants no product-session/filesystem/process/credential/management authority. Released platform owns asset sessions/bridge/permissions/revocation.\n\nMain-process session.fetch also enters Electron's hook. Contextless other requests retain authorization only with exactly one already-present matching private bridge token from the owning Runtime session and no frame/WebContents/initiator. Missing provenance grants nothing; destination must still be the exact private origin. Renderer/worker provenance remains authoritative; never inherit frame-only claims.",
-          "char_count": 3832
+          "body": "## Sessions and permissions\nprocess.local is an explicit high-risk grant, rechecked by method on every Worker Process Broker call. Hosts inherit neither the complete Redeven environment nor session cookies/plugin tokens/credentials. [Process sessions](../architecture/plugin-process-sessions.md) owns lifecycle.\n\nResolve only stored channel metadata with exact nonempty channel/user/environment identities. Cache by owner-session hash; all four hashes must match. No guessed owner sweeps or local teardown registries.\n\nCanonical HTTP route: /_redevplugin/api/plugins. Resolve method effects before local policy clamps; shared runtime management stays admin-only. Plugin Center reads grants and explicit policies via released APIs, never registry writes/default catalog grants. Catalog identity is not permission. Official/community classifies repository origin for display only.\n\n## Package and network admission\nInstall/update validates source policy, publisher/plugin/version, exact package hashes and Host capability contracts. Plugin signatures, trusted-publisher admission and release references are absent. Reject malformed content, fabricated provenance, owner/scope mismatch, unapproved source changes and same-version content replacement. Explicit consent and durable request receipts bind installation; permissions and runtime revocation remain independent.\n\nVPN/proxy/enterprise DNS is routing, not evidence of malice. Package downloads retain source/redirect/integrity checks through normal host routing. Authorized HTTPS connectors use released transport after grants; routing grants no extra destinations/methods, private-prefix bypass or ambient credentials. Proxy discovery/timeouts/TLS failures reject only their operation. Construction performs no discovery; plugin readiness cannot gate core Runtime. Keep TLS validation; proxy credentials stay on that hop. Never retry writes with unknown outcomes.\n\n## Confirmation and runtime trust\nValidate capability preflight against the Host-known response schema before confirmation. Reserved redevplugin.capability.risk_plan.* values must satisfy strict v1: reject unknown/malformed reserved versions without generic fallback. Replacement/replay needs new confirmation.\n\nDescriptors bind version/target/IPC/WASM ABI/artifact hash. Darwin Developer ID signing precedes product digest/Sigstore evidence; Desktop signing preserves those nested bytes. Startup cannot trust a digest computed from its own field binary.\n\nBusiness adapters run only after platform lifecycle/permission/confirmation/lease/quota/revocation/audit resolution. Never expose raw errors, tokens/secrets/cookies/query strings/absolute paths/full URLs in public or durable diagnostics.\n\n## Web isolation\nPlugin documents use distinct product origins and the published surface handler. Local UI/AppServer strip parent auth before delegation. Desktop binds private bridge credentials to actual frame origin. Frame-less workers instead require Electron's initiator origin in the owning Runtime partition, matching the exact private origin; missing/opaque origins fail. Present frames remain authoritative. Workers inherit no frame-only host-access/Tessiven claims. Center binds child routes to authenticated parents and cancels preparation on revocation; Gateway checks expected namespace/target.\n\nPlugin DOM/rendering freedom grants no product-session/filesystem/process/credential/management authority. Released platform owns asset sessions/bridge/permissions/revocation.\n\nMain-process session.fetch also enters Electron's hook. Contextless other requests retain authorization only with exactly one already-present matching private bridge token from the owning Runtime session and no frame/WebContents/initiator. Missing provenance grants nothing; destination must still be the exact private origin. Renderer/worker provenance remains authoritative; never inherit frame-only claims.",
+          "char_count": 3909
         },
         {
           "id": "boundaries",
@@ -19706,7 +19744,7 @@
           "description": "Tests."
         }
       ],
-      "snippet": "ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Provenance, signatures, execution approval, update eligibility an",
+      "snippet": "ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Source identity, execution approval, update eligibility and permi",
       "links": [
         {
           "label": "Process sessions",
@@ -24837,7 +24875,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "lifecycle",
           "plugins",
@@ -24847,59 +24885,61 @@
         "title": "Plugin package review, installation and saved-data recovery",
         "type": "UI Contract"
       },
-      "body_length": 4155,
-      "summary": "Released ReDevPlugin owns exact inspection, atomic install/update and retained-data recovery. Product dialogs present source, scope and consent while preserving drafts and authoritative identity. Unknown effects reconcile rather than replay; closing management never cancels admitted platform execution.",
+      "body_length": 3623,
+      "summary": "All plugin sources share released package inspection, exact review and durable installation. Official/community classification changes display only. Permissions remain independent explicit decisions; unknown effects reconcile from durable receipts without replay.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Package review\n### Updates\nReview update opens exact intent without mutation/navigation. Official updates show validated preview immediately, never refresh the market/download externally; missing previews read selected same-generation/release detail only. External packages use released inspection.\n\nConfirm full release ref, metadata/package digests and installed management revision. Changed generation/ref/revision invalidates consent; same-version substitution is forbidden. After submission refresh installed inventory only; canceled/superseded reads cannot replace the dialog.\n\nBounded content-height dialogs retain identity/versions through preparation/submission/completion, with long review scrolling above fixed footer. Show destinations/process/background access once; collapse technical limits. Closing completion keeps Updates, clears obsolete selection and shows All plugins are up to date when empty.\n\n### External packages\nAdmins choose compatible public HTTPS, GitHub Release/optional tag or local .redevplugin. Submit source/intent to released inspector; browser never downloads/parses remote packages, selects trust or invents provenance. Failed post-install refresh offers inventory Retry, never reinstall.\n\nLead with verified localized author/publisher/version, not available names replaced by technical IDs. Verified stays quiet; unverified/blocked/revoked warn. Omit introductory/four-step timelines but retain accessible progress.\n\nBefore consent show destinations, host permissions, credentials, processes, background and host methods. Ordinary Worker/plugin-storage methods cannot become broad delete-content counters; dangerous/unknown effects remain visible regardless of route. Keyboard details retain declarations/diffs/source/hash/binding. Network changes share one heading; storage/process/background changes stay on rows, including removed declarations.\n\nSaved-data uses released security summary, including settings-only/no-Worker packages; Surface/store/operation details collapse. Resource changes mark rows, label-only changes do not. Writable Surface resources are sensitive declarations, never filesystem permission/automatic grants.\n\nOne short checkbox confirms exact package; signature cannot replace consent. Review proves no completed install/grant; enabled proves no grant. Unknown outcomes retain inspection/reconciliation. Wrap long names/locales, preserve mobile targets/footer. External install grants nothing and explains later access management; official install retains reviewed permissions.\n\n## Installation progress\nOne target-owned flow is `idle`→`review_ready`→`installing`→`installed`; only shared install projection owns task failures. Cards/inspector share accessible aria-busy/live status/alerts/progress.\n\nInstall/update share official access presentation and bounded content-height review/progress/error/completion dialogs with scrolling body/fixed footer. Completion retains installed identity/setup attention without claiming access. Admitted Execution survives management closure; lost replies cannot reinstall. Only current inventory exposes launch; failed setup preserves layout.",
-          "char_count": 3148
+          "body": "## Package review\n\nMarket installs automatically inspect the selected repository/release/asset and expected package/security/contract hashes. Direct installation accepts HTTPS, GitHub repository or uploaded `.redevplugin` bytes. Multi-plugin repositories expose one selection step. No plugin signature, publisher trust badge, official-only wizard or separate client protocol exists.\n\nUpdates inspect the installed original source before presenting a candidate. Changing source requires explicit consent. Same-version changed contents and downgrades are blocked in update review. Changed revision/identity or expired inspection invalidates consent. Missing or changed security evidence requires explicit review; no market preview substitutes for current Host inspection.\n\nLead with verified localized identity and versions. Show access changes and saved-data conversion once; collapse technical declarations, limits, hashes and source facts. Worker/storage methods imply no broad host access.\n\nDialogs provide scrollable content, visible actions, keyboard focus, localization, touch targets and reduced motion. Progress retains identity. Cancellation fences late replies; source edits clear repository selection and market expectations.\n\nOne concise consent confirms the exact package. Installation enables the plugin without granting permissions. Both official and community packages direct later access decisions to installed details. Surface launch targets come only from Host `action_state` and per-Surface authority; missing permission leads to permission review, never a synthetic Enable/grant sequence.\n\n## Installation progress\n\nThe Shell observes owner-scoped durable receipts and Execution progress. First installations can be recovered without an installed inventory row. Closing Plugin Center does not cancel admitted execution. Owner changes clear observers; reconnect restores receipts. Concurrent submits share one request, and lost replies query the same request ID.\n\nA committed receipt remains committed even if post-commit execution or inventory refresh fails. Refresh retries only reconciliation. Unknown outcomes neither replay nor erase data. Definite failure requires a new review. Retained data uses the dedicated released recovery APIs, never automatic deletion followed by install.\n\nBoth update paths close affected slots, retire authority, preserve layout and reconcile inventory through the placement coordinator. Completion offers opening only when current inventory permits it.",
+          "char_count": 2506
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "[Surfaces](plugin-surfaces.md#discovery-and-surfaces) owns discovery/navigation. Released ReDevPlugin owns package/trust/execution/permissions and exact inspection/commit identities. UI adds no parser, mutation receipt store, grant, stale candidate, trust-derived permission or uncertain replay.",
-          "char_count": 295
+          "body": "[Surfaces](plugin-surfaces.md#discovery-and-surfaces) owns navigation and placement. [Package lifecycle](../architecture/redevplugin-package-lifecycle.md) owns source and automatic-update rules. ReDevPlugin owns package validation, durable receipts, permissions and execution; UI adds no parser, receipt database, implicit grants or uncertain replay.",
+          "char_count": 350
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Source.\n\n- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApprovedInstallSetup.ts:1` - Source.",
-          "char_count": 354
+          "body": "- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx` - Unified installation review.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx` - Update review.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts` - Durable receipt presentation.\n- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Responsive and accessible review acceptance.",
+          "char_count": 449
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1:source.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:0:unified installation review.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx",
+          "description": "Unified installation review."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:0:update review.",
           "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx",
-          "line": 1,
-          "description": "Source."
+          "description": "Update review."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1:source.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts",
-          "line": 1,
-          "description": "Source."
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts:0:durable receipt presentation.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts",
+          "description": "Durable receipt presentation."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1:source.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx",
-          "line": 1,
-          "description": "Source."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApprovedInstallSetup.ts:1:source.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApprovedInstallSetup.ts",
-          "line": 1,
-          "description": "Source."
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:0:responsive and accessible review acceptance.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx",
+          "description": "Responsive and accessible review acceptance."
         }
       ],
-      "snippet": "Released ReDevPlugin owns exact inspection, atomic install/update and retained-data recovery. Product dialogs present source, scope and consent while preserving drafts and authoritative identity. Unknown effects reconcile rather than replay",
+      "snippet": "All plugin sources share released package inspection, exact review and durable installation. Official/community classification changes display only. Permissions remain independent explicit decisions; unknown effects reconcile from durable r",
       "links": [
+        {
+          "label": "Package lifecycle",
+          "path": "architecture/redevplugin-package-lifecycle.md",
+          "concept_id": "architecture.redevplugin-package-lifecycle",
+          "title": "Plugin package and runtime lifecycle"
+        },
         {
           "label": "Surfaces",
           "path": "ui/plugin-surfaces.md",
@@ -24935,7 +24975,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "activity",
           "plugin-center",
@@ -24946,15 +24986,15 @@
         "title": "Plugin discovery, placement and layout continuity",
         "type": "UI Contract"
       },
-      "body_length": 5465,
+      "body_length": 5487,
       "summary": "Redeven owns navigation, pins and persisted geometry; released ReDevPlugin owns surface slots and authority. Activity and Workbench placements remain independent, lazy opening captures current context and hidden opened surfaces retain edits. Layout continuity never revives revoked authority or replays unknown writes.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Discovery and surfaces\n### Discovery and pinning\nActivity Bar Plugins opens a Shell-root Launcher without navigation. Search intersects category with NFKC/locale-folded names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay without grid reflow and restore row focus.\n\nTiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/Shift+F10 offers information/current-mode Activity Bar or Workbench Dock pins; pinning keeps Launcher open, dismiss restores tile focus. Plugin Center has explicit 44px touch pins; cards/details/Activity headers also offer Activity pins.\n\nUse environment-scoped Shell preferences with independent Activity/Workbench pins and synchronized selected/accessibility state. Pins grant no launch/enable/authority. Activity unpin first completes exact retirement; failed close retains pin/error. Other windows/siblings retain lifetimes.\n\n### Recovery, installation and policy\nAuthenticated session-ready invokes idempotent Host recoverEnabled without timers. Every placement consumes action_state; trust/grants/policy/recovery cannot derive can_open. [Installation](plugin-package-review.md#installation-progress) owns durable Execution/setup; [package review](plugin-package-review.md#package-review) external packages. Failure preserves placement. Plugin Center joins inventory/grants/Host requirements/policy. Method effects cannot rename capabilities; failure reloads authority/requires fresh confirmation.\n\n### Activity pages/windows\nAllocate a fresh PluginSurfaceSlot only when placement and document are visible. Hidden unopened placements retain layout without iframe/authority; close requires no open/revoke round trip. Once opening starts, hiding retains independent slot/draft/selection/undo/pending work. Visible placements may open concurrently; each actual open captures current context revision and delivers later changes once. Windows use openSurfaceInSlot. Open/bridge failure replaces iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page.\n\nEquivalent metadata preserves container/iframe/state; slot lifecycle owns visibility. Instance/surface/management-revision/runtime-generation changes retire leases. Cold open shows one themed accessible waiting surface, then ready or recovery/details; never rotate bootstrap labels.\n\nStable pinned-page component functions allow names/icons/order updates without remounting siblings or losing edits. Published Floe retained views own sibling isolation/DOM order: moving the same iframe can reload it. Acceptance checks inner document/draft and container; add no second keep-alive stack.\n\n### Workbench and teardown\n[Layout continuity](#layout-continuity) owns bindings/removal/recovery. Overlays cannot forward input, guess focus or create bridges; Workbench unpin removes only shortcut. One abort-aware FIFO dialog handles independent confirmations with initial Cancel focus. Hidden/retired/revoked surfaces cannot approve queued work; retired surfaces cannot download. Shell never uploads/retains export bytes.\n\n## Layout continuity\nOpen captures display mode with independent SDK slots; neither mode creates a Plugin Center widget. `workbench/actions/open_plugin` atomically creates/reuses exact instance/surface binding. Late requests cannot lower management revision or substitute surfaces; failed cleanup retries reconciliation, never uninstall.\n\nContainers retain identity while SDK leases retire. Committed/unknown platform outcomes invalidate slot registry first; no close after revocation. Shell reconnect owns disconnection; authenticated inventory recovery restores layout. Failed initial reads keep canvas unready/autosave off with Retry. Saved cards offer explicit reload for fresh authority, never indefinite preparation/retired-session reuse.",
-          "char_count": 3840
+          "body": "## Discovery and surfaces\n### Discovery and pinning\nActivity Bar Plugins opens a Shell-root Launcher without navigation. Search intersects category with NFKC/locale-folded names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay without grid reflow and restore row focus.\n\nTiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/Shift+F10 offers information/current-mode Activity Bar or Workbench Dock pins; pinning keeps Launcher open, dismiss restores tile focus. Plugin Center has explicit 44px touch pins; cards/details/Activity headers also offer Activity pins.\n\nUse environment-scoped Shell preferences with independent Activity/Workbench pins and synchronized selected/accessibility state. Pins grant no launch/enable/authority. Activity unpin first completes exact retirement; failed close retains pin/error. Other windows/siblings retain lifetimes.\n\n### Recovery, installation and policy\nAuthenticated session-ready invokes idempotent Host recoverEnabled without timers. Every placement consumes action_state; source classification/grants/policy/recovery cannot derive can_open. [Installation](plugin-package-review.md#installation-progress) owns durable Execution observation; [package review](plugin-package-review.md#package-review) external packages. Failure preserves placement. Plugin Center joins inventory/grants/Host requirements/policy. Method effects cannot rename capabilities; failure reloads authority/requires fresh confirmation.\n\n### Activity pages/windows\nAllocate a fresh PluginSurfaceSlot only when placement and document are visible. Hidden unopened placements retain layout without iframe/authority; close requires no open/revoke round trip. Once opening starts, hiding retains independent slot/draft/selection/undo/pending work. Visible placements may open concurrently; each actual open captures current context revision and delivers later changes once. Windows use openSurfaceInSlot. Open/bridge failure replaces iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page.\n\nEquivalent metadata preserves container/iframe/state; slot lifecycle owns visibility. Instance/surface/management-revision/runtime-generation changes retire leases. Cold open shows one themed accessible waiting surface, then ready or recovery/details; never rotate bootstrap labels.\n\nStable pinned-page component functions allow names/icons/order updates without remounting siblings or losing edits. Published Floe retained views own sibling isolation/DOM order: moving the same iframe can reload it. Acceptance checks inner document/draft and container; add no second keep-alive stack.\n\n### Workbench and teardown\n[Layout continuity](#layout-continuity) owns bindings/removal/recovery. Overlays cannot forward input, guess focus or create bridges; Workbench unpin removes only shortcut. One abort-aware FIFO dialog handles independent confirmations with initial Cancel focus. Hidden/retired/revoked surfaces cannot approve queued work; retired surfaces cannot download. Shell never uploads/retains export bytes.\n\n## Layout continuity\nOpen captures display mode with independent SDK slots; neither mode creates a Plugin Center widget. `workbench/actions/open_plugin` atomically creates/reuses exact instance/surface binding. Late requests cannot lower management revision or substitute surfaces; failed cleanup retries reconciliation, never uninstall.\n\nContainers retain identity while SDK leases retire. Committed/unknown platform outcomes invalidate slot registry first; no close after revocation. Shell reconnect owns disconnection; authenticated inventory recovery restores layout. Failed initial reads keep canvas unready/autosave off with Retry. Saved cards offer explicit reload for fresh authority, never indefinite preparation/retired-session reuse.",
+          "char_count": 3862
         },
         {
           "id": "boundaries",
@@ -25783,5 +25823,5 @@
       ]
     }
   ],
-  "source_sha256": "9d3854cbd1726657f249bd156aa012b02bd7d1ac3505b6ea6a8722d98c9d179f"
+  "source_sha256": "c3dbfec81e3fc8ea2e0c40f45480b11ab905efd6ab195068ac205e847b24547c"
 }

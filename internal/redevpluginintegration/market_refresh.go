@@ -195,11 +195,6 @@ func (i *Integration) acceptMarketSnapshot(snapshot pluginmarket.Snapshot) (plug
 		return pluginmarket.Snapshot{}, fmt.Errorf("%w: catalog generation moved backwards", pluginmarket.ErrInvalidResponse)
 	}
 	i.marketMu.RUnlock()
-	if i.releaseProvider != nil {
-		if err := i.releaseProvider.setSnapshot(snapshot); err != nil {
-			return pluginmarket.Snapshot{}, err
-		}
-	}
 	frozen := snapshot.Clone()
 	i.marketMu.Lock()
 	i.marketSnapshot = &frozen

@@ -7,7 +7,7 @@ import { PluginBackgroundStatus, backgroundScheduleLabel } from './PluginBackgro
 import type { PluginInventoryItem } from './pluginTypes';
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.innerHTML = ''; });
-const item = { inventoryKey: 'installed:counter', pluginID: 'dev.counter', displayName: 'Counter', description: '', iconFallback: 'generic', category: 'utilities', searchKeywords: [], publisher: 'Example', lifecycleState: 'enabled', trustBadge: 'unsigned', pinned: false } satisfies PluginInventoryItem;
+const item = { inventoryKey: 'installed:counter', pluginID: 'dev.counter', displayName: 'Counter', description: '', iconFallback: 'generic', category: 'utilities', searchKeywords: [], publisher: 'Example', lifecycleState: 'enabled', sourceKind: 'community', pinned: false } satisfies PluginInventoryItem;
 describe('background interval presentation', () => {
   it('formats exact short intervals without inventing a schedule for existing entries', () => {
     const i18n = createI18nHelpers('en-US', enUS);

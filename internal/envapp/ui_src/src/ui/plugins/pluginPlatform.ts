@@ -12,7 +12,6 @@ import {
   type PluginSurfaceFileExport,
   type PluginSurfaceInteractionEvent,
 } from '@floegence/redevplugin-ui';
-import { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
 
 export const redevPluginCSRFHeader = 'X-ReDevPlugin-CSRF';
 export const redevPluginCSRFProof = 'redeven-env-v1';
@@ -20,7 +19,6 @@ export const redevPluginAPIPath = '/_redevplugin/api/plugins';
 
 export type RedevenPluginPlatform = Readonly<{
   client: PluginPlatformClient;
-  localImport: PluginLocalImportClient;
   close: () => Promise<void>;
 }>;
 
@@ -62,16 +60,10 @@ export function createRedevenPluginPlatform(options: Readonly<{
     surfaceTransport,
     onMutationOutcomeUnknown: options.onMutationOutcomeUnknown,
   });
-  const localImport = new PluginLocalImportClient({
-    fetch,
-    surfaceScope,
-    onMutationOutcomeUnknown: options.onMutationOutcomeUnknown,
-  });
   let closePromise: Promise<void> | undefined;
   let closed = false;
   return {
     client,
-    localImport,
     close() {
       if (closed) return Promise.resolve();
       closePromise ??= client.revokeSessionScope().then(() => {

@@ -6,14 +6,7 @@ export type PluginLifecycleState =
   | 'update_available'
   | 'needs_attention';
 
-export type PluginTrustBadge =
-  | 'official'
-  | 'verified'
-  | 'unsigned'
-  | 'community'
-  | 'revoked'
-  | 'unavailable'
-  | 'blocked';
+export type PluginSourceBadge = 'official' | 'community';
 
 export type PluginAttentionReason =
   | 'permission_required'
@@ -24,8 +17,7 @@ export type PluginAttentionReason =
   | 'diagnostic_error'
   | 'catalog_revoked'
   | 'catalog_disabled'
-  | 'install_unavailable'
-  | 'trust_unavailable';
+  | 'install_unavailable';
 
 export type PluginProcessStatusState =
   | 'starting'
@@ -62,55 +54,30 @@ export type PluginPermissionGroup =
   | 'other';
 
 export type OfficialPluginDistribution = {
-  releaseRef: PluginReleaseRef;
   installSource: ExternalPluginSourcePreset;
 };
 
 export type PluginMarketLatestRelease = {
   plugin_id: string;
+  publisher_id: string;
   channel: string;
   version: string;
-  asset: {
-    url: string;
-  };
-  publisher_release_ref: {
-    release_ref: PluginReleaseRef;
-  };
-  signer_key_id: string;
-  compatibility: {
-    min_redeven_version: string;
-    min_redevplugin_version: string;
-  };
-  /** Display-ready, market-cached evidence for an official install. */
+  source: { provider: 'github'; repository_id: number; repository_owner: string; repository_name: string; release_id: number; tag: string; target_commit: string };
+  asset: { asset_id: number; name: string; url: string; size: number; sha256: string };
+  package_sha256: string;
+  manifest_sha256: string;
+  entries_sha256: string;
+  release_identity_digest: string;
   install_preview?: PluginMarketInstallPreview;
 };
 
 export type PluginMarketInstallPreview = Readonly<{
-  /** The exact market release identity and digests consumed by the install Execution. */
-  release_ref: PluginReleaseRef;
-  compatibility?: {
-    min_redeven_version: string;
-    min_redevplugin_version: string;
-  };
-  security_summary: Readonly<Partial<Omit<PluginExternalPackageSecuritySummary, 'permissions'>> & {
-    summary_sha256?: string;
-    permissions: readonly Readonly<{
-      permission_id: string;
-      methods?: readonly string[];
-      required: boolean;
-      effects: readonly string[];
-    }>[];
-    process?: PluginExternalPackageProcessSummary;
-    background?: PluginExternalPackageBackgroundSummary;
-    data_upgrade?: PluginExternalPackageInspection['security_summary']['data_upgrade'];
-  }>;
+  release: PluginMarketLatestRelease;
+  security_summary: PluginExternalPackageSecuritySummary;
   release_identity_digest: string;
   manifest_sha256: string;
   contract_set_sha256: string;
   summary_sha256: string;
-  transport_assets?: readonly Readonly<{ locator: string; url: string }>[];
-  /** Transport is needed by the platform, but never rendered by the UI. */
-  release?: PluginMarketLatestRelease;
 }>;
 
 export type PluginMarketSnapshot = {
@@ -123,7 +90,7 @@ export type PluginMarketSnapshot = {
   plugins: Array<{
     plugin_id: string;
     publisher_id: string;
-    source_kind?: 'official' | 'reviewed-third-party';
+    source_kind: 'official' | 'community';
     presentation: PluginMarketPresentation;
     categories: string[];
     channels: string[];
@@ -183,7 +150,6 @@ export type PluginMarketDetail = Readonly<{
   categories: readonly string[];
   channels: readonly string[];
   repository: Readonly<{ provider: string; repository_id: number; owner: string; name: string; url: string }>;
-  compatibility: Readonly<{ min_redeven_version: string; min_redevplugin_version: string }>;
   status: string;
   latest: readonly {
     channel: string;
@@ -206,7 +172,7 @@ export type OfficialPluginPermission = {
 export type OfficialPluginCatalogItem = {
   pluginID: string;
   publisherID: string;
-  sourceKind?: 'official' | 'reviewed-third-party';
+  sourceKind: 'official' | 'community';
   pluginInstanceID: string;
   displayName: string;
   description: string;
@@ -215,14 +181,11 @@ export type OfficialPluginCatalogItem = {
   marketGeneration?: number;
   latestVersion: string;
   stableVersion: string;
-  minRedevenVersion: string;
-  minReDevPluginVersion: string;
   rolloutState: 'stable' | 'staged' | 'disabled' | 'revoked';
   iconURL?: string;
   iconFallback: 'database' | 'github' | 'generic';
   category: PluginPresentationCategory;
   searchKeywords: readonly string[];
-  trustedSigningKeyIDs: readonly string[];
   permissions?: readonly OfficialPluginPermission[];
   installPreview?: PluginMarketInstallPreview;
   distribution: OfficialPluginDistribution;
@@ -281,7 +244,7 @@ export type PluginInventoryItem = {
     'management_revision' | 'enable_state' | 'deleted_at'>;
   canDisable?: boolean;
   lifecycleState: PluginLifecycleState;
-  trustBadge: PluginTrustBadge;
+  sourceKind: PluginSourceBadge;
   pinned: boolean;
   lastOpenedAt?: string;
   defaultLaunchTarget?: PluginSurfaceLaunchTarget;
@@ -292,13 +255,13 @@ export type PluginInventoryItem = {
   officialCatalog?: OfficialPluginCatalogItem;
   presentation?: PluginAuthorPresentation;
   externalPackage?: {
-    signatureAssessment: PluginExternalPackageSignatureAssessment;
     sourceProvenance: PluginExternalPackageSourceProvenance;
     executionApproval: PluginExternalPackageExecutionApproval;
     updateEligibility: PluginExternalPackageUpdateEligibility;
     securitySummary: PluginExternalPackageSecuritySummary;
   };
   processStatus?: PluginProcessStatus;
+  automaticUpdates?: boolean;
   backgroundInterval?: ReDevPluginRecord['background_interval'];
 };
 
@@ -315,10 +278,9 @@ export type PluginUpdateCandidate = Readonly<{
   publisher: string;
   installedVersion: string;
   targetVersion: string;
-  kind: 'version_update' | 'replace' | 'noop' | 'blocked';
+  kind: 'version_update' | 'noop' | 'blocked';
   target: PluginPackageIdentity;
-  reviewEvidence: Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>
-    | Readonly<{ kind: 'official_preview'; preview: PluginMarketInstallPreview; marketGeneration?: number }>;
+  reviewEvidence: Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>;
 }>;
 
 export type PluginInventoryProjection = {
@@ -332,28 +294,19 @@ export type PluginInstallObservation =
   | 'reconnecting'
   | 'failed'
   | 'finalizing'
-  | 'activation_failed'
   | 'refresh_failed';
 
-export type PluginInstallFailureSource =
-  | 'submission'
-  | 'execution'
-  | 'inventory'
-  | 'setup';
+export type PluginInstallFailureSource = 'execution' | 'inventory';
 
 export type PluginInstallFailureRecovery =
-  | 'replay_submission'
-  | 'retry_install'
   | 'review_again'
-  | 'erase_retained_data'
   | 'refresh_inventory'
-  | 'retry_setup'
   | 'none';
 
 export type PluginInstallFailure = Readonly<{
   source: PluginInstallFailureSource;
   code: string;
-  stage?: PluginReleaseInstallProgressEvent['stage'];
+  stage?: PluginInstallProgressEvent['stage'];
   retryable: boolean;
   recovery: PluginInstallFailureRecovery;
 }>;
@@ -363,7 +316,8 @@ export type PluginInstallExecutionProjection = Readonly<{
   pluginInstanceID: string;
   observation: PluginInstallObservation;
   execution?: PluginExecution;
-  progress: readonly PluginReleaseInstallProgressEvent[];
+  receipt?: PluginInspectedInstallOperation;
+  progress: readonly PluginInstallProgressEvent[];
   failure?: PluginInstallFailure;
 }>;
 
@@ -399,9 +353,10 @@ export type ExternalPluginSourceKind = 'package_url' | 'github_repository' | 'pa
 
 export type ExternalPluginSourcePreset =
   | { sourceKind: 'package_url'; url: string }
-  | { sourceKind: 'github_repository'; url: string; tag?: string };
+  | { sourceKind: 'github_repository'; url: string; tag?: string; pluginID?: string; repositoryID?: string; releaseID?: string; assetID?: string; expected?: PluginMarketInstallPreview };
 
 export type ExternalPluginInspectionRequest =
+  | { sourceKind: 'installed_source'; pluginInstanceID: string; expectedManagementRevision: number }
   | {
       sourceKind: 'package_url';
       url: string;
@@ -411,6 +366,11 @@ export type ExternalPluginInspectionRequest =
       sourceKind: 'github_repository';
       url: string;
       tag?: string;
+      pluginID?: string;
+      repositoryID?: string;
+      releaseID?: string;
+      assetID?: string;
+      expected?: PluginMarketInstallPreview;
       intent: PluginUploadedExternalPackageIntent;
     }
   | {
@@ -420,21 +380,9 @@ export type ExternalPluginInspectionRequest =
     };
 
 export type PluginManagementCommand =
-  | {
-      type: 'install';
-      pluginID: string;
-      source: 'official_catalog';
-      pluginInstanceID: string;
-      releaseRef: PluginReleaseRef;
-      releaseIdentityDigest: string;
-      manifestSHA256: string;
-      contractSetSHA256: string;
-      summarySHA256: string;
-    }
   | { type: 'enable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'disable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'uninstall'; pluginInstanceID: string; expectedManagementRevision: number; dataRetention: 'keep_data' | 'delete_data' }
-  | { type: 'update'; pluginID: string; pluginInstanceID: string; expectedManagementRevision: number; targetVersion: string; releaseRef: PluginReleaseRef }
   | {
       type: 'grant_permission';
       pluginInstanceID: string;
@@ -452,7 +400,6 @@ export type PluginManagementCommand =
       expectedRevokeEpoch: number;
     };
 
-export type PluginOfficialInstallCommand = Extract<PluginManagementCommand, { type: 'install' }>;
 
 export type PluginOpenSurfaceCommand = {
   type: 'open_surface';
@@ -463,7 +410,7 @@ export type PluginOpenSurfaceCommand = {
 };
 
 export type PluginLifecycleCommand = PluginManagementCommand | PluginOpenSurfaceCommand;
-export type PluginPendingCommandType = PluginLifecycleCommand['type'];
+export type PluginPendingCommandType = PluginLifecycleCommand['type'] | 'install' | 'update';
 
 export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentation_sha256'> & {
   presentation?: PluginRecord['presentation'];
@@ -479,10 +426,7 @@ export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'pr
   presentation_sha256?: string;
   security_summary: PluginExternalPackageSecuritySummary;
 };
-export type ExternalPluginCommitResult = Omit<PluginInstalledExternalPackage, 'plugin'> & {
-  plugin: ReDevPluginRecord;
-};
-export type PluginExternalPackageSignatureAssessment = ExternalPluginInspection['signature_assessment'];
+export type ExternalPluginCommitResult = { plugin?: ReDevPluginRecord; operation: PluginInspectedInstallOperation };
 export type PluginExternalPackageSourceProvenance = ExternalPluginInspection['source_provenance'];
 export type PluginExternalPackageExecutionApproval = ExternalPluginInspection['execution_approval'];
 export type PluginExternalPackageUpdateEligibility = ExternalPluginInspection['update_eligibility'];
@@ -510,12 +454,11 @@ import type {
   PluginCatalogResult,
   PluginCatalogRecord,
   PluginExternalPackageInspection,
-  PluginInstalledExternalPackage,
+  PluginInspectedInstallOperation,
   PluginExecution,
   PluginPermissionGrant,
   PluginRecord,
-  PluginReleaseInstallProgressEvent,
-  PluginReleaseRef,
+  PluginInstallProgressEvent,
   PluginRecoveryResult,
   PluginSecurityPolicy,
   PluginUploadedExternalPackageIntent,

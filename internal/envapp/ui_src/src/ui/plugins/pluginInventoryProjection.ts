@@ -98,7 +98,7 @@ export function buildPluginPanelModel(
 
 export function buildPluginCenterModel(projection: PluginInventoryProjection, activeTab: PluginCenterTab = 'installed'): PluginCenterModel {
   const installed = projection.items.filter((item) => Boolean(item.pluginInstanceID));
-  const discover = projection.items.filter((item) => !item.pluginInstanceID && (item.trustBadge === 'official' || item.officialCatalog?.sourceKind === 'reviewed-third-party') && item.lifecycleState === 'not_installed');
+  const discover = projection.items.filter((item) => !item.pluginInstanceID && (item.sourceKind === 'official' || item.officialCatalog?.sourceKind === 'community') && item.lifecycleState === 'not_installed');
   const updates = projection.items.filter((item) => item.lifecycleState === 'update_available');
   return { activeTab, installed, discover, updates };
 }
@@ -123,7 +123,7 @@ function projectCatalogItem(
       searchKeywords: catalogItem.searchKeywords,
       publisher: catalogItem.publisher,
       lifecycleState: catalogState(catalogItem),
-      trustBadge: catalogTrustBadge(catalogItem),
+      sourceKind: catalogSourceKind(catalogItem),
       pinned: false,
       attentionReason: catalogAttentionReason(catalogItem),
       officialCatalog: catalogItem,
@@ -131,9 +131,9 @@ function projectCatalogItem(
     };
   }
 
-  const authorization = projectAuthorization(catalogItem, installed, grants, policy, requirements);
-  const lifecycleState = installedLifecycleState(installed, catalogItem, authorization);
-  const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState, authorization);
+  const authorization = projectGenericAuthorization(installed, grants, requirements, policy);
+  const lifecycleState = installedLifecycleState(installed, catalogItem);
+  const attentionReason = installedAttentionReason(installed, lifecycleState);
   const externalPackage = externalPackageProjection(installed);
   const installedIconURL = installedPluginIconURL(installed);
   const installedLocale = installed.presentation?.locales.find((locale) => (
@@ -141,8 +141,8 @@ function projectCatalogItem(
   ));
   const installedPublisher = String(installed.manifest.publisher.display_name ?? installed.publisher_id).trim();
   const defaultViewSurface = installed.manifest.surfaces.find((surface) => (
-    surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary'
-  ));
+    surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary' && surfaceCanOpen(installed, surface.surface_id)
+  )) ?? installed.manifest.surfaces.find((surface) => surface.kind === 'view' && surfaceCanOpen(installed, surface.surface_id));
   return {
     inventoryKey: installedInventoryKey(installed.plugin_instance_id),
     pluginID: catalogItem.pluginID,
@@ -155,6 +155,7 @@ function projectCatalogItem(
     searchKeywords: installedLocale?.keywords ?? [],
     publisher: installedPublisher || installed.publisher_id,
     version: installed.version,
+    automaticUpdates: installed.automatic_updates,
     managementRevision: installed.management_revision,
     networkConnectors: projectNetworkConnectors(installed),
     recoveryIdentity: {
@@ -172,15 +173,15 @@ function projectCatalogItem(
     },
     canDisable: installed.enable_state === 'enabled',
     lifecycleState,
-    trustBadge: installedTrustBadge(installed, catalogItem),
+    sourceKind: installedSourceKind(installed, catalogItem),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
     declaredSurfaceIDs: installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => surface.surface_id),
-    launchTargets: installed.action_state?.can_open === true ? installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => ({
+    launchTargets: installed.manifest.surfaces.filter((surface) => surface.kind === 'view' && surfaceCanOpen(installed, surface.surface_id)).map((surface) => ({
       pluginID: installed.plugin_id, pluginInstanceID: installed.plugin_instance_id,
       surfaceID: surface.surface_id, displayName: manifestDisplayName(installed) || installed.plugin_id,
       expectedManagementRevision: installed.management_revision,
-    })) : [],
+    })),
     defaultLaunchTarget: installed.action_state?.can_open === true && defaultViewSurface
       ? {
           pluginID: installed.plugin_id,
@@ -208,18 +209,10 @@ function projectInstalledItem(
   processStatus?: PluginProcessStatus,
 ): PluginInventoryItem {
   const authorization = projectGenericAuthorization(installed, grants, requirements, policy);
-  const runnable = isRunnableInstalledTrust(installed);
-  const permissionAttention = authorizationNeedsPermissionAttention(authorization);
-  const lifecycleState: PluginInventoryItem['lifecycleState'] = !runnable
-    ? 'needs_attention'
-    : permissionAttention
-      ? 'needs_attention'
-      : installed.enable_state === 'enabled'
-        ? 'enabled'
-        : 'disabled';
+  const lifecycleState = installedLifecycleState(installed);
   const launchSurface = installed.manifest.surfaces.find((surface) => (
-    surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary'
-  ));
+    surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary' && surfaceCanOpen(installed, surface.surface_id)
+  )) ?? installed.manifest.surfaces.find((surface) => surface.kind === 'view' && surfaceCanOpen(installed, surface.surface_id));
   const externalPackage = externalPackageProjection(installed);
   const publisher = String(installed.manifest.publisher.display_name ?? installed.publisher_id).trim();
   const displayName = manifestDisplayName(installed) || installed.plugin_id;
@@ -235,6 +228,7 @@ function projectInstalledItem(
     searchKeywords: [],
     publisher,
     version: installed.version,
+    automaticUpdates: installed.automatic_updates,
     managementRevision: installed.management_revision,
     networkConnectors: projectNetworkConnectors(installed),
     recoveryIdentity: {
@@ -252,15 +246,15 @@ function projectInstalledItem(
     },
     canDisable: installed.enable_state === 'enabled',
     lifecycleState,
-    trustBadge: installedTrustBadgeForRecord(installed),
+    sourceKind: installedSourceKindForRecord(installed),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
     declaredSurfaceIDs: installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => surface.surface_id),
-    launchTargets: installed.action_state?.can_open === true ? installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => ({
+    launchTargets: installed.manifest.surfaces.filter((surface) => surface.kind === 'view' && surfaceCanOpen(installed, surface.surface_id)).map((surface) => ({
       pluginID: installed.plugin_id, pluginInstanceID: installed.plugin_instance_id,
       surfaceID: surface.surface_id, displayName: manifestDisplayName(installed) || installed.plugin_id,
       expectedManagementRevision: installed.management_revision,
-    })) : [],
+    })),
     defaultLaunchTarget: installed.action_state?.can_open === true && launchSurface
       ? {
           pluginID: installed.plugin_id,
@@ -270,11 +264,7 @@ function projectInstalledItem(
           expectedManagementRevision: installed.management_revision,
         }
       : undefined,
-    attentionReason: !runnable
-      ? 'trust_unavailable'
-      : permissionAttention
-        ? 'permission_required'
-        : lifecycleState === 'disabled' ? 'disabled' : undefined,
+    attentionReason: installedAttentionReason(installed, lifecycleState),
     authorization,
     presentation: installed.presentation,
     externalPackage,
@@ -295,13 +285,11 @@ export function installedPluginIconURL(installed: ReDevPluginRecord): string | u
 }
 
 function externalPackageProjection(installed: ReDevPluginRecord): PluginInventoryItem['externalPackage'] {
-  return installed.signature_assessment
-    && installed.source_provenance
+  return installed.source_provenance
     && installed.execution_approval
     && installed.update_eligibility
     && installed.security_summary
     ? {
-        signatureAssessment: installed.signature_assessment,
         sourceProvenance: installed.source_provenance,
         executionApproval: installed.execution_approval,
         updateEligibility: installed.update_eligibility,
@@ -318,23 +306,24 @@ function projectGenericAuthorization(
 ): PluginAuthorizationInventory | undefined {
   if (!requirements || requirements.required_permissions.length === 0) return undefined;
   const methodsByPermission = new Map<string, string[]>();
-  for (const contract of requirements.contracts) {
-    for (const method of contract.methods) {
+  for (const method of [...(requirements.methods ?? []), ...requirements.contracts.flatMap((contract) => contract.methods)]) {
       for (const permissionID of method.required_permissions) {
         const methods = methodsByPermission.get(permissionID) ?? [];
         if (!methods.includes(method.method)) methods.push(method.method);
         methodsByPermission.set(permissionID, methods);
       }
-    }
   }
+  const surfaces = installed.manifest.surfaces.filter((surface) => surface.kind === 'view');
+  const requiresAllMethods = surfaces.some((surface) => surface.required_methods === undefined);
+  const openingMethods = new Set(surfaces.flatMap((surface) => surface.required_methods ?? []));
   return projectAuthorizationFromPermissions(
     requirements.required_permissions.map((permissionID) => ({
       permissionID,
       group: 'other',
-      // Host requirements are the only authority when market presentation
-      // metadata is absent. Missing any required grant must fail closed instead
-      // of exposing a launch target for a plugin that cannot use its contract.
-      requiredToOpen: true,
+      // This describes startup access only. Host action_state remains the sole
+      // authority for whether any individual surface can actually open.
+      requiredToOpen: requiresAllMethods || (methodsByPermission.get(permissionID) ?? []).some((method) => openingMethods.has(method)),
+      requiredToOpenMethods: (methodsByPermission.get(permissionID) ?? []).filter((method) => requiresAllMethods || openingMethods.has(method)),
       methods: methodsByPermission.get(permissionID) ?? [],
     })),
     installed,
@@ -352,21 +341,10 @@ function catalogPluginKey(publisherID: string, pluginID: string): string {
 }
 
 function isCatalogPackageRecord(record: ReDevPluginRecord, item: OfficialPluginCatalogItem): boolean {
-  if (item.sourceKind === 'reviewed-third-party' && record.source_provenance) return true;
-  const release = item.distribution.releaseRef;
-  const currentReleaseMatches = record.version === release.version
-    && record.package_hash === release.expected_hashes.package_sha256
-    && record.manifest_hash === release.expected_hashes.manifest_sha256
-    && record.entries_hash === release.expected_hashes.entries_sha256;
-  if (record.version === release.version) return currentReleaseMatches;
-  if (record.plugin_instance_id !== item.pluginInstanceID || record.source_provenance || record.trust_state !== 'verified') return false;
-  const verifiedHashes = record.trust_assessment?.verified_hashes;
-  const verifiedSignature = record.trust_assessment?.verified_signature;
-  return verifiedSignature?.algorithm === 'ed25519'
-    && item.trustedSigningKeyIDs.includes(verifiedSignature.key_id)
-    && record.package_hash === verifiedHashes?.package_sha256
-    && record.manifest_hash === verifiedHashes?.manifest_sha256
-    && record.entries_hash === verifiedHashes?.entries_sha256;
+  const provenance = record.source_provenance;
+  const source = item.distribution.installSource;
+  return provenance?.kind === 'github_repository' && source.sourceKind === 'github_repository'
+    && provenance.repository_id === source.repositoryID;
 }
 
 function catalogInventoryKey(item: OfficialPluginCatalogItem): string {
@@ -379,91 +357,40 @@ function installedInventoryKey(pluginInstanceID: string): string {
 
 function installedLifecycleState(
   installed: ReDevPluginRecord,
-  catalogItem: OfficialPluginCatalogItem,
-  authorization?: PluginAuthorizationInventory,
+  catalogItem?: OfficialPluginCatalogItem,
 ): PluginInventoryItem['lifecycleState'] {
-  if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return 'needs_attention';
-  if (!isRunnableInstalledTrust(installed)) return 'needs_attention';
-  if ((catalogItem.permissions?.length ?? 0) === 0
-    && authorizationNeedsPermissionAttention(authorization)) return 'needs_attention';
+  if (!isExecutionApproved(installed) || (installed.action_state?.blocked_reason && installed.action_state.blocked_reason !== 'disabled')) return 'needs_attention';
   if (installed.enable_state !== 'enabled') return 'disabled';
-  if (compareVersion(installed.version, catalogItem.stableVersion) < 0) return 'update_available';
-  if (authorization?.permissions.some((permission) => (
-    permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
-  ))) return 'needs_attention';
+  if (catalogItem && compareVersion(installed.version, catalogItem.stableVersion) < 0) return 'update_available';
   return 'enabled';
 }
 
-function installedTrustBadge(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['trustBadge'] {
-  const catalogBadge = catalogTrustBadge(catalogItem);
-  if (catalogBadge !== 'official') return catalogBadge;
-  if (isRunnableInstalledTrust(installed)) {
-    return installed.signature_assessment && installed.signature_assessment.state !== 'verified'
-      ? installedTrustBadgeForRecord(installed)
-      : 'official';
-  }
-  const trustState = normalizeTrustState(installed.trust_state);
-  return trustState === 'blocked_security' || trustState === 'blocked' ? 'blocked' : 'unavailable';
+function surfaceCanOpen(installed: ReDevPluginRecord, surfaceID: string): boolean {
+  const state = installed.action_state;
+  if (!state?.can_open) return false;
+  return state.surfaces ? state.surfaces.some((surface) => surface.surface_id === surfaceID && surface.can_open) : true;
 }
 
-function installedTrustBadgeForRecord(installed: ReDevPluginRecord): PluginInventoryItem['trustBadge'] {
-  switch (installed.signature_assessment?.state) {
-    case 'verified': return 'verified';
-    case 'absent': return 'unsigned';
-    case 'unknown_signer': return 'community';
-    case 'invalid': return 'blocked';
-    case 'revoked': return 'revoked';
-    case 'unavailable': return 'unavailable';
-    default:
-      return normalizeTrustState(installed.trust_state) === 'verified' ? 'verified' : 'unavailable';
-  }
+function installedSourceKind(_installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['sourceKind'] {
+  return catalogItem.sourceKind;
+}
+
+function installedSourceKindForRecord(_installed: ReDevPluginRecord): PluginInventoryItem['sourceKind'] {
+  return 'community';
 }
 
 function installedAttentionReason(
   installed: ReDevPluginRecord,
-  catalogItem: OfficialPluginCatalogItem,
   lifecycleState: PluginInventoryItem['lifecycleState'],
-  authorization?: PluginAuthorizationInventory,
 ): PluginInventoryItem['attentionReason'] | undefined {
-  const catalogReason = catalogAttentionReason(catalogItem);
-  if (catalogReason) return catalogReason;
-  if (!isRunnableInstalledTrust(installed)) return 'trust_unavailable';
-  if (authorization?.permissions.some((permission) => permission.requiredToOpen && permission.blockedToOpen)) {
-    return 'policy_restricted';
-  }
-  if (authorization?.permissions.some((permission) => (
-    permission.requiredToOpen && (!permission.granted || permission.deniedByGrant)
-  ))) return 'permission_required';
-  if ((catalogItem.permissions?.length ?? 0) === 0
-    && authorizationNeedsPermissionAttention(authorization)) return 'permission_required';
+  if (!isExecutionApproved(installed)) return 'policy_restricted';
+  if (installed.action_state?.blocked_reason === 'runtime_unavailable') return 'runtime_missing';
+  if (installed.action_state?.blocked_reason === 'permission_required') return 'permission_required';
+  if (installed.action_state?.blocked_reason === 'policy_restricted') return 'policy_restricted';
+  if (installed.action_state?.blocked_reason && installed.action_state.blocked_reason !== 'disabled') return 'diagnostic_error';
   if (lifecycleState === 'disabled') return 'disabled';
   if (lifecycleState === 'update_available') return 'update_required';
   return undefined;
-}
-
-function authorizationNeedsPermissionAttention(
-  authorization?: PluginAuthorizationInventory,
-): boolean {
-  const permissions = authorization?.permissions ?? [];
-  return permissions.some((permission) => permission.requiredToOpen && (
-    !permission.granted
-    || permission.deniedByGrant
-    || permission.grantBlockedByPolicy
-  ));
-}
-
-function projectAuthorization(
-  catalogItem: OfficialPluginCatalogItem,
-  installed: ReDevPluginRecord,
-  grants: readonly PluginPermissionGrant[],
-  policy?: PluginSecurityPolicy,
-  requirements?: PluginPermissionRequirements,
-): PluginAuthorizationInventory | undefined {
-  const metadata = catalogItem.permissions ?? [];
-  if (metadata.length > 0) {
-    return projectAuthorizationFromPermissions(metadata, installed, grants, policy);
-  }
-  return projectGenericAuthorization(installed, grants, requirements, policy);
 }
 
 function projectAuthorizationFromPermissions(
@@ -528,19 +455,9 @@ function groupByPluginInstance(
   return grouped;
 }
 
-function isRunnableInstalledTrust(installed: ReDevPluginRecord | string): boolean {
-  if (typeof installed === 'string') return normalizeTrustState(installed) === 'verified';
-  const signatureState = installed.signature_assessment?.state;
-  if (signatureState === 'invalid' || signatureState === 'revoked') return false;
+function isExecutionApproved(installed: ReDevPluginRecord): boolean {
   const approval = installed.execution_approval?.state;
-  if (approval === 'policy_blocked' || approval === 'pending') return false;
-  if (approval === 'user_approved' || approval === 'policy_approved') return true;
-  const trustState = normalizeTrustState(installed.trust_state);
-  return trustState === 'verified' || trustState === 'unsigned_local';
-}
-
-function normalizeTrustState(trustState: string): string {
-  return String(trustState ?? '').trim().toLowerCase();
+  return approval !== 'policy_blocked' && approval !== 'pending';
 }
 
 function catalogState(catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['lifecycleState'] {
@@ -548,10 +465,8 @@ function catalogState(catalogItem: OfficialPluginCatalogItem): PluginInventoryIt
   return 'not_installed';
 }
 
-function catalogTrustBadge(catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['trustBadge'] {
-  if (catalogItem.rolloutState === 'revoked') return 'revoked';
-  if (catalogItem.rolloutState === 'disabled') return 'blocked';
-  return catalogItem.sourceKind === 'reviewed-third-party' ? 'community' : 'official';
+function catalogSourceKind(catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['sourceKind'] {
+  return catalogItem.sourceKind === 'community' ? 'community' : 'official';
 }
 
 function catalogAttentionReason(catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['attentionReason'] | undefined {

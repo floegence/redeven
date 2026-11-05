@@ -10,9 +10,17 @@ import type { ReDevPluginRecord } from './pluginTypes';
 import type { PluginPermissionRequirements } from '@floegence/redevplugin-ui';
 
 const examplePlugin = OFFICIAL_PLUGIN_CATALOG_SEED[0];
-const packageHash = examplePlugin.distribution.releaseRef.expected_hashes.package_sha256;
-const manifestHash = examplePlugin.distribution.releaseRef.expected_hashes.manifest_sha256;
-const entriesHash = examplePlugin.distribution.releaseRef.expected_hashes.entries_sha256;
+function installedRequirements(pluginInstanceID = examplePlugin.pluginInstanceID): PluginPermissionRequirements {
+  return { plugin_instance_id: pluginInstanceID, plugin_version: examplePlugin.stableVersion,
+    active_fingerprint: packageHash, management_revision: 7, required_permissions: ['metrics.read'],
+    contracts: [{ contract_id: 'example.metrics.v1', contract_version: '4.0.0', contract_sha256: 'a'.repeat(64),
+      capability_id: 'example.capability.metrics', capability_version: '3.0.0',
+      methods: [{ method: 'metrics.list', required_permissions: ['metrics.read'] }, { method: 'metrics.inspect', required_permissions: ['metrics.read'] }] }] };
+}
+
+const packageHash = examplePlugin.installPreview!.release.package_sha256;
+const manifestHash = examplePlugin.installPreview!.release.manifest_sha256;
+const entriesHash = examplePlugin.installPreview!.release.entries_sha256;
 const otherPackageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
 const readGrant = {
   plugin_instance_id: examplePlugin.pluginInstanceID,
@@ -32,19 +40,8 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
     package_hash: packageHash,
     manifest_hash: manifestHash,
     entries_hash: entriesHash,
-    trust_state: 'verified',
-    trust_assessment: {
-      trust_state: 'verified',
-      verified_hashes: {
-        package_sha256: packageHash,
-        manifest_sha256: manifestHash,
-        entries_sha256: entriesHash,
-      },
-      verified_signature: {
-        algorithm: 'ed25519',
-        key_id: 'example_signing_key_2026',
-      },
-    },
+    automatic_updates: false,
+    source_provenance: { kind: 'github_repository', repository_id: '1289352675', release_id: '21', asset_id: '22', repository_url: 'https://github.com/example/example-plugins', owner: 'example', repository: 'example-plugins', resolved_commit_sha: 'a'.repeat(40), release_tag: 'metrics-v4.4.9', asset_name: 'metrics-4.4.9.redevplugin', package_sha256: packageHash, resolved_at: '2026-11-05T00:00:00Z' },
     enable_state: 'enabled',
     action_state: {
       can_open: true,
@@ -96,6 +93,12 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
 }
 
 describe('plugin inventory projection', () => {
+  it('does not label method-only grants as necessary to open an independent surface', () => {
+    const record = installedRecord();
+    record.manifest.surfaces[0].required_methods = [];
+    const item = projectPluginInventory({ officialCatalog: [], installedPlugins: [record], permissionRequirements: [installedRequirements()] }).items[0];
+    expect(item.authorization?.permissions[0]).toMatchObject({ permissionID: 'metrics.read', requiredToOpen: false });
+  });
   it('preserves the Host installation identity in official and generic inventory', () => {
     const record = installedRecord();
     const expected = {
@@ -157,7 +160,7 @@ describe('plugin inventory projection', () => {
       displayName: examplePlugin.displayName,
       iconURL: `/_redevplugin/api/plugins/${encodeURIComponent(examplePlugin.pluginInstanceID)}/icon/${examplePlugin.presentation?.icon?.sha256}`,
       lifecycleState: 'enabled',
-      trustBadge: 'official',
+      sourceKind: 'official',
       managementRevision: 7,
       defaultLaunchTarget: {
         pluginID: examplePlugin.pluginID,
@@ -358,22 +361,11 @@ describe('plugin inventory projection', () => {
     overrides: Partial<ReDevPluginRecord>;
   }> = [
     {
-      label: 'package hash mismatch',
+      label: 'package hash mismatch from a different source',
       overrides: {
+        source_provenance: undefined,
         active_fingerprint: otherPackageHash,
         package_hash: otherPackageHash,
-        trust_assessment: {
-          trust_state: 'verified' as const,
-          verified_hashes: {
-            package_sha256: otherPackageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-          verified_signature: {
-            algorithm: 'ed25519',
-            key_id: 'example_signing_key_2026',
-          },
-        },
       },
     },
     {
@@ -391,21 +383,10 @@ describe('plugin inventory projection', () => {
       },
     },
     {
-      label: 'legacy version signed by a non-official key',
+      label: 'older version from an unassociated source',
       overrides: {
+        source_provenance: undefined,
         version: '1.9.0',
-        trust_assessment: {
-          trust_state: 'verified' as const,
-          verified_hashes: {
-            package_sha256: packageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-          verified_signature: {
-            algorithm: 'ed25519' as const,
-            key_id: 'community-signing-key',
-          },
-        },
       },
     },
   ];
@@ -421,7 +402,7 @@ describe('plugin inventory projection', () => {
     const externalItem = projection.items.find((item) => item.inventoryKey.startsWith('instance:'));
     expect(catalogItem).toMatchObject({
       displayName: examplePlugin.displayName,
-      trustBadge: 'official',
+      sourceKind: 'official',
       lifecycleState: 'not_installed',
     });
     expect(externalItem).toMatchObject({
@@ -431,31 +412,13 @@ describe('plugin inventory projection', () => {
     expect(externalItem).not.toHaveProperty('officialCatalog');
   });
 
-  it('binds exact unsigned catalog content to its generated installed instance without upgrading trust', () => {
+  it('binds the original repository to its generated installed instance', () => {
     const pluginInstanceID = 'plugin_generated_metrics';
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],
+      permissionRequirements: [installedRequirements(pluginInstanceID)],
       installedPlugins: [installedRecord({
         plugin_instance_id: pluginInstanceID,
-        trust_state: 'unsigned_local',
-        trust_assessment: {
-          trust_state: 'unsigned_local',
-          verified_hashes: {
-            package_sha256: packageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-        },
-        signature_assessment: {
-          state: 'absent',
-          reason_codes: ['signature_not_present'],
-          assessed_hashes: {
-            package_sha256: packageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-          assessed_at: '2026-07-24T10:00:00Z',
-        },
         execution_approval: {
           state: 'user_approved',
           reason_codes: [],
@@ -472,7 +435,7 @@ describe('plugin inventory projection', () => {
       inventoryKey: `instance:${pluginInstanceID}`,
       pluginInstanceID,
       displayName: examplePlugin.displayName,
-      trustBadge: 'unsigned',
+      sourceKind: 'official',
       lifecycleState: 'disabled',
       officialCatalog: { pluginID: examplePlugin.pluginID },
       authorization: {
@@ -564,79 +527,6 @@ describe('plugin inventory projection', () => {
     ]));
   });
 
-  it.each([
-    ['verified', 'automatic_eligible', 'policy_approved', 'verified'],
-    ['absent', 'manual_only', 'user_approved', 'unsigned'],
-    ['unknown_signer', 'manual_only', 'user_approved', 'community'],
-    ['unavailable', 'manual_only', 'user_approved', 'unavailable'],
-    ['invalid', 'manual_only', 'policy_blocked', 'blocked'],
-    ['revoked', 'manual_only', 'policy_blocked', 'revoked'],
-  ] as const)(
-    'projects %s external trust, approval, provenance, and update eligibility',
-    (signatureState, updateState, approvalState, trustBadge) => {
-      const external = installedRecord({
-        publisher_id: 'com.example.publisher',
-        plugin_id: 'com.example.toolbox',
-        plugin_instance_id: `plugini_${signatureState}`,
-        signature_assessment: {
-          state: signatureState,
-          reason_codes: [],
-          assessed_hashes: {
-            package_sha256: packageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-          assessed_at: '2026-07-24T10:00:00Z',
-        },
-        source_provenance: {
-          kind: 'package_url',
-          source_origin: 'https://plugins.example.com',
-          source_path: '/toolbox.redevplugin',
-          redirect_chain: [],
-          package_sha256: packageHash,
-          resolved_at: '2026-07-24T10:00:00Z',
-        },
-        execution_approval: {
-          state: approvalState,
-          reason_codes: [],
-          assessed_at: '2026-07-24T10:00:00Z',
-        },
-        update_eligibility: {
-          state: updateState,
-          reason_codes: [],
-          assessed_at: '2026-07-24T10:00:00Z',
-        },
-        security_summary: {
-          summary_sha256: 'sha256:9b30eca232030072294fcabdc98df492609672c92d2d04a545d5790119d1822b',
-          permissions: [],
-          methods: [],
-          capability_contracts: [],
-          workers: [],
-          network: [],
-          storage: [],
-          secret_refs: [],
-          core_actions: [],
-          intents: [],
-          surfaces: [],
-        },
-      });
-
-      const projection = projectPluginInventory({ officialCatalog: [], installedPlugins: [external] });
-
-      expect(projection.items[0]).toMatchObject({
-        inventoryKey: `instance:plugini_${signatureState}`,
-        trustBadge,
-        externalPackage: {
-          signatureAssessment: { state: signatureState },
-          sourceProvenance: { kind: 'package_url', package_sha256: packageHash },
-          executionApproval: { state: approvalState },
-          updateEligibility: { state: updateState },
-          securitySummary: { permissions: [], methods: [] },
-        },
-      });
-    },
-  );
-
   it('routes only enabled verified records with a revision-bound launch target', () => {
     const enabledProjection = projectPluginInventory({
       officialCatalog: [examplePlugin],
@@ -696,12 +586,13 @@ describe('plugin inventory projection', () => {
   it('does not override Host launch authority when an active read grant is missing', () => {
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],
+      permissionRequirements: [installedRequirements()],
       installedPlugins: [installedRecord()],
     });
 
     expect(projection.items[0]).toMatchObject({
-      lifecycleState: 'needs_attention',
-      attentionReason: 'permission_required',
+      lifecycleState: 'enabled',
+      attentionReason: undefined,
       defaultLaunchTarget: expect.objectContaining({ surfaceID: 'metrics.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
@@ -737,8 +628,8 @@ describe('plugin inventory projection', () => {
     });
 
     expect(projection.items[0]).toMatchObject({
-      lifecycleState: 'needs_attention',
-      attentionReason: 'permission_required',
+      lifecycleState: 'enabled',
+      attentionReason: undefined,
       defaultLaunchTarget: expect.objectContaining({ surfaceID: 'metrics.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
@@ -752,13 +643,14 @@ describe('plugin inventory projection', () => {
   it('keeps an explicit deny distinct from a missing grant', () => {
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],
+      permissionRequirements: [installedRequirements()],
       installedPlugins: [installedRecord()],
       permissionGrants: [{ ...readGrant, effect: 'deny' }],
     });
 
     expect(projection.items[0]).toMatchObject({
-      lifecycleState: 'needs_attention',
-      attentionReason: 'permission_required',
+      lifecycleState: 'enabled',
+      attentionReason: undefined,
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({
@@ -777,6 +669,7 @@ describe('plugin inventory projection', () => {
   it('treats an empty policy allowlist as uncapped and carries its CAS revisions', () => {
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],
+      permissionRequirements: [installedRequirements()],
       installedPlugins: [installedRecord()],
       permissionGrants: [readGrant],
       securityPolicies: [{
@@ -813,7 +706,8 @@ describe('plugin inventory projection', () => {
   ])('marks the required read permission as policy restricted for %#', (policyRules) => {
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],
-      installedPlugins: [installedRecord()],
+      permissionRequirements: [installedRequirements()],
+      installedPlugins: [installedRecord({ action_state: { can_open: false, can_enable: false, can_disable: true, can_uninstall: true, blocked_reason: 'policy_restricted' } })],
       permissionGrants: [readGrant],
       securityPolicies: [{
         plugin_instance_id: examplePlugin.pluginInstanceID,
@@ -828,7 +722,7 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'policy_restricted',
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'metrics.dashboard' }),
+      defaultLaunchTarget: undefined,
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'metrics.read', granted: true, blockedByPolicy: true }),
@@ -838,9 +732,12 @@ describe('plugin inventory projection', () => {
   });
 
   it('keeps the primary surface launchable when policy denies a non-opening read method', () => {
+    const record = installedRecord();
+    record.manifest.surfaces[0].required_methods = ['metrics.list'];
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],
-      installedPlugins: [installedRecord()],
+      permissionRequirements: [installedRequirements()],
+      installedPlugins: [record],
       permissionGrants: [readGrant],
       securityPolicies: [{
         plugin_instance_id: examplePlugin.pluginInstanceID,
@@ -878,16 +775,15 @@ describe('plugin inventory projection', () => {
 
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
-      trustBadge: 'revoked',
+      sourceKind: 'official',
       attentionReason: 'catalog_revoked',
     });
   });
 
-  it('keeps non-runnable trust states out of enable and open flows', () => {
+  it('keeps Host-unavailable records out of open flows', () => {
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
-        trust_state: 'needs_review',
         action_state: {
           can_open: false,
           can_enable: false,
@@ -896,22 +792,14 @@ describe('plugin inventory projection', () => {
           blocked_reason: 'runtime_unavailable',
           recovery_action: 'retry',
         },
-        trust_assessment: {
-          trust_state: 'needs_review',
-          verified_hashes: {
-            package_sha256: packageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-        },
       })],
     });
 
     const installedItem = projection.items.find((item) => item.inventoryKey.startsWith('instance:'));
     expect(installedItem).toMatchObject({
       lifecycleState: 'needs_attention',
-      trustBadge: 'unavailable',
-      attentionReason: 'trust_unavailable',
+      sourceKind: 'official',
+      attentionReason: 'runtime_missing',
       defaultLaunchTarget: undefined,
     });
     const installedTile = buildPluginPanelModel(projection, undefined, { canOpenSurfaces: true }).tiles
@@ -981,4 +869,26 @@ it('projects connector capabilities only from verified installed declarations', 
     expect(projected.networkConnectors).toEqual([{ connectorID: 'service', transport: 'http', configurable: true, httpMethods: ['GET', 'POST'] }]);
   }
   expect(projectPluginInventory({ officialCatalog: [examplePlugin], installedPlugins: [] }).items[0].networkConnectors).toBeUndefined();
+});
+
+it('does not let market availability revoke an already installed package', () => {
+  const projection = projectPluginInventory({
+    officialCatalog: [{ ...examplePlugin, rolloutState: 'revoked' }],
+    installedPlugins: [installedRecord()], permissionGrants: [readGrant],
+  });
+  expect(projection.items[0]).toMatchObject({ lifecycleState: 'enabled', sourceKind: 'official' });
+});
+
+it('never derives installed permissions from a newer market release', () => {
+  const projection = projectPluginInventory({ officialCatalog: [{ ...examplePlugin, permissions: [{ permissionID: 'market.admin', group: 'other', requiredToOpen: true, methods: ['market.delete'] }] }], installedPlugins: [installedRecord()], permissionRequirements: [installedRequirements()] });
+  expect(projection.items[0]?.authorization?.permissions.map((item) => item.permissionID)).toEqual(['metrics.read']);
+});
+
+it('selects only individually authorized surfaces from Host inventory', () => {
+  const record = installedRecord();
+  record.manifest.surfaces.push({ ...record.manifest.surfaces[0]!, surface_id: 'public', intent: 'secondary' });
+  record.action_state = { can_open: true, can_enable: false, can_disable: true, can_uninstall: true, surfaces: [{ surface_id: 'metrics.dashboard', can_open: false, blocked_reason: 'permission_required' }, { surface_id: 'public', can_open: true }] };
+  const item = projectPluginInventory({ officialCatalog: [examplePlugin], installedPlugins: [record] }).items[0]!;
+  expect(item.launchTargets?.map((target) => target.surfaceID)).toEqual(['public']);
+  expect(item.defaultLaunchTarget?.surfaceID).toBe('public');
 });

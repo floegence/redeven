@@ -3,11 +3,11 @@ type: Security Contract
 title: Plugin platform integration security
 tags: [security, plugins, permissions, local-ui]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
-ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Provenance, signatures, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.
+ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Source identity, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.
 
 # Contract
 
@@ -16,10 +16,10 @@ process.local is an explicit high-risk grant, rechecked by method on every Worke
 
 Resolve only stored channel metadata with exact nonempty channel/user/environment identities. Cache by owner-session hash; all four hashes must match. No guessed owner sweeps or local teardown registries.
 
-Canonical HTTP route: /_redevplugin/api/plugins. Resolve method effects before local policy clamps; shared runtime management stays admin-only. Plugin Center reads grants and explicit policies via released APIs, never registry writes/default catalog grants. Catalog identity is not permission; only verified catalog trust receives Official, without changing actual trust badges.
+Canonical HTTP route: /_redevplugin/api/plugins. Resolve method effects before local policy clamps; shared runtime management stays admin-only. Plugin Center reads grants and explicit policies via released APIs, never registry writes/default catalog grants. Catalog identity is not permission. Official/community classifies repository origin for display only.
 
 ## Package and network admission
-Install/update requires exact source policy, revocation evidence, publisher/plugin/version, signed release metadata, package hashes and Host requirement. Reject browser trust, arbitrary bytes, rollback, unknown publishers, invalid/revoked signatures and fabricated provenance. Retain existing official release-ref verification; add no authorization workflow.
+Install/update validates source policy, publisher/plugin/version, exact package hashes and Host capability contracts. Plugin signatures, trusted-publisher admission and release references are absent. Reject malformed content, fabricated provenance, owner/scope mismatch, unapproved source changes and same-version content replacement. Explicit consent and durable request receipts bind installation; permissions and runtime revocation remain independent.
 
 VPN/proxy/enterprise DNS is routing, not evidence of malice. Package downloads retain source/redirect/integrity checks through normal host routing. Authorized HTTPS connectors use released transport after grants; routing grants no extra destinations/methods, private-prefix bypass or ambient credentials. Proxy discovery/timeouts/TLS failures reject only their operation. Construction performs no discovery; plugin readiness cannot gate core Runtime. Keep TLS validation; proxy credentials stay on that hop. Never retry writes with unknown outcomes.
 

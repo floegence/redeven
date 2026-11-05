@@ -10,7 +10,7 @@ import {
   createSmokeTransportGate,
   ensureEnabledWorkerRuntime,
   isEnvAppPage,
-  releaseRefFromInstalledPlugin,
+  installInspectedPackage,
   runtimePIDFromHealth,
   waitFor,
   workerResultFromRPCResponse,
@@ -431,7 +431,7 @@ test('plugin smoke fails on a typed recovery failure and preserves its body', ()
       results: [{
         plugin_instance_id: 'catalog_containers',
         status: 'failed',
-        error: { reason: 'trust_state_advanced', action: 'retry' },
+        error: { reason: 'unknown', action: 'retry' },
       }],
     },
   };
@@ -526,44 +526,30 @@ test('Desktop smoke refreshes the UI projection once after direct fixture instal
   assert.match(source, /direct-install-projection-diagnostics\.json/u);
 });
 
-test('Desktop smoke reconstructs the exact signed release reference from Host-owned installed facts', () => {
-  assert.deepEqual(releaseRefFromInstalledPlugin({
-    package_hash: 'package-sha256',
-    manifest_hash: 'manifest-sha256',
-    entries_hash: 'entries-sha256',
-    release_trust_binding: {
-      source_id: 'official',
-      channel: 'stable',
-      release_metadata_ref: 'https://example.invalid/release.json',
-      release_metadata_sha256: 'release-sha256',
-      publisher_id: 'redeven',
-      plugin_id: 'containers',
-      version: '4.4.4',
-    },
-  }), {
-    source_id: 'official',
-    channel: 'stable',
-    release_metadata_ref: 'https://example.invalid/release.json',
-    release_metadata_sha256: 'release-sha256',
-    publisher_id: 'redeven',
-    plugin_id: 'containers',
-    version: '4.4.4',
-    expected_hashes: {
-      package_sha256: 'package-sha256',
-      manifest_sha256: 'manifest-sha256',
-      entries_sha256: 'entries-sha256',
-    },
-  });
+test('Desktop smoke reconciles the same durable request after a lost response', async () => {
+  const calls = [];
+  const receipt = { execution: { status: 'completed', plugin_instance_id: 'plugin' }, mutation_outcome: 'committed' };
+  const result = await installInspectedPackage(async (route, body) => {
+    calls.push({ route, body });
+    if (calls.length === 1) throw new Error('response lost');
+    return receipt;
+  }, { inspection_id: 'inspection', inspected_hashes: { package_sha256: 'sha256:package' } });
+  assert.equal(result, receipt);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].body.request_id, calls[1].body.request_id);
+  assert.match(calls[1].route, /install-operations\/query$/u);
 });
 
-test('Desktop smoke verifies user-disabled intent through a real signed release update', async () => {
+test('Desktop smoke preserves disabled intent and never reinstalls identical inspected bytes', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
   assert.match(source, /\/_redevplugin\/api\/plugins\/disable/u);
-  assert.match(source, /\/_redevplugin\/api\/plugins\/update-release-ref/u);
+  assert.match(source, /\/_redevplugin\/api\/plugins\/updates\/inspect/u);
   assert.match(source, /plugin\?\.enable_state === 'disabled_by_user'/u);
+  assert.match(source, /if \(updateApplied\) await installInspectedPackage/u);
+  assert.match(source, /update_applied: updateApplied/u);
   assert.match(source, /disabled_update_intent: disabledUpdateIntent/u);
   assert.match(source, /explicit re-enable before cold restart/u);
 });
