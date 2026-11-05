@@ -26,7 +26,7 @@ type extensionSourcePipe struct {
 	binding, tab    string
 	target, request string
 	ctx             context.Context
-	cancel          context.CancelFunc
+	cancel          context.CancelCauseFunc
 	queue           chan json.RawMessage
 	bytes           atomic.Int64
 	slots           chan struct{}
@@ -75,7 +75,7 @@ func (host *browserSourceHost) attachExtension(ctx context.Context, client *comp
 		return nil, err
 	}
 	_ = conn.SetDeadline(time.Time{})
-	lifetime, cancel := context.WithCancel(host.ctx)
+	lifetime, cancel := context.WithCancelCause(host.ctx)
 	pipe := &extensionSourcePipe{client: client, conn: conn, binding: binding, tab: tab, target: target, request: browserTraceRequest(ctx), ctx: lifetime, cancel: cancel, queue: make(chan json.RawMessage, 128), slots: make(chan struct{}, 32)}
 	client.mu.Lock()
 	if client.sources == nil {
@@ -83,7 +83,7 @@ func (host *browserSourceHost) attachExtension(ctx context.Context, client *comp
 	}
 	if client.sources[binding] != nil {
 		client.mu.Unlock()
-		cancel()
+		cancel(nil)
 		return nil, errors.New("extension source already attached")
 	}
 	client.sources[binding] = pipe
@@ -219,7 +219,7 @@ func (pipe *extensionSourcePipe) retire(reason string) {
 		if reason != "" {
 			slog.Warn("browser source transport retired", "stage", "extension_carrier", "binding", pipe.binding, "reason", reason)
 		}
-		pipe.cancel()
+		pipe.cancel(&computerSourceDisconnectedError{reason: browserDetachReason(reason)})
 		_ = pipe.conn.Close()
 		// Detach only this exact generation. A reconnect must not inherit authority,
 		// and a late cleanup cannot unbind a later explicit selection of the tab.

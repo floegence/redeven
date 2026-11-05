@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	fltools "github.com/floegence/floret/v7/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"strings"
@@ -145,5 +146,46 @@ func TestComputerReadFailureSummaryNeverReclassifiesGuestFaultOrUnknownEffect(t 
 				t.Fatalf("untyped summary reclassified %s", code)
 			}
 		}
+	}
+}
+
+func TestComputerSnapshotReceiptsRetainSourceCompletenessWithoutEmission(t *testing.T) {
+	for _, method := range []string{"ui.snapshot", "ui.observe", "ui.ref('a').snapshot"} {
+		t.Run(method, func(t *testing.T) {
+			calls := 0
+			rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+				if c.ToolName == "computer.action" {
+					return TargetToolResult{Result: map[string]any{"semantic_schema_version": 2, "node": semanticFixtureNode("a", "text", "hidden source content")}}, nil
+				}
+				calls++
+				return TargetToolResult{Result: map[string]any{"observation": map[string]any{"semantic_schema_version": 2, "document_id": "source:3", "nodes": []any{semanticFixtureNode("a", "text", "hidden source content")}, "total": 3, "truncated": true}}}, nil
+			})
+			result, err := executeTestScript(t.Context(), rt, call, "await "+method+"({root_ref:'a',limit:1,emit:false}); log('explicit prefix');")
+			if err != nil {
+				t.Fatal(err)
+			}
+			published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var text map[string]any
+			if err := json.Unmarshal([]byte(published.Text), &text); err != nil {
+				t.Fatal(err)
+			}
+			for _, wire := range []map[string]any{text, published.Structured} {
+				data := wire["data"].(map[string]any)
+				reads := data["read_outcomes"].([]any)
+				read := reads[len(reads)-1].(map[string]any)
+				if fmt.Sprint(read["total"]) != "3" || fmt.Sprint(read["returned_count"]) != "1" || read["source_truncated"] != true || read["truncated"] != true || read["root_ref"] != "a" || fmt.Sprint(read["limit"]) != "1" || read["document_id"] != "source:3" {
+					t.Fatalf("lost source completeness: %#v", read)
+				}
+				if wire["truncated"] != false || data["observations"] != nil || data["observation"] != nil {
+					t.Fatalf("source and output loss conflated: %#v", wire)
+				}
+			}
+			if calls != 1 || strings.Contains(published.Text, "hidden source content") {
+				t.Fatalf("hidden content or repeated read: %d %s", calls, published.Text)
+			}
+		})
 	}
 }

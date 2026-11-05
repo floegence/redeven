@@ -398,10 +398,10 @@ func (r *ComputerUseRuntime) managedTabTargetID(endpoint, tabID string) string {
 }
 
 func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call TargetToolCall, ref string, policy ToolTargetPolicy) (_ TargetDescriptor, resultErr error) {
-	createdTab := false
+	var createdTarget TargetDescriptor
 	defer func() {
-		if createdTab && resultErr != nil {
-			resultErr = &computerTabCreatedError{cause: resultErr}
+		if createdTarget.ID != "" && resultErr != nil {
+			resultErr = &computerTabCreatedError{cause: resultErr, targetID: createdTarget.ID, targetKind: createdTarget.Kind}
 		}
 	}()
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
@@ -453,7 +453,9 @@ func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call T
 			return target, err
 		}
 		target, err = r.ConnectBrowser(ctx, connection)
-		createdTab = err == nil && connection.NewTab
+		if err == nil && connection.NewTab {
+			createdTarget = target
+		}
 	} else {
 		if candidate.view.TargetID == "" {
 			return target, &targetToolPolicyError{code: "target_setup_required"}
@@ -596,6 +598,7 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 		if errors.As(err, &created) {
 			payload["action_executed"] = true
 			payload["completed_actions"] = []string{"new_tab"}
+			payload["created_target"] = map[string]any{"target_id": created.targetID, "target_kind": created.targetKind}
 		}
 		if errors.Is(err, errBrowserOutcomeUnknown) {
 			payload["effect_outcome_unknown"] = true

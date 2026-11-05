@@ -134,6 +134,16 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 	if publishErr != nil || !strings.Contains(published.Text, "tree_text") {
 		t.Fatalf("final provider boundary: %v", publishErr)
 	}
+	hidden := execute("const snapshot=await ui.snapshot({emit:false,limit:1}); log(snapshot.nodes.length);")
+	hiddenPayload := hidden.Result.(map[string]any)
+	reads := toAnySlice(hiddenPayload["read_outcomes"])
+	read := reads[0].(map[string]any)
+	if read["source_truncated"] != true || read["returned_count"] != 1 || hiddenPayload["observation"] != nil {
+		t.Fatalf("real source completeness lost: %#v", hiddenPayload)
+	}
+	if textObservation["read_options_scope"] != "method_inventory" {
+		t.Fatal("method inventory scope missing")
+	}
 	execute("const detail=await ui.ref(exportRef).node(); ui.assert(detail.role==='link'); await ui.snapshot({full:true});")
 
 	// A document root is not a rendered element. Rejecting its text read
@@ -146,16 +156,11 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 		}
 		execute("await ui.snapshot({emit:false});")
 	}
-	help, _ := computerScriptHelp("downloads", true)
-	_, example, ok := strings.Cut(help, "Capture the cursor BEFORE one export action:\n")
-	if !ok {
-		t.Fatal("download example missing")
-	}
-	example, _, ok = strings.Cut(example, "\nUse the returned path")
-	if !ok {
-		t.Fatal("download example boundary missing")
-	}
-	execute(example)
+	// Task-specific composition belongs in the qualification fixture, not core
+	// help. Keep the same exact download/no-replay acceptance after help moved
+	// to a method reference.
+	execute(`const cursor=await browser.downloadCursor(); await ui.getByRole('link',{name:'Export domains',exact:true}).click(); const receipt=await cursor.wait({timeout_ms:5000}); log(await browser.saveDownload(receipt.download.id));`)
+
 	space, err := prepareTaskFiles(owner.stateDir, owner.threadID)
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +178,7 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, example, ok = strings.Cut(string(document), "<!-- qualified-browser-batch -->\n```javascript\n")
+	_, example, ok := strings.Cut(string(document), "<!-- qualified-browser-batch -->\n```javascript\n")
 	if !ok {
 		t.Fatal("batch example missing")
 	}

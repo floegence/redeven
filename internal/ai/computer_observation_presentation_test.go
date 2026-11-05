@@ -137,7 +137,7 @@ func TestComputerScriptInputReceiptRetainsFactsAndIndependentRead(t *testing.T) 
 			}
 			if mode == "fresh_read" {
 				observation := payload["observation"].(map[string]any)
-				if observation["read_options"] == nil {
+				if observation["read_options"] == nil || observation["read_options_scope"] != "method_inventory" {
 					t.Fatalf("lost read options: %+v", observation)
 				}
 			}
@@ -263,6 +263,29 @@ func TestComputerObservationPresentationKeepsLifecycleAndReadFacts(t *testing.T)
 		}
 		if !found {
 			t.Errorf("missing %s in public Activity rows: %+v", key, rows)
+		}
+	}
+}
+
+func TestComputerCreationAndDetachFactsReachActivity(t *testing.T) {
+	for _, key := range []string{"created_target", "connection_diagnostic", "read_outcomes"} {
+		values := map[string]any{
+			"created_target":        map[string]any{"target_id": "chrome-created", "target_kind": "browser.connected"},
+			"connection_diagnostic": map[string]any{"phase": "source_disconnected", "reason": "replaced_with_devtools"},
+			"read_outcomes":         []any{map[string]any{"action": "snapshot", "status": "completed", "total": 3, "returned_count": 1, "source_truncated": true, "root_ref": "a", "limit": 1}},
+		}
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.select_target", Status: toolResultStatusError, Data: map[string]any{key: values[key], "selected": false}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, row := range activity.Payload.(fltools.StructuredActivityPayload).Rows {
+			if row.Title == key && row.Content == toolDetailValue(values[key]) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("public Activity lost %s: %+v", key, activity)
 		}
 	}
 }

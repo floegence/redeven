@@ -202,6 +202,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	emittedBytes := 0
 	var observationScope string
 	var argumentDiagnostic map[string]any
+	var connectionDiagnostic map[string]any
 	var failedInputProgress map[string]any
 	var failedActionability map[string]any
 	var failedOperationPhase string
@@ -267,6 +268,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				payload["budget_exhausted"] = "operations"
 			case payload["script_error"] == "SCRIPT_OUTPUT_LIMIT" && computerOutputLimitFacts(payload["output_limit"]) != nil:
 				payload["budget_exhausted"] = "output"
+			}
+			if connectionDiagnostic != nil {
+				payload["connection_diagnostic"] = connectionDiagnostic
 			}
 			if failureStage != "" {
 				payload["stage"] = failureStage
@@ -399,6 +403,8 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				}
 				if err != nil || takeoverResult(observed, err) {
 					facts, _ := observed.Result.(map[string]any)
+					diagnostic, _ := facts["connection_diagnostic"].(map[string]any)
+					connectionDiagnostic = computerConnectionDiagnostic(diagnostic)
 					failedInputProgress = computerInputProgress(facts["input_progress"])
 					failedOperationPhase = computerActivityFailurePhase(facts)
 				}
@@ -534,6 +540,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				if observation, ok := payload["observation"]; ok {
 					if tree, ok := observation.(map[string]any); ok {
 						tree = cloneAnyMap(tree)
+						tree["read_options_scope"] = "method_inventory"
 						tree["read_options"] = []string{"node", "snapshot", "source", "screenshot"}
 						if computerBrowserTarget(target.Kind) {
 							tree["read_options"] = []string{"node", "snapshot", "source", "query", "count", "rows", "text", "screenshot"}

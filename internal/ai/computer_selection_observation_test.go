@@ -14,9 +14,16 @@ func TestComputerCoreHelpHasMinimalSignaturesAndNoWorkflow(t *testing.T) {
 		if !ok || len(help) > 3000 {
 			t.Fatalf("core reference size: %d", len(help))
 		}
-		for _, signature := range []string{"ui.snapshot(", "ui.ref(", "ui.getByRole(", "locator.node()", "parent_ref is optional", "log("} {
+		for _, signature := range []string{"ui.snapshot(", "ui.ref(", "ui.getByRole(", "locator.node()", "parent_ref is optional", "log(", "locator.fill(", "locator.press(", "ui.key(", "ui.doubleClick(", "status:'invalidated'", "without content", "read_options", "method inventory"} {
 			if !strings.Contains(help, signature) {
 				t.Fatalf("missing signature %s", signature)
+			}
+		}
+		if browser {
+			for _, signature := range []string{"browser.navigate(", "browser.back(", "browser.reload("} {
+				if !strings.Contains(help, signature) {
+					t.Fatalf("missing qualified signature %s", signature)
+				}
 			}
 		}
 		for _, directive := range []string{"Choose the next", "Use roles and refs", "before claiming completeness"} {

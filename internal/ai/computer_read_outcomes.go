@@ -27,14 +27,26 @@ func computerReadOutcome(operation map[string]any, index int, status string, fac
 	// Collection counts describe the actual returned source page, never readiness.
 	if status == "completed" {
 		key := ""
+		collection := facts
 		switch operation["action"] {
+		case "snapshot", "observe":
+			key, collection = "nodes", identity
+			out["scope"] = "loaded_accessibility_tree"
+			for _, field := range []string{"root_ref", "limit"} {
+				if value, exists := operation[field]; exists {
+					out[field] = value
+				}
+			}
+			if truncated, ok := collection["truncated"].(bool); ok {
+				out["source_truncated"] = truncated
+			}
 		case "query":
 			key = "items"
 		case "table":
 			key = "rows"
 		}
 		if key != "" {
-			rawTotal := facts["total"]
+			rawTotal := collection["total"]
 			switch n := rawTotal.(type) {
 			case int:
 				rawTotal = float64(n)
@@ -48,10 +60,10 @@ func computerReadOutcome(operation map[string]any, index int, status string, fac
 			if total, ok := computerNonnegativeInteger(rawTotal); ok && total <= math.MaxInt32 {
 				out["total"] = int64(total)
 			}
-			if items, ok := facts[key].([]any); ok {
+			if items, ok := collection[key].([]any); ok {
 				out["returned_count"] = len(items)
 			}
-			if truncated, ok := facts["truncated"].(bool); ok {
+			if truncated, ok := collection["truncated"].(bool); ok {
 				out["truncated"] = truncated
 			}
 		}

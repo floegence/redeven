@@ -2,6 +2,8 @@
 
 - 2026-11-05: Bound official OpenAI [prompt cache keys](ai/model-request-reuse.md) while preserving stable provider and account isolation across Floret thread turns.
 
+- 2026-11-05: Preserve [snapshot source completeness](ai/computer-use-scripts.md), [confirmed tab identity](ai/computer-use-target-selection.md) and [exact-source disconnect causes](ai/computer-use-browser-connection.md) through model/Activity results; qualify help return unions and the method inventory without replay or inferred capability.
+
 - 2026-11-05: Replace contextual [Ask Flower windows](ui/flower-activity-companion.md#contextual-window) with one content-sized card, integrated editor, compact context actions and reversible origin-based motion; retain preview ownership, request identity and viewport/focus acceptance.
 
 - 2026-11-05: Keep [Flower navigation](ui/flower-thread-sidebar.md) controls in the title row, consume upstream segmented selection motion, animate in-flow disclosure heights and remove persistent pin badges.

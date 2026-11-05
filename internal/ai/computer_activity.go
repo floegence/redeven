@@ -47,6 +47,9 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 		// or suggest a recovery action.
 		add("actionability", "", toolDetailValue(actionability), fltools.StructuredActivityRowFormatCode)
 	}
+	if created, ok := payload["created_target"].(map[string]any); ok {
+		add("created_target", "", toolDetailValue(created), fltools.StructuredActivityRowFormatCode)
+	}
 	if diagnostic, ok := payload["connection_diagnostic"].(map[string]any); ok {
 		add("connection_diagnostic", "", toolDetailValue(diagnostic), fltools.StructuredActivityRowFormatCode)
 	}

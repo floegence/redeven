@@ -273,7 +273,7 @@ func TestComputerScriptTakeoverDiscardsObservedContent(t *testing.T) {
 		t.Fatalf("takeover: %+v %v", result, err)
 	}
 	payload := result.Result.(map[string]any)
-	if payload["logs"] != nil || payload["observation"] != nil || payload["action_executed"] != true || len(result.Attachments) != 0 {
+	if payload["logs"] != nil || payload["observation"] != nil || payload["read_outcomes"] != nil || payload["action_executed"] != true || len(result.Attachments) != 0 {
 		t.Fatalf("private projection: %+v", result)
 	}
 }

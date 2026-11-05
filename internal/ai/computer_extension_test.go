@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -190,7 +191,7 @@ func TestExtensionDrainedReadCancellationDoesNotClaimUserControl(t *testing.T) {
 	go func() { <-entered; cancel() }()
 	call := TargetToolCall{TargetID: "chrome-task", ToolName: "computer.observe"}
 	result, err := executor.ExecuteTargetTool(ctx, call)
-	if err == nil || takeoverResult(result, err) || errors.Is(err, errComputerEffectUnknown) || cancellations.Load() != 1 {
+	if err == nil || takeoverResult(result, err) || errors.Is(err, errComputerEffectUnknown) || result.Result.(map[string]any)["connection_diagnostic"] != nil || cancellations.Load() != 1 {
 		t.Fatalf("drained read claimed ownership or unknown effect: %#v %v", result, err)
 	}
 	result, err = executor.ExecuteTargetTool(t.Context(), call)
@@ -215,8 +216,8 @@ func TestExtensionLostEffectIsTerminalAndNeverReplayed(t *testing.T) {
 		}
 	})
 	executor := &extensionTargetExecutor{sourceHost: host, targetID: "chrome-task"}
-	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer.click", Arguments: json.RawMessage(`{"x":1,"y":2}`)})
-	if !errors.Is(err, errComputerEffectUnknown) || calls.Load() != 1 {
+	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer.click", Arguments: json.RawMessage(`{"x":1,"y":2}`)})
+	if !errors.Is(err, errComputerEffectUnknown) || result.Result.(map[string]any)["connection_diagnostic"] != nil || calls.Load() != 1 {
 		t.Fatalf("effect result: %v, calls: %d", err, calls.Load())
 	}
 
@@ -581,8 +582,23 @@ func TestExtensionNewTabSelectionFailurePreservesCreationFacts(t *testing.T) {
 			if mode == "confirmed" && (payload["action_executed"] != true || len(extractStringSlice(payload["completed_actions"])) != 1 || errors.Is(failure, errBrowserOutcomeUnknown)) {
 				t.Fatalf("confirmed creation lost: %#v %v", payload, failure)
 			}
+			if mode == "confirmed" {
+				created, ok := payload["created_target"].(map[string]any)
+				if !ok || created["target_id"] != extensionNativeTargetID(client, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") || created["target_kind"] != "browser.connected" {
+					t.Fatalf("confirmed tab identity lost: %#v", payload)
+				}
+			} else if payload["created_target"] != nil {
+				t.Fatal("unknown creation invented identity")
+			}
 			if mode == "unknown" && (payload["effect_outcome_unknown"] != true || payload["action_executed"] != nil || !errors.Is(failure, errBrowserOutcomeUnknown)) {
 				t.Fatalf("unknown creation misrepresented: %#v %v", payload, failure)
+			}
+			published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: "select", ToolName: "computer.select_target", Status: toolResultStatusError, Data: payload})
+			if publishErr != nil {
+				t.Fatal(publishErr)
+			}
+			if mode == "confirmed" && !strings.Contains(published.Text, extensionNativeTargetID(client, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) {
+				t.Fatal("final model text lost created identity")
 			}
 			selected, _ := store.GetComputerTarget(t.Context(), "thread-first")
 			_ = peer.Close()
@@ -676,14 +692,14 @@ func TestExtensionRejectsOldObservationProtocol(t *testing.T) {
 func TestExtensionLateBindingRetirementPreservesReconnectedSource(t *testing.T) {
 	registry := NewTargetRegistry()
 	client := &computerExtensionClient{}
-	pipe := &extensionSourcePipe{binding: "current"}
+	pipe := &extensionSourcePipe{binding: "current", ctx: t.Context()}
 	current := &extensionTargetExecutor{client: client, tabID: "7", pipe: pipe}
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"stable": current}, t.TempDir())
 	if err := registry.Register(TargetDescriptor{ID: "stable", Kind: "browser.connected"}); err != nil {
 		t.Fatal(err)
 	}
-	runtime.retireExtensionBinding(client, "7", "old")
-	if runtime.executors["stable"] != current {
+	runtime.retireExtensionBinding(client, "7", "old", "target_closed")
+	if runtime.executors["stable"] != current || context.Cause(pipe.ctx) != nil {
 		t.Fatal("late binding retirement removed the current source")
 	}
 }
@@ -692,7 +708,7 @@ func TestExtensionCloseWaitsForNativeBindingRetirement(t *testing.T) {
 	_, client, peer := extensionFixture(t)
 	local, remote := net.Pipe()
 	defer remote.Close()
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	pipe := &extensionSourcePipe{client: client, conn: local, ctx: ctx, cancel: cancel, tab: "7", binding: "12345678-1234-1234-1234-123456789012"}
 	executor := &extensionTargetExecutor{client: client, pipe: pipe}
 	finished := make(chan error, 1)
@@ -718,5 +734,112 @@ func TestExtensionCloseWaitsForNativeBindingRetirement(t *testing.T) {
 	}
 	if err := <-finished; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestExtensionDetachFactsReachScriptAndModelWithoutReplay(t *testing.T) {
+	for _, reason := range []string{"target_closed", "canceled_by_user", "replaced_with_devtools", "debugger_detached", "private arbitrary reason"} {
+		for _, action := range []string{"await ui.key('Enter');", "await ui.snapshot({emit:false});"} {
+			t.Run(reason+action, func(t *testing.T) {
+				var executor *extensionTargetExecutor
+				rt, call := scriptRuntimeFixture(t, func(ctx context.Context, c TargetToolCall) (TargetToolResult, error) {
+					return executor.ExecuteTargetTool(ctx, c)
+				})
+				_, client, native := extensionFixture(t, rt)
+				local, remote := net.Pipe()
+				defer remote.Close()
+				lifetime, cancel := context.WithCancelCause(t.Context())
+				pipe := &extensionSourcePipe{client: client, conn: local, ctx: lifetime, cancel: cancel, tab: "7", binding: "11111111-1111-1111-1111-111111111111"}
+				// The real event reader must retire exactly this registered generation.
+				healthy := &extensionTargetExecutor{client: client, tabID: "8", pipe: &extensionSourcePipe{binding: "22222222-2222-2222-2222-222222222222"}}
+				rt.executors["unrelated"] = healthy
+				t.Cleanup(func() { rt.mu.Lock(); delete(rt.executors, "unrelated"); rt.mu.Unlock() })
+				var dispatches atomic.Int32
+				source, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+					var req struct{ ID, Method string }
+					_ = json.NewDecoder(r.Body).Decode(&req)
+					if req.Method == "source.tool" {
+						dispatches.Add(1)
+						if err := browserbridge.WriteMessage(native, map[string]any{"type": "target_unavailable", "tab_id": "7", "binding": pipe.binding, "reason": reason}, 1<<20); err != nil {
+							t.Error(err)
+						}
+						<-lifetime.Done()
+						w.WriteHeader(http.StatusServiceUnavailable)
+					} else {
+						_ = json.NewEncoder(w).Encode(map[string]any{"id": req.ID, "result": true})
+					}
+				})
+				executor = &extensionTargetExecutor{client: client, sourceHost: source, pipe: pipe, targetID: call.TargetID, tabID: "7"}
+				rt.executors[call.TargetID] = executor
+				go func() {
+					for {
+						raw, err := browserbridge.ReadMessage(native, 1<<20)
+						if err != nil {
+							return
+						}
+						var req struct{ ID, Command string }
+						_ = json.Unmarshal(raw, &req)
+						if req.Command != "unbind" {
+							t.Error("unexpected dispatch", req.Command)
+						}
+						_ = browserbridge.WriteMessage(native, map[string]any{"id": req.ID, "result": true}, 1<<20)
+					}
+				}()
+				result, err := executeTestScript(t.Context(), rt, call, action+"await ui.key('X');")
+				if err == nil || dispatches.Load() != 1 {
+					t.Fatalf("lost failure or repeated input: %v %d", err, dispatches.Load())
+				}
+				unknown := strings.Contains(action, "key")
+				if errors.Is(err, errComputerEffectUnknown) != unknown {
+					t.Fatalf("changed effect certainty: %v", err)
+				}
+				published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusError, effectUncertain: unknown, Data: result.Result})
+				if publishErr != nil {
+					t.Fatal(publishErr)
+				}
+				var text map[string]any
+				_ = json.Unmarshal([]byte(published.Text), &text)
+				for _, wire := range []map[string]any{text, published.Structured} {
+					data := wire["data"].(map[string]any)
+					diagnostic, ok := data["connection_diagnostic"].(map[string]any)
+					if !ok || diagnostic["phase"] != "source_disconnected" || diagnostic["reason"] != browserDetachReason(reason) || data["effect_outcome_unknown"] != unknown {
+						t.Fatalf("lost detach facts: %#v", data)
+					}
+				}
+				if strings.Contains(published.Text, "private arbitrary") {
+					t.Fatal("raw reason escaped")
+				}
+				rt.mu.Lock()
+				other := rt.executors["unrelated"]
+				delete(rt.executors, "unrelated")
+				rt.mu.Unlock()
+				if other != healthy {
+					t.Fatal("other tab retired")
+				}
+				if err := pipe.drain(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
+func TestExtensionDetachDoesNotEraseConfirmedReply(t *testing.T) {
+	lifetime, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	source, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ ID string }
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		cancel(&computerSourceDisconnectedError{reason: "target_closed"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": map[string]any{"result": map[string]any{"action_executed": true}}})
+	})
+	executor := &extensionTargetExecutor{sourceHost: source, targetID: "confirmed", pipe: &extensionSourcePipe{ctx: lifetime}}
+	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "confirmed", ToolName: "computer.key", Arguments: json.RawMessage(`{"key":"Enter"}`)})
+	if err != nil || result.Result.(map[string]any)["action_executed"] != true || result.Result.(map[string]any)["connection_diagnostic"] != nil {
+		t.Fatalf("confirmed response reclassified: %#v %v", result, err)
+	}
+	result, err = executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "another", ToolName: "computer.key"})
+	if err == nil || result.Result != nil {
+		t.Fatalf("diagnostic crossed target identity: %#v %v", result, err)
 	}
 }

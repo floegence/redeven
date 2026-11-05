@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script execution and semantic observations
 tags: [ai, computer-use, scripts, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -16,12 +16,12 @@ One computer.exec is one Floret effect attempt. Recheck target/grant/cancel/cont
 
 Require target/code/readable description. Limits30s/50operations/eight namespaces,ui.budget/results show remainder. Await/loops/same-target navigation compose;new visual judgment returns to model. No timers;const/let call-local,globalThis healthy turn/target only. SCRIPT_NO_PROGRESS=no supported pending work,STALE_REFERENCE=invalid observed identity;neither permits replay/retarget. Unique lookup missing/ambiguous fails;query/count0 and waitFor timeout are data.
 
-Failed host call seals even if caught,retiring namespace/dormant promises with context_reset/confirmed effects. Parse-only rejection retains healthy namespace;post-start SyntaxError/fault retires jobs. Diagnostics distinguish parse/execution/host_operation and closed phase/method/field/expected/example/source-position-symbol;raw interpreter text private,echo known unsupported options only. Help owns signatures/observed roles,no business guesses. CDP retains method/signed code. Source-owner absent/closed/busy/identity rejection proves action_executed:false only pre-dispatch. helper_exchange retains response_unavailable|invalid_response|helper_rejected/uncertainty;only exact validated request/target proves no execution.
+Failed host call seals even if caught,retiring namespace/dormant promises with context_reset/confirmed effects. Parse-only rejection retains healthy namespace;post-start SyntaxError/fault retires jobs. Diagnostics distinguish parse/execution/host_operation and closed phase/method/field/expected/example/source-position-symbol;raw interpreter text private,echo known unsupported options only. Core help uses object-qualified signatures and the snapshot/observe invalidated return union; detailed topics remain on demand. Help owns signatures/observed roles,no business guesses. CDP retains method/signed code. Source-owner absent/closed/busy/identity rejection proves action_executed:false only pre-dispatch. helper_exchange retains response_unavailable|invalid_response|helper_rejected/uncertainty;only exact validated request/target proves no execution.
 
 ## Explicit invalidation/output
 Readonly snapshot/observe/screenshot/locators(including snapshot pre-resolution) accept on_invalidated:'return'. Only typed no-effect document change returns invalidated/document_changed/observation_stage/needs_observation without content,preparation,input,takeover,cancel or revoked authority;default throws. Consume budget,no completed_actions. Model chooses next read,never auto-retry/reset. Candidate/unknown protocol/uncertainty stop.
 
-Invocation-local read_outcomes retains operation_index/action/status/bounded document/typed invalidation,including emit:false;50-operation bound,no locals/content/recovery decisions. Successful query/table receipts also retain total/returned_count/truncated across later guest faults;no loading cause is inferred. Privacy pause discards it. completed_reads records successful kinds/scopes independently of observation_status/image authority. Activity retains reset/zero-based failure without changing status. Confirmed input followed by typed missing/ambiguous/unsupported content read displays action performed with requested content unreadable;computer_failed_read carries actual read kind. Canonical/detail errors persist. Unknown effects,guest faults and input failures never become this neutral interruption.
+Invocation-local read_outcomes retains operation_index/action/status/bounded document/typed invalidation,including emit:false;50-operation bound,no locals/content/recovery decisions. Successful query/table and snapshot/observe receipts retain total/returned_count/truncated across later guest faults. Snapshot receipts additionally identify source_truncated, loaded_accessibility_tree scope and explicit root_ref/limit; these facts describe the source page before guest filtering, independently of final-envelope delivery truncation. No hidden nodes or loading cause is inferred. Privacy pause discards it. completed_reads records successful kinds/scopes independently of observation_status/image authority. Activity retains reset/zero-based failure without changing status. Confirmed input followed by typed missing/ambiguous/unsupported content read displays action performed with requested content unreadable;computer_failed_read carries actual read kind. Canonical/detail errors persist. Unknown effects,guest faults and input failures never become this neutral interruption.
 
 Bounds:snapshot256KiB,helper512KiB,final1MiB,logs64KiB UTF8,explicit encoded prefix384KiB. Exact-size admission returns SCRIPT_OUTPUT_LIMIT/continuation,no replay/middle loss. SCRIPT_OUTPUT_LIMIT is a delivery-budget result: the confirmed prefix, completed reads and output_limit facts remain available, and the code does not mean that a completed read failed. Publish logs before later operations;earlier output survives later failure/timeout/uncertainty. Failed read discards its content/pixels and stops calls/logs;private pause removes invocation content.
 
@@ -34,7 +34,7 @@ Typed preflight invalidation before mutation yields dispatch_status:not_dispatch
 
 Use trees for controls,text for prose/code,collections for loaded data,images for visuals;retain headings/units/period/scope/keys. Counts/cursors prove no unseen data,successful reads may expose app errors;denied/unvisited stays unknown,no business-success/site/industry inference.
 
-Browser geometry yields original quads/session CSS viewport/optional hit. click/hover check and deliver identical first-quad center or supplied point,no alternate search. scroll_into_view:true;stability_timeout_ms:1000(range0..5000),retain preparation/time. type inserts,fill replaces. Native window scroll,scrollAt(no click),selector scroll and doubleClick keep distinct parity. Browser-only waits:text|value,equals:string,optional timeout,visible textContent/value;completed waits survive guest faults. [Read contract](computer-script-read-contract.md) owns privacy/shapes/ack/actionability/limits.
+Browser geometry yields original quads/session CSS viewport/optional hit. click/hover check and deliver identical first-quad center or supplied point,no alternate search. scroll_into_view:false;stability_timeout_ms:0(range0..5000),retain preparation/time. type inserts,fill replaces. Native window scroll,scrollAt(no click),selector scroll and doubleClick keep distinct parity. Browser-only waits:text|value,equals:string,optional timeout,visible textContent/value;completed waits survive guest faults. [Read contract](computer-script-read-contract.md) owns privacy/shapes/ack/actionability/limits.
 
 Drag duration_ms integer0..5000,straight held path,zero no delay. Monotonic origin prevents accumulated waits,not transport cost. Cancel/takeover/document change releases at last confirmed point;NativeInputSequence starts after down ack with authority/cancel/receipts. Unknown replies never replay;AppKit independently measures.
 
@@ -69,7 +69,7 @@ log({scores: batchScores, total: batchTotal});
 await ui.screenshot();
 ```
 
-TestComputerScriptExamplesQualification runs this exact batch and the download-help example through QuickJS/Runtime/installed Chromium: 1.4MB exact download, one export/identity, three scores, retained state and actual screenshot. Image metadata is not a path/PNG buffer.
+TestComputerScriptExamplesQualification runs this exact batch and an explicit download fixture through QuickJS/Runtime/installed Chromium: 1.4MB exact download, one export/identity, three scores, retained state and actual screenshot. Image metadata is not a path/PNG buffer.
 
 - `redeven:internal/ai/computer_script.go` - Source.
 - `redeven:internal/ai/computer_observation_text_test.go` - Tests.

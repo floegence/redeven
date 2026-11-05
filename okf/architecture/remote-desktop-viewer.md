@@ -9,6 +9,9 @@ reviewed_at: "2026-11-04"
 
 Published input/playback and session contracts own current-frame authority. Separate cursors permit immediate movement; embedded cursors hide local pointer. Recovery keeps controls usable; disconnect stops media/input with confirmed removal or Retry. Frozen pixels never imply connection.
 
+# Contract
+
+## Lock-screen input
 When a lock-screen frame is painted and acknowledged in control mode, the viewer
 arms physical-only unlock input automatically. Paint and acknowledgement may
 arrive in either order; both paths attempt arming, and subsequent acknowledgements
@@ -17,8 +20,6 @@ interaction explains the wait instead of claiming that authentication failed.
 Opening a panel, losing the socket, changing generation or mode, and every
 unpainted transition revoke the armed target. Backend frame, generation, control
 owner and physical-input checks remain mandatory for every unlock event.
-
-# Contract
 
 ## Input and clipboard
 The published Floe input and pointer controllers own client composition, physical keys, pointer gestures and release. Mouse and drag movement retains only the latest pending position, bounded to 120 submissions per second.

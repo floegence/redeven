@@ -14,7 +14,7 @@ func compactComputerObservation(current map[string]any) map[string]any {
 		return current
 	}
 	metadata := map[string]any{"detail": "compact", "scope": "loaded_accessibility_tree", "source_truncated": current["truncated"] == true}
-	for _, key := range []string{"document_id", "url", "title", "truncated", "total", "execution_mode", "source", "coverage", "root_ref", "limit", "read_options"} {
+	for _, key := range []string{"document_id", "url", "title", "truncated", "total", "execution_mode", "source", "coverage", "root_ref", "limit", "read_options", "read_options_scope"} {
 		if v, ok := current[key]; ok {
 			metadata[key] = v
 		}

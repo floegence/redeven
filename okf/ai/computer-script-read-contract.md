@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script read and validation boundaries
 tags: [ai, computer-use, scripts, validation]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -47,7 +47,7 @@ rows requires one table/grid,excludes nested tables,retains header/data/cell rol
 
 scroll_progress is return-only:scope/measured_ref names requested element/viewport,not wheel receiver. Immediate before/after/offset_changed implies no scroll_effect;unknown/unavailable=null. Separate preparation/input. Wheel uses clipped/transformed visible intersection(document viewport),not enabled/offscreen center;check ancestry/embedding overlays then one wheel. Rejection retains preparation,no alternate search/replay.
 
-No automatic diff/read advisor. read_options/root/limit/continuation supports model choice. Node detail is not subtree;child_refs/children_truncated describe returned relations/loss. Collections use snapshot/rows/query/count.
+No automatic diff/read advisor. read_options is a target-level method inventory, marked read_options_scope:method_inventory; it never asserts per-node capability. root/limit/continuation retain explicit source scope. Node detail is not subtree;child_refs/children_truncated describe returned relations/loss. Collections use snapshot/rows/query/count.
 
 # Boundaries
 

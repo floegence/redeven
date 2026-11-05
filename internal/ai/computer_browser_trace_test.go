@@ -41,7 +41,7 @@ func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) 
 	_, client, native := extensionFixture(t)
 	local, helper := net.Pipe()
 	t.Cleanup(func() { _ = helper.Close() })
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	pipe := &extensionSourcePipe{
 		client: client, conn: local, ctx: ctx, cancel: cancel,
 		target: "fixture-target\r\nforged=target", request: "fixture-request\nforged=request", tab: "7", binding: "fixture-binding\rforged=binding",

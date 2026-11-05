@@ -344,7 +344,10 @@ type computerConnectionError struct {
 
 // A browser adapter received confirmation that a new tab was created before
 // a later selection step failed. The wrapped error retains its own identity.
-type computerTabCreatedError struct{ cause error }
+type computerTabCreatedError struct {
+	cause                error
+	targetID, targetKind string
+}
 
 func (e *computerTabCreatedError) Error() string { return e.cause.Error() }
 func (e *computerTabCreatedError) Unwrap() error { return e.cause }
@@ -353,6 +356,9 @@ func (e *computerConnectionError) Error() string { return e.cause.Error() }
 func (e *computerConnectionError) Unwrap() error { return e.cause }
 func computerConnectionDiagnostic(raw map[string]any) map[string]any {
 	phase, reason := anyToString(raw["phase"]), anyToString(raw["reason"])
+	if phase == "source_disconnected" {
+		return map[string]any{"phase": phase, "reason": browserDetachReason(reason)}
+	}
 	if phase != "tab_lookup" && phase != "tab_restore" && phase != "debugger_attach" && phase != "binding_validation" {
 		return nil
 	}
@@ -422,3 +428,10 @@ func computerWaitFacts(raw any) map[string]any {
 	}
 	return out
 }
+
+// Source lifetime carries a bounded observed disconnect cause. It says nothing
+// about input delivery or which actor initiated a native detach.
+type computerSourceDisconnectedError struct{ reason string }
+
+func (e *computerSourceDisconnectedError) Error() string { return "browser source disconnected" }
+func (e *computerSourceDisconnectedError) Unwrap() error { return net.ErrClosed }

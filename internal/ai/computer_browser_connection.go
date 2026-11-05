@@ -196,10 +196,10 @@ func (r *ComputerUseRuntime) disconnectBrowser(ctx context.Context, targetID str
 // CDP endpoint/profile identities originate in the authenticated connection UI.
 // Each actual tab has one adapter; selecting another tab never replaces it.
 func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (_ TargetDescriptor, resultErr error) {
-	createdTab := false
+	createdTargetID := ""
 	defer func() {
-		if createdTab && resultErr != nil {
-			resultErr = &computerTabCreatedError{cause: resultErr}
+		if createdTargetID != "" && resultErr != nil {
+			resultErr = &computerTabCreatedError{cause: resultErr, targetID: createdTargetID, targetKind: "browser.connected"}
 		}
 	}()
 	command := "inventory"
@@ -214,7 +214,10 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 		if len(tabs) == 0 || tabs[0].ID == "" {
 			return TargetDescriptor{}, errBrowserOutcomeUnknown
 		}
-		createdTab = true
+		createdTargetID = targetID
+		if createdTargetID == "" {
+			createdTargetID = r.connectedBrowserTargetID(connection.CDPURL, tabs[0])
+		}
 	}
 	tabs, err = r.browserInventoryPrivacy(ctx, connection.CDPURL, tabs)
 	if err != nil {
@@ -234,8 +237,7 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 		return r.ResolveTarget(ctx, existing)
 	}
 	if targetID == "" {
-		digest := sha256.Sum256([]byte(r.browserServiceSnapshot().Generation + "\x00" + connection.CDPURL + "\x00" + chosen.ProfileID + "\x00" + chosen.ID))
-		targetID = "connected-" + hex.EncodeToString(digest[:16])
+		targetID = r.connectedBrowserTargetID(connection.CDPURL, *chosen)
 	}
 	resources, err := r.managedResources()
 	if err != nil {
@@ -260,4 +262,9 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 	}
 	r.executors[targetID] = executor
 	return target, nil
+}
+
+func (r *ComputerUseRuntime) connectedBrowserTargetID(endpoint string, tab ComputerBrowserTab) string {
+	digest := sha256.Sum256([]byte(r.browserServiceSnapshot().Generation + "\x00" + endpoint + "\x00" + tab.ProfileID + "\x00" + tab.ID))
+	return "connected-" + hex.EncodeToString(digest[:16])
 }

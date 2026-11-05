@@ -453,10 +453,10 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	return profile, nil
 }
 func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (_ TargetDescriptor, resultErr error) {
-	createdTab := false
+	createdTargetID := ""
 	defer func() {
-		if createdTab && resultErr != nil {
-			resultErr = &computerTabCreatedError{cause: resultErr}
+		if createdTargetID != "" && resultErr != nil {
+			resultErr = &computerTabCreatedError{cause: resultErr, targetID: createdTargetID, targetKind: "browser.managed"}
 		}
 	}()
 	profile, err := r.managedProfileLocked(ctx, connection.ManagedProfileID)
@@ -476,7 +476,10 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 		if len(tabs) == 0 || tabs[0].ID == "" {
 			return TargetDescriptor{}, errBrowserOutcomeUnknown
 		}
-		createdTab = true
+		createdTargetID = targetID
+		if createdTargetID == "" {
+			createdTargetID = "managed-" + tabs[0].ID
+		}
 	}
 	tabs, err = r.browserInventoryPrivacy(ctx, profile.endpoint, tabs)
 	if err != nil {

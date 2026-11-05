@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Computer target selection across threads
 tags: [ai, computer-use, targets, permissions]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -34,12 +34,15 @@ The migrated product store remains the only selection store.
 A lost task page fails until an authorized candidate is selected. Deleting product settings removes the selection and grants; a later bind never recreates a deleted thread.
 
 ## Binding contract and observation identity
-Selection returns version 2 with exact backend availability and the shared core
+Selection returns version 3 with exact backend availability and the shared core
 script guide and one bounded initial observation through the normal runtime gate.
 Observation failure retains selected:true and needs_observation; private pauses
 retain selection without leaking content. Confirmed app opening remains
 action_executed:true. Confirmed new-tab creation remains action_executed:true
-even if a later selection step fails; an unconfirmed creation is reported as an
+even if a later selection step fails, with created_target:{target_id,target_kind}
+from the confirming extension, managed or CDP owner. This opaque identity does
+not imply selected/observed state or grant authority; it exposes no endpoint.
+No tab is recreated or closed automatically. An unconfirmed creation is reported as an
 unknown effect, never as an unexecuted action. Startup error types survive the
 model-facing result. ui.help discloses read, visual and download details on demand.
 The earlier verbose capability fields are superseded by this model-facing guide;
