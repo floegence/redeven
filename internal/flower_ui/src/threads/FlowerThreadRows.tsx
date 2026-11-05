@@ -91,22 +91,39 @@ export function FlowerThreadRows(props: Readonly<{
     if (row.style == null) row.element.removeAttribute('style'); else row.element.setAttribute('style', row.style);
     row.style = undefined;
   };
-  const disclose = (row: MountedRow, height: number, opacity: string, exiting: boolean, removeRow?: () => void) => {
-    row.style ??= row.element.getAttribute('style');
-    const targetHeight = exiting ? 0 : row.element.getBoundingClientRect().height;
-    Object.assign(row.element.style, { minHeight: '0', overflow: 'clip', flexShrink: '0' });
-    const style = getComputedStyle(row.element);
-    const animation = row.element.animate([
-      { height: `${height}px`, opacity },
-      { height: `${targetHeight}px`, opacity: exiting ? 0 : 1 },
-    ], { duration: parseFloat(style.getPropertyValue('--floe-duration-base')) || 200,
-      easing: style.getPropertyValue('--floe-ease-out').trim() || 'ease-out', fill: 'both' });
-    animation.id = exiting ? 'flower-thread-exit' : 'flower-thread-disclosure';
-    if (exiting) row.exit = animation; else row.enter = animation;
-    animation.onfinish = () => {
-      if (exiting) { if (row.exit === animation) removeRow?.(); }
-      else if (row.enter === animation) { row.enter = undefined; animation.cancel(); restoreStyle(row); }
-    };
+  type Disclosure = { row: MountedRow; height: number; opacity: string; exiting: boolean; removeRow?: () => void };
+  const disclose = (changes: Disclosure[]) => {
+    // One reveal edge traverses the batch. Earlier rows keep their natural
+    // spacing instead of every line being compressed at the same time.
+    const naturalHeights = changes.map(({ row }) => row.element.getBoundingClientRect().height);
+    const initial = changes.reduce((sum, change) => sum + change.height, 0);
+    const target = changes[0].exiting ? 0 : naturalHeights.reduce((sum, height) => sum + height, 0);
+    let offset = 0;
+    changes.forEach(({ row, height, opacity, exiting, removeRow }, index) => {
+      row.style ??= row.element.getAttribute('style');
+      const naturalHeight = naturalHeights[index];
+      const targetHeight = exiting ? 0 : naturalHeight;
+      Object.assign(row.element.style, { minHeight: '0', overflow: 'clip', flexShrink: '0' });
+      const style = getComputedStyle(row.element);
+      const boundaries = [offset, offset + naturalHeight]
+        .map(edge => ({ progress: (edge - initial) / (target - initial), height: edge - offset }))
+        .filter(edge => edge.progress > 0 && edge.progress < 1)
+        .sort((a, b) => a.progress - b.progress);
+      const keyframes: Keyframe[] = [
+        { height: `${height}px`, opacity, offset: 0 },
+        ...boundaries.map(edge => ({ height: `${edge.height}px`, opacity: edge.height === 0 ? 0 : 1, offset: edge.progress })),
+        { height: `${targetHeight}px`, opacity: exiting ? 0 : 1, offset: 1 },
+      ];
+      offset += naturalHeight;
+      const animation = row.element.animate(keyframes, { duration: parseFloat(style.getPropertyValue('--floe-duration-slow')) || 280,
+        easing: style.getPropertyValue('--floe-ease-in-out').trim() || 'ease-in-out', fill: 'both' });
+      animation.id = exiting ? 'flower-thread-exit' : 'flower-thread-disclosure';
+      if (exiting) row.exit = animation; else row.enter = animation;
+      animation.onfinish = () => {
+        if (exiting) { if (row.exit === animation) removeRow?.(); }
+        else if (row.enter === animation) { row.enter = undefined; animation.cancel(); restoreStyle(row); }
+      };
+    });
   };
   createEffect(() => {
     const keys = props.keys;
@@ -114,6 +131,7 @@ export function FlowerThreadRows(props: Readonly<{
     untrack(() => {
       const retained = new Set(keys);
       const entering = new Map<string, { height: number; opacity: string }>();
+      const departing: Disclosure[] = [];
       const exitingParents = new Set<HTMLElement>();
       for (const [key, row] of mounted) {
         const parent = row.element.parentElement!;
@@ -141,8 +159,13 @@ export function FlowerThreadRows(props: Readonly<{
         if (row.style !== undefined) restoreStyle(row);
         row.element.inert = true; row.element.setAttribute('aria-hidden', 'true');
         row.element.dataset.flowerThreadExiting = 'true';
-        disclose(row, height, opacity, true, () => remove(key, row));
+        departing.push({ row, height, opacity, exiting: true, removeRow: () => remove(key, row) });
         exitingParents.add(parent);
+      }
+      if (departing.length) {
+        // Mounted insertion order can differ from the current displayed order.
+        departing.sort((a, b) => a.row.element.compareDocumentPosition(b.row.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+        disclose(departing);
       }
       // Exiting rows keep their original slots until their height reaches zero.
       // Absolute positioning would collapse the group immediately and overlap
@@ -180,7 +203,8 @@ export function FlowerThreadRows(props: Readonly<{
         moveFlowerThreadRow(parent, row.element, beforeByParent.get(parent) ?? null);
         beforeByParent.set(parent, row.element);
       }
-      for (const [key, snapshot] of entering) disclose(mounted.get(key)!, snapshot.height, snapshot.opacity, false);
+      const arrivals = keys.filter(key => entering.has(key)).map(key => ({ row: mounted.get(key)!, ...entering.get(key)!, exiting: false }));
+      if (arrivals.length) disclose(arrivals);
     });
   });
   onCleanup(() => { for (const [key, row] of mounted) remove(key, row); });

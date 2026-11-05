@@ -995,7 +995,7 @@ export default mergeConfig(viteConfig, defineConfig({
         },
         dragFlowerDirectoryWithMouse: async ({ page }) => {
           const frame = await frameForSelector(page, '[data-flower-directory-header="/two/project"]');
-          const handle = frame.locator('[data-flower-directory-header="/two/project"] .flower-directory-drag-handle');
+          const handle = frame.locator('[data-flower-directory-header="/two/project"] .flower-directory-toggle');
           await handle.hover();
           const start = await handle.boundingBox();
           const target = await frame.locator('[data-flower-directory-header="/one/project"]').boundingBox();

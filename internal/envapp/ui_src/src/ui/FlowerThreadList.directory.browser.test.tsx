@@ -238,11 +238,18 @@ describe('Flower directory navigation', () => {
     const pill = ui.host.querySelector<HTMLElement>('.floe-segmented-control__pill')!;
     const before = header.getBoundingClientRect().height;
     const start = pill.getBoundingClientRect().left;
-    (page.getByRole('radio', { name: copy.viewByDirectory }).element() as HTMLButtonElement).click();
+    const destination = page.getByRole('radio', { name: copy.viewByDirectory }).element() as HTMLButtonElement;
+    const travel = destination.getBoundingClientRect().left - start;
+    destination.click();
     const animation = pill.getAnimations().find(value => value.id === 'floe-segmented-selection')!;
-    expect(animation).toBeDefined(); animation.pause(); animation.currentTime = 80;
+    expect(animation).toBeDefined(); animation.pause(); animation.currentTime = 60;
+    const earlyProgress = (pill.getBoundingClientRect().left - start) / travel;
+    expect(earlyProgress).toBeGreaterThan(0);
+    expect(earlyProgress).toBeLessThan(0.45);
+    animation.currentTime = 140;
     const middle = pill.getBoundingClientRect().left;
-    expect(middle).toBeGreaterThan(start);
+    expect((middle - start) / travel).toBeGreaterThan(0.25);
+    expect((middle - start) / travel).toBeLessThan(0.85);
     (page.getByRole('radio', { name: copy.viewByTime }).element() as HTMLButtonElement).click();
     expect(pill.getBoundingClientRect().left).toBeCloseTo(middle, 0);
     expect(header.getBoundingClientRect().height).toBe(before);
@@ -254,7 +261,7 @@ describe('Flower directory navigation', () => {
   it('continuously collapses row height and reverses from the visible position', async () => {
     const ui = mount();
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
-    const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+    const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-3"]')!;
     const height = row.getBoundingClientRect().height;
     ui.header('/one/project').querySelector<HTMLButtonElement>('button')!.click();
     const animation = row.getAnimations().find(value => value.id === 'flower-thread-exit')!;
@@ -269,6 +276,40 @@ describe('Flower directory navigation', () => {
     expect(row.inert).toBe(false);
   });
 
+  it('keeps disclosure visibly travelling before settling, in both directions', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('button')!;
+    const batch = () => [...ui.host.querySelectorAll<HTMLElement>('[data-thread-id^="alpha-"][data-pinned="false"], .flower-thread-rows > .flower-directory-more')];
+    const naturalHeights = batch().map(row => row.getBoundingClientRect().height);
+    const naturalHeight = naturalHeights.reduce((sum, height) => sum + height, 0);
+    for (const opening of [false, true]) {
+      toggle.click();
+      const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+      const motion = row.getAnimations().find(value => value.id === (opening ? 'flower-thread-disclosure' : 'flower-thread-exit'))!;
+      expect(motion).toBeDefined();
+      const seek = (time: number) => { for (const element of batch()) for (const animation of element.getAnimations()) { animation.pause(); animation.currentTime = time; } };
+      seek(60);
+      const early = batch().reduce((sum, row) => sum + row.getBoundingClientRect().height, 0) / naturalHeight;
+      expect(opening ? early : 1 - early).toBeGreaterThan(0);
+      expect(opening ? early : 1 - early).toBeLessThan(0.45);
+      seek(140);
+      const heights = batch().map(row => row.getBoundingClientRect().height);
+      const middle = heights.reduce((sum, height) => sum + height, 0) / naturalHeight;
+      expect(middle).toBeGreaterThan(0.25);
+      expect(middle).toBeLessThan(0.85);
+      expect(heights.filter((height, index) => height > 0.5 && height < naturalHeights[index] - 0.5)).toHaveLength(1);
+      for (const animation of ui.host.getAnimations({ subtree: true })) {
+        if (animation.id === 'flower-thread-disclosure' || animation.id === 'flower-thread-exit') {
+          animation.pause(); animation.currentTime = 140;
+        }
+      }
+      await page.screenshot({ element: ui.host, path: `__screenshots__/flower-directory-${opening ? 'expand' : 'collapse'}-middle.png` });
+      for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
+      await frame();
+    }
+  });
+
   it('keeps successive directory headers below the collapsing content on every frame', async () => {
     const ui = mount();
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
@@ -277,7 +318,7 @@ describe('Flower directory navigation', () => {
     const before = header.getBoundingClientRect().top;
     await userEvent.click(ui.header('/one/project').querySelector<HTMLButtonElement>('button')!);
     const samples: number[] = [];
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 24; i++) {
       samples.push(header.getBoundingClientRect().top);
       for (const row of rows) if (row.isConnected) expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(header.getBoundingClientRect().top + 1);
       await frame();
@@ -286,6 +327,36 @@ describe('Flower directory navigation', () => {
     expect(samples.some(top => top < before - 1 && top > after + 1)).toBe(true);
     expect(after).toBeLessThan(before - 100);
     expect(ui.host.querySelector('[data-flower-thread-exiting]')).toBeNull();
+  });
+
+  it.each(['porcelain-light', 'porcelain-dark'])('paints sustained disclosure travel without overlapping groups in %s', async theme => {
+    const ui = mount(undefined, undefined, theme);
+    ui.host.style.width = '240px';
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('button')!;
+    const next = ui.header('/two/project');
+    for (const opening of [false, true]) {
+      const initial = next.getBoundingClientRect().top;
+      const started = performance.now();
+      toggle.click();
+      const samples: { time: number; top: number }[] = [];
+      do {
+        await frame();
+        samples.push({ time: performance.now() - started, top: next.getBoundingClientRect().top });
+        const rows = ui.host.querySelectorAll<HTMLElement>('[data-thread-id^="alpha-"][data-pinned="false"]');
+        for (const row of rows) expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(next.getBoundingClientRect().top + 1);
+      } while (performance.now() - started < 360);
+      const end = next.getBoundingClientRect().top;
+      const travelling = samples.filter(sample => Math.abs(sample.top - initial) > 1 && Math.abs(sample.top - end) > 1);
+      expect(travelling.length).toBeGreaterThanOrEqual(5);
+      expect(travelling.at(-1)!.time - travelling[0].time).toBeGreaterThan(100);
+      for (let index = 1; index < samples.length; index++) {
+        const delta = samples[index].top - samples[index - 1].top;
+        expect(opening ? delta : -delta).toBeGreaterThanOrEqual(-0.5);
+      }
+    }
+    expect(ui.host.querySelector('[data-flower-thread-exiting]')).toBeNull();
+    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(9);
   });
 
   it('expands conversations and the more control from zero to their natural height', async () => {
@@ -302,7 +373,7 @@ describe('Flower directory navigation', () => {
     expect(animation).toBeDefined();
     animation.pause(); animation.currentTime = 0;
     expect(more.getBoundingClientRect().height).toBe(0);
-    animation.currentTime = 80;
+    animation.currentTime = 220;
     expect(more.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(more.getBoundingClientRect().height).toBeLessThan(naturalHeight);
     animation.finish(); await frame();
@@ -344,6 +415,28 @@ describe('Flower directory navigation', () => {
     toggle.click();
     expect(ui.host.getAnimations({ subtree: true }).some(animation => animation.id === 'flower-thread-disclosure')).toBe(false);
     expect(retainedRow.isConnected).toBe(false);
+  });
+
+  it('retains natural spacing and row identity through repeated partial reversals', async () => {
+    const ui = mount();
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('.flower-directory-toggle')!;
+    const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+    for (let index = 0; index < 6; index++) {
+      const before = ui.header('/two/project').getBoundingClientRect().top;
+      toggle.click();
+      expect(ui.header('/two/project').getBoundingClientRect().top).toBeCloseTo(before, 0);
+      expect(ui.host.querySelector('[data-thread-id="alpha-0"]')).toBe(row);
+      for (const animation of ui.host.getAnimations({ subtree: true })) {
+        if (animation.id === 'flower-thread-disclosure' || animation.id === 'flower-thread-exit') { animation.pause(); animation.currentTime = 120; }
+      }
+    }
+    for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
+    await frame();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(row.style.overflow).toBe('');
+    expect(ui.host.querySelectorAll('[data-flower-thread-card]')).toHaveLength(9);
+    expect(ui.host.querySelector('[data-flower-thread-exiting]')).toBeNull();
   });
 
   it.each(['porcelain-light', 'porcelain-dark'])('uses legible workspace geometry in %s', async theme => {
@@ -601,7 +694,7 @@ describe('Flower directory navigation', () => {
     await page.screenshot({ element: ui.host, path: `__screenshots__/flower-collapsed-running-zh-${theme}.png` });
     await userEvent.click(ui.header('/workspace/floegence/redeven').querySelector('button')!);
     for (const animation of ui.host.getAnimations({ subtree: true })) if (animation.id) animation.finish();
-    const handle = ui.header('/workspace/floegence/floe-webapp').querySelector<HTMLButtonElement>('.flower-directory-drag-handle')!;
+    const handle = ui.header('/workspace/floegence/floe-webapp').querySelector<HTMLButtonElement>('.flower-directory-toggle')!;
     const from = handle.getBoundingClientRect(), target = ui.header('/workspace/floegence/redeven').getBoundingClientRect();
     handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, pointerId: 9, button: 0, clientX: from.x + 6, clientY: from.y + 10 }));
     window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, isPrimary: true, pointerId: 9, clientX: from.x + 6, clientY: target.top + 12 }));
@@ -650,6 +743,9 @@ describe('Flower directory navigation', () => {
   it('reorders using the native mouse without collapsing the source directory', async () => {
     const ui = mount();
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    expect(ui.header('/two/project').querySelectorAll('button')).toHaveLength(2);
+    expect(ui.header('/two/project').querySelector('.flower-directory-drag-handle')).toBeNull();
+    expect(ui.header('/two/project').querySelector('.flower-directory-toggle')?.getAttribute('aria-description')).toBe(copy.reorderDirectory);
     const result = await media.dragFlowerDirectoryWithMouse();
     expect(result).toEqual({ preview: 1, indicator: 'true', order: ['/two/project', '/one/project', ''], expanded: 'true', previewAfter: 0 });
     expect(ui.order()).toEqual(result.order);
@@ -668,7 +764,7 @@ describe('Flower directory navigation', () => {
   it('makes a directory drag visible, follows the pointer and removes feedback on cancel', async () => {
     const ui = mount();
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
-    const handle = ui.header('/two/project').querySelector<HTMLButtonElement>('.flower-directory-drag-handle');
+    const handle = ui.header('/two/project').querySelector<HTMLButtonElement>('.flower-directory-toggle');
     expect(handle).not.toBeNull();
     const from = handle!.getBoundingClientRect();
     handle!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, pointerId: 7, button: 0, clientX: from.x + 8, clientY: from.y + 8 }));
@@ -693,7 +789,7 @@ describe('Flower directory navigation', () => {
     ui.setItems(Array.from({ length: 18 }, (_, i) => item(`group-${i}`, `/work/group-${i}`, i)));
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
     const viewport = ui.host.querySelector<HTMLElement>('.flower-scroll')!;
-    const handle = ui.host.querySelector<HTMLButtonElement>('.flower-directory-drag-handle')!;
+    const handle = ui.host.querySelector<HTMLButtonElement>('.flower-directory-toggle')!;
     const from = handle.getBoundingClientRect(), bounds = viewport.getBoundingClientRect();
     const initialOrder = ui.order();
     handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, pointerId: 8, button: 0, clientX: from.x + 8, clientY: from.y + 8 }));

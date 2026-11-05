@@ -4,7 +4,7 @@ import type { Component, JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, GitBranch, Grid, GripVertical, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, GitBranch, Grid, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import { FlowerPinIcon } from '../icons/FlowerPinIcon';
 import { animateFlowerThreadRowsChange, FlowerThreadRows } from './FlowerThreadRows';
@@ -897,8 +897,6 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                       <ChevronRight class="flower-directory-chevron h-3 w-3 shrink-0" />
                       <Folder class="h-3.5 w-3.5 shrink-0" /><span class="flower-directory-name" data-full-path={duplicateDirectoryNames().has(directoryLabel(path)) ? 'true' : undefined}>{duplicateDirectoryNames().has(directoryLabel(path)) ? path : directoryLabel(path)}</span><span class="flower-directory-count">{group()?.threadIDs.length}</span>
                     </button>
-                    <Show when={directoryReorderable()}><button type="button" class="flower-directory-drag-handle" aria-label={`${copy().reorderDirectory}: ${path || copy().noDirectory}`} title={copy().reorderDirectory}
-                      onPointerDown={event => beginDirectoryGesture(event, path)} onKeyDown={event => moveDirectoryWithKeyboard(event, path)}><GripVertical class="h-3.5 w-3.5" /></button></Show>
                     <Show when={collapsed().has(path) && (group()?.runningCount ?? 0) > 0}>
                       <span class="flower-directory-running" data-flower-thread-indicator="wave" role="img" aria-label={copy().statuses.running} title={copy().statuses.running}><FlowerThreadWave /></span>
                     </Show>
@@ -951,7 +949,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       </div>
       <Show when={directoryDrag()}>{state => <Portal>
         <div ref={directoryDragPreview} class="flower-directory-drag-preview" data-flower-directory-drag-preview data-floe-surface="floating" aria-hidden="true">
-          <GripVertical class="h-3.5 w-3.5" /><Folder class="h-4 w-4" />
+          <Folder class="h-4 w-4" />
           <span>{directoryLabel(state().path)}</span><span class="flower-directory-count">{allDirectoryGroups().find(group => group.path === state().path)?.threads.length}</span>
         </div>
       </Portal>}</Show>

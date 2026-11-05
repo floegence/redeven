@@ -8256,15 +8256,6 @@ button.flower-composer-context-source:focus-visible,
   border-radius: var(--floe-radius-sm); color: var(--flower-thread-rail-muted);
   transition: background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
-.flower-directory-drag-handle {
-  display: grid; place-items: center; width: 24px; height: 28px; flex: 0 0 24px;
-  color: var(--muted-foreground); border-radius: var(--floe-radius-sm); cursor: grab;
-  opacity: .4; transition: opacity var(--floe-duration-fast) var(--floe-ease-out), background-color var(--floe-duration-fast) var(--floe-ease-out);
-}
-.flower-directory-header:hover .flower-directory-drag-handle, .flower-directory-header:focus-within .flower-directory-drag-handle { opacity: 1; }
-.flower-directory-drag-handle:hover { background: var(--floe-state-hover); color: var(--foreground); }
-.flower-directory-drag-handle:active { cursor: grabbing; }
-.flower-directory-drag-handle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .flower-directory-drag-preview {
   position: fixed; top: 0; left: 0; z-index: 10000; pointer-events: none; display: flex; align-items: center; gap: 8px;
   min-height: 38px; padding: 8px 10px; border-radius: var(--floe-radius-group); border: 1px solid var(--floe-line);
@@ -8279,7 +8270,7 @@ button.flower-composer-context-source:focus-visible,
   display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 34px; flex: 1 1 auto;
   padding: 0 6px; text-align: left; cursor: pointer; user-select: none; -webkit-touch-callout: none;
 }
-.flower-directory-chevron { transition: transform var(--floe-duration-base) var(--floe-ease-out); }
+.flower-directory-chevron { transition: transform var(--floe-duration-slow) var(--floe-ease-in-out); }
 .flower-directory-toggle[aria-expanded='true'] .flower-directory-chevron { transform: rotate(90deg); }
 .flower-directory-name, .flower-workspace-name {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -8367,7 +8358,6 @@ button.flower-composer-context-source:focus-visible,
   .flower-directory-toggle, .flower-directory-more { min-height: 44px; }
   .flower-directory-new, .flower-thread-workspaces-button, .flower-workspace-thread-pin { width: 44px; height: 44px; }
   .flower-workspace-thread-pin { flex-basis: 44px; opacity: 1; }
-  .flower-directory-drag-handle { width: 44px; height: 44px; flex-basis: 44px; opacity: 1; }
   .flower-workspace-thread-select { min-height: 44px; }
   .flower-thread-view-switch button { min-width: 44px; min-height: 44px; }
   .flower-thread-list-header .flower-thread-refresh-button { width: 44px; height: 44px; flex: 0 0 44px; }
