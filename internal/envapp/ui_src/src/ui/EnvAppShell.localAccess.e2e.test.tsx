@@ -4064,6 +4064,10 @@ describe('EnvAppShell environment entry affordances', () => {
       const id = 'redeven.plugin.activity:' + encodeURIComponent(projection.items[1].inventoryKey);
       await flushUntil(() => registeredComponentsState.dynamicComponents.some(item => item.id === id), 60);
       const first = registeredComponentsState.dynamicComponents.find(item => item.id === id)!.component;
+      findActivityButton(host, id)!.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-plugin-surface-page]')), 60);
+      const firstPage = host.querySelector('[data-activity-plugin-surface-page]')!;
+      const firstFrame = firstPage.querySelector('iframe');
       await pluginPanelState.lastProps.onOpenCenter();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onRefresh));
       const renamed = { ...projection.items[1], displayName: 'Renamed application' };
@@ -4075,6 +4079,9 @@ describe('EnvAppShell environment entry affordances', () => {
         const current = registeredComponentsState.dynamicComponents.find(item => item.id === id)!;
         expect(current.component).toBe(first);
         expect(current).toMatchObject({ name: 'Renamed application' });
+        expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
+        expect(firstPage.querySelector('iframe')).toBe(firstFrame);
+        expect(activityPluginPageState.closeCalls).toBe(0);
       }
       expect(registeredComponentsState.dynamicComponents).toHaveLength(1);
     } finally { dispose(); }

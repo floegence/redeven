@@ -1411,24 +1411,28 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       component: () => {
         let ownedClose: (() => Promise<boolean>) | null = null;
         return (
-          <ActivityPluginSurfacePage
-            resolveSurface={resolvePluginSurface}
-            refreshInventory={refreshPluginSurfaceInventory}
-            coordinator={pluginSurfaceCoordinator}
-            confirmationQueue={pluginConfirmationQueue}
-            target={target}
-            onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')}
-            registerClose={(requestClose) => {
-              if (requestClose) {
-                ownedClose = requestClose;
-                setClose(() => requestClose);
-                return;
-              }
-              if (close() === ownedClose) setClose(null);
-              ownedClose = null;
-            }}
-            onRetirementError={reportPluginSurfaceRetirementError}
-          />
+          <FlowerContextSource id={`activity:plugin:${inventoryKey}`} pageID={pluginActivityComponentID(inventoryKey)}
+            pageName={pluginInventoryProjection()?.items.find(item => item.inventoryKey === inventoryKey)?.displayName ?? ''}
+            mode="activity" selected={viewMode() === 'activity' && layout.sidebarActiveTab() === pluginActivityComponentID(inventoryKey)}>
+            <ActivityPluginSurfacePage
+              resolveSurface={resolvePluginSurface}
+              refreshInventory={refreshPluginSurfaceInventory}
+              coordinator={pluginSurfaceCoordinator}
+              confirmationQueue={pluginConfirmationQueue}
+              target={target}
+              onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')}
+              registerClose={(requestClose) => {
+                if (requestClose) {
+                  ownedClose = requestClose;
+                  setClose(() => requestClose);
+                  return;
+                }
+                if (close() === ownedClose) setClose(null);
+                ownedClose = null;
+              }}
+              onRetirementError={reportPluginSurfaceRetirementError}
+            />
+          </FlowerContextSource>
         );
       },
     };
@@ -1924,10 +1928,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         id: pluginActivityComponentID(inventoryKey),
         name: tile.item.displayName,
         icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
-        component: () => <FlowerContextSource id={`activity:plugin:${inventoryKey}`} pageID={pluginActivityComponentID(inventoryKey)}
-          pageName={tile.item.displayName} mode="activity" selected={viewMode() === 'activity' && layout.sidebarActiveTab() === pluginActivityComponentID(inventoryKey)}>
-          <runtime.component />
-        </FlowerContextSource>,
+        component: runtime.component,
         sidebar: {
           order: 102 + index,
           fullScreen: true,
