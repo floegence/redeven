@@ -13671,15 +13671,15 @@
         "title": "Remote desktop connection launcher",
         "type": "Interaction Contract"
       },
-      "body_length": 3259,
+      "body_length": 3505,
       "summary": "One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. Failure retains recovery; dismissing pending creation releases its session. Once opened, viewer lifetime is independent of the launcher.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Use the shared monitor/pointer mark, distinguishable at Dock/header sizes across themes/high contrast. Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.\n- SSH preparation, operation-bound challenge, progress and desktop opening stay in the same dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope/credential lifetime; opening the launcher changes no OS permission.\n- SSH host preparation presents observed checking, component, service and verification stages. The Desktop bridge forwards the published component media substate (`checking`, `downloading`, `receiving`, `verifying`, `installing`, `validating`, `ready`) only while the deployment stage is `preparing_media`; older byte-only reports remain valid. Component byte progress appears only during an observed transfer with a real total and received count. Integrity checking, unpacking, validation and packaging use one calm indeterminate Floe progress cue, so a completed download never masquerades as completed preparation. Avoid simultaneous spinners, shimmer and sweeping effects; static current-step emphasis and observed detail communicate stage changes. Interrupted or rollback states never imply completion.\n- Preparation keeps a viewport-bounded content area while observed detail text and transfer metrics change. The seven-step list scrolls independently within a 128px maximum height, adapts to short viewports, and keeps the active step visible without moving keyboard focus; compact markers preserve readable row spacing. The current detail is announced through a single atomic status region, the progress wrapper owns the accessible progressbar semantics, and the visual Floe primitive is decorative. Reduced-motion and forced-colors preferences disable decorative motion while retaining a visible state boundary.\n- Initial content is target/readiness/connect. Admin/display selectors retain native keyboard behavior/labels; decorative chevrons sit 12px inside the field with separate text padding and no pointer interception.\n- Disabling approval reuse requests confirmation on future connections without revoking OS grants. Status refresh cannot erase connection failure.",
-          "char_count": 2216
+          "body": "- Use the shared monitor/pointer mark, distinguishable at Dock/header sizes across themes/high contrast. Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.\n- SSH preparation, operation-bound challenge, progress and desktop opening stay in the same dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope/credential lifetime; opening the launcher changes no OS permission.\n- SSH host preparation presents observed checking, component, service and verification stages. The Desktop bridge forwards the published component media substate (`checking`, `downloading`, `receiving`, `verifying`, `installing`, `validating`, `ready`) only while the deployment stage is `preparing_media`; older byte-only reports remain valid. Component byte progress appears only during an observed transfer with a real total and received count. Integrity checking, unpacking, validation and packaging use one calm indeterminate Floe progress cue, so a completed download never masquerades as completed preparation. Avoid simultaneous spinners, shimmer and sweeping effects; static current-step emphasis and observed detail communicate stage changes. Interrupted or rollback states never imply completion.\n- Preparation keeps a compact viewport-bounded content area while observed detail text and transfer metrics change. The seven-step list scrolls independently within a 128px maximum height, yields space to wrapped status copy, and keeps the active step visible without moving keyboard focus. Compact markers center digits and checks; the section heading needs no decorative activity dot. Status copy uses its natural line count with a small gap above the progress bar instead of reserving empty text rows; the dialog footer remains stable across preparation updates. The current detail is announced through a single atomic status region, the progress wrapper owns the accessible progressbar semantics, and the visual Floe primitive is decorative. Reduced-motion and forced-colors preferences disable decorative motion while retaining a visible state boundary.\n- Initial content is target/readiness/connect. Admin/display selectors retain native keyboard behavior/labels; decorative chevrons sit 12px inside the field with separate text padding and no pointer interception.\n- Disabling approval reuse requests confirmation on future connections without revoking OS grants. Status refresh cannot erase connection failure.",
+          "char_count": 2462
         },
         {
           "id": "boundaries",
@@ -13908,7 +13908,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "desktop",
           "input",
@@ -13918,15 +13918,15 @@
         "title": "Remote desktop viewer interaction",
         "type": "Interaction Contract"
       },
-      "body_length": 2511,
+      "body_length": 2606,
       "summary": "Published input/playback and session contracts own current-frame authority. Separate cursors permit immediate movement; embedded cursors hide local pointer. Recovery keeps controls usable; disconnect stops media/input with confirmed removal or Retry. Frozen pixels never imply connection.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Lock-screen input\nWhen a lock-screen frame is painted and acknowledged in control mode, the viewer\narms physical-only unlock input automatically. Paint and acknowledgement may\narrive in either order; both paths attempt arming, and subsequent acknowledgements\nmust not steal focus. The host lock screen remains unobscured, and a rate-limited\ninteraction explains the wait instead of claiming that authentication failed.\nOpening a panel, losing the socket, changing generation or mode, and every\nunpainted transition revoke the armed target. Backend frame, generation, control\nowner and physical-input checks remain mandatory for every unlock event.\n\n## Input and clipboard\nThe published Floe input and pointer controllers own client composition, physical keys, pointer gestures and release. Mouse and drag movement retains only the latest pending position, bounded to 120 submissions per second.\n\nThis desktop-only policy does not apply to host application windows, which use their own upstream cursor contract.\n\n## Toolbar and window\nDesktop opens an isolated owned window; browsers open a separate viewer. Ended sessions explain how to start a new connection from the launcher and never expose an ineffective Reconnect action.\n\nExplicit Disconnect closes that device; an enabled sound toggle must never hide a closed audio context after reconnect.",
-          "char_count": 1351
+          "body": "## Lock-screen input\nWhen a lock-screen frame is painted and acknowledged in control mode, the viewer\narms physical-only unlock input automatically. Paint and acknowledgement may\narrive in either order; both paths attempt arming, and subsequent acknowledgements\nmust not steal focus. The host lock screen remains unobscured, and a rate-limited\ninteraction explains the wait instead of claiming that authentication failed.\nOpening a panel, losing the socket, changing generation or mode, and every\nunpainted transition revoke the armed target. Backend frame, generation, control\nowner and physical-input checks remain mandatory for every unlock event.\n\n## Input and clipboard\nThe published Floe input and pointer controllers own client composition, physical keys, pointer gestures and release. Mouse and drag movement retains only the latest pending position, bounded to 120 submissions per second.\n\nThis desktop-only policy does not apply to host application windows, which use their own upstream cursor contract.\n\n## Toolbar and window\nDesktop opens an isolated owned window; browsers open a separate viewer. Ended sessions explain how to start a new connection from the launcher and never expose an ineffective Reconnect action.\n\nThe toolbar contains desktop-session controls only; it does not show a file-browser shortcut.\n\nExplicit Disconnect closes that device; an enabled sound toggle must never hide a closed audio context after reconnect.",
+          "char_count": 1446
         },
         {
           "id": "boundaries",
@@ -25882,5 +25882,5 @@
       ]
     }
   ],
-  "source_sha256": "dbbd738890f0ba19698e1ed0a17b509bb163ab94a6b909482d4538d14952bbd1"
+  "source_sha256": "e5adf2c92aa8b2c483c2e4378918ac240894bb77ea1ddd34a4728dafc9116385"
 }

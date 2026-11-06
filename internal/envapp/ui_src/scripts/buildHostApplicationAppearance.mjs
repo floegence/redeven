@@ -73,8 +73,8 @@ emitArtifact(desktopCatalogTarget, desktopCatalogSource);
 
 const desktopIcons = await build({
   stdin: { contents: `import {render} from 'solid-js/web'; import {createComponent} from 'solid-js';
-    import {Monitor,Scan,ActualSize,Fullscreen,ExitFullscreen,SlidersHorizontal,Clipboard,Keyboard,FolderOpen,Unplug,Pin,X} from '@floegence/floe-webapp-core/icons';
-    const icons={display:Monitor,fit:Scan,pixels:ActualSize,fullscreen:Fullscreen,exitFullscreen:ExitFullscreen,settings:SlidersHorizontal,clipboard:Clipboard,shortcuts:Keyboard,files:FolderOpen,disconnect:Unplug,pin:Pin,close:X};
+    import {Monitor,Scan,ActualSize,Fullscreen,ExitFullscreen,SlidersHorizontal,Clipboard,Keyboard,Unplug,Pin,X} from '@floegence/floe-webapp-core/icons';
+    const icons={display:Monitor,fit:Scan,pixels:ActualSize,fullscreen:Fullscreen,exitFullscreen:ExitFullscreen,settings:SlidersHorizontal,clipboard:Clipboard,shortcuts:Keyboard,disconnect:Unplug,pin:Pin,close:X};
     const disposers=new WeakMap();
     export function mount(element,key){disposers.get(element)?.();element.replaceChildren();disposers.set(element,render(()=>createComponent(icons[key],{size:16}),element));element.querySelector('svg').setAttribute('aria-hidden','true');}
   `, resolveDir: root },

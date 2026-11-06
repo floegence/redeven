@@ -135,24 +135,53 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   await expect.poll(() => state.deployment.mock.calls.some(([request]) => request.action === 'manage')).toBe(true);
   const request = state.deployment.mock.calls.find(([value]) => value.action === 'manage')![0];
   const report = (event: object) => state.progress.mock.calls[0][0]({ operation_id: request.operationId, ...event });
-  report({ stage: 'preparing_media', media_state: 'downloading', received_bytes: 2500000, expected_bytes: 10000000 });
+  report({ stage: 'transferring', transfer_file: 'runtime', transfer_kind: 'upload', received_bytes: 176700000, expected_bytes: 214600000 });
   await expect.poll(() => dialog.querySelector('.remote-desktop-preparation-steps')).toBeTruthy();
-  expect(dialog.textContent).toContain('25%');
+  await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
   const progress = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-progress')!;
   const stepsList = dialog.querySelector<HTMLOListElement>('.remote-desktop-preparation-steps')!;
+  for (const numberedMarker of stepsList.querySelectorAll<HTMLElement>('.remote-desktop-preparation-marker:not(:has(svg))')) {
+    const bounds = numberedMarker.getBoundingClientRect();
+    const digit = document.createRange();
+    digit.selectNodeContents(numberedMarker);
+    const digitBounds = digit.getBoundingClientRect();
+    expect(Math.abs(digitBounds.y + digitBounds.height / 2 - bounds.y - bounds.height / 2), 'Step numbers stay centered inside their circular borders').toBeLessThanOrEqual(1);
+    expect(Math.abs(digitBounds.x + digitBounds.width / 2 - bounds.x - bounds.width / 2)).toBeLessThanOrEqual(1);
+    expect(digitBounds.top).toBeGreaterThanOrEqual(bounds.top);
+    expect(digitBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
+  }
+  if (locale === 'zh-CN') {
+    await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-preparation-upload-dark-${width}.png` });
+    document.documentElement.dataset.floeShellTheme = 'porcelain-light';
+    document.documentElement.classList.remove('dark');
+    await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+    await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-preparation-upload-light-${width}.png` });
+    document.documentElement.dataset.floeShellTheme = 'porcelain-dark';
+    document.documentElement.classList.add('dark');
+  }
+  report({ stage: 'preparing_media', media_state: 'downloading', received_bytes: 2500000, expected_bytes: 10000000 });
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  expect(dialog.textContent).toContain('25%');
   const marker = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-marker')!;
   expect(marker.getBoundingClientRect().width).toBe(14);
   expect(marker.closest('li')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(26);
   expect(stepsList.clientHeight).toBeLessThanOrEqual(128);
   expect(stepsList.scrollHeight).toBeGreaterThan(stepsList.clientHeight);
   expect(stepsList.tabIndex).toBe(0);
-  expect(dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!.getBoundingClientRect().height).toBe(340);
+  expect(dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!.getBoundingClientRect().height).toBe(width === 320 ? 300 : 280);
   expect(getComputedStyle(marker, '::before').animationName).toBe('none');
   expect(dialog.querySelector('.remote-desktop-flow-spinner, [data-floe-progress-shimmer]')).toBeNull();
   expect(getComputedStyle(progress.querySelector('[data-floe-surface-part=progress-fill]')!, '::after').animationName).toBe('none');
   expect(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations === Infinity)).toHaveLength(0);
   expect(progress.getAttribute('aria-valuenow')).toBe('2500000');
   expect(dialog.textContent).toContain(copy.t('remoteDesktop.deployDownloadDetail'));
+  expect(dialog.querySelector('.remote-desktop-flow-activity')).toBeNull();
+  const detail = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-current > p')!;
+  expect(progress.getBoundingClientRect().top - detail.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(8);
+  expect(progress.getBoundingClientRect().top - detail.getBoundingClientRect().bottom).toBeLessThanOrEqual(12);
+  const detailText = document.createRange();
+  detailText.selectNodeContents(detail);
+  expect(detail.getBoundingClientRect().height - detailText.getBoundingClientRect().height, 'Status copy does not reserve unused text rows').toBeLessThan(8);
   const content = dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
   const metrics = dialog.querySelector<HTMLElement>('.remote-desktop-progress-values')!;
   expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom);
@@ -163,7 +192,7 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   const before = cancel.getBoundingClientRect();
   if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-preparation-download-${width}.png` });
   report({ stage: 'preparing_media', media_state: 'verifying', received_bytes: 10000000, expected_bytes: 10000000 });
-  const currentDetail = () => dialog.querySelector<HTMLElement>('.remote-desktop-preparation-current p span > span:not([aria-hidden])')?.textContent;
+  const currentDetail = () => detail.textContent;
   expect(currentDetail()).toBe(copy.t('remoteDesktop.deployMediaVerifyDetail'));
   expect(progress.hasAttribute('aria-valuenow')).toBe(false);
   expect(dialog.querySelector('.remote-desktop-progress-values')).toBeNull();

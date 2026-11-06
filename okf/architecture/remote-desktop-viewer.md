@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Remote desktop viewer interaction
 tags: [desktop, viewer, interaction, input]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -28,6 +28,8 @@ This desktop-only policy does not apply to host application windows, which use t
 
 ## Toolbar and window
 Desktop opens an isolated owned window; browsers open a separate viewer. Ended sessions explain how to start a new connection from the launcher and never expose an ineffective Reconnect action.
+
+The toolbar contains desktop-session controls only; it does not show a file-browser shortcut.
 
 Explicit Disconnect closes that device; an enabled sound toggle must never hide a closed audio context after reconnect.
 

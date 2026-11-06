@@ -203,15 +203,15 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     await expect.poll(() => flow.querySelector('[data-phase="applying"]')).not.toBeNull();
     expect(flow.querySelector('input[type=password]')).toBeNull();
     expect(flow.querySelector('[aria-current=step]')?.textContent).toContain('Prepare host');
-    expect(getComputedStyle(flow.querySelector('.remote-desktop-flow-activity')!).animationName).toBe('none');
+    expect(flow.querySelector('.remote-desktop-flow-activity')).toBeNull();
     expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
     const action = flow.querySelector('.remote-desktop-flow-footer > button:last-child')!;
     expect(Math.abs(action.getBoundingClientRect().width - actionWidth)).toBeLessThan(1);
     expect(dialog.contains(document.activeElement)).toBe(true);
     expect(getComputedStyle(flow.querySelector('.remote-desktop-step-title')!).boxShadow).toBe('none');
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
-    expect(content.getBoundingClientRect().height).toBe(340);
-    expect(Math.abs(dialog.getBoundingClientRect().height - (initialHeight - initialContentHeight + 340))).toBeLessThan(1);
+    expect(content.getBoundingClientRect().height).toBe(280);
+    expect(Math.abs(dialog.getBoundingClientRect().height - (initialHeight - initialContentHeight + 280))).toBeLessThan(1);
     expect(content.scrollHeight).toBeLessThanOrEqual(content.clientHeight + 1);
     expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
     expect(flow.querySelector<HTMLElement>('.remote-desktop-flow-footer')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(850);

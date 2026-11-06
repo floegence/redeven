@@ -19,7 +19,6 @@ let videoCodecs = ['h264'];
 let audioRequest, disconnectBusy = false, panelTrigger, recoveryTimer;
 const windowBridge = window.redevenHostApplicationWindow;
 const displayOptions = $('display-options');
-$('files').hidden = !windowBridge && !window.opener;
 const fullscreen = () => windowBridge ? nativeFullscreen : !!document.fullscreenElement;
 for (const element of document.querySelectorAll('[data-icon]')) remoteDesktopIcons.mount(element, element.dataset.icon);
 
@@ -539,7 +538,6 @@ $('shortcuts').onclick = () => {
   });
   openPanel('shortcuts', [element('p', copy('shortcutsHint')), ...shortcuts]); updateTransitionControls();
 };
-$('files').onclick = () => { window.redevenHostApplicationWindow?.request('files'); window.opener?.postMessage({ type: 'redeven:remote-desktop:files', session_id: session.id }, '*'); window.dispatchEvent(new CustomEvent('redeven:remote-desktop:files')); };
 $('reconnect').onclick = () => { reconnectAttempts = 0; void connect(); };
 function stopViewer() {
   stopped = true; clearTimeout(retry); clearTimeout(hideTimer); clearTimeout(recoveryTimer); epoch++;

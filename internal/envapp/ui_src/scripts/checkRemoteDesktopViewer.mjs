@@ -430,10 +430,7 @@ await session.run(async () => {
       await opener.goto(`http://127.0.0.1:${server.address().port}/launcher`);
       const popup = opener.waitForEvent('popup');
       await opener.evaluate(() => {
-        const viewer = window.open('about:blank', '_blank');
-        window.addEventListener('message', (event) => {
-          if (event.origin === window.location.origin && event.source === viewer) window.filesMessage = event.data;
-        });
+        window.open('about:blank', '_blank');
       });
       page = await popup;
     }
@@ -1525,15 +1522,8 @@ await session.run(async () => {
       if (desktop) {
         assert.deepEqual(await page.evaluate(() => Object.keys(window.redevenHostApplicationWindow).sort()), ['request', 'subscribe']);
         assert.equal(await page.evaluate(() => typeof window.redevenDesktop), 'undefined');
-        await page.locator('#files').click();
-        await page.waitForFunction(() => document.documentElement.dataset.fixtureFiles === '1');
-      } else {
-        await page.locator('#files').click();
-        await opener.waitForFunction(
-          () => window.filesMessage?.type === 'redeven:remote-desktop:files' && window.filesMessage.session_id === 'qualification',
-        );
-        await page.bringToFront();
       }
+      assert.equal(await page.locator('#files').count(), 0, 'remote desktop toolbar must not expose a file browser action');
       // DRM client text has its own capability; clipboard synchronization stays off.
       clientTextOnly = true;
       const refreshCapabilities = (capabilities) =>
@@ -1684,9 +1674,9 @@ await session.run(async () => {
           document.documentElement.lang = locale;
         }, locale);
         await page.waitForFunction((title) => document.title.startsWith(title), catalog.title);
-        assert.equal(await page.locator('#files').getAttribute('aria-label'), catalog.files);
-        assert.equal(await page.locator('#files').getAttribute('title'), catalog.files);
-        assert.equal(await page.locator('#files svg').count(), 1);
+        assert.equal(await page.locator('#shortcuts').getAttribute('aria-label'), catalog.shortcuts);
+        assert.equal(await page.locator('#shortcuts').getAttribute('title'), catalog.shortcuts);
+        assert.equal(await page.locator('#shortcuts svg').count(), 1);
         assert.equal(await page.locator('#desktop').getAttribute('aria-label'), catalog.title);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${locale} narrow window overflow`);
         await page.locator('#settings').click();
@@ -1785,7 +1775,7 @@ await session.run(async () => {
             'narrow localized settings',
             'dialog keyboard',
             'shortcut receipts',
-            'browser and Desktop files',
+            'focused toolbar without a file browser action',
             'clipboard epoch fencing',
             'fullscreen hide and pin',
             'disconnect retry and cleared pixels',

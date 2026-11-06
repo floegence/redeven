@@ -383,7 +383,6 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (progress?.stage !== 'preparing_media' || !progress.expected_bytes || progress.received_bytes === undefined || progress.media_state && !['downloading', 'receiving'].includes(progress.media_state)) return undefined;
     return { value: Math.min(progress.received_bytes, progress.expected_bytes), total: progress.expected_bytes };
   };
-  const preparationDetailKeys = ['deployConnectingDetail', 'deployCheckDetail', 'deployServicePackageDetail', 'deployRuntimePackageDetail', 'deployRuntimeDownloadDetail', 'deployTransferDetail', 'deployServiceUploadDetail', 'deployGraphicsUploadDetail', 'deployLicenseUploadDetail', 'deployRuntimeUploadDetail', 'deployMediaCheckDetail', 'deployDownloadDetail', 'deployMediaVerifyDetail', 'deployMediaInstallDetail', 'deployMediaValidateDetail', 'deployMediaPackDetail', 'deployMediaFinishingDetail', 'deployAuthorizeDetail', 'deployRecoverDetail', 'deployFilesDetail', 'deployInstallDetail', 'deployStartDetail', 'deployStopDetail', 'deployVerifyDetail', 'connectionContinuing'] as const;
   const preparationDetail = (): EnvAppTranslationKey => {
     switch (deploymentProgress()?.stage) {
       case 'connecting': return 'remoteDesktop.deployConnectingDetail';
@@ -420,7 +419,6 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       default: return 'remoteDesktop.deployCheckDetail';
     }
   };
-  const preparationDetails = () => preparationDetailKeys.map(key => i18n.t(`remoteDesktop.${key}`));
   const preparationProgressLabel = createUniqueId();
   const deploymentStageCopy = (): EnvAppTranslationKey => {
     switch (deploymentProgress()?.stage) {
@@ -580,10 +578,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
           </Show>
           <Show when={['preparing','canceling'].includes(deploymentPhase())}>
             <div class="remote-desktop-flow-stage" data-phase="applying">
-              <div class="remote-desktop-flow-transition">
-                <span class="remote-desktop-flow-activity" aria-hidden="true" />
-                <div><h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t(cancelingDeployment() ? 'remoteDesktop.deployRollback' : 'remoteDesktop.installStep')}</h4></div>
-              </div>
+              <h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t(cancelingDeployment() ? 'remoteDesktop.deployRollback' : 'remoteDesktop.installStep')}</h4>
               <Show when={operation() === 'ensure' && !cancelingDeployment() && preparationStep() >= 0} fallback={<div class="remote-desktop-deployment-progress" role="status"><p>{i18n.t(deploymentStageCopy())}</p><progress aria-label={i18n.t(deploymentStageCopy())} /></div>}>
                 <ol ref={preparationStepsElement} class="remote-desktop-preparation-steps" aria-label={i18n.t('remoteDesktop.installStep')} tabIndex={0}>
                   <For each={preparationSteps}>{(key, index) => <li data-state={preparationStep() < 0 ? 'upcoming' : index() < preparationStep() ? 'complete' : index() === preparationStep() ? 'active' : 'upcoming'} aria-current={index() === preparationStep() ? 'step' : undefined}>
@@ -593,7 +588,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
                   </li>}</For>
                 </ol>
                 <div class="remote-desktop-preparation-current" data-floe-surface="inset">
-                  <p id={preparationProgressLabel} role="status" aria-atomic="true"><StableText reserve={preparationDetails()}>{i18n.t(preparationDetail())}</StableText></p>
+                  <p id={preparationProgressLabel} role="status" aria-atomic="true">{i18n.t(preparationDetail())}</p>
                   <div class="remote-desktop-preparation-progress" role="progressbar" aria-labelledby={preparationProgressLabel} aria-valuemin={0} aria-valuemax={measuredProgress()?.total ?? 100} aria-valuenow={measuredProgress()?.value}>
                     <LinearProgress aria-hidden="true" value={measuredProgress()?.value} max={measuredProgress()?.total ?? 100} indeterminate={!measuredProgress()} size="sm" />
                   </div>
