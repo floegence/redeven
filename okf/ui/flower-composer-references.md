@@ -62,6 +62,7 @@ Right-click/More/keyboard menu appends current-draft reference without selecting
 
 ## Context actions
 One authorized privacy-checked mapper emits ordered MessageReference and UserInput.Context snapshots. Malformed/forged/unknown input or failed projection rejects admission and preserves editable drafts.
+Builders emit only fields admitted for the declared source before serialization. Composer snapshots omit presentation-only `detail`; composer and Tessiven file references omit `root_label`. Optional unsupported keys remain absent, including when their values would be undefined. Integration tests run the real builder through the strict parser and launch adapter rather than only observing a submit callback.
 
 One assistant.ask.flower action carries target/source/presentation/typed items. Runtime enforces privacy matrix:file_path for files,terminal_selection for terminal,process_snapshot for monitoring,bounded text_snapshot for Git/environment. Never reconstruct references from product action copies. Product routing commands independently resolve/authorize environment target. Missing thread/reference means absence;other Floret failures remain unavailable,no product fallback.
 

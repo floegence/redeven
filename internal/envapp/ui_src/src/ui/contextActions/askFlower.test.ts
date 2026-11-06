@@ -6,6 +6,19 @@ import {
 } from './protocol';
 
 describe('Ask Flower context actions', () => {
+  it('builds strict composer snapshots that are valid before JSON serialization', () => {
+    const action = buildAskFlowerContextAction({ source: 'flower_composer', context_items: [
+      { kind: 'text_snapshot', title: 'File Browser', content: 'directory: /workspace', detail: 'Display-only detail' },
+      { kind: 'file_path', path: '/workspace/file.txt', is_directory: false, root_label: 'Workspace' },
+    ] });
+    expect(action.context).toEqual([
+      { kind: 'text_snapshot', title: 'File Browser', content: 'directory: /workspace' },
+      { kind: 'file_path', path: '/workspace/file.txt', is_directory: false },
+    ]);
+    expect(isAskFlowerContextActionEnvelope(action)).toBe(true);
+    expect(requireAskFlowerContextActionEnvelope(action)?.context).toEqual(action.context);
+  });
+
   it('maps terminal selection context into the shared envelope', () => {
     const action = buildAskFlowerContextAction({
       source: 'terminal',

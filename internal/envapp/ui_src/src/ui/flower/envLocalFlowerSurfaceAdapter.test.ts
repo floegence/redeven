@@ -2,6 +2,7 @@
 
 import { createDownloadManager } from '../downloads/createDownloadManager';
 import { createRuntimeDownloadSource } from '../downloads/runtimeDownloadSource';
+import { buildAskFlowerContextAction } from '../contextActions/askFlower';
 
 import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 
@@ -1420,6 +1421,25 @@ describe('Env local Flower surface adapter', () => {
         input_modalities: ['text', 'image'],
       }),
     ]);
+  });
+
+  it('admits the generated global Ask context through the real launch adapter', async () => {
+    const facts = 'File Browser (files)\n\nkind: navigation';
+    const action = buildAskFlowerContextAction({ source: 'flower_composer', context_items: [
+      { kind: 'text_snapshot', title: 'File Browser', content: facts },
+    ] });
+    let body: any;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      expect(url).toBe('/_redeven_proxy/api/ai/turns');
+      expect(init?.method).toBe('POST');
+      body = JSON.parse(String(init?.body));
+      return jsonResponse(typedCommandResponse('global-context', 'global-thread', 'global-turn', 'Explain this'));
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_a', envLabel: 'Demo', rpc: { ai: {} } as any });
+    await expect(adapter.launchTurn({ client_request_id: 'global-context', model_id: 'fixture/model',
+      prompt: 'Explain this', context_action: action })).resolves.toMatchObject({ thread_id: 'global-thread' });
+    expect(body.input.context_action.context).toEqual([{ kind: 'text_snapshot', title: 'File Browser', content: facts }]);
+    expect(body.create.model_id).toBe('fixture/model');
   });
 
   it('rejects invalid explicit context actions instead of dropping linked context', async () => {

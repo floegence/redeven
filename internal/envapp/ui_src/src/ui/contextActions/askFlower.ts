@@ -23,13 +23,13 @@ export type EnvFlowerTurnLauncherIntent = Omit<FlowerTurnLauncherIntent, 'contex
   context_items: readonly EnvFlowerTurnLauncherContextItem[];
 }>;
 
-function toContextActionItem(item: EnvFlowerTurnLauncherContextItem): ContextActionContextItem {
+function toContextActionItem(item: EnvFlowerTurnLauncherContextItem, source: ContextActionSurface): ContextActionContextItem {
   if (item.kind === 'file_path') {
     return {
       kind: 'file_path',
       path: item.path,
       is_directory: item.is_directory,
-      root_label: item.root_label,
+      ...(source !== 'flower_composer' && source !== 'tessiven' && item.root_label !== undefined ? { root_label: item.root_label } : {}),
     };
   }
   if (item.kind === 'terminal_selection') {
@@ -56,7 +56,7 @@ function toContextActionItem(item: EnvFlowerTurnLauncherContextItem): ContextAct
     return {
       kind: 'text_snapshot',
       title: item.title,
-      detail: item.detail,
+      ...(source !== 'flower_composer' && item.detail !== undefined ? { detail: item.detail } : {}),
       content: item.content,
     };
   }
@@ -81,7 +81,7 @@ export function buildAskFlowerContextAction(params: {
       surface_id: params.surfaceId,
     },
     execution_context: params.executionContext,
-    context: params.context_items.map((item) => toContextActionItem(item)),
+    context: params.context_items.map((item) => toContextActionItem(item, params.source)),
     presentation: {
       label: 'Ask Flower',
       priority: 100,
