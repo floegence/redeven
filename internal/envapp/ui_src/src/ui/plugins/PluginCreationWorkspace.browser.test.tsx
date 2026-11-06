@@ -327,6 +327,46 @@ it('blocks a document reload until the latest composer transaction completes', a
   }
 });
 
+it.each(['pending', 'rejected'])('flushes the active draft before Desktop restart when creation is %s', async outcome => {
+  draft = { ...baseDraft, id: crypto.randomUUID() };
+  let finish: (() => void) | undefined;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  const original = globalThis.fetch;
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).endsWith('/drafts') && init?.method === 'POST') {
+      await pending;
+      return outcome === 'rejected' ? Response.json({ error: 'Draft creation unavailable' }, { status: 503 }) : Response.json({ data: draft });
+    }
+    return original(input, init);
+  });
+  vi.stubGlobal('fetch', fetch);
+  releaseHTTP?.(); releaseHTTP = bindSessionHTTP({ fetch, events: async function* () {} });
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const session = coordinator.open('restart-pending-creation');
+  session.mutate(value => ({ ...value, text: 'The latest unsent requirement' }));
+  let embedded: FlowerEmbeddedConversation | undefined;
+  let prepareRestart: (() => Promise<string | undefined>) | undefined;
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeConfigProvider><I18nProvider><PluginCreationWorkspace
+    draftCoordinator={coordinator} draftID="new" visible canManage
+    onBack={vi.fn()} onSaved={vi.fn()} onInstalled={vi.fn()} onRestartReady={save => { prepareRestart = save; }}
+    renderFlower={options => { embedded = options.embeddedConversation; return <div>Conversation fixture</div>; }}
+  /></I18nProvider></FloeConfigProvider>, host);
+  try {
+    await expect.poll(() => embedded).toBeDefined();
+    embedded!.onDraftChange?.(session.snapshot());
+    embedded!.onDraftPresence?.(true);
+    let completed = false;
+    const result = prepareRestart!().then(id => { completed = true; return { id }; }, error => ({ error: String(error) }));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(completed).toBe(false);
+    finish!();
+    if (outcome === 'pending') expect(await result).toEqual({ id: draft.id });
+    else { expect(await result).toHaveProperty('error'); expect(completed).toBe(false); }
+    expect(session.snapshot().value.text).toBe('The latest unsent requirement');
+  } finally { finish?.(); dispose?.(); dispose = undefined; coordinator.dispose(); await removePluginComposer(draft.id); }
+});
+
 it.each(['rename', 'delete', 'rename_empty'])('completes %s after a new draft finishes creating', async action => {
   const original = globalThis.fetch;
   let finish: (() => void) | undefined;

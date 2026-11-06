@@ -599,7 +599,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   let restartWorkspace: RestartWorkspace | null = null;
   const restartRestore = restartBridge ? restartBridge.read().then(async restored => {
     if (restored) {
-      restartWorkspace = restoreSessionRestartState(flowerDraftCoordinator, restored.state);
+      restartWorkspace = await restoreSessionRestartState(flowerDraftCoordinator, restored.state);
+      if (restartWorkspace.pluginDraftID) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('plugin_draft', restartWorkspace.pluginDraftID);
+        window.history.replaceState(window.history.state, '', url);
+        pluginCreationURL = url.href;
+        setPluginCreationProjectID(restartWorkspace.pluginDraftID);
+        setPluginCreationOpen(true);
+      }
       if (!await restartBridge.restored(restored.ticket)) throw new Error('The restart state belongs to an expired Env App session.');
     }
     setRestartRestorePending(false);
@@ -609,7 +617,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     onCleanup(restartBridge.register(async () => {
       setRestartPreparing(true);
       try {
-        return await captureSessionRestartState(flowerDraftCoordinator, { viewMode: viewMode(), activityID: layout.sidebarActiveTab() });
+        const savedPluginDraftID = await pluginCreationSaveForRestart?.();
+        return await captureSessionRestartState(flowerDraftCoordinator, {
+          viewMode: viewMode(), activityID: layout.sidebarActiveTab(),
+          ...(pluginCreationOpen() ? { pluginDraftID: savedPluginDraftID ?? pluginCreationProjectID() } : {}),
+        });
       } catch (error) {
         flowerDraftCoordinator.resumeAfterCanceledRestart();
         setRestartPreparing(false);
@@ -1945,6 +1957,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const [pluginCreationReference, setPluginCreationReference] = createSignal<string>();
   let pluginCreationURL = window.location.href;
   let pluginCreationNavigate: ((commit: () => unknown) => Promise<boolean>) | undefined;
+  let pluginCreationSaveForRestart: (() => Promise<string | undefined>) | undefined;
   let pluginHistoryPending = false;
   let pluginHistoryTarget = { url: pluginCreationURL, state: window.history.state };
   const navigatePluginCreation = (id: string | undefined, replace = false) => {
@@ -1994,6 +2007,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     <PluginCreationWorkspace canManage={canAdmin()} draftCoordinator={flowerDraftCoordinator} draftID={id} visible={pluginCreationOpen()} centerEntry={localRuntime()?.web_entry === 'center-v1'} referenceThreadID={pluginCreationReference()}
       onBack={backFromPluginCreation} onSaved={saved => navigatePluginCreation(saved, true)}
       onNavigationReady={navigate => { pluginCreationNavigate = navigate; }}
+      onRestartReady={save => { pluginCreationSaveForRestart = save; }}
       onInstalled={async () => {if(!await refetchPluginInventory())throw new Error(i18n.t('uiCopy.plugin.creation.inventoryFailed'));}}
       onOpenInstalled={async instanceID => {
         const projection = await refetchPluginInventory();

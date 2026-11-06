@@ -73,6 +73,12 @@ waits for initial draft creation, snapshot capture and outstanding saves. Failed
 creation or unavailable attachment bytes retain the page and unsent input.
 Document reload/close asks for native confirmation while the latest composer
 snapshot is unsaved; a completed transaction clears that protection.
+Desktop Runtime restart flushes the active workspace before capture. The existing
+bounded, exact-session restart handoff carries cached draft snapshots, File bytes,
+comment text and the current draft route across the new private origin. Restoration
+commits that cache before acknowledging the handoff or mounting the workspace, so
+a subsequent reload retains it. Server authorization still precedes reading a
+restored draft; surface targets, ports, credentials and grants are never restored.
 A failed saved-draft read cannot display a fresh
 composer or silently create a replacement. Renaming and deletion bind the current
 revision; renaming an empty draft first completes its request-idempotent creation.

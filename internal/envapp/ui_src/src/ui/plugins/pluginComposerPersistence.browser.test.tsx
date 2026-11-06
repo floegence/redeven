@@ -3,7 +3,8 @@ import {
   createFlowerComposerDraftCoordinator,
   type FlowerComposerRestartDraft,
 } from '../../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
-import { loadPluginComposer, savePluginComposer, removePluginComposer, loadPluginComment, savePluginComment } from './pluginComposerPersistence';
+import { loadPluginComposer, savePluginComposer, removePluginComposer, loadPluginComment, savePluginComment, capturePluginDraftsForRestart, restorePluginDraftsAfterRestart } from './pluginComposerPersistence';
+import { captureSessionRestartState, restoreSessionRestartState } from '../services/sessionRestart';
 it('retains text and attachment bytes across a fresh coordinator without old admission authority', async () => {
   const id = crypto.randomUUID();
   const file = new File(['private attachment'], 'notes.txt', { type: 'text/plain' });
@@ -23,6 +24,31 @@ it('retains text and attachment bytes across a fresh coordinator without old adm
   await removePluginComposer(id);
   expect(await loadPluginComposer(id)).toBeUndefined();
   coordinator.dispose();
+});
+it('rehydrates the origin cache from the bounded Desktop handoff before a later page reload', async () => {
+  const id = crypto.randomUUID(), commentOnly = crypto.randomUUID();
+  const original = createFlowerComposerDraftCoordinator();
+  const restored = createFlowerComposerDraftCoordinator();
+  const value: FlowerComposerRestartDraft = {
+    scope_id: 'ephemeral-creation-scope', value: { text: 'Keep this unopened draft', mode: 'ordinary', attachments: [], references: [] },
+    files: [{ local_id: 'file-1', file: new File(['reference bytes'], 'reference.txt', { type: 'text/plain' }) }],
+  };
+  try {
+    await savePluginComposer(id, value);
+    await savePluginComment(id, 'Keep this canvas comment');
+    await savePluginComment(commentOnly, 'Independent comment');
+    const snapshot = await captureSessionRestartState(original, { viewMode: 'activity', activityID: 'files' });
+    await removePluginComposer(id); await removePluginComposer(commentOnly);
+    expect(await loadPluginComposer(id)).toBeUndefined();
+    await restoreSessionRestartState(restored, snapshot);
+    expect((await loadPluginComposer(id))?.value.text).toBe(value.value.text);
+    expect(await (await loadPluginComposer(id))?.files[0]?.file.text()).toBe('reference bytes');
+    expect(await loadPluginComment(id)).toBe('Keep this canvas comment');
+    expect(await loadPluginComment(commentOnly)).toBe('Independent comment');
+    const cache = await capturePluginDraftsForRestart();
+    await restorePluginDraftsAfterRestart(cache);
+    expect((await capturePluginDraftsForRestart()).filter(entry => entry.id === id || entry.id === commentOnly)).toHaveLength(2);
+  } finally { await removePluginComposer(id); await removePluginComposer(commentOnly); original.dispose(); restored.dispose(); }
 });
 it('removes only the deleted project composer and comment together', async () => {
   const id = crypto.randomUUID(), sibling = crypto.randomUUID();

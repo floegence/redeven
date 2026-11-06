@@ -50,6 +50,7 @@ export type PluginCreationWorkspaceProps = Readonly<{
   referenceThreadID?: string;
   onBack: () => void;
   onNavigationReady?: (navigate: ((commit: () => unknown) => Promise<boolean>) | undefined) => void;
+  onRestartReady?: (save: (() => Promise<string | undefined>) | undefined) => void;
   onSaved: (id: string) => void;
   onOpenInstalled?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onInstalled: (pluginInstanceID: string) => Promise<unknown> | unknown;
@@ -412,6 +413,13 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     props.onNavigationReady?.(async commit => {
       try { return await navigateFromPreview(commit); } catch (error) { fail(error); return false; }
     });
+    props.onRestartReady?.(async () => {
+      if (!draft() && (createPending || latestComposer && (latestComposer.value.text
+        || latestComposer.value.attachments.length || latestComposer.value.references.length))) await ensureDraft();
+      await persistComposer();
+      await commentSave;
+      return draft()?.id;
+    });
     const media = window.matchMedia('(max-width: 720px)');
     const syncViewport = () => setNarrow(media.matches);
     syncViewport();
@@ -424,6 +432,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   onCleanup(() => {
     window.removeEventListener('beforeunload', preventUnsavedDocumentExit);
     props.onNavigationReady?.(undefined);
+    props.onRestartReady?.(undefined);
     window.removeEventListener('pagehide', persistComposer);
     if (saveTimer) clearTimeout(saveTimer);
     persistComposer();

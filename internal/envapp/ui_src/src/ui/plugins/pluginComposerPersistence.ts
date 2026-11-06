@@ -46,3 +46,52 @@ export async function savePluginComment(id: string, text: string): Promise<void>
   if (text) await transact('readwrite', store => store.put(text.slice(0, 4000), `comment:${id}`));
   else await transact('readwrite', store => store.delete(`comment:${id}`));
 }
+
+export type PluginDraftRestartSnapshot = Readonly<{
+  id: string;
+  composer?: FlowerComposerRestartDraft;
+  comment?: string;
+}>;
+
+// Desktop replaces both the private origin and its session storage on restart.
+// Transfer user-authored cache entries through the existing bounded handoff;
+// a restored cache entry still requires server authorization before use.
+export async function capturePluginDraftsForRestart(): Promise<readonly PluginDraftRestartSnapshot[]> {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('drafts', 'readonly');
+    const store = tx.objectStore('drafts');
+    const keys = store.getAllKeys();
+    const values = store.getAll();
+    tx.oncomplete = () => {
+      const entries = new Map<string, { id: string; composer?: FlowerComposerRestartDraft; comment?: string }>();
+      keys.result.forEach((key, index) => {
+        const name = String(key), comment = name.startsWith('comment:');
+        const id = comment ? name.slice('comment:'.length) : name;
+        const entry = entries.get(id) ?? { id };
+        if (comment) entry.comment = values.result[index];
+        else entry.composer = values.result[index];
+        entries.set(id, entry);
+      });
+      resolve([...entries.values()]);
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Draft storage transaction was interrupted'));
+  });
+}
+
+export async function restorePluginDraftsAfterRestart(entries: readonly PluginDraftRestartSnapshot[]): Promise<void> {
+  if (!entries.length) return;
+  const db = await open();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('drafts', 'readwrite');
+    const store = tx.objectStore('drafts');
+    for (const entry of entries) {
+      if (entry.composer) store.put(entry.composer, entry.id);
+      if (entry.comment) store.put(entry.comment, `comment:${entry.id}`);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Draft storage transaction was interrupted'));
+  });
+}

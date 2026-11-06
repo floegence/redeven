@@ -30,6 +30,12 @@ Lifecycle generation fencing cancels matching Opens so a late response cannot re
 
 Transport recovery IPC is a narrow current-session capability. The separate Desktop Restart handoff exposes only the current window's bounded user-authored state to its fresh session, never ports, tokens, other Environment snapshots, Runtime handles, or launcher operations. Terminal transport failure may preserve the renderer window for diagnosis and navigation, but every previously loaded Runtime surface remains non-interactive until a fresh session is explicitly opened.
 
+Private-origin replacement clears browser storage. Env App includes its saved
+plugin composer/comment cache and selected draft route in this same handoff,
+flushes the active workspace before capture, and commits restored storage before
+acknowledgment. Failed capture or persistence cannot report successful restoration.
+Restored cache is user intent only; opening a draft requires fresh server authority.
+
 Welcome Flower and Tessiven share compatibility/AI readiness. Returning to preparation disposes stale initialization while parent `ComposerDraftStore` retains drafts. Plugin workers/sandboxes receive no runtime-control endpoint/token; resource access uses released ReDevPlugin brokers and registered adapters.
 
 # Evidence

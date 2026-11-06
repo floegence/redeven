@@ -3,7 +3,7 @@ type: Architecture Boundary
 title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -60,6 +60,14 @@ installation under a new request identity. Preview state and formal installation
 have separate stores and grants. Deleting author resources preserves installed
 plugins. Host-local source access is scoped to the authenticated draft and normal
 Flower effect approval; it does not authorize plugin execution.
+
+Author-store locks belong to the owning Host process. The platform must
+open them atomically close-on-exec, so terminal and service descendants cannot
+keep author workspaces locked after Runtime shutdown. The host must not delete
+author state or bypass exclusive ownership to recover a failed startup.
+`desktop/scripts/check-plugin-author-restart.mjs` explicitly qualifies a real
+Desktop restart while a terminal child survives, then verifies inventory and
+the same persisted draft through the product UI.
 
 Preview refresh preserves selected actions and JSON drafts; pending work remains
 single-flight. Unknown outcomes require explicit review and never replay.
