@@ -48,6 +48,30 @@ function mount(scope = `directory-test-${++scopeID}`, storage?: Pick<Storage, 'g
 }
 
 describe('Flower directory navigation', () => {
+  it.each([220, 272, 380])('gives directory conversations the full row width at %spx', async width => {
+    const ui = mount();
+    ui.host.style.width = `${width}px`;
+    ui.setItems(ui.items().map(entry => entry.thread_id === 'alpha-0'
+      ? { ...entry, title: 'Review the complete workspace configuration and deployment checklist' } : entry));
+    await frame();
+    const row = ui.host.querySelector<HTMLElement>('[data-thread-id="alpha-0"]')!;
+    const title = row.querySelector<HTMLElement>('.flower-thread-list-title')!;
+    const timeTitleWidth = title.getBoundingClientRect().width;
+    await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));
+    await frame();
+    const rows = ui.host.querySelector<HTMLElement>('.flower-thread-rows')!;
+    expect(row.getBoundingClientRect().left).toBeCloseTo(rows.getBoundingClientRect().left, 0);
+    expect(row.getBoundingClientRect().right).toBeCloseTo(rows.getBoundingClientRect().right, 0);
+    expect(title.getBoundingClientRect().width).toBeCloseTo(timeTitleWidth, 0);
+    expect(title.scrollWidth).toBeGreaterThan(title.clientWidth);
+    expect(getComputedStyle(title).textOverflow).toBe('ellipsis');
+    expect(getComputedStyle(row, '::before').content).toBe('none');
+    const toggle = ui.header('/one/project').querySelector<HTMLButtonElement>('.flower-directory-toggle')!;
+    expect(toggle.firstElementChild?.classList.contains('flower-directory-icon')).toBe(true);
+    await userEvent.click(row.querySelector<HTMLButtonElement>('.flower-thread-card-select-button')!);
+    expect(ui.onSelect).toHaveBeenCalledExactlyOnceWith('alpha-0');
+  });
+
   it('distinguishes open and closed folder icons while keeping header geometry stable', async () => {
     const ui = mount();
     await userEvent.click(page.getByRole('radio', { name: copy.viewByDirectory }));

@@ -4,7 +4,7 @@ import type { Component, JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, ArrowDown, ChevronRight, Clock, Copy, Folder, FolderOpen, GitBranch, Grid, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, Clock, Copy, Folder, FolderOpen, GitBranch, Grid, MessageSquare, MoreHorizontal, Pencil, Plus, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import { FlowerPinIcon } from '../icons/FlowerPinIcon';
 import { animateFlowerThreadRowsChange, flowerThreadMotionDuration, FlowerThreadRows } from './FlowerThreadRows';
@@ -886,7 +886,6 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                       onPointerDown={event => beginDirectoryGesture(event, path)}
                       onClick={() => toggleDirectory(path)}
                       onKeyDown={event => moveDirectoryWithKeyboard(event, path)}>
-                      <ChevronRight class="flower-directory-chevron h-3 w-3 shrink-0" />
                       <span class="flower-directory-icon h-3.5 w-3.5 shrink-0" aria-hidden="true" data-state={collapsed().has(path) ? 'closed' : 'open'}>
                         <Show when={!collapsed().has(path)} fallback={<Folder class="h-full w-full" />}>
                           <FolderOpen class="h-full w-full" />
