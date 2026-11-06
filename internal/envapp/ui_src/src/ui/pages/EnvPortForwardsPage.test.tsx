@@ -1378,7 +1378,7 @@ describe('EnvPortForwardsPage', () => {
 
     await waitForAssertion(() => {
       expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services/mws-legacy/open-session', expect.objectContaining({ method: 'POST', body: expect.stringContaining('request_id') }));
-      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/pf-route-safe-alias/touch', { method: 'POST' });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/pf-route-safe-alias/touch', { method: 'POST', headers: undefined, sessionBound: true });
       expect(assign).toHaveBeenCalledWith('https://localhost/pf/pf-route-safe-alias/session?token=private-value');
     });
   });
@@ -2840,7 +2840,7 @@ describe('EnvPortForwardsPage', () => {
     openButton?.click();
 
     await waitForAssertion(() => {
-      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST', headers: undefined, sessionBound: true });
       expect(assign).toHaveBeenCalledWith('https://localhost/pf/forward-1/');
     });
     expect(close).not.toHaveBeenCalled();
@@ -3079,7 +3079,7 @@ describe('EnvPortForwardsPage', () => {
     openButton?.click();
 
     await waitForAssertion(() => {
-      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST', headers: undefined, sessionBound: true });
       expect(sandboxWindowRegistryMocks.registerSandboxWindow).toHaveBeenCalledWith(popup, {
         origin: 'https://forward.test',
         floe_app: 'com.floegence.redeven.portforward',
