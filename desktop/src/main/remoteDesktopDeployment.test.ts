@@ -2,13 +2,16 @@ import { createHash } from 'node:crypto';
 import { PassThrough, Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { RemoteDesktopDeployment, DesktopDeploymentPermissionError } from './remoteDesktopDeployment';
-import type { DesktopSSHCommandResult, DesktopSSHTransportLease } from './sshTransportManager';
+import { DesktopSSHCommandTimeoutError, type DesktopSSHCommandResult, type DesktopSSHTransportLease } from './sshTransportManager';
 import { parseDesktopDeploymentRequest, parseDesktopDeploymentProgress, type DesktopDeploymentProgress, type DesktopDeploymentOperation, type DesktopAdministratorMethod } from '../shared/remoteDesktopDeployment';
 const operationId = 'fixture-operation', policyDigest = 'c'.repeat(64);
 const request = (operation: DesktopDeploymentOperation = 'ensure', administratorMethod: DesktopAdministratorMethod = 'sudo') => ({ action: 'manage' as const, operationId, operation, confirmed: true as const, administratorMethod });
 type Mode = 'nopasswd' | 'password' | 'reject' | 'cancel' | 'prepare_failure' | 'prepare_cancel' | 'confirmation' | 'proof_failure' | 'root' | 'echo' | 'late_proof' | 'duplicate_challenge' | 'duplicate_proof' | 'wrong_result' | 'hung_cancel' | 'stale_challenge' | 'root_multistage' | 'heartbeat_loss' | 'committed_cancel' | 'root_runtime';
 function fixture(mode: Mode = 'nopasswd') {
     const commands: string[] = [], writes: string[] = [], progress: DesktopDeploymentProgress[] = [], streamOptions: object[] = [], credentialBuffers: Buffer[] = [];
+    const cached = new Map<string, Buffer>();
+    const cacheControl: { response?: { exit_code: number; stdout: string }; error?: Error; cancel?: boolean; timeout?: number } = {};
+    const uploads: string[] = [];
     const sha = (data: Buffer) => createHash('sha256').update(data).digest('hex');
     const service = Buffer.from('reviewed-service'), worker = Buffer.from('reviewed-worker');
     const kit = { serviceSHA256: sha(service), workerSHA256: sha(worker), files: new Map([['floe-host-desktop-service', service], ['desktop-drm', worker], ['libdrmtap.LICENSE', Buffer.from('license')], ['redeven', Buffer.from('verified-released-runtime')]]) };
@@ -19,16 +22,29 @@ function fixture(mode: Mode = 'nopasswd') {
         throw new Error('Admission denied'); if (mode === 'late_proof' || mode === 'duplicate_proof' || mode === 'heartbeat_loss')
         await new Promise<void>(resolve => { settleProof = resolve; }); });
     const lease = {
-        run: async (command: string, options: { stdinData?: Buffer; onStdinProgress?: (completedBytes: number, totalBytes: number) => void } = {}) => {
+        run: async (command: string, options: { stdinData?: Buffer; timeout_ms?: number; onStdinProgress?: (completedBytes: number, totalBytes: number) => void } = {}) => {
             commands.push(command);
             if (mode === 'root_runtime' && command.includes('/proc/42')) return done(1);
             if (command.startsWith('uname'))
                 return done(0, ['Linux', 'x86_64', 'tang', 'host.example'].join('\n') + '\n');
             if (command.startsWith('stty'))
                 return done(0, mode === 'echo' ? 'echo; -icanon;' : '-echo; -icanon;');
+            if (command.includes('stage=$(mktemp -d /tmp/redeven-desktop-ssh-')) {
+                cacheControl.timeout = options.timeout_ms;
+                if (cacheControl.error) throw cacheControl.error;
+                if (cacheControl.cancel) void manager.cancel(1, operationId);
+                if (cacheControl.response) return done(cacheControl.response.exit_code, cacheControl.response.stdout);
+                const missing = [...kit.files].filter(([name, bytes]) => command.includes(`name='${name}'`) && !cached.get(name)?.equals(bytes)).map(([name]) => name);
+                return done(0, ['/tmp/redeven-desktop-ssh-AbC123', ...missing].join('\n') + '\n');
+            }
             if (command.includes('mktemp'))
-                return done(0, '/tmp/redeven-desktop-ssh-AbC123\n');
-            if (command.startsWith('cat > ') && options.stdinData) options.onStdinProgress?.(options.stdinData.length, options.stdinData.length);
+                return done();
+            if (command.startsWith('cat > ') && options.stdinData) {
+                const name = command.split('/').at(-1)!.slice(0, -1);
+                uploads.push(name);
+                cached.set(name, Buffer.from(options.stdinData));
+                options.onStdinProgress?.(options.stdinData.length, options.stdinData.length);
+            }
             return done();
         },
         stream: (command: string, options: {
@@ -143,9 +159,61 @@ function fixture(mode: Mode = 'nopasswd') {
         if (event.stage === 'confirmation_required' && !['duplicate_challenge','stale_challenge'].includes(mode))
             manager.respond(1, { action: 'respond', operationId, challengeId: event.challenge_id!, confirmed: true });
     });
-    return { commands, writes, progress, run, kit, manager, verify, streamOptions, credentialBuffers, settleProof: () => settleProof?.() };
+    return { commands, writes, progress, run, kit, manager, verify, streamOptions, credentialBuffers, cached, uploads, cacheControl, settleProof: () => settleProof?.() };
 }
 describe('SSH desktop deployment transaction', () => {
+    it('reuses unchanged host files without another upload and still verifies Runtime admission', async () => {
+        const f = fixture();
+        expect((await f.run()).ok).toBe(true);
+        const firstUploads = f.commands.filter(command => command.startsWith('cat > ')).length;
+        expect(firstUploads).toBe(4);
+        expect((await f.run()).ok).toBe(true);
+        expect(f.commands.filter(command => command.startsWith('cat > '))).toHaveLength(firstUploads);
+        expect(f.verify).toHaveBeenCalledTimes(2);
+        expect(f.cacheControl.timeout).toBe(30000);
+        expect(f.commands.filter(command => command.includes('stage=$(mktemp -d /tmp/redeven-desktop-ssh-'))).toHaveLength(2);
+    });
+    it('only retransfers the changed or corrupted artifact', async () => {
+        const f = fixture();
+        expect((await f.run()).ok).toBe(true);
+        f.cached.set('desktop-drm', Buffer.from('damaged-worker'));
+        f.kit.files.set('redeven', Buffer.from('upgraded-runtime'));
+        f.uploads.length = 0;
+        expect((await f.run()).ok).toBe(true);
+        expect(f.uploads).toEqual(['desktop-drm', 'redeven']);
+    });
+    it('rejects failed, duplicate or unknown cache responses before any upload or elevation', async () => {
+        for (const response of [
+            { exit_code: 1, stdout: '' },
+            { exit_code: 0, stdout: '/tmp/redeven-desktop-ssh-AbC123\n../escape\n' },
+            { exit_code: 0, stdout: '/tmp/redeven-desktop-ssh-AbC123\nredeven\nredeven\n' },
+        ]) {
+            const f = fixture();
+            f.cacheControl.response = response;
+            expect(await f.run()).toMatchObject({ ok: false, code: 'deployment_failed' });
+            expect(f.uploads).toEqual([]);
+            expect(f.commands.some(command => command.includes('sudo'))).toBe(false);
+        }
+    });
+    it('cancels after the cache probe before transferring or elevating', async () => {
+        const f = fixture();
+        f.cacheControl.cancel = true;
+        expect(await f.run()).toMatchObject({ ok: false, code: 'canceled' });
+        expect(f.uploads).toEqual([]);
+        expect(f.commands.at(-1)).toContain('rm -rf');
+        expect(f.verify).not.toHaveBeenCalled();
+    });
+    it('reports a cache inspection timeout and cleans only a validated transaction path', async () => {
+        for (const directory of ['/tmp/redeven-desktop-ssh-AbC123', '/tmp/untrusted-path']) {
+            const f = fixture();
+            f.cacheControl.error = new DesktopSSHCommandTimeoutError('host.example', 30000, `${directory}\n`);
+            expect(await f.run()).toMatchObject({ ok: false, code: 'operation_timeout' });
+            expect(f.uploads).toEqual([]);
+            const cleanup = f.commands.filter(command => command.startsWith('rm -rf'));
+            expect(cleanup).toEqual(directory.endsWith('AbC123') ? ["rm -rf -- '/tmp/redeven-desktop-ssh-AbC123'"] : []);
+            expect(f.verify).not.toHaveBeenCalled();
+        }
+    });
     it('rejects retired verbs, missing scope and mismatched challenge payloads', () => {
         for (const operation of ['install', 'start', 'update'])
             expect(parseDesktopDeploymentRequest({ ...request(), operation })).toBeUndefined();

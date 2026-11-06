@@ -402,6 +402,10 @@ it('shows observed preparation stages and only reports measured component progre
   report({ operation_id: operationId, stage: 'preparing_runtime_package', transfer_file: 'runtime', transfer_kind: 'download', received_bytes: 2500000 });
   expect(host.querySelector('.remote-desktop-preparation-metrics')?.textContent).toContain('2.5 MB');
   expect(host.querySelector('.remote-desktop-preparation-metrics')?.textContent).not.toContain('%');
+  report({ operation_id: operationId, stage: 'checking_transfer_cache' });
+  expect(steps()[3].dataset.state).toBe('active');
+  expect(host.querySelector<HTMLElement>('.remote-desktop-preparation-current > p')?.textContent).toBe('Checking existing host components.');
+  expect(host.querySelector('.remote-desktop-preparation-metrics')).toBeNull();
   report({ operation_id: operationId, stage: 'transferring', transfer_file: 'runtime', transfer_kind: 'upload', received_bytes: 5000000, expected_bytes: 10000000 });
   expect(steps()[3].dataset.state).toBe('active');
   expect(host.querySelector('.remote-desktop-progress-values')?.textContent).toContain('50%');

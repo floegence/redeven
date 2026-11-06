@@ -26,7 +26,7 @@ export type DesktopDeploymentRequest = {
 };
 export type DesktopDeploymentProgress = Readonly<{
     operation_id: string;
-    stage: 'connecting' | 'checking' | 'preparing_service_package' | 'preparing_runtime_package' | 'preparing_media' | 'transferring' | 'authorization_required' | 'authorized' | 'confirmation_required' | 'verification_required' | 'recovering' | 'verifying_files' | 'installing_service' | 'starting_service' | 'stopping_service' | 'rolling_back' | 'rolled_back' | 'complete' | 'failed';
+    stage: 'connecting' | 'checking' | 'preparing_service_package' | 'preparing_runtime_package' | 'preparing_media' | 'checking_transfer_cache' | 'transferring' | 'authorization_required' | 'authorized' | 'confirmation_required' | 'verification_required' | 'recovering' | 'verifying_files' | 'installing_service' | 'starting_service' | 'stopping_service' | 'rolling_back' | 'rolled_back' | 'complete' | 'failed';
     media_state?: DesktopDeploymentMediaState;
     transfer_file?: DesktopDeploymentTransferFile;
     transfer_kind?: 'download' | 'upload';
@@ -87,7 +87,7 @@ export function parseDesktopDeploymentProgress(value: unknown): DesktopDeploymen
     if (!value || typeof value !== 'object')
         return;
     const event = value as DesktopDeploymentProgress;
-    if (!identifier(event.operation_id) || !['connecting', 'checking', 'preparing_service_package', 'preparing_runtime_package', 'preparing_media', 'transferring', 'authorization_required', 'authorized', 'confirmation_required', 'verification_required', 'recovering', 'verifying_files', 'installing_service', 'starting_service', 'stopping_service', 'rolling_back', 'rolled_back', 'complete', 'failed'].includes(event.stage))
+    if (!identifier(event.operation_id) || !['connecting', 'checking', 'preparing_service_package', 'preparing_runtime_package', 'preparing_media', 'checking_transfer_cache', 'transferring', 'authorization_required', 'authorized', 'confirmation_required', 'verification_required', 'recovering', 'verifying_files', 'installing_service', 'starting_service', 'stopping_service', 'rolling_back', 'rolled_back', 'complete', 'failed'].includes(event.stage))
         return;
     if (event.rollback !== undefined && !['complete', 'failed'].includes(event.rollback))
         return;

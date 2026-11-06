@@ -345,7 +345,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       case undefined: case 'connecting': case 'checking': return 0;
       case 'preparing_service_package': return 1;
       case 'preparing_runtime_package': return 2;
-      case 'transferring': return 3;
+      case 'checking_transfer_cache': case 'transferring': return 3;
       case 'preparing_media': return 4;
       case 'authorized': case 'confirmation_required': case 'recovering': case 'verifying_files': case 'installing_service': case 'starting_service': case 'stopping_service': return 5;
       case 'verification_required': return 6;
@@ -392,6 +392,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       case 'connecting': return 'remoteDesktop.deployConnectingDetail';
       case 'preparing_service_package': return 'remoteDesktop.deployServicePackageDetail';
       case 'preparing_runtime_package': return deploymentProgress()?.received_bytes !== undefined ? 'remoteDesktop.deployRuntimeDownloadDetail' : 'remoteDesktop.deployRuntimePackageDetail';
+      case 'checking_transfer_cache': return 'remoteDesktop.deployCacheCheckDetail';
       case 'transferring':
         switch (deploymentProgress()?.transfer_file) {
           case 'service': return 'remoteDesktop.deployServiceUploadDetail';
@@ -430,6 +431,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       case 'checking': return 'remoteDesktop.deployChecking';
       case 'preparing_service_package': return 'remoteDesktop.deployServicePackageDetail';
       case 'preparing_runtime_package': return 'remoteDesktop.deployRuntimePackageDetail';
+      case 'checking_transfer_cache': return 'remoteDesktop.deployCacheCheckDetail';
       case 'preparing_media': return 'remoteDesktop.preparing';
       case 'transferring': case 'verifying_files': return 'remoteDesktop.deployTransferring';
       case 'authorization_required': case 'authorized': return 'remoteDesktop.deployAuthorizing';
@@ -600,7 +602,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
                   <div class="remote-desktop-preparation-progress" role="progressbar" aria-labelledby={preparationProgressLabel} aria-valuemin={0} aria-valuemax={measuredProgress()?.total ?? 100} aria-valuenow={measuredProgress()?.value}>
                     <LinearProgress aria-hidden="true" value={measuredProgress()?.value} max={measuredProgress()?.total ?? 100} indeterminate={!measuredProgress()} size="sm" />
                   </div>
-                  <div class="remote-desktop-preparation-metrics"><Show when={measuredProgress()}>{progress => <div class="remote-desktop-progress-values"><span>{i18n.t(deploymentProgress()?.transfer_kind === 'upload' ? 'remoteDesktop.deployUploadProgress' : 'remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().value / 1000000)} / {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().total / 1000000)}</span><span>{new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(progress().value / progress().total)}</span></div>}</Show><Show when={!measuredProgress() && receivedByteTransfer()}>{progress => <span>{i18n.t(progress().transfer_kind === 'upload' ? 'remoteDesktop.deployUploadProgress' : 'remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().received_bytes! / 1000000)}</span>}</Show></div>
+                  <Show when={measuredProgress() || receivedByteTransfer()}><div class="remote-desktop-preparation-metrics"><Show when={measuredProgress()}>{progress => <div class="remote-desktop-progress-values"><span>{i18n.t(deploymentProgress()?.transfer_kind === 'upload' ? 'remoteDesktop.deployUploadProgress' : 'remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().value / 1000000)} / {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().total / 1000000)}</span><span>{new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(progress().value / progress().total)}</span></div>}</Show><Show when={!measuredProgress() && receivedByteTransfer()}>{progress => <span>{i18n.t(progress().transfer_kind === 'upload' ? 'remoteDesktop.deployUploadProgress' : 'remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().received_bytes! / 1000000)}</span>}</Show></div></Show>
                 </div>
               </Show>
             </div>

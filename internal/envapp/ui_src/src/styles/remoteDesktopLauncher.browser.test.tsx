@@ -249,6 +249,12 @@ it('keeps the preparation dialog compact on a short viewport', async () => {
   expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
   expect(cancel.getBoundingClientRect().bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+  state.progress.mock.calls[0][0]({ operation_id: request.operationId, stage: 'checking_transfer_cache' });
+  expect(dialog.querySelector('.remote-desktop-preparation-current > p')?.textContent).toBe(copy.t('remoteDesktop.deployCacheCheckDetail'));
+  expect(dialog.querySelector('.remote-desktop-preparation-metrics')).toBeNull();
+  expect(dialog.querySelector('[role=progressbar]')?.hasAttribute('aria-valuenow')).toBe(false);
+  expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(580);
+  expect(cancel.getBoundingClientRect().bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
   finish({ ok: false, code: 'canceled' });
 });
 

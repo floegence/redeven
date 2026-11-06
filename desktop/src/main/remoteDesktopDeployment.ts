@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { DesktopSSHTransportLease } from './sshTransportManager';
+import { desktopTransferNames, desktopTransferProbeCommand, desktopTransferPublishCommand, type DesktopTransferFile } from './remoteDesktopTransferCache';
+import { DesktopSSHCommandTimeoutError, type DesktopSSHTransportLease } from './sshTransportManager';
 import { parseDesktopDeploymentProgress, type DesktopAdministratorMethod, type DesktopDeploymentPackageProgress, type DesktopDeploymentRequest, type DesktopDeploymentOperation, type DesktopDeploymentProgress, type DesktopDeploymentResult, type DesktopDeploymentTransferFile } from '../shared/remoteDesktopDeployment';
 export type DesktopServiceKit = Readonly<{
     files: ReadonlyMap<string, Buffer>;
@@ -23,6 +24,7 @@ export class DesktopDeploymentPermissionError extends Error {
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const digest = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 const sha256 = /^[a-f0-9]{64}$/u;
+const stagingDirectory = /^\/tmp\/redeven-desktop-ssh-[A-Za-z0-9]{6}$/u;
 // Credentials belong only to this SSH transaction. Runtime APIs, daemon input,
 // command arguments and diagnostics must never receive them.
 type Operation = {
@@ -129,19 +131,34 @@ export class RemoteDesktopDeployment {
                 || digest(kit.files.get('floe-host-desktop-service') ?? Buffer.alloc(0)) !== kit.serviceSHA256
                 || digest(kit.files.get('desktop-drm') ?? Buffer.alloc(0)) !== kit.workerSHA256)
                 return { ok: false, code: 'deployment_failed' };
-            const temporary = await host.lease.run('umask 077; mktemp -d /tmp/redeven-desktop-ssh-XXXXXX', { signal, timeout_ms: 10000 });
-            directory = temporary.stdout.trim();
-            if (temporary.exit_code !== 0 || !/^\/tmp\/redeven-desktop-ssh-[A-Za-z0-9]{6}$/u.test(directory)) {
-                directory = '';
-                return { ok: false, code: 'deployment_failed' };
-            }
-            const transferFiles: Readonly<Record<string, DesktopDeploymentTransferFile>> = {
-                'floe-host-desktop-service': 'service', 'desktop-drm': 'graphics', 'libdrmtap.LICENSE': 'license', redeven: 'runtime',
-            };
-            for (const name of ['floe-host-desktop-service', 'desktop-drm', 'libdrmtap.LICENSE', ...(operation === 'ensure' ? ['redeven'] : [])]) {
+            const files: DesktopTransferFile[] = [];
+            for (const name of desktopTransferNames) {
+                if (name === 'redeven' && operation !== 'ensure') continue;
                 const data = kit.files.get(name);
                 if (!data || data.length === 0 || data.length > (name === 'redeven' ? 512 << 20 : 128 << 20))
                     return { ok: false, code: 'deployment_failed' };
+                files.push({ name, size: data.length, sha256: name === 'floe-host-desktop-service' ? kit.serviceSHA256 : name === 'desktop-drm' ? kit.workerSHA256 : digest(data) });
+            }
+            report({ stage: 'checking_transfer_cache' });
+            // One bounded SSH round trip checks every requested file, copies hits
+            // into this transaction and hashes the private copies before use.
+            const checked = await host.lease.run(desktopTransferProbeCommand(files), { signal, timeout_ms: 30000 }).catch(error => {
+                if (error instanceof DesktopSSHCommandTimeoutError) {
+                    const staging = error.stdout.split('\n')[0];
+                    if (stagingDirectory.test(staging)) directory = staging;
+                }
+                throw error;
+            });
+            const [staging, ...missing] = checked.stdout.trimEnd().split('\n');
+            if (stagingDirectory.test(staging)) directory = staging;
+            if (checked.exit_code !== 0 || !directory || new Set(missing).size !== missing.length || missing.some(name => !files.some(file => file.name === name)))
+                return { ok: false, code: 'deployment_failed' };
+            signal.throwIfAborted();
+            const transferFiles: Readonly<Record<string, DesktopDeploymentTransferFile>> = {
+                'floe-host-desktop-service': 'service', 'desktop-drm': 'graphics', 'libdrmtap.LICENSE': 'license', redeven: 'runtime',
+            };
+            for (const name of missing) {
+                const data = kit.files.get(name)!;
                 const transferFile = transferFiles[name];
                 report({ stage: 'transferring' });
                 let lastTransferReportAt = 0, lastTransferBytes = -1;
@@ -156,6 +173,11 @@ export class RemoteDesktopDeployment {
                 if (uploaded.exit_code !== 0)
                     return { ok: false, code: 'deployment_failed' };
             }
+            if (missing.length) {
+                const published = await host.lease.run(desktopTransferPublishCommand(directory, files.filter(file => missing.includes(file.name))), { signal, timeout_ms: 30000 });
+                if (published.exit_code !== 0) return { ok: false, code: 'deployment_failed' };
+            }
+            signal.throwIfAborted();
             let mediaSHA256: string | undefined;
             if (operation === 'ensure') {
                 report({ stage: 'preparing_media' });
@@ -205,7 +227,7 @@ export class RemoteDesktopDeployment {
             return { ...result, ...(rollback ? { rollback } : privilegedStarted && !result.ok ? { rollback: result.rollback ?? 'unknown' } : {}) };
         }
         catch (error) {
-            return { ok: false, code: signal.aborted ? 'canceled' : error instanceof DesktopDeploymentPermissionError ? 'permission_denied' : 'transport_interrupted', ...(privilegedStarted ? { rollback: rollback ?? 'unknown' } : {}) };
+            return { ok: false, code: signal.aborted ? 'canceled' : error instanceof DesktopDeploymentPermissionError ? 'permission_denied' : error instanceof DesktopSSHCommandTimeoutError ? 'operation_timeout' : 'transport_interrupted', ...(privilegedStarted ? { rollback: rollback ?? 'unknown' } : {}) };
         }
         finally {
             if (directory && host)
