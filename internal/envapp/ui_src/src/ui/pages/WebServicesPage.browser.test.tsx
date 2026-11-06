@@ -105,6 +105,10 @@ describe('Web Services product interaction', () => {
     const normalFetch = api.fetch.getMockImplementation()!;
     api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
       if (url.endsWith('/catalog')) return {templates: [template]};
+      if (url.endsWith('/install-plans')) {
+        const request = JSON.parse(String(options?.body));
+        return {service_id: 'compact-install', expires_at_unix_ms: Date.now() + 60000, plan_digest: 'compact-reviewed', workspace_path: request.workspace_path === template.default_workspace_path ? request.workspace_path + '/instance' : request.workspace_path};
+      }
       if (url.endsWith('/release-candidates')) return {schema_version: 2, check_status: 'fresh', catalog_status: 'complete', has_more: false, loaded_count: 1, candidates: [{schema_version: 2, candidate_id: 'recommended', source_kind: 'npm', source: '@example/harness', version: '0.2.0-rc.2', channel: 'preview', trust: 'registry_verified', selectable: true, verification_status: 'verified', is_recommended: true, recommendation_status: 'available', relation: 'same'}]};
       return normalFetch(url, options);
     });
@@ -135,7 +139,7 @@ describe('Web Services product interaction', () => {
       expect(form.innerText).not.toContain(template.description);
       expect(details.open).toBe(false);
       expect(details.querySelector<HTMLElement>('fieldset')!.checkVisibility()).toBe(false);
-      expect(workspace.textContent).toBe(template.default_workspace_path);
+      expect(workspace.textContent).toBe(template.default_workspace_path + '/instance');
       expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth + 1);
       expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
       expect(panel.getBoundingClientRect().width).toBeLessThanOrEqual(width === 390 ? 390 : 672);
@@ -167,7 +171,7 @@ describe('Web Services product interaction', () => {
       expect(document.querySelector('[data-release-id="recommended"]')).toBeTruthy();
       await userEvent.keyboard('{Escape}');
       await expect.poll(() => document.querySelector('[data-testid="managed-release-candidates"]')).toBeNull();
-      expect(workspace.textContent).toBe(template.default_workspace_path);
+      expect(workspace.textContent).toBe(template.default_workspace_path + '/instance');
     });
   }
   for (const locale of SUPPORTED_LOCALES) it(`keeps the complete install form usable at 320px in ${locale}`, async () => {
@@ -197,7 +201,7 @@ describe('Web Services product interaction', () => {
     expect(consent.getBoundingClientRect().bottom).toBeLessThan(submit.getBoundingClientRect().top);
     expect(details.open).toBe(true);
   });
-  it('keeps mandatory consent visible and reviews the chosen mode before handing installation to the list', async () => {
+  it('prepares the chosen mode after consent and deploys with one click', async () => {
     const template = installFixture(true);
     const normalFetch = api.fetch.getMockImplementation()!;
     let resolvePlan!: (value: unknown) => void;
@@ -217,19 +221,20 @@ describe('Web Services product interaction', () => {
     expect(notice.closest('details')).toBeNull();
     expect(submit.disabled).toBe(true);
     await userEvent.click(page.elementLocator(notice.querySelector<HTMLInputElement>('input[type=checkbox]')!.closest('label')!));
-    expect(submit.disabled).toBe(false);
+    expect(submit.disabled).toBe(true);
     const details = panel.querySelector<HTMLDetailsElement>('[data-testid="managed-install-options"]')!;
     details.querySelector('summary')!.focus();
     await userEvent.keyboard('{Enter}');
     const radios = details.querySelectorAll<HTMLInputElement>('input[type="radio"]');
     radios[1].focus(); await userEvent.keyboard('{ArrowLeft}');
-    await userEvent.click(page.elementLocator(submit));
-    await expect.poll(() => api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/install-plans')).length).toBe(1);
+    await expect.poll(() => api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/install-plans')).length).toBe(2);
     expect(submit.disabled).toBe(true);
     expect(document.querySelector('[data-testid="managed-install-form"]')).toBeTruthy();
-    expect(api.fetch.mock.calls.find(([url]) => String(url).endsWith('/install-plans'))?.[1]?.body).toContain('"access_mode":"unified_proxy"');
+    expect(api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/install-plans')).at(-1)?.[1]?.body).toContain('"access_mode":"unified_proxy"');
+    expect(api.fetch.mock.calls.filter(([url, options]) => String(url).endsWith('/managed-web-services') && options?.method === 'POST')).toHaveLength(0);
     resolvePlan({service_id: operation.service_id, expires_at_unix_ms: Date.now() + 60000, plan_digest: 'compact-reviewed', workspace_path: template.default_workspace_path + '/instance'});
-    await expect.poll(() => panel.querySelector('.service-install-ready')?.textContent).toBe('Ready to install');
+    await expect.poll(() => submit.disabled).toBe(false);
+    expect(submit.textContent).toBe('Deploy');
     expect(submit.disabled).toBe(false);
     expect(panel.querySelector('[data-testid="managed-workspace-path"]')?.textContent).toBe(template.default_workspace_path + '/instance');
     await userEvent.click(page.elementLocator(submit));
@@ -238,6 +243,32 @@ describe('Web Services product interaction', () => {
     expect(requests).toHaveLength(1);
     expect(JSON.parse(String(requests[0][1]?.body))).toMatchObject({access_mode: 'unified_proxy', accepted_notice_revisions: {'trusted-workspace': 1}, plan_digest: 'compact-reviewed'});
   });
+  it('shows failed preparation inline and retries without deploying or moving the footer', async () => {
+    installFixture();
+    const normalFetch = api.fetch.getMockImplementation()!;
+    let attempts = 0;
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/install-plans') && attempts++ === 0) throw new TypeError('offline');
+      return normalFetch(url, options);
+    });
+    await mount(390, 'porcelain-dark');
+    await page.viewport(390, 720);
+    const panel = await openInstall();
+    const submit = panel.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
+    const feedback = panel.querySelector<HTMLElement>('.service-install-feedback')!;
+    expect(submit.disabled).toBe(true);
+    expect(feedback.textContent).toContain('Could not check this deployment. Try again.');
+    const before = submit.getBoundingClientRect();
+    await userEvent.click(page.elementLocator(feedback.querySelector<HTMLButtonElement>('button')!));
+    await expect.poll(() => submit.disabled).toBe(false);
+    expect(feedback.textContent).toBe('');
+    expect(submit.getBoundingClientRect().bottom).toBe(before.bottom);
+    expect(submit.getBoundingClientRect().width).toBe(before.width);
+    expect(attempts).toBe(2);
+    expect(api.fetch.mock.calls.filter(([url, options]) => String(url).endsWith('/managed-web-services') && options?.method === 'POST')).toHaveLength(0);
+    expect((await axe.run(panel)).violations.filter(v => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+  });
+
   for (const [width, preset, locale, reducedMotion] of [
     [1120, 'classic-light', 'en-US', false], [360, 'classic-dark', 'zh-CN', true],
     [480, 'classic-light', 'de-DE', false], [1120, 'classic-dark', 'zh-TW', false],
@@ -275,9 +306,8 @@ describe('Web Services product interaction', () => {
     await userEvent.click(page.getByTestId('service-template-primary'));
     const submit = document.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]');
     expect(submit).toBeTruthy();
-    await userEvent.click(page.elementLocator(submit!));
     await expect.poll(() => api.fetch.mock.calls.some(([url]) => String(url).endsWith('/install-plans'))).toBe(true);
-    await settle();
+    await expect.poll(() => submit!.disabled).toBe(false);
     const startedAt = performance.now();
     await userEvent.click(page.elementLocator(submit!));
     await expect.poll(() => host.querySelector('[data-testid="managed-install-submission"]')).toBeTruthy();

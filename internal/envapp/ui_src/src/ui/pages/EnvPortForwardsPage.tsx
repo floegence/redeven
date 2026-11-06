@@ -25,6 +25,7 @@ import { openWebServiceRoute, resolveWebServiceOpenRoute } from '../services/web
 export { resolveWebServiceOpenRoute, type WebServiceOpenRoute } from '../services/webServiceWindows';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { createManagedServiceUpdatePreparation } from './managedServiceUpdatePreparation';
+import { createManagedServiceInstallPreparation } from './managedServiceInstallPreparation';
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ManagedWebEntranceContext } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
@@ -2352,7 +2353,6 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const visibleInstallSubmissions = createMemo(() => installSubmissions().filter(item => !managedState().some(service => service.service_id === item.serviceID) && archiveView() === 'active'));
   let disposed = false;
   onCleanup(() => { disposed = true; });
-	const [installReview, setInstallReview] = createSignal<{ service_id: string; expires_at_unix_ms: number; plan_digest: string; workspace_path: string; fingerprint: string } | null>(null);
 	const [installParameters,setInstallParameters]=createSignal<Record<string,string>>({});
   const [workspacePath, setWorkspacePath] = createSignal('');
   const [managedAccessMode, setManagedAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
@@ -2567,11 +2567,11 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 		return { forward: result.forward, app_path: result.app_path, managed_entrance:result.managed_entrance };
 	};
 
-  let installReviewSession = 0;
+  const [installReviewSession, setInstallReviewSession] = createSignal(0);
   const closeTemplateDrawer = () => {
-    installReviewSession++;
+    setInstallReviewSession(value => value + 1);
     setManagedInstallSubmitting(false);
-	setInstallParameters({});setInstallReview(null);
+	setInstallParameters({});
     setTemplateDrawerOpen(false);
     setTemplateDrawerView('catalog');
     setSelectedTemplateID(null);
@@ -2582,8 +2582,6 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 		setTemplateRecommendationUnavailable(false);
   };
 
-	const installRequest = () => ({ template_id: selectedTemplate()?.template_id, deployment: selectedTemplate()?.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters: {...selectedTemplateRelease()?.parameters, ...installParameters()}, accepted_notice_revisions: acceptedNoticeRevisions(selectedTemplate()?.notices, installNoticeAcceptances()), target_release_id: selectedTemplateRelease()?.candidate.candidate_id });
-	createEffect(() => { const review = installReview(); if (review && review.fingerprint !== JSON.stringify(installRequest())) setInstallReview(null); });
   const acceptInstallReceipt = (submission: ManagedInstallSubmission, result: ManagedInstallReceipt, authority: () => boolean) => {
     if (!authority() || disposed) return;
     if (result.service.service_id !== submission.serviceID || result.operation.service_id !== submission.serviceID || result.operation.action !== 'install') {
@@ -2641,22 +2639,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     const template = selectedTemplate();
     if (!template || managedInstallSubmitting() || !template.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some(service => service.template_id === template.template_id && (service.management_state ?? 'active') === 'active') || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService()) return;
     const authority = managedResource.captureAuthority();
-    const request = installRequest();
-    const review = installReview();
-    const reviewSession = installReviewSession;
-    if (!review) {
-      setManagedInstallSubmitting(true);
-      try {
-        const plan = await fetchLocalApiJSON<{service_id: string; expires_at_unix_ms: number; plan_digest: string; workspace_path: string}>('/_redeven_proxy/api/managed-web-services/install-plans', {method: 'POST', body: JSON.stringify(request)});
-        if (!authority() || disposed || reviewSession !== installReviewSession || JSON.stringify(request) !== JSON.stringify(installRequest())) return;
-        setWorkspacePath(plan.workspace_path);
-        setInstallReview({...plan, fingerprint: JSON.stringify(installRequest())});
-      } catch (error) {
-        if (authority() && !disposed && reviewSession === installReviewSession) notify.error(i18n.t('webServices.notifications.failedToAddTitle'), error instanceof Error ? error.message : String(error));
-      } finally { if (authority() && !disposed && reviewSession === installReviewSession) setManagedInstallSubmitting(false); }
-      return;
-    }
-    if (review.expires_at_unix_ms <= Date.now()) { setInstallReview(null); return; }
+    const prepared = installPreparation.current();
+    if (!prepared) return;
+    const {request, plan: review} = prepared;
+    setManagedInstallSubmitting(true);
     const requestID = managedRequestID();
     const body = JSON.stringify({...request, request_id: requestID, plan_digest: review.plan_digest});
     const secretNames = new Set((template.effective_spec?.parameters ?? template.spec?.parameters ?? []).filter(parameter => parameter.type === 'secret').map(parameter => parameter.name));
@@ -2874,6 +2860,22 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     const template = selectedTemplate();
     return template ? templatePresentation(template) : null;
   });
+  const installSelection = createMemo(() => {
+    const template = selectedTemplate();
+    if (!templateDrawerOpen() || templateDrawerView() !== 'install' || !template?.available || !canManageManagedService() || templateRecommendationUnavailable() || !workspacePath().trim() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances())) return null;
+    const parameters = {...selectedTemplateRelease()?.parameters, ...installParameters()};
+    if ((template.effective_spec?.parameters ?? template.spec?.parameters ?? []).some(parameter => parameter.required && !(parameters[parameter.name] ?? parameter.default ?? '').trim())) return null;
+    return {
+      identity: JSON.stringify([installReviewSession(), managedResource.identity(), ctx.resourceCacheAccess?.().generation, template.template_id, template.revision, template.source_sha256]),
+      request: {template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters, accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()), target_release_id: selectedTemplateRelease()?.candidate.candidate_id},
+    };
+  });
+  const installPreparation = createManagedServiceInstallPreparation(installSelection);
+  const installWorkspacePath = () => installPreparation.workspacePath() ?? workspacePath();
+  const installPreparationError = () => {
+    const error = installPreparation.error();
+    return error instanceof LocalApiError ? managedFailureMessage(error.code, i18n) : error ? i18n.t('webServices.managed.installPreparationFailed') : '';
+  };
   const workspaceUsesRecommendedPath = createMemo(() => {
     const template = selectedTemplate();
     return Boolean(template?.default_workspace_path) && workspacePath() === template?.default_workspace_path;
@@ -3161,7 +3163,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
   const openTemplateCatalog = () => {
-    installReviewSession++;
+    setInstallReviewSession(value => value + 1);
     setManagedInstallSubmitting(false);
     setTemplateDrawerView('catalog');
     setSelectedTemplateID(null);
@@ -3173,14 +3175,13 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
 	const beginTemplateInstall = (template: ManagedCatalogTemplate, preserveRelease = false) => {
     if (!template.available || installedServiceForTemplate(template) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed')) return;
-    installReviewSession++;
+    setInstallReviewSession(value => value + 1);
     setManagedInstallSubmitting(false);
 		if (!preserveRelease) {
 			setSelectedTemplateRelease(null);
 			setTemplateRecommendationUnavailable(false);
 		}
     setSelectedTemplateID(template.template_id);
-		setInstallReview(null);
 		setInstallParameters({});
     setWorkspacePath(template.default_workspace_path);
     setManagedAccessMode(template.default_access_mode || 'unified_proxy');
@@ -4020,7 +4021,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
             <div class="ml-auto flex items-center gap-2">
               <Show when={templateDrawerView() !== 'install'}><Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button></Show>
               <Show when={templateDrawerView() === 'install'}>
-              <Button data-testid="managed-install-submit" size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}><StableText reserve={[i18n.t('webServices.managed.operationStarting'), i18n.t('webServices.managed.installStart'), i18n.t('webServices.management.reviewInstall')]}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : installReview() ? i18n.t('webServices.managed.installStart') : i18n.t('webServices.management.reviewInstall')}</StableText></Button>
+              <Button data-testid="managed-install-submit" size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !installPreparation.current()} aria-busy={installPreparation.loading()}>{i18n.t('webServices.managed.deploy')}</Button>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
                 <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}><StableText reserve={[i18n.t('webServices.managed.savingTemplate'), i18n.t('webServices.managed.saveTemplate')]}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</StableText></Button>
@@ -4087,7 +4088,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                   </div>
                   <div class="service-install-workspace">
                     <FolderOpen class="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span class="min-w-0 break-all font-mono" title={workspacePath()} data-testid="managed-workspace-path" data-path={workspacePath()}>{workspacePath() || i18n.t('webServices.managed.workspacePlaceholder')}</span>
+                    <span class="min-w-0 break-all font-mono" title={installWorkspacePath()} data-testid="managed-workspace-path" data-path={installWorkspacePath()}>{installWorkspacePath() || i18n.t('webServices.managed.workspacePlaceholder')}</span>
                   </div>
                   <Show when={!workspaceUsesRecommendedPath()}>
                     <p class="service-install-warning"><AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{i18n.t('webServices.managed.workspaceCustomDescription')}</p>
@@ -4118,7 +4119,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                   <Show when={(template.notices?.length ?? 0) > 0}><ManagedTemplateNotices presentation="inline" notices={localizedManagedNotices(template.notices, template.localizations, i18n.locale(), template.default_locale)} accepted={installNoticeAcceptances()} disabled={managedInstallSubmitting()} onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances(current => ({...current, [noticeID]: accepted}))} /></Show>
                 </div>
               </Show>
-              <Show when={installReview()}><p role="status" class="service-install-ready"><Check class="h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.installReady')}</p></Show>
+              <div class="service-install-feedback" aria-live="polite">
+                <Show when={installPreparation.loading()}><p role="status" class="text-xs text-muted-foreground">{i18n.t('webServices.managed.installPreparing')}</p></Show>
+                <Show when={installPreparationError()}><div role="alert" class="flex items-start justify-between gap-3 text-xs leading-5 text-destructive"><span>{installPreparationError()}</span><button type="button" class="shrink-0 cursor-pointer underline underline-offset-4" onClick={() => installPreparation.refresh()}>{i18n.t('webServices.managed.retry')}</button></div></Show>
+              </div>
             </div>
           )}</Show>
 

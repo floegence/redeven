@@ -238,7 +238,7 @@
   .service-install-options__body dt { color: var(--floe-ink-soft); margin-bottom: 4px; }
   .service-install-options__body dd { color: var(--foreground); }
   .service-install-notices { display: grid; gap: 16px; padding-top: 4px; }
-  .service-install-ready { display: flex; gap: 7px; align-items: center; color: var(--floe-ink-soft); font-size: 12px; }
+  .service-install-feedback { min-height: 20px; }
   @media (max-width: 639px) { .service-install { gap: 16px; } .service-install-options__body { padding-left: 0; } }
   @media (max-width: 479px) {
     .service-install-footer { flex-wrap: wrap; }

@@ -1737,15 +1737,13 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
 
     expect(controlText(host)).toContain('Container root access and outbound network');
-    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Review installation');
+    const install = host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]');
     expect(install?.disabled).toBe(true);
     host.querySelector<HTMLInputElement>('[data-testid="managed-template-notices"] input[type="checkbox"]')?.click();
     await flushPage();
     expect(install?.disabled).toBe(false);
     expect(controlText(host.querySelector('[data-testid="managed-release-risk-hints"]'))).toContain('cannot be ordered safely');
     expect(host.querySelector('[data-testid="managed-release-risk-hints"] input[type="checkbox"]')).toBeNull();
-    install?.click();
-    await waitForAssertion(() => expect(controlText(install)).toContain('Install and start'));
     install?.click();
 
     await waitForAssertion(() => expect(createBody).toMatchObject({
@@ -1823,7 +1821,7 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Cancel')?.click();
     await flushPage();
 
-    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Review installation');
+    const install = host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]');
     expect(install?.disabled).toBe(true);
     expect(controlText(host)).toContain('The recommended release is unavailable. Refresh and choose an available release.');
 
@@ -1835,15 +1833,12 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     expect(install?.disabled).toBe(false);
     install?.click();
-    await waitForAssertion(() => expect(controlText(install)).toContain('Install and start'));
-    install?.click();
     await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-install-submission"]'))).toContain('The recommended release is unavailable'));
     expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'Review installation')?.click();
     await flushPage();
-    const retry = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'Review installation');
-    retry?.click();
-    await waitForAssertion(() => expect(controlText(retry)).toContain('Install and start'));
+    const retry = host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]');
+    expect(retry?.disabled).toBe(false);
     retry?.click();
     await waitForAssertion(() => expect(createBody).toMatchObject({ template_id: 'example-webtop', target_release_id: 'verified-release' }));
     expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
@@ -1884,14 +1879,77 @@ describe('EnvPortForwardsPage', () => {
       await flushPage();
     };
     const submit = async () => {
-      const review = findButton('Review installation');
-      review.click();
-      await waitForAssertion(() => expect(controlText(review)).toContain('Install and start'));
-      review.click();
+      const deploy = host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
+      await waitForAssertion(() => expect(deploy.disabled).toBe(false));
+      deploy.click();
       await flushPage();
     };
     return {template, receipt, response, open, submit, findButton, setReject: (error: unknown) => { reject = error; }, setLookup: (value: typeof receipt | null) => { lookup = value; }, lookupCalls: () => lookupCalls, posts: () => localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url, init]) => String(url).endsWith('/managed-web-services') && init?.method === 'POST')};
   }
+
+  it('prepares the final workspace automatically and deploys with one confirmation', async () => {
+    const fixture = installHandoffFixture();
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open();
+      await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => String(url).endsWith('/install-plans'))).toHaveLength(1));
+      expect(host.querySelector('[data-testid="managed-workspace-path"]')?.getAttribute('data-path')).toBe(fixture.receipt.service.workspace_path);
+      expect(fixture.posts()).toHaveLength(0);
+      const deploy = host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
+      expect(controlText(deploy)).toBe('Deploy');
+      expect(deploy.disabled).toBe(false);
+      deploy.click();
+      await flushPage();
+      expect(fixture.posts()).toHaveLength(1);
+      expect(JSON.parse(String(fixture.posts()[0][1]?.body))).toMatchObject({workspace_path: fixture.receipt.service.workspace_path, plan_digest: 'reviewed-plan'});
+      expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
+    } finally { dispose(); }
+  });
+
+  it('checks again after input changes and requires a new click to deploy', async () => {
+    const fixture = installHandoffFixture();
+    const pending = deferred<unknown>();
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    let plans = 0;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/install-plans') && ++plans > 1 ? pending.promise : normalFetch(url, init));
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open();
+      const deploy = fixture.findButton('Deploy');
+      const input = host.querySelector<HTMLInputElement>('#install-parameter-display_name')!;
+      input.value = 'Updated name'; input.dispatchEvent(new Event('input', {bubbles: true}));
+      expect(deploy.disabled).toBe(true);
+      deploy.click();
+      await flushPage();
+      expect(fixture.posts()).toHaveLength(0);
+      expect(host.querySelector('[data-testid="managed-workspace-path"]')?.textContent).toBe(fixture.receipt.service.workspace_path);
+      pending.resolve({service_id: 'mws-handoff', expires_at_unix_ms: Date.now() + 60000, plan_digest: 'edited-plan', workspace_path: fixture.receipt.service.workspace_path});
+      await flushPage();
+      expect(fixture.posts()).toHaveLength(0);
+      expect(deploy.disabled).toBe(false);
+      deploy.click();
+      await flushPage();
+      expect(JSON.parse(String(fixture.posts()[0][1]?.body))).toMatchObject({plan_digest: 'edited-plan', parameters: {display_name: 'Updated name'}});
+    } finally { dispose(); }
+  });
+
+  it('waits for required inputs before preparing a deployment', async () => {
+    const fixture = installHandoffFixture();
+    Object.assign(fixture.template.spec.parameters[1], {required: true});
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open();
+      expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => String(url).endsWith('/install-plans'))).toHaveLength(0);
+      expect(fixture.findButton('Deploy').disabled).toBe(true);
+      const input = host.querySelector<HTMLInputElement>('#install-parameter-registry_token')!;
+      input.value = 'user-token'; input.dispatchEvent(new Event('input', {bubbles: true}));
+      await flushPage();
+      expect(fixture.findButton('Deploy').disabled).toBe(false);
+      expect(fixture.posts()).toHaveLength(0);
+      input.value = ''; input.dispatchEvent(new Event('input', {bubbles: true}));
+      expect(fixture.findButton('Deploy').disabled).toBe(true);
+    } finally { dispose(); }
+  });
 
   it('keeps real operation details available while the full service view is delayed', async () => {
     const fixture = installHandoffFixture();
@@ -1939,7 +1997,7 @@ describe('EnvPortForwardsPage', () => {
       fixture.findButton('Review installation').click(); await flushPage();
       expect(host.querySelector<HTMLInputElement>('#install-parameter-display_name')?.value).toBe('My dashboard');
       expect(host.querySelector<HTMLInputElement>('#install-parameter-registry_token')?.value).toBe('');
-      expect(fixture.findButton('Review installation')).toBeTruthy();
+      expect(fixture.findButton('Deploy')).toBeTruthy();
       expect(fixture.posts()).toHaveLength(1);
     } finally { dispose(); }
   });
@@ -1977,17 +2035,18 @@ describe('EnvPortForwardsPage', () => {
     const fixture = installHandoffFixture();
     const oldPlan = deferred<{service_id: string; expires_at_unix_ms: number; plan_digest: string; workspace_path: string}>();
     const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
-    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/install-plans') ? oldPlan.promise : normalFetch(url, init));
+    let planRequests = 0;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/install-plans') && planRequests++ === 0 ? oldPlan.promise : normalFetch(url, init));
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await flushPage(); await fixture.open();
-      fixture.findButton('Review installation').click(); await flushPage();
+      expect(fixture.findButton('Deploy').disabled).toBe(true);
       host.querySelector<HTMLButtonElement>('[data-testid="env-app-drawer-close"]')!.click(); await flushPage();
       await fixture.open();
       oldPlan.resolve({service_id: 'old-service', expires_at_unix_ms: Date.now() + 60000, plan_digest: 'old-plan', workspace_path: '/Users/demo/Services/old-plan'});
       await flushPage();
-      expect(fixture.findButton('Review installation').disabled).toBe(false);
-      expect(host.querySelector('[data-testid="managed-workspace-path"]')?.getAttribute('data-path')).toBe(fixture.template.default_workspace_path);
+      expect(fixture.findButton('Deploy').disabled).toBe(false);
+      expect(host.querySelector('[data-testid="managed-workspace-path"]')?.getAttribute('data-path')).toBe(fixture.receipt.service.workspace_path);
       expect(fixture.posts()).toHaveLength(0);
     } finally { dispose(); }
   });
@@ -2050,10 +2109,9 @@ describe('EnvPortForwardsPage', () => {
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
       await flushPage();
 
-      const review = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Review installation');
-      review?.click();
-      await waitForAssertion(() => expect(controlText(review)).toContain('Install and start'));
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim().startsWith('Install'))?.click();
+      const deploy = host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
+      expect(deploy.disabled).toBe(false);
+      deploy.click();
 
       await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services', expect.objectContaining({ method: 'POST' })));
       await flushMicrotasks();
