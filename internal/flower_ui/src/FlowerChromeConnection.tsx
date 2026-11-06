@@ -3,8 +3,9 @@ import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerChromeDiagnostic, FlowerChromeStatus, FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
 
-import { FolderOpen, ChevronRight, Info } from '@floegence/floe-webapp-core/icons';
+import { FolderOpen, ChevronRight, ExternalLink, Info } from '@floegence/floe-webapp-core/icons';
 import { FlowerChromeGuideVisual } from './FlowerChromeGuideVisual';
+import { FlowerComputerBrandIcon } from './FlowerComputerIdentity';
 import { FlowerChromeReadiness } from './FlowerChromeReadiness';
 import { chromeConnectionDiagnostic, chromeConnectionError } from './chromeConnectionDiagnostic';
 
@@ -170,25 +171,31 @@ export function FlowerChromeConnection(props: {
     </ol></Show>
     <Show when={setup() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'continue' && diagnostic()?.stage !== 'prepare'}>
       <Show when={step() === 'install'} fallback={<>
-        <div class="flower-chrome-guide-scene"><FlowerChromeGuideVisual mode="connect" copy={props.copy} chromium={selectedInstallation()?.kind !== 'google_chrome'} /><h3>{props.copy.setupConnectTitle}</h3></div>
+        <div class="flower-chrome-guide-scene"><FlowerChromeGuideVisual chromium={selectedInstallation()?.kind !== 'google_chrome'} /><h3>{props.copy.setupConnectTitle}</h3></div>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('install')}>{props.copy.setupBack}</Button>
           <Show when={manualDesktop()} fallback={<Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>}><Button onClick={copyConnection}><StableText reserve={[props.copy.chromeConnectionLinkCopied, props.copy.chromeCopyConnectionLink]}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</StableText></Button></Show>
         </div>
       </>}>
-        <Show when={extensionsOpened()} fallback={<div class="flower-chrome-guide-scene"><FlowerChromeGuideVisual mode="intro" copy={props.copy} chromium={selectedInstallation()?.kind !== 'google_chrome'} /><p class="flower-computer-description">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p></div>}>
-          <div class="flower-chrome-guide-scene">
-            <FlowerChromeGuideVisual mode="install" copy={props.copy} chromium={selectedInstallation()?.kind !== 'google_chrome'} />
-            <div class="flower-chrome-guide-instructions"><p><span class="flower-chrome-guide-number" aria-hidden="true">1</span>{props.copy.setupDeveloperMode}</p></div>
-            <div class="flower-chrome-guide-folder-action"><span class="flower-chrome-guide-number" aria-hidden="true">2</span><div><p>{props.copy.setupDragTitle}</p><span title={setup()?.extension_path}>{setup()?.extension_home_path.at(-1)}</span></div><Button size="sm" variant="outline" icon={FolderOpen} disabled={opening() || manualDesktop()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button></div>
-          </div>
+        <Show when={extensionsOpened()} fallback={<div class="flower-chrome-guide-scene"><FlowerChromeGuideVisual chromium={selectedInstallation()?.kind !== 'google_chrome'} /><p class="flower-computer-description">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p></div>}>
+          <ol class="flower-chrome-install-actions" aria-label={props.copy.setupInstallTitle} data-floe-surface="raised">
+            <li class="flower-chrome-install-action" data-action="extensions" data-floe-surface-divider>
+              <span class="flower-chrome-install-icon"><FlowerComputerBrandIcon kind={selectedInstallation()?.kind === 'google_chrome' ? 'chrome' : 'chromium'} /></span>
+              <div class="flower-chrome-install-copy"><h3>{props.copy.setupDeveloperMode}</h3><span>chrome://extensions</span></div>
+              <Button size="sm" variant="outline" icon={ExternalLink} disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>
+            </li>
+            <li class="flower-chrome-install-action" data-action="folder" data-floe-surface-divider>
+              <span class="flower-chrome-install-icon"><FolderOpen aria-hidden="true" /></span>
+              <div class="flower-chrome-install-copy"><h3>{props.copy.setupDragTitle}</h3><span title={setup()?.extension_path}>{setup()?.extension_home_path.at(-1)}</span></div>
+              <Button size="sm" variant="outline" icon={FolderOpen} disabled={opening() || manualDesktop()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
+            </li>
+          </ol>
         </Show>
-        <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flower-chrome-install-footer">
           <Show when={extensionsOpened()} fallback={<>
             <Show when={!updateRequired()}><Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupAlreadyInstalled}</Button></Show>
             <Button disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>
           </>}>
-            <Button size="sm" variant="ghost" disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>
             <Button disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupInstalled}</Button>
           </Show>
         </div>

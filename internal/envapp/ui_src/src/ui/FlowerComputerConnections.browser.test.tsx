@@ -232,11 +232,17 @@ for (const [locale, copy, platform, dark] of [
       expect(dialog().innerText).toContain(copy.setupDragTitle);
       expect(dialog().innerText).not.toContain(copy.setupDragFolderHint);
       expect(dialog().innerText).not.toContain(copy.setupInstallDone);
-      expect(dialog().querySelector('[data-guide-visual="install"]')).not.toBeNull();
-      expect(dialog().querySelector('.flower-chrome-guide-folder-action')?.textContent).toContain('Flower Browser 123456789abcdef0');
+      expect(dialog().querySelector('.flower-chrome-guide-target, .flower-chrome-guide-toggle, [data-guide-visual="install"]')).toBeNull();
+      expect(dialog().querySelectorAll('.flower-chrome-install-action')).toHaveLength(2);
+      expect(dialog().querySelector('.flower-chrome-install-action[data-action="folder"]')?.textContent).toContain('Flower Browser 123456789abcdef0');
       expect(button(copy.copyExtensionPath).checkVisibility()).toBe(false);
       expect(dialog().innerText).not.toContain(copy.setupFolderHint);
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-install.png` });
+      expect(button(copy.openExtensions).closest('[data-action="extensions"]')).not.toBeNull();
+      button(copy.openExtensions).focus(); await userEvent.keyboard('{Enter}');
+      await waitFor(() => !button(copy.openExtensions).disabled);
+      expect(management.openExtension).toHaveBeenLastCalledWith('extensions', 'browser-aaaaaaaaaaaaaaaaaaaaaaaa');
+      expect(button(copy.openExtensionFolder).closest('[data-action="folder"]')).not.toBeNull();
       button(copy.openExtensionFolder).focus(); await userEvent.keyboard('{Enter}');
       await waitFor(() => !button(copy.openExtensionFolder).disabled);
       expect(management.openExtension).toHaveBeenLastCalledWith('folder', 'browser-aaaaaaaaaaaaaaaaaaaaaaaa');
@@ -262,7 +268,7 @@ for (const [locale, copy, platform, dark] of [
       expect(dialog().scrollWidth).toBeLessThanOrEqual(dialog().clientWidth + 1);
       const content = dialog().querySelector<HTMLElement>('.flower-computer-content')!;
       expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
-      for (const element of dialog().querySelectorAll<HTMLElement>('.flower-chrome-guide-window, .flower-chrome-guide-folder-action, button')) {
+      for (const element of dialog().querySelectorAll<HTMLElement>('.flower-chrome-install-action, button')) {
         if (!element.checkVisibility()) continue;
         expect(element.scrollWidth, element.className).toBeLessThanOrEqual(element.clientWidth + 1);
         expect(element.getBoundingClientRect().right, element.className).toBeLessThanOrEqual(content.getBoundingClientRect().right);
@@ -272,7 +278,7 @@ for (const [locale, copy, platform, dark] of [
       button(copy.setupInstalled).click();
       expect(continued).not.toHaveBeenCalled();
       button(copy.openConnection).click();
-      await waitFor(() => management.openExtension.mock.calls.length === 4);
+      await waitFor(() => management.openExtension.mock.calls.length === 5);
       await waitFor(() => dialog().querySelector('[role="status"]')?.textContent === copy.setupConfirming);
       expect(continued).not.toHaveBeenCalled();
       expect(primary()).toHaveLength(1);
@@ -306,7 +312,7 @@ it('routes an incompatible installed extension back to update without continuing
   expect(continued).not.toHaveBeenCalled();
   button(computerUseEnUS.openExtensions).click();
   await waitFor(() => !!button(computerUseEnUS.setupInstalled));
-  expect(host.querySelector('.flower-chrome-guide-folder-action')?.textContent).toContain('Flower Browser fixture');
+  expect(host.querySelector('.flower-chrome-install-action[data-action="folder"]')?.textContent).toContain('Flower Browser fixture');
   button(computerUseEnUS.setupInstalled).click();
   loadExtensionStatus.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] });
   button(computerUseEnUS.openConnection).click();

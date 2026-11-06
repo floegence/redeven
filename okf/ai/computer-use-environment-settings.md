@@ -16,7 +16,7 @@ The overview identifies the actual Runtime hostname and platform, followed by on
 
 The browser page presents connected profiles with their actual Chrome/Chromium marks, inline connection status, and a shared connect/refresh action row. Refresh retains the previous observed profiles until the response arrives. Disconnected states expose the connection action, while genuine diagnostics remain visible. Pairing details, permissions explanations and advanced connection controls use secondary disclosure. Both carriers bundle unchanged, hash-pinned theSVG browser and operating-system marks; unknown identities remain generic. Layout uses published Floe surfaces and tokens, reflows at narrow widths, and reserves asynchronous action geometry.
 
-Extension setup uses a noninteractive browser illustration to locate Developer mode and show the folder-drag direction. Short numbered instructions and explicit open actions remain accessible; paths, alternate installation and longer explanations stay in Help. Illustrations never simulate a real browser control or claim installation success.
+Extension installation presents two compact action rows: open the real browser Extensions page, then reveal the prepared folder in the host file manager. Instructions explicitly place Developer mode and folder dragging in the browser. Settings must not render simulated drop targets, browser switches or draggable folders; decorative brand marks imply no interaction. Paths, alternate installation and longer explanations stay in Help. Opening a page or folder is not installation evidence; only the existing browser handshake can confirm a connection.
 
 Both carriers provide complete explicit localized copy.
 

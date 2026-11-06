@@ -163,7 +163,7 @@ for (const width of [1000, 390]) {
     expect(readiness.getBoundingClientRect().height).toBeLessThan(260);
     expect(dialog.innerText).toContain(localized.setupDeveloperMode);
     expect(dialog.innerText).toContain(localized.setupDragTitle);
-    expect(dialog.querySelector('.flower-chrome-guide-folder-action')?.textContent).toContain('Flower Browser fixture');
+    expect(dialog.querySelector('.flower-chrome-install-action[data-action="folder"]')?.textContent).toContain('Flower Browser fixture');
     expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
     if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/chrome-readiness-setup-${width}.png` });
   });

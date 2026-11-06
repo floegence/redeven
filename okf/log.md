@@ -1,5 +1,6 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Replace misleading simulated installation controls with real host actions in [Browser and desktop settings](ai/computer-use-environment-settings.md).
 - 2026-11-05: Refined [Browser and desktop settings](ai/computer-use-environment-settings.md) with grouped environment controls, focused connection rows, pinned browser/platform marks and on-demand target discovery.
 
 - 2026-11-05: Clarify [computer script output](ai/computer-use-scripts.md) with an emitted snapshot example, structured logging and on-demand result/truncation scopes; keep independent budgets and remove prescriptive layout-recovery diagnostics.
