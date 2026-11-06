@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-ComputerUseRuntime owns discovery/selection over product settings. Users describe work; Flower locates page/window without mandatory settings binding. Selection is working position, not authority. Stale/disconnected/occupied targets fail explicitly while retaining previous selection.
+ComputerUseRuntime owns discovery/selection through Flower's computer tools. Users describe work; Flower locates the page/window. Product settings expose no manual target picker or endpoint-to-picker route. Selection is working position, not authority. Stale/disconnected/occupied targets fail explicitly while retaining previous selection.
 
 # Contract
 
@@ -26,7 +26,7 @@ A changed title/URL requires fresh discovery rather than a silent substitute.
 ## Default work and explicit switching
 For `current`, the Runtime reads the thread's `computer_target_id`. An existing selection must still resolve to that exact resource.
 
-Empty, failed and pending inventory reads retain cancellation, return and close controls.
+Environment settings never bind or replace the current target. Their access controls manage grants independently of Flower's target selection.
 
 ## Persistence and fork
 The migrated product store remains the only selection store.

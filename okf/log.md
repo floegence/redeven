@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Remove manual page/application selection from [Browser and desktop settings](ai/computer-use-environment-settings.md); keep target discovery with Flower, use Chromium identity and align full-row settings navigation.
+
 - 2026-11-05: Consume canonical Floret control guidance and remove the unused
   host ask-user schema. Verify final provider requests and interaction history.
 

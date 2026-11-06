@@ -1,6 +1,7 @@
 import { createEffect, createSignal, on, onCleanup, Show } from 'solid-js';
 import { Button, Switch } from '@floegence/floe-webapp-core/ui';
-import { Check, Download, Upload, Sparkles } from '@floegence/floe-webapp-core/icons';
+import { Check, Download, Upload } from '@floegence/floe-webapp-core/icons';
+import { FlowerComputerBrandIcon } from './FlowerComputerIdentity';
 import type { FlowerBrowserInstallationSnapshot, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 
@@ -99,7 +100,7 @@ export function FlowerManagedBrowser(props: {
   } as Record<string, string>)[status()?.state ?? ''] ?? props.copy.checking;
   return <section class="flower-browser-install" aria-label={props.copy.managed}>
     <div class="flower-browser-enable-row" data-floe-surface="raised">
-      <span class="flower-computer-capability-icon" data-kind="managed" aria-hidden="true"><Sparkles /></span>
+      <span class="flower-computer-capability-icon" aria-hidden="true"><FlowerComputerBrandIcon kind="chromium" /></span>
       <div><h3>{props.copy.browserEnable}</h3><p>{status()?.enabled === false ? props.copy.browserDisabledHint : props.copy.browserEnabledHint}</p></div>
       <Switch aria-label={props.copy.browserEnable} checked={status()?.enabled ?? true}
         disabled={!props.canMutate || saving() || !status()} onChange={enabled => void setEnabled(enabled)} />

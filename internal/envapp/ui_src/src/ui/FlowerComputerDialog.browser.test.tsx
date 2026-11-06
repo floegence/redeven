@@ -9,7 +9,6 @@ import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core'
 import { FlowerComputerConnections } from '../../../../flower_ui/src/FlowerComputerConnections';
 import zhCN from './i18n/locales/catalogs/zh-CN.json';
 import deDE from './i18n/locales/catalogs/de-DE.json';
-import ruRU from './i18n/locales/catalogs/ru-RU.json';
 import zhTW from './i18n/locales/catalogs/zh-TW.json';
 import { computerUseEnUS as copy, type FlowerComputerCopy } from '../../../../flower_ui/src/computerUseCopy';
 import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerCapability, FlowerComputerEnvironment } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -20,13 +19,7 @@ const waitFor = async (predicate: () => boolean) => {
   await vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 3000 });
 };
 const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === text)!;
-const radios = () => [...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
 const environment: FlowerComputerEnvironment = { hostname: 'Work Mac', platform: 'darwin', managed: { state: 'on_demand' }, desktop: { state: 'permission_required', reason: 'screen_recording_required' }, chrome: { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [] } };
-const manyTargets = () => [
-  { candidate_ref: 'new', target_id: '', kind: 'browser.connected', display_name: 'Chrome', profile_name: 'Chrome', new_tab: true, state: 'ready' },
-  ...Array.from({ length: 40 }, (_, index) => ({ candidate_ref: `page-${index}`, target_id: `page-${index}`, kind: 'browser.connected', display_name: 'Chrome', profile_name: 'Chrome', title: ['DeepSeek', 'floegence/floebrowser', 'API console', 'Project dashboard'][index % 4], url: `https://example.test/workspace/project-${index}/overview`, state: index === 2 ? 'in_use' : 'ready' })),
-  { candidate_ref: 'notes', target_id: 'notes', kind: 'desktop.window', display_name: 'Notes — Project plan', app_bundle_id: 'com.apple.Notes', state: 'ready' },
-];
 function mount(options: { current?: string; fullAccess?: boolean; readonly?: boolean; connectionOnly?: boolean; copy?: FlowerComputerCopy; environment?: FlowerComputerEnvironment } = {}) {
   const management = {
     loadEnvironment: vi.fn().mockResolvedValue(options.environment ?? environment),
@@ -58,8 +51,7 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
   dispose = () => { stop(); host.remove(); };
   return { management, setThread, setOpen, onContinue, onInstallDesktopWithFlower, editPermission };
 }
-async function ready() { await waitFor(() => !!button(copy.switchTarget) && !button(copy.switchTarget).disabled); }
-async function picker() { button(copy.switchTarget).click(); await waitFor(() => radios().length > 0 && !radios()[0].disabled); }
+async function ready() { await waitFor(() => !!button(copy.browserSettings) && !button(copy.browserSettings).disabled); }
 
 for (const width of [1000, 390]) {
   it(`hands missing Ubuntu desktop components to Flower at ${width}px`, async () => {
@@ -144,7 +136,7 @@ for (const width of [1000, 390]) {
     const chrome = { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
       diagnostic: { stage: 'open' as const, reason: 'desktop_session_unavailable' } };
     const { management } = mount({ copy: localized, environment: { ...environment, hostname: 'udesk26', platform: 'linux', chrome } });
-    await waitFor(() => !!button(localized.switchTarget) && !button(localized.switchTarget).disabled);
+    await waitFor(() => !!button(localized.browserSettings) && !button(localized.browserSettings).disabled);
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const card = [...dialog.querySelectorAll('section')].find(item => item.querySelector('h4')?.textContent === localized.chromeTitle)!;
     card.querySelector('button')!.click();
@@ -169,115 +161,56 @@ for (const width of [1000, 390]) {
   });
 }
 
-it('keeps a long picker compact with search and confirmation outside the list scroll', async () => {
-  await page.viewport(1280, 900);
-  const { management } = mount({ current: 'page-0' });
-  management.listCandidates.mockResolvedValue({ current_target_id: 'page-0', candidates: manyTargets() });
-  await ready(); await picker();
+it('uses Chromium identity and aligned full-row capability actions', async () => {
+  await page.viewport(1100, 900);
+  mount(); await ready();
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
   await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
-  expect(radios()).toHaveLength(42);
-  expect(dialog.getBoundingClientRect().height).toBeLessThanOrEqual(620);
-  const list = dialog.querySelector<HTMLElement>('[role="radiogroup"]')!;
-  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
-  const search = dialog.querySelector<HTMLInputElement>('input[type="search"]')!;
-  const searchTop = search.getBoundingClientRect().top;
-  const confirmTop = button(copy.confirmTarget).getBoundingClientRect().top;
-  list.scrollTop = list.scrollHeight;
-  await new Promise(resolve => requestAnimationFrame(resolve));
-  expect(search.getBoundingClientRect().top).toBe(searchTop);
-  expect(button(copy.confirmTarget).getBoundingClientRect().top).toBe(confirmTop);
-  expect(dialog.querySelector<HTMLElement>('.flower-computer-content')!.scrollTop).toBe(0);
-  radios().at(-1)!.click();
-  expect(management.selectCandidate).not.toHaveBeenCalled();
-  expect(button(copy.confirmTarget).disabled).toBe(false);
-});
-
-it('filters directly to applications, combines search, and preserves an explicit staged choice', async () => {
-  const { management } = mount({ current: 'page-0' });
-  management.listCandidates.mockResolvedValue({ current_target_id: 'page-0', candidates: manyTargets() });
-  await ready(); await picker();
-  const filters = [...document.querySelectorAll<HTMLButtonElement>('.flower-computer-picker-filters button')];
-  expect(filters.map(item => item.textContent)).toEqual([`${copy.allTargets}42`, `${copy.targetPages}41`, `${copy.targetApps}1`]);
-  filters[2].click();
-  expect(radios()).toHaveLength(1);
-  expect(radios()[0].value).toBe('notes');
-  radios()[0].focus(); await userEvent.keyboard(' ');
-  expect(document.querySelector('.flower-computer-picker-selection')?.textContent).toBe('Notes — Project plan');
-  filters[1].click();
-  expect(radios()).toHaveLength(41);
-  expect(radios().find(item => item.value === 'page-2')!.disabled).toBe(true);
-  expect(document.querySelector('.flower-computer-target-current')?.textContent).toBe(copy.currentTarget);
-  const search = document.querySelector<HTMLInputElement>('input[type="search"]')!;
-  search.value = 'project-39'; search.dispatchEvent(new Event('input', { bubbles: true }));
-  expect(radios()).toHaveLength(1);
-  expect(radios()[0].value).toBe('page-39');
-  filters[2].click();
-  expect(radios()).toHaveLength(0);
-  expect(document.body.textContent).toContain(copy.noMatchingTargets);
-  expect(management.selectCandidate).not.toHaveBeenCalled();
-  button(copy.confirmTarget).click();
-  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
-  expect(management.selectCandidate).toHaveBeenCalledWith('thread', 'notes');
-});
-
-for (const [locale, labels, width, dark] of [['zh-CN', zhCN.flowerSurface.computer, 1280, false], ['zh-CN-dark', zhCN.flowerSurface.computer, 1280, true], ['de-DE-mobile', deDE.flowerSurface.computer, 390, false], ['ru-RU-mobile', ruRU.flowerSurface.computer, 390, false]] as const) {
-  it(`keeps dense target rows and fixed actions readable in ${locale}`, async () => {
-    await page.viewport(width, 800); document.documentElement.classList.toggle('dark', dark);
-    const { management } = mount({ copy: labels, current: 'page-0' });
-    management.listCandidates.mockResolvedValue({ current_target_id: 'page-0', candidates: manyTargets() });
-    await waitFor(() => !!button(labels.switchTarget) && !button(labels.switchTarget).disabled);
-    button(labels.switchTarget).click();
-    await waitFor(() => radios().length === 42 && !radios()[0].disabled);
-    radios()[2].click();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
-    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
-    const content = dialog.querySelector<HTMLElement>('.flower-computer-content')!;
-    expect(content.scrollHeight).toBeLessThanOrEqual(content.clientHeight + 1);
-    const filters = dialog.querySelector<HTMLElement>('.flower-computer-picker-filters')!;
-    expect(filters.scrollWidth).toBeLessThanOrEqual(filters.clientWidth + 1);
-    for (const filter of filters.querySelectorAll('button')) {
-      const [label, count] = filter.querySelectorAll('span');
-      expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(20);
-      expect(count.getBoundingClientRect().left).toBeGreaterThan(label.getBoundingClientRect().right);
-      expect(Math.abs(count.getBoundingClientRect().top - label.getBoundingClientRect().top)).toBeLessThanOrEqual(3);
-    }
-    for (const row of dialog.querySelectorAll<HTMLElement>('.flower-computer-target')) {
-      expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
-      expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(width === 390 ? 64 : 48);
-    }
-    const first = dialog.querySelector<HTMLElement>('.flower-computer-target')!;
-    expect(getComputedStyle(first).cursor).toBe('pointer');
-    expect(button(labels.confirmTarget).getBoundingClientRect().bottom).toBeLessThanOrEqual(800);
-    expect(button(labels.confirmTarget).disabled).toBe(false);
-    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/compact-picker-${locale}.png` });
-  });
-}
-
-it('gives capability actions visible button boundaries before hover', async () => {
-  mount(); await ready();
-  const actions = [...document.querySelectorAll<HTMLButtonElement>('button')]
-    .filter(item => [copy.browserSettings, copy.manage, copy.details].includes(item.textContent?.trim() ?? ''));
-  expect(actions).toHaveLength(3);
-  for (const action of actions) {
-    const style = getComputedStyle(action);
-    expect(parseFloat(style.borderTopWidth)).toBeGreaterThanOrEqual(1);
-    expect(style.borderTopStyle).toBe('solid');
-    expect(style.cursor).toBe('pointer');
-    expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+  const rows = [...document.querySelectorAll<HTMLElement>('.flower-computer-capability')];
+  expect(rows).toHaveLength(3);
+  expect(rows[0].querySelector('[data-computer-brand="chromium"]')).toBeTruthy();
+  expect(rows[1].querySelector('[data-computer-brand="chrome"]')).toBeTruthy();
+  const states = rows.map(row => row.querySelector<HTMLElement>('.flower-computer-status')!);
+  const stateBounds = states.map(state => state.getBoundingClientRect());
+  expect(Math.max(...stateBounds.map(rect => rect.left)) - Math.min(...stateBounds.map(rect => rect.left))).toBeLessThan(1);
+  for (const [index, row] of rows.entries()) {
+    const action = row.querySelector<HTMLButtonElement>('button')!;
+    const bounds = row.getBoundingClientRect();
+    const actionBounds = action.getBoundingClientRect();
+    expect(actionBounds.width).toBeCloseTo(bounds.width, 0);
+    expect(Math.abs(actionBounds.height - bounds.height)).toBeLessThanOrEqual(1);
+    expect(getComputedStyle(action).cursor).toBe('pointer');
+    expect(getComputedStyle(states[index]).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(Math.abs(stateBounds[index].top + stateBounds[index].height / 2 - (bounds.top + bounds.height / 2))).toBeLessThan(1);
   }
+  button(copy.browserSettings).focus();
+  expect(button(copy.browserSettings).matches(':focus-visible')).toBe(true);
+  expect(getComputedStyle(button(copy.browserSettings)).outlineStyle).toBe('solid');
+  await userEvent.keyboard('{Enter}');
+  await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('data-flower-computer-panel') === 'managed');
+  expect(document.querySelector('.flower-computer-title [data-computer-brand="chromium"]')).toBeTruthy();
+  button(copy.back).click();
+  await userEvent.click(button(copy.manage));
+  expect(document.querySelector('[data-flower-computer-panel]')?.getAttribute('data-flower-computer-panel')).toBe('chrome');
+  button(copy.back).click();
+  button(copy.details).focus();
+  await userEvent.keyboard(' ');
+  expect(document.querySelector('[data-flower-computer-panel]')?.getAttribute('data-flower-computer-panel')).toBe('diagnostics');
 });
 
 it('keeps conversation state out of settings without changing the selection', async () => {
   const { management } = mount();
   await ready();
+  expect(button(copy.switchTarget)).toBeUndefined();
+  expect(button(copy.advanced)).toBeUndefined();
+  expect(document.querySelector('[role="radiogroup"]')).toBeNull();
   expect(document.querySelector('.flower-computer-selection')).toBeNull();
   expect(document.body.textContent).not.toContain(copy.currentMissing);
   expect(document.body.textContent).not.toContain(copy.automaticHint);
   expect(document.body.textContent).toContain('Work Mac');
   expect(document.body.textContent).toContain(copy.chromeOffline);
   expect(management.selectCandidate).not.toHaveBeenCalled();
+  expect(management.discoverBrowser).not.toHaveBeenCalled();
   expect(management.loadAccess).not.toHaveBeenCalled();
   expect(management.listCandidates).not.toHaveBeenCalled();
 });
@@ -291,62 +224,6 @@ it('returns a remote user to chat without selecting a replacement or resuming a 
   expect(onContinue).not.toHaveBeenCalled();
 });
 
-for (const width of [1000, 390]) {
-  for (const outcome of ['empty', 'failed', 'pending'] as const) {
-    it(`keeps recovery and exits usable with a ${outcome} target list at ${width}px`, async () => {
-      await page.viewport(width, 800);
-      const { management, setOpen, onContinue } = mount(); await ready();
-      const originalInventory = await management.listCandidates('thread');
-      management.listCandidates.mockClear();
-      if (outcome === 'empty') management.listCandidates.mockResolvedValue({ current_target_id: 'lost-page', candidates: [] });
-      else if (outcome === 'failed') management.listCandidates.mockRejectedValue(new Error('private inventory error'));
-      else management.listCandidates.mockImplementation(() => new Promise(() => undefined));
-      button(copy.switchTarget).click();
-      await waitFor(() => !!button(copy.cancel));
-      if (outcome !== 'pending') await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
-      if (outcome === 'empty') expect(document.body.textContent).toContain(copy.noTargets);
-      if (outcome === 'failed') expect(document.body.textContent).toContain(copy.loadFailed);
-      expect(document.body.textContent).not.toContain('private inventory error');
-      expect(button(copy.confirmTarget).disabled).toBe(true);
-      expect(button(copy.cancel).disabled).toBe(false);
-      expect(button(copy.refresh).disabled).toBe(outcome === 'pending');
-      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-      await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
-      expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
-      const cancelBounds = button(copy.cancel).getBoundingClientRect();
-      expect(cancelBounds.left).toBeGreaterThanOrEqual(0);
-      expect(cancelBounds.bottom).toBeLessThanOrEqual(800);
-      button(copy.cancel).click();
-      expect(button(copy.close).disabled).toBe(false);
-      if (outcome === 'failed') {
-        management.listCandidates.mockResolvedValue(originalInventory);
-        button(copy.switchTarget).click();
-        await waitFor(() => radios().length > 0 && !radios()[0].disabled);
-        button(copy.cancel).click();
-      }
-      button(copy.close).click();
-      await waitFor(() => !document.querySelector('[data-flower-computer-panel]'));
-      setOpen(true);
-      await waitFor(() => !!document.querySelector('[data-flower-computer-panel]'));
-      const close = document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!;
-      expect(close.disabled).toBe(false);
-      close.click();
-      await waitFor(() => !document.querySelector('[data-flower-computer-panel]'));
-      expect(management.selectCandidate).not.toHaveBeenCalled();
-      expect(onContinue).not.toHaveBeenCalled();
-    });
-  }
-}
-
-it('keeps close available while a replacement selection is pending', async () => {
-  const { management } = mount(); await ready(); await picker();
-  management.selectCandidate.mockImplementation(() => new Promise(() => undefined));
-  radios()[0].click(); button(copy.confirmTarget).click();
-  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
-  const close = document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!;
-  expect(close.disabled).toBe(false); close.click();
-  await waitFor(() => !document.querySelector('[data-flower-computer-panel]'));
-});
 it('explains the headless browser before offering optional account groups', async () => {
   const { management } = mount(); await ready(); button(copy.browserSettings).click();
   await waitFor(() => !!document.querySelector('details'));
@@ -363,28 +240,9 @@ it('explains the headless browser before offering optional account groups', asyn
   expect(details.textContent).toContain(copy.profileIsolationHint);
   expect(management.createManagedProfile).not.toHaveBeenCalled();
 });
-it('stages a page choice until confirmation and cancels without binding it', async () => {
+it('saves grants only on explicit confirmation without selecting a target', async () => {
   const { management } = mount({ current: '' });
-  await ready(); await picker(); radios()[0].click();
-  expect(management.selectCandidate).not.toHaveBeenCalled();
-  button(copy.cancel).click();
-  expect(management.selectCandidate).not.toHaveBeenCalled();
-  expect(document.querySelector('.flower-computer-selection')).toBeNull();
-  await picker();
-  expect(radios().every(radio => !radio.checked)).toBe(true);
-  radios()[0].click(); button(copy.confirmTarget).click();
-  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
-  expect(management.selectCandidate).toHaveBeenCalledWith('thread', 'next');
-  expect(management.saveAccess).not.toHaveBeenCalled();
-});
-it('supports grouped search and saves grants only on explicit confirmation', async () => {
-  const { management } = mount({ current: '' });
-  await ready(); await picker();
-  const search = document.querySelector<HTMLInputElement>('input[type="search"]')!;
-  search.value = 'Notes'; search.dispatchEvent(new Event('input', { bubbles: true }));
-  expect(radios()).toHaveLength(1);
-  expect(radios()[0].closest('label')?.textContent).toContain('Notes');
-  button(copy.cancel).click(); button(copy.permissions).click();
+  await ready(); button(copy.permissions).click();
   await waitFor(() => !!button(copy.grantRequested) && !button(copy.grantRequested).disabled);
   button(copy.grantRequested).click(); expect(management.saveAccess).not.toHaveBeenCalled();
   button(copy.save).click();
@@ -393,6 +251,7 @@ it('supports grouped search and saves grants only on explicit confirmation', asy
   await waitFor(() => !button(copy.revokeAll).disabled); button(copy.revokeAll).click();
   await waitFor(() => management.saveAccess.mock.calls.length === 2);
   expect(management.saveAccess).toHaveBeenLastCalledWith('thread', { origins: [], apps: [], allow_foreground: false });
+  expect(management.selectCandidate).not.toHaveBeenCalled();
 });
 it('discards late access results across threads and still permits read-only inspection', async () => {
   const { management, setThread } = mount({ readonly: true });
@@ -435,33 +294,6 @@ it('keeps full access separate from system permission and uses the existing mode
   await waitFor(() => !button(copy.editPermissions).disabled);
   button(copy.editPermissions).click(); expect(editPermission).toHaveBeenCalledTimes(1);
 });
-it('preserves the old page on stale selection and supports keyboard operation at 390px', async () => {
-  await page.viewport(390, 720);
-  const { management } = mount({ current: 'next-page' });
-  management.selectCandidate.mockRejectedValue(Object.assign(new Error('private adapter details'), { code: 'target_selection_stale' }));
-  await ready(); await picker();
-  radios()[1].focus(); await userEvent.keyboard(' ');
-  button(copy.confirmTarget).focus(); await userEvent.keyboard('{Enter}');
-  await waitFor(() => document.querySelector('[role="alert"]')?.textContent === copy.selectionStale);
-  expect(management.selectCandidate).toHaveBeenCalledWith('thread', 'window');
-  expect(document.body.textContent).not.toContain('private adapter details');
-  button(copy.cancel).click();
-  await picker();
-  expect(document.querySelector('.flower-computer-target-current')?.closest('label')?.textContent).toContain('Existing draft');
-  button(copy.cancel).click();
-  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-  expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
-  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
-});
-it('does not select stale inventory after a failed refresh', async () => {
-  const { management } = mount(); await ready();
-  management.listCandidates.mockRejectedValue(new Error('offline'));
-  button(copy.switchTarget).click();
-  await waitFor(() => !!document.querySelector('[role="alert"]'));
-  expect(radios().every(radio => radio.disabled)).toBe(true);
-  expect(button(copy.confirmTarget).disabled).toBe(true);
-  expect(management.selectCandidate).not.toHaveBeenCalled();
-});
 it('only refreshes diagnostics and never creates profiles or configures Chrome', async () => {
   const { management } = mount(); await ready();
   button(copy.details).click(); button(copy.refresh).click();
@@ -472,31 +304,6 @@ it('only refreshes diagnostics and never creates profiles or configures Chrome',
   expect(management.selectCandidate).not.toHaveBeenCalled();
 });
 
-it('allows retrying a private desktop after dependencies were repaired', async () => {
-  const { management } = mount({ environment: { ...environment, platform: 'linux', desktop: { state: 'on_demand' } } });
-  management.listCandidates.mockResolvedValue({ current_target_id: 'lost-page', candidates: [
-    { candidate_ref: 'private', target_id: 'xvfb-main', kind: 'xvfb.desktop', display_name: 'Private desktop', state: 'setup_required' },
-  ] });
-  await ready();
-  button(copy.switchTarget).click();
-  await waitFor(() => radios().length === 1);
-  expect(radios()[0].disabled).toBe(false);
-  radios()[0].click();
-  button(copy.confirmTarget).click();
-  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
-});
-it('discovers advanced pages into the same staged selector without binding', async () => {
-  const { management } = mount(); await ready();
-  management.discoverBrowser.mockResolvedValue({ current_target_id: 'lost-page', candidates: [{ candidate_ref: 'cdp', kind: 'browser.connected', display_name: 'Debug page', state: 'ready' }] });
-  button(copy.advanced).click();
-  const input = document.querySelector<HTMLInputElement>('input[type="url"]')!;
-  input.value = 'http://127.0.0.1:9222'; input.dispatchEvent(new Event('input', { bubbles: true }));
-  button(copy.listTabs).click();
-  await waitFor(() => radios().length === 1 && !radios()[0].disabled);
-  expect(management.discoverBrowser).toHaveBeenCalledWith('thread', 'http://127.0.0.1:9222');
-  radios()[0].click(); button(copy.cancel).click();
-  expect(management.selectCandidate).not.toHaveBeenCalled();
-});
 it('does not resume another conversation when a Chrome guide finishes late', async () => {
   const { management, setThread, onContinue, setOpen } = mount({ connectionOnly: true });
   let finish!: (value: unknown) => void;
@@ -516,7 +323,7 @@ for (const [locale, localizedCopy, width, dark] of [
     await page.viewport(width, 800);
     document.documentElement.classList.toggle('dark', dark);
     const { management } = mount({ copy: localizedCopy });
-    await waitFor(() => !!button(localizedCopy.switchTarget) && !button(localizedCopy.switchTarget).disabled);
+    await waitFor(() => !!button(localizedCopy.browserSettings) && !button(localizedCopy.browserSettings).disabled);
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
     expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
@@ -530,7 +337,16 @@ for (const [locale, localizedCopy, width, dark] of [
     for (const capability of capabilities) {
       expect(capability.scrollWidth).toBeLessThanOrEqual(capability.clientWidth + 1);
       expect(capability.querySelector('button')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(width < 480 ? 44 : 32);
+      const status = capability.querySelector<HTMLElement>('.flower-computer-status')!;
+      expect(getComputedStyle(status).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      if (width < 480) {
+        const text = capability.querySelector('.flower-computer-capability-copy')!.getBoundingClientRect();
+        expect(status.getBoundingClientRect().left).toBeCloseTo(text.left, 0);
+        expect(status.getBoundingClientRect().top).toBeGreaterThanOrEqual(text.bottom);
+      }
     }
+    const chevrons = capabilities.map(item => item.querySelector('.flower-computer-capability-chevron')!.getBoundingClientRect());
+    expect(Math.max(...chevrons.map(rect => rect.right)) - Math.min(...chevrons.map(rect => rect.right))).toBeLessThan(1);
     expect(Math.max(...bounds.map(rect => rect.width)) - Math.min(...bounds.map(rect => rect.width))).toBeLessThan(1);
     expect(bounds[1].top).toBeGreaterThanOrEqual(bounds[0].bottom - 1);
     expect(bounds[2].top).toBeGreaterThanOrEqual(bounds[1].bottom - 1);
@@ -540,10 +356,9 @@ for (const [locale, localizedCopy, width, dark] of [
     if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') {
       await page.screenshot({ element: dialog, path: `__screenshots__/flower-computer-${locale}-${width}.png` });
     }
-    button(localizedCopy.switchTarget).click();
-    await waitFor(() => radios().length > 0 && !radios()[0].disabled);
-    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
-    expect(button(localizedCopy.confirmTarget).getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    expect(button(localizedCopy.switchTarget)).toBeUndefined();
+    expect(button(localizedCopy.advanced)).toBeUndefined();
+    expect(management.listCandidates).not.toHaveBeenCalled();
   });
 }
 
@@ -551,7 +366,7 @@ it('keeps the connected overview and its settings pages balanced in Chinese', as
   await page.viewport(1100, 900);
   const localizedCopy = zhCN.flowerSurface.computer;
   mount({ fullAccess: true, copy: localizedCopy, environment: { ...environment, hostname: 'MacBook-Pro.local', desktop: { state: 'ready' }, chrome: { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'chrome', name: 'Chrome' }] } } });
-  await waitFor(() => !!button(localizedCopy.switchTarget) && !button(localizedCopy.switchTarget).disabled);
+  await waitFor(() => !!button(localizedCopy.browserSettings) && !button(localizedCopy.browserSettings).disabled);
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
   await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
   expect(dialog.textContent).toContain(localizedCopy.connected);
@@ -562,7 +377,7 @@ it('keeps the connected overview and its settings pages balanced in Chinese', as
     if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-computer-polish-${name}.png` });
   };
   await screenshot('zh-CN-overview');
-  for (const [name, action] of [['managed', localizedCopy.browserSettings], ['diagnostics', localizedCopy.details], ['help', localizedCopy.help], ['advanced', localizedCopy.advanced], ['access', localizedCopy.fullAccessTitle]] as const) {
+  for (const [name, action] of [['managed', localizedCopy.browserSettings], ['diagnostics', localizedCopy.details], ['help', localizedCopy.help], ['access', localizedCopy.fullAccessTitle]] as const) {
     button(action).click();
     await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
     expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
@@ -573,26 +388,12 @@ it('keeps the connected overview and its settings pages balanced in Chinese', as
   chromeCard.querySelector('button')!.click();
   await screenshot('zh-CN-chrome');
 });
-it('reconciles a lost selection response by reading inventory without retrying the write', async () => {
-  const { management } = mount({ current: '' }); await ready(); await picker();
-  management.selectCandidate.mockRejectedValue(new Error('response lost'));
-  radios()[0].click(); button(copy.confirmTarget).click();
-  await waitFor(() => document.querySelector('[role="alert"]')?.textContent === copy.selectionFailed);
-  management.listCandidates.mockResolvedValue({ current_target_id: 'next-page', candidates: [{ candidate_ref: 'confirmed', target_id: 'next-page', kind: 'browser.connected', display_name: 'Confirmed page', state: 'ready' }] });
-  button(copy.refresh).click();
-  await waitFor(() => radios().length === 1 && !radios()[0].disabled);
-  button(copy.cancel).click();
-  await picker();
-  expect(document.querySelector('.flower-computer-target-current')?.closest('label')?.textContent).toContain('Confirmed page');
-  expect(management.selectCandidate).toHaveBeenCalledTimes(1);
-});
-
 it('keeps narrow settings pages and long resource names inside their scroll viewport', async () => {
   await page.viewport(390, 720);
   const localizedCopy = deDE.flowerSurface.computer;
   const { management } = mount({ copy: localizedCopy, environment: { ...environment, hostname: 'runtime-with-a-long-workspace-and-device-name.example.test', chrome: { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'work', name: 'Work-profile-with-a-long-unbroken-name-for-layout-qualification' }] } } });
   management.listManagedProfiles.mockResolvedValue([{ id: 'work', name: 'Work-profile-with-a-long-unbroken-name-for-layout-qualification' }]);
-  await waitFor(() => !!button(localizedCopy.switchTarget) && !button(localizedCopy.switchTarget).disabled);
+  await waitFor(() => !!button(localizedCopy.browserSettings) && !button(localizedCopy.browserSettings).disabled);
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
   const inspect = () => {
     const content = dialog.querySelector<HTMLElement>('.flower-computer-content')!;
@@ -604,7 +405,7 @@ it('keeps narrow settings pages and long resource names inside their scroll view
       }
     }
   };
-  for (const action of [localizedCopy.browserSettings, localizedCopy.details, localizedCopy.help, localizedCopy.advanced, localizedCopy.permissions]) {
+  for (const action of [localizedCopy.browserSettings, localizedCopy.details, localizedCopy.help, localizedCopy.permissions]) {
     button(action).click();
     await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
     if (action === localizedCopy.browserSettings) (dialog.querySelector('summary') as HTMLElement).click();
