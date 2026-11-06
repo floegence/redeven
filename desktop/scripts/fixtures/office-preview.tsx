@@ -9,15 +9,14 @@ type Preview = { name: string; mime: string; bytes: number[]; attachment?: boole
 declare global { interface Window { officePreview: { open: (input: Preview) => void; close: () => void } } }
 const [preview, setPreview] = createSignal<Preview>();
 window.officePreview = { open: setPreview, close: () => setPreview(undefined) };
-const source = () => {
-  const value = preview()!;
+const source = (value: Preview) => {
   return { id: value.name, name: value.name, mimeType: value.mime,
     load: async () => new Blob([new Uint8Array(value.bytes)], { type: value.mime }) };
 };
 render(() => <>
-  <FlowerAttachmentPreviewWindow source={preview()?.attachment ? source() : null} copy={taskFilesEnUS}
+  <FlowerAttachmentPreviewWindow source={preview()?.attachment ? source(preview()!) : null} copy={taskFilesEnUS}
     loadingLabel={taskFilesEnUS.loading} unavailableLabel={taskFilesEnUS.unsupported} onClose={window.officePreview.close} />
-  <Show when={preview() && !preview()!.attachment ? preview() : undefined} keyed>{() =>
-    <FlowerTaskFilePreview source={source()} copy={taskFilesEnUS} downloading={false} onClose={window.officePreview.close} />
+  <Show when={preview() && !preview()!.attachment ? preview() : undefined} keyed>{value =>
+    <FlowerTaskFilePreview source={source(value)} copy={taskFilesEnUS} downloading={false} onClose={window.officePreview.close} />
   }</Show>
 </>, document.getElementById('root')!);
