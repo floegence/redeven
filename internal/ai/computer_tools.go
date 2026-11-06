@@ -17,7 +17,7 @@ func isComputerUseToolName(name string) bool {
 }
 
 func builtInComputerToolDefinitions() []ToolDef {
-	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Selected target ID. Use an explicitly selected target or the saved current binding."}}
+	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Target ID returned by computer.select_target; omit to use the saved current binding. A candidate_ref is not a target ID."}}
 	schema := func(properties map[string]any, required []string) json.RawMessage {
 		properties["description"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "User-facing action and target; omit secrets."}
 		if !slices.Contains(required, "description") {
@@ -93,4 +93,4 @@ func builtInComputerToolDefinitions() []ToolDef {
 	return defs
 }
 
-const computerScriptDocumentation = `Execute asynchronous JavaScript against one explicitly selected target. code contains UI/browser operations; description labels the invocation. Selection returns basic signatures in tool_contract.documentation; ui.help(topic) provides detailed contracts. Limits: 50 operations, 30 seconds, 64 MiB heap, 64 KiB logs. No DOM, Node, filesystem, network or timers. globalThis lasts within a healthy turn/target namespace; execution failures report context_reset. Completed effects are not rolled back or automatically replayed. Results distinguish observations, confirmed execution, stop reasons and uncertain effects. Output exhaustion is reported as SCRIPT_OUTPUT_LIMIT with the confirmed prefix and completed reads retained.`
+const computerScriptDocumentation = `Execute asynchronous JavaScript against one explicitly selected target. code contains UI/browser operations; description labels the invocation. Selection returns basic signatures in tool_contract.documentation; ui.help(topic) provides detailed contracts. Limits: 50 operations, 30 seconds, 64 MiB heap, 64 KiB logs. SCRIPT_OPERATION_LIMIT stops before operation 51; completed effects remain and context_reset is true. No DOM, Node, filesystem, network or timers. globalThis lasts within a healthy turn/target namespace; execution failures report context_reset. Completed effects are not rolled back or automatically replayed. Results distinguish observations, confirmed execution, stop reasons and uncertain effects. Output exhaustion is reported as SCRIPT_OUTPUT_LIMIT with the confirmed prefix and completed reads retained.`

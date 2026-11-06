@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+- 2026-11-06: Clarify model-visible terminal lifetime, computer operation limits,
+  optional-target and strict-null semantics, file routes and image bounds.
+  Consume independent fetch guidance from its Floret owner; preserve execution
+  and authorization contracts.
+
 - 2026-11-05: Remove manual page/application selection from [Browser and desktop settings](ai/computer-use-environment-settings.md); keep target discovery with Flower, use Chromium identity and align full-row settings navigation.
 
 - 2026-11-05: Consume canonical Floret control guidance and remove the unused

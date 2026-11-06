@@ -16,6 +16,11 @@ child-only environment variables while preserving project cwd and OS temporary
 path conventions. Cleanup waits for owned terminal processes to be reaped.
 
 PTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.
+Its model-facing description discloses the 30-minute command lifetime, explicit
+termination and Service shutdown. Cancelling the initial exec wait stops its
+command; cancelling a later read preserves it. It identifies shell reads/searches as the file
+and discovered-rule reading path, and discover/select/exec as the browser preview
+path. These descriptions do not change process ownership or permission.
 
 `cwd` is the preferred working-directory field; `workdir` has the same semantics. When both fields are empty, the run working directory is used; relative paths resolve from it. Two nonempty fields must resolve to the same authorized directory, including equivalent symlink paths. Neither takes precedence. A conflict retains `INVALID_PATH`, with `reason=conflicting_working_directories` and `process_started=false`; rejection precedes host-work admission and process creation.
 

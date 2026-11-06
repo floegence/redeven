@@ -162,7 +162,13 @@ func compileStrictArgumentRule(schema map[string]any, depth int) (*strictArgumen
 				return nil, fmt.Errorf("property %s: %w", name, err)
 			}
 			if !required[name] && !acceptsNull {
-				properties[name] = map[string]any{"anyOf": []any{child, map[string]any{"type": "null"}}}
+				description, _ := child["description"].(string)
+				if description != "" {
+					description += " "
+				}
+				description += "Use null to omit this optional argument."
+				delete(child, "description")
+				properties[name] = map[string]any{"anyOf": []any{child, map[string]any{"type": "null"}}, "description": description}
 				childRule.omitNull = true
 			}
 			rule.properties[name] = childRule

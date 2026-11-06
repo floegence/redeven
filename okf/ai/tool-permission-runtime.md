@@ -32,6 +32,8 @@ Diagnostics name order/overlap/anchor/EOF/context/duplicate path with chunk/body
 # Boundaries
 
 Tool names are not aliases for deleted knowledge-era tools. OKF is an embedded project corpus and does not access the internet; external, current, recent, news, third-party, market, pricing, and general web facts must use direct authoritative URLs or web search discovery instead.
+Search and fetch are independently configured. Published Floret fetch guidance
+describes reading a known URL without assuming search is available.
 
 Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.
 

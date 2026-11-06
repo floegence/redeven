@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model provider surface and history
 tags: [ai, models, providers, history]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -15,6 +15,13 @@ Floret owns canonical provider history/rendering lineage; Redeven supplies model
 Redeven owns the canonical-to-callable alias table at its provider boundary. Internal definitions, execution, history and Flower keep canonical names. When serialization changes a name, the detached tool description explicitly maps its canonical name to the callable name using that same table. OpenAI Responses/Chat, ChatGPT namespaces and DeepSeek receive this guidance before request measurement and freezing; unchanged names, including Anthropic definitions, receive none. Prompts, user content, scripts, argument schemas and canonical records are never text-rewritten. Returned stream/final calls still map back through the registered aliases; frozen retries retain identical guidance. This requires no Floret API, storage or dependency change.
 
 ## Responses
+Strict OpenAI rendering makes optional object properties required but nullable.
+Only adapter-added nulls are restored to omission before canonical validation;
+required fields, canonical nulls and false/zero/empty values keep their meaning.
+The nullable property's description retains its original guidance and explicitly
+says to use null for omission. Canonical schemas and non-strict DeepSeek requests
+remain unchanged. This belongs to Redeven's existing provider-schema adapter.
+
 Hosted search includes web_search_call.action.sources for Activity URLs; Qwen keeps its tool shape. Floret7.97.0 ResponsesOutput reconciles done/terminal. Completed reasoning ciphertext wins; fill only missing/null/empty from matching terminal item. Search done bytes win when only valid action.sources differ,never merge/overwrite lists; answer annotations independent. Validate terminal-only fallback; omitted terminal retains ordered done events. Duplicate done,identity/content/arguments/status/inputs/unknown fields/missing items/byte limits remain strict.
 
 Redeven maps opaque SDK bytes/typed errors. CompleteWithDiagnostics returns safe paths,boundary,counts/chosen authority,never query/URL/values. Localize post-response.completed validation failure with exact copyable conflict detail. Attempt epochs identify requests,not failed retries. Validation never advances history,changes retry policy or replays effects.

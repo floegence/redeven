@@ -3,7 +3,7 @@ type: AI Media Contract
 title: Direct image reading and tool media retention
 tags: [ai, tools, images, media, security]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -19,7 +19,9 @@ remain available after model preparation.
   bytes without reopening the source. Default behavior remains unchanged.
 - Every permission mode checks image capability, CanRead, filesystem scope and
   ToolTargetPolicy. Unavailable explicit targets fail without device fallback.
-- File reads retain their 10 MiB bound; Computer snapshots retain 16 MiB.
+- File reads and crop results retain their 10 MiB bound; Computer snapshots retain
+  16 MiB. All reads are bounded to 16384 pixels per side and 32 megapixels. Tool
+  guidance discloses these limits and the width/height/size_bytes result fields.
 - Locator-only crop accepts integer x/y/width/height within original image pixels,
   never clips, and saves a new lossless PNG with source_crop metadata. It uses
   fresh canonical authorization. Image pixels differ from CSS action coordinates.
