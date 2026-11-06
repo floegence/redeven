@@ -1531,6 +1531,13 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 
 	if toolErrRaw != nil {
+		var cancellationFailure *subagentCancellationError
+		if errors.As(toolErrRaw, &cancellationFailure) {
+			outcome.effectUncertain = true
+			outcome.executionFacts.completed = false
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: cancellationFailure.Error(), Retryable: false}, result)
+			return outcome, nil
+		}
 		var patchFailure *patchApplyError
 		if errors.As(toolErrRaw, &patchFailure) {
 			outcome.effectUncertain = patchFailure.attempted

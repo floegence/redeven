@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Tessiven Flower tools and scoped Runtime operations
 tags: [tessiven, runtime, desktop, gateway, security]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -19,6 +19,11 @@ Discovery starts no process/business session and path refs grant no authority. I
 - `tessiven.runtime.inspect` / `POST .../runtimes/inspect` reads status, bounded public diagnostics, or the original Desktop operation.
 - `tessiven.runtime.action` / `POST .../runtimes/actions` requests connection or one supported `start`, `stop`, `restart`, or `update` process operation.
 - `tessiven.inspect/action` retain the canonical canvas version, bound instance, and resource identity checks for Managed Services and containers.
+
+For tessiven.action, open prepares and returns entrance information for the
+running bound service and may run its preparation hook. It does not launch a
+browser or start a stopped service. A returned operation_id can be queried through
+the corresponding inspect action=operation; absence of an ID is not retry authority.
 
 No sibling module, replacement SDK, or product lifecycle queue is introduced.
 
@@ -54,6 +59,8 @@ Flower and the UI call the same Tessiven service; neither writes its database di
 
 # Evidence
 
+- `internal/managedwebservice/open_session_test.go` — Running entrance preparation and stopped-service refusal without lifecycle dispatch.
+- `internal/ai/tool_contract_clarity_test.go` — Final provider-visible descriptions across four routes.
 - `internal/tessiven/runtimes.go`
 - `internal/tessiven/broker_test.go` — Unattributed/device-generation denial, permission recheck and unknown effects.
 - `internal/codeapp/appserver/tessiven_source_test.go` — Public-header rejection and post-confirmation source revocation.

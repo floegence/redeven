@@ -1354,6 +1354,12 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		TargetRefs: nil,
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
+	if operation, ok := activity.Payload.(fltools.SubAgentOperationActivityPayload); ok && len(operation.Targets) > 200 {
+		// Bound only the display list. Counts and model-visible outcomes stay complete.
+		operation.Targets = operation.Targets[:200]
+		activity.Payload = operation
+		activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "truncated", Label: "truncated", Value: "true"})
+	}
 	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
 		if toolName == "threads.query" || toolName == "threads.read" {
 			activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))

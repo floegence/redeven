@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-06: Correct [child cancellation](ai/subagent-runtime.md) scope, action fields and confirmed/uncertain results; clarify thread-local Computer selection, parent events and Tessiven opening. Qualify published Floret behavior, model correction and public Activity without a new lifecycle owner.
+
 - 2026-11-06: Preserve exact [model tool arguments](ai/model-provider-surface-and-history.md#tool-argument-ownership) through native Gateway, Desktop RPC and canonical history; consume upstream bounded syntax correction and qualify question admission, exhaustion, restart and explicit Retry without confirmed-effect replay.
 - 2026-11-06: Stabilize the [Flower model picker](ui/flower-model-navigation.md) with upstream logical-edge anchoring, fixed catalog ordering, a complete scrollable catalog and settled focus restoration.
 

@@ -14,9 +14,11 @@ import (
 )
 
 func TestFlowerSubagentArgumentsCorrectBeforeActivityAndSurviveRestart(t *testing.T) {
-	for _, tc := range []struct{ action, field string }{
-		{"spawn", "task_name"}, {"send_input", "target"}, {"close", "target"},
-		{"status", "target or ids"}, {"inspect", "target or ids"}, {"wait", "ids"},
+	for _, tc := range []struct{ action, field, extra string }{
+		{"spawn", "task_name", ""}, {"send_input", "target", ""}, {"close", "target", ""},
+		{"status", "target or ids", ""}, {"inspect", "target or ids", ""}, {"wait", "ids", ""},
+		{"close_all", "ids", `,"ids":["only-this-child"],"limit":1`},
+		{"close_all", "current_thread", `,"scope":"current_run"`},
 	} {
 		t.Run(tc.action, func(t *testing.T) {
 			var calls atomic.Int32
@@ -35,7 +37,7 @@ func TestFlowerSubagentArgumentsCorrectBeforeActivityAndSurviveRestart(t *testin
 				}
 				switch calls.Add(1) {
 				case 1:
-					args, _ := json.Marshal(map[string]string{"action": tc.action})
+					args := []byte(`{"action":"` + tc.action + `"` + tc.extra + `}`)
 					writeDeepSeekIntegrationToolCall(w, flusher, "invalid-response", "invalid-input", "subagents", string(args))
 				case 2:
 					raw, _ := json.Marshal(request["input"])

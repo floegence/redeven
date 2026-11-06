@@ -208,3 +208,21 @@ func TestStaticEntranceIsSavedAfterLifecycleIdentityCommit(t *testing.T) {
 		t.Fatal("healthy launch did not save its applied static entrance", err)
 	}
 }
+
+func TestOpenSessionDoesNotStartStoppedService(t *testing.T) {
+	spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{StartScript: "exit 97", OpenScript: "exit 98"}}
+	manager, registry, service, _ := newRuntimeResolutionTestService(t, spec, ReleaseIdentity{Kind: "none"}, "stopped")
+	opening, err := manager.OpenSession(t.Context(), service.ServiceID, OpenSessionRequest{RequestID: "open-stopped"})
+	var failure *Error
+	if opening != nil || !errors.As(err, &failure) || failure.Code != "SERVICE_NOT_RUNNING" {
+		t.Fatalf("opening=%+v error=%v", opening, err)
+	}
+	stored, err := registry.GetManagedService(t.Context(), service.ServiceID)
+	if err != nil || stored.RuntimeIdentity != "" {
+		t.Fatalf("open launched a process: %+v %v", stored, err)
+	}
+	active, err := registry.GetActiveManagedOperation(t.Context(), service.ServiceID)
+	if err != nil || active != nil {
+		t.Fatalf("open admitted a lifecycle operation: %+v %v", active, err)
+	}
+}

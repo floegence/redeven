@@ -417,7 +417,14 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			adapter, _ := newSubagentHandoffTestAdapter(t, []flruntime.ThreadSummary{completed, failed, cancelled, waiting, approval}, map[identity.ThreadID]flruntime.ThreadView{completed.ID: completedSubagentTestView(completed, final)})
 			definition := fltools.Definition{Name: "subagents", InputSchema: fltools.StrictObject(map[string]any{"action": map[string]any{"type": "string"}}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}
 			tool := fltools.Define[map[string]any](definition, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
-				data, err := adapter.manage(ctx, inv.CallID, map[string]any{"action": action, "timeout_ms": 1, "ids": []any{completed.ID.String(), failed.ID.String(), cancelled.ID.String(), waiting.ID.String(), approval.ID.String()}})
+				args := map[string]any{"action": action}
+				if action != subagentActionList {
+					args["ids"] = []any{completed.ID.String(), failed.ID.String(), cancelled.ID.String(), waiting.ID.String(), approval.ID.String()}
+				}
+				if action == subagentActionWait {
+					args["timeout_ms"] = 1
+				}
+				data, err := adapter.manage(ctx, inv.CallID, args)
 				if err != nil {
 					return fltools.Result{}, err
 				}

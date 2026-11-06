@@ -102,7 +102,11 @@ func TestFlowerSubagentForkAndIndependentRootCannotControlSourceChildren(t *test
 		for _, parentID := range []string{fork.ThreadID, other.ThreadID} {
 			adapter := newServiceFloretSubagentRuntime(f.service, &run{threadID: parentID, turnID: "scope-turn"})
 			for _, action := range []string{subagentActionSendInput, subagentActionClose, subagentActionInspect, subagentActionStatus} {
-				result, err := adapter.manage(t.Context(), "foreign-"+action, map[string]any{"action": action, "target": f.child.String(), "message": "Must not reach the source child."})
+				args := map[string]any{"action": action, "target": f.child.String()}
+				if action == subagentActionSendInput {
+					args["message"] = "Must not reach the source child."
+				}
+				result, err := adapter.manage(t.Context(), "foreign-"+action, args)
 				if err != nil || result["status"] != "not_found" {
 					t.Fatalf("%s %s=%#v err=%v", parentID, action, result, err)
 				}

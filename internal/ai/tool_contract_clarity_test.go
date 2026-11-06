@@ -41,7 +41,7 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				p.chatGPT = true
 				p.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 			}
-			wanted := map[string]bool{"terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true}
+			wanted := map[string]bool{"terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true, "subagent_events": true}
 			var defs []ToolDef
 			for _, def := range builtInModelCapabilityDefinitions() {
 				if wanted[def.Name] {
@@ -77,11 +77,13 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				t.Error("standalone fetch implies an absent search capability")
 			}
 			for name, phrases := range map[string][]string{
-				"terminal_exec": {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal.terminate", "Service shutdown", "read/search files", "computer.targets"},
-				"computer_exec": {"SCRIPT_OPERATION_LIMIT", "completed effects"},
-				"image_read":    {"width", "height", "10 MiB", "32 megapixels"},
-				"web_fetch":     {"known URL"},
-				"subagents":     {"send_input requires target and message", "close requires target", "status/inspect require target or ids", "wait requires ids"},
+				"terminal_exec":   {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal.terminate", "Service shutdown", "read/search files", "computer.targets"},
+				"computer_exec":   {"SCRIPT_OPERATION_LIMIT", "completed effects", "thread/turn/target", "without clearing"},
+				"image_read":      {"width", "height", "10 MiB", "32 megapixels"},
+				"web_fetch":       {"known URL"},
+				"subagents":       {"send_input requires target and message", "close requires target", "status/inspect require target or ids", "wait requires ids", "including earlier turns", "deduplicated union", "starts a new turn", "Neither deletes threads"},
+				"subagent_events": {"current parent thread", "earlier turns"},
+				"tessiven_action": {"open prepares", "neither launches a browser nor starts a stopped service", "operation_id"},
 			} {
 				for _, phrase := range phrases {
 					if !strings.Contains(strings.ToLower(fmt.Sprint(functions[name]["description"])), strings.ToLower(phrase)) {
@@ -95,11 +97,23 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 					t.Errorf("subagents gained provider-dependent root %s", keyword)
 				}
 			}
-			for field, phrase := range map[string]string{"task_name": "Required for spawn", "task_description": "Required for spawn", "message": "4000 UTF-8 bytes", "target": "Required for send_input and close", "ids": "required for wait"} {
+			for field, phrase := range map[string]string{"task_name": "Required for spawn", "task_description": "Required for spawn", "message": "4000 UTF-8 bytes", "target": "Required for send_input and close", "ids": "required for wait", "scope": "Optional for close_all only", "limit": "Optional for list only", "running_only": "Optional for list only", "timeout_ms": "Optional for wait only"} {
 				property := subagentsSchema["properties"].(map[string]any)[field].(map[string]any)
 				if !strings.Contains(fmt.Sprint(property["description"]), phrase) {
 					t.Errorf("subagents.%s omits %q", field, phrase)
 				}
+			}
+			scope := subagentsSchema["properties"].(map[string]any)["scope"].(map[string]any)
+			scopeValidator, err := compileArgumentSchema(scope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scopeValidator.Validate("current_thread") != nil || scopeValidator.Validate("current_run") == nil {
+				t.Fatalf("misleading scope reached provider: %#v", scope)
+			}
+			target := functions["computer_exec"]["parameters"].(map[string]any)["properties"].(map[string]any)["target"].(map[string]any)
+			if !strings.Contains(fmt.Sprint(target["description"]), "this thread's saved binding") {
+				t.Fatalf("target scope omitted: %#v", target)
 			}
 			for _, tc := range []struct{ name, field string }{{"computer_exec", "target"}, {"tessiven_action", "generation"}, {"tessiven_runtime_action", "identity"}} {
 				schema := functions[tc.name]["parameters"].(map[string]any)

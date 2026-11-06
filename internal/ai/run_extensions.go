@@ -138,7 +138,38 @@ func decodeSubagentsToolInput(raw []byte) (map[string]any, error) {
 	return args, validateSubagentsArgsByAction(action, args)
 }
 
+// Null is omission on strict provider routes. Every non-null field must belong
+// to the selected action, including empty arrays, false and default values.
 func validateSubagentsArgsByAction(action string, args map[string]any) error {
+	allowed := map[string][]string{
+		subagentActionSpawn:     {"task_name", "task_description", "message", "context_mode", "title", "objective"},
+		subagentActionSendInput: {"target", "message"},
+		subagentActionWait:      {"ids", "timeout_ms"},
+		subagentActionList:      {"running_only", "limit"},
+		subagentActionStatus:    {"target", "ids"},
+		subagentActionInspect:   {"target", "ids"},
+		subagentActionClose:     {"target"},
+		subagentActionCloseAll:  {"scope"},
+	}
+	if fields, known := allowed[action]; known {
+		unsupported := []string{}
+		for key, value := range args {
+			if key == "action" || value == nil {
+				continue
+			}
+			found := false
+			for _, field := range fields {
+				found = found || key == field
+			}
+			if !found {
+				unsupported = append(unsupported, key)
+			}
+		}
+		if len(unsupported) > 0 {
+			sort.Strings(unsupported)
+			return invalidSubagentArguments("invalid_arguments.subagents.unsupported_fields", fmt.Sprintf("%s does not accept %s", action, strings.Join(unsupported, ", ")), map[string]any{"action": action, "fields": unsupported})
+		}
+	}
 	switch action {
 	case "":
 		return invalidSubagentArguments("invalid_arguments.subagents.missing_action", "subagents action is required", nil)
@@ -202,12 +233,12 @@ func validateSubagentsArgsByAction(action string, args map[string]any) error {
 	case subagentActionCloseAll:
 		scope := strings.ToLower(strings.TrimSpace(anyToString(args["scope"])))
 		if scope == "" {
-			scope = "current_run"
+			scope = "current_thread"
 		}
-		if scope != "current_run" {
+		if scope != "current_thread" {
 			return invalidSubagentArguments(
 				"invalid_arguments.subagents.close_all_invalid_scope",
-				fmt.Sprintf("invalid scope %q", strings.TrimSpace(anyToString(args["scope"]))),
+				fmt.Sprintf("close_all scope must be current_thread; got %q", strings.TrimSpace(anyToString(args["scope"]))),
 				nil,
 			)
 		}

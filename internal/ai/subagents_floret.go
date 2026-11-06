@@ -438,19 +438,53 @@ func (runtime *floretSubagentRuntime) close(ctx context.Context, toolCallID stri
 	if !found {
 		return subagentTargetNotFound(parent.threadID, target, subagentActionClose), nil
 	}
+	item, cancelErr := cancelSubagent(ctx, threads, parent.threadID, subagentSnapshotFromSummary(summary), "user_close", toolCallID)
+	accepted, stopped := readBoolField(item, "accepted"), readBoolField(item, "stopped")
+	out := map[string]any{
+		"status": "ok", "action": subagentActionClose, "target": target,
+		"thread_id": target, "accepted": accepted, "closed": stopped, "stopped": stopped,
+		"items": []map[string]any{item},
+	}
+	if cancelErr != nil {
+		out["status"], out["unconfirmed_ids"] = "partial", []string{target}
+		delete(out, "accepted")
+		delete(out, "closed")
+		delete(out, "stopped")
+	}
+	return out, cancelErr
+}
+
+// A failed Cancel may have committed its request before result projection failed.
+// Preserve confirmed siblings and expose uncertainty without replaying the call.
+type subagentCancellationError struct{ cause error }
+
+func (err *subagentCancellationError) Error() string {
+	return "child cancellation outcome is unconfirmed; inspect the child before another action: " + err.cause.Error()
+}
+func (err *subagentCancellationError) Unwrap() error { return err.cause }
+
+func cancelSubagent(ctx context.Context, threads flruntime.ThreadService, parentID string, snapshot subagentSnapshot, source, toolCallID string) (map[string]any, error) {
+	// Keep single-target Cancel's upstream host-work cleanup even for an idle
+	// terminal child; that does not count as a newly cancelled execution.
+	alreadyTerminal := isSubagentTerminalStatus(snapshot.Status)
 	result, err := threads.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
-		ThreadID:   summary.ID,
-		RequestKey: flruntime.RequestKey(subagentCloseOperationID(parent.threadID, target, "user_close", toolCallID)),
+		ThreadID:   identity.ThreadID(snapshot.ThreadID),
+		RequestKey: flruntime.RequestKey(subagentCloseOperationID(parentID, snapshot.ThreadID, source, toolCallID)),
 	})
 	if err != nil {
-		return nil, err
+		// The prior status is not an observation of the failed call's outcome.
+		item := map[string]any{"thread_id": snapshot.ThreadID, "task_name": snapshot.TaskName, "status": "unknown"}
+		return item, &subagentCancellationError{cause: err}
 	}
-	snapshot := subagentSnapshotFromThread(summary, result)
-	return map[string]any{
-		"status": "ok", "action": subagentActionClose, "target": target,
-		"thread_id": target, "closed": true, "stopped": true,
-		"items": []map[string]any{boundedSubagentItem(subagentSnapshotPayload(snapshot))},
-	}, nil
+	item := boundedSubagentItem(subagentSnapshotPayload(subagentSnapshotFromThread(subagentThreadSummary(snapshot), result)))
+	cancellation := result.Cancellation
+	accepted := !alreadyTerminal && cancellation != nil && result.ThreadID.String() == snapshot.ThreadID && result.TurnID != "" && result.RunID != "" &&
+		cancellation.ThreadID == result.ThreadID && cancellation.TurnID == result.TurnID && cancellation.RunID == result.RunID
+	// Admission is not proof of settlement, and settlement does not roll back
+	// external effects: the child's canonical failure remains in the item.
+	item["accepted"] = accepted
+	item["stopped"] = accepted && result.Activity == flruntime.ThreadActivityIdle && result.LastOutcome != nil
+	return item, nil
 }
 
 func (runtime *floretSubagentRuntime) closeAll(ctx context.Context, toolCallID string, _ map[string]any) (map[string]any, error) {
@@ -462,28 +496,46 @@ func (runtime *floretSubagentRuntime) closeAll(ctx context.Context, toolCallID s
 	if err != nil {
 		return nil, err
 	}
-	items := make([]map[string]any, 0, len(snapshots))
-	affected := make([]string, 0, len(snapshots))
+	candidates := make([]subagentSnapshot, 0, len(snapshots))
+	requested := make([]string, 0, len(snapshots))
 	for _, snapshot := range snapshots {
 		if !isSubagentTerminalStatus(snapshot.Status) {
-			result, cancelErr := threads.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
-				ThreadID:   identity.ThreadID(snapshot.ThreadID),
-				RequestKey: flruntime.RequestKey(subagentCloseOperationID(parent.threadID, snapshot.ThreadID, "parent_close_all", toolCallID)),
-			})
-			if cancelErr != nil {
-				return nil, cancelErr
-			}
-			snapshot = subagentSnapshotFromThread(subagentThreadSummary(snapshot), result)
+			candidates = append(candidates, snapshot)
+			requested = append(requested, snapshot.ThreadID)
 		}
-		affected = append(affected, snapshot.ThreadID)
-		items = append(items, boundedSubagentItem(subagentSnapshotPayload(snapshot)))
 	}
-	out := subagentBoundedResult(subagentActionCloseAll, items)
-	out["scope"] = "current_run"
-	out["closed_count"] = len(affected)
-	out["stopped_count"] = len(affected)
+	items := make([]map[string]any, 0, len(candidates))
+	affected := make([]string, 0, len(candidates))
+	stopped := 0
+	out := subagentBoundedResult(subagentActionCloseAll, nil)
+	out["scope"], out["requested_ids"], out["requested_count"] = "current_thread", requested, len(requested)
+	var cancelErr error
+	for index, snapshot := range candidates {
+		var item map[string]any
+		item, cancelErr = cancelSubagent(ctx, threads, parent.threadID, snapshot, "parent_close_all", toolCallID)
+		items = append(items, item)
+		if cancelErr != nil {
+			out["status"] = "partial"
+			out["unconfirmed_ids"] = []string{snapshot.ThreadID}
+			out["unattempted_ids"] = requested[index+1:]
+			for _, remaining := range candidates[index+1:] {
+				items = append(items, map[string]any{"thread_id": remaining.ThreadID, "task_name": remaining.TaskName, "status": "not_attempted", "accepted": false, "stopped": false})
+			}
+			break
+		}
+		if readBoolField(item, "accepted") {
+			affected = append(affected, snapshot.ThreadID)
+		}
+		if readBoolField(item, "stopped") {
+			stopped++
+		}
+	}
+	// Every attempted or unattempted outcome is model-visible. Activity alone
+	// bounds its display list; counts never include omitted terminal children.
+	out["items"] = items
+	out["accepted_count"], out["closed_count"], out["stopped_count"] = len(affected), stopped, stopped
 	out["affected_ids"] = affected
-	return out, nil
+	return out, cancelErr
 }
 
 func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (map[string]any, error) {

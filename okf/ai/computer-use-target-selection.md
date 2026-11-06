@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Computer target selection across threads
 tags: [ai, computer-use, targets, permissions]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -29,7 +29,10 @@ For `current`, the Runtime reads the thread's `computer_target_id`. An existing 
 Environment settings never bind or replace the current target. Their access controls manage grants independently of Flower's target selection.
 
 ## Persistence and fork
-The migrated product store remains the only selection store.
+The migrated product store remains the only selection store. The binding belongs
+to the thread, persists across turns and restart, and is not copied to a fork.
+Script context_reset clears the thread/turn/target JavaScript namespace without
+clearing this binding or granting readiness.
 
 A lost task page fails until an authorized candidate is selected. Deleting product settings removes the selection and grants; a later bind never recreates a deleted thread.
 
@@ -64,5 +67,7 @@ Persisted preference or grants alone cannot prove readiness, foreground safety o
 
 # Evidence
 
+- `redeven:internal/ai/computer_target_binding_test.go` - Thread isolation, persistence and fork boundaries.
+- `redeven:internal/ai/computer_script_test.go` - Reset retains selection and isolates later namespaces.
 - `redeven:internal/ai/computer_runtime.go` - Source.
 - `redeven:internal/ai/target_registry.go` - Source.

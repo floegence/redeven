@@ -37,6 +37,23 @@ describe('subagent read boundaries', () => {
   });
 });
 
+describe('subagent cancellation results', () => {
+  it('retains the cancelled sibling and does not label an unconfirmed child as stopped', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagents', renderer: 'subagent_operation', status: 'error', payload: {
+      action: 'close_all', status: 'error', requested_count: 2,
+      targets: [{ thread_id: 'older', task_name: 'Earlier Task', status: 'canceled' }, { thread_id: 'current', task_name: 'Current Task', status: 'unknown' }],
+      error: { message: 'Child cancellation outcome is unconfirmed.' },
+    } }));
+    expect(result.label).toBe('Close subagents · Failed');
+    expect(result.detailBlocks).toContainEqual(expect.objectContaining({
+      kind: 'subagents', subagents: expect.objectContaining({ items: [
+        expect.objectContaining({ thread_id: 'older', raw_status: 'canceled', show_status: true }),
+        expect.objectContaining({ thread_id: 'current', raw_status: '', show_status: false }),
+      ] }),
+    }));
+  });
+});
+
 describe('parent event tool rows', () => {
   it('shows an accepted submission without exposing protocol receipts as rows', () => {
     const result = presentFlowerActivityItem(item({ tool_name: 'report_to_parent', renderer: 'structured',

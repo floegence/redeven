@@ -783,3 +783,38 @@ func TestComputerRoleNameDiagnosticAndHelpStayFactual(t *testing.T) {
 		t.Fatalf("bad argument diagnostic: calls=%d %+v %v", calls, payload, err)
 	}
 }
+
+func TestComputerScriptResetRetainsThreadSelectionAndIsolatesNamespaces(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(context.Context, TargetToolCall) (TargetToolResult, error) { return TargetToolResult{}, nil })
+	_, _, bindings, _ := computerBindingFixture(t)
+	runtime.bindings = bindings
+	call.ThreadID = "thread-first"
+	if err := runtime.BindThreadTarget(t.Context(), call.ThreadID, call.TargetID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeTestScript(t.Context(), runtime, call, `globalThis.marker = 7;`); err != nil {
+		t.Fatal(err)
+	}
+
+	failed, err := executeTestScript(t.Context(), runtime, call, `ui.assert(marker === 7); throw new Error('reset fixture');`)
+	if err == nil || failed.Result.(map[string]any)["context_reset"] != true {
+		t.Fatalf("namespace did not reset: %+v %v", failed, err)
+	}
+	selected, err := runtime.ResolveTargetForThread(t.Context(), call.ThreadID, "")
+	if err != nil || selected.ID != call.TargetID {
+		t.Fatalf("reset cleared saved selection: %+v %v", selected, err)
+	}
+	if _, err := executeTestScript(t.Context(), runtime, call, `ui.assert(typeof marker === 'undefined'); globalThis.marker = 8;`); err != nil {
+		t.Fatal(err)
+	}
+	runtime.releaseComputerControl(call.ThreadID, call.RunID)
+	for _, other := range []TargetToolCall{
+		{ThreadID: "thread-second", TurnID: call.TurnID, RunID: "other-thread", TargetID: call.TargetID, ToolCallID: "other", ToolName: call.ToolName, revalidate: call.revalidate},
+		{ThreadID: call.ThreadID, TurnID: "other-turn", RunID: "other-turn", TargetID: call.TargetID, ToolCallID: "other", ToolName: call.ToolName, revalidate: call.revalidate},
+	} {
+		if _, err := executeTestScript(t.Context(), runtime, other, `ui.assert(typeof marker === 'undefined'); globalThis.marker = 9;`); err != nil {
+			t.Fatal(err)
+		}
+		runtime.releaseComputerControl(other.ThreadID, other.RunID)
+	}
+}
