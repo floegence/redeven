@@ -29,6 +29,39 @@ vi.mock('../services/remoteDesktopApi', async original => ({ ...await original<o
 vi.mock('../services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 
 let dispose: (() => void) | undefined;
+
+async function settleDialog(dialog: HTMLElement) {
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).length).toBe(0);
+}
+
+function expectCompactFooter(flow: HTMLElement) {
+  const content = flow.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
+  const footer = flow.querySelector<HTMLElement>('.remote-desktop-flow-footer')!;
+  const lastContent = content.lastElementChild!.getBoundingClientRect();
+  const remainingScroll = content.scrollHeight - content.clientHeight - content.scrollTop;
+  const gap = footer.getBoundingClientRect().top - lastContent.bottom + remainingScroll;
+  expect(gap).toBeGreaterThanOrEqual(16);
+  expect(gap).toBeLessThanOrEqual(24);
+}
+
+function expectFlowWithinViewport(dialog: HTMLElement, width: number, height: number) {
+  const body = dialog.querySelector<HTMLElement>('[data-floe-dialog-body]')!;
+  const content = dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
+  const footer = dialog.querySelector<HTMLElement>('.remote-desktop-flow-footer')!;
+  expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  expect(dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight + 1);
+  expect(content.clientHeight).toBeGreaterThan(80);
+  for (const button of footer.querySelectorAll('button')) {
+    const bounds = button.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(width);
+    expect(bounds.bottom).toBeLessThanOrEqual(height);
+  }
+}
+
 beforeEach(() => {
   vi.resetAllMocks(); state.status.mockResolvedValue(setupNeeded);
   state.progress.mockReturnValue(() => {});state.deployment.mockResolvedValue({ ok: true, available: true }); state.open.mockResolvedValue(undefined);
@@ -58,7 +91,9 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
   await userEvent.click(primary);
   await expect.poll(() => document.querySelector('.remote-desktop-deployment-flow')).not.toBeNull();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
-  await Promise.allSettled(flow.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+  await settleDialog(dialog);
+  expectCompactFooter(flow);
+  expectFlowWithinViewport(dialog, 320, 780);
   expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
   expect(flow.scrollWidth).toBeLessThanOrEqual(flow.clientWidth + 1);
   for (const control of flow.querySelectorAll<HTMLElement>('input, button')) {
@@ -70,6 +105,9 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
   }
   await userEvent.click(flow.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
   await expect.poll(()=>flow.querySelector('input[type=password]')).not.toBeNull();
+  await settleDialog(dialog);
+  expectCompactFooter(flow);
+  expectFlowWithinViewport(dialog, 320, 780);
   await page.elementLocator(flow.querySelector<HTMLInputElement>('input[type=password]')!).fill('ephemeral-fixture');
   await userEvent.keyboard('{Enter}');
   await expect.poll(() => flow.querySelector('[data-phase=applying]')).not.toBeNull();
@@ -80,6 +118,66 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
   if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-step-narrow-zh-CN.png' });
   finishDeployment({ ok: false, code: 'canceled', rollback: 'complete' });
   await expect.poll(() => flow.querySelector('[data-phase=authorizing]')).not.toBeNull();
+});
+
+it.each([
+  { width: 1000, height: 850, locale: 'zh-CN', theme: 'porcelain-light' },
+  { width: 1000, height: 520, locale: 'en-US', theme: 'porcelain-dark' },
+  { width: 320, height: 780, locale: 'de-DE', theme: 'porcelain-dark' },
+  { width: 320, height: 600, locale: 'en-US', theme: 'porcelain-light' },
+  { width: 320, height: 480, locale: 'zh-CN', theme: 'porcelain-dark' },
+] as const)('sizes authorization, credentials and failure to content in $locale at $width × $height', async ({ width, height, locale, theme }) => {
+  const previousTheme = document.documentElement.dataset.floeShellTheme;
+  const previousDark = document.documentElement.classList.contains('dark');
+  document.documentElement.dataset.floeShellTheme = theme;
+  document.documentElement.classList.toggle('dark', theme.endsWith('dark'));
+  try {
+    await page.viewport(width, height);
+    await loadEnvAppDictionary(locale); writeStoredLanguagePreference(locale);
+    let finishDeployment!: (value: object) => void;
+    state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : request.action === 'respond' ? Promise.resolve({ ok: true }) : new Promise(resolve => {
+      finishDeployment = resolve;
+      queueMicrotask(() => state.progress.mock.calls[0][0]({ operation_id: request.operationId, stage: 'authorization_required', challenge_id: 'password', host: 'host.example', ssh_user: 'tang' }));
+    }));
+    const host = document.createElement('main'); document.body.append(host);
+    dispose = render(() => <I18nProvider><RemoteDesktopLauncher /></I18nProvider>, host);
+    await expect.poll(() => document.documentElement.lang).toBe(locale);
+    await userEvent.click(host.querySelector('button')!);
+    const dialog = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+    await expect.poll(() => dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')?.disabled).toBe(false);
+    await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+    const flow = dialog.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
+    const content = flow.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
+    await settleDialog(dialog);
+    expectCompactFooter(flow);
+    expectFlowWithinViewport(dialog, width, height);
+    await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-compact-authorization-${width}-${height}-${locale}.png` });
+
+    await userEvent.click(flow.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
+    await expect.poll(() => content.dataset.phase).toBe('password');
+    await settleDialog(dialog);
+    expectCompactFooter(flow);
+    expectFlowWithinViewport(dialog, width, height);
+    const password = flow.querySelector<HTMLInputElement>('input[type=password]')!;
+    expect(password.getBoundingClientRect().top).toBeGreaterThanOrEqual(content.getBoundingClientRect().top);
+    expect(password.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom);
+    await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-compact-password-${width}-${height}-${locale}.png` });
+    await page.elementLocator(password).fill('ephemeral-fixture');
+    await userEvent.keyboard('{Enter}');
+    await expect.poll(() => content.dataset.phase).toBe('preparing');
+    finishDeployment({ ok: false, code: 'authorization_failed', rollback: 'complete' });
+    await expect.poll(() => content.dataset.phase).toBe('failed');
+    await settleDialog(dialog);
+    expect(flow.querySelector('input[type=password]')).toBeNull();
+    expect(content.querySelector('[role=alert]')?.textContent).toContain('authorization_failed');
+    expectCompactFooter(flow);
+    expectFlowWithinViewport(dialog, width, height);
+    await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-compact-failure-${width}-${height}-${locale}.png` });
+  } finally {
+    if (previousTheme === undefined) delete document.documentElement.dataset.floeShellTheme;
+    else document.documentElement.dataset.floeShellTheme = previousTheme;
+    document.documentElement.classList.toggle('dark', previousDark);
+  }
 });
 
 it.each([
@@ -108,6 +206,9 @@ it.each([
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
     const select = dialog.querySelector<HTMLSelectElement>('.remote-desktop-credential select')!;
     expect(select.labels?.[0]?.textContent).toContain(locale === 'zh-CN' ? '管理员授权方式' : 'Administrator authorization');
+    expectCompactFooter(dialog.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!);
+    const authorizationFooter = dialog.querySelector<HTMLElement>('.remote-desktop-flow-footer')!;
+    expect(authorizationFooter.getBoundingClientRect().top - select.getBoundingClientRect().bottom).toBeLessThanOrEqual(24);
     await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-authorization-' + width + '-' + locale + '-' + theme + '-' + forcedColors + '.png' });
     const arrow = select.parentElement!.querySelector('svg');
     expect(arrow, 'The dropdown arrow needs its own inset inside the field').not.toBeNull();
@@ -189,7 +290,7 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     const duration = Number.parseFloat(getComputedStyle(flow).animationDuration);
     expect(duration).toBeLessThanOrEqual(.3);
     expect(getComputedStyle(flow).animationName).toBe(reducedMotion === 'reduce' ? 'none' : 'remote-desktop-flow-enter');
-    await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+    await settleDialog(dialog);
     await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).length).toBe(0);
     const initialHeight = dialog.getBoundingClientRect().height;
     const content = flow.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
@@ -209,9 +310,9 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     expect(Math.abs(action.getBoundingClientRect().width - actionWidth)).toBeLessThan(1);
     expect(dialog.contains(document.activeElement)).toBe(true);
     expect(getComputedStyle(flow.querySelector('.remote-desktop-step-title')!).boxShadow).toBe('none');
-    await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+    await settleDialog(dialog);
     expect(content.getBoundingClientRect().height).toBe(280);
-    expect(Math.abs(dialog.getBoundingClientRect().height - (initialHeight - initialContentHeight + 280))).toBeLessThan(1);
+    await expect.poll(() => Math.abs(dialog.getBoundingClientRect().height - (initialHeight - initialContentHeight + 280))).toBeLessThan(1);
     expect(content.scrollHeight).toBeLessThanOrEqual(content.clientHeight + 1);
     expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
     expect(flow.querySelector<HTMLElement>('.remote-desktop-flow-footer')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(850);
@@ -223,8 +324,9 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     expect(flow.querySelector('input[type=password]')).toBeNull();
     expect(flow.querySelector('[aria-current=step]')?.textContent).toContain('Connect');
     expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
-    await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
-    await expect.poll(() => Math.abs(dialog.getBoundingClientRect().height - initialHeight)).toBeLessThan(1);
+    await settleDialog(dialog);
+    expect(dialog.getBoundingClientRect().height).toBeLessThan(initialHeight);
+    expectCompactFooter(flow);
     if (reducedMotion === 'no-preference') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-step-connecting.png' });
     finishConnection({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' });
     await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();

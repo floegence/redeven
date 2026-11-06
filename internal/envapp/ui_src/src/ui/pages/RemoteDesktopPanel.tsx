@@ -77,7 +77,11 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   let connectionAttempt = 0, pendingPopup: Window | null = null;
   let preparationScrollFrame: number | undefined;
   let panel: HTMLElement | undefined, preparationStepsElement: HTMLOListElement | undefined, returnFocus: HTMLElement | undefined, returnFocusKey: string | undefined;
-  const focusStep = (element: HTMLElement) => queueMicrotask(() => { if (!disposed && element.isConnected) element.focus({ preventScroll: true }); });
+  const focusStep = (element: HTMLElement) => queueMicrotask(() => {
+    // Reveal credential fields inside the bounded content area while keeping
+    // stage-heading focus from moving the user's scroll position.
+    if (!disposed && element.isConnected) element.focus({ preventScroll: !(element instanceof HTMLInputElement) });
+  });
   const rememberFocus = () => { if (document.activeElement instanceof HTMLElement) { returnFocus = document.activeElement; returnFocusKey = returnFocus.dataset.desktopFocus; } };
   const restoreFocus = () => queueMicrotask(() => {
     if (disposed) return;
