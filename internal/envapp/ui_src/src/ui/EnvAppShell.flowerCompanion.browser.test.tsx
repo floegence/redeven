@@ -1542,6 +1542,19 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(context.context[0].content).toContain('kind: navigation');
   });
 
+  it('keeps header context within the shell while Containers is active', async () => {
+    testRealFlowerLauncher = true; testRealFlowerPreview = true;
+    await mountShell();
+    await userEvent.click(document.querySelector('[data-floe-rail-icon="containers"]')!.closest('button')!);
+    const header = document.querySelector<HTMLElement>('[data-floe-shell-slot="top-bar"]')!;
+    await userEvent.click(header.querySelector('button')!, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-floe-prompt-card] .flower-composer-context-source')!);
+    await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')?.textContent).toContain('kind: shell');
+    const preview = document.querySelector('[data-flower-context-preview-text]')!.textContent!;
+    for (const excluded of ['containers', 'selected_resource', 'navigation.id', 'filter:', 'screen_text:']) expect(preview).not.toContain(excluded);
+  });
+
   it('opens the global command with a frozen context and preserves the draft on repeated invocation', async () => {
     testRealFlowerLauncher = true;
     await mountShell();

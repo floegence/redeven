@@ -37,7 +37,8 @@ await session.run(async () => {
       const input = JSON.parse(Buffer.concat(chunks)); const sequence = ++providerSequence;
       response.setHeader('Content-Type', 'text/event-stream');
       const event = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
-      const complete = items => { event({ type: 'response.completed', response: { id: `ask-${sequence}`, status: 'completed', output: items, usage: { input_tokens: 200, output_tokens: 40 } } }); response.end(); };
+      event({ type: 'response.created', response: { id: `ask-${sequence}`, created_at: Math.floor(Date.now() / 1000), model: 'gpt-5-mini' } });
+      const complete = items => { event({ type: 'response.completed', response: { id: `ask-${sequence}`, model: 'gpt-5-mini', status: 'completed', output: items, usage: { input_tokens: 200, output_tokens: 40 } } }); response.end('data: [DONE]\n\n'); };
       const reply = text => {
         const item = { type: 'message', id: `message-${sequence}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] };
         event({ type: 'response.output_item.added', output_index: 0, item: { ...item, status: 'in_progress', content: [] } });
@@ -222,6 +223,15 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     const navigation = identity => rail.locator(`[data-floe-rail-icon="${identity}"]`).locator('xpath=ancestor::button[1]');
     await navigation('containers').click();
     await page.locator('[data-flower-context-page="containers"]').filter({ visible: true }).waitFor();
+    await page.locator('[data-floe-shell-slot="top-bar"] button').first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+    await card.locator('.flower-composer-context-source').first().click(); await text.waitFor();
+    const shellContext = await text.innerText();
+    assert.ok(shellContext.includes('kind: shell'));
+    assert.ok(!shellContext.includes('containers'));
+    report.shell = { context: shellContext, targetExact: true, extraHeaderAction: false };
+    await page.screenshot({ path: path.join(output, 'shell-context.png') });
+    await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
     for (const identity of ['files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'settings']) {
       const target = navigation(identity);
       const label = await target.getAttribute('aria-label');
@@ -230,6 +240,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       const slot = action.locator('.floe-context-action-icon');
       assert.ok((await slot.boundingBox()).width <= 14);
       assert.ok((await slot.locator('svg').boundingBox()).height <= 14);
+      if (identity === 'files') await page.screenshot({ path: path.join(output, 'compact-context-menu.png') });
       await action.click(); await card.waitFor();
       if (identity === 'files') await card.locator('textarea').fill('Keep this question across targets');
       assert.equal(await card.locator('textarea').inputValue(), 'Keep this question across targets');

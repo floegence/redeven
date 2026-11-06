@@ -4547,7 +4547,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const flowerNavigationBindings = new Map<string, () => void>();
   onCleanup(() => { flowerNavigationBindings.forEach(remove => remove()); flowerNavigationBindings.clear(); });
   const bindFlowerShell = (element: HTMLElement) => {
-    const remove = flowerContextSources.register({ id: 'shell', element, activateOnInteraction: false,
+    const remove = flowerContextSources.register({ id: `shell:${createClientId()}`, element, activateOnInteraction: false,
       read: target => {
         const node = target instanceof Element ? target : element;
         const region = node.closest<HTMLElement>('nav, header, [role="navigation"], [role="banner"]');
@@ -5499,6 +5499,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const standaloneTessivenReady = () => runtimeConnectionEstablished() && activityContentAvailable();
   const renderStandaloneTessiven = () => (
     <div
+      ref={bindFlowerShell}
       class="h-full min-h-0"
       data-env-service-canvas-window
       data-env-service-canvas-ready={standaloneTessivenReady() ? 'true' : 'false'}
@@ -5531,6 +5532,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       <div class="h-full min-h-0" hidden={pluginCreationOpen()} inert={pluginCreationOpen()} data-plugin-creation-retained-shell>
       <AppViewport>
         <div
+          ref={bindFlowerShell}
           class="flex h-full min-h-0 flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
           inert={mobilePluginModalOpen()}
           aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
@@ -5620,7 +5622,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       </div>
       <Show when={pluginCreationOpen()}>
         <AppViewport>
-          <div class="relative h-full min-h-0 overflow-hidden" data-redeven-plugin-creation-page>
+          <div ref={bindFlowerShell} class="relative h-full min-h-0 overflow-hidden" data-redeven-plugin-creation-page>
             <Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}>
               <Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense>
             </Show>
@@ -5752,7 +5754,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                     <h1 class="floe-window-status__title">{i18n.t(restartRestoreFailed() ? 'sessionRestart.failed' : 'sessionRestart.restoring')}</h1>
                   </div></section>
                 )}>
-                  <div ref={bindFlowerShell} class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
+                  <div class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
                     {standaloneTessiven ? renderStandaloneTessiven() : renderMainShell()}
                   </div>
                 </Show>
