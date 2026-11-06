@@ -84,6 +84,9 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = fmt.Fprintf(w, `<title>Batch report</title><div role="region" aria-label="Score">%d</div>`, page*7)
+		case "/large":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = io.WriteString(w, "<title>Large source</title>"+strings.Repeat("<p>"+strings.Repeat("Source text ", 45)+"</p>", 180))
 		default:
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = io.WriteString(w, `<title>Examples</title><a href="/export">Export domains</a>`)
@@ -155,7 +158,26 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 			continue
 		}
 		example, _, _ = strings.Cut(example, " Details:")
-		execute(strings.ReplaceAll(example, "'observed-ref'", "exportRef"))
+		result := execute(strings.ReplaceAll(example, "'observed-ref'", "exportRef"))
+		payload := result.Result.(map[string]any)
+		if examples == 0 {
+			if payload["observation"] == nil || len(toAnySlice(payload["logs"])) != 0 {
+				t.Fatalf("core observation example failed: %#v", payload)
+			}
+		} else {
+			logs := toAnySlice(payload["logs"])
+			if len(logs) != 1 {
+				t.Fatalf("structured log missing: %#v", payload)
+			}
+			values := toAnySlice(logs[0])
+			if len(values) != 1 {
+				t.Fatalf("text example changed shape: %#v", values)
+			}
+			value, ok := values[0].(map[string]any)
+			if !ok || value["text"] != "Export domains" || value["truncated"] != false {
+				t.Fatalf("text example lost source facts: %#v", value)
+			}
+		}
 		examples++
 	}
 	if examples != 2 {
@@ -208,4 +230,25 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 		t.Fatal("example did not return a real screenshot")
 	}
 	execute(`ui.assert(batchScores.length===3 && batchScores[0]===7 && batchScores[1]===14 && batchScores[2]===21); ui.assert(batchTotal===42);`)
+
+	// The default example publishes bounded source content even when raw node
+	// logging would exceed its separate budget. Source loss stays independent.
+	execute("await browser.navigate(" + string(quoted) + " + '/large');")
+	execute(`const tree=await ui.snapshot({limit:1000,emit:false}); ui.assert(JSON.stringify(tree.nodes).length>65536);`)
+	_, example, _ = strings.Cut(guide, "Example: ")
+	example, _, _ = strings.Cut(example, "\n")
+	large := execute(example)
+	published, publishErr = floretToolResultFromFlower(nil, ToolResult{ToolID: "large-example", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: large.Result})
+	if publishErr != nil {
+		t.Fatal(publishErr)
+	}
+	var model map[string]any
+	if err := json.Unmarshal([]byte(published.Text), &model); err != nil {
+		t.Fatal(err)
+	}
+	data := model["data"].(map[string]any)
+	read = data["read_outcomes"].([]any)[0].(map[string]any)
+	if model["truncated"] != false || data["truncated"] != false || read["source_truncated"] != true || read["truncated"] != true || !strings.Contains(published.Text, "Source text") || len(toAnySlice(data["logs"])) != 0 {
+		t.Fatalf("large example lost output or conflated truncation: %#v", model)
+	}
 }

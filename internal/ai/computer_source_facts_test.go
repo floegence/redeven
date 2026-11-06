@@ -179,7 +179,7 @@ func TestComputerSnapshotReceiptsRetainSourceCompletenessWithoutEmission(t *test
 				if fmt.Sprint(read["total"]) != "3" || fmt.Sprint(read["returned_count"]) != "1" || read["source_truncated"] != true || read["truncated"] != true || read["root_ref"] != "a" || fmt.Sprint(read["limit"]) != "1" || read["document_id"] != "source:3" {
 					t.Fatalf("lost source completeness: %#v", read)
 				}
-				if wire["truncated"] != false || data["observations"] != nil || data["observation"] != nil {
+				if wire["truncated"] != false || data["truncated"] != false || data["observations"] != nil || data["observation"] != nil {
 					t.Fatalf("source and output loss conflated: %#v", wire)
 				}
 			}

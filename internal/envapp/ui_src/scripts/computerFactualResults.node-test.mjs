@@ -18,6 +18,19 @@ async function fixture(html, run) {
   } finally { if(controller){await controller.page.releasePage();controller.close();}await browser.close(); }
 }
 
+test('unsupported layout reports capability facts without prescribing recovery',()=>fixture('<main><!--state marker--><button>Ready</button></main>',async({controller,session})=>{
+  const entry=await controller.page.resolve({role:'button',name:'Ready',exact:true});
+  const {root}=await session.send('DOM.getDocument',{depth:-1});
+  const pending=[root];let comment;
+  while(pending.length){const node=pending.pop();if(node.nodeType===8){comment=node;break;}pending.push(...(node.children??[]));}
+  assert.ok(comment,'fixture comment missing');
+  await assert.rejects(controller.page.elementState({...entry,backendNodeId:comment.backendNodeId}),error=>{
+    assert.equal(error.message,'TARGET_CAPABILITY_UNAVAILABLE');
+    assert.deepEqual(error.diagnostic,{phase:'read',method:'element_state',expected:'element_or_text_layout'});
+    return true;
+  });
+}));
+
 test('nested wheel reports only the explicit measured element, never a guessed receiver',()=>fixture('<style>body{margin:0}main{width:600px;height:300px;overflow:hidden}#inner{width:580px;height:280px;overflow:auto}#content{height:2000px}</style><main><div id="inner"><div id="content">Content</div></div></main>',async({tab,call})=>{
   const observed=await call('computer.observe');
   const main=observed.result.observation.nodes.find(n=>n.role==='main');

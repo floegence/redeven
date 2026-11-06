@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Clarify [computer script output](ai/computer-use-scripts.md) with an emitted snapshot example, structured logging and on-demand result/truncation scopes; keep independent budgets and remove prescriptive layout-recovery diagnostics.
+
 - 2026-11-05: Preserve typed [computer script cancellation](ai/computer-use-scripts.md) across interpreter retirement and closed pipes, retaining confirmed operations and independent unknown effects; qualify core read examples and locator wait signatures at the model and Activity boundaries.
 
 - 2026-11-05: Preserve Ask Flower trigger coordinates through file, Git and preview actions; consume Floe 0.93.2 directional presence with immediate input, retained exits, clean active editor surfaces and distinct opaque reference fills.

@@ -871,7 +871,7 @@ export class BrowserComputerPage {
           let receives=false;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===node){receives=true;break;}
           return {connected,node_type,rendered:visible,visible:visible&&!opacity_zero,enabled,readonly,editable,opacity_zero,receives,...(r?{bounds:[r.x,r.y,r.width,r.height]}:{})};
         }` }, value => value?.unsupported === true || typeof value?.connected === 'boolean' && typeof value.visible === 'boolean' && typeof value.enabled === 'boolean' && (!value.visible || (typeof value.readonly === 'boolean' && typeof value.receives === 'boolean' && Array.isArray(value.bounds) && value.bounds.length === 4 && value.bounds.every(Number.isFinite))));
-      if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {diagnostic:{phase:'read',method:'element_state',expected:'element_or_text_layout',recovery:'choose_supported_read'}});
+      if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {diagnostic:{phase:'read',method:'element_state',expected:'element_or_text_layout'}});
       return result;
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', { objectId: object.objectId }); }
   }
