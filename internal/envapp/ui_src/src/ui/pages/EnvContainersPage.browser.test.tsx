@@ -1505,7 +1505,7 @@ describe('native Containers responsive product surface', () => {
       await userEvent.click(prompt.querySelector<HTMLButtonElement>('.flower-composer-context-source')!);
       await expect.poll(() => document.querySelector('.flower-context-preview-window')?.textContent, { timeout: 10_000 }).toContain('permission_denied');
       expect(document.querySelector('.flower-context-preview-window')?.textContent).toContain('udesk26');
-      await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-context-preview-window [data-floe-floating-window-control=close]')!);
+      await userEvent.click(document.querySelector<HTMLButtonElement>(width >= 768 ? '.flower-context-preview-window [data-floe-floating-window-control=close]' : '.flower-context-preview-window button[aria-label="' + (locale === 'zh-CN' ? '关闭' : locale === 'zh-TW' ? '關閉' : 'Close') + '"]')!);
       await expect.poll(() => document.querySelector('.flower-context-preview-window')).toBeNull();
       expect(editor.value).toBe('Please diagnose and help configure this engine.');
       expect(document.documentElement.classList.contains('dark')).toBe(appearance === 'dark');

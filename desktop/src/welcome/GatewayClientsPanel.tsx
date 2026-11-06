@@ -1,4 +1,5 @@
-import { KeyedFor, Button, Input, Dialog } from '@floegence/floe-webapp-core/ui';
+import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
+import { KeyedFor, Button, Input } from '@floegence/floe-webapp-core/ui';
 import { AlertTriangle, Copy, Monitor, Plus, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from 'solid-js';
 import { gatewayConnectionOrigin } from '../shared/gatewayNetworkSettings';

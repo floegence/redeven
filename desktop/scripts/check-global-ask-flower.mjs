@@ -14,7 +14,7 @@ import { createBuiltFlowerPreview } from './flower-preview.mjs';
 // A marker beneath the real card proves that captured pixels omit prompt chrome.
 async function prepareCaptureProof(page) {
   return page.evaluate(() => {
-    const source = document.getElementById('redeven-desktop-main').getBoundingClientRect();
+    const source = [...document.querySelectorAll('[data-desktop-page]')].find(element => element.getClientRects().length).getBoundingClientRect();
     const card = document.querySelector('[data-floe-prompt-card]').getBoundingClientRect();
     const x = Math.max(source.left, card.left) + 18;
     const y = Math.max(source.top, card.top) + 18;

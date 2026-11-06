@@ -1,5 +1,6 @@
+import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { Show, createMemo, createUniqueId, type JSX } from 'solid-js';
-import { Button, Dialog, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
+import { Button, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { environmentHasAccessSettings, type EnvironmentSettingsTab } from './environmentSettingsSession';

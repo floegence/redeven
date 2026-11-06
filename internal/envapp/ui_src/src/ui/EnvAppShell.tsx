@@ -5111,10 +5111,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const HeaderActions = () => (
     <div class="flex items-center gap-1">
-      <Show when={canUseFlower()}><TopBarIconButton label={i18n.t('flowerTurnLauncher.windowTitle')}
-        tooltip={topBarTooltip(i18n.t('flowerTurnLauncher.windowTitle'))} onClick={openGlobalAskFlower}>
-        <ActivityBarFlowerIcon class="w-4 h-4" />
-      </TopBarIconButton></Show>
       <Show when={!layout.isMobile()}>
         <EnvDisplayModeSwitcher
           mode={viewModeSelection.visual()}
@@ -5522,7 +5518,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
           <Suspense fallback={<ActivityPageLoading />}>
             <div class="h-full min-h-0 flex flex-col">
-              <div class="flex shrink-0 justify-end px-2 py-1"><TopBarIconButton label={i18n.t('flowerTurnLauncher.windowTitle')} onClick={openGlobalAskFlower}><ActivityBarFlowerIcon class="h-4 w-4" /></TopBarIconButton></div>
               <div class="min-h-0 flex-1"><EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone /></div>
             </div>
           </Suspense>

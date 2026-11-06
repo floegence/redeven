@@ -1,5 +1,5 @@
 import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
-import { createFlowerContextSources, FlowerContextSources } from '../../../internal/flower_ui/src/FlowerContextSource';
+import { createFlowerContextSources, FlowerContextSource, FlowerContextSources } from '../../../internal/flower_ui/src/FlowerContextSource';
 import { flowerPageContextSnapshot } from '../../../internal/flower_ui/src/flowerPageContext';
 import { GlobalFlowerContextMenu } from '../../../internal/flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
@@ -6347,23 +6347,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const selectedEnvironment = owner ? snapshot().environments.find(environment => environment.id === owner.dataset.ownerId) : undefined;
     const environment = selectedEnvironment ?? settingsSession()?.environment ?? flowerRuntimeEnvironment();
     if (!environment) return openFlowerSurface;
-    const subject = request ? flowerContextSources.captureTarget(request.target, request.selection) : undefined;
-    const main = document.getElementById('redeven-desktop-main');
-    const inContent = !request || Boolean(main?.contains(request.target));
-    const page = visibleSurface();
-    const title = subject ? subject.value.pageName : selectedEnvironment ? selectedEnvironment.label : !inContent ? i18n().t('shell.accessibility.topBarLabel')
-      : page === 'connect_environment' ? i18n().t('environmentCenter.title') : page === 'environment_settings' ? i18n().t('environmentCenter.environmentSettings') : page === 'flower' ? 'Flower' : 'Tessiven';
+    const subject = selectedEnvironment ? undefined : request ? flowerContextSources.captureTarget(request.target, request.selection) : flowerContextSources.capture();
+    const title = subject ? subject.value.pageName : selectedEnvironment ? selectedEnvironment.label : i18n().t('shell.accessibility.topBarLabel');
     const captured = flowerPageContextSnapshot({ environmentID: '', environmentName: '',
-      pageID: subject?.value.pageID ?? selectedEnvironment?.id ?? (inContent ? page : 'topbar'), pageName: title, capturedAtMs: Date.now(),
-      state: { kind: subject ? subject.value.kind ?? 'surface' : selectedEnvironment ? 'object' : inContent ? 'surface' : 'shell',
+      pageID: subject?.value.pageID ?? selectedEnvironment?.id ?? 'desktop-shell', pageName: title, capturedAtMs: Date.now(),
+      state: { kind: subject ? subject.value.kind ?? 'surface' : selectedEnvironment ? 'object' : 'shell',
         ...(subject ? subject.value.state : selectedEnvironment ? { environment: { id: selectedEnvironment.id, name: selectedEnvironment.label } }
-          : inContent ? (page === 'flower' ? readFlowerContext?.() : page === 'tessiven' ? readTessivenContext?.() : {}) : {}),
-        ...((subject?.selection ?? request?.selection) ? { selection: subject?.selection ?? request?.selection } : {}) } });
+          : {}),
+        ...(subject?.selection ? { selection: subject.selection } : {}) } });
     const context = { kind: 'text_snapshot' as const, title, content: captured.content };
     const base = buildEnvironmentFlowerTurnLauncherIntent(environment);
-    const screenshotSource = subject ? { element: subject.element, valid: () => subject.element.isConnected && flowerContextSources.captureTarget(subject.element)?.value.resourceKey === subject.value.resourceKey }
+    const screenshotSource = subject ? { element: subject.element, valid: () => {
+      const current = flowerContextSources.captureTarget(subject.element);
+      return current?.id === subject.id && current.value.resourceKey === subject.value.resourceKey;
+    } }
       : owner ? { element: owner, valid: () => owner.isConnected && owner.dataset.ownerId === selectedEnvironment?.id }
-      : inContent ? readLauncherScreenshot() : undefined;
+      : undefined;
     return () => {
       if (flowerTurnLauncherLocked()) return;
       if (flowerTurnLauncherOpen() && !request) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
@@ -6567,9 +6566,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         trailingActions={(
           <div class="flex items-center gap-1">
-            <TopBarIconButton label={i18n().t('environmentCenter.askFlowerCardTitle')} onClick={openGlobalAskFlower}>
-              <FlowerIcon class="h-4 w-4" />
-            </TopBarIconButton>
             <Show when={!environmentsVisible()}>
               <button
                 type="button"
@@ -6633,6 +6629,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <Show when={environmentsVisited()}>
           <div class="h-full min-h-0" style={{ display: environmentsVisible() ? undefined : 'none' }}
             data-desktop-page="environments" aria-hidden={!environmentsVisible() ? 'true' : undefined} inert={!environmentsVisible()}>
+            <FlowerContextSource id="desktop:environments" pageID="connect_environment" pageName={i18n().t('environmentCenter.title')} mode="activity" selected={environmentsVisible()} enabled={environmentsVisible()}
+              boundary={body => body.parentElement!} state={{ section: activeCenterTab() }}>
             <ConnectEnvironmentSurface
               i18n={i18n()}
               visible={environmentsVisible()}
@@ -6762,9 +6760,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               signOutControlPlane={setSignOutControlPlaneTarget}
               deleteGateway={setDeleteGatewayTarget}
             />
+            </FlowerContextSource>
           </div>
         </Show>
         <Show when={tessivenVisited()}><div class="h-full min-h-0" style={{ display: tessivenVisible() ? undefined : 'none' }} data-desktop-page="tessiven" aria-hidden={!tessivenVisible() ? 'true' : undefined} inert={!tessivenVisible()}>
+          <FlowerContextSource id="desktop:tessiven" pageID="tessiven" pageName="Tessiven" mode="activity" selected={tessivenVisible()} enabled={tessivenVisible()}
+            boundary={body => body.parentElement!} state={readTessivenContext?.()} resourceKey={String(readTessivenContext?.().canvas_id ?? '')}>
           <TessivenPage registerPageContext={read => { readTessivenContext = read; onCleanup(() => { if (readTessivenContext === read) readTessivenContext = undefined; }); }} locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
             renderFlower={surface => {
               return <Show keyed when={flowerIdentityKey()}>{environmentID => <DesktopFlowerRuntimeBoundary embedded
@@ -6796,10 +6797,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             }}
             onOpenFlower={openFlowerConversation}
             onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>
+          </FlowerContextSource>
         </div></Show>
         <Show when={flowerVisited()}>
           <div class="h-full min-h-0" style={{ display: flowerVisible() ? undefined : 'none' }}
             data-desktop-page="flower" aria-hidden={!flowerVisible() ? 'true' : undefined} inert={!flowerVisible()}>
+            <FlowerContextSource id="desktop:flower" pageID="flower" pageName="Flower" mode="activity" selected={flowerVisible()} enabled={flowerVisible()}
+              boundary={body => body.parentElement!} state={readFlowerContext?.()} resourceKey={String(readFlowerContext?.().thread_id ?? '')}>
             <Show keyed when={flowerIdentityKey()}>
               {(environmentID) => {
                 return (
@@ -6864,6 +6868,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 );
               }}
             </Show>
+            </FlowerContextSource>
           </div>
         </Show>
       </DesktopLauncherShell>

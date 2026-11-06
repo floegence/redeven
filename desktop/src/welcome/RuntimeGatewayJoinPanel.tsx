@@ -1,9 +1,10 @@
+import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { GatewayPicker } from './GatewayPicker';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { gatewayRuntimeAddress, savedGatewaySuggestions } from './savedGatewaySuggestions';
 import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 
 import type { GatewayJoinPreview, GatewayAttachmentOperation, GatewayEnrollmentPurpose, GatewayAttachmentStatus, GatewayAttachmentSnapshot } from '../shared/gatewayJoin';

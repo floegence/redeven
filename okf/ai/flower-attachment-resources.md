@@ -3,7 +3,7 @@ type: AI Resource Contract
 title: Flower attachment resources
 tags: [ai, flower, attachments, storage, security]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -31,6 +31,11 @@ Cleanup removes work copies, never original inputs/images. Retained references p
 Files derives input/media pages from public windows with current product authorization. Last-reference inventory includes inactive paths/queued inputs but grants no read authority. External files/deliveries retain destinations and survive cleanup. Existing upload/media backup scope excludes disposable task files.
 
 # Boundaries
+
+Attachment staging capabilities travel only through `Upload-Staging-Capability`.
+Both the server proxy allowlist and Floe's browser response policy explicitly retain
+that field across local HTTP, TLS, private bridge and remote connections. The
+capability remains in memory; it is never copied into URLs or canonical context.
 
 Redeven does not inspect or migrate Floret storage, persist message ordering, expose a filesystem path, accept a client owner, authorize by locator, or infer canonical membership from its claim table. Neither transport embeds bytes or a URL identity in a turn JSON body.
 

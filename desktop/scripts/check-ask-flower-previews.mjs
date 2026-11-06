@@ -60,9 +60,9 @@ await session.run(async () => {
       const results = (input.input ?? []).filter(item => item.type === 'function_call_output' && toolCalls.has(item.call_id));
       providerRequests.push({ marker, model: input.model, referencesExact: true, imageParts: imageParts.length, toolResults: results.length });
       if (!results.length) {
-        assert.ok(input.tools.some(tool => tool.name === 'file_read'));
+        assert.ok(input.tools.some(tool => tool.name === 'read_file'));
         const id = `read-${sequence}`; toolCalls.add(id);
-        const item = { type: 'function_call', id, call_id: id, name: 'file_read', arguments: JSON.stringify({ file_path: proofPath }) };
+        const item = { type: 'function_call', id, call_id: id, name: 'read_file', arguments: JSON.stringify({ path: proofPath }) };
         event({ type: 'response.output_item.added', output_index: 0, item }); event({ type: 'response.output_item.done', output_index: 0, item }); complete([item]); return;
       }
       assert.ok(results.some(item => String(item.output).includes('Ask Flower preview acceptance')), 'A real read tool returns the isolated fixture');
@@ -100,6 +100,7 @@ await session.run(async () => {
     const result = await response.json(); assert.ok(response.ok && result.ok !== false, JSON.stringify(result)); return result.data ?? result;
   };
   await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Ask Flower qualification', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 128000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'qualification-only' }], web_search_provider_key_patches: [] });
+  await api('/_redeven_proxy/api/ai/default_permission', 'PUT', { permission_type: 'readonly' });
   await build({ stdin: { contents: "import { bootstrapDesktopShellBridge } from './desktop/src/preload/desktopShell'; bootstrapDesktopShellBridge();", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(state, 'preload.cjs') });
   await build({ entryPoints: [path.join(root, 'desktop/src/main/manualScreenshot.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(state, 'capture.cjs') });
   await writeFile(path.join(state, 'main.cjs'), `const { app, BrowserWindow, ipcMain } = require('electron');
@@ -119,6 +120,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await page.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
     await page.goto(startup.local_ui_url);
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Ask Flower', exact: true }).count(), 0, 'No extra Ask Flower header icon');
     await page.getByRole('button', { name: 'File Browser', exact: true }).filter({ visible: true }).last().click();
     await page.getByTitle('Go to path', { exact: true }).filter({ visible: true }).last().click();
     await page.getByRole('textbox', { name: 'Go to path', exact: true }).fill(directory);
@@ -186,19 +188,23 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await preview.waitFor({ state: 'hidden' });
     const sendAndVerify = async (marker, facts) => {
       expected.set(marker, facts);
+      const previous = new Set((await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.map(thread => thread.thread_id));
       await card.locator('textarea').fill(`${marker}: inspect the attached context and read ${proofPath}.`);
-      const received = page.waitForResponse(response => response.request().method() === 'POST' && /\/ai\/(?:threads\/[^/]+\/)?turns$/.test(new URL(response.url()).pathname));
       await card.locator('.floe-prompt-card-submit').click();
-      const response = await received;
-      const sent = response.request().postDataJSON();
-      assert.equal(sent.thread_id, undefined);
-      assert.equal(sent.input.context_action.context[0].content, facts);
-      const receipt = (await response.json()).data;
-      assert.ok(receipt.thread_id);
+      // The real renderer sends over the authenticated session, not page fetch.
+      let threadID;
+      for (let attempt = 0; attempt < 600; attempt++) {
+        assert.ok(!providerError, providerError);
+        const created = (await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.filter(thread => !previous.has(thread.thread_id));
+        assert.ok(created.length <= 1, 'One click creates exactly one task');
+        if (created.length) { threadID = created[0].thread_id; break; }
+        await delay(50);
+      }
+      assert.ok(threadID, await card.innerText());
       let detail;
       for (let attempt = 0; attempt < 600; attempt++) {
         assert.ok(!providerError, providerError);
-        detail = await api(`/_redeven_proxy/api/ai/threads/${receipt.thread_id}`);
+        detail = await api(`/_redeven_proxy/api/ai/threads/${threadID}`);
         assert.notEqual(detail.current.last_outcome, 'failed', JSON.stringify(detail.current));
         if (detail.current.activity === 'idle' && detail.current.last_outcome === 'completed') break;
         await delay(50);
@@ -206,8 +212,9 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       assert.equal(detail.current.last_outcome, 'completed');
       await card.waitFor({ state: 'hidden' });
       await page.getByText(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`, { exact: true }).filter({ visible: true }).waitFor();
-      assert.ok(!report.sends.some(previous => previous.threadID === receipt.thread_id), 'Every Ask creates a new task');
-      report.sends.push({ marker, threadID: receipt.thread_id, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true });
+      assert.ok(strings(detail).some(text => text.includes(facts)), 'Canonical admitted context matches the preview');
+      assert.ok(!report.sends.some(previous => previous.threadID === threadID), 'Every Ask creates a new task');
+      report.sends.push({ marker, threadID, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true });
       await page.screenshot({ path: path.join(output, `completed-${marker}.png`) });
     };
     await sendAndVerify('QUALIFY_ASK_IMAGE', context);

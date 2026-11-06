@@ -1280,7 +1280,7 @@ export function EnvCodespacesPage(props: { registerPageContext?: FlowerPageConte
     const snapshot = flowerPageContextSnapshot({ environmentID: '', environmentName: '', pageID: menu.space.code_space_id,
       pageName: menu.space.name || menu.space.code_space_id, capturedAtMs: Date.now(),
       state: { kind: 'object', code_space_id: menu.space.code_space_id, running: menu.space.running, workspace_path: menu.space.workspace_path } });
-    const contexts = [{ kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content }, ...result.intent.context_items.map(item => item.kind === 'file_path' ? { kind: item.kind, path: item.path, is_directory: item.is_directory } : item)];
+    const contexts = [{ kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content }, ...result.intent.context_items.filter(item => item.kind === 'file_path').map(item => ({ kind: item.kind, path: item.path, is_directory: item.is_directory }))];
     env.openFlowerTurnLauncher({ ...result.intent, source_surface: 'flower_composer', context_items: contexts,
       context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: contexts, surfaceId: menu.space.code_space_id,
         suggested_working_dir: result.intent.suggested_working_dir }) }, anchor);

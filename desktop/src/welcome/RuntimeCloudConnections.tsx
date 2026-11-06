@@ -1,5 +1,6 @@
+import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import {Button, Dialog, Select} from '@floegence/floe-webapp-core/ui';
+import {Button, Select} from '@floegence/floe-webapp-core/ui';
 import {createEffect, createMemo, createSignal, on, onCleanup, Show} from 'solid-js';
 import type {DesktopI18n} from '../shared/i18n';
 

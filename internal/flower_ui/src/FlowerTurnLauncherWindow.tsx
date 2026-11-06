@@ -618,6 +618,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       </>}
       containsTarget={target => target instanceof Element && Boolean(
         target.closest('.flower-turn-launcher-related-surface')
+          || target.closest('[role="menu"]')
           || target.closest('[data-floe-geometry-surface="floating-window"]')?.querySelector(':scope > .flower-turn-launcher-related-surface'))}
     />
     <Dialog open={Boolean(localPreview())} onOpenChange={open => { if (!open) clearPreview(); }}

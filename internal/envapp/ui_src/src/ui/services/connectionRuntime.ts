@@ -2,6 +2,7 @@ import type { ArtifactSource } from '@floegence/flowersec-core';
 import type { HTTPDirectArtifactSourceV1, PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
 import type { ConnectConfig } from '@floegence/floe-webapp-protocol';
 import { bindSessionHTTP } from './sessionHTTP';
+import { flowerStagingCapabilityHeaderName } from '../../../../../flower_host_ui/src/flowerAttachmentStaging';
 import type { FlowersecConnectionConfig, ProxyBootstrapOwnerOptions } from '@floegence/floe-webapp-boot';
 
 export type EnvAppConnectionMode = 'local' | 'remote';
@@ -38,6 +39,7 @@ export type EnvAppConnectionRuntime = Readonly<{
 }>;
 
 type BootModule = typeof import('@floegence/floe-webapp-boot');
+const extraResponseHeaders = Object.freeze([flowerStagingCapabilityHeaderName()]);
 
 let bootModulePromise: Promise<BootModule> | undefined;
 
@@ -104,7 +106,7 @@ export function createEnvAppConnectionRuntime(
         const boot = await loadBootModule();
         if (local.kind === 'public_http') {
           return createConfigLease(boot.createHTTPDirectConnectionConfig({
-            source: await local.source(), httpDirect: { origin: local.origin },
+            source: await local.source(), httpDirect: { origin: local.origin }, extraResponseHeaders,
           }));
         }
         if (local.kind === 'desktop_private_bridge_v2') {
@@ -112,10 +114,12 @@ export function createEnvAppConnectionRuntime(
           return createConfigLease(boot.createPrivateLoopbackDirectConnectionConfig({
             source,
             privateLoopback: { origin: local.origin },
+            extraResponseHeaders,
           }));
         }
         return createConfigLease(boot.createArtifactDirectConnectionConfig({
           source: await local.source(),
+          extraResponseHeaders,
         }));
       }
 
@@ -124,7 +128,7 @@ export function createEnvAppConnectionRuntime(
         remoteSource(),
         options.proxyBootstrap(),
       ]);
-      const proxyBootstrap = boot.createProxyBootstrapOwner(proxyBootstrapOptions ?? {});
+      const proxyBootstrap = boot.createProxyBootstrapOwner({ ...proxyBootstrapOptions, extraResponseHeaders });
       try {
         const config = boot.createProxyRuntimeTunnelConnectionConfig({
           source,

@@ -17,9 +17,9 @@ export function registerFlowerPageReader(read: () => FlowerPageContextState | un
   registrar?.(read, resourceKey);
 }
 
-export function FlowerContextSource(props: { id: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; kind?: FlowerSourceFacts['kind']; selected?: boolean; enabled?: boolean; boundary?: (body: HTMLElement) => HTMLElement; class?: string; state?: FlowerPageContextState; children: JSX.Element }) {
+export function FlowerContextSource(props: { id: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; kind?: FlowerSourceFacts['kind']; resourceKey?: string; selected?: boolean; enabled?: boolean; boundary?: (body: HTMLElement) => HTMLElement; class?: string; state?: FlowerPageContextState; children: JSX.Element }) {
   const sources = useContext(FlowerContextSources);
-  let element!: HTMLDivElement;
+  let element!: HTMLElement;
   let reader: (() => FlowerPageContextState | undefined) | undefined;
   let readResourceKey: (() => string | undefined) | undefined;
   const register: SourceReader = (read, resourceKey) => {
@@ -37,13 +37,13 @@ export function FlowerContextSource(props: { id: string; pageID: string; pageNam
   onMount(() => {
     element = props.boundary?.(element) ?? element;
     const remove = sources?.register({ id, element, enabled: () => props.enabled !== false, activateOnInteraction: props.kind !== 'shell' && props.kind !== 'navigation', read: () => ({
-      kind: props.kind ?? 'surface', resourceKey: readResourceKey?.(), pageID: props.pageID, pageName: props.pageName, mode: props.mode, state: copyFacts(reader?.() ?? props.state),
+      kind: props.kind ?? 'surface', resourceKey: readResourceKey?.() ?? props.resourceKey, pageID: props.pageID, pageName: props.pageName, mode: props.mode, state: copyFacts(reader?.() ?? props.state),
     }) });
     if (props.selected) activate();
     onCleanup(() => remove?.());
   });
   createEffect(() => { if (props.selected) activate(); });
-  return <div ref={element} class={props.class ?? "h-full min-h-0 w-full"} data-flower-context-source={id} data-flower-context-page={props.pageID} data-flower-context-mode={props.mode}>
+  return <div ref={node => { element = node; }} class={props.class ?? "h-full min-h-0 w-full"} data-flower-context-source={id} data-flower-context-page={props.pageID} data-flower-context-mode={props.mode}>
     <SourceOwner.Provider value={() => ({ pageID: props.pageID, pageName: props.pageName, mode: props.mode })}><ContextReader.Provider value={register}>{props.children}</ContextReader.Provider></SourceOwner.Provider>
   </div>;
 }

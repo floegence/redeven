@@ -115,6 +115,7 @@ describe('createEnvAppConnectionRuntime', () => {
     expect(second.config.source).toBe(source);
     expect(first.config.lifecycle).not.toBe(second.config.lifecycle);
     expect(bootMocks.createProxyBootstrapOwner).toHaveBeenCalledTimes(2);
+    expect(bootMocks.createProxyBootstrapOwner).toHaveBeenLastCalledWith({ extraResponseHeaders: ['Upload-Staging-Capability'] });
     expect(bootMocks.owners[0]).not.toBe(bootMocks.owners[1]);
 
     first.dispose();
@@ -176,7 +177,7 @@ describe('createEnvAppConnectionRuntime', () => {
       remoteSource: () => Object.freeze({ acquire: vi.fn() }), proxyBootstrap: () => ({}),
     });
     const lease = await runtime.createConfig('local');
-    expect(bootMocks.createHTTPDirectConnectionConfig).toHaveBeenCalledWith({ source, httpDirect: { origin: 'http://192.168.1.20:23998' } });
+    expect(bootMocks.createHTTPDirectConnectionConfig).toHaveBeenCalledWith({ source, httpDirect: { origin: 'http://192.168.1.20:23998' }, extraResponseHeaders: ['Upload-Staging-Capability'] });
     expect(bootMocks.createPrivateLoopbackDirectConnectionConfig).not.toHaveBeenCalled();
     expect(bootMocks.createArtifactDirectConnectionConfig).not.toHaveBeenCalled();
     lease.dispose();
@@ -207,6 +208,7 @@ describe('createEnvAppConnectionRuntime', () => {
     expect(bootMocks.createPrivateLoopbackDirectConnectionConfig).toHaveBeenCalledWith({
       source,
       privateLoopback: { origin: 'http://127.0.0.1:43123' },
+      extraResponseHeaders: ['Upload-Staging-Capability'],
     });
     expect(bootMocks.createArtifactDirectConnectionConfig).not.toHaveBeenCalled();
     lease.dispose();

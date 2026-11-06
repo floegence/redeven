@@ -563,7 +563,9 @@ describe('FlowerTurnLauncherWindow', () => {
       { id: 'gateway/unavailable', label: 'Gateway / Unavailable', provider_id: 'gateway', provider_name: 'Gateway', provider_type: 'openai_compatible', source: 'runtime_config', state: 'unavailable', reason: 'missing_keys' },
     ] };
     const host = document.createElement('div'); document.body.appendChild(host);
-    render(() => <FlowerTurnLauncherWindow open intent={baseIntent} onClose={() => undefined} onSubmit={async () => undefined}
+    const [intent, setIntent] = createSignal<FlowerTurnLauncherSubmitInput['intent']>({ ...baseIntent, initial_prompt: 'Keep chosen model' });
+    const onSubmit = vi.fn(async (_input: FlowerTurnLauncherSubmitInput) => {});
+    render(() => <FlowerTurnLauncherWindow open intent={intent()} onClose={() => undefined} onSubmit={onSubmit}
       modelSource={{ loadSettings: async () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, model_directory: directory, provider_secrets: [] }) }} />, host);
     const trigger = host.querySelector<HTMLButtonElement>('[role=combobox]')!;
     await vi.waitFor(() => expect(trigger.textContent).toContain('Sonnet'));
@@ -582,6 +584,12 @@ describe('FlowerTurnLauncherWindow', () => {
     trigger.click();
     expect(host.querySelector('[role=group][aria-label=Gateway] [role=option]')?.getAttribute('aria-selected')).toBe('true');
     expect(host.querySelector('[role=group][aria-label=Primary] [role=option]')?.getAttribute('aria-selected')).toBe('false');
+    trigger.click();
+    setIntent({ ...baseIntent, context_items: [{ kind: 'text_snapshot', title: 'New target', content: 'new target facts' }] });
+    await flushAsync();
+    host.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!.click(); await flushAsync();
+    expect(onSubmit.mock.calls[0][0].model_id).toBe('gateway/sonnet');
+    expect(onSubmit.mock.calls[0][0].intent.context_items[0]).toEqual({ kind: 'text_snapshot', title: 'New target', content: 'new target facts' });
   });
 
   it('freezes an uncertain send against retargeting and releases the launcher lock on close', async () => {

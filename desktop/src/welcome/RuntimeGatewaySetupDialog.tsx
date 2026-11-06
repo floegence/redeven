@@ -1,7 +1,8 @@
+import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import { Button, Dialog, Dropdown } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';

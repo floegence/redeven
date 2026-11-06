@@ -23,6 +23,7 @@ let testFilesMenu = false;
 let testDesktopBridge = false;
 let testRealFlowerLauncher = false;
 let testRealFlowerPreview = false;
+let RealEnvFlowerLauncher: typeof import('./widgets/FlowerTurnLauncherWindow').FlowerTurnLauncherWindow;
 let registeredCommands: Array<{ id: string; execute: () => void }> = [];
 let pluginCreationNavigationFixture: { open: (instanceID: string) => Promise<void>; navigate?: (commit: () => unknown) => Promise<boolean> } | undefined;
 let pluginCreationInventory: any | undefined;
@@ -496,7 +497,8 @@ vi.mock('@floegence/floe-webapp-boot', () => ({
   createProxyRuntimeTunnelConnectionConfig: (config: object) => ({ ...config, lifecycle: { dispose: () => undefined } }),
 }));
 
-vi.mock('@floegence/floe-webapp-protocol', () => ({
+vi.mock('@floegence/floe-webapp-protocol', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-protocol')>(),
   useProtocol: () => ({
     status: () => protocolSnapshot.state,
     snapshot: () => protocolSnapshot,
@@ -870,7 +872,7 @@ vi.mock('./pages/EnvAIPage', () => ({
           Submit work
         </button>
         <button type="button" data-testid="activity-flower-related-trigger">Related</button>
-        <Portal mount={document.body}>
+        <Show when={!testRealFlowerPreview}><Portal mount={document.body}>
           <button
             type="button"
             class="flower-turn-launcher-related-surface"
@@ -898,16 +900,14 @@ vi.mock('./pages/EnvAIPage', () => ({
             <div class="flower-settings-dialog"><button type="button" data-testid="activity-flower-settings-action">Settings action</button></div>
             <button type="button" data-testid="activity-flower-settings-backdrop">Settings backdrop</button>
           </div>
-        </Portal>
+        </Portal></Show>
       </div>
     );
   },
 }));
 
-vi.mock('./widgets/FlowerTurnLauncherWindow', async importOriginal => {
-  const actual = await importOriginal<typeof import('./widgets/FlowerTurnLauncherWindow')>();
-  return ({
-  FlowerTurnLauncherWindow: (props: any) => testRealFlowerPreview ? <actual.FlowerTurnLauncherWindow {...props} /> : testRealFlowerLauncher ? <SharedFlowerTurnLauncherWindow {...props} /> : (
+vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
+  FlowerTurnLauncherWindow: (props: any) => testRealFlowerPreview ? <RealEnvFlowerLauncher {...props} /> : testRealFlowerLauncher ? <SharedFlowerTurnLauncherWindow {...props} /> : (
     <Show when={props.open && props.intent}>
       <div style={{ position: 'fixed', top: '100px', 'z-index': 200 }} data-testid="flower-turn-launcher" data-placement={props.placement ?? 'window'}>
         <button
@@ -924,7 +924,7 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', async importOriginal => {
       </div>
     </Show>
   ),
-}); });
+}));
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
   mapEnvFlowerSettings: () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [] }),
   createEnvLocalFlowerSurfaceAdapter: () => ({
@@ -1072,6 +1072,7 @@ vi.mock('./envSidebarVisibilityMotion', () => ({
 }));
 // Load the product graph after the mock state referenced by its imports exists.
 const { FileBrowserWorkspace } = await import('./widgets/FileBrowserWorkspace');
+RealEnvFlowerLauncher = (await vi.importActual<typeof import('./widgets/FlowerTurnLauncherWindow')>('./widgets/FlowerTurnLauncherWindow')).FlowerTurnLauncherWindow;
 
 async function settleFrames(count = 3): Promise<void> {
   for (let index = 0; index < count; index += 1) {
@@ -1522,15 +1523,15 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     }
   });
 
-  it('opens Ask Flower from a page background context menu and submits its frozen source', async () => {
-    testRealFlowerLauncher = true;
+  it('opens Ask Flower from navigation and submits its frozen target', async () => {
+    testRealFlowerLauncher = true; testRealFlowerPreview = true;
     await mountShell();
-    const target = document.querySelector<HTMLElement>('[data-env-shell-background]')!;
+    const target = document.querySelector<HTMLElement>('[data-floe-rail-icon="files"]')!.closest('button')!;
     await userEvent.click(target, { button: 'right' });
     await vi.waitFor(() => expect(document.querySelector('[data-context-action-id="assistant.ask.flower"]')).toBeTruthy());
     await userEvent.click(document.querySelector<HTMLButtonElement>('[data-context-action-id="assistant.ask.flower"]')!);
     await vi.waitFor(() => expect(document.querySelector('[data-floe-prompt-card] textarea')).toBeTruthy());
-    await userEvent.fill(document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!, 'Explain this page');
+    await userEvent.fill(document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!, 'Explain this navigation target');
     await userEvent.click(document.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
     await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledOnce());
     const sent = flowerLaunchTurnMock.mock.calls[0]![0];
@@ -1538,11 +1539,13 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const context = sent.context_action as { context: Array<{ kind: string; content: string }> };
     expect(context.context[0].kind).toBe('text_snapshot');
     expect(context.context[0].content.length).toBeGreaterThan(0);
+    expect(context.context[0].content).toContain('kind: navigation');
   });
 
   it('opens the global command with a frozen context and preserves the draft on repeated invocation', async () => {
     testRealFlowerLauncher = true;
     await mountShell();
+    expect(document.querySelector('button[aria-label="Ask Flower"]')).toBeNull();
     const command = registeredCommands.find(item => item.id === 'redeven.askFlower')!;
     expect(command).toBeTruthy(); command.execute();
     await vi.waitFor(() => expect(document.querySelector('[data-floe-prompt-card] textarea')).toBeTruthy());

@@ -1,6 +1,7 @@
+import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { GatewayPicker } from './GatewayPicker';
 import { gatewayAllowedHost, gatewayConnectionOrigin, gatewayListenAddress } from '../shared/gatewayNetworkSettings';
-import { KeyedFor, Button, Checkbox, Input, StableText, Dialog } from '@floegence/floe-webapp-core/ui';
+import { KeyedFor, Button, Checkbox, Input, StableText } from '@floegence/floe-webapp-core/ui';
 import { AlertTriangle, ChevronDown, Globe, HelpIcon, Plus, Refresh, Save, Shield, Terminal, Trash, Copy } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
