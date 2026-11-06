@@ -2703,7 +2703,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   onMount(() => {
     const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(source => {
       if (flowerTurnLauncherLocked()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
-      const context = { kind: 'text_snapshot' as const, title: source.title || environmentName(), content: JSON.stringify(source, null, 2) };
+      const snapshot = flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
+        pageID: '', pageName: source.title || environmentName(), capturedAtMs: source.captured_at_ms,
+        state: { url: source.url, ...(source.selection ? { selection: source.selection } : {}) } });
+      const context = { kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content };
       openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
         context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source.id }) }, { x: 32, y: 80 });
       if (!flowerTurnLauncherOpen()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }

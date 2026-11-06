@@ -1555,6 +1555,31 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     for (const excluded of ['containers', 'selected_resource', 'navigation.id', 'filter:', 'screen_text:']) expect(preview).not.toContain(excluded);
   });
 
+  it('previews child-window facts without exposing transport metadata and submits the same text', async () => {
+    testRealFlowerLauncher = true; testRealFlowerPreview = true;
+    const original = window.redevenDesktopShell;
+    let receive!: (source: import('../../../../../desktop/src/shared/manualScreenshotIPC').DesktopAskFlowerSource) => void;
+    window.redevenDesktopShell = { onAskFlowerSource: listener => { receive = listener; return () => {}; } } as typeof original;
+    try {
+      await mountShell();
+      receive({ id: 'private-capture-origin', title: 'Project preview', url: 'https://preview.example.com/project', captured_at_ms: 12345, selection: 'Selected project heading' });
+      await expect.poll(() => document.querySelector('[data-floe-prompt-card] textarea')).toBeTruthy();
+      await userEvent.click(document.querySelector<HTMLButtonElement>('[data-floe-prompt-card] .flower-composer-context-source')!);
+      await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')).toBeTruthy();
+      const preview = document.querySelector('[data-flower-context-preview-text]')!.textContent!;
+      expect(preview).toContain('Project preview');
+      expect(preview).toContain('url: https://preview.example.com/project');
+      expect(preview).toContain('selection: Selected project heading');
+      for (const excluded of ['private-capture-origin', 'captured_at_ms', '{', '"title"']) expect(preview).not.toContain(excluded);
+      document.querySelector<HTMLButtonElement>('.flower-context-preview-window [data-floe-floating-window-control="close"]')!.click();
+      await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')).toBeNull();
+      await userEvent.fill(document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!, 'Explain the selected heading');
+      await userEvent.click(document.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+      await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledOnce());
+      expect((flowerLaunchTurnMock.mock.calls[0]![0].context_action as { context: { content: string }[] }).context[0].content).toBe(preview);
+    } finally { window.redevenDesktopShell = original; }
+  });
+
   it('opens the global command with a frozen context and preserves the draft on repeated invocation', async () => {
     testRealFlowerLauncher = true;
     await mountShell();
