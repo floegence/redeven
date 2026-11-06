@@ -56,22 +56,21 @@ describe('Flower explicit preference writes', () => {
   });
 });
 
-it('bounds preference reads including time spent behind a write', async () => {
+it('keeps preference reads queued until the owning write settles', async () => {
   vi.useFakeTimers();
-  const client = createFlowerConversationPreferenceClient({
-    load: async () => ({ revision: 1, reasoning_by_model: {} }),
-    patch: () => new Promise(() => {}),
+  let finish!: (value: { revision: number; reasoning_by_model: Record<string, never> }) => void;
+  const load = vi.fn(async () => ({ revision: 2, reasoning_by_model: {} }));
+  const client = createFlowerConversationPreferenceClient({ load,
+    patch: () => new Promise(resolve => { finish=resolve; }),
   });
-  const write = client.save({ model_id: 'provider/a' });
-  const writeFailure = expect(write).rejects.toThrow('save timed out');
+  const write=client.save({model_id:'provider/a'});
   await vi.advanceTimersByTimeAsync(0);
-  const read = expect(client.load()).rejects.toThrow('read timed out');
-  await vi.advanceTimersByTimeAsync(15_000);
-  await read;
-  await vi.advanceTimersByTimeAsync(105_000);
-  await writeFailure;
-  expect(vi.getTimerCount()).toBe(0);
-  vi.useRealTimers();
+  const read=client.load();
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(load).toHaveBeenCalledTimes(1);
+  finish({revision:2,reasoning_by_model:{}});
+  await write;await expect(read).resolves.toMatchObject({revision:2});
+  expect(load).toHaveBeenCalledTimes(2);expect(vi.getTimerCount()).toBe(0);vi.useRealTimers();
 });
 
 it('releases timed out writes without replay and reads a fresh CAS revision for the next choice', async () => {

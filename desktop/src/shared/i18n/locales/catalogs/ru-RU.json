@@ -638,6 +638,7 @@
       "composerReferenceAdded": "Добавлена ссылка на {path}.",
       "composerReferenceExists": "Ссылка на {path} уже добавлена.",
       "pendingSending": "Отправка",
+      "sendAcceptedSyncing": "Получено, синхронизация",
       "pendingQueueAdmission": "Ожидает добавления в очередь",
       "pendingQueued": "В очереди",
       "queuedSendNow": "Отправить сейчас",

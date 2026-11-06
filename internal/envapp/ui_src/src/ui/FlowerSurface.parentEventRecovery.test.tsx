@@ -70,13 +70,13 @@ it('releases a stalled body when collapsed and ignores late completion after re-
   finish(body('first', 'Stale')); await flush();
   expect(reading.events()[0].message).toBe('Current'); expect(reading.bodyState('first')).toBe('ready'); second();
 });
-it('bounds deadline retries and releases timers after exhausted body reads', async () => {
+it('retains a slow body read without redispatch and releases demand on collapse', async () => {
   vi.useFakeTimers();
   const read = vi.fn(() => new Promise<FlowerParentEventPage>(() => {}));
   const { reading } = mount(read, page([event('first')]));
   const release = reading.retainBody('first'); await flush();
-  await vi.advanceTimersByTimeAsync(63_000); await flush();
-  expect(read).toHaveBeenCalledTimes(4); expect(reading.bodyState('first')).toBe('failed');
+  await vi.advanceTimersByTimeAsync(300_000); await flush();
+  expect(read).toHaveBeenCalledTimes(1); expect(reading.bodyState('first')).toBe('reading');
   expect(vi.getTimerCount()).toBe(0); release();
 });
 it('reconnects demanded bodies and preserves completed reports across metadata updates', async () => {

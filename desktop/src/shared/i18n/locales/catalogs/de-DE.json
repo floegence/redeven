@@ -631,6 +631,7 @@
       "composerReferenceAdded": "{path} wurde als Verweis hinzugefügt.",
       "composerReferenceExists": "{path} ist bereits referenziert.",
       "pendingSending": "Wird gesendet",
+      "sendAcceptedSyncing": "Empfangen, wird synchronisiert",
       "pendingQueueAdmission": "Wartet auf Aufnahme in die Warteschlange",
       "pendingQueued": "In Warteschlange",
       "queuedSendNow": "Jetzt senden",

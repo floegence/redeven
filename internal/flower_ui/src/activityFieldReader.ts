@@ -1,5 +1,5 @@
 import type { FlowerActivityField, FlowerActivityFieldChunk, FlowerActivityStructurePage, FlowerActivityValue, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
-import { recoverHistoryRead } from './historyReadRecovery';
+import { recoverHistoryRequest } from './historyReadRecovery';
 import { createActivityReadQueue } from './activityReadQueue';
 
 const encoder = new TextEncoder();
@@ -65,8 +65,8 @@ export function createActivityFieldReader(transport: Transport, budgets = { fiel
       if (textFields && (!selectedFields || textFields.length > 8 || new Set(textFields).size !== textFields.length
         || textFields.some(field => !field || field.length > 128 || /[/~]/u.test(field) || selectedFields.includes(field)))) invalid('invalid deferred fields');
       const key = JSON.stringify([threadID, itemID, path, maximumBytes, maximumNodes, selectedFields, textFields]);
-      const result = await queue.run('value:' + key, owned, readSignal => recoverHistoryRead(() => transport.loadActivityValue!(threadID,
-        { item_id: itemID, path, maximum_bytes: maximumBytes, maximum_nodes: maximumNodes, ...(selectedFields ? { fields: selectedFields } : {}), ...(textFields ? { text_fields: textFields } : {}) }, readSignal), readSignal), 'interactive');
+      const result = await recoverHistoryRequest(attemptSignal => queue.run('value:' + key, attemptSignal, readSignal => transport.loadActivityValue!(threadID,
+        { item_id: itemID, path, maximum_bytes: maximumBytes, maximum_nodes: maximumNodes, ...(selectedFields ? { fields: selectedFields } : {}), ...(textFields ? { text_fields: textFields } : {}) }, readSignal), 'interactive'), 'Activity read timed out.', owned);
       owned.throwIfAborted();
       if (epoch !== generation) throw new DOMException('Read scope changed.', 'AbortError');
       if (result.thread_id !== threadID || result.item_id !== itemID || result.path !== path || !result.turn_id || !result.run_id
@@ -108,7 +108,7 @@ export function createActivityFieldReader(transport: Transport, budgets = { fiel
       if (cached) return cached;
       const epoch = generation;
       const owned = AbortSignal.any([signal, lifetime.signal, scope.signal]);
-      const page = await queue.run('shape:' + key, owned, readSignal => recoverHistoryRead(() => transport.loadActivityStructure!(threadID, { item_id: itemID, path, offset, limit, ...(version ? { version } : {}) }, readSignal), readSignal), 'interactive');
+      const page = await recoverHistoryRequest(attemptSignal => queue.run('shape:' + key, attemptSignal, readSignal => transport.loadActivityStructure!(threadID, { item_id: itemID, path, offset, limit, ...(version ? { version } : {}) }, readSignal), 'interactive'), 'Activity read timed out.', owned);
       owned.throwIfAborted();
       if (epoch !== generation) throw new DOMException('Read scope changed.', 'AbortError');
       validateField(page.field);
@@ -153,11 +153,11 @@ export function createActivityFieldReader(transport: Transport, budgets = { fiel
       const cached = fields.get(key);
       const epoch = generation;
       const owned = AbortSignal.any([signal, lifetime.signal, scope.signal]);
-      const chunk = cached ?? await queue.run('field:' + key, owned, readSignal => recoverHistoryRead(() => transport.loadActivityField!(threadID, {
+      const chunk = cached ?? await recoverHistoryRequest(attemptSignal => queue.run('field:' + key, attemptSignal, readSignal => transport.loadActivityField!(threadID, {
         item_id: itemID, path, entry_id: field.entry_id, source_sha256: field.source_sha256, sha256: field.sha256,
         source_id: field.source_id, run_id: field.run_id, offset_bytes: base + offset, limit_bytes: Math.max(4, Math.min(ACTIVITY_FIELD_CHUNK_BYTES, extent - offset)),
         ...(alignStart ? { align_start: true } : {}),
-      }, readSignal), readSignal), 'interactive');
+      }, readSignal), 'interactive'), 'Activity read timed out.', owned);
       owned.throwIfAborted();
       if (epoch !== generation) throw new DOMException('Read scope changed.', 'AbortError');
       const size = encoder.encode(chunk.text).length;

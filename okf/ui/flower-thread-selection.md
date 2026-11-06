@@ -52,3 +52,5 @@ The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title e
 
 - `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - Tests.
+
+A `summary_unavailable` thread preserves any previously known history and becomes read-only. Cold selection settles without a detail request or invented timestamp/title; late unavailable summaries cancel outstanding detail preparation. Healthy summary replacement restores ordinary selection. Transient read failures keep the selection demand and retry with capped backoff; elapsed time alone never turns a connected slow read into failure.

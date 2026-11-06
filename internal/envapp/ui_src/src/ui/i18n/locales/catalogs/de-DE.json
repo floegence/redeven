@@ -5836,6 +5836,7 @@
       "restoreSend": "In leeres Eingabefeld übernehmen",
       "deleteUnsent": "Ungesendete Nachricht löschen",
       "sendWaiting": "Warten auf Versand",
+      "sendAcceptedSyncing": "Empfangen, wird synchronisiert",
       "attachmentRecoveryDescription": "Anhänge sind nach dem Neustart nicht verfügbar. Stelle Text und Verweise wieder her und wähle die Dateien erneut aus. Aktualisiere, um die Annahme der ursprünglichen Anfrage zu prüfen.",
       "removeRecoveryCopy": "Lokale Wiederherstellungskopie entfernen",
       "removeRecoveryCopyDescription": "Entfernt diese lokale Wiederherstellungskopie und setzt spätere Nachrichten fort. Die ursprüngliche Serveranfrage wird nicht abgebrochen.",

@@ -162,11 +162,17 @@ describe('connection-owned local model reads', () => {
     expect(settings).toHaveBeenCalledWith(configuration);
     resource.invalidate();
   });
-  it('ends a hung initial settings read with a bounded error', async () => {
+  it('keeps a slow settings read alive until its connection owner invalidates it', async () => {
     vi.useFakeTimers();
-    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: () => new Promise(() => undefined), loadDirectory: async () => directory });
-    const pending = expect(resource.loadSettings()).rejects.toMatchObject({ name: 'TimeoutError' });
-    await vi.advanceTimersByTimeAsync(10_000); await pending;
+    let signal!: AbortSignal;
+    const load = vi.fn((value: AbortSignal) => { signal = value; return new Promise<FlowerSettingsSnapshot>(() => undefined); });
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: load, loadDirectory: async () => directory });
+    const pending = resource.loadSettings();
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(load).toHaveBeenCalledTimes(1); expect(signal.aborted).toBe(false);
+    const cancelled = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    resource.invalidate(); await cancelled;
+    expect(signal.aborted).toBe(true); expect(vi.getTimerCount()).toBe(0);
   });
   it('rejects unsupported shapes and mismatched Desktop identities', () => {
     expect(() => readFlowerModelDirectory({ current_model: '', models: [] })).toThrow('invalid');

@@ -801,6 +801,8 @@ export type FlowerQueuedTurnAttachment = Readonly<{
 export type FlowerThreadSummary = Omit<FlowerThreadSnapshot, 'read_status'> & { readonly read_status?: FlowerThreadReadStatus };
 
 export type FlowerThreadSnapshot = Readonly<{
+  /** Settings-only placeholder; zero timestamps mean unavailable, never epoch time. */
+  summary_unavailable?: Readonly<{ code: 'authority_corrupt' }>;
   // Browser-only presentation sample; not part of the runtime wire contract.
   turn_clock?: import('../flowerTurnClock').FlowerTurnClockSample;
   history_window?: FlowerHistoryWindow;
@@ -1270,6 +1272,7 @@ export type FlowerThreadPinMetadata = Readonly<{
 }>;
 
 export type FlowerThreadListItem = Readonly<{
+  summary_unavailable?: Readonly<{ code: 'authority_corrupt' }>;
   cancellation?: FlowerThreadCancellation;
   thread_id: string;
   title: string;

@@ -1,5 +1,5 @@
 import { withFlowerReadDeadline } from './requestDeadline';
-import { HISTORY_READ_RETRY_DELAYS, recoverableHistoryRead } from './historyReadRecovery';
+import { historyReadRetryDelay, recoverableHistoryRead } from './historyReadRecovery';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 
 export const HISTORY_BODY_CONCURRENCY = 2;
@@ -44,7 +44,7 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       if (entry.state !== 'queued') continue;
       if (entry.signal.aborted) { remove(key, entry); continue; }
       active++; dispatches++; entry.state = 'loading'; changed();
-      void withFlowerReadDeadline(signal => queue.run('body:' + ++sequence, signal, entry.read, entry.priority), timeoutMessage(), entry.signal).then(
+      void withFlowerReadDeadline(signal => queue.run('body:' + ++sequence, signal, entry.read, entry.priority), timeoutMessage(), entry.signal, 0).then(
         more => {
           entry.failures = 0;
           if (more === 'source_changed' && !entry.signal.aborted && reads.get(key) === entry) {
@@ -61,8 +61,8 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
           if (entry.signal.aborted) remove(key, entry);
           else if (reads.get(key) === entry) {
             entry.recoverable = recoverableHistoryRead(error);
-            const delay = HISTORY_READ_RETRY_DELAYS[entry.failures++];
-            if (entry.recoverable && delay !== undefined) {
+            const delay = historyReadRetryDelay(entry.failures++);
+            if (entry.recoverable) {
               entry.state = 'waiting';
               entry.timer = setTimeout(() => {
                 entry.timer = undefined;

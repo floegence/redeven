@@ -39,6 +39,7 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot, untitl
   }
   return {
     thread_id: thread.thread_id,
+    ...(thread.summary_unavailable ? { summary_unavailable: thread.summary_unavailable } : {}),
     title: flowerThreadDisplayTitle(thread, untitled),
     title_status: thread.title_status,
     model_id: thread.model_id,

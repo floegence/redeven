@@ -631,6 +631,7 @@
       "composerReferenceAdded": "{path}을(를) 참조에 추가했습니다.",
       "composerReferenceExists": "{path}은(는) 이미 참조되어 있습니다.",
       "pendingSending": "보내는 중",
+      "sendAcceptedSyncing": "수신됨, 동기화 중",
       "pendingQueueAdmission": "대기열에 추가 대기 중",
       "pendingQueued": "대기열에 추가됨",
       "queuedSendNow": "지금 보내기",

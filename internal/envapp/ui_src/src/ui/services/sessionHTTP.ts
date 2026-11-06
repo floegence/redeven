@@ -1,3 +1,4 @@
+import type { ProxyRequestInit } from '@floegence/flowersec-core/proxy';
 import { readApiJSONResponse } from './localApi';
 import { createSignal } from 'solid-js';
 import { createDirectoryFavoritesClient, type DirectoryFavoritesSnapshot } from '../../../../../flower_ui/src/filePicker/directoryFavorites';
@@ -7,6 +8,9 @@ import type { AcquisitionConnectionLifecycle, FetchServerSentEventsOptions, Serv
 
 // The Shell's connection lifecycle owns transport and cancellation. This binding
 // only routes product requests to that lifecycle; it never opens or retries one.
+// Explicit per-request host policy; the published proxy keeps byte/admission limits.
+function sessionOwned<T extends RequestInit>(init: T): T & ProxyRequestInit { return { ...init, sessionBound: true }; }
+
 type SessionHTTP = Pick<AcquisitionConnectionLifecycle, 'fetch' | 'events'>;
 let current: SessionHTTP | undefined;
 
@@ -51,14 +55,14 @@ function sessionHTTP(): SessionHTTP {
 }
 
 export async function fetchSessionHTTP(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return sessionHTTP().fetch(input, init);
+  return sessionHTTP().fetch(input, sessionOwned(init ?? {}));
 }
 
 export async function* readSessionEvents(
   input: RequestInfo | URL,
   options?: Omit<FetchServerSentEventsOptions, 'fetch'>,
 ): AsyncGenerator<ServerSentEvent> {
-  yield* sessionHTTP().events(input, options);
+  yield* sessionHTTP().events(input, sessionOwned(options ?? {}));
 }
 
 export function isSessionEventAuthorizationError(error: unknown): boolean {

@@ -53,3 +53,17 @@ describe('directory favorite authenticated lifetime', () => {
   releaseNew();expect(envDirectoryFavorites(()=> 'Failed')).toBeUndefined();
  });
 });
+
+it('selects the published session-owned policy without replacing or replaying the environment connection', async () => {
+ const {fetchSessionHTTP,readSessionEvents}=await import('./sessionHTTP');
+ const fetch=vi.fn(async()=>new Response('accepted'));
+ let eventOptions: unknown;
+ const dispose=bindSessionHTTP({fetch,events:async function*(_input,options){eventOptions=options;yield {data:'ready'};}});
+ const controller=new AbortController();
+ try {
+  await fetchSessionHTTP('/_redeven_proxy/api/ai/turns',{method:'POST',body:'{}',signal:controller.signal});
+  expect(fetch).toHaveBeenCalledExactlyOnceWith('/_redeven_proxy/api/ai/turns',expect.objectContaining({sessionBound:true,signal:controller.signal}));
+  const frames=[];for await(const frame of readSessionEvents('/_redeven_proxy/api/ai/flower/stream',{signal:controller.signal}))frames.push(frame);
+  expect(frames).toEqual([{data:'ready'}]);expect(eventOptions).toMatchObject({sessionBound:true,signal:controller.signal});
+ } finally {dispose();}
+});

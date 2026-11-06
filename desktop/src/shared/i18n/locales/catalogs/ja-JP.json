@@ -631,6 +631,7 @@
       "composerReferenceAdded": "{path} を参照に追加しました。",
       "composerReferenceExists": "{path} はすでに参照されています。",
       "pendingSending": "送信中",
+      "sendAcceptedSyncing": "受信済み・同期中",
       "pendingQueueAdmission": "キューへの追加待ち",
       "pendingQueued": "キュー済み",
       "queuedSendNow": "今すぐ送信",

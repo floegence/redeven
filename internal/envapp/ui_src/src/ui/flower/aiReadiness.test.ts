@@ -214,7 +214,7 @@ describe('createAIReadinessController', () => {
     await flushAsync();
 
     expect(request).toHaveBeenCalledOnce();
-    expect(request).toHaveBeenCalledWith('/_redeven_proxy/api/ai/readiness', { method: 'GET' });
+    expect(request).toHaveBeenCalledWith('/_redeven_proxy/api/ai/readiness', { method: 'GET', signal: expect.any(AbortSignal) });
     expect(controller.loading()).toBe(false);
     expect(controller.snapshot()).toEqual(ready());
     controller.dispose();
@@ -250,8 +250,8 @@ describe('createAIReadinessController', () => {
     });
     expect(retryController.retryPending()).toBe(false);
     expect(request.mock.calls).toEqual([
-      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
-      ['/_redeven_proxy/api/ai/readiness/retry', { method: 'POST' }],
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET', signal: expect.any(AbortSignal) }],
+      ['/_redeven_proxy/api/ai/readiness/retry', { method: 'POST', signal: expect.any(AbortSignal) }],
     ]);
     retryController.dispose();
   });
@@ -301,7 +301,7 @@ describe('createAIReadinessController', () => {
     await flushAsync();
 
     expect(request.mock.calls).toEqual([
-      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET', signal: expect.any(AbortSignal) }],
     ]);
     expect(controller.retryPending()).toBe(false);
     controller.dispose();
@@ -500,14 +500,14 @@ describe('createAIReadinessController', () => {
     await vi.advanceTimersByTimeAsync(100);
     await controller.retry();
     expect(request.mock.calls).toEqual([
-      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET', signal: expect.any(AbortSignal) }],
     ]);
     expect(controller.busyStartedAt()).toBeNull();
 
     await controller.resume();
     expect(request.mock.calls).toEqual([
-      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
-      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET', signal: expect.any(AbortSignal) }],
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET', signal: expect.any(AbortSignal) }],
     ]);
     expect(controller.snapshot()).toEqual(ready());
     controller.dispose();
@@ -535,28 +535,24 @@ describe('createAIReadinessController', () => {
   });
 });
 
-it.each(['refresh', 'retry', 'stop'] as const)('releases a hung %s without replaying a command or accepting its late result', async (command) => {
+it.each(['refresh', 'retry', 'stop'] as const)('keeps a slow %s owned until explicit pause without replay', async (command) => {
   vi.useFakeTimers();
   const response = deferred<AIReadinessSnapshot>();
   const request = vi.fn().mockResolvedValueOnce({ ...inspecting(), stoppable: true }).mockImplementationOnce(() => response.promise).mockResolvedValue(ready());
   const controller = createAIReadinessController({ request, autoStart: false, visibilitySource: null });
   await controller.refresh();
   const pending = controller[command]();
-  await vi.advanceTimersByTimeAsync(command === 'refresh' ? 15_000 : 120_000);
-  await pending;
-  expect(controller.snapshot()).toMatchObject({ state: 'blocked', reason_code: 'temporarily_blocked', retryable: false, safe_to_retry: false, retry_reason: 'readiness_request_timeout' });
-  expect(controller.loading()).toBe(false);
-  expect(controller.retryPending()).toBe(false);
-  expect(controller.busyStartedAt()).toBeNull();
+  await vi.advanceTimersByTimeAsync(300_000);
   expect(request).toHaveBeenCalledTimes(2);
-  await controller.refresh();
+  expect(controller.snapshot().state).not.toBe('blocked');
+  const signal = request.mock.calls[1][1].signal as AbortSignal;
+  expect(signal.aborted).toBe(false);
+  controller.pause(); await pending;
+  expect(signal.aborted).toBe(true);
+  await controller.resume();
+  response.resolve({ ...inspecting(), state: 'stopped' }); await flushAsync();
   expect(controller.snapshot()).toEqual(ready());
-  response.resolve({ ...inspecting(), state: 'stopped' });
-  await flushAsync();
-  expect(controller.snapshot()).toEqual(ready());
-  expect(request).toHaveBeenCalledTimes(3);
-  controller.dispose();
-  vi.useRealTimers();
+  expect(request).toHaveBeenCalledTimes(3); controller.dispose();
 });
 
 it('stops immediately, deduplicates stop requests, and polls until rollback completes', async () => {

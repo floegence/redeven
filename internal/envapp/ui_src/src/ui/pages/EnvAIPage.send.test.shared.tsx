@@ -345,7 +345,6 @@ vi.mock('../services/localApi', () => ({
     headers: new Headers(),
     status: 200,
   })),
-  uploadLocalApiAttachment: vi.fn(),
   LocalApiError: class LocalApiError extends Error {
     readonly code: string;
     readonly data: unknown;
@@ -900,7 +899,7 @@ export function registerEnvAIPageSendTests() {
       const { host, dispose } = await renderPage();
       try {
         await selectHistoryThread(host);
-        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/history', { method: 'POST', body: '{}', signal: expect.any(AbortSignal) });
+        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/history', expect.objectContaining({ method: 'POST', body: '{}', signal: expect.any(AbortSignal), sessionBound: true }));
         expect(mocks.currentItemsMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
       } finally {

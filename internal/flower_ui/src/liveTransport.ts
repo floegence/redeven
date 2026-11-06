@@ -26,7 +26,6 @@ export type LiveTransport<T> = Readonly<{
 }>;
 
 const RECONNECT_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000, 10_000] as const;
-const HANDSHAKE_TIMEOUT_MS = 15_000;
 
 // Only transport/read availability and lost observation continuity recover
 // automatically. Invalid contracts and authorization require explicit action.
@@ -34,17 +33,16 @@ function recoverable(error: unknown): boolean {
   if (error === undefined) return true;
   const status = Number((error as { status?: unknown })?.status ?? 0);
   const code = String((error as { code?: unknown })?.code ?? '').trim();
-  if (status >= 400 && status < 500) return status === 408;
+  if (status >= 400 && status < 500) return status === 408 || status === 429;
   if (code === 'flower_live_version_error' || code === 'INVALID_JSON_RESPONSE') return false;
   return error instanceof FlowerReadDeadlineError || status >= 500 && status <= 599
-    || code === 'transport' || code === 'flower_live_sync_error' || code === 'flower_live_handshake_timeout';
+    || ['transport', 'network_error', 'connection_closed', 'transport_unavailable', 'timeout', 'operation_failed', 'closed', 'going_away'].includes(code) || code === 'flower_live_sync_error' || code === 'flower_live_handshake_timeout';
 }
 
 type ConnectionAttempt = {
   epoch: number;
   controller: AbortController;
   connectedAt: number;
-  handshakeTimer?: number;
 };
 
 type TransportOwner<T> = {
@@ -72,7 +70,6 @@ export function createLiveTransport<T>(): LiveTransport<T> {
     current.retryTimer = undefined;
     const attempt = current.attempt;
     current.attempt = undefined;
-    if (attempt?.handshakeTimer !== undefined) window.clearTimeout(attempt.handshakeTimer);
     attempt?.controller.abort();
     if (notify) current.input.onBoundary?.();
   };
@@ -110,14 +107,6 @@ export function createLiveTransport<T>(): LiveTransport<T> {
     const attempt: ConnectionAttempt = { epoch: ++epoch, controller: new AbortController(), connectedAt: Date.now() };
     current.attempt = attempt;
     setState(current, reconnecting ? 'reconnecting' : 'connecting', state.error);
-    if (current.input.isReady) {
-      attempt.handshakeTimer = window.setTimeout(() => {
-        if (!currentAttempt(current, attempt)) return;
-        fail(Object.assign(new Error('Flower live synchronization did not become ready in time.'), {
-          code: 'flower_live_handshake_timeout',
-        }), attempt.epoch);
-      }, HANDSHAKE_TIMEOUT_MS);
-    }
     void (async () => {
       try {
         for await (const value of current.input.connect({ signal: attempt.controller.signal })) {
@@ -127,8 +116,6 @@ export function createLiveTransport<T>(): LiveTransport<T> {
             if (capacity) await capacity;
             if (!currentAttempt(current, attempt)) return;
             if (state.status !== 'ready' && (!current.input.isReady || current.input.isReady(value))) {
-              if (attempt.handshakeTimer !== undefined) window.clearTimeout(attempt.handshakeTimer);
-              attempt.handshakeTimer = undefined;
               setState(current, 'ready');
             }
           } catch (error) {

@@ -493,7 +493,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     },
     syncMetadata(source: FlowerThreadSnapshot) {
       batch(() => {
-        for (const key of ['title', 'title_status', 'title_generation', 'read_status', 'model_id', 'working_dir', 'pinned_at_ms', 'pin_rank', 'permission_type', 'reasoning_selection', 'reasoning_capability', 'settings_revision', 'read_only_reason', 'updated_at_ms'] as const) {
+        for (const key of ['title', 'title_status', 'title_generation', 'read_status', 'model_id', 'working_dir', 'pinned_at_ms', 'pin_rank', 'permission_type', 'reasoning_selection', 'reasoning_capability', 'settings_revision', 'read_only_reason', 'summary_unavailable', 'updated_at_ms'] as const) {
           if (source[key] !== thread[key]) setThread({ [key]: source[key] });
         }
       });

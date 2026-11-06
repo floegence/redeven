@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/logsafe"
 )
 
@@ -38,6 +39,14 @@ func (s *Service) publishCanonicalThreadSummary(ctx context.Context, endpointID,
 		return nil
 	}
 	summary, err := threadSummaryFromRuntime(ctx, s.threadRuntime, identity.ThreadID(threadID))
+	if errors.Is(err, flruntime.ErrAuthorityCorrupt) {
+		view, err := s.unavailableThreadSummary(ctx, settings)
+		if err != nil {
+			return err
+		}
+		s.publishFlowerLiveSummary(endpointID, view)
+		return nil
+	}
 	if err != nil {
 		return err
 	}

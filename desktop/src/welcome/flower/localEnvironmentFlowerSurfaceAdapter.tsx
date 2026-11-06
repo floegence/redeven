@@ -793,7 +793,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   const loadSettings: FlowerSurfaceAdapter['loadSettings'] = (refresh = false, signal) => withFlowerReadDeadline(async readSignal => {
     const [settings, conversation_preferences] = await Promise.all([resource.loadSettings(refresh), preferences.load(readSignal)]);
     return { ...settings, conversation_preferences };
-  }, 'Flower settings read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal);
+  }, 'Flower settings read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal, 0);
   const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
     directoryFavorites: failureMessage => options.directoryFavoritesClient?.view(failureMessage),
@@ -823,24 +823,16 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         const streamController = new AbortController();
         const abort = () => streamController.abort(input.signal.reason);
         input.signal.addEventListener('abort', abort, { once: true });
-        let activityTimer: ReturnType<typeof setTimeout> | undefined;
-        const resetActivityTimer = () => {
-          if (activityTimer !== undefined) clearTimeout(activityTimer);
-          activityTimer = setTimeout(() => streamController.abort('Flower live stream timed out.'), 45_000);
-        };
         try {
-          resetActivityTimer();
           for await (const frame of fetchServerSentEvents(path, {
             method: 'GET',
             signal: streamController.signal,
             fetch: runtimeFlowerStreamFetch(bridge, streamID),
-            onActivity: resetActivityTimer,
           })) {
             yield frame;
           }
         } finally {
           input.signal.removeEventListener('abort', abort);
-          if (activityTimer !== undefined) clearTimeout(activityTimer);
           streamController.abort();
           bridge.cancelRuntimeFlowerStream(streamID);
         }

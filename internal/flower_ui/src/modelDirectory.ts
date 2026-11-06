@@ -47,8 +47,6 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
   return { current_model_id: response.current_model, models: directory.models, sources: directory.sources, provider_catalogs: directory.provider_catalogs, provider_defaults: directory.provider_defaults, search_policies: directory.search_policies, provider_search_policies: directory.provider_search_policies };
 }
 
-const MODEL_READ_DEADLINE_MS = 10_000;
-
 function readWithSignal<T>(signal: AbortSignal, read: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     const abort = () => reject(signal.reason);
@@ -89,9 +87,8 @@ export function createFlowerModelReadResource(options: Readonly<{
   };
   const read = async <T,>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     const controller = new AbortController(); controllers.add(controller);
-    const timer = setTimeout(() => controller.abort(new DOMException('Flower model read timed out.', 'TimeoutError')), MODEL_READ_DEADLINE_MS);
     try { return await readWithSignal(controller.signal, () => operation(controller.signal)); }
-    finally { clearTimeout(timer); controllers.delete(controller); }
+    finally { controllers.delete(controller); }
   };
   const loadDirectory = (refresh = false, prepare?: () => Promise<unknown>): Promise<FlowerModelDirectory> => {
     checkScope();

@@ -1417,6 +1417,18 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
 export function mapFlowerThreadSummary(raw: unknown, messages: readonly FlowerChatMessage[], options: FlowerLiveThreadMapperOptions): FlowerThreadSummary {
   const record = recordValue(raw) ?? {};
   const threadID = trim(record.thread_id);
+  if (!threadID) throw new Error('Flower contract error: thread summary requires thread_id.');
+  const unavailable = recordValue(record.summary_unavailable);
+  if (record.summary_unavailable !== undefined && (!unavailable || Array.isArray(unavailable) || unavailable.code !== 'authority_corrupt'
+    || Object.keys(unavailable).length !== 1 || record.run_status !== 'read_only'
+    || record.created_at_unix_ms !== 0 || record.updated_at_unix_ms !== 0
+    || record.title_generation !== 0 || trim(record.title_status) || trim(record.active_run_id) || trim(record.title)
+    || record.run_progress != null || record.cancellation != null || record.approval_pending === true
+    || Number(record.approval_pending_count ?? 0) !== 0 || record.input_request != null
+    || trim(record.run_error) || trim(record.run_error_code) || trim(record.run_error_detail)
+    || Number(record.queued_turn_count ?? 0) !== 0 || Array.isArray(record.queued_turns) && record.queued_turns.length > 0)) {
+    throw new Error('Flower contract error: invalid unavailable thread summary.');
+  }
   const status = runStatus(record.run_status);
   const activeRunID = status === 'running' || status === 'waiting_approval' || status === 'waiting_user'
     ? trim(record.active_run_id)
@@ -1457,8 +1469,9 @@ export function mapFlowerThreadSummary(raw: unknown, messages: readonly FlowerCh
     home_runtime_id: options.runtimeID,
     home_runtime_kind: options.runtimeKind,
     ...(trim(options.originEnvPublicID) ? { origin_env_public_id: trim(options.originEnvPublicID) } : {}),
-    created_at_ms: unixMs(record.created_at_unix_ms, 'thread.created_at_unix_ms'),
-    updated_at_ms: unixMs(record.updated_at_unix_ms ?? record.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
+    created_at_ms: unavailable ? 0 : unixMs(record.created_at_unix_ms, 'thread.created_at_unix_ms'),
+    updated_at_ms: unavailable ? 0 : unixMs(record.updated_at_unix_ms ?? record.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
+    ...(unavailable ? { summary_unavailable: { code: 'authority_corrupt' as const } } : {}),
     status,
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
     ...(progress ? { run_progress: progress } : {}),

@@ -36,18 +36,6 @@ export type LocalStagedAttachmentResponse = {
   download_url?: string;
 };
 
-export type LocalAttachmentUploadRequest = Readonly<{
-  file: File;
-  source: 'uploaded_file' | 'long_text';
-  requestID: string;
-  stagingScopeID: string;
-  stagingCapability: string;
-  contentSHA256: string;
-  displayNameSHA256: string;
-  signal: AbortSignal;
-  onProgress: (loaded: number, total?: number) => void;
-}>;
-
 export class LocalApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -199,92 +187,6 @@ export async function uploadLocalApiFile(file: File): Promise<string> {
     throw new Error('Upload response missing url');
   }
   return url;
-}
-
-export async function uploadLocalApiAttachment(request: LocalAttachmentUploadRequest): Promise<LocalStagedAttachmentResponse> {
-  if (request.signal.aborted) {
-    const error = new Error('Attachment upload was cancelled.');
-    error.name = 'AbortError';
-    throw error;
-  }
-  const form = new FormData();
-  form.append('source', request.source);
-  form.append('file', request.file, request.file.name);
-  const init = await prepareLocalApiRequestInit({
-    method: 'POST',
-    body: form,
-    headers: {
-      'Idempotency-Key': request.requestID,
-      'Upload-Staging-Scope-ID': request.stagingScopeID,
-      'Upload-Staging-Capability': request.stagingCapability,
-      'Upload-Content-SHA256': request.contentSHA256,
-      'Upload-Content-Length': String(request.file.size),
-      'Upload-Display-Name-SHA256': request.displayNameSHA256,
-    },
-  });
-  return new Promise<LocalStagedAttachmentResponse>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const abort = () => xhr.abort();
-    const finish = () => request.signal.removeEventListener('abort', abort);
-    xhr.open('POST', '/_redeven_proxy/api/ai/uploads', true);
-    xhr.withCredentials = init.credentials !== 'omit';
-    new Headers(init.headers).forEach((value, name) => xhr.setRequestHeader(name, value));
-    xhr.upload.onprogress = (event) => {
-      request.onProgress(event.loaded, event.lengthComputable ? event.total : undefined);
-    };
-    xhr.onerror = () => {
-      finish();
-      reject(new LocalApiError({ message: 'Attachment upload transport failed.', status: xhr.status }));
-    };
-    xhr.onabort = () => {
-      finish();
-      const error = new Error('Attachment upload was cancelled.');
-      error.name = 'AbortError';
-      reject(error);
-    };
-    xhr.onload = () => {
-      finish();
-      let data: any = null;
-      let parsedJSON = false;
-      try {
-        if (xhr.responseText) {
-          data = JSON.parse(xhr.responseText);
-          parsedJSON = true;
-        }
-      } catch {
-        // The typed error below intentionally omits an untrusted response body.
-      }
-      if (xhr.status < 200 || xhr.status >= 300 || data?.ok === false) {
-        const message = localApiErrorMessage(data, xhr.status || 400);
-        const code = localApiErrorCode(data) || 'REQUEST_FAILED';
-        const retryAfterMs = localApiRetryAfterMs(data);
-        if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
-          reject(new AccessUnlockError({ message, status: xhr.status || 400, code, retryAfterMs }));
-          return;
-        }
-        reject(new LocalApiError({ message, status: xhr.status || 400, code, data: data?.data }));
-        return;
-      }
-      if (xhr.status !== 204 && !parsedJSON) {
-        reject(new LocalApiError({
-          message: 'Attachment upload returned an invalid JSON response.',
-          status: xhr.status,
-          code: 'INVALID_JSON_RESPONSE',
-        }));
-        return;
-      }
-      resolve((data?.data ?? data) as LocalStagedAttachmentResponse);
-    };
-    request.signal.addEventListener('abort', abort, { once: true });
-    if (request.signal.aborted) {
-      finish();
-      const error = new Error('Attachment upload was cancelled.');
-      error.name = 'AbortError';
-      reject(error);
-      return;
-    }
-    xhr.send(form);
-  });
 }
 
 export async function getEnvAppAccessStatus(): Promise<EnvAppAccessStatus> {

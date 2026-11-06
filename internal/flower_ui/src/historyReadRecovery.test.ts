@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { recoverHistoryRead } from './historyReadRecovery';
+import { recoverHistoryRead, recoverHistoryRequest } from './historyReadRecovery';
 import { FlowerReadDeadlineError, withFlowerReadDeadline } from './requestDeadline';
 
 afterEach(() => vi.useRealTimers());
@@ -45,18 +45,35 @@ describe('history read recovery', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('bounds retries and preserves the final failure', async () => {
+  it('retains demand past repeated failures and recovers without a manual action', async () => {
     vi.useFakeTimers();
-    const error = { status: 429 };
-    const read = vi.fn().mockRejectedValue(error);
-    const result = recoverHistoryRead(read, new AbortController().signal).catch(value => value);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(await result).toBe(error);
-    expect(read).toHaveBeenCalledTimes(4);
+    const read = vi.fn().mockRejectedValue({ status: 429 });
+    const controller = new AbortController();
+    const result = recoverHistoryRead(read, controller.signal);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(read.mock.calls.length).toBeGreaterThan(4);
+    expect(read.mock.calls.length).toBeLessThan(20);
+    read.mockResolvedValue('recovered');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await result).toBe('recovered');
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each([{ status: 403 }, { status: 404 }, new TypeError('invalid source')])('does not retry authority or protocol errors', async error => {
+  it('accepts a five-minute authorized response without redispatch', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const read = vi.fn((signal: AbortSignal) => new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => resolve('slow page'), 300_000);
+      signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+    }));
+    const pending = recoverHistoryRequest(read, 'timeout', controller.signal);
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(await pending).toBe('slow page');
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([{ status: 401, code: 'transport' }, { status: 403, code: 'operation_failed' }, { status: 404, code: 'timeout' }, { status: 423, code: 'closed' }, { code: 'resource_exhausted' }, new TypeError('invalid source')])('does not retry authority or protocol errors', async error => {
     const read = vi.fn().mockRejectedValue(error);
     await expect(recoverHistoryRead(read, new AbortController().signal)).rejects.toBe(error);
     expect(read).toHaveBeenCalledOnce();

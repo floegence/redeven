@@ -32,7 +32,7 @@ Closed groups mount shells/summary; first open mounts bodies, subsequent folds r
 ## Progressive completion
 Only explicit group/enclosing-turn opening that reveals open group completes boundaries; auto-live groups never traverse history. Before paint transfer anchors/focus/detail owners when first node changes. Reopen retains latest-tools destination.
 
-Immutable pages never overwrite newer facts/bodies; mutable IDs join bounded tail observation. Fence by thread/connection/navigation/document. Collapse cancels demand but abort-ignoring transport holds physical slot until settlement. Sample finite tail once, never chase output. Empty exhausted boundaries finish; nonadvancing fails.15s exposes Retry without releasing unsettled slot. Parent receipts reuse interval events; no hidden terminal/thinking/report bodies.
+Immutable pages never overwrite newer facts/bodies; mutable IDs join bounded tail observation. Fence by thread/connection/navigation/document. Collapse cancels demand but abort-ignoring transport holds physical slot until settlement. Sample finite tail once, never chase output. Empty exhausted boundaries finish; nonadvancing fails. Slow connected reads retain demand; cancellation fences publication without releasing an unsettled physical slot. Parent receipts reuse interval events; no hidden terminal/thinking/report bodies.
 
 ## Geometry and input
 Tool/thinking titles/summaries/times13px/18px. Prose/icons/summary/progress share edge; permanent gutters avoid shifts/blank titles, including children. Full-row targets put time/chevron after intrinsic text; only long text shrinks. CSS owns geometry, no text-measure loop.

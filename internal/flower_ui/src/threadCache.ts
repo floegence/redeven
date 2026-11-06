@@ -289,7 +289,10 @@ function receiveSummary(
 ): FlowerThreadSnapshot {
   const candidate: FlowerThreadSnapshot = { ...incoming, read_status: mergeThreadReadStatus(current?.read_status, incoming.read_status, Math.max(incoming.updated_at_ms, incoming.read_status?.snapshot.activity_revision ?? 0)) };
   const title = mergeThreadTitle(current, candidate);
-  if (!current) return summaryOnly({ ...candidate, ...title });
+  if (incoming.summary_unavailable) return summaryOnly({ ...candidate, ...title,
+    created_at_ms: current?.created_at_ms ?? 0, updated_at_ms: current?.updated_at_ms ?? 0,
+    status: 'read_only', summary_unavailable: incoming.summary_unavailable });
+  if (!current || current.summary_unavailable) return summaryOnly({ ...candidate, ...title, summary_unavailable: undefined });
   const activityIsStale = Math.max(incoming.updated_at_ms, incoming.read_status?.snapshot.activity_revision ?? 0) < threadSnapshotRevision(current);
   return retainEqualValue(current, summaryOnly({ ...(activityIsStale
     ? mergeNewerSummaryMetadata(current, candidate)
@@ -304,8 +307,9 @@ function titledView(view: ThreadDetailView, summary: FlowerThreadSnapshot): Thre
   if (previous && previous.thread.title === summary.title
     && previous.thread.title_status === summary.title_status
     && previous.thread.title_generation === summary.title_generation
-    && previous.thread.read_status === summary.read_status) return previous;
-  const result = { ...view, thread: { ...view.thread, ...threadTitleSnapshot(summary), read_status: summary.read_status } };
+    && previous.thread.read_status === summary.read_status
+    && previous.thread.summary_unavailable === summary.summary_unavailable) return previous;
+  const result = { ...view, thread: { ...view.thread, ...threadTitleSnapshot(summary), read_status: summary.read_status, summary_unavailable: summary.summary_unavailable, ...(summary.summary_unavailable ? { status: 'read_only' as const } : {}) } };
   titledViews.set(view, result);
   return result;
 }
@@ -455,7 +459,7 @@ function createCache(
     },
     views: new Map([...views.entries()].flatMap(([id, entry]) => {
       const summary = summaries.get(id);
-      return summary ? [[id, entry.runtime ? { ...entry.view, get version() { return entry.view.version; }, thread: entry.runtime.syncMetadata({ ...entry.view.thread, ...threadTitleSnapshot(summary), read_status: summary.read_status }) } : titledView(entry.view, summary)] as const] : [];
+      return summary ? [[id, entry.runtime ? { ...entry.view, get version() { return entry.view.version; }, thread: entry.runtime.syncMetadata({ ...entry.view.thread, ...threadTitleSnapshot(summary), read_status: summary.read_status, summary_unavailable: summary.summary_unavailable, }) } : titledView(entry.view, summary)] as const] : [];
     })),
     select(id) {
       const nextID = id == null || id.trim() === '' ? null : id.trim();

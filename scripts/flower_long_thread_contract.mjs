@@ -8,6 +8,7 @@ export const fastTests = Object.freeze([
   'flowerTurnPresentation.test.ts', 'flowerToolSequences.test.ts', 'flowerToolSequences.client.test.ts', 'flowerToolSequenceLayout.client.test.ts', 'flowerPresentationSubscriptions.client.test.ts', 'flowerActivityTitleReveal.client.test.ts', 'flowerComputerActivities.client.test.ts', 'flowerMotionPreference.client.test.ts', 'flowerSequenceDisclosure.client.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
 ]);
 export const browserTests = Object.freeze([
+  'FlowerSurface.unavailableHistory.browser.test.tsx', 'FlowerSurface.historySyncRecovery.browser.test.tsx',
   'FlowerSurface.continuousHistory.browser.test.tsx', 'FlowerSurface.coldHistory.browser.test.tsx',
   'FlowerSurface.streamingStability.browser.test.tsx',
   'FlowerSurface.reasoningSelection.browser.test.tsx', 'FlowerSurface.disclosureInteraction.browser.test.tsx',

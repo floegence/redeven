@@ -304,7 +304,7 @@ import { mapFlowerActivityItem, mapFlowerGoal } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerHistoryRequest } from './contracts/flowerSurfaceContracts';
 import { HISTORY_EDGE_MARGIN_PX, historyFoldedNavigation, historyReadingKey, historyReadingRequest, historyReadingSelection, historyReadingGaps, measureHistoryReadingHeights, historyGapRequest, historyReadingItemBytes, type HistoryReadingGap } from './historyReadingWindow';
-import { recoverHistoryRead, recoverableHistoryRead } from './historyReadRecovery';
+import { recoverHistoryRequest, recoverableHistoryRead } from './historyReadRecovery';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
   defaultReasoningSelectionForCapability,
@@ -876,7 +876,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const livePresentationConfirmed = () => !props.adapter.connectLiveStream || liveSyncState().status === 'ready';
   const [unconfirmedStops, setUnconfirmedStops] = createSignal<ReadonlySet<string>>(new Set());
   const readDetail = <T,>(read: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> => (
-    withFlowerReadDeadline(read, copy().chat.syncTimeout, signal)
+    withFlowerReadDeadline(read, copy().chat.syncTimeout, signal, 0)
   );
   let subagentDetailReadController: AbortController | undefined;
   const [computerObserverID, setComputerObserverID] = createSignal('');
@@ -1738,10 +1738,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const surfaceReadOnly = createMemo(() => props.adapter.canMutate === false);
   const selectedThreadReadOnlyReason = createMemo(() => trimString(selectedThread()?.read_only_reason));
-  const selectedThreadReadOnly = createMemo(() => surfaceReadOnly() || selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
+  const selectedThreadReadOnly = createMemo(() => Boolean(selectedThreadSummary()?.summary_unavailable) || surfaceReadOnly() || selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
   const selectedThreadReadOnlyDisplay = createMemo(() => (
     selectedThreadReadOnlyReason()
-      || (selectedThreadLiveStatus() === 'read_only' ? copy().chat.threadReference.unavailable : subagentsCopy().readOnlyComposerLabel)
+      || (selectedThreadSummary()?.summary_unavailable || selectedThreadLiveStatus() === 'read_only' ? copy().chat.threadReference.unavailable : subagentsCopy().readOnlyComposerLabel)
   ));
   const visibleInputRequest = (thread: FlowerThreadSnapshot | null | undefined): FlowerInputRequest | null => (
     thread?.status === 'waiting_user' ? thread.input_request ?? null : null
@@ -2995,7 +2995,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       t.model_id ?? '',
       t.target_labels?.join('\x1e') ?? '',
       t.working_dir ?? '',
-      t.read_only_reason ?? '',
+      t.read_only_reason ?? '', t.summary_unavailable?.code ?? '',
       stableLiveSidebar ? 'live' : String(visibleThread.read_status.is_unread),
       stableLiveSidebar ? 'live' : String(flowerThreadActivityRevision(t.read_status.snapshot)),
     ].join('\x1f');
@@ -3013,7 +3013,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     t.model_id,
     t.target_labels.join('\x1e'),
     t.working_dir,
-    t.read_only_reason ?? '',
+    t.read_only_reason ?? '', t.summary_unavailable?.code ?? '',
     SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(t.read_status.is_unread),
     SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(flowerThreadActivityRevision(t.read_status.snapshot)),
   ].join('\x1f');
@@ -4345,7 +4345,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       let interest = historyFoldedNavigation(viewport, input, [...new Set([...threadCache().readingItemIDs(tid), ...protectedHistoryItems(transcriptScroll)])].flatMap(id => { const item = threadCache().runtimePreviewItem(tid, id); return item ? [item] : []; }), protectedHistoryItems(transcriptScroll)) ?? input;
       if (input.anchor_id && !interest.skip_folded) {
         // Prefetch never fences the current observer or queues its live deltas.
-        const page = await recoverHistoryRead(() => readHistory(tid, input, signal, false), signal);
+        const page = await recoverHistoryRequest(readSignal => readHistory(tid, input, readSignal, false), copy().chat.syncTimeout, signal);
         signal.throwIfAborted();
         if (tid !== selectedThreadID() || epoch !== liveTransport.connectionEpoch()) return;
         const ids = readingSelection(tid, page.current.items ?? [], input.direction === 'before' ? 'before' : 'after', transcriptScroll);
@@ -4360,7 +4360,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       let view: Awaited<ReturnType<typeof readHistory>>;
       try {
         const pendingSignal = handoff ? AbortSignal.any([signal, handoff.controller.signal]) : signal;
-        view = await recoverHistoryRead(() => readDetail(readSignal => readHistory(tid, interest, readSignal, true), pendingSignal), pendingSignal);
+        view = await recoverHistoryRequest(readSignal => readHistory(tid, interest, readSignal, true), copy().chat.syncTimeout, pendingSignal);
         protectReadingHandoff();
         pendingSignal.throwIfAborted();
       } catch (error) {
@@ -4369,7 +4369,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         // and restore its canonical interest before considering another edge.
         if (historyHandoff === handoff) historyHandoff = undefined;
         historyReadingInput = previousInput;
-        view = await recoverHistoryRead(() => readDetail(readSignal => readHistory(tid, previousInput, readSignal, true), signal), signal);
+        view = await recoverHistoryRequest(readSignal => readHistory(tid, previousInput, readSignal, true), copy().chat.syncTimeout, signal);
         historyEdgeKey = '';
         historyReadingPending = !handoff.disclosed;
       } finally {
@@ -4530,12 +4530,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       try {
       const foreground = tid === selectedThreadID() && target.source !== 'goal_popup';
       const input = foreground && historyReadingThreadID === tid ? historyReadingInput : {};
-      // Keep retry ownership inside this coalesced demand and its one deadline.
-      // A changed leaf restarts the whole baseline plus preparation; no staged
-      // page or transient failure can replace the accepted document.
-      const live = await readDetail(readSignal => recoverHistoryRead(
-        () => readHistory(tid, input, readSignal, foreground), readSignal,
-      ), signal);
+      // The coalesced demand survives transient attempts until navigation or
+      // observation supersedes it. The selection owns cancellation across transport attempts.
+      const live = await recoverHistoryRequest(
+        readSignal => readHistory(tid, input, readSignal, foreground), copy().chat.syncTimeout, signal,
+      );
       signal.throwIfAborted();
       if (surfaceDisposed || retiredThreadIDs.has(tid) || target.epoch !== liveTransport.connectionEpoch()) {
         throw new DOMException('Read was superseded.', 'AbortError');
@@ -4591,6 +4590,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const cached = threadCache().views.get(tid);
     const summary = threadCache().summaries.get(tid);
+    if (summary?.summary_unavailable) return Promise.resolve(null);
     if (!force && cached?.version && !threadSummaryNeedsDetail(summary, cached.thread, cached.contentRevision)) return Promise.resolve(cached.thread);
     if (force) detailLoader.invalidate(tid);
     const signal = background ? demandSignal : demandSignal
@@ -4603,6 +4603,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     const threadID = trimString(selectedThreadID());
     const summary = selectedThreadSummary();
+    if (summary?.summary_unavailable) {
+      untrack(() => { detailLoader.forget(threadID); setThreadDetailLoading(threadID, false); cancelSelectedThreadTailReveal(); });
+      return;
+    }
     if (pendingThreadSelection() || !threadID || !summary || !selectedThreadSummaryNeedsDetail()) return;
     untrack(() => { void requestThreadDetail(threadID, 'summary_update'); });
   });
@@ -4925,9 +4929,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const interruptionRevision = transcriptScroll.userInterruptionRevision();
     const cached = threadCache().views.get(tid);
     const detailAvailable = Boolean(cached);
-    const refreshNeeded = !cached || Boolean(props.adapter.loadHistory || revalidateWarmDetail
+    const unavailable = Boolean(threadCache().summaries.get(tid)?.summary_unavailable);
+    const refreshNeeded = !unavailable && (!cached || Boolean(props.adapter.loadHistory || revalidateWarmDetail
       || threadNeedsFileActivityTargets(cached.thread)
-      || threadSummaryNeedsDetail(threadCache().summaries.get(tid), cached.thread, cached.contentRevision));
+      || threadSummaryNeedsDetail(threadCache().summaries.get(tid), cached.thread, cached.contentRevision)));
     batch(() => {
       setThreadNavigationOpen(false);
       cancelDeferredThreadSelection();
@@ -4949,6 +4954,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     scheduleSelectedThreadTailReveal(tid, sequence);
     returnToChat();
+    if (unavailable) {
+      cancelSelectedThreadTailReveal();
+      scheduleThreadSelectionContentPresented(tid);
+      return;
+    }
     if (detailAvailable) {
       // Prepare cached DOM in the same task. Reveal only when no new baseline
       // is needed; otherwise keep its obsolete geometry behind preparation.
@@ -5110,7 +5120,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     settingsReadController = controller;
     const current = () => preferenceAdapterCurrent(adapter) && generation === settingsRefreshGeneration && !controller.signal.aborted;
     setSettingsState({ status: 'loading' });
-    const request = withFlowerReadDeadline(signal => adapter.loadSettings(invalidateInFlight, signal), copy().chat.syncTimeout, controller.signal).then(next => {
+    const request = recoverHistoryRequest(signal => adapter.loadSettings(invalidateInFlight, signal), copy().chat.syncTimeout, controller.signal).then(next => {
       if (!current()) return;
       acceptSettingsSnapshot(adapter, next);
       if (next.model_directory) setModelDirectory(next.model_directory);
@@ -6129,13 +6139,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     subagentHandoff = handoff;
     let revision = 0;
     try {
-      const detail = await recoverHistoryRead(async () => {
+      const detail = await recoverHistoryRequest(async signal => {
         revision = ++subagentReadingRevision;
         subagentPendingEnvelopes.clear();
-        const detail = await readDetail(signal => props.adapter.loadSubagentDetail(request.parentThreadID, request.childThreadID,
-          props.adapter.loadHistory ? { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) } : undefined, signal), readController.signal);
+        const detail = await props.adapter.loadSubagentDetail(request.parentThreadID, request.childThreadID,
+          props.adapter.loadHistory ? { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) } : undefined, signal);
         return detail;
-      }, readController.signal);
+      }, copy().chat.syncTimeout, readController.signal);
       protectReadingHandoff(true);
       readController.signal.throwIfAborted();
       if (revision !== subagentReadingRevision || observer !== computerObserverID()) return false;
@@ -6240,7 +6250,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const epoch = liveTransport.connectionEpoch();
       setActiveSubagentDetail(current => current?.generation === active.generation ? { ...current, requestStatus: 'loading', error: '' } : current);
       try {
-        const page = await recoverHistoryRead(() => props.adapter.loadSubagentDetail(active.parentThreadID, active.childThreadID, input, signal), signal);
+        const page = await recoverHistoryRequest(readSignal => props.adapter.loadSubagentDetail(active.parentThreadID, active.childThreadID, input, readSignal), copy().chat.syncTimeout, signal);
         signal.throwIfAborted();
         if (untrack(activeSubagentDetail)?.generation !== active.generation || epoch !== liveTransport.connectionEpoch()) return;
         if (page.current.thread_id !== active.childThreadID || page.summary.parent_thread_id !== active.parentThreadID) throw new Error('Subagent page identity differs.');
@@ -12618,7 +12628,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <MessageCopyButton message={message()} text={copyText()} placement="user" />
                   <Show when={pendingDelivery()}>{pending => <span role="status" title={pending().deliveryError}>
                     {pending().delivery === 'failed' ? copy().chat.sendFailed : pending().delivery === 'unknown' ? copy().chat.sendUnknown
-                      : pending().delivery === 'accepted' ? copy().chat.sendWaiting : copy().chat.pendingSending}
+                      : pending().delivery === 'accepted' ? copy().chat.sendAcceptedSyncing : copy().chat.pendingSending}
                   </span>}</Show>
                 </div>
               </Show>

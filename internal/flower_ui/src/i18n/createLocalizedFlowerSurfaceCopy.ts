@@ -443,6 +443,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       composerReferenceAdded: (path) => t(i18n, k('chat.composerReferenceAdded'), { path }),
       composerReferenceExists: (path) => t(i18n, k('chat.composerReferenceExists'), { path }),
       sendWaiting: t(i18n, k('chat.sendWaiting')),
+      sendAcceptedSyncing: t(i18n, k('chat.sendAcceptedSyncing')),
       preparingSend: t(i18n, k('chat.preparingSend')),
       sendFailed: t(i18n, k('chat.sendFailed')),
       sendUnknown: t(i18n, k('chat.sendUnknown')),

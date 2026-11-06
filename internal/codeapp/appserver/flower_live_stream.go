@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/ai"
@@ -13,7 +14,7 @@ import (
 
 const (
 	flowerLiveHeartbeatInterval = 15 * time.Second
-	flowerLiveWriteTimeout      = 5 * time.Second
+	flowerLiveWriteTimeout      = 0 // Request/session cancellation owns slow consumers.
 )
 
 func serveAIFlowerLiveStream(w http.ResponseWriter, r *http.Request, aiSvc *ai.Service, meta *session.Meta) {
@@ -68,12 +69,38 @@ func serveFlowerLiveStreamFrames(w http.ResponseWriter, r *http.Request, subscri
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	controller := http.NewResponseController(w)
+	// Cancellation must interrupt a blocked write even when the peer keeps its
+	// socket open. Serialize deadline updates so a frame cannot clear an abort.
+	var deadlineMu sync.Mutex
+	setDeadline := func(deadline time.Time) error {
+		deadlineMu.Lock()
+		defer deadlineMu.Unlock()
+		if r.Context().Err() != nil {
+			deadline = time.Now()
+		}
+		return controller.SetWriteDeadline(deadline)
+	}
+	cancelled := make(chan struct{})
+	stopCancellation := context.AfterFunc(r.Context(), func() {
+		defer close(cancelled)
+		_ = setDeadline(time.Now())
+	})
+	defer func() {
+		if !stopCancellation() {
+			<-cancelled
+		}
+		_ = controller.SetWriteDeadline(time.Time{})
+	}()
 	write := func(prefix string, payload []byte) (writeErr error) {
-		if err := controller.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		deadline := time.Time{}
+		if writeTimeout > 0 {
+			deadline = time.Now().Add(writeTimeout)
+		}
+		if err := setDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return err
 		}
 		defer func() {
-			if err := controller.SetWriteDeadline(time.Time{}); writeErr == nil && err != nil && !errors.Is(err, http.ErrNotSupported) {
+			if err := setDeadline(time.Time{}); writeErr == nil && err != nil && !errors.Is(err, http.ErrNotSupported) {
 				writeErr = err
 			}
 		}()

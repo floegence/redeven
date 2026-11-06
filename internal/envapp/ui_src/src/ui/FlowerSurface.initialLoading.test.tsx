@@ -142,7 +142,7 @@ describe('Flower initial conversation loading', () => {
 
   it.each([
     [401, 'Restore access'], [403, 'Restore access'], [423, 'Unlock access'],
-    [426, 'matching app and runtime version'], [429, 'Close unused Flower views'],
+    [426, 'matching app and runtime version'],
   ] as const)('keeps actionable status %i guidance inside the initial loading presentation', async (status, guidance) => {
     const connectLiveStream = vi.fn((): AsyncIterable<FlowerLiveStreamEnvelope> => ({
       [Symbol.asyncIterator]: () => ({ next: async () => { throw Object.assign(new Error('private diagnostic'), { status, code: 'unexpected_status' }); } }),
@@ -154,6 +154,18 @@ describe('Flower initial conversation loading', () => {
     expect(surface.textContent).not.toContain('private diagnostic');
     expect(surface.querySelector('.flower-chat-shell')).toBeNull();
     expect(connectLiveStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers temporary capacity pressure without replacing loading with a terminal error', async () => {
+    const connectLiveStream = vi.fn(async function* (input): AsyncIterable<FlowerLiveStreamEnvelope> {
+      if (connectLiveStream.mock.calls.length === 1) throw Object.assign(new Error('capacity'), { status: 429 });
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] };
+      await waitForAbort(input);
+    });
+    const surface = renderSurfaceWithAdapter({ ...adapter(true), connectLiveStream });
+    await waitFor(() => Boolean(surface.querySelector('.flower-empty-state')));
+    expect(connectLiveStream).toHaveBeenCalledTimes(2);
+    expect(surface.querySelector('.flower-warmup button')).toBeNull();
   });
 
   it('keeps embedded conversation loading and recovery independent of the sidebar inventory', async () => {

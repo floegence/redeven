@@ -172,6 +172,27 @@ describe('readRuntimeFlowerHTTPResponse', () => {
 });
 
 describe('requestRuntimeFlowerHTTP', () => {
+  it('keeps a slow response owned until completion without a socket timeout', async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    let calls = 0;
+    const server = http.createServer((_request, response) => {
+      calls++; started(); release = () => response.end('{"ok":true}');
+    });
+    const port = await listen(server);
+    const spy = vi.spyOn(http, 'request');
+    try {
+      const pending = requestRuntimeFlowerHTTP(new URL(`http://127.0.0.1:${port}/threads`), { method: 'GET', path: '/threads' });
+      await ready;
+      expect(spy.mock.calls.at(-1)?.[1]).toMatchObject({ timeout: 0 });
+      await new Promise(resolve => setTimeout(resolve, 60));
+      release();
+      await expect(pending).resolves.toMatchObject({ status: 200, body: '{"ok":true}' });
+      expect(calls).toBe(1);
+    } finally { spy.mockRestore(); await close(server); }
+  });
+
   it('honors a request-specific timeout for bootstrap reads', async () => {
     const server = http.createServer((_request, _response) => {
       // Keep the socket open until the client-side deadline fires.
@@ -204,7 +225,10 @@ describe('openRuntimeFlowerHTTPStream', () => {
     });
     const port = await listen(server);
     try {
+      const spy = vi.spyOn(http, 'request');
       const stream = openRuntimeFlowerHTTPStream(new URL(`http://127.0.0.1:${port}/stream`));
+      expect(spy.mock.calls.at(-1)?.[1]).toMatchObject({ timeout: 0 });
+      spy.mockRestore();
       const incoming = await stream.response;
       const [chunk] = await once(incoming, 'data') as [Buffer];
       expect(chunk.toString('utf8')).toContain('"kind":"ready"');

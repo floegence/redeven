@@ -20,7 +20,7 @@ export async function withFlowerRequestDeadline<T>(operation: () => Promise<T>, 
 }
 
 // One read deadline owns both the bounded wait and transport cancellation.
-export async function withFlowerReadDeadline<T>(read: (signal: AbortSignal) => Promise<T>, timeoutMessage: string, signal?: AbortSignal): Promise<T> {
+export async function withFlowerReadDeadline<T>(read: (signal: AbortSignal) => Promise<T>, timeoutMessage: string, signal?: AbortSignal, timeoutMs = 15_000): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let cancel: (() => void) | undefined;
@@ -32,11 +32,11 @@ export async function withFlowerReadDeadline<T>(read: (signal: AbortSignal) => P
         return read(controller.signal);
       }),
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => {
+        if (timeoutMs > 0) timer = setTimeout(() => {
           const error = new FlowerReadDeadlineError(timeoutMessage);
           reject(error);
           controller.abort(error);
-        }, 15_000);
+        }, timeoutMs);
         cancel = () => {
           const error = new DOMException('Read was superseded.', 'AbortError');
           reject(error);

@@ -5836,6 +5836,7 @@
       "restoreSend": "Restaurar no editor vazio",
       "deleteUnsent": "Excluir mensagem não enviada",
       "sendWaiting": "Aguardando envio",
+      "sendAcceptedSyncing": "Recebido, sincronizando",
       "attachmentRecoveryDescription": "Os anexos não estão disponíveis após reiniciar. Restaure o texto e as referências e selecione os arquivos novamente. Atualize para verificar se a solicitação original foi aceita.",
       "removeRecoveryCopy": "Remover cópia local de recuperação",
       "removeRecoveryCopyDescription": "Remove esta cópia local de recuperação e retoma as mensagens seguintes. A solicitação original ao servidor não é cancelada.",

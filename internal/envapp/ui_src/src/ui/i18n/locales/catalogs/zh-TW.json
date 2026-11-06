@@ -5836,6 +5836,7 @@
       "restoreSend": "還原至空輸入框",
       "deleteUnsent": "刪除未傳送訊息",
       "sendWaiting": "等待傳送",
+      "sendAcceptedSyncing": "已接收，正在同步",
       "attachmentRecoveryDescription": "重新啟動後附件無法使用。請還原文字和參照，再重新選擇檔案。可重新整理確認原請求是否已受理。",
       "removeRecoveryCopy": "移除本機還原副本",
       "removeRecoveryCopyDescription": "移除本機還原副本並繼續傳送後續訊息，不會取消原伺服器請求。",

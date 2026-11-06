@@ -207,7 +207,6 @@ describe('Flower workspace synchronization recovery', () => {
 
   it.each([
     [426, 'matching app and runtime version'],
-    [429, 'Close unused Flower views'],
   ] as const)('shows actionable recovery for status %i without an automatic retry loop', async (status, guidance) => {
     const selected = thread({ thread_id: 'thread-explicit-recovery' });
     const failure = deferred<void>();
@@ -384,13 +383,8 @@ describe('Flower workspace synchronization recovery', () => {
     const selected = thread({ thread_id: 'thread-sync-late', status: 'running' });
     const late = deferred<void>();
     const attempts: FlowerLiveStreamConnectInput[] = [];
-    const originalSetTimeout = globalThis.setTimeout;
-    const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler, timeout, ...args) => {
-      // Settings and stream reads share the same deadline; only unresolved waits expire.
-      const delay = timeout === 15_000 ? 30 : timeout;
-      return originalSetTimeout(handler, delay, ...args);
-    });
-    onTestFinished(() => timer.mockRestore());
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    onTestFinished(() => visibility.mockRestore());
     const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
       attempts.push(input);
       const attempt = attempts.length;
@@ -403,6 +397,9 @@ describe('Flower workspace synchronization recovery', () => {
     });
     const loadThread = vi.fn(async () => liveBootstrap(selected, 9));
     const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [selected]), loadThread, connectLiveStream });
+    await waitFor(() => attempts.length === 1);
+    visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange')); await flush();
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
     await waitFor(() => connectLiveStream.mock.calls.length === 2 && surface.querySelector('.flower-warmup') === null);
     selectThread(surface, selected.thread_id);
     await waitFor(() => surface.textContent?.includes('Plan deploy') ?? false);
@@ -644,9 +641,9 @@ it('bounds a stalled Stop, preserves navigation and drafts, and confirms before 
 });
 
 
-it('bounds Stop confirmation reads and ignores their late terminal detail', async () => {
+it('keeps slow Stop confirmation pending and accepts its eventual terminal detail', async () => {
   onTestFinished(() => {
-    vi.restoreAllMocks();
+    vi.useRealTimers(); vi.restoreAllMocks();
   });
   const running = thread({ thread_id: 'thread-stop-detail-timeout', status: 'running' });
   const confirmation = deferred<ReturnType<typeof liveBootstrap>>();
@@ -656,21 +653,14 @@ it('bounds Stop confirmation reads and ignores their late terminal detail', asyn
   const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: vi.fn(async () => [running]), loadThread, stopThread },
     { focusThreadRequest: { request_id: 'detail-timeout', thread_id: running.thread_id } });
   await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label') === 'Stop');
-  let expire!: () => void;
-  const nativeSetTimeout = globalThis.setTimeout;
-  vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler, timeout, ...args) => {
-    if (timeout === 15_000) expire = () => (handler as () => void)();
-    return nativeSetTimeout(handler, timeout, ...args);
-  });
+  vi.useFakeTimers();
   surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
-  await waitFor(() => stopThread.mock.calls.length === 1 && Boolean(expire));
-  expire();
-  await waitFor(() => noticeMessage(surface.querySelector('.flower-workspace-sync')).includes(stopUnconfirmed) === true);
-  expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.disabled).toBe(false);
-  expect(surface.querySelector('.flower-sync-retry')?.textContent).toBe('Resync');
-  expect(surface.querySelector('.flower-sync-retry')?.getAttribute('aria-disabled')).toBe('false');
-  confirmation.resolve(liveBootstrap(thread({ ...running, status: 'success', error: undefined }), 10));
-  await flush();
-  expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label')).toBe('Stop');
+  await vi.advanceTimersByTimeAsync(300_000);
+  expect(stopThread).toHaveBeenCalledTimes(1);
+  expect(surface.textContent).not.toContain(stopUnconfirmed);
+  expect(surface.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+  confirmation.resolve(liveBootstrap(thread({ ...running, status: 'success', active_run_id: undefined, run_progress: undefined, error: undefined }), 10));
+  await vi.advanceTimersByTimeAsync(100);
+  expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label')).not.toBe('Stop');
   expect(stopThread).toHaveBeenCalledTimes(1);
 });

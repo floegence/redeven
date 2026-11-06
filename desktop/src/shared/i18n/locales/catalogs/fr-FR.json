@@ -631,6 +631,7 @@
       "composerReferenceAdded": "{path} ajouté aux références.",
       "composerReferenceExists": "{path} est déjà référencé.",
       "pendingSending": "Envoi en cours",
+      "sendAcceptedSyncing": "Reçu, synchronisation en cours",
       "pendingQueueAdmission": "En attente d’ajout à la file",
       "pendingQueued": "En file d’attente",
       "queuedSendNow": "Envoyer maintenant",

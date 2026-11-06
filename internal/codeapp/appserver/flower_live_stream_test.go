@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -143,13 +144,8 @@ func TestServeAIFlowerLiveStreamRefreshesDeadlineForIdleHeartbeat(t *testing.T) 
 	if !strings.Contains(decodedFlowerLiveSSEData(t, body), `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n: heartbeat\n\n") {
 		t.Fatalf("stream did not contain two complete frames: %q", body)
 	}
-	if len(response.deadlineWrites) != 4 {
-		t.Fatalf("deadline writes=%v, want set and clear for each frame", response.deadlineWrites)
-	}
-	for index := 1; index < len(response.deadlineWrites); index += 2 {
-		if !response.deadlineWrites[index].IsZero() {
-			t.Fatalf("frame %d left an active write deadline: %v", index/2, response.deadlineWrites)
-		}
+	if len(response.deadlineWrites) < 4 || !response.deadlineWrites[1].IsZero() || !response.deadlineWrites[len(response.deadlineWrites)-1].IsZero() {
+		t.Fatalf("frame/handler cleanup left an active deadline: %v", response.deadlineWrites)
 	}
 }
 
@@ -253,5 +249,59 @@ func TestFlowerLiveSubscriptionErrorsPreserveRecoveryClassification(t *testing.T
 				t.Fatalf("invalid failure response: %s (%v)", response.Body.String(), err)
 			}
 		})
+	}
+}
+
+// A real socket with a stalled reader proves request cancellation releases the
+// handler instead of relying on an elapsed-time failure.
+type saturatedFlowerLiveStream struct {
+	payload []byte
+	started chan struct{}
+	once    sync.Once
+}
+
+func (stream *saturatedFlowerLiveStream) Next(ctx context.Context) (*ai.FlowerLiveStreamFrame, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	stream.once.Do(func() { close(stream.started) })
+	return &ai.FlowerLiveStreamFrame{Data: stream.payload}, nil
+}
+func TestFlowerLiveSlowConsumerUsesCancellationWithoutWriteDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := &saturatedFlowerLiveStream{payload: bytes.Repeat([]byte("x"), 32<<20), started: make(chan struct{})}
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		serveFlowerLiveStreamFrames(w, r.WithContext(ctx), stream, time.Minute, flowerLiveWriteTimeout)
+	}))
+	defer server.Close()
+	conn, err := net.Dial("tcp", server.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetReadBuffer(1024)
+	}
+	if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: test\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-stream.started:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not start")
+	}
+	select {
+	case <-done:
+		t.Fatal("slow connected reader terminated before cancellation")
+	case <-time.After(100 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelled blocked write retained its handler")
 	}
 }

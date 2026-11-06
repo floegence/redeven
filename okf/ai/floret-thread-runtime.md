@@ -51,3 +51,5 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 - `redeven:internal/ai/terminal_wait_floret_integration_test.go` - Tests.
 - `redeven:internal/ai/strict_repetition_integration_test.go` - Tests.
+
+Published Floret v7.107.5 owns the schema-36 activity-membership preparation fence. Pending membership applies only to tool records, even when thinking and tools share a source identifier. Released schema-35 manifests rebuild from canonical source without rewriting conversation records. Cold bounded reads, full View, Send, Retry, Fork and restart are qualified using an immutable synthetic released-writer fixture. Redeven never repairs upstream domain records; residual authority corruption is an explicit per-thread unavailable summary, not a fabricated healthy view or global transport failure.

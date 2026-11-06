@@ -41,6 +41,7 @@ type Options struct {
 	AllowedOrigins              []string
 	DefaultHTTPRequestTimeout   time.Duration
 	MaxHTTPRequestTimeout       time.Duration
+	SessionBoundRequests        bool
 	MaxConcurrentStreams        int
 	MaxBodyBytes                int64
 	BlockedResponseHeaders      []string
@@ -68,6 +69,7 @@ func New(opts Options) (*flowersec.ProxyServer, error) {
 		MaxBodyBytes:                opts.MaxBodyBytes,
 		DefaultHTTPRequestTimeout:   opts.DefaultHTTPRequestTimeout,
 		MaxHTTPRequestTimeout:       opts.MaxHTTPRequestTimeout,
+		SessionBoundRequests:        opts.SessionBoundRequests,
 		BlockedResponseHeaders:      blocked,
 		ExtraRequestHeaders:         opts.ExtraRequestHeaders,
 		ExtraResponseHeaders:        opts.ExtraResponseHeaders,

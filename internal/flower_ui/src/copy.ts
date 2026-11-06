@@ -617,6 +617,7 @@ export type FlowerSurfaceCopy = Readonly<{
     composerReferenceAdded: (path: string) => string;
     composerReferenceExists: (path: string) => string;
     sendWaiting: string;
+    sendAcceptedSyncing: string;
     preparingSend: string;
     sendFailed: string;
     sendUnknown: string;
@@ -1141,6 +1142,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     composerReferenceAdded: (path) => `${path} referenced.`,
     composerReferenceExists: (path) => `${path} is already referenced.`,
     sendWaiting: "Waiting to send",
+    sendAcceptedSyncing: "Received, syncing",
     preparingSend: "Preparing message",
     sendFailed: "Send failed",
     sendUnknown: "Confirmation needed",

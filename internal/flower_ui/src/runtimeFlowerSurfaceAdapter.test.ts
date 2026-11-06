@@ -1,3 +1,4 @@
+import unavailableBaseline from './testdata/unavailableThreadBaseline.json';
 import { createThreadCache } from './threadCache';
 import hostWorkDetail from './testdata/hostWorkCompletedDetail.json';
 import { describe, expect, it, vi } from 'vitest';
@@ -154,6 +155,25 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('decodes the actual Go unavailable summary without poisoning healthy threads', async () => {
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () { yield unavailableBaseline; } }));
+    const result = await adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]().next();
+    expect(result.value).toMatchObject({ kind: 'ready', baseline_complete: true, summaries: [
+      { thread_id: 'unavailable-history', status: 'read_only', created_at_ms: 0, summary_unavailable: { code: 'authority_corrupt' } },
+      { thread_id: 'healthy-history', status: 'idle', title: 'Healthy history', created_at_ms: 1793894400000 },
+    ] });
+  });
+  it.each([
+    { summary_unavailable: undefined }, { summary_unavailable: { code: 'network' } },
+    { created_at_unix_ms: 1 }, { active_run_id: 'invented-run' }, { run_status: 'idle' },
+    { approval_pending_count: 1 }, { input_request: {} }, { run_error: 'fabricated' }, { summary_unavailable: [] },
+  ])('rejects malformed unavailable summaries %j', async patch => {
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
+      yield { ...unavailableBaseline, summaries: [{ ...unavailableBaseline.summaries[0], ...patch }] };
+    } }));
+    await expect(adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]().next()).rejects.toThrow('Flower contract error');
+  });
+
   it('passes the independent source icon resolver through read-only adapters', async () => {
     const resolveSourceIcon = vi.fn(async () => ({ expires_at: '2027-01-13T00:00:00Z' }));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { canMutate: false, resolveSourceIcon }));

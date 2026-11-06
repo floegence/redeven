@@ -33,6 +33,20 @@ function receive(
 }
 
 describe('ThreadCache', () => {
+  it('isolates unavailable summaries, retains known content and clears the marker after recovery', () => {
+    let cache = receive(createThreadCache(), view('a', 7, 'Known answer'));
+    const unavailable = { ...thread('a', 0, ''), title: '', title_status: 'unset' as const, title_generation: 0,
+      created_at_ms: 0, status: 'read_only' as const, summary_unavailable: { code: 'authority_corrupt' as const } };
+    cache = cache.replaceSummary(unavailable);
+    expect(cache.summaries.get('a')).toMatchObject({ created_at_ms: 1, updated_at_ms: 7, title: 'a', status: 'read_only' });
+    expect(cache.views.get('a')?.thread).toMatchObject({ status: 'read_only', summary_unavailable: { code: 'authority_corrupt' } });
+    expect(cache.views.get('a')?.thread.messages[0].content).toBe('Known answer');
+    cache = cache.replaceSummary(thread('a', 8, ''));
+    expect(cache.summaries.get('a')?.summary_unavailable).toBeUndefined();
+    expect(cache.views.get('a')?.thread.summary_unavailable).toBeUndefined();
+    expect(cache.views.get('a')?.thread.status).toBe('success');
+  });
+
   it('hydrates editable product settings independently of a newer subagent runtime baseline', () => {
     const child = { ...thread('child', 2, 'child answer'), settings_revision: 0, model_id: '',
       parent_thread_id: 'parent', read_only_reason: 'Managed subagent projection' };
@@ -667,6 +681,18 @@ describe('title updates independent of runtime revisions', () => {
 });
 
 describe('ThreadCache native baseline reads', () => {
+  it('keeps native runtime authority while unavailable metadata disables mutations', () => {
+    const current: FlowerRuntimeCurrentView = {thread_id:'a',view_version:2,activity:'idle',last_outcome:'completed',items:[{id:'answer',ordinal:1,kind:'assistant',text:'Canonical answer',turn_id:'turn',run_id:'run'}]};
+    let cache=createThreadCache().receiveView(view('a',2,'Canonical answer'),{current}).cache;
+    cache=cache.replaceSummary({...thread('a',0,''),title:'',title_generation:0,title_status:'unset',status:'read_only',summary_unavailable:{code:'authority_corrupt'}});
+    expect(cache.views.get('a')?.thread.summary_unavailable).toEqual({code:'authority_corrupt'});
+    expect(cache.views.get('a')?.thread.status).toBe('success');
+    expect(cache.views.get('a')?.thread.messages[0].content).toBe('Canonical answer');
+    cache=cache.replaceSummary(thread('a',3,''));
+    expect(cache.views.get('a')?.thread.summary_unavailable).toBeUndefined();
+    expect(cache.views.get('a')?.thread.messages[0].content).toBe('Canonical answer');
+  });
+
   const current: FlowerRuntimeCurrentView = { thread_id: 'a', view_version: 2, activity: 'active', turn_id: 'turn', run_id: 'run', run_progress: { phase: 'streaming' },
     items: [{ id: 'answer', ordinal: 1, kind: 'assistant', text: 'text', live: true, turn_id: 'turn', run_id: 'run' }] };
   const update: FlowerRuntimeUpdate = { thread_id: 'a', base_version: 2, view_version: 3, turn_id: 'turn', run_id: 'run',

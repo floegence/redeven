@@ -1,3 +1,4 @@
+import { bindTestSessionHTTP } from '../test/sessionHTTPFixture';
 import '../index.css';
 import './flower-feature.css';
 import { ThemeProvider } from '@floegence/floe-webapp-core';
@@ -43,6 +44,7 @@ describe('Flower thread references', () => {
       }
       return new Response(JSON.stringify({ client_request_id: body.client_request_id, thread_id: 'thread-1' }));
     });
+    const release = await bindTestSessionHTTP((input, init) => globalThis.fetch(input, init));
     try {
       await page.viewport(1280, 900);
       const source = { ...referenceAdapter(), runtime: runtimeAdapter.runtime, launchTurn: runtimeAdapter.launchTurn };
@@ -60,7 +62,7 @@ describe('Flower thread references', () => {
         thread: { runtime_id: 'env:local-environment', thread_id: 'thread-2' } });
       await expect.poll(() => surface.querySelector('[data-reference-kind="thread"]')).toBeNull();
       expect(editor.value).toBe('');
-    } finally { fetch.mockRestore(); }
+    } finally { release(); fetch.mockRestore(); }
   });
 
   it('adds to the current draft through all menu entries, deduplicates and allows self-reference', async () => {

@@ -1773,10 +1773,11 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Flower could not finish this reply.');
   });
 
-  it('stops the initial loading indicator and offers retry when the conversation inventory times out', async () => {
+  it('keeps a slow inventory read pending and admits its eventual response once', async () => {
     vi.useFakeTimers();
     try {
-      const listThreads = vi.fn(() => new Promise<never>(() => undefined));
+      let finish!: (value: ReturnType<typeof thread>[]) => void;
+      const listThreads = vi.fn(() => new Promise<ReturnType<typeof thread>[]>(resolve => { finish = resolve; }));
       const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads, disableLiveStream: true });
 
       await Promise.resolve();
@@ -1784,10 +1785,13 @@ describe('FlowerSurface navigation', () => {
       expect(runtime.querySelector('.flower-warmup-indicator')).not.toBeNull();
       expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
 
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(runtime.querySelector('.flower-warmup-indicator')).toBeNull();
-      expect(runtime.querySelector('.flower-warmup')?.textContent).toContain('Conversations');
-      expect(runtime.querySelector('.flower-warmup button')?.textContent).toBe('Retry');
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(runtime.querySelector('.flower-warmup-indicator')).not.toBeNull();
+      expect(runtime.querySelector('.flower-warmup button')).toBeNull();
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      finish([]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runtime.querySelector('.flower-warmup')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

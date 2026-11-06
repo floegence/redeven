@@ -5836,6 +5836,7 @@
       "restoreSend": "空の入力欄に戻す",
       "deleteUnsent": "未送信メッセージを削除",
       "sendWaiting": "送信待ち",
+      "sendAcceptedSyncing": "受信済み・同期中",
       "attachmentRecoveryDescription": "再起動後は添付ファイルを利用できません。テキストと参照を復元してから、ファイルを選び直してください。更新すると元のリクエストの受理状況を確認できます。",
       "removeRecoveryCopy": "ローカルの復元用コピーを削除",
       "removeRecoveryCopyDescription": "このローカルの復元用コピーを削除し、後続のメッセージの送信を再開します。元のサーバーへのリクエストは取り消されません。",

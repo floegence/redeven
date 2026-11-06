@@ -563,6 +563,18 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	return s.threadListFromSettings(ctx, list, strings.TrimSpace(next))
 }
 
+// A settings-only placeholder never invents canonical facts. The explicit
+// discriminator permits a local unavailable row in both baseline and live lists.
+func (s *Service) unavailableThreadSummary(ctx context.Context, settings *threadstore.ThreadSettings) (ThreadView, error) {
+	view, err := s.threadSettingsView(ctx, settings)
+	if err != nil {
+		return ThreadView{}, err
+	}
+	view.RunStatus = "read_only"
+	view.SummaryUnavailable = &ThreadSummaryUnavailable{Code: "authority_corrupt"}
+	return view, nil
+}
+
 func (s *Service) threadListFromSettings(ctx context.Context, list []threadstore.ThreadSettings, next string) (*ListThreadsResponse, error) {
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
@@ -577,11 +589,10 @@ func (s *Service) threadListFromSettings(ctx context.Context, list []threadstore
 				continue
 			}
 			if errors.Is(err, flruntime.ErrAuthorityCorrupt) {
-				view, settingsErr := s.threadSettingsView(ctx, &t)
+				view, settingsErr := s.unavailableThreadSummary(ctx, &t)
 				if settingsErr != nil {
-					return nil, fmt.Errorf("build unavailable thread %s settings: %w", threadID, settingsErr)
+					return nil, settingsErr
 				}
-				view.RunStatus = "read_only"
 				out.Threads = append(out.Threads, view)
 				continue
 			}

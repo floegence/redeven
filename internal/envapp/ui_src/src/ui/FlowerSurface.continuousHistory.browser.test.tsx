@@ -1228,22 +1228,18 @@ describe('continuous history navigation', () => {
     expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
     expect(root.querySelector('.flower-history-navigation')).toBeNull();
   });
-  it('resumes an exhausted edge read on connection restoration without a paging click', async () => {
+  it('retains an edge read through prolonged failures and recovers without a paging click', async () => {
     const { root, history, scroll, failNext } = await mountContinuous();
     failNext({ code: 'transport' }, 1000);
     scroll(400, -100);
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await waitFor(() => history.mock.calls.length >= 6, 12000);
     expect(history.mock.calls.length).toBeLessThanOrEqual(10);
-    const exhaustedCount = history.mock.calls.length;
-    await new Promise(resolve => setTimeout(resolve, 2500));
-    expect(history.mock.calls.length).toBe(exhaustedCount);
     const anchor = root.querySelector('[data-flower-message-id="entry-184"]');
     failNext(undefined, 0);
-    window.dispatchEvent(new Event('online'));
-    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="entry-150"]')));
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="entry-150"]')), 12000);
     expect(anchor?.isConnected).toBe(true);
     expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
-  });
+  }, 30000);
   it('retains a child tail when scrolling changes during interest installation', async () => {
     const { viewport, loadChild, scroll, afterNextSnapshot } = await mountChild();
     const tail = viewport.querySelector<HTMLElement>('[data-flower-message-id="child-entry-329"]')!;

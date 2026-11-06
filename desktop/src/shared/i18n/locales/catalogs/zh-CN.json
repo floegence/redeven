@@ -631,6 +631,7 @@
       "composerReferenceAdded": "已引用 {path}。",
       "composerReferenceExists": "{path} 已在引用列表中。",
       "pendingSending": "发送中",
+      "sendAcceptedSyncing": "已接收，正在同步",
       "pendingQueueAdmission": "待入列",
       "pendingQueued": "已排队",
       "queuedSendNow": "立即发送",

@@ -63,7 +63,7 @@ export function createParentEventReading(props: Readonly<{
       const query = { action: 'read' as const, event_id: id };
       const result = validateParentEventPage(await recoverHistoryRead(() => detailQueue.run(JSON.stringify([threadID, id]), signal,
         transportSignal => withFlowerReadDeadline(readSignal => reader(threadID, query, readSignal),
-          props.timeoutMessage ?? 'Event read timed out.', transportSignal)), signal), threadID, query);
+          props.timeoutMessage ?? 'Event read timed out.', transportSignal, 0)), signal), threadID, query);
       signal.throwIfAborted();
       if (demanded.get(id) !== owner || props.threadID !== threadID) return;
       owner.status = 'ready'; owner.accessed = ++accessSequence;
@@ -100,7 +100,7 @@ export function createParentEventReading(props: Readonly<{
     const cached = key && pagesByQuery.get(key);
     if (cached) { signal.throwIfAborted(); return cached; }
     const page = validateParentEventPage(await recoverHistoryRead(() => withFlowerReadDeadline(
-      readSignal => pageQueue.run(JSON.stringify([threadID, query]), readSignal, signal => reader(threadID, query, signal)), props.timeoutMessage ?? 'Event read timed out.', signal), signal), threadID, query);
+      readSignal => pageQueue.run(JSON.stringify([threadID, query]), readSignal, signal => reader(threadID, query, signal)), props.timeoutMessage ?? 'Event read timed out.', signal, 0), signal), threadID, query);
     signal.throwIfAborted();
     if (key && pagesLeaf === query.leaf_id) {
       pagesByQuery.set(key, page);
@@ -319,7 +319,7 @@ export function createParentEventReading(props: Readonly<{
         const proof = await recoverHistoryRead(async () => {
           try {
             return validateParentEventPage(await withFlowerReadDeadline(signal => pageQueue.run(JSON.stringify([thread, query]), signal,
-              transportSignal => reader(thread, query, transportSignal)), props.timeoutMessage ?? 'Event read timed out.', scope.signal), thread, query);
+              transportSignal => reader(thread, query, transportSignal)), props.timeoutMessage ?? 'Event read timed out.', scope.signal, 0), thread, query);
           } catch (error) {
             if ((error as { code?: string })?.code === 'history_source_changed') return undefined;
             throw error;
@@ -349,7 +349,7 @@ export function createParentEventReading(props: Readonly<{
         while (remaining > 0) {
           const query: FlowerParentEventQuery = { action: 'list', leaf_id: leaf, after_ordinal: lower, before_ordinal: upper, limit: Math.min(100, remaining) };
           const page = validateParentEventPage(await recoverHistoryRead(() => withFlowerReadDeadline(
-            signal => pageQueue.run(JSON.stringify([thread, query]), signal, transportSignal => reader(thread, query, transportSignal)), props.timeoutMessage ?? 'Event read timed out.', scope.signal), scope.signal), thread, query);
+            signal => pageQueue.run(JSON.stringify([thread, query]), signal, transportSignal => reader(thread, query, transportSignal)), props.timeoutMessage ?? 'Event read timed out.', scope.signal, 0), scope.signal), thread, query);
           scope.signal.throwIfAborted();
           pages.push({ page, query });
           for (const event of page.events) updated.set(event.id, event);

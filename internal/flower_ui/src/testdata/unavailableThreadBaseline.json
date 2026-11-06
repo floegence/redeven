@@ -1,0 +1,66 @@
+{
+  "baseline_complete": true,
+  "observer_id": "fixture-observer",
+  "schema_version": 3,
+  "kind": "ready",
+  "summaries": [
+    {
+      "summary_unavailable": {
+        "code": "authority_corrupt"
+      },
+      "thread_id": "unavailable-history",
+      "title": "",
+      "title_status": "",
+      "title_generation": 0,
+      "model_id": "openai/gpt-5-mini",
+      "permission_type": "approval_required",
+      "working_dir": "/fixture",
+      "queued_turn_count": 0,
+      "queued_turns": null,
+      "run_status": "read_only",
+      "run_updated_at_unix_ms": 0,
+      "reasoning_selection": {},
+      "reasoning_capability": {
+        "kind": "",
+        "wire_shape": "",
+        "source_urls": null,
+        "source_checked_at": "",
+        "fixture": ""
+      },
+      "pin_rank": 0,
+      "settings_revision": 1,
+      "created_at_unix_ms": 0,
+      "updated_at_unix_ms": 0,
+      "last_message_at_unix_ms": 0,
+      "last_message_preview": ""
+    },
+    {
+      "thread_id": "healthy-history",
+      "title": "Healthy history",
+      "title_status": "ready",
+      "title_generation": 1,
+      "model_id": "openai/gpt-5-mini",
+      "permission_type": "approval_required",
+      "working_dir": "/fixture",
+      "queued_turn_count": 0,
+      "queued_turns": null,
+      "run_status": "idle",
+      "run_updated_at_unix_ms": 0,
+      "approval_pending": false,
+      "reasoning_selection": {},
+      "reasoning_capability": {
+        "kind": "",
+        "wire_shape": "",
+        "source_urls": null,
+        "source_checked_at": "",
+        "fixture": ""
+      },
+      "pin_rank": 0,
+      "settings_revision": 1,
+      "created_at_unix_ms": 1793894400000,
+      "updated_at_unix_ms": 1793894400000,
+      "last_message_at_unix_ms": 0,
+      "last_message_preview": ""
+    }
+  ]
+}

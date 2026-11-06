@@ -127,7 +127,7 @@ export function requestRuntimeFlowerHTTP(
       method: request.method,
       agent: options.agent,
       signal: options.signal,
-      timeout: Math.max(1, Math.floor(options.timeoutMs ?? 120_000)),
+      timeout: options.timeoutMs === undefined ? 0 : Math.max(1, Math.floor(options.timeoutMs)),
       headers: {
         Accept: options.accept ?? 'application/json',
         ...(options.headers ?? {}),
@@ -165,7 +165,7 @@ export function openRuntimeFlowerHTTPStream(
 	const client = url.protocol === 'https:' ? https : http;
 	const request = client.request(url, {
 		method: 'GET',
-		timeout: 120_000,
+		timeout: 0,
 		headers: {
 			Accept: 'text/event-stream',
 			...(options.headers ?? {}),

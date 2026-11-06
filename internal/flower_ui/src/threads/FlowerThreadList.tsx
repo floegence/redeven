@@ -153,7 +153,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       <div class="flower-thread-card-trailing" data-has-timestamp={!indicator().actionRequired && !progressLabel() ? 'true' : undefined}>
         <div class="flower-thread-card-summary" aria-hidden="true">
           <Show when={indicator().actionRequired} fallback={
-            <span class="flower-thread-card-time" data-progress={progressLabel() ? 'true' : undefined} title={progressLabel()}>{progressLabel() || fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
+            <span class="flower-thread-card-time" data-progress={progressLabel() ? 'true' : undefined} title={progressLabel()}>{props.item.summary_unavailable ? copy().statuses.read_only : progressLabel() || fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
           }>
             <span class="flower-thread-card-action-indicator" title={indicator().ariaStatus}>
               <Show when={props.item.status === 'waiting_approval'} fallback={<MessageSquare class="flower-thread-card-action-icon" />}>
@@ -1013,7 +1013,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                     <Show when={indicator().visual === 'dot'}><span class="flower-workspace-unread" /></Show>
                     <Show when={indicator().actionRequired}><Show when={item().status === 'waiting_approval'} fallback={<MessageSquare class="h-3 w-3" />}><ShieldCheck class="h-3 w-3" /></Show></Show>
                   </span>
-                  <span class="flower-workspace-thread-title">{item().title}</span><span class="flower-workspace-thread-time">{fmtFlowerShortTime(item().created_at_ms, copy())}</span>
+                  <span class="flower-workspace-thread-title">{item().title}</span><span class="flower-workspace-thread-time">{item().summary_unavailable ? copy().statuses.read_only : fmtFlowerShortTime(item().created_at_ms, copy())}</span>
                 </button>
                 <Show when={props.canPin && props.onMenuAction && canPinThreadItem(item())}><button type="button" class="flower-workspace-thread-pin" aria-label={`${item().pinned ? copy().unpin : copy().pin}: ${item().title}`}
                   title={item().pinned ? copy().unpin : copy().pin} aria-pressed={item().pinned} disabled={props.pinBusy} onClick={() => togglePin(item(), undefined, true)}>

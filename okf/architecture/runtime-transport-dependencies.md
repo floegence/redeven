@@ -11,7 +11,7 @@ Published Flowersec owns acquisition, framing, retries and connection replacemen
 
 # Contract
 
-Published Flowersec owns Transportv3 connection/session/RPC/streams; Floeterm owns terminal lifecycle. Pins: terminal-go v0.20.0 and Flowersec Go v5.11.1. Env App and Desktop consume Flowersec TypeScript v5.11.1. Each Env App shares one current protocol session; switching thread/Activity/Workbench/terminal/file cannot reconnect it. Register complete AI inventory in direct/remote profiles before session freeze; declared methods cannot become router404. Stop is one RPC lifecycle command,no fallback.
+Published Flowersec owns Transportv3 connection/session/RPC/streams; Floeterm owns terminal lifecycle. Pins: terminal-go v0.20.0 and Flowersec Go v5.12.0. Env App and Desktop consume Flowersec TypeScript v5.12.0. Each Env App shares one current protocol session; switching thread/Activity/Workbench/terminal/file cannot reconnect it. Register complete AI inventory in direct/remote profiles before session freeze; declared methods cannot become router404. Stop is one RPC lifecycle command,no fallback.
 
 Published WebSocketHTTPServerOptions.ApplicationHandler composes Gateway HTTP/Runtime on one TLS endpoint; egress.HTTPSProxy supplies explicit Cloud routing. [Web Center](web-environment-center.md) uses published controller/pinned RuntimeTLS/in-process Connector without new wire/replay. Desktop SSH placementHTTP2 remains separate. [Terminal](runtime-terminal-lifecycle.md) owns framing/history/attachment/warmup.
 
@@ -30,3 +30,9 @@ Upstream owns acquisition/retry/framing/connection replacement; product selects 
 ## Env App recovery
 - `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Source.
+
+Flower HTTP, including attachment uploads, uses the bound session fetch on ordinary Env pages and custom turn routes. Uploads display indeterminate progress until confirmed completion; they retain stable idempotency identity, byte limits and cancellation. Published Flowersec `ProxyRequestInit.sessionBound` and host-only Go `ProxyServerOptions.SessionBoundRequests` remove elapsed/header/SSE-idle deadlines for the Env proxy. They preserve stream/body limits, admission caps, explicit cancellation and authoritative session termination. Generic port/app proxies retain finite defaults. No request metadata grants the server policy. Desktop local HTTP and live writes follow request ownership; cancellation interrupts a blocked write. The published Floe SSE parser preserves the per-request flag. Shared Shell model configuration, directory and readiness use the same session; their owners cancel on invalidation/pause/disposal. No scope or wire extension is required.
+
+Run `REDEVEN_FLOWER_SESSION_ACCEPTANCE=1 go test ./internal/runtimeproxy -run '^TestFlowerSessionBoundBrowserE2E$' -count=1 -v -timeout=6m` for explicit carrier acceptance. The real published Go/browser tunnel and product session binding must retain one socket and one command through 130 seconds of delayed headers/body and SSE silence, then release cancelled/terminated requests and reject oversized bodies.
+
+[Real encrypted-tunnel acceptance](../../internal/runtimeproxy/flower_session_browser_test.go) combines the published Go server, browser client, Floe parser and product session binding with 55-second header stalls, 75-second response stalls, stalled SSE, cancellation and byte-limit checks. It requires one connection and one command admission. [Floret runtime](../ai/floret-thread-runtime.md) owns historical repair.

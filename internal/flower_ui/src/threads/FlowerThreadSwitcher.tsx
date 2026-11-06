@@ -120,6 +120,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
   };
 
   const rowMeta = (item: FlowerCompanionThreadListItem, groupKind: FlowerThreadGroup['kind']): string => {
+    if (item.summary_unavailable) return props.copy.threadList.statuses.read_only;
     const indicator = flowerThreadIndicator(item, props.copy.threadList);
     if (indicator.actionRequired || indicator.visual === 'wave') return indicator.title;
     if (queuedTurnCount(item) > 0) return props.copy.queued;

@@ -1,3 +1,4 @@
+import { bindTestSessionHTTP } from '../test/sessionHTTPFixture';
 import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { expect, it, vi, onTestFinished } from 'vitest';
@@ -20,6 +21,7 @@ const item = (kind: 'input' | 'media'): FlowerTaskMaterial => ({ id: kind, kind,
   locator: 'attachment://v1/upl_one/source.txt', item_id: 'user:one', turn_id: 'turn', created_at: '2026-10-29T00:00:00Z' });
 
 async function setup() {
+  onTestFinished(await bindTestSessionHTTP((input, init) => globalThis.fetch(input, init)));
   await page.viewport(1280, 900);
   const rows = { files: [{ file_path: '/project/report.txt', name: 'report.txt', title: '', mime: 'text/plain', size: 6,
     sha256: 'a'.repeat(64), endpoint_id: 'runtime-one', thread_id: 'one', turn_id: 'turn', run_id: 'run', status: 'available' }],

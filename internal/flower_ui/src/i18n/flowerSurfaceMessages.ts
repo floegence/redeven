@@ -248,6 +248,7 @@ export const flowerSurfaceEnUS = {
     composerReferenceAdded: '{path} referenced.',
     composerReferenceExists: '{path} is already referenced.',
     sendWaiting: "Waiting to send",
+    sendAcceptedSyncing: "Received, syncing",
     preparingSend: "Preparing message",
     sendFailed: "Send failed",
     sendUnknown: "Confirmation needed",

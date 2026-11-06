@@ -46,12 +46,12 @@ export function createFlowerConversationPreferenceClient(transport: Readonly<{
       readSignal.throwIfAborted();
       options.signal?.throwIfAborted();
       return transport.load(readSignal);
-    }, 'Flower preferences read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal),
+    }, 'Flower preferences read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal, 0),
     save: (patch: FlowerConversationPreferencePatch): Promise<FlowerConversationPreferences> => {
       const captured = structuredClone(patch);
       const result = writes.then(() => withFlowerRequestDeadline(async () => {
         assertWritable();
-        const current = await withFlowerReadDeadline(signal => transport.load(signal), 'Flower preferences read timed out.', options.signal);
+        const current = await withFlowerReadDeadline(signal => transport.load(signal), 'Flower preferences read timed out.', options.signal, 0);
         assertWritable();
         return transport.patch({ ...captured, expected_revision: current.revision });
       }, 'Flower preferences save timed out. Check settings before retrying.', options.signal));

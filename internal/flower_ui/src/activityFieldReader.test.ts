@@ -14,6 +14,20 @@ function transport() {
   };
 }
 describe('activity field reader', () => {
+  it('releases physical read slots during retry backoff', async () => {
+    vi.useFakeTimers();
+    const api = transport();
+    api.loadActivityStructure.mockRejectedValue({ code: 'transport' });
+    const reader = createActivityFieldReader(api);
+    const failed = reader.structure('thread', 'tool', field.path, signal());
+    const cancelled = expect(failed).rejects.toMatchObject({ name: 'AbortError' });
+    try {
+      await vi.advanceTimersByTimeAsync(1);
+      expect(reader.requests.active).toBe(0);
+      await expect(reader.chunk('thread', 'tool', field, 0, signal())).resolves.toMatchObject({ next: ACTIVITY_FIELD_CHUNK_BYTES });
+    } finally { reader.dispose(); await cancelled; vi.useRealTimers(); }
+  });
+
   it('revalidates resident extents even when the requested shape version is unchanged', async () => {
     const api = transport(); const reader = createActivityFieldReader(api);
     const version = 'resident:shape';
@@ -63,6 +77,7 @@ describe('activity field reader', () => {
     });
     const reader = createActivityFieldReader(api);
     const read = reader.chunk('thread', 'tool', field, 0, signal());
+    await Promise.resolve();
     reader.invalidate();
     await expect(read).rejects.toMatchObject({ name: 'AbortError' });
     expect(aborted).toBe(true);
@@ -94,9 +109,11 @@ describe('activity field reader', () => {
       api.loadActivityField.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
       const reader = createActivityFieldReader(api); const owner = new AbortController();
       const pending = reader.chunk('thread', 'tool', field, 0, owner.signal);
+      const cancelled = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await Promise.resolve();
       if (action === 'collapse') owner.abort(); else if (action === 'invalidate') reader.invalidate(); else reader.dispose();
       finish({ thread_id: 'thread', path: field.path, entry_id: 'result', source_sha256: 'source', sha256: 'text', bytes: field.bytes!, offset_bytes: 0, text: 'x' });
-      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await cancelled;
       expect(reader.bytes.fields).toBe(0);
     }
   });

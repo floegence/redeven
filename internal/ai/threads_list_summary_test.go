@@ -2,10 +2,14 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -185,6 +189,37 @@ func TestListThreadsIsolatesCorruptCanonicalThread(t *testing.T) {
 	for _, thread := range page.Threads {
 		seen[thread.ThreadID] = thread
 	}
+	unavailable := seen[damagedID.String()]
+	if unavailable.SummaryUnavailable == nil || unavailable.SummaryUnavailable.Code != "authority_corrupt" || unavailable.CreatedAtUnixMs != 0 || unavailable.UpdatedAtUnixMs != 0 {
+		t.Fatal("missing explicit unavailable contract")
+	}
+	// Export the real product writer's envelope for the actual TS decoder and
+	// browser test; normalize identities/settings only, never fill missing facts.
+	unavailable.ThreadID, unavailable.WorkingDir, unavailable.SettingsRevision = "unavailable-history", "/fixture", 1
+	healthy := seen[createdIDs[0]]
+	healthy.ThreadID, healthy.WorkingDir, healthy.SettingsRevision = "healthy-history", "/fixture", 1
+	healthy.Title, healthy.CreatedAtUnixMs, healthy.UpdatedAtUnixMs, healthy.LastMessageAtUnixMs = "Healthy history", 1793894400000, 1793894400000, 0
+	healthy.RunUpdatedAtUnixMs = 0
+	baselineComplete := true
+	envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, BaselineComplete: &baselineComplete, ObserverID: "fixture-observer", Summaries: []ThreadView{unavailable, healthy}}
+	raw, marshalErr := json.MarshalIndent(envelope, "", "  ")
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	raw = append(raw, '\n')
+	path := filepath.Join("..", "flower_ui", "src", "testdata", "unavailableThreadBaseline.json")
+	if os.Getenv("UPDATE_FLOWER_UNAVAILABLE_FIXTURE") == "1" {
+		if err := os.WriteFile(path, raw, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	expected, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(raw) != string(expected) {
+		t.Fatal("unavailable summary wire fixture changed; review with UPDATE_FLOWER_UNAVAILABLE_FIXTURE=1")
+	}
 	if got := seen[damagedID.String()].RunStatus; got != "read_only" {
 		t.Fatalf("damaged thread status = %q, want read_only", got)
 	}
@@ -252,6 +287,44 @@ func TestPointSummaryRequiresPublishedCapabilityAndPreservesErrors(t *testing.T)
 	for _, want := range []error{context.Canceled, context.DeadlineExceeded, flruntime.ErrThreadNotFound} {
 		if _, got := threadSummaryFromRuntime(t.Context(), failingSummaryRuntime{svc.threadRuntime, want}, id); !errors.Is(got, want) {
 			t.Fatalf("error = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestUnavailableThreadSummaryPublicationKeepsObserverHealthy(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	created, err := svc.CreateThread(t.Context(), meta, "local corruption", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	if ready := nextFlowerLiveStreamFrame(t, sub); ready.Kind != FlowerLiveStreamReady {
+		t.Fatal(ready.Kind)
+	}
+	svc.threadRuntime = &countingListThreadRuntime{ThreadService: svc.threadRuntime, summaryErrors: map[identity.ThreadID]error{identity.ThreadID(created.ThreadID): flruntime.ErrAuthorityCorrupt}}
+	if err := svc.publishCanonicalThreadSummary(t.Context(), meta.EndpointID, created.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	for {
+		frame, err := readFlowerLiveStreamEnvelope(ctx, sub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var envelope FlowerLiveStreamEnvelope
+		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		for _, summary := range envelope.Summaries {
+			if summary.ThreadID == created.ThreadID && summary.SummaryUnavailable != nil {
+				return
+			}
 		}
 	}
 }

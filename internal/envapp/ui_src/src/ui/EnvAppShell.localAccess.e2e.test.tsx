@@ -1439,7 +1439,8 @@ vi.mock('./utils/askFlowerPath', () => ({
   resolveSuggestedWorkingDirAbsolute: () => '',
 }));
 vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), reloadCurrentPage: reloadCurrentPageMock }));
-vi.mock('./services/localApi', () => ({
+vi.mock('./services/localApi', async importOriginal => ({
+  ...await importOriginal<typeof import('./services/localApi')>(),
   fetchLocalApiJSON: (url: string, ...args: unknown[]) => url === '/_redeven_proxy/api/ui-cache-scope'
     ? cacheScopeMock() : fetchLocalApiJSONMock(url, ...args),
   readApiJSONResponse: vi.fn(async () => ({ data: {}, headers: new Headers(), status: 200 })),
@@ -1447,6 +1448,10 @@ vi.mock('./services/localApi', () => ({
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   uploadLocalApiFile: vi.fn(),
   unlockEnvAppAccess: unlockEnvAppAccessMock,
+}));
+vi.mock('./services/sessionHTTP', async importOriginal => ({
+  ...await importOriginal<typeof import('./services/sessionHTTP')>(),
+  fetchSessionJSON: (url: string, init: RequestInit) => fetchLocalApiJSONMock(url, init),
 }));
 vi.mock('./plugins/pluginApi', () => ({
   createPluginLifecycleAPI: pluginLifecycleMocks.createPluginLifecycleAPI,
@@ -5326,7 +5331,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(activitySurfaceLifecycleState.flowerMounts).toBe(1);
       expect(fetchLocalApiJSONMock).toHaveBeenCalledWith(
         '/_redeven_proxy/api/ai/readiness',
-        { method: 'GET' },
+        expect.objectContaining({ method: 'GET', signal: expect.any(AbortSignal) }),
       );
 
       (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement | null)?.click();
@@ -6192,7 +6197,7 @@ describe('EnvAppShell remote access gate', () => {
     }
   });
 
-  it('refreshes AI readiness after remote HTTP unlock while direct RPC remains pending', async () => {
+  it('waits for the secure session before refreshing AI readiness after remote unlock', async () => {
     getLocalRuntimeMock.mockResolvedValue(null);
     getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
     const connectDeferred = deferred<void>();
@@ -6216,16 +6221,19 @@ describe('EnvAppShell remote access gate', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 
-      await flushUntil(() => fetchLocalApiJSONMock.mock.calls.length > 0);
+      await flushUntil(() => protocolSnapshot.state === 'connecting');
 
       expect(unlockEnvAppAccessMock).toHaveBeenCalledWith('secret');
       expect(protocolSnapshot.state).toBe('connecting');
       expect(accessResumeMock).not.toHaveBeenCalled();
       expect(host.textContent).toContain('Preparing secure session');
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
+      expect(fetchLocalApiJSONMock).not.toHaveBeenCalled();
+      publishProtocolConnected();
+      await flushUntil(() => fetchLocalApiJSONMock.mock.calls.length > 0);
       expect(fetchLocalApiJSONMock).toHaveBeenCalledWith(
         '/_redeven_proxy/api/ai/readiness',
-        { method: 'GET' },
+        expect.objectContaining({ method: 'GET', signal: expect.any(AbortSignal) }),
       );
     } finally {
       connectDeferred.resolve();

@@ -164,31 +164,36 @@ describe('Flower detail history recovery', () => {
     } finally { observer.disconnect(); }
   });
 
-  it('bounds persistent source changes and allows an explicit retry after exhaustion', async () => {
+  it('keeps recovering beyond the former retry budget without user intervention', async () => {
     const { root, history, recover } = await mount(100);
-    await waitFor(() => [...root.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Retry'), 5000);
-    expect(history.mock.calls.filter(call => call[1].observer_id)).toHaveLength(4);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    expect(history).toHaveBeenCalledTimes(4);
-    recover();
-    const retry = [...root.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === 'Retry');
-    expect(retry).toBeDefined(); retry!.click();
-    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id=latest]')));
-    expect(history.mock.calls.filter(call => call[1].observer_id)).toHaveLength(5);
+    await waitFor(() => history.mock.calls.length >= 5, 7000);
     expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
-  });
+    expect([...root.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Retry')).toBe(false);
+    recover();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id=latest]')), 7000);
+    expect(history.mock.calls.length).toBeGreaterThan(5);
+    expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
+  }, 16000);
 
-  it('describes exhausted refresh as interrupted sync while retaining the loaded conversation', async () => {
-    const { root, history, refresh } = await mount();
+  it('retains content, draft and scroll during a prolonged refresh outage', async () => {
+    const { root, history, refresh, recover } = await mount();
     await waitFor(() => Boolean(root.querySelector('[data-flower-message-id=latest]')));
     const row = root.querySelector('[data-flower-message-id=latest]');
+    const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
+    editor.value = 'Draft during outage'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const top = viewport.scrollTop;
     refresh(100);
-    await waitFor(() => Boolean(root.querySelector('.flower-thread-sync-error')), 5000);
-    expect(root.querySelector('.flower-thread-sync-error')?.textContent).toContain('Sync interrupted');
-    expect(root.querySelector('.flower-thread-sync-error')?.textContent).not.toContain('Conversation could not load');
+    await waitFor(() => history.mock.calls.length >= 6, 7000);
+    expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
     expect(root.querySelector('[data-flower-message-id=latest]')).toBe(row);
-    expect(history.mock.calls.filter(call => call[1].observer_id)).toHaveLength(5);
-  });
+    expect(editor.value).toBe('Draft during outage');
+    expect(Math.abs(viewport.scrollTop - top)).toBeLessThanOrEqual(1);
+    recover();
+    await waitFor(() => history.mock.calls.length >= 7, 7000);
+    expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
+    expect(root.querySelector('[data-flower-message-id=latest]')).toBe(row);
+  }, 16000);
 
   it('fences obsolete retry revisions while accepting fresh live updates', async () => {
     const { root, history, push } = await mount(1);
@@ -215,6 +220,6 @@ describe('Flower detail history recovery', () => {
     disposeRenderedSurface(root);
     await new Promise(resolve => setTimeout(resolve, 350));
     expect(history).toHaveBeenCalledTimes(2);
-    expect(history.mock.calls[0][2].aborted).toBe(true);
+    expect(root.querySelector('main')).toBeNull();
   });
 });

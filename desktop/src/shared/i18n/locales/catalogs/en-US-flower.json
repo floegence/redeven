@@ -370,6 +370,7 @@
     "composerReferenceAdded": "{path} referenced.",
     "composerReferenceExists": "{path} is already referenced.",
     "pendingSending": "Sending",
+    "sendAcceptedSyncing": "Received, syncing",
     "pendingQueueAdmission": "Waiting to queue",
     "pendingQueued": "Queued",
     "queuedSendNow": "Send now",

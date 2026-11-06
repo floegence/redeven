@@ -97,7 +97,7 @@ describe('Flower settings lifecycle', () => {
   });
 });
 
-it('releases a settings timeout and ignores its late success after manual retry', async () => {
+it('keeps slow settings pending without redispatch and accepts their eventual response', async () => {
   const pending = deferred<FlowerSettingsSnapshot>();
   const loadSettings = vi.fn().mockResolvedValueOnce(settingsSnapshot()).mockImplementationOnce(() => pending.promise).mockResolvedValue(settingsSnapshot());
   const [revision, setRevision] = createSignal(0);
@@ -106,14 +106,11 @@ it('releases a settings timeout and ignores its late success after manual retry'
   fillDraft(surface);
   vi.useFakeTimers();
   setRevision(1);
-  await vi.advanceTimersByTimeAsync(15_000);
-  expect(status(surface)?.textContent).toContain('15 seconds');
+  await vi.advanceTimersByTimeAsync(300_000);
+  expect(status(surface)?.getAttribute('aria-busy')).toBe('true');
   expect(submit(surface).disabled).toBe(true);
-  retry(surface).click();
-  await vi.advanceTimersByTimeAsync(0);
-  expect(loadSettings).toHaveBeenCalledTimes(3);
-  expect(status(surface)).toBeNull();
-  pending.resolve({ ...settingsSnapshot(), defaults: { permission_type: 'readonly' } });
+  expect(loadSettings).toHaveBeenCalledTimes(2);
+  pending.resolve(settingsSnapshot());
   await vi.advanceTimersByTimeAsync(0);
   expect(status(surface)).toBeNull();
   expect(submit(surface).disabled).toBe(false);

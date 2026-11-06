@@ -155,7 +155,14 @@ func NewModelsResponse(runtime *AIRuntimeStatus) *ModelsResponse {
 	}
 }
 
+// ThreadSummaryUnavailable identifies a settings-only row. It carries no
+// canonical title, timestamps or lifecycle; consumers must keep its failure local.
+type ThreadSummaryUnavailable struct {
+	Code string `json:"code"`
+}
+
 type ThreadView struct {
+	SummaryUnavailable   *ThreadSummaryUnavailable     `json:"summary_unavailable,omitempty"`
 	Cancellation         *flruntime.ThreadCancellation `json:"cancellation,omitempty"`
 	ThreadID             string                        `json:"thread_id"`
 	Title                string                        `json:"title"`

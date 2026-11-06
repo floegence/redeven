@@ -1020,7 +1020,6 @@ vi.mock('./services/localApi', () => ({
     }
   },
   prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
-  uploadLocalApiAttachment: vi.fn(),
   uploadLocalApiFile: vi.fn(),
   unlockEnvAppAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),
 }));

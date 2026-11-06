@@ -135,7 +135,7 @@ describe('history body request ownership', () => {
     expect(read).toHaveBeenCalledTimes(2);
     expect(loader.state('0')).toBeUndefined();
   });
-  it('automatically recovers transient failures and bounds retry exhaustion', async () => {
+  it('keeps visible reads pending through a prolonged outage and recovers automatically', async () => {
     vi.useFakeTimers();
     const loader = createHistoryBodyLoader(() => 'timeout');
     const controller = new AbortController();
@@ -144,12 +144,12 @@ describe('history body request ownership', () => {
     await settle(); expect(loader.state('item')).toBe('loading');
     await vi.advanceTimersByTimeAsync(2000);
     expect(read).toHaveBeenCalledTimes(4);
-    expect(loader.state('item')).toBe('failed');
-    await vi.advanceTimersByTimeAsync(60000);
-    expect(read).toHaveBeenCalledTimes(4);
+    expect(loader.state('item')).toBe('loading');
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(read.mock.calls.length).toBeGreaterThan(4);
+    expect(read.mock.calls.length).toBeLessThan(20);
     read.mockResolvedValue(undefined);
-    loader.resume(); await settle();
-    expect(read).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(10000); await settle();
     expect(loader.state('item')).toBeUndefined();
     controller.abort();
     expect(vi.getTimerCount()).toBe(0);
@@ -195,7 +195,7 @@ describe('history body request ownership', () => {
     expect(loader.state('item')).toBeUndefined();
     second.abort(); expect(vi.getTimerCount()).toBe(0);
   });
-  it('bounds stalled physical transports after the read deadline and releases UI ownership', async () => {
+  it('bounds physical transports during a long stall and cancels only obsolete demand', async () => {
     vi.useFakeTimers();
     const loader = createHistoryBodyLoader(() => 'timeout');
     const controller = new AbortController();
@@ -204,9 +204,9 @@ describe('history body request ownership', () => {
     loader.request('a', {}, controller.signal, read);
     loader.request('b', {}, controller.signal, read);
     loader.request('c', {}, controller.signal, read);
-    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(300_000);
     expect(read).toHaveBeenCalledTimes(2);
-    expect(read.mock.calls[0][0].aborted).toBe(true);
+    expect(read.mock.calls[0][0].aborted).toBe(false);
     expect(loader.state('a')).toBe('loading');
     completions.shift()!(); await settle();
     expect(read).toHaveBeenCalledTimes(3);

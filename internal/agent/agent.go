@@ -1746,6 +1746,7 @@ func (a *Agent) registerEnvSessionProxy(handlers flowersec.StreamHandlerRegistra
 		ExtraRequestHeaders:    runtimeproxy.EnvAppRequestHeaders(),
 		ExtraResponseHeaders:   runtimeproxy.EnvAppResponseHeaders(),
 		MaxBodyBytes:           runtimeproxy.EnvAppMaxBodyBytes,
+		SessionBoundRequests:   true,
 	})
 	if err != nil {
 		closeUpstream()

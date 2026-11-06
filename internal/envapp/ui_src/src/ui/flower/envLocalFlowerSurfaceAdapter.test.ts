@@ -2381,7 +2381,7 @@ it('offers automatic installation only when the Desktop acquisition bridge exist
 
 let releaseTestTransport: (() => void) | undefined;
 beforeEach(async () => {
-  releaseTestTransport = await bindTestSessionHTTP(fetchMock);
+  releaseTestTransport = await bindTestSessionHTTP((input, init) => globalThis.fetch(input, init));
 });
 afterEach(() => releaseTestTransport?.());
 
@@ -2560,4 +2560,27 @@ it('keeps plugin input and context continuations on the authenticated carrier', 
     '/_redeven_proxy/api/ai/threads/author-thread/input_response',
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('uploads attachments once through the bound session with honest progress and cancellation', async () => {
+  const adapter = createEnvLocalFlowerSurfaceAdapter({envPublicID:'env', envLabel:'Env', rpc:{ai:{}} as never});
+  const controller = new AbortController();
+  const progress = vi.fn();
+  let finish!: (response: Response) => void;
+  fetchMock.mockImplementation((_url, init) => new Promise<Response>(resolve => {
+    expect(init).toMatchObject({sessionBound:true,signal:controller.signal,method:'POST'});
+    expect(new Headers(init.headers).get('Idempotency-Key')).toBe('upload-one');
+    expect(init.body).toBeInstanceOf(FormData);
+    finish=resolve;
+  }));
+  const file=new File(['hello'],'notes.txt',{type:'text/plain'});
+  const pending=adapter.uploadAttachment!({file,model_id:'model',source:'file',request_id:'upload-one',attempt_id:'attempt-one',capability_revision:'revision',
+    staging_scope:{staging_scope_id:'scope',target_id:'turn',capability:'secret',expires_at_unix_ms:Date.now()+60000},
+    signal:controller.signal,on_progress:progress});
+  await vi.waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(1));
+  expect(progress).toHaveBeenLastCalledWith({attempt_id:'attempt-one',loaded:0,indeterminate:true});
+  finish(jsonResponse({attachment_id:'upl_one',display_name:'notes.txt',detected_media_type:'text/plain',size_bytes:5,content_sha256:'a'.repeat(64),logical_locator:'attachment://v1/upl_one/notes.txt'}));
+  await expect(pending).resolves.toMatchObject({attachment_id:'upl_one',size_bytes:5});
+  expect(progress).toHaveBeenLastCalledWith({attempt_id:'attempt-one',loaded:5,total:5,indeterminate:false});
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });

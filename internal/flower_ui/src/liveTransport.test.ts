@@ -149,20 +149,19 @@ describe('LiveTransport recovery ownership', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('retries a stalled handshake through the existing owner and accepts a fresh ready', async () => {
+  it('keeps a slow baseline alive until its owner reports failure or readiness', async () => {
     vi.useFakeTimers();
     const fixture = controlledConnections<{ kind: string }>();
     const onTerminalError = vi.fn();
     const transport = createLiveTransport<{ kind: string }>();
     const stop = transport.start({ ...fixture, onCurrent: vi.fn(), onTerminalError, isReady: value => value.kind === 'ready' });
     fixture.connections[0]!.push({ kind: 'summary.batch' });
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(transport.state()).toMatchObject({ status: 'reconnecting', error: { code: 'flower_live_handshake_timeout' } });
-    expect(fixture.connections[0]!.signal.aborted).toBe(true);
-    await vi.advanceTimersByTimeAsync(301);
-    expect(fixture.connect).toHaveBeenCalledTimes(2);
-    fixture.connections[1]!.push({ kind: 'ready' });
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(transport.state().status).toBe('connecting');
+    expect(fixture.connections[0]!.signal.aborted).toBe(false);
+    expect(fixture.connect).toHaveBeenCalledTimes(1);
+    fixture.connections[0]!.push({ kind: 'ready' });
+    await vi.advanceTimersByTimeAsync(0);
     expect(onTerminalError).not.toHaveBeenCalled();
     expect(transport.state().status).toBe('ready');
     stop();
@@ -214,7 +213,7 @@ describe('LiveTransport recovery ownership', () => {
     stop();
   });
 
-  it.each([400, 401, 403, 423, 426, 429])('keeps HTTP %i actionable until an explicit restart', async status => {
+  it.each([400, 401, 403, 423, 426])('keeps HTTP %i actionable until an explicit restart', async status => {
     vi.useFakeTimers();
     const fixture = controlledConnections<{ kind: string }>();
     const onTerminalError = vi.fn();
@@ -355,3 +354,12 @@ it('awaits presentation capacity and never publishes ready from an obsolete owne
   expect(transport.state().status).not.toBe('ready');
   expect(terminal).not.toHaveBeenCalled();
 });
+
+ it('automatically recovers rate-limited observation without replaying commands', async () => {
+  vi.useFakeTimers(); const fixture = controlledConnections<{kind:string}>();
+  const terminal = vi.fn(); const transport = createLiveTransport<{kind:string}>();
+  const stop = transport.start({...fixture,onCurrent:vi.fn(),onTerminalError:terminal,isReady:v=>v.kind==='ready'});
+  fixture.connections[0].reject({status:429}); await vi.advanceTimersByTimeAsync(301);
+  fixture.connections[1].push({kind:'ready'}); await vi.advanceTimersByTimeAsync(0);
+  expect(transport.state().status).toBe('ready');expect(terminal).not.toHaveBeenCalled();stop();
+ });

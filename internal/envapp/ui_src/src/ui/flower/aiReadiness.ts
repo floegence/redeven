@@ -1,7 +1,8 @@
 import { createSignal, getOwner, onCleanup, type Accessor } from 'solid-js';
-import { FlowerReadDeadlineError, FlowerRequestDeadlineError, withFlowerReadDeadline, withFlowerRequestDeadline } from '../../../../../flower_ui/src/requestDeadline';
+import { withFlowerReadDeadline } from '../../../../../flower_ui/src/requestDeadline';
 
-import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
+import { fetchSessionJSON } from '../services/sessionHTTP';
+import { LocalApiError } from '../services/localApi';
 
 export type AIReadinessState =
   | 'unavailable'
@@ -289,7 +290,7 @@ function shouldPoll(snapshot: AIReadinessSnapshot): boolean {
 }
 
 export function createAIReadinessController(args: CreateAIReadinessControllerArgs = {}): AIReadinessController {
-  const request = args.request ?? fetchLocalApiJSON;
+  const request = args.request ?? fetchSessionJSON;
   const visibilitySource = args.visibilitySource === undefined
     ? (typeof document === 'undefined' ? null : document)
     : args.visibilitySource;
@@ -304,6 +305,8 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
   const [longStartupReadySequence, setLongStartupReadySequence] = createSignal(0);
 
   let disposed = false;
+  const requests = new Set<AbortController>();
+  const cancelRequests = () => { for (const request of requests) request.abort(); requests.clear(); };
   let paused = args.initialPaused === true;
   let generation = 0;
   let loadingGeneration = 0;
@@ -359,22 +362,16 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
   };
 
   const resolveFailure = (error: unknown): AIReadinessSnapshot => {
-    if (error instanceof FlowerReadDeadlineError || error instanceof FlowerRequestDeadlineError) {
-      return Object.freeze({ state: 'blocked', reason_code: 'temporarily_blocked', retryable: false, safe_to_retry: false, retry_reason: 'readiness_request_timeout' });
-    }
     return aiReadinessFromLocalApiError(error) ?? contractErrorSnapshot;
   };
 
   const invokeRequest = (url: string, init: RequestInit): Promise<unknown> => {
+    const controller = new AbortController(); requests.add(controller);
     try {
-      const pending = Promise.resolve(request(url, init));
-      const operation = () => pending;
-      return init.method === 'GET'
-        ? withFlowerReadDeadline(operation, 'Readiness status request timed out.')
-        : withFlowerRequestDeadline(operation, 'Readiness command response timed out.');
-    } catch (error) {
-      return Promise.reject(error);
-    }
+      const pending = Promise.resolve(request(url, { ...init, signal: controller.signal }));
+      return withFlowerReadDeadline(() => pending, 'Readiness request cancelled.', controller.signal, 0)
+        .finally(() => requests.delete(controller));
+    } catch (error) { requests.delete(controller); return Promise.reject(error); }
   };
 
   refresh = (): Promise<AIReadinessSnapshot> => {
@@ -465,6 +462,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     if (disposed || paused) return;
     paused = true;
     generation += 1;
+    cancelRequests();
     loadingGeneration = 0;
     retryInFlight = null;
     stopInFlight = null;
@@ -492,6 +490,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     if (disposed) return;
     disposed = true;
     generation += 1;
+    cancelRequests();
     clearTimer();
     setLoading(false);
     setRetryPending(false);

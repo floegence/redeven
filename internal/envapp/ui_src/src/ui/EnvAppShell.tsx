@@ -7,7 +7,7 @@ import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiv
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase, type AccessGateFeedback } from './EnvironmentAccessGate';
 import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
-import { envDirectoryFavorites, isSessionEventAuthorizationError } from './services/sessionHTTP';
+import { envDirectoryFavorites, fetchSessionJSON, isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
 import { EnvPageLoading } from './pages/EnvPageLoading';
@@ -204,7 +204,6 @@ import {
   type RuntimeMaintenanceContext,
 } from './services/desktopShellBridge';
 import {
-  fetchLocalApiJSON,
   getEnvAppAccessStatus,
   unlockEnvAppAccess,
   type EnvAppAccessStatus,
@@ -1090,7 +1089,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
   let aiReadinessAccessible = false;
   createEffect(() => {
-    const accessible = readinessAccessGranted();
+    const accessible = readinessAccessGranted() && protocol.status() === 'connected';
     if (accessible && !aiReadinessAccessible) void aiReadinessController.resume();
     if (!accessible && aiReadinessAccessible) aiReadinessController.pause();
     aiReadinessAccessible = accessible;
@@ -1251,9 +1250,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     scope: () => JSON.stringify([envId(), resourceCacheAccess().generation, settingsSeq()]),
     loadConfiguration: async signal => {
       const { mapEnvFlowerSettings } = await import('./flower/envLocalFlowerSurfaceAdapter');
-      return mapEnvFlowerSettings(await fetchLocalApiJSON('/_redeven_proxy/api/settings', { method: 'GET', signal }));
+      return mapEnvFlowerSettings(await fetchSessionJSON('/_redeven_proxy/api/settings', { method: 'GET', signal }));
     },
-    loadDirectory: async (baseline, signal) => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal })),
+    loadDirectory: async (baseline, signal) => readFlowerModelDirectory(await fetchSessionJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal })),
   });
   onCleanup(() => flowerModelReadResource.invalidate());
   const debugConsole = createDebugConsoleController({
@@ -3708,6 +3707,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   let lastConnectedClient: unknown = null;
+  // Consume access revocation from the protocol snapshot. Unrelated UI changes
+  // during an explicit unlock must not reapply the same old failure.
+  createEffect(() => {
+    const snapshot = protocol.snapshot();
+    if (isLocalMode() && snapshot.failure?.code.toUpperCase() === 'ACCESS_PASSWORD_REQUIRED') {
+      untrack(() => markCurrentAccessLocked(i18n.t('accessGate.sessionEndedError')));
+    }
+  });
 
   // Policy revocation closes the secure transport before another artifact can
   // report an access error. Check the Runtime's authority once on terminal
@@ -3755,9 +3762,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
 
     lastConnectedClient = null;
-    if (isLocalMode() && snapshotFailureCode.toUpperCase() === 'ACCESS_PASSWORD_REQUIRED') {
-      markCurrentAccessLocked(i18n.t('accessGate.sessionEndedError'));
-    }
     if (protocolStatusValue === 'connecting') {
       untrack(() => reconnectController.noteProtocolConnecting(protocolSnapshot.attempt));
       return;
