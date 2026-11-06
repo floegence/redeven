@@ -220,7 +220,7 @@ describe('ExternalPluginInstallDialog', () => {
     const onCommit = vi.fn();
     const props = renderDialog({ updateItem: item, sourcePreset: catalog.distribution.installSource, onCommit });
     await flush();
-    expect(props.onInspect).toHaveBeenCalledWith(expect.objectContaining({ expected: expect.objectContaining({ release: expect.objectContaining({ plugin_id: 'com.example.metrics' }) }) }), expect.any(AbortSignal));
+    expect(props.onInspect).toHaveBeenCalledWith(expect.objectContaining({ expected: expect.objectContaining({ release: expect.objectContaining({ plugin_id: 'github.repo.1289352675.metrics' }) }) }), expect.any(AbortSignal));
     expect(onCommit).not.toHaveBeenCalled();
   });
   it('leads with verified author presentation and keeps technical review behind disclosure', async () => {

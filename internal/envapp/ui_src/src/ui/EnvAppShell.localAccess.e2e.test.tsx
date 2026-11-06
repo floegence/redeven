@@ -210,8 +210,8 @@ const pluginPlatformMocks = vi.hoisted(() => {
   };
 });
 const examplePluginCatalog = {
-  pluginID: 'com.example.metrics',
-  publisherID: 'com.example',
+  pluginID: EXAMPLE_PLUGIN_PACKAGE.plugin_id,
+  publisherID: EXAMPLE_PLUGIN_PACKAGE.publisher_id,
   sourceKind: 'official',
   pluginInstanceID: 'plugin_example_metrics',
   displayName: 'Metrics',
@@ -3592,7 +3592,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await pluginPanelState.lastProps.onOpenPluginSurface(examplePluginProjection('enabled').items[0].defaultLaunchTarget);
       await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
       await flushUntil(() => (
-        document.querySelector('[data-plugin-surface-host]')?.getAttribute('data-plugin-id') === 'com.example.metrics'
+        document.querySelector('[data-plugin-surface-host]')?.getAttribute('data-plugin-id') === 'github.repo.1289352675.metrics'
       ));
 
       const surfaceHost = document.querySelector('[data-plugin-surface-host]');

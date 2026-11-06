@@ -28,6 +28,7 @@ const readGrant = {
   effect: 'grant',
   granted_at: '2026-07-04T10:02:00Z',
 } as const;
+const githubProvenance = { kind: 'github_repository', repository_id: '1289352675', release_id: '21', asset_id: '22', repository_url: 'https://github.com/example/example-plugins', owner: 'example', repository: 'example-plugins', resolved_commit_sha: 'a'.repeat(40), release_tag: 'metrics-v4.4.9', asset_name: 'metrics-4.4.9.redevplugin', package_sha256: packageHash, resolved_at: '2026-11-05T00:00:00Z' } as const;
 function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPluginRecord {
   const marketIcon = examplePlugin.presentation?.icon;
   const iconPath = 'ui/assets/metrics-plugin.png';
@@ -41,7 +42,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
     manifest_hash: manifestHash,
     entries_hash: entriesHash,
     automatic_updates: false,
-    source_provenance: { kind: 'github_repository', repository_id: '1289352675', release_id: '21', asset_id: '22', repository_url: 'https://github.com/example/example-plugins', owner: 'example', repository: 'example-plugins', resolved_commit_sha: 'a'.repeat(40), release_tag: 'metrics-v4.4.9', asset_name: 'metrics-4.4.9.redevplugin', package_sha256: packageHash, resolved_at: '2026-11-05T00:00:00Z' },
+    source_provenance: githubProvenance,
     enable_state: 'enabled',
     action_state: {
       can_open: true,
@@ -360,6 +361,30 @@ describe('plugin inventory projection', () => {
     label: string;
     overrides: Partial<ReDevPluginRecord>;
   }> = [
+    {
+      label: 'local package with copied repository-derived IDs',
+      overrides: {
+        source_provenance: undefined,
+      },
+    },
+    {
+      label: 'direct HTTPS package with copied repository-derived IDs',
+      overrides: {
+        source_provenance: { kind: 'package_url', source_origin: 'https://plugins.example.com', source_path: '/metrics.redevplugin', redirect_chain: [], package_sha256: packageHash, resolved_at: '2026-11-05T00:00:00Z' },
+      },
+    },
+    {
+      label: 'uploaded package with copied repository-derived IDs',
+      overrides: {
+        source_provenance: { kind: 'package_upload', upload_id: 'copied-upload', package_sha256: packageHash, resolved_at: '2026-11-05T00:00:00Z' },
+      },
+    },
+    {
+      label: 'different repository with copied repository-derived IDs',
+      overrides: {
+        source_provenance: { ...githubProvenance, repository_id: '42' },
+      },
+    },
     {
       label: 'package hash mismatch from a different source',
       overrides: {

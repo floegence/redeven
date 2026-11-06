@@ -1,7 +1,7 @@
 import type { PluginMarketLatestRelease, ExternalPluginInspection } from './pluginTypes';
 
 export const EXAMPLE_PLUGIN_PACKAGE = {
-  channel: 'stable', publisher_id: 'com.example', plugin_id: 'com.example.metrics', version: '4.4.9',
+  channel: 'stable', publisher_id: 'github.repo.1289352675', plugin_id: 'github.repo.1289352675.metrics', version: '4.4.9',
   package_sha256: '954894fbc63c3490fe011c9a6baf8985258a3c9c98a16827ed8342aaf438ed32',
   manifest_sha256: 'ab8c23c53758bba5165fd4d50c7972e94791dd1ccff75de02c51c554767fb12b',
   entries_sha256: '8b043db413f20ae08be6252f74bbd82fc17a82592192d40c9947a5fcb9983c0f',

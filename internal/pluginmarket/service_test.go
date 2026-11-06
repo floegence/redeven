@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,13 +21,13 @@ import (
 
 const validCatalogResponse = `{
   "data": [{
-    "plugin_id": "com.example.metrics",
-    "publisher_id": "com.redeven.official",
+    "plugin_id": "github.repo.1289352675.metrics",
+    "publisher_id": "github.repo.1289352675",
     "source_kind": "official",
     "presentation": {
       "default_locale": "en-US",
       "icon": {
-        "url": "/v1/plugins/com.example.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
+        "url": "/v1/plugins/github.repo.1289352675.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
         "media_type": "image/png",
         "width": 512,
         "height": 512,
@@ -46,7 +47,7 @@ const validCatalogResponse = `{
 
 const validLatestResponse = `{
   "data": {
-    "plugin_id": "com.example.metrics",
+    "plugin_id": "github.repo.1289352675.metrics",
     "channel": "stable",
     "version": "4.0.0",
     "source": {
@@ -66,7 +67,7 @@ const validLatestResponse = `{
       "sha256": "3dd8cc3fc30c347d6276b88ece0913ad8f15cd762704e7902ba6290351bb5e3c"
     },
     "release_identity_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    "publisher_id": "com.redeven.official",
+    "publisher_id": "github.repo.1289352675",
     "package_sha256": "8bc0bf9dc43c2f183e532e3f0d4d5921d3d103d40d6aca918958b3337563359a",
     "manifest_sha256": "79a512b3749024e1306cdb4ecc14c77684f180c07fdc32c2bbe59589c617767a",
     "entries_sha256": "5b5b5a0c16196cae96bed838aa22ebbacf09b14c9462d1dac1abffe56f27d639"
@@ -80,13 +81,13 @@ const validLatestResponse = `{
 
 const validDetailResponse = `{
   "data": {
-    "plugin_id": "com.example.metrics",
-    "publisher_id": "com.redeven.official",
+    "plugin_id": "github.repo.1289352675.metrics",
+    "publisher_id": "github.repo.1289352675",
     "source_kind": "official",
     "presentation": {
       "default_locale": "en-US",
       "icon": {
-        "url": "/v1/plugins/com.example.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
+        "url": "/v1/plugins/github.repo.1289352675.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
         "media_type": "image/png",
         "width": 512,
         "height": 512,
@@ -343,7 +344,7 @@ func TestServiceDetailReturnsMarketGeneration(t *testing.T) {
 		Origin:    "https://plugins.redeven.com",
 		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.URL.Path != "/v1/plugins/com.example.metrics" {
+			if request.URL.Path != "/v1/plugins/github.repo.1289352675.metrics" {
 				return response(http.StatusNotFound, `{}`, nil), nil
 			}
 			return response(http.StatusOK, validDetailResponse, nil), nil
@@ -352,11 +353,11 @@ func TestServiceDetailReturnsMarketGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	detail, generation, err := service.Detail(context.Background(), "com.example.metrics")
+	detail, generation, err := service.Detail(context.Background(), "github.repo.1289352675.metrics")
 	if err != nil {
 		t.Fatalf("Detail() error = %v", err)
 	}
-	if generation != 41 || detail.PluginID != "com.example.metrics" {
+	if generation != 41 || detail.PluginID != "github.repo.1289352675.metrics" {
 		t.Fatalf("detail = %#v, generation = %d", detail, generation)
 	}
 	if detail.Presentation.Icon == nil || detail.Presentation.Icon.SHA256 != "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1" {
@@ -377,7 +378,7 @@ func TestServiceDetailRejectsStaleGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	if _, generation, err := service.Detail(context.Background(), "com.example.metrics"); !errors.Is(err, ErrInvalidResponse) || generation != -1 {
+	if _, generation, err := service.Detail(context.Background(), "github.repo.1289352675.metrics"); !errors.Is(err, ErrInvalidResponse) || generation != -1 {
 		t.Fatalf("Detail() error = %v, generation = %d", err, generation)
 	}
 }
@@ -387,7 +388,7 @@ func TestServiceIconReturnsEvidenceBoundBytes(t *testing.T) {
 	data := []byte("verified market icon")
 	digest := fmt.Sprintf("%x", sha256.Sum256(data))
 	icon := PresentationIcon{
-		URL:       "/v1/plugins/com.example.metrics/icon?sha256=" + digest,
+		URL:       "/v1/plugins/github.repo.1289352675.metrics/icon?sha256=" + digest,
 		MediaType: "image/png",
 		Width:     128,
 		Height:    128,
@@ -397,7 +398,7 @@ func TestServiceIconReturnsEvidenceBoundBytes(t *testing.T) {
 		Origin:    "https://plugins.redeven.com",
 		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.URL.Path != "/v1/plugins/com.example.metrics/icon" || request.URL.Query().Get("sha256") != digest {
+			if request.URL.Path != "/v1/plugins/github.repo.1289352675.metrics/icon" || request.URL.Query().Get("sha256") != digest {
 				t.Fatalf("request URL = %s", request.URL)
 			}
 			return response(http.StatusOK, string(data), http.Header{"Content-Type": {"image/png"}}), nil
@@ -406,7 +407,7 @@ func TestServiceIconReturnsEvidenceBoundBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	asset, err := service.Icon(context.Background(), "com.example.metrics", icon)
+	asset, err := service.Icon(context.Background(), "github.repo.1289352675.metrics", icon)
 	if err != nil {
 		t.Fatalf("Icon() error = %v", err)
 	}
@@ -420,7 +421,7 @@ func TestServiceIconRejectsUnverifiedResponses(t *testing.T) {
 	data := []byte("verified market icon")
 	digest := fmt.Sprintf("%x", sha256.Sum256(data))
 	icon := PresentationIcon{
-		URL:       "/v1/plugins/com.example.metrics/icon?sha256=" + digest,
+		URL:       "/v1/plugins/github.repo.1289352675.metrics/icon?sha256=" + digest,
 		MediaType: "image/png",
 		Width:     128,
 		Height:    128,
@@ -457,7 +458,7 @@ func TestServiceIconRejectsUnverifiedResponses(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := service.Icon(context.Background(), "com.example.metrics", icon); !errors.Is(err, ErrInvalidResponse) {
+			if _, err := service.Icon(context.Background(), "github.repo.1289352675.metrics", icon); !errors.Is(err, ErrInvalidResponse) {
 				t.Fatalf("Icon() error = %v, want ErrInvalidResponse", err)
 			}
 		})
@@ -604,11 +605,113 @@ func TestCatalogInstallPreviewRetainsExactOrdinaryPackage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Refresh() error = %v", err)
 	}
-	release, err := snapshot.LatestRelease("com.example.metrics", "stable")
+	release, err := snapshot.LatestRelease("github.repo.1289352675.metrics", "stable")
 	if err != nil {
 		t.Fatalf("LatestRelease() error = %v", err)
 	}
 	if release.PackageSHA256 == release.Asset.SHA256 || release.Version != "4.0.0" {
 		t.Fatalf("package and transport digests must remain distinct: %#v", release)
+	}
+}
+
+func TestMarketReleaseRejectsRepositoryIdentityImpersonation(t *testing.T) {
+	var response LatestReleaseResponse
+	if err := json.Unmarshal([]byte(validLatestResponse), &response); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*LatestRelease){
+		func(r *LatestRelease) { r.Source.RepositoryID = 42 },
+		func(r *LatestRelease) { r.PublisherID = "github.repo.42" },
+		func(r *LatestRelease) { r.PluginID = "github.repo.12893526750.metrics" },
+	} {
+		release := response.Data
+		mutate(&release)
+		if validateLatestReleaseWithPreview(release, false) == nil {
+			t.Fatalf("accepted foreign identity: %+v", release)
+		}
+	}
+}
+
+func TestMarketSummaryRequiresMatchingPublisherInPreview(t *testing.T) {
+	var response CatalogResponse
+	if err := json.Unmarshal([]byte(catalogResponseWithInstallPreview(t)), &response); err != nil {
+		t.Fatal(err)
+	}
+	response.Data[0].PublisherID = "github.repo.42"
+	if validatePluginSummary(response.Data[0]) == nil {
+		t.Fatal("accepted preview for another publisher")
+	}
+}
+
+func TestMarketDetailRejectsAnotherRepositoryIdentity(t *testing.T) {
+	service, err := NewService(ServiceOptions{Origin: "https://plugins.example.test", CachePath: filepath.Join(t.TempDir(), "market.json"), HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return response(http.StatusOK, strings.ReplaceAll(validDetailResponse, `"repository_id": 1289352675`, `"repository_id": 42`), nil), nil
+	})}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.Detail(context.Background(), "github.repo.1289352675.metrics"); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("accepted mismatched detail: %v", err)
+	}
+}
+
+func TestRepositoryIdentityMismatchPreservesValidatedCache(t *testing.T) {
+	t.Parallel()
+	cachePath := filepath.Join(t.TempDir(), "market.json")
+	body := catalogResponseWithInstallPreview(t)
+	service, err := NewService(ServiceOptions{
+		Origin: "https://plugins.example.test", CachePath: cachePath,
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return response(http.StatusOK, body, nil), nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid, err := service.Refresh(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(cachePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var forged CatalogResponse
+	if err := json.Unmarshal([]byte(body), &forged); err != nil {
+		t.Fatal(err)
+	}
+	forged.Meta.Generation++
+	forged.Data[0].Latest.InstallPreview.Release.Source.RepositoryID = 42
+	raw, err := json.Marshal(forged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = string(raw)
+	if _, err := service.Refresh(context.Background()); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("foreign repository refresh: %v", err)
+	}
+	after, err := os.ReadFile(cachePath)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("invalid refresh changed the durable cache: %v", err)
+	}
+	if cached, ok := service.CachedSnapshot(); !ok || cached.Generation != valid.Generation ||
+		cached.Plugins[0].Release.Source.RepositoryID != valid.Plugins[0].Release.Source.RepositoryID {
+		t.Fatalf("invalid refresh changed the in-memory snapshot: %+v", cached)
+	}
+	valid.Plugins[0].Release.Source.RepositoryID = 42
+	poisoned, err := json.Marshal(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cachePath, poisoned, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := NewService(ServiceOptions{Origin: "https://plugins.example.test", CachePath: cachePath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = restarted.Close() })
+	if _, ok := restarted.CachedSnapshot(); ok {
+		t.Fatal("accepted foreign repository identity from disk after restart")
 	}
 }

@@ -120,6 +120,20 @@ For Worker execution, test the declared method with the verified runtime pair
 and the command's surface, method, and params options. Do not invent permission
 grants or treat a fixture as real-runtime evidence.
 
+For GitHub publication, choose a slug and run
+`redevplugin repository identity <project-root> <slug>` before the final build.
+The released CLI resolves the enclosing Git origin, or an explicit
+`--repository https://github.com/owner/repo`, and generates
+`publisher_id = github.repo.<repository-id>` and
+`plugin_id = github.repo.<repository-id>.<slug>`. Never invent the numeric ID or
+copy another publisher's prefix. Refresh `.redevplugin/index.json` through
+`redevplugin scaffold repository-index`, using explicit `--replace` for an
+existing entry. If the project has generated bindings, regenerate the configured
+binding directory after identity changes, then rebuild and validate. Publish the ordinary package in its
+declared release namespace and add the `redevplugin` repository topic for discovery.
+Local drafts and uploaded packages retain their actual source category; a copied
+GitHub-shaped ID does not establish repository provenance.
+
 Package the validated output directory from `redevplugin.project.json` with
 `redevplugin package <output-directory> <destination.redevplugin>`, then validate
 the resulting package. Keep source and final deliverables at the user-selected

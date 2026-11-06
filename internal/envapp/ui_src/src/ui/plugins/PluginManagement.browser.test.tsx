@@ -90,7 +90,7 @@ const updateDialogViewportCases = [
 
 const metricsItem: PluginInventoryItem = {
   inventoryKey: 'instance:metrics',
-  pluginID: 'com.example.metrics',
+  pluginID: 'github.repo.1289352675.metrics',
   pluginInstanceID: 'plugini_redeven_official_metrics',
   displayName: 'Metrics',
   description: 'Manage Docker and Podman resources without leaving the current environment.',
@@ -106,7 +106,7 @@ const metricsItem: PluginInventoryItem = {
   pinned: true,
   presentation: metricsHostPresentation,
   defaultLaunchTarget: {
-    pluginID: 'com.example.metrics',
+    pluginID: 'github.repo.1289352675.metrics',
     pluginInstanceID: 'plugini_redeven_official_metrics',
     surfaceID: 'metrics.dashboard',
     displayName: 'Metrics',

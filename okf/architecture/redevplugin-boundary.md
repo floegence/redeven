@@ -74,7 +74,7 @@ Private files1→chunked2 migration stays upstream, separate from control/author
 Host enforces read/write ceilings/read-only effects before process operations. SQLite authorizes compiled SQL,excludes host paths,bounds values/complexity/concurrency. Product maps sessions/process adapters only; no new manifest/data flags.
 
 ## Open distribution
-Ordinary plugins require no signature, publisher trust, registration or manual directory admission. Official/community is display-only. All sources use inspection, exact consent, durable receipts and independent permissions. Product update scheduling uses the current authenticated session and upstream automatic-eligibility rules; it adds no host install state machine. Signed platform releases, product runtime identity and signed runtime leases remain separate platform/product protections.
+Ordinary plugins require no signature, publisher trust, registration or manual directory admission. Official/community is display-only. Released platform helpers own GitHub repository-derived identity; product validates market evidence using those helpers and delegates independent source inspection to Host. Authors supply a slug, never publisher registration or signature evidence. Local/upload identities do not confer GitHub provenance. All sources use inspection, exact consent, durable receipts and independent permissions. Product update scheduling uses the current authenticated session and upstream automatic-eligibility rules; it adds no host install state machine. Signed platform releases, product runtime identity and signed runtime leases remain separate platform/product protections.
 
 # Boundaries
 

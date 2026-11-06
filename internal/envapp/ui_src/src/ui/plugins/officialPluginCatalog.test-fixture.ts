@@ -10,13 +10,13 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   stale: false,
   source: 'remote',
   plugins: [{
-    plugin_id: 'com.example.metrics',
-    publisher_id: 'com.example',
+    plugin_id: 'github.repo.1289352675.metrics',
+    publisher_id: 'github.repo.1289352675',
     source_kind: 'official',
     presentation: {
       default_locale: 'en-US',
       icon: {
-        url: '/v1/plugins/com.example.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1',
+        url: '/v1/plugins/github.repo.1289352675.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1',
         media_type: 'image/png',
         width: 512,
         height: 512,

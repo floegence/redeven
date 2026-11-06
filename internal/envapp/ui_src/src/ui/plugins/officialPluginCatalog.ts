@@ -7,7 +7,7 @@ import type {
   PluginMarketDetail,
   PluginPresentationCategory,
 } from './pluginTypes';
-import { resolvePresentation } from '@floegence/redevplugin-contracts';
+import { resolvePresentation, validateGitHubPluginIdentity } from '@floegence/redevplugin-contracts';
 
 export function officialPluginCatalog(
   snapshot?: PluginMarketSnapshot,
@@ -29,6 +29,8 @@ function normalizedInstallPreview(
   const release = preview.release;
   if (!release || release.plugin_id !== plugin.plugin_id || release.publisher_id !== plugin.publisher_id
     || release.channel !== plugin.latest.channel || release.version !== plugin.latest.version) return undefined;
+  try { validateGitHubPluginIdentity(release.source.repository_id, release.publisher_id, release.plugin_id); }
+  catch { return undefined; }
   return preview;
 }
 

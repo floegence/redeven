@@ -131,59 +131,63 @@ test('unlocked packaged renderer emits a current validated Floe acquisition enve
   }
 });
 
-test('packaged renderer fixture submits the market preview directly to the install Execution', async () => {
+test('packaged renderer fixture uses repository-bound inspection and durable installation', async () => {
   const server = await createBuiltDistServer({ pluginInstallFlow: true });
-  const releaseRef = {
-    source_id: 'redeven_official',
-    channel: 'stable',
-    release_metadata_ref: 'plugins/com.redeven.official/com.example.metrics/4.4.9/release.json',
-    release_metadata_sha256: '7f36244ce5fe5f80751051f1aa2adcb49d049eab2f748d751ae7021cbf074a15',
-    publisher_id: 'com.redeven.official',
-    plugin_id: 'com.example.metrics',
-    version: '4.4.9',
-    expected_hashes: {
-      package_sha256: 'sha256:954894fbc63c3490fe011c9a6baf8985258a3c9c98a16827ed8342aaf438ed32',
-      manifest_sha256: 'sha256:ab8c23c53758bba5165fd4d50c7972e94791dd1ccff75de02c51c554767fb12b',
-      entries_sha256: 'sha256:8b043db413f20ae08be6252f74bbd82fc17a82592192d40c9947a5fcb9983c0f',
-    },
-  };
-  const installPreview = {
-    release_ref: releaseRef,
-    release_identity_digest: 'sha256:824e51f410a597845d546835e61271b8a530044c51e2d14a098eb847adf1e181',
-    manifest_sha256: releaseRef.expected_hashes.manifest_sha256,
-    contract_set_sha256: 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab',
-    summary_sha256: 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673',
-  };
-
+  const post = async (route, body) => fetch(new URL(route, server.baseURL), {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
   try {
-    const response = await fetch(new URL('/_redevplugin/api/plugins/executions/release-installs', server.baseURL), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        request_id: '00000000-0000-4000-8000-000000000001',
-        plugin_instance_id: 'catalog_com.redeven.official_com.example.metrics',
-        ...installPreview,
-      }),
+    const snapshot = await (await fetch(new URL('/_redeven_proxy/api/plugins/market/catalog', server.baseURL))).json();
+    const plugin = snapshot.data.plugins[0];
+    assert.equal(plugin.plugin_id, 'github.repo.1289352675.metrics');
+    assert.equal(plugin.publisher_id, 'github.repo.1289352675');
+    assert.equal(plugin.source_kind, 'official');
+    const preview = plugin.latest.install_preview;
+    assert.equal(preview.release.source.repository_id, 1289352675);
+    assert.equal(preview.release.publisher_id, plugin.publisher_id);
+    assert.equal(preview.release.plugin_id, plugin.plugin_id);
+    assert.equal(preview.release_ref, undefined);
+    const request = {
+      intent: { action: 'install' },
+      expected_plugin_id: plugin.plugin_id,
+      expected_publisher_id: plugin.publisher_id,
+      expected_version: preview.release.version,
+      expected_package_sha256: `sha256:${preview.release.package_sha256}`,
+      expected_security_summary_sha256: preview.summary_sha256,
+      expected_contract_set_sha256: preview.contract_set_sha256,
+      source: { kind: 'github_repository', url: 'https://github.com/floegence/redeven-official-plugins',
+        host: 'redeven', tag: 'metrics-v4.4.9', plugin_id: plugin.plugin_id,
+        repository_id: '1289352675', release_id: '21', asset_id: '22' },
+    };
+    const badSource = await post('/_redevplugin/api/plugins/external-packages/inspect', {
+      ...request, source: { ...request.source, repository_id: '42' },
     });
+    assert.notEqual(badSource.status, 200);
+    const inspected = await post('/_redevplugin/api/plugins/external-packages/inspect', request);
+    assert.equal(inspected.status, 200);
+    const inspection = (await inspected.json()).data;
+    assert.equal(inspection.source_provenance.repository_id, '1289352675');
+    const install = { request_id: '00000000-0000-4000-8000-000000000001',
+      inspection_id: inspection.inspection_id, expected_package_sha256: inspection.inspected_hashes.package_sha256 };
+    const wrongHash = await post('/_redevplugin/api/plugins/external-packages/install-operations', {
+      ...install, expected_package_sha256: `sha256:${'0'.repeat(64)}`,
+    });
+    assert.notEqual(wrongHash.status, 200);
+    const response = await post('/_redevplugin/api/plugins/external-packages/install-operations', install);
     assert.equal(response.status, 200);
-    const result = await response.json();
-    assert.equal(result.ok, true);
-    assert.equal(result.data.execution_id, 'release_install_built_renderer');
-
-    const mismatchedResponse = await fetch(new URL('/_redevplugin/api/plugins/executions/release-installs', server.baseURL), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        request_id: '00000000-0000-4000-8000-000000000002',
-        plugin_instance_id: 'catalog_com.redeven.official_com.example.metrics',
-        ...installPreview,
-        release_ref: { ...releaseRef, version: '4.4.6' },
-      }),
-    });
-    assert.notEqual(mismatchedResponse.status, 200);
-  } finally {
-    await server.close();
-  }
+    const result = (await response.json()).data;
+    assert.equal(result.execution.execution_id, 'install_built_renderer');
+    assert.equal(result.request_id, install.request_id);
+    const recovered = await post('/_redevplugin/api/plugins/external-packages/install-operations/query', { request_id: install.request_id });
+    const receipt = (await recovered.json()).data;
+    assert.equal(receipt.mutation_outcome, 'committed');
+    const catalog = await post('/_redevplugin/api/plugins/catalog/query', {});
+    const record = (await catalog.json()).data.plugins[0];
+    assert.equal(record.plugin_id, plugin.plugin_id);
+    assert.equal(record.publisher_id, plugin.publisher_id);
+    assert.equal(record.source_provenance.repository_id, '1289352675');
+    assert.equal(record.trust_state, undefined);
+  } finally { await server.close(); }
 });
 
 test('locked packaged renderer verifies the access gate without opening privileged plugin UI', () => {
@@ -218,11 +222,10 @@ test('unlocked packaged renderer opens Plugin Center through the empty launcher 
   assert.doesNotMatch(pluginInstallCheck, /JSON\.stringify\(normalizedPluginRequests\)\s*!==/u);
 });
 
-test('unlocked packaged renderer exercises current Host recovery and Execution Event routes only', () => {
+test('unlocked packaged renderer exercises current inspection and install receipt routes only', () => {
   assert.match(packagedRendererSource, /\/_redevplugin\/api\/plugins\/runtime\/recover-enabled/u);
-  assert.match(packagedRendererSource, /\/_redevplugin\/api\/plugins\/executions\/release-installs/u);
-  assert.match(packagedRendererSource, /\/executions\/release_install_built_renderer\/query/u);
-  assert.match(packagedRendererSource, /\/executions\/release_install_built_renderer\/events\/query/u);
-  assert.doesNotMatch(packagedRendererSource, /runtime\/refresh-enabled/u);
-  assert.doesNotMatch(packagedRendererSource, /release-install-operations/u);
+  assert.match(packagedRendererSource, /external-packages\/inspect/u);
+  assert.match(packagedRendererSource, /external-packages\/install-operations\/query/u);
+  assert.match(packagedRendererSource, /external-packages\/install-operations\/list/u);
+  assert.doesNotMatch(packagedRendererSource, /runtime\/refresh-enabled|executions\/release-installs|release_metadata_ref|signer_key_id|trust_assessment/u);
 });

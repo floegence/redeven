@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/hostnetwork"
+	"github.com/floegence/redevplugin/v3/pkg/pluginidentity"
 )
 
 const (
@@ -165,6 +166,9 @@ func (service *Service) Detail(ctx context.Context, pluginID string) (PluginDeta
 	}
 	if response.Meta.Generation < 0 || response.Meta.Stale || response.Data.PluginID != pluginID || !idPattern.MatchString(response.Data.PublisherID) || response.Data.Status == "" || len(response.Data.Presentation.Locales) == 0 {
 		return PluginDetail{}, -1, invalid("plugin detail is invalid")
+	}
+	if err := pluginidentity.ValidateGitHub(response.Data.Repository.RepositoryID, response.Data.PublisherID, response.Data.PluginID); err != nil {
+		return PluginDetail{}, -1, invalid("plugin detail repository identity is invalid")
 	}
 	if !validateFullPresentation(response.Data.Presentation, pluginID) {
 		return PluginDetail{}, -1, invalid("plugin detail presentation is invalid")

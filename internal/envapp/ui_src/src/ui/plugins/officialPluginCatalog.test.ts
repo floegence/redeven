@@ -6,7 +6,7 @@ import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from '.
 describe('official plugin catalog contracts', () => {
   it('uses verified market icon metadata and cached declaration permissions', () => {
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]).toMatchObject({ iconFallback: 'generic' });
-    expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.example.metrics/icon');
+    expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/github.repo.1289352675.metrics/icon');
     expect(officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT)[0]?.permissions).toEqual(expect.arrayContaining([
       expect.objectContaining({ permissionID: 'metrics.read', requiredToOpen: true }),
     ]));
@@ -28,7 +28,7 @@ describe('official plugin catalog contracts', () => {
     });
   });
 
-  it('preserves the reviewed third-party source classification', () => {
+  it('preserves the community source classification', () => {
     const next = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
     next.plugins[0]!.source_kind = 'community';
     expect(officialPluginCatalog(next)[0]?.sourceKind).toBe('community');
@@ -63,7 +63,7 @@ describe('official plugin catalog contracts', () => {
   it('accepts only bounded, digest-bound market icon metadata', () => {
     const sha256 = 'a'.repeat(64);
     const icon = {
-      url: `/v1/plugins/com.example.metrics/icon?sha256=${sha256}`,
+      url: `/v1/plugins/github.repo.1289352675.metrics/icon?sha256=${sha256}`,
       media_type: 'image/png' as const,
       width: 128,
       height: 128,
@@ -75,7 +75,7 @@ describe('official plugin catalog contracts', () => {
         ? { ...plugin, presentation: { ...plugin.presentation, icon } }
         : plugin),
     };
-    expect(officialPluginCatalog(next)[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.example.metrics/icon');
+    expect(officialPluginCatalog(next)[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/github.repo.1289352675.metrics/icon');
 
     const unsafe = {
       ...next,
@@ -118,4 +118,10 @@ describe('official plugin catalog contracts', () => {
     }
   });
 
+});
+
+it('does not offer an install preview claiming another repository namespace', () => {
+  const next = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+  next.plugins[0]!.latest.install_preview!.release.source.repository_id = 42;
+  expect(officialPluginCatalog(next)).toEqual([]);
 });

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -20,24 +21,60 @@ import (
 )
 
 // TestLiveOfficialMarketReleaseInstallCompletes proves the product integration
-// against a validated market snapshot and its ordinary release assets.
+// against a live market refresh or a validated snapshot and ordinary release assets.
 // It is opt-in because it performs bounded public HTTPS downloads.
 func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	snapshotPath := os.Getenv("REDEVEN_LIVE_PLUGIN_MARKET_SNAPSHOT")
+	liveOrigin := os.Getenv("REDEVEN_LIVE_PLUGIN_MARKET_ORIGIN")
 	pluginID := os.Getenv("REDEVEN_LIVE_PLUGIN_ID")
-	if snapshotPath == "" {
-		t.Skip("REDEVEN_LIVE_PLUGIN_MARKET_SNAPSHOT is not set")
+	if snapshotPath == "" && liveOrigin == "" {
+		t.Skip("REDEVEN_LIVE_PLUGIN_MARKET_SNAPSHOT or REDEVEN_LIVE_PLUGIN_MARKET_ORIGIN is not set")
+	}
+	runtimePath := os.Getenv("REDEVEN_LIVE_PLUGIN_RUNTIME_PATH")
+	if runtimePath == "" {
+		t.Fatal("live acceptance requires REDEVEN_LIVE_PLUGIN_RUNTIME_PATH from verified published artifacts")
 	}
 	if pluginID == "" {
-		pluginID = "com.redeven.official.weather"
+		pluginID = "github.repo.1289352675.weather"
 	}
-	raw, err := os.ReadFile(snapshotPath)
+	stateDir := t.TempDir()
+	cachePath := filepath.Join(stateDir, "market-lkg.json")
+	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		Origin: liveOrigin, CachePath: cachePath,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := market.Close(); err != nil {
+			t.Errorf("close market: %v", err)
+		}
+	})
 	var snapshot pluginmarket.Snapshot
-	if err := json.Unmarshal(raw, &snapshot); err != nil {
-		t.Fatal(err)
+	if snapshotPath != "" {
+		raw, err := os.ReadFile(snapshotPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(cachePath, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var valid bool
+		snapshot, valid = market.CachedSnapshot()
+		if !valid {
+			t.Fatal("market service rejected the supplied snapshot")
+		}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		snapshot, err = market.Refresh(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snapshot.Stale || snapshot.Source != pluginmarket.SnapshotSourceRemote {
+			t.Fatal("live acceptance requires a fresh remote market snapshot")
+		}
+		t.Logf("validated live market generation %d with %d listings", snapshot.Generation, len(snapshot.Plugins))
 	}
 	release, err := snapshot.LatestRelease(pluginID, "stable")
 	if err != nil {
@@ -53,22 +90,7 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 		t.Fatal("live release is missing its verified install preview")
 	}
 
-	stateDir := t.TempDir()
-	cachePath := filepath.Join(stateDir, "market-lkg.json")
-	if err := os.WriteFile(cachePath, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
-		Origin: "https://plugins.redeven.com", CachePath: cachePath,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	const channelID = "channel_live_official_release"
-	runtimePath := os.Getenv("REDEVEN_LIVE_PLUGIN_RUNTIME_PATH")
-	if runtimePath == "" {
-		runtimePath = testRuntimePath(t, stateDir)
-	}
 	options := Options{
 		StateDir: stateDir, PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
 		RuntimePath: runtimePath, PluginMarket: market,
@@ -94,7 +116,10 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	inspectBody, err := json.Marshal(host.InspectExternalPackageRequest{
 		Intent: host.ExternalPackageIntent{Action: "install"},
 		Source: host.ExternalPackageSource{Kind: "github_repository", Host: "redeven", PluginID: pluginID,
-			URL: "https://github.com/" + release.Source.RepositoryOwner + "/" + release.Source.RepositoryName, Tag: release.Source.Tag},
+			URL: "https://github.com/" + release.Source.RepositoryOwner + "/" + release.Source.RepositoryName, Tag: release.Source.Tag,
+			RepositoryID: strconv.FormatInt(release.Source.RepositoryID, 10),
+			ReleaseID:    strconv.FormatInt(release.Source.ReleaseID, 10),
+			AssetID:      strconv.FormatInt(release.Asset.AssetID, 10)},
 		ExpectedPublisherID: release.PublisherID, ExpectedPluginID: pluginID, ExpectedVersion: release.Version,
 		ExpectedPackageSHA256: "sha256:" + release.PackageSHA256, ExpectedSecuritySummarySHA256: preview.SummarySHA256,
 		ExpectedContractSetSHA256: preview.ContractSetSHA256,
@@ -158,9 +183,12 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 			var catalog struct {
 				Data struct {
 					Plugins []struct {
-						ID          string `json:"plugin_instance_id"`
-						PackageHash string `json:"package_hash"`
-						EnableState string `json:"enable_state"`
+						PluginInstanceID string                               `json:"plugin_instance_id"`
+						PluginID         string                               `json:"plugin_id"`
+						PublisherID      string                               `json:"publisher_id"`
+						PackageHash      string                               `json:"package_hash"`
+						EnableState      string                               `json:"enable_state"`
+						SourceProvenance host.ExternalPackageSourceProvenance `json:"source_provenance"`
 					} `json:"plugins"`
 				} `json:"data"`
 			}
@@ -168,8 +196,15 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 				t.Fatalf("installed inventory: %s", catalogResponse.Body.String())
 			}
 			record := catalog.Data.Plugins[0]
-			if record.ID != current.Data.Execution.PluginInstanceID || record.PackageHash != inspected.Data.InspectedHashes.PackageSHA256 || record.EnableState != "enabled" {
+			if record.PluginInstanceID != current.Data.Execution.PluginInstanceID || record.PackageHash != inspected.Data.InspectedHashes.PackageSHA256 || record.EnableState != "enabled" {
 				t.Fatalf("installed identity: %+v", record)
+			}
+			if record.PluginID != pluginID || record.PublisherID != release.PublisherID ||
+				record.SourceProvenance.Kind != "github_repository" ||
+				record.SourceProvenance.RepositoryID != strconv.FormatInt(release.Source.RepositoryID, 10) ||
+				record.SourceProvenance.ReleaseID != strconv.FormatInt(release.Source.ReleaseID, 10) ||
+				record.SourceProvenance.AssetID != strconv.FormatInt(release.Asset.AssetID, 10) {
+				t.Fatalf("installed source identity differs from observed release: %+v", record)
 			}
 			if err := integration.Close(); err != nil {
 				t.Fatal(err)
@@ -185,6 +220,21 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 			}
 			if recovered.Code != http.StatusOK || json.Unmarshal(recovered.Body.Bytes(), &replay) != nil || replay.Data.Execution.ID != current.Data.Execution.ID || replay.Data.MutationOutcome != "committed" {
 				t.Fatalf("restart receipt: %d %s", recovered.Code, recovered.Body.String())
+			}
+			restartedCatalog := httptest.NewRecorder()
+			integration.Handler().ServeHTTP(restartedCatalog, liveReleaseRequest(t, http.MethodPost, "/_redevplugin/api/plugins/catalog/query", channelID, []byte(`{}`)))
+			catalog.Data.Plugins = nil
+			if restartedCatalog.Code != http.StatusOK || json.Unmarshal(restartedCatalog.Body.Bytes(), &catalog) != nil || len(catalog.Data.Plugins) != 1 {
+				t.Fatalf("restarted inventory: %s", restartedCatalog.Body.String())
+			}
+			persisted := catalog.Data.Plugins[0]
+			if persisted.PluginInstanceID != record.PluginInstanceID || persisted.PluginID != record.PluginID ||
+				persisted.PublisherID != record.PublisherID || persisted.PackageHash != record.PackageHash ||
+				persisted.SourceProvenance.Kind != "github_repository" ||
+				persisted.SourceProvenance.RepositoryID != record.SourceProvenance.RepositoryID ||
+				persisted.SourceProvenance.ReleaseID != record.SourceProvenance.ReleaseID ||
+				persisted.SourceProvenance.AssetID != record.SourceProvenance.AssetID {
+				t.Fatalf("source identity was not preserved across Host restart: %+v", persisted)
 			}
 			t.Logf("verified %s %s, exact package %s, durable request %s after Host restart", pluginID, release.Version, record.PackageHash, replay.Data.RequestID)
 			return

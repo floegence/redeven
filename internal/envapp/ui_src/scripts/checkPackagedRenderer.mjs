@@ -9,6 +9,7 @@ import { mkdtemp, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
+import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { findUnapprovedWasmAssets } from './packagedWasmPolicy.mjs';
@@ -29,23 +30,56 @@ const builtPluginPackageHashes = Object.freeze({
   manifest_sha256: 'sha256:ab8c23c53758bba5165fd4d50c7972e94791dd1ccff75de02c51c554767fb12b',
   entries_sha256: 'sha256:8b043db413f20ae08be6252f74bbd82fc17a82592192d40c9947a5fcb9983c0f',
 });
-const builtPluginReleaseRef = Object.freeze({
-  source_id: 'redeven_official',
-  channel: 'stable',
-  release_metadata_ref: 'plugins/com.redeven.official/com.example.metrics/4.4.9/release.json',
-  release_metadata_sha256: '7f36244ce5fe5f80751051f1aa2adcb49d049eab2f748d751ae7021cbf074a15',
-  publisher_id: 'com.redeven.official',
-  plugin_id: 'com.example.metrics',
-  version: '4.4.9',
-  expected_hashes: builtPluginPackageHashes,
+const builtPluginRelease = Object.freeze({
+  channel: 'stable', publisher_id: 'github.repo.1289352675', plugin_id: 'github.repo.1289352675.metrics', version: '4.4.9',
+  ...Object.fromEntries(Object.entries(builtPluginPackageHashes).map(([key, value]) => [key, value.slice('sha256:'.length)])),
+  source: { provider: 'github', repository_id: 1289352675, repository_owner: 'floegence',
+    repository_name: 'redeven-official-plugins', release_id: 21, tag: 'metrics-v4.4.9', target_commit: 'a'.repeat(40) },
+  asset: { asset_id: 22, name: 'metrics-4.4.9.redevplugin', size: 42, sha256: 'b'.repeat(64),
+    url: 'https://github.com/floegence/redeven-official-plugins/releases/download/metrics-v4.4.9/metrics-4.4.9.redevplugin' },
 });
-const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${builtPluginReleaseRef.plugin_id}`;
+const builtPluginInstanceID = 'plugini_built_renderer';
 const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const builtPluginReleaseIdentityDigest = 'sha256:824e51f410a597845d546835e61271b8a530044c51e2d14a098eb847adf1e181';
 const builtPluginContractSetSHA256 = 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab';
 const builtPluginSummarySHA256 = 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673';
-const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
-const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.9/metrics-4.4.9.redevplugin';
+const builtPluginSecuritySummary = {
+  summary_sha256: builtPluginSummarySHA256,
+  permissions: [{ permission_id: 'metrics.read', methods: ['metrics.list'], required: true, effects: ['read'] }],
+  methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
+};
+const builtPluginInstallPreview = {
+  release: builtPluginRelease, security_summary: builtPluginSecuritySummary,
+  release_identity_digest: builtPluginReleaseIdentityDigest, manifest_sha256: builtPluginPackageHashes.manifest_sha256,
+  contract_set_sha256: builtPluginContractSetSHA256, summary_sha256: builtPluginSummarySHA256,
+};
+const builtPluginInspectRequest = {
+  intent: { action: 'install' },
+  expected_plugin_id: builtPluginRelease.plugin_id, expected_publisher_id: builtPluginRelease.publisher_id,
+  expected_version: builtPluginRelease.version, expected_package_sha256: builtPluginPackageHashes.package_sha256,
+  expected_security_summary_sha256: builtPluginSummarySHA256, expected_contract_set_sha256: builtPluginContractSetSHA256,
+  source: { kind: 'github_repository', url: 'https://github.com/floegence/redeven-official-plugins', host: 'redeven',
+    tag: builtPluginRelease.source.tag, plugin_id: builtPluginRelease.plugin_id,
+    repository_id: '1289352675', release_id: '21', asset_id: '22' },
+};
+const builtPluginProvenance = {
+  kind: 'github_repository', repository_id: '1289352675', release_id: '21', asset_id: '22',
+  repository_url: builtPluginInspectRequest.source.url, owner: 'floegence', repository: 'redeven-official-plugins',
+  resolved_commit_sha: builtPluginRelease.source.target_commit, release_tag: builtPluginRelease.source.tag,
+  asset_name: builtPluginRelease.asset.name, package_sha256: builtPluginPackageHashes.package_sha256,
+  resolved_at: '2026-11-06T00:00:00Z',
+};
+const builtPluginInspection = {
+  inspection_id: 'inspection_built_renderer', expires_at: '2099-01-01T00:00:00Z',
+  intent: { action: 'install', plugin_instance_id: builtPluginInstanceID },
+  publisher_id: builtPluginRelease.publisher_id, plugin_id: builtPluginRelease.plugin_id, version: builtPluginRelease.version,
+  inspected_hashes: builtPluginPackageHashes, source_provenance: builtPluginProvenance,
+  execution_approval: { state: 'pending', reason_codes: [], assessed_at: '2026-11-06T00:00:00Z' },
+  update_eligibility: { state: 'manual_only', reason_codes: [], assessed_at: '2026-11-06T00:00:00Z' },
+  security_summary: builtPluginSecuritySummary, presentation: builtPluginPresentationCatalog(),
+};
+const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginRelease.plugin_id}`;
+const builtPluginPackageURL = builtPluginRelease.asset.url;
 
 const builtDistProxyRuntimeProjection = JSON.stringify({
   scope: 'proxy.runtime',
@@ -274,15 +308,16 @@ function builtPluginMarketSnapshot() {
     stale: false,
     source: 'remote',
     plugins: [{
-      plugin_id: builtPluginReleaseRef.plugin_id,
-      publisher_id: builtPluginReleaseRef.publisher_id,
+      plugin_id: builtPluginRelease.plugin_id,
+      publisher_id: builtPluginRelease.publisher_id,
+      source_kind: 'official',
       presentation: {
         default_locale: 'en-US',
         locales: [{
           locale: 'en-US',
           name: 'Fixture Plugin',
           publisher_name: 'Fixture Publisher',
-          summary: 'A signed plugin fixture for renderer verification.',
+          summary: 'A repository-bound plugin fixture for renderer verification.',
           keywords: ['fixture'],
         }],
       },
@@ -290,29 +325,11 @@ function builtPluginMarketSnapshot() {
       channels: ['stable'],
       latest: {
         channel: 'stable',
-        version: builtPluginReleaseRef.version,
+        version: builtPluginRelease.version,
         availability_status: 'visible',
-        install_preview: {
-          release_ref: builtPluginReleaseRef,
-          security_summary: {
-            summary_sha256: builtPluginSummarySHA256,
-            permissions: [{ permission_id: 'metrics.read', methods: ['metrics.list'], required: true, effects: ['read'] }],
-          },
-          release_identity_digest: builtPluginReleaseIdentityDigest,
-          manifest_sha256: builtPluginPackageHashes.manifest_sha256,
-          contract_set_sha256: builtPluginContractSetSHA256,
-          summary_sha256: builtPluginSummarySHA256,
-        },
+        install_preview: builtPluginInstallPreview,
       },
-      release: {
-        plugin_id: builtPluginReleaseRef.plugin_id,
-        channel: 'stable',
-        version: builtPluginReleaseRef.version,
-        asset: { url: builtPluginPackageURL },
-        publisher_release_ref: { release_ref: builtPluginReleaseRef },
-        signer_key_id: 'redeven_official_signing_2026_08',
-        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.5' },
-      },
+      release: builtPluginRelease,
     }],
   };
 }
@@ -324,8 +341,8 @@ function builtPluginPresentationCatalog() {
       locale: 'en-US',
       plugin_name: 'Fixture Plugin',
       publisher_name: 'Fixture Publisher',
-      summary: 'A signed plugin fixture for renderer verification.',
-      description: ['This fixture exercises the signed plugin presentation path.'],
+      summary: 'A repository-bound plugin fixture for renderer verification.',
+      description: ['This fixture exercises the verified plugin presentation path.'],
       highlights: ['Provides deterministic renderer verification data.'],
       keywords: ['fixture'],
       surfaces: [{ surface_id: 'plugin.primary', label: 'Fixture Surface' }],
@@ -337,8 +354,8 @@ function builtPluginPresentationCatalog() {
 function builtPluginMarketDetail() {
   const presentation = builtPluginPresentationCatalog();
   return {
-    plugin_id: builtPluginReleaseRef.plugin_id,
-    publisher_id: builtPluginReleaseRef.publisher_id,
+    plugin_id: builtPluginRelease.plugin_id,
+    publisher_id: builtPluginRelease.publisher_id,
     presentation: {
       default_locale: presentation.default_locale,
       locales: presentation.locales.map(({ plugin_name: name, ...locale }) => ({ ...locale, name })),
@@ -347,29 +364,31 @@ function builtPluginMarketDetail() {
     channels: ['stable'],
     repository: {
       provider: 'github',
-      repository_id: 1,
-      owner: 'fixture',
-      name: 'plugin',
-      url: 'https://github.com/fixture/plugin',
+      repository_id: 1289352675,
+      owner: 'floegence',
+      name: 'redeven-official-plugins',
+      url: builtPluginInspectRequest.source.url,
     },
-    compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.5' },
     status: 'visible',
-    latest: [{ channel: 'stable', version: builtPluginReleaseRef.version, availability_status: 'visible' }],
+    latest: [{ channel: 'stable', version: builtPluginRelease.version, availability_status: 'visible' }],
   };
 }
 
 function builtPluginInstalledPlugin() {
   return {
     plugin_instance_id: builtPluginInstanceID,
-    publisher_id: builtPluginReleaseRef.publisher_id,
-    plugin_id: builtPluginReleaseRef.plugin_id,
-    version: builtPluginReleaseRef.version,
+    publisher_id: builtPluginRelease.publisher_id,
+    plugin_id: builtPluginRelease.plugin_id,
+    version: builtPluginRelease.version,
     active_fingerprint: builtPluginPackageHashes.package_sha256,
     package_hash: builtPluginPackageHashes.package_sha256,
     manifest_hash: builtPluginPackageHashes.manifest_sha256,
     entries_hash: builtPluginPackageHashes.entries_sha256,
-    trust_state: 'verified',
-    trust_assessment: { trust_state: 'verified', verified_hashes: builtPluginPackageHashes },
+    source_provenance: builtPluginProvenance,
+    execution_approval: { state: 'user_approved', reason_codes: [], assessed_at: '2026-11-06T00:00:00Z' },
+    update_eligibility: builtPluginInspection.update_eligibility,
+    security_summary: builtPluginSecuritySummary,
+    automatic_updates: false,
     enable_state: 'enabled',
     action_state: {
       can_open: true,
@@ -382,11 +401,11 @@ function builtPluginInstalledPlugin() {
     revoke_epoch: 0,
     manifest: {
       schema_version: 'redevplugin.manifest.v9',
-      publisher: { publisher_id: builtPluginReleaseRef.publisher_id, display_name: 'Fixture Publisher' },
+      publisher: { publisher_id: builtPluginRelease.publisher_id, display_name: 'Fixture Publisher' },
       plugin: {
-        plugin_id: builtPluginReleaseRef.plugin_id,
+        plugin_id: builtPluginRelease.plugin_id,
         display_name: 'Fixture Plugin',
-        version: builtPluginReleaseRef.version,
+        version: builtPluginRelease.version,
       },
       api: { major: 1 },
       permissions: [],
@@ -398,7 +417,7 @@ function builtPluginInstalledPlugin() {
         kind: 'view',
         intent: 'primary',
         label: 'Fixture Surface',
-        entry: 'ui/index.html',
+        entry: 'ui/index.html', web: { root: 'ui', spa: false },
       }],
       workers: [],
       methods: [],
@@ -417,7 +436,8 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   }
   let baseURL = '';
   let installedPlugin = null;
-  let releaseInstallExecution = null;
+  let inspectedPlugin = false;
+  let installOperation = null;
   let directArtifact = null;
   let directArtifactJSON = '';
   let directArtifactExpiresAt = '';
@@ -659,7 +679,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           ok: true,
           data: {
             plugin_instance_id: expected.plugin_instance_id,
-            plugin_version: builtPluginReleaseRef.version,
+            plugin_version: builtPluginRelease.version,
             active_fingerprint: builtPluginPackageHashes.package_sha256,
             management_revision: 1,
             required_permissions: ['metrics.read'],
@@ -678,81 +698,42 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         recovered();
         return;
       }
-      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/query') {
-        const body = pluginPayload;
-        const expected = { limit: 500, operation_scope: 'release_install' };
-        if (JSON.stringify(body) !== JSON.stringify(expected)) {
-          throw new Error(`unexpected plugin executions request: ${JSON.stringify({ expected, actual: body })}`);
-        }
-        jsonResponse(response, { ok: true, data: { executions: [] } });
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/external-packages/inspect') {
+        assert.deepEqual(pluginPayload, builtPluginInspectRequest);
+        inspectedPlugin = true;
+        jsonResponse(response, { ok: true, data: builtPluginInspection });
         return;
       }
-      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/release-installs') {
-        const body = pluginPayload;
-        const expected = {
-          request_id: body.request_id,
-          plugin_instance_id: builtPluginInstanceID,
-          release_ref: builtPluginReleaseRef,
-          release_identity_digest: builtPluginReleaseIdentityDigest,
-          manifest_sha256: builtPluginPackageHashes.manifest_sha256,
-          contract_set_sha256: builtPluginContractSetSHA256,
-          summary_sha256: builtPluginSummarySHA256,
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/external-packages/install-operations/list') {
+        assert.deepEqual(pluginPayload, { limit: 500, cursor: 0 });
+        jsonResponse(response, { ok: true, data: { operations: installOperation ? [installOperation] : [], next_cursor: 0 } });
+        return;
+      }
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/external-packages/install-operations') {
+        assert.equal(inspectedPlugin, true);
+        const expected = { request_id: pluginPayload.request_id, inspection_id: builtPluginInspection.inspection_id,
+          expected_package_sha256: builtPluginPackageHashes.package_sha256 };
+        assert.match(pluginPayload.request_id, /^[0-9a-f-]{36}$/u);
+        assert.deepEqual(pluginPayload, expected);
+        installOperation = {
+          execution: { execution_id: 'install_built_renderer', plugin_instance_id: builtPluginInstanceID,
+            kind: 'operation', status: 'running', cursor: 1, cancelable: true,
+            created_at: '2026-11-06T00:00:00Z', updated_at: '2026-11-06T00:00:01Z' },
+          request_id: expected.request_id, inspection_id: expected.inspection_id,
+          plugin_id: builtPluginRelease.plugin_id, version: builtPluginRelease.version,
+          package_sha256: expected.expected_package_sha256, mutation_outcome: 'unknown',
         };
-        if (!/^[0-9a-f-]{36}$/u.test(body.request_id)
-          || JSON.stringify(body) !== JSON.stringify(expected)) {
-          throw new Error(`unexpected plugin release install request: ${JSON.stringify({ expected, actual: body })}`);
-        }
-        releaseInstallExecution = {
-          execution_id: 'release_install_built_renderer',
-          plugin_instance_id: builtPluginInstanceID,
-          kind: 'operation',
-          status: 'running',
-          cursor: 1,
-          cancelable: true,
-          created_at: '2026-08-05T08:00:00Z',
-          updated_at: '2026-08-05T08:00:01Z',
-        };
-        jsonResponse(response, { ok: true, data: releaseInstallExecution });
+        jsonResponse(response, { ok: true, data: installOperation });
         return;
       }
-      if (pluginInstallFlow
-        && requestURL.pathname === '/_redevplugin/api/plugins/executions/release_install_built_renderer/events/query') {
-        const body = pluginPayload;
-        const expected = { after_cursor: 0, limit: 1_000 };
-        if (JSON.stringify(body) !== JSON.stringify(expected)) {
-          throw new Error(`unexpected plugin execution events request: ${JSON.stringify({ expected, actual: body })}`);
-        }
-        jsonResponse(response, {
-          ok: true,
-          data: {
-            execution_id: 'release_install_built_renderer',
-            events: [{
-              execution_id: 'release_install_built_renderer',
-              sequence: 2,
-              kind: 'terminal',
-              payload: { status: 'completed' },
-            }],
-            cursor: 2,
-          },
-        });
-        return;
-      }
-      if (pluginInstallFlow
-        && requestURL.pathname === '/_redevplugin/api/plugins/executions/release_install_built_renderer/query') {
-        const body = pluginPayload;
-        if (JSON.stringify(body) !== '{}') {
-          throw new Error(`unexpected plugin execution query: ${JSON.stringify(body)}`);
-        }
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/external-packages/install-operations/query') {
+        assert.ok(installOperation);
+        assert.deepEqual(pluginPayload, { request_id: installOperation.request_id });
         installedPlugin = builtPluginInstalledPlugin();
-        releaseInstallExecution = {
-          ...releaseInstallExecution,
-          status: 'completed',
-          cursor: 2,
-          cancelable: false,
-          updated_at: '2026-08-05T08:00:02Z',
-          terminal_at: '2026-08-05T08:00:02Z',
-        };
-        jsonResponse(response, { ok: true, data: releaseInstallExecution });
+        installOperation = { ...installOperation, mutation_outcome: 'committed',
+          execution: { ...installOperation.execution, status: 'completed', cursor: 2, cancelable: false,
+            updated_at: '2026-11-06T00:00:02Z', terminal_at: '2026-11-06T00:00:02Z' } };
+        jsonResponse(response, { ok: true, data: installOperation });
         return;
       }
 
@@ -1496,7 +1477,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     await pluginItem.press('Enter');
     const pluginDetails = pluginCenter.locator('[data-plugin-center-details]');
     await pluginDetails.waitFor({ state: 'visible', timeout: 10_000 });
-    await pluginDetails.getByText('This fixture exercises the signed plugin presentation path.', { exact: true })
+    await pluginDetails.getByText('This fixture exercises the verified plugin presentation path.', { exact: true })
       .waitFor({ state: 'visible', timeout: 10_000 });
     const pluginInstall = pluginCenter.locator('[data-plugin-action="install"]');
     if (await pluginInstall.count() !== 1) {
@@ -1510,7 +1491,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     }
     await pluginInstall.click();
 
-    const installReview = page.locator('[data-plugin-install-review-dialog]');
+    const installReview = page.locator('[data-external-plugin-dialog]');
     try {
       await installReview.waitFor({ state: 'visible', timeout: 10_000 });
     } catch (error) {
@@ -1521,12 +1502,11 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         pageErrors,
       })}`, { cause: error });
     }
-    await page.locator('[data-plugin-install-review-confirm]').click();
-    // Completed official installs keep the review dialog open so the user can
-    // inspect the result or open the newly installed plugin. Close it through
-    // its explicit action before continuing with the installed inventory.
     const installDialog = page.locator('[role="dialog"]').filter({ has: installReview });
-    await installDialog.getByText('Installation complete.', { exact: true }).waitFor({
+    await installDialog.locator('[data-external-plugin-confirmation]').check();
+    await installDialog.getByRole('button', { name: 'Install plugin', exact: true }).click();
+    // Finish the shared package review before checking installed inventory.
+    await installDialog.getByText('Fixture Plugin was installed.', { exact: true }).waitFor({
       state: 'visible',
       timeout: 10_000,
     });
@@ -1545,7 +1525,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     try {
       await installedPluginItem.waitFor({ state: 'visible', timeout: 10_000 });
     } catch (error) {
-      throw new Error(`built signed plugin install did not refresh inventory: ${JSON.stringify({
+      throw new Error(`built plugin install did not refresh inventory: ${JSON.stringify({
         pluginRequests,
         pluginCenterText: (await pluginCenter.innerText()).slice(0, 2_000),
         pageErrors,
@@ -1555,9 +1535,6 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     await installedPluginItem.press('Enter');
     const installedDetails = pluginCenter.locator('[data-plugin-center-details]');
     await installedDetails.getByText('Official', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 });
-    if (pluginRequests.some((request) => request.path.includes('/external-packages/'))) {
-      throw new Error(`built plugin Install used external-package admission: ${JSON.stringify(pluginRequests)}`);
-    }
     const normalizedPluginRequests = pluginRequests.map((request) => {
       const payload = request.payload != null
         && typeof request.payload === 'object'
@@ -1571,41 +1548,18 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     const requiredPluginRequests = [
       { method: 'POST', path: '/_redevplugin/api/plugins/runtime/recover-enabled', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
-      {
-        method: 'POST',
-        path: '/_redevplugin/api/plugins/executions/query',
-        payload: { limit: 500, operation_scope: 'release_install' },
-      },
-      {
-        method: 'POST',
-        path: '/_redevplugin/api/plugins/executions/release-installs',
-        payload: {
-          request_id: ':requestID',
-          plugin_instance_id: builtPluginInstanceID,
-          release_ref: builtPluginReleaseRef,
-          release_identity_digest: builtPluginReleaseIdentityDigest,
-          manifest_sha256: builtPluginPackageHashes.manifest_sha256,
-          contract_set_sha256: builtPluginContractSetSHA256,
-          summary_sha256: builtPluginSummarySHA256,
-        },
-      },
-      {
-        method: 'POST',
-        path: '/_redevplugin/api/plugins/executions/release_install_built_renderer/events/query',
-        payload: { after_cursor: 0, limit: 1_000 },
-      },
-      {
-        method: 'POST',
-        path: '/_redevplugin/api/plugins/executions/release_install_built_renderer/query',
-        payload: {},
-      },
+      { method: 'POST', path: '/_redevplugin/api/plugins/external-packages/inspect', payload: builtPluginInspectRequest },
+      { method: 'POST', path: '/_redevplugin/api/plugins/external-packages/install-operations', payload: {
+        request_id: ':requestID', inspection_id: builtPluginInspection.inspection_id,
+        expected_package_sha256: builtPluginPackageHashes.package_sha256,
+      } },
+      { method: 'POST', path: '/_redevplugin/api/plugins/external-packages/install-operations/query', payload: { request_id: ':requestID' } },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
     ];
     let requestCursor = 0;
     for (const requiredRequest of requiredPluginRequests) {
-      const requiredJSON = JSON.stringify(requiredRequest);
       const nextIndex = normalizedPluginRequests.findIndex(
-        (request, index) => index >= requestCursor && JSON.stringify(request) === requiredJSON,
+        (request, index) => index >= requestCursor && isDeepStrictEqual(request, requiredRequest),
       );
       if (nextIndex < 0) {
         throw new Error(`built plugin Install omitted or reordered a required plugin request: ${JSON.stringify({
@@ -1618,13 +1572,8 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     }
     const exactRequestCounts = new Map([
       ['POST /_redevplugin/api/plugins/runtime/recover-enabled', 1],
-      ['POST /_redevplugin/api/plugins/executions/query', 1],
-      ['POST /_redevplugin/api/plugins/executions/release-installs', 1],
-      ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/events/query', 1],
-      ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/query', 1],
-      ['POST /_redevplugin/api/plugins/permissions/query', 1],
-      ['POST /_redevplugin/api/plugins/security-policies/query', 1],
-      ['POST /_redevplugin/api/plugins/permissions/requirements/query', 1],
+      ['POST /_redevplugin/api/plugins/external-packages/inspect', 1],
+      ['POST /_redevplugin/api/plugins/external-packages/install-operations', 1],
     ]);
     for (const [requestIdentity, expectedCount] of exactRequestCounts) {
       const count = normalizedPluginRequests.filter(
@@ -1886,7 +1835,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
-export { createBuiltDistServer, createBuiltDistTLS, trustBuiltDistWebTransport, verifyBuiltFlowerLifecycle, verifyBuiltMobileFlowerVisibility };
+export { createBuiltDistServer, createBuiltDistTLS, trustBuiltDistWebTransport, verifyBuiltFlowerLifecycle, verifyBuiltMobileFlowerVisibility, verifyBuiltPluginInstallRouting };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(async (error) => {

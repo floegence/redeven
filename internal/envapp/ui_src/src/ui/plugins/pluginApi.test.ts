@@ -296,7 +296,7 @@ describe('plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         lifecycleState: 'not_installed',
         officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
@@ -332,7 +332,7 @@ describe('plugin lifecycle client integration', () => {
     await expect(refresh).resolves.toEqual({ generation: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.generation, changed: true, stale: false });
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [expect.objectContaining({
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
@@ -400,7 +400,7 @@ describe('plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
@@ -462,7 +462,7 @@ describe('plugin lifecycle client integration', () => {
       marketUnavailable: false,
       items: [expect.objectContaining({
         pluginInstanceID: generatedMetricsInstanceID,
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
       })],
     });
   });
@@ -483,7 +483,7 @@ describe('plugin lifecycle client integration', () => {
       marketUnavailable: false,
       items: [expect.objectContaining({
         pluginInstanceID: generatedMetricsInstanceID,
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
       })],
     });
     vi.useRealTimers();

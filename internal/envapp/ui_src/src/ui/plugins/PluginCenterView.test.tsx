@@ -31,7 +31,7 @@ afterEach(() => {
 const metricsReleaseRef = { ...EXAMPLE_PLUGIN_PACKAGE, version: '2.0.0' };
 const metricsPlugin = {
   inventoryKey: 'catalog:metrics',
-  pluginID: 'com.example.metrics',
+  pluginID: 'github.repo.1289352675.metrics',
   displayName: 'Metrics',
   description: 'Show neutral runtime metrics.',
   iconFallback: 'generic',
@@ -42,8 +42,8 @@ const metricsPlugin = {
   sourceKind: 'official',
   pinned: false,
   officialCatalog: {
-    pluginID: 'com.example.metrics',
-    publisherID: 'com.example',
+    pluginID: 'github.repo.1289352675.metrics',
+    publisherID: 'github.repo.1289352675',
     sourceKind: 'official',
     pluginInstanceID: 'plugini_redeven_official_metrics',
     displayName: 'Metrics',
@@ -507,7 +507,7 @@ describe('PluginCenterView', () => {
     openInventoryDetails(mount);
 
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledWith(
-      'com.example.metrics',
+      'github.repo.1289352675.metrics',
       OFFICIAL_PLUGIN_CATALOG_SEED[0]!.marketGeneration,
       expect.any(AbortSignal),
     ));
@@ -567,12 +567,12 @@ describe('PluginCenterView', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const onLoadMarketDetail = vi.fn(async (): Promise<PluginMarketDetail> => ({
-      plugin_id: 'com.example.metrics',
-      publisher_id: 'com.example',
+      plugin_id: 'github.repo.1289352675.metrics',
+      publisher_id: 'github.repo.1289352675',
       presentation: { default_locale: 'en-US', locales: [] },
       categories: ['infrastructure'],
       channels: ['stable'],
-      repository: { provider: 'github', repository_id: 1, owner: 'example', name: 'plugin', url: 'https://github.com/example/plugin' },
+      repository: { provider: 'github', repository_id: 1289352675, owner: 'example', name: 'plugin', url: 'https://github.com/example/plugin' },
       status: 'active',
       latest: [],
     }));
@@ -684,7 +684,7 @@ describe('PluginCenterView', () => {
   });
 
   it('offers one mode-independent open action from the detail overflow for a runnable update', () => {
-    const target = { pluginID: 'com.example.metrics', pluginInstanceID: 'plugininst_metrics', surfaceID: 'metrics.dashboard', expectedManagementRevision: 13 };
+    const target = { pluginID: 'github.repo.1289352675.metrics', pluginInstanceID: 'plugininst_metrics', surfaceID: 'metrics.dashboard', expectedManagementRevision: 13 };
     const updateItem = {
       ...metricsPlugin,
       pluginInstanceID: 'plugininst_metrics',
@@ -1608,7 +1608,7 @@ describe('PluginCenterView', () => {
           canDisable: true,
           lifecycleState: 'enabled',
           defaultLaunchTarget: {
-            pluginID: 'com.example.metrics',
+            pluginID: 'github.repo.1289352675.metrics',
             pluginInstanceID: 'plugininst_metrics',
             surfaceID: 'metrics.dashboard',
             expectedManagementRevision: 7,
@@ -1899,7 +1899,7 @@ describe('PluginCenterView', () => {
           managementRevision: 11,
           lifecycleState: 'enabled',
           defaultLaunchTarget: {
-            pluginID: 'com.example.metrics',
+            pluginID: 'github.repo.1289352675.metrics',
             pluginInstanceID: 'plugininst_metrics',
             surfaceID: 'metrics.dashboard',
             expectedManagementRevision: 11,
@@ -1928,7 +1928,7 @@ describe('PluginCenterView', () => {
     open.click();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'open_surface',
-      pluginID: 'com.example.metrics',
+      pluginID: 'github.repo.1289352675.metrics',
       pluginInstanceID: 'plugininst_metrics',
       surfaceID: 'metrics.dashboard',
       expectedManagementRevision: 11,
@@ -2059,7 +2059,7 @@ describe('PluginCenterView', () => {
     enabledProjection.items[0] = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
@@ -2107,7 +2107,7 @@ describe('PluginCenterView', () => {
     const metrics = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
@@ -2175,7 +2175,7 @@ describe('PluginCenterView', () => {
     enabledProjection.items[0] = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
@@ -2215,7 +2215,7 @@ describe('PluginCenterView', () => {
     enabledProjection.items[0] = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
@@ -2284,7 +2284,7 @@ describe('PluginCenterView', () => {
       ...staleProjection.items[0],
       lifecycleState: 'enabled',
       defaultLaunchTarget: {
-        pluginID: 'com.example.metrics',
+        pluginID: 'github.repo.1289352675.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,

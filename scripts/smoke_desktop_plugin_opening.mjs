@@ -8,7 +8,7 @@ import { assertIsolatedSmokeConfiguration } from './smoke_desktop_plugins.mjs';
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '..');
 const hostSelector = '[data-redeven-plugin-workbench-surface] [data-plugin-surface-host]';
-const ids = ['com.redeven.official.mind-map', 'com.redeven.official.weather'];
+const ids = ['github.repo.1289352675.mind-map', 'github.repo.1289352675.weather'];
 
 async function eventually(read, label, timeout = 40_000) {
   const started = performance.now();
@@ -118,7 +118,7 @@ export async function verifyWorkbenchPluginOpening(page, reportRoot, config) {
 
   await switchMode('Activity');
   for (const existing of await page.locator('[data-redeven-plugin-activity-window="true"]').all()) {
-    if (await existing.locator('[data-plugin-id="com.redeven.official.weather"], [data-plugin-id="com.redeven.official.mind-map"]').count() === 0) continue;
+    if (await existing.locator('[data-plugin-id="github.repo.1289352675.weather"], [data-plugin-id="github.repo.1289352675.mind-map"]').count() === 0) continue;
     await existing.getByRole('button', { name: 'Close', exact: true }).click();
     await existing.waitFor({ state: 'detached' });
   }
@@ -259,7 +259,7 @@ export async function verifyWorkbenchPluginOpening(page, reportRoot, config) {
     { urlPattern: '*/_redevplugin/api/plugins/surfaces/*/prepare', requestStage: 'Response' },
     { urlPattern: '*/_redevplugin/api/plugins/surfaces/*/dispose', requestStage: 'Response' },
   ] });
-  const activity = page.locator('[data-redeven-plugin-activity-window="true"] [data-plugin-surface-host][data-plugin-id="com.redeven.official.weather"]');
+  const activity = page.locator('[data-redeven-plugin-activity-window="true"] [data-plugin-surface-host][data-plugin-id="github.repo.1289352675.weather"]');
   try {
     await page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first().click();
     await page.locator('[data-plugin-panel-tile]').filter({ hasText: 'Weather' }).first().click();

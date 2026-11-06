@@ -13,6 +13,7 @@ import (
 
 	"github.com/floegence/redevplugin/v3/pkg/host"
 	pluginmanifest "github.com/floegence/redevplugin/v3/pkg/manifest"
+	"github.com/floegence/redevplugin/v3/pkg/pluginidentity"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
@@ -287,7 +288,7 @@ func validateSnapshot(snapshot Snapshot) error {
 		}
 		seen[plugin.PluginID] = struct{}{}
 		if plugin.Release != nil {
-			if plugin.Release.PluginID != plugin.PluginID || plugin.Release.Channel != plugin.Latest.Channel || plugin.Release.Version != plugin.Latest.Version {
+			if plugin.Release.PluginID != plugin.PluginID || plugin.Release.PublisherID != plugin.PublisherID || plugin.Release.Channel != plugin.Latest.Channel || plugin.Release.Version != plugin.Latest.Version {
 				return invalid("snapshot release does not match its catalog pointer")
 			}
 			if err := validateLatestRelease(*plugin.Release); err != nil {
@@ -320,6 +321,9 @@ func validatePluginSummary(plugin PluginSummary) error {
 		return invalid("catalog latest channel is not declared")
 	}
 	if plugin.Latest.InstallPreview != nil {
+		if plugin.Latest.InstallPreview.Release.PublisherID != plugin.PublisherID {
+			return invalid("catalog publisher differs from install preview")
+		}
 		if err := validateInstallPreview(*plugin.Latest.InstallPreview, plugin.PluginID, plugin.Latest.Channel, plugin.Latest.Version); err != nil {
 			return err
 		}
@@ -537,6 +541,9 @@ func validateLatestRelease(release LatestRelease) error {
 }
 
 func validateLatestReleaseWithPreview(release LatestRelease, validatePreview bool) error {
+	if err := pluginidentity.ValidateGitHub(release.Source.RepositoryID, release.PublisherID, release.PluginID); err != nil {
+		return invalid("release repository identity: " + err.Error())
+	}
 	if !idPattern.MatchString(release.PluginID) || !idPattern.MatchString(release.PublisherID) || release.Channel != "stable" || !semverPattern.MatchString(release.Version) ||
 		release.Source.Provider != "github" || release.Source.RepositoryID <= 0 || release.Source.ReleaseID <= 0 ||
 		!regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,99}$`).MatchString(release.Source.RepositoryOwner) ||

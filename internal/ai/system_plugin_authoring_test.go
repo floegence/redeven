@@ -35,6 +35,18 @@ func TestPluginAuthoringSkillUsesPublishedPlatformInModelAndBrowseContent(t *tes
 	if !strings.Contains(activation.Content, coordinate) || strings.Contains(activation.Content, "{{REDEVPLUGIN_PLATFORM_VERSION}}") {
 		t.Fatal("model instructions must contain the actual released platform coordinate")
 	}
+	for _, instruction := range []string{
+		"redevplugin repository identity <project-root> <slug>",
+		"publisher_id = github.repo.<repository-id>",
+		"plugin_id = github.repo.<repository-id>.<slug>",
+		"before the final build",
+		"binding directory after identity changes",
+		"GitHub-shaped ID does not establish repository provenance",
+	} {
+		if !strings.Contains(activation.Content, instruction) {
+			t.Fatalf("published plugin authoring instruction is missing: %s", instruction)
+		}
+	}
 	file, err := manager.BrowseFile(path, "SKILL.md", "utf8", 64*1024)
 	if err != nil || file.Truncated {
 		t.Fatalf("browse and model instructions differ: truncated=%v err=%v", file.Truncated, err)
