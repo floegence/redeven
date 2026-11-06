@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { createEffect, createMemo } from 'solid-js';
 import { WorkbenchWidgetHeader, type WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
 import { useI18n } from '../i18n';
@@ -17,6 +18,7 @@ export function WorkbenchGitDiffWidget(props: WorkbenchWidgetBodyProps) {
       && previous?.newPath === next?.newPath
       && previous?.changeType === next?.changeType,
   });
+  registerFlowerPageReader(() => ({ diff: target() }));
   const path = () => target()?.newPath || target()?.path || target()?.oldPath || '';
   createEffect(() => workbench.updateWidgetTitle(props.widgetId, path() ? `${i18n.t('gitDiff.title')} · ${path()}` : i18n.t('gitDiff.title')));
   return (

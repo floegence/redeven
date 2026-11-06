@@ -4,18 +4,6 @@ export type FlowerPageContextState = Readonly<Record<string, unknown>>;
 export type FlowerPageContextRegistrar = (read: () => FlowerPageContextState | undefined) => void;
 const MAX_PAGE_CONTEXT_CHARS = 6000;
 
-/** Readers expose current page facts without mirroring state or requesting data. */
-export function createFlowerPageContextRegistry() {
-  const readers = new Map<string, () => FlowerPageContextState | undefined>();
-  return {
-    register(pageID: string, read: () => FlowerPageContextState | undefined): () => void {
-      readers.set(pageID, read);
-      return () => { if (readers.get(pageID) === read) readers.delete(pageID); };
-    },
-    read: (pageID: string) => readers.get(pageID)?.(),
-  };
-}
-
 export function flowerPageContextSnapshot(input: {
   environmentID: string;
   environmentName: string;
@@ -31,13 +19,13 @@ export function flowerPageContextSnapshot(input: {
     ...(state ? { state } : {}),
   }, null, 2);
   let content = serialize(input.state);
-  if (input.pageID === 'terminal' && typeof input.state?.screen_text === 'string'
+  if (typeof input.state?.screen_text === 'string'
     && Array.from(content).length > MAX_PAGE_CONTEXT_CHARS) {
     // Trim the screen's prefix before serialization so identity and the latest
     // visible lines survive JSON escaping within the automatic reference budget.
     const screen = Array.from(input.state.screen_text);
     const serializeTail = (omitted: number) => serialize({
-      ...input.state, screen_text: `...${screen.slice(omitted).join('')}`,
+      ...input.state, truncated: true, screen_text: `...${screen.slice(omitted).join('')}`,
     });
     let low = 0;
     let high = screen.length;
@@ -51,9 +39,25 @@ export function flowerPageContextSnapshot(input: {
   // Page identity remains first. Bound automatically captured metadata before it
   // enters the draft, so preview, submission and retries always show the same text.
   const runes = Array.from(content);
+  if (runes.length > MAX_PAGE_CONTEXT_CHARS) {
+    // Bound fields before serialization, retaining the most useful identities.
+    const state: Record<string, unknown> = { truncated: true };
+    for (const [key, value] of Object.entries(input.state ?? {})) {
+      if (Array.from(serialize({ ...state, [key]: value })).length <= MAX_PAGE_CONTEXT_CHARS) { state[key] = value; continue; }
+      if (typeof value !== 'string') continue;
+      const chars = Array.from(value); let low = 0; let high = chars.length;
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (Array.from(serialize({ ...state, [key]: chars.slice(0, middle).join('') + '…' })).length <= MAX_PAGE_CONTEXT_CHARS) low = middle;
+        else high = middle - 1;
+      }
+      if (low) state[key] = chars.slice(0, low).join('') + '…';
+    }
+    content = serialize(state);
+  }
   return {
     label: input.pageName,
     title: input.pageName,
-    content: runes.length > MAX_PAGE_CONTEXT_CHARS ? `${runes.slice(0, MAX_PAGE_CONTEXT_CHARS - 1).join('')}…` : content,
+    content,
   };
 }

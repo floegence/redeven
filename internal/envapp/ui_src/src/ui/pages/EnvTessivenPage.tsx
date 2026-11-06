@@ -1,3 +1,4 @@
+import { FlowerContextSource, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import type { TessivenOpenRequest } from '../../../../../tessiven_ui/src/navigation';
 import { createMemo, onCleanup } from 'solid-js';
@@ -50,7 +51,8 @@ export default function EnvTessivenPage(props: {
       }
     : null;
   return (
-    <TessivenPage registerPageContext={props.registerPageContext}
+    <FlowerContextSource id="tessiven:canvas" pageID="tessiven:canvas" pageName="Tessiven" mode="overlay" selected={props.visible}>
+    <TessivenPage registerPageContext={read => registerFlowerPageReader(read, props.registerPageContext)}
       locale={i18n.locale()}
       visible={props.visible}
       standalone={props.standalone}
@@ -119,5 +121,6 @@ export default function EnvTessivenPage(props: {
         }
       }}
     />
+    </FlowerContextSource>
   );
 }

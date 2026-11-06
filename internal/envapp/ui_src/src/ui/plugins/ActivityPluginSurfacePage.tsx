@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { useViewActivation } from '@floegence/floe-webapp-core';
 import { Show, type Accessor, type JSX } from 'solid-js';
 
@@ -19,6 +20,7 @@ export type ActivityPluginSurfacePageProps = Readonly<{
 
 export function ActivityPluginSurfacePage(props: ActivityPluginSurfacePageProps): JSX.Element {
   const activation = useViewActivation();
+  registerFlowerPageReader(() => ({ plugin_id: props.target()?.pluginID, instance_id: props.target()?.pluginInstanceID, surface_id: props.target()?.surfaceID }));
 
   return (
     <div class="h-full min-h-0 w-full" data-activity-plugin-surface-page>

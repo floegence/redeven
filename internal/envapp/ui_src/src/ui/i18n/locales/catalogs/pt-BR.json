@@ -1035,7 +1035,9 @@
       "showingAttachedSnapshot": "Mostrando o snapshot anexado que o Flower receberá.",
       "queuedWithMessage": "Na fila com sua mensagem Ask Flower.",
       "openLiveFilePreviewAction": "Abrir prévia ao vivo do arquivo"
-    }
+    },
+    "screenshot": "Capturar visualização",
+    "screenshotFailed": "Não foi possível capturar esta visualização. Mantenha a página aberta e selecione a aba atual quando solicitado."
   },
   "runtimeMonitor": {
     "permissionTitle": "Permissão de leitura necessária",

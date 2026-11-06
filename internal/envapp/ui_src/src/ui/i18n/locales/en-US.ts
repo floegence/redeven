@@ -2326,6 +2326,8 @@ export const enUS = defineDictionary({
     },
   },
   flowerTurnLauncher: {
+    screenshot: "Capture view",
+    screenshotFailed: "Could not capture this view. Keep this page open and select the current tab if prompted.",
     windowTitle: 'Ask Flower',
     workingDirLabel: 'Working dir',
     workingDirectoryUnavailable: 'Working directory unavailable',

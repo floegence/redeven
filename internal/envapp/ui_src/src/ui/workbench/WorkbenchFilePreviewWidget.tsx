@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { dirnameAbsolute } from '../utils/askFlowerPath';
 import { Show, batch, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification, useResizeObserver } from '@floegence/floe-webapp-core';
@@ -134,6 +135,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       notification.error(i18n.t('filePreview.saveFailedTitle'), i18n.t('filePreview.saveFailedMessage', { path, message }));
     },
   });
+  registerFlowerPageReader(() => ({ path: controller.item()?.path, mode: controller.descriptor().mode, unsaved: controller.dirty(), selection: controller.selectedText() }));
   const [openLifecycle, setOpenLifecycle] = createSignal<PreviewOpenLifecycle>({ phase: 'idle' });
   const [dismissedSyncedPreviewKey, setDismissedSyncedPreviewKey] = createSignal('');
   const [pendingWidgetRemoval, setPendingWidgetRemoval] = createSignal(false);

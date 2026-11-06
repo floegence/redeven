@@ -18,6 +18,7 @@ export type WebServiceBrowserCopy = Readonly<{
   developerToolsLabel: string;
   openExternalLabel: string;
   secureRouteLabel: string;
+  askFlowerLabel?: string;
 }>;
 
 function htmlEscape(value: unknown): string {
@@ -140,6 +141,7 @@ export function buildWebServiceBrowserDocumentURL(
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
       </button>
     </div>
+    ${copy.askFlowerLabel ? `<button id="browser-ask-flower" class="nav-button" type="button" aria-label="${htmlEscape(copy.askFlowerLabel)}" title="${htmlEscape(copy.askFlowerLabel)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg></button>` : ''}
     <button id="browser-devtools" class="nav-button" type="button" aria-label="${htmlEscape(copy.developerToolsLabel)}" title="${htmlEscape(copy.developerToolsLabel)}" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-3 3 3 3"/><path d="m16 9 3 3-3 3"/><path d="m14 6-4 12"/></svg>
     </button>

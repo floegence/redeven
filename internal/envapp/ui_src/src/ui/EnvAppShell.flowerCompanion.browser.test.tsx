@@ -22,6 +22,7 @@ let floeRegistryComponents = (): any[] => [];
 let testFilesMenu = false;
 let testDesktopBridge = false;
 let testRealFlowerLauncher = false;
+let registeredCommands: Array<{ id: string; execute: () => void }> = [];
 let pluginCreationNavigationFixture: { open: (instanceID: string) => Promise<void>; navigate?: (commit: () => unknown) => Promise<boolean> } | undefined;
 let pluginCreationInventory: any | undefined;
 let pluginCreationSessionReady: (() => void) | undefined;
@@ -208,7 +209,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
-  useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
+  useCommand: () => ({ open: vi.fn(), registerAll: (items: any[]) => { registeredCommands = items; return () => { registeredCommands = []; }; }, getKeybindDisplay: (keybind: string) => keybind }),
   useNotification: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
   useTheme: () => ({
     theme: () => 'system',
@@ -254,7 +255,7 @@ vi.mock('@floegence/floe-webapp-core/app', async (importOriginal) => ({
             )
           : null}
         <Show when={testTerminalFooter && props.activeId?.() === 'terminal'}>
-          {floeRegistryComponents().find((component: any) => component.id === 'terminal')?.component?.()}
+          <div style={{ position: 'absolute', inset: '0', 'pointer-events': 'none' }}>{floeRegistryComponents().find((component: any) => component.id === 'terminal')?.component?.()}</div>
         </Show>
         <button
           type="button"
@@ -717,7 +718,7 @@ vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: (props: any) => {
     onCleanup(() => unregister?.());
     return <div ref={anchor} data-terminal-flower-anchor style={{ width: '360px', height: '24px' }} />;
   };
-  return <Show when={testTerminalFooter}><div data-testid="terminal-status-bar" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', height: '28px', display: 'flex', 'align-items': 'center', 'justify-content': 'center' }}><Show when={props.registerActivityFlowerAnchor}><Anchor /></Show></div></Show>;
+  return <Show when={testTerminalFooter}><div data-testid="terminal-status-bar" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', height: '28px', 'pointer-events': 'auto', display: 'flex', 'align-items': 'center', 'justify-content': 'center' }}><Show when={props.registerActivityFlowerAnchor}><Anchor /></Show></div></Show>;
 } }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
@@ -1515,6 +1516,24 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       if (original) Object.defineProperty(window, 'visualViewport', original);
       else Reflect.deleteProperty(window, 'visualViewport');
     }
+  });
+
+  it('opens the global command with a frozen context and preserves the draft on repeated invocation', async () => {
+    testRealFlowerLauncher = true;
+    await mountShell();
+    const command = registeredCommands.find(item => item.id === 'redeven.askFlower')!;
+    expect(command).toBeTruthy(); command.execute();
+    await vi.waitFor(() => expect(document.querySelector('[data-floe-prompt-card] textarea')).toBeTruthy());
+    const editor = document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!;
+    await userEvent.fill(editor, 'Inspect this page'); command.execute();
+    expect(document.activeElement).toBe(editor); expect(editor.value).toBe('Inspect this page');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledOnce());
+    const sent = flowerLaunchTurnMock.mock.calls[0]![0];
+    expect(sent.thread_id).toBeUndefined();
+    const context = sent.context_action as { context: Array<{ kind: string; content: string }> };
+    expect(context.context[0].kind).toBe('text_snapshot');
+    expect(JSON.parse(context.context[0].content).page).toBeTruthy();
   });
 
   it('keeps prepared Ask Flower settings when retrying unknown admission after personal preferences change', async () => {

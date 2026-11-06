@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { FeedbackIndicator, Button, MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
@@ -128,7 +129,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const [sampleSeq, setSampleSeq] = createSignal(0);
   const [chartToken, setChartToken] = createSignal(0);
 
-  props.registerPageContext?.(() => ({
+  registerFlowerPageReader(() => ({
     sort: sortBy(), show_internal_sessions: showInternalSessions(),
     ...(!noRead() && data() ? {
       readings: { sampled_at_ms: data()!.timestampMs, cpu_percent: data()!.cpuUsage, cpu_cores: data()!.cpuCores,
@@ -137,7 +138,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
       selected_process: (() => { const process = data()!.processes.find(item => item.pid === selectedProcessPid());
         return process ? { pid: process.pid, name: process.name, username: process.username } : undefined; })(),
     } : {}),
-  }));
+  }), props.registerPageContext);
 
   // Sort client-side as a safety net in case the runtime-side ordering changes.
   const processes = createMemo<SysMonitorProcessInfo[]>(() => {

@@ -1035,7 +1035,9 @@
       "showingAttachedSnapshot": "Affichage de l’instantané joint que Flower recevra.",
       "queuedWithMessage": "Mis en file avec votre message adressé à Flower.",
       "openLiveFilePreviewAction": "Ouvrir l’aperçu en direct du fichier"
-    }
+    },
+    "screenshot": "Capturer la vue",
+    "screenshotFailed": "Impossible de capturer cette vue. Gardez la page ouverte et sélectionnez l’onglet actuel si demandé."
   },
   "runtimeMonitor": {
     "permissionTitle": "Autorisation de lecture requise",

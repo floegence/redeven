@@ -143,6 +143,7 @@ function bootstrap(): void {
   back.addEventListener('click', () => void perform({ action: 'back' }));
   forward.addEventListener('click', () => void perform({ action: 'forward' }));
   reload.addEventListener('click', () => void perform({ action: state.loading ? 'stop' : 'reload' }));
+  elementByID<HTMLButtonElement>('browser-ask-flower')?.addEventListener('click', () => void perform({ action: 'ask_flower' }));
   developerTools.addEventListener('click', () => void perform({ action: 'toggle_devtools' }));
   openExternal.addEventListener('click', () => void perform({ action: 'open_external' }));
 

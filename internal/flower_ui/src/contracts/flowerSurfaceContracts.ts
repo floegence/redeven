@@ -1460,6 +1460,7 @@ export type FlowerStagedLongTextReadResult = Readonly<{
 }>;
 
 export type FlowerTurnLauncherSourceSurface =
+  | 'flower_composer'
   | 'desktop_welcome_environment_card'
   | 'file_browser'
   | 'terminal'

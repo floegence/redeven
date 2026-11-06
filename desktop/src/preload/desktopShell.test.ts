@@ -105,6 +105,23 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererSend).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps screenshots explicit and releases the origin notification listener', async () => {
+    const { bootstrapDesktopShellBridge } = await import('./desktopShell');
+    bootstrapDesktopShellBridge();
+    const bridge = exposeInMainWorld.mock.calls[0][1];
+    const receive = vi.fn(); const unsubscribe = bridge.onAskFlowerSource(receive);
+    expect(ipcRendererInvoke).not.toHaveBeenCalled();
+    const listener = ipcRendererOn.mock.calls.find(call => call[0] === 'redeven-desktop:ask-flower-source')![1];
+    const source = { id: 'source', title: 'Editor', url: 'https://example.test/', captured_at_ms: 1 };
+    listener({}, source); expect(receive).toHaveBeenCalledWith(source);
+    await bridge.captureSourceScreenshot('source');
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:source-screenshot', 'source');
+    await bridge.captureScreenshot({ url: 'https://example.test/', region: { x: 0, y: 0, width: 100, height: 100 } });
+    expect(() => bridge.captureScreenshot({ url: 'https://example.test/', region: { x: 0, y: 0, width: 0, height: 100 } })).toThrow();
+    bridge.releaseAskFlowerSource(); expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:release-flower-source');
+    unsubscribe(); expect(ipcRendererRemoveListener).toHaveBeenCalledWith('redeven-desktop:ask-flower-source', listener);
+  });
+
   it('normalizes codespace window open failures from electron main', async () => {
     ipcRendererInvoke.mockResolvedValueOnce({
       ok: false,

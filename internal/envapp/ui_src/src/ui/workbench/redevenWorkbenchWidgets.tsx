@@ -1,3 +1,4 @@
+import { FlowerContextSource, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type {
   WorkbenchWidgetBodyProps as RedevenWorkbenchWidgetBodyProps,
   WorkbenchWidgetDefinition,
@@ -147,6 +148,7 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
   const pluginHost = useWorkbenchPluginSurfaceContext();
   const state = () => workbench.pluginSurfaceState(props.widgetId);
+  registerFlowerPageReader(() => { const current = state(); return current ? { plugin_id: current.plugin_id, instance_id: current.plugin_instance_id, surface_id: current.surface_id } : undefined; });
   const inventoryKey = createMemo(() => {
     const persisted = state();
     return persisted ? `instance:${persisted.plugin_instance_id}` : null;
@@ -469,6 +471,10 @@ function localizedWorkbenchWidgetCopy(
 export function localizedRedevenWorkbenchWidgets(t: I18nHelpers['t']): readonly WorkbenchWidgetDefinition[] {
   return redevenWorkbenchWidgets.map((definition) => ({
     ...definition,
+    body: props => <FlowerContextSource id={`workbench:${props.widgetId}`} pageID={definition.type}
+      pageName={localizedWorkbenchWidgetCopy(definition.type, t)?.label ?? definition.label} mode="workbench" selected={props.selected}>
+      <definition.body {...props} />
+    </FlowerContextSource>,
     ...(localizedWorkbenchWidgetCopy(definition.type, t) ?? {}),
   }));
 }

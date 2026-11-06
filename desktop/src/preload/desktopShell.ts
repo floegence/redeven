@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
 
+import { RELEASE_FLOWER_SOURCE_CHANNEL, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, type DesktopAskFlowerSource, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
+
 import { REMOTE_DESKTOP_FILES_CHANNEL } from '../shared/hostApplicationWindowIPC';
 import { contextBridge, ipcRenderer } from 'electron';
 import { REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, parseDesktopDeploymentRequest, parseDesktopDeploymentProgress, type DesktopDeploymentRequest, type DesktopDeploymentResult, type DesktopDeploymentProgress } from '../shared/remoteDesktopDeployment';
@@ -44,6 +46,14 @@ import {
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
+    onAskFlowerSource: (listener: (value: DesktopAskFlowerSource) => void) => {
+      const receive = (_event: unknown, value: DesktopAskFlowerSource) => listener(value);
+      ipcRenderer.on(ASK_FLOWER_SOURCE_CHANNEL, receive);
+      return () => ipcRenderer.removeListener(ASK_FLOWER_SOURCE_CHANNEL, receive);
+    },
+    releaseAskFlowerSource: () => ipcRenderer.send(RELEASE_FLOWER_SOURCE_CHANNEL),
+    captureSourceScreenshot: (id: string) => ipcRenderer.invoke(SOURCE_SCREENSHOT_CHANNEL, id),
+    captureScreenshot: (request: unknown) => ipcRenderer.invoke(MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest(request)),
     onManagedEntranceRequest: (listener: (request: ManagedEntrancePreparationRequest) => Promise<unknown>): (() => void) => {
       const pending = new Map<string, ManagedEntrancePreparationRequest>();
       const cancel = (_event: unknown, id: unknown) => {

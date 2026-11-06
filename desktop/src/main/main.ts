@@ -1,3 +1,5 @@
+import { captureAuthorizedPage } from './manualScreenshot';
+import { RELEASE_FLOWER_SOURCE_CHANNEL, type DesktopAskFlowerSource, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
 import { attachDesktopEditContextMenu } from './editContextMenu';
 import { desktopRuntimeTargetKindFromID, desktopRuntimeTargetKey } from '../shared/desktopRuntimePlacement';
 import { decodeGatewayClientAccessPackage } from './gatewayClientAccess';
@@ -8340,6 +8342,7 @@ function openSessionChildWindow(
 
   sessionRecord.child_windows.set(childKey, childWindow);
   sessionKeyByWebContentsID.set(childWindow.webContentsID, sessionKey);
+  attachAskFlowerShortcut(childWindow.browserWindow.webContents, sessionRecord);
   return childWindow.browserWindow;
 }
 
@@ -8399,6 +8402,7 @@ async function openSessionCodespaceLoadingWindow(
     },
   });
   const window = tracked.browserWindow;
+  attachAskFlowerShortcut(window.webContents, record);
   const webSession = session.fromPartition(partition);
   owner = new CodeSpaceNativeWindow({
     identity,
@@ -8528,6 +8532,7 @@ function webServiceBrowserDocumentURL(): string {
     developerToolsLabel: i18n.t('webServiceBrowser.developerTools'),
     openExternalLabel: i18n.t('webServiceBrowser.openInBrowser'),
     secureRouteLabel: i18n.t('webServiceBrowser.secureRoute'),
+    askFlowerLabel: i18n.t('environmentCenter.askFlowerCardTitle'),
   }, desktopThemeState().getSnapshot());
 }
 
@@ -8784,6 +8789,8 @@ function createWebServiceBrowserController(
         }
         publishState();
         return { ok: true };
+      case 'ask_flower':
+        askFlowerFromOwnedWindow(contentView.webContents); return { ok: true };
       case 'toggle_devtools':
         toggleDevTools();
         return { ok: true };
@@ -8963,6 +8970,9 @@ function createWebServiceBrowserController(
   contentView.webContents.on('devtools-closed', publishState);
 
   const handleDevToolsShortcut = (event: Electron.Event, input: Electron.Input): void => {
+    if (input.type === 'keyDown' && input.shift && !input.alt && (input.meta || input.control) && input.key.toLowerCase() === 'j') {
+      event.preventDefault(); askFlowerFromOwnedWindow(contentView.webContents); return;
+    }
     if (!isWebServiceBrowserDevToolsShortcut(input)) return;
     event.preventDefault();
     toggleDevTools();
@@ -18979,6 +18989,40 @@ function senderUtilityWindowKind(webContentsID: number): DesktopUtilityWindowKin
   return utilityWindowKindByWebContentsID.get(webContentsID) ?? 'launcher';
 }
 
+// One ephemeral origin per receiving shell. Nothing is captured until its button is clicked.
+const flowerWindowOrigins = new Map<number, { id: string; source: WebContents; url: string; record: DesktopSessionRecord; metadata: DesktopAskFlowerSource }>();
+function clearFlowerWindowOrigin(this: WebContents): void { flowerWindowOrigins.delete(this.id); }
+function attachAskFlowerShortcut(source: WebContents, record: DesktopSessionRecord): void {
+  source.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.shift || input.alt || !(input.meta || input.control) || input.key.toLowerCase() !== 'j') return;
+    event.preventDefault(); askFlowerFromOwnedWindow(source, record);
+  });
+}
+function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRecord): void {
+  const record = owner ?? sessionRecordForWebContentsID(source.id);
+  const root = record && !record.closing ? liveTrackedBrowserWindow(record.root_window) : null;
+  if (!root || !record || root.webContents === source || source.isDestroyed()) return;
+  // Repeated invocations focus the existing draft without replacing its source.
+  const current = flowerWindowOrigins.get(root.webContents.id);
+  if (current?.record === record) {
+    root.webContents.send(ASK_FLOWER_SOURCE_CHANNEL, current.metadata);
+    root.show(); root.focus(); return;
+  }
+  const url = source.getURL();
+  let publicURL: string;
+  try { const parsed = new URL(url); parsed.username = ''; parsed.password = ''; parsed.search = ''; parsed.hash = ''; publicURL = ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : ''; }
+  catch { publicURL = ''; }
+  const id = crypto.randomUUID();
+  root.webContents.removeListener('destroyed', clearFlowerWindowOrigin);
+  root.webContents.once('destroyed', clearFlowerWindowOrigin);
+  root.webContents.removeListener('did-navigate', clearFlowerWindowOrigin);
+  root.webContents.once('did-navigate', clearFlowerWindowOrigin);
+  const metadata = { id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now() };
+  flowerWindowOrigins.set(root.webContents.id, { id, source, url, record, metadata });
+  root.webContents.send(ASK_FLOWER_SOURCE_CHANNEL, metadata);
+  root.show(); root.focus();
+}
+
 function sessionRecordForWebContentsID(webContentsID: number): DesktopSessionRecord | null {
   const sessionKey = sessionKeyByWebContentsID.get(webContentsID);
   if (!sessionKey) {
@@ -19966,6 +20010,32 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     await openAdvancedSettingsWindow();
+  });
+  ipcMain.on(RELEASE_FLOWER_SOURCE_CHANNEL, event => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (record && record.root_window.webContentsID === event.sender.id
+      && event.senderFrame === event.sender.mainFrame && event.sender.getURL() === record.entry_url) flowerWindowOrigins.delete(event.sender.id);
+  });
+  ipcMain.handle(SOURCE_SCREENSHOT_CHANNEL, async (event, id: unknown) => {
+    const origin = flowerWindowOrigins.get(event.sender.id);
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const valid = () => origin && typeof id === 'string' && origin.id === id && record && !record.closing
+      && record.root_window.webContentsID === event.sender.id && event.senderFrame === event.sender.mainFrame
+      && event.sender.getURL() === record.entry_url && sessionRecordForWebContentsID(event.sender.id) === record
+      && flowerWindowOrigins.get(event.sender.id) === origin && !origin.source.isDestroyed() && origin.source.getURL() === origin.url
+      && origin.record === record;
+    if (!valid() || !origin) throw new Error('Screenshot source changed.');
+    return captureAuthorizedPage(origin.source, { url: origin.url, valid: () => Boolean(valid()) });
+  });
+  ipcMain.handle(MANUAL_SCREENSHOT_CHANNEL, async (event, request) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const trusted = record ? !record.closing && record.root_window.webContentsID === event.sender.id
+      && event.sender.getURL() === record.entry_url : utilityWindowKindByWebContentsID.has(event.sender.id);
+    if (!trusted || event.senderFrame !== event.sender.mainFrame) throw new Error('Screenshot source is unavailable.');
+    const input = parseManualScreenshotRequest(request);
+    if (input.url !== event.sender.getURL()) throw new Error('Screenshot source changed.');
+    return captureAuthorizedPage(event.sender, { ...input, valid: () => event.senderFrame === event.sender.mainFrame
+      && (record ? !record.closing && sessionRecordForWebContentsID(event.sender.id) === record : utilityWindowKindByWebContentsID.has(event.sender.id)) });
   });
   ipcMain.handle(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, async (event, request): Promise<DesktopShellWindowCommandResponse> => {
     const normalized = normalizeDesktopShellWindowCommandRequest(request);

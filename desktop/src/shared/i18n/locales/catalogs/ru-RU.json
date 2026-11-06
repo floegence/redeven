@@ -2763,7 +2763,9 @@
     "cloudSyncDetails": "Подробности синхронизации",
     "cloudTechnicalDetails": "Технические подробности",
     "cloudAwaitingSync": "Ещё не синхронизировано",
-    "cloudAwaitingSyncDetail": "Обновите, чтобы загрузить окружения Redeven Cloud."
+    "cloudAwaitingSyncDetail": "Обновите, чтобы загрузить окружения Redeven Cloud.",
+    "screenshot": "Снимок текущего вида",
+    "screenshotFailed": "Не удалось сделать снимок. Оставьте исходную страницу открытой и выберите текущую вкладку, если появится запрос."
   },
   "gatewayAccess": {
     "localService": "Локальный хост",

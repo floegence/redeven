@@ -1,3 +1,4 @@
+import { FlowerContextSource, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { Button, LinearProgress, StableText, Switch } from '@floegence/floe-webapp-core/ui';
 import { Refresh, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
 import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
@@ -42,7 +43,7 @@ export function RemoteDesktopLauncher() {
   const i18n = useI18n();
   // The launcher owns preparation. Dialog presence only attaches its view;
   // dismissing the modal must not dispose the operation or its subscription.
-  const content = createMemo(() => started() ? <RemoteDesktopPanel active={open()} onActivityChange={setActivity} onConnected={() => setOpen(false)} /> : undefined);
+  const content = createMemo(() => started() ? <FlowerContextSource id="remote-desktop:dialog" pageID="remote-desktop" pageName={i18n.t('remoteDesktop.title')} mode="overlay" selected={open()}><RemoteDesktopPanel active={open()} onActivityChange={setActivity} onConnected={() => setOpen(false)} /></FlowerContextSource> : undefined);
   return <>
     <Button variant="outline" onClick={() => { setStarted(true); setOpen(true); }}><RemoteDesktopIcon class="w-4 h-4" /><Show when={!open() && activity()} fallback={i18n.t('remoteDesktop.title')}>{key => <span role="status">{i18n.t(key())}</span>}</Show></Button>
     <Dialog open={open()} onOpenChange={setOpen} title={i18n.t('remoteDesktop.title')} closeLabel={i18n.t('common.actions.close')} escapeKeyPhase="bubble"
@@ -64,6 +65,7 @@ export function RemoteDesktopPanel(props: { active?: boolean; onActivityChange?:
  const busy = () => deployment() && ['preparing','password','confirmation','canceling'].includes(deploymentPhase()) ? 'deployment' : actionBusy();
   const [mode, setMode] = createSignal<'view' | 'control'>('control');
   const [display, setDisplay] = createSignal('');
+  registerFlowerPageReader(() => ({ mode: mode(), display_id: display(), backend: status()?.capabilities.backend, connection_state: status()?.capabilities.state, setup_state: status()?.setup?.state }));
   const [optionsOpen, setOptionsOpen] = createSignal(false);
   const [confirmation, setConfirmation] = createSignal<'takeover' | 'forget'>();
   const [opened, setOpened] = createSignal(false);

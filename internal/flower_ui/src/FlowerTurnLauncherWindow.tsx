@@ -1,8 +1,8 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, mergeProps, onCleanup, untrack } from 'solid-js';
 import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
-import { Activity, AlertTriangle, ArrowUp, FileText } from '@floegence/floe-webapp-core/icons';
+import { Activity, AlertTriangle, ArrowUp, Camera, FileText } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Button, PromptCard, type FloatingWindowViewportInsets, type SelectOption } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog, PromptCard, type FloatingWindowViewportInsets, type SelectOption } from '@floegence/floe-webapp-core/ui';
 
 import type {
   FlowerTurnLauncherIntent, FlowerModelDirectory, FlowerSurfaceAdapter,
@@ -50,6 +50,7 @@ export type FlowerTurnLauncherPanelProps = Readonly<{
   modelSource?: Pick<FlowerSurfaceAdapter, 'loadSettings' | 'loadModelDirectory' | 'subscribeModelDirectory'>;
   draft?: string;
   onDraftChange?: (draft: string) => void;
+  screenshot?: Readonly<{ label: string; failed: string; capture: (signal: AbortSignal) => Promise<File> }>;
   onClose: () => void;
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
   onContextAction?: (action: FlowerTurnLauncherContextAction, entry: FlowerTurnLauncherContextChip) => void | Promise<void>;
@@ -80,6 +81,12 @@ function copyValue(
 }
 
 function entryIcon(entry: FlowerTurnLauncherContextChip) {
+  const file = entry.primary_action?.type === 'open_attachment_snapshot_preview' ? entry.primary_action.file : undefined;
+  if (file?.type.startsWith('image/')) {
+    const url = URL.createObjectURL(file);
+    onCleanup(() => URL.revokeObjectURL(url));
+    return <img src={url} alt="" class="h-5 w-5 rounded-sm object-cover" />;
+  }
   return <FlowerContextIcon tone={entry.tone} name={entry.tone === 'selection' ? entry.detail : entry.label} />;
 }
 
@@ -109,6 +116,12 @@ export function createFlowerTurnLauncherPanelController(
   const [isComposing, setIsComposing] = createSignal(false);
   const [selectedModelID, setSelectedModelID] = createSignal('');
   const [sending, setSending] = createSignal(false);
+  const [capturing, setCapturing] = createSignal(false);
+  const [captureError, setCaptureError] = createSignal('');
+  let captureController: AbortController | undefined;
+  const cancelCapture = () => { captureController?.abort(); captureController = undefined; setCapturing(false); };
+  createEffect(() => { const open = props.open; void props.intent; cancelCapture(); if (open) setCaptureError(''); });
+  onCleanup(cancelCapture);
   const [clientRequestID, setClientRequestID] = createSignal('');
   const [pendingRequest, setPendingRequest] = createSignal<FlowerTurnLauncherSubmitInput | null>(null);
   const [editableIntent, setEditableIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
@@ -127,7 +140,7 @@ export function createFlowerTurnLauncherPanelController(
     setInternalUserPrompt(value);
     props.onDraftChange?.(value);
   };
-  const canSubmit = createMemo(() => !sending() && (compact(visiblePrompt()).length > 0 || (editableIntent()?.pending_attachments?.length ?? 0) > 0));
+  const canSubmit = createMemo(() => !capturing() && !sending() && (compact(visiblePrompt()).length > 0 || (editableIntent()?.pending_attachments?.length ?? 0) > 0));
   const suggestedWorkingDir = createMemo(() => compact(props.intent?.suggested_working_dir));
 
   const resetLauncherState = (intent: FlowerTurnLauncherIntent | null) => {
@@ -171,7 +184,7 @@ export function createFlowerTurnLauncherPanelController(
   onCleanup(() => { if (focusedFrame !== undefined) cancelAnimationFrame(focusedFrame); });
 
   const submit = async () => {
-    if (sending()) return;
+    if (sending() || capturing()) return;
     const intent = editableIntent();
     const requestID = clientRequestID();
     const retryingUnknownAdmission = admissionUnknown();
@@ -224,7 +237,22 @@ export function createFlowerTurnLauncherPanelController(
     setValidationError('');
   };
 
+  const captureScreenshot = async () => {
+    if (!props.screenshot || capturing() || sending() || admissionUnknown()) return;
+    const operation = new AbortController(); captureController = operation;
+    setCapturing(true); setCaptureError('');
+    try {
+      const file = await props.screenshot.capture(operation.signal);
+      if (!operation.signal.aborted && props.open) addFiles([file]);
+    } catch (error) {
+      if (!operation.signal.aborted && !(error instanceof DOMException && error.name === 'NotAllowedError')) setCaptureError(props.screenshot.failed);
+    } finally {
+      if (captureController === operation) { captureController = undefined; setCapturing(false); }
+    }
+  };
+
   return {
+    capturing, captureError, captureScreenshot,
     selectedModelID, setSelectedModelID, addFiles,
     footerPlacement,
     visiblePrompt,
@@ -457,7 +485,22 @@ type FlowerModelSelectOption = SelectOption & Readonly<{ model: ComposerModelOpt
 
 /** Product content and admission state over the published contextual input. */
 export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
-  const controller = createFlowerTurnLauncherPanelController(props, 'window');
+  const [localPreview, setLocalPreview] = createSignal<{ title: string; text?: string; url?: string }>();
+  let previewURL: string | undefined;
+  const clearPreview = () => { if (previewURL) URL.revokeObjectURL(previewURL); previewURL = undefined; setLocalPreview(undefined); };
+  onCleanup(clearPreview);
+  createEffect(() => { if (!props.open) clearPreview(); });
+  const controller = createFlowerTurnLauncherPanelController(mergeProps(props, {
+    onContextAction: (action: FlowerTurnLauncherContextAction, entry: FlowerTurnLauncherContextChip) => {
+      if (props.onContextAction) return props.onContextAction(action, entry);
+      clearPreview();
+      if (action.type === 'open_attachment_snapshot_preview' && action.file.type.startsWith('image/')) {
+        previewURL = URL.createObjectURL(action.file); setLocalPreview({ title: action.file.name, url: previewURL });
+      } else if (action.type === 'open_text_context_preview' || action.type === 'open_process_snapshot_preview') {
+        setLocalPreview({ title: action.title, text: action.body });
+      }
+    },
+  }), 'window');
   const [directory, setDirectory] = createSignal<FlowerModelDirectory>();
   const [modelLoading, setModelLoading] = createSignal(false);
   const [modelError, setModelError] = createSignal('');
@@ -499,7 +542,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   });
   const presentedIntent = createMemo<FlowerTurnLauncherIntent | null>(previous =>
     props.open && props.intent ? props.intent : previous ?? null);
-  return (
+  return (<>
     <PromptCard
       open={props.open && Boolean(props.intent)}
       bodyProps={props.localScrollProps}
@@ -530,6 +573,10 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       submitLabel={copyValue(props.copy, controller.sending() ? 'sending' : 'send_turn')}
       onSubmit={() => { void controller.submit(); }}
       attachment={{ label: copyValue(props.copy, 'add_attachments'), onFiles: controller.addFiles }}
+      tools={<Show when={props.screenshot}><Button variant="ghost" size="icon" icon={Camera}
+        aria-label={props.screenshot!.label} title={props.screenshot!.label} loading={controller.capturing()}
+        disabled={controller.sending() || controller.admissionUnknown()}
+        onClick={() => { void controller.captureScreenshot(); }} /></Show>}
       selection={props.modelSource ? {
         label: copyValue(props.copy, 'select_model'), placeholder: copyValue(props.copy, 'select_model'),
         value: controller.selectedModelID(), options: modelOptions(),
@@ -542,7 +589,8 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         onRetry: () => setModelReload(value => value + 1),
       } : undefined}
       references={<FlowerTurnLauncherReferences controller={controller} copy={props.copy} localScrollProps={props.localScrollProps} />}
-      feedback={(controller.validationError() || controller.launchError()) && <>
+      feedback={(controller.captureError() || controller.validationError() || controller.launchError()) && <>
+        <Show when={controller.captureError()}><div class="flower-ask-card-validation" role="alert">{controller.captureError()}</div></Show>
         <Show when={controller.validationError()}><div class="flower-ask-card-validation" role="alert">{controller.validationError()}</div></Show>
         <Show when={controller.launchError()}>
           <div role={controller.launchErrorKind() === 'unknown' ? 'status' : 'alert'}
@@ -556,5 +604,11 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         target.closest('.flower-turn-launcher-related-surface')
           || target.closest('[data-floe-geometry-surface="floating-window"]')?.querySelector(':scope > .flower-turn-launcher-related-surface'))}
     />
-  );
+    <Dialog open={Boolean(localPreview())} onOpenChange={open => { if (!open) clearPreview(); }}
+      title={localPreview()?.title} closeLabel={copyValue(props.copy, 'close')} class="flower-turn-launcher-related-surface" globalZIndex={(props.zIndex ?? 100) + 2}>
+      <Show when={localPreview()?.url} fallback={<pre class="max-h-[65vh] overflow-auto whitespace-pre-wrap text-xs">{localPreview()?.text}</pre>}>
+        <img src={localPreview()?.url} alt={localPreview()?.title ?? ''} class="max-h-[65vh] w-full object-contain" />
+      </Show>
+    </Dialog>
+  </>);
 }

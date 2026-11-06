@@ -2738,7 +2738,9 @@
     "cloudSyncDetails": "同期の詳細",
     "cloudTechnicalDetails": "技術的な詳細",
     "cloudAwaitingSync": "未同期",
-    "cloudAwaitingSyncDetail": "更新して Redeven Cloud の環境を読み込んでください。"
+    "cloudAwaitingSyncDetail": "更新して Redeven Cloud の環境を読み込んでください。",
+    "screenshot": "表示中の画面を撮影",
+    "screenshotFailed": "画面を撮影できませんでした。元のページを開いたままにし、選択を求められたら現在のタブを選んでください。"
   },
   "gatewayAccess": {
     "localService": "ローカルホスト",

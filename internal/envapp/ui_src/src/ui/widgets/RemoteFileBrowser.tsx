@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { directoryFavoriteAction } from '../../../../../flower_ui/src/filePicker/directoryFavorites';
 import { Star } from '@floegence/floe-webapp-core/icons';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
@@ -762,14 +763,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitBranchDetailState, setGitBranchDetailState] = createSignal<GitBranchDetailState>({ kind: 'idle' });
   const [selectedGitBranchSubview, setSelectedGitBranchSubview] = createSignal<GitBranchSubview>('status');
   let readFilePageState: (() => Readonly<Record<string, unknown>>) | undefined;
-  props.registerPageContext?.(() => ({
+  registerFlowerPageReader(() => ({
     mode: pageMode(),
     ...(activeDirectorySnapshotReady() ? { directory: activeDirectoryPath() } : {}),
     show_hidden: showHidden(),
     ...(pageMode() === 'git' ? { git_view: gitSubview(), repository: repoInfo()?.repoRootPath,
       branch: selectedGitBranchName() || undefined, commit: selectedCommitHash() || undefined } : {}),
     ...(pageMode() === 'files' && activeDirectorySnapshotReady() ? readFilePageState?.() : {}),
-  }));
+  }), props.registerPageContext);
 
   const [gitCommitMessage, setGitCommitMessage] = createSignal('');
   const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');

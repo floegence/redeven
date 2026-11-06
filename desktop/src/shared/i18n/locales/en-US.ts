@@ -1114,6 +1114,8 @@ export const enUS = {
     technicalDetails: 'Technical details',
   },
   environmentCenter: {
+    screenshot: "Capture view",
+    screenshotFailed: "Could not capture this view. Keep this page open and select the current tab if prompted.",
     runtimePlatform: "Runtime operating system: {platform}",
     runtimePlatformUnknown: "Runtime operating system unknown",
     cloudAwaitingSyncDetail: "Refresh to load your Redeven Cloud environments.",

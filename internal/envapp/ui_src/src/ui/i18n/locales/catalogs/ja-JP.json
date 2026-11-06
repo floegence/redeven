@@ -1035,7 +1035,9 @@
       "showingAttachedSnapshot": "Flower が受け取る添付スナップショットを表示しています。",
       "queuedWithMessage": "Ask Flower メッセージと一緒にキューに入っています。",
       "openLiveFilePreviewAction": "ライブファイルプレビューを開く"
-    }
+    },
+    "screenshot": "表示中の画面を撮影",
+    "screenshotFailed": "画面を撮影できませんでした。元のページを開いたままにし、選択を求められたら現在のタブを選んでください。"
   },
   "runtimeMonitor": {
     "permissionTitle": "読み取り権限が必要です",

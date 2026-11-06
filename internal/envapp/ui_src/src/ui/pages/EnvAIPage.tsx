@@ -1,3 +1,4 @@
+import { FlowerContextSource, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useDownloadManager } from '../downloads/DownloadContext';
 import { FlowerTaskFilePreviewContent } from '../flower/FlowerTaskFilePreviewContent';
@@ -198,7 +199,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     } : undefined,
   });
 
-  return (
+  return (<FlowerContextSource id="flower:conversation" pageID="ai" pageName="Flower" mode="overlay">
     <AIReadinessBoundary
       controller={readinessController}
       embedded={Boolean(props.embeddedConversation)}
@@ -222,6 +223,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
           threadListPreferenceStorage={threadListPreferenceStorage}
           embeddedConversation={props.embeddedConversation}
           captureNewConversationContext={props.captureNewConversationContext}
+          registerContextReader={registerFlowerPageReader}
           renderContextSnapshotPreview={FlowerContextSnapshotPreview}
           adapter={adapter}
           filesystemScopeKey={filesystemPicker.scopeKey}
@@ -271,5 +273,5 @@ export function EnvAIPage(props: EnvAIPageProps) {
         />;
       }}</Show>}
     />
-  );
+  </FlowerContextSource>);
 }

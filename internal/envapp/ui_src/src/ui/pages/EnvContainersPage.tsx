@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
   Button,
@@ -851,11 +852,11 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   const [detailRetry, setDetailRetry] = createSignal(0);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>(defaultResourceFilter(restored.view));
-  props.registerPageContext?.(() => {
+  registerFlowerPageReader(() => {
     const entry = selectedEntry();
     return { view: view(), query: searchQuery(), filter: resourceFilter(),
       selected_resource: entry ? { engine: entry.target.engine, endpoint_id: entry.target.endpoint_id, id: resourceIdentity(view(), entry.item) } : undefined };
-  });
+  }, props.registerPageContext);
   const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
   const [operationsOpen, setOperationsOpen] = createSignal(false);
   const [selectedOperationID, setSelectedOperationID] = createSignal('');

@@ -1,3 +1,4 @@
+import { captureManualScreenshot, type ManualScreenshotSource } from '../../../internal/flower_ui/src/manualScreenshot';
 import { stageFlowerTurnLauncherAttachments } from '../../../internal/flower_ui/src/stageFlowerTurnLauncherAttachments';
 import { DesktopFloeLocaleProvider } from './DesktopFloeLocaleProvider';
 import { createDownloadManager } from '../../../internal/envapp/ui_src/src/ui/downloads/createDownloadManager';
@@ -410,6 +411,7 @@ declare global {
     redevenDesktopLauncher?: DesktopLauncherBridge;
     redevenDesktopSettings?: DesktopSettingsBridge;
     redevenDesktopShell?: Readonly<{
+      captureScreenshot?: import("../../../internal/flower_ui/src/manualScreenshot").ScreenshotBridge;
       openConnectionCenter?: () => Promise<void>;
       openDashboard?: () => Promise<unknown>;
       openExternalURL?: (url: string) => Promise<{ ok: boolean; message?: string }>;
@@ -2435,12 +2437,15 @@ function DesktopCommandRegistrar(props: Readonly<{
   openLanguageSettings: () => void;
   openThemePicker: () => void;
   checkForUpdates: () => void;
+  askFlower: () => void;
 }>): null {
   const cmd = useCommand();
 
   createEffect(() => {
     const snapshot = props.snapshot();
     const list = [
+      { id: 'redeven.desktop.askFlower', title: props.i18n.t('environmentCenter.askFlowerCardTitle'),
+        keybind: 'mod+shift+j', allowWhileTyping: true, execute: props.askFlower },
       {
         id: 'redeven.desktop.connectEnvironment',
         title: props.i18n.t('commandPalette.connectEnvironmentTitle'),
@@ -6317,6 +6322,34 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     navigateWelcomeSurface('flower');
   }
 
+  let readTessivenContext: (() => Readonly<Record<string, unknown>>) | undefined;
+  let readFlowerContext: (() => Readonly<Record<string, unknown>>) | undefined;
+  let launcherScreenshotSource: ManualScreenshotSource | undefined;
+  const bindLauncherScreenshot = () => {
+    const element = document.getElementById('redeven-desktop-main');
+    const source = visibleSurface();
+    const environmentID = (settingsSession()?.environment ?? flowerRuntimeEnvironment())?.id;
+    const resource = () => source === 'flower' ? readFlowerContext?.().thread_id : source === 'tessiven' ? readTessivenContext?.().canvas_id : settingsSession()?.environment.id;
+    const identity = resource();
+    launcherScreenshotSource = element ? { element, valid: () => element.isConnected && visibleSurface() === source
+      && (settingsSession()?.environment ?? flowerRuntimeEnvironment())?.id === environmentID && resource() === identity } : undefined;
+  };
+  const openGlobalAskFlower = () => {
+    if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+    const environment = settingsSession()?.environment ?? flowerRuntimeEnvironment();
+    if (!environment) { openFlowerSurface(); return; }
+    bindLauncherScreenshot();
+    const page = visibleSurface();
+    const title = page === 'connect_environment' ? i18n().t('environmentCenter.title') : page === 'environment_settings' ? i18n().t('environmentCenter.environmentSettings') : page === 'flower' ? 'Flower' : 'Tessiven';
+    const context = { kind: 'text_snapshot' as const, title,
+      content: JSON.stringify({ page, ...(page === 'flower' ? readFlowerContext?.() : page === 'tessiven' ? readTessivenContext?.() : {}), environment: { id: environment.id, name: environment.label }, captured_at: new Date().toISOString() }, null, 2) };
+    const base = buildEnvironmentFlowerTurnLauncherIntent(environment);
+    setFlowerTurnLauncherIntent({ ...base, context_items: [context],
+      context_action: { ...base.context_action, context: [context] } });
+    setFlowerTurnLauncherAnchor({ x: 32, y: 80 });
+    setFlowerTurnLauncherOpen(true);
+  };
+
   function buildEnvironmentFlowerTurnLauncherIntent(environment: DesktopEnvironmentEntry): EnvironmentFlowerTurnLauncherIntent {
     const cleanLabel = trimString(environment.label) || i18n().t('environmentCenter.thisEnvironment');
     const contextSummary = environmentFlowerContextSummary(i18n(), environment);
@@ -6347,6 +6380,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       void openFlowerSurface();
       return;
     }
+    bindLauncherScreenshot();
     setFlowerTurnLauncherIntent(buildEnvironmentFlowerTurnLauncherIntent(environment));
     setFlowerTurnLauncherAnchor(anchor ?? capturePromptCardAnchor() ?? null);
     setFlowerTurnLauncherOpen(true);
@@ -6485,6 +6519,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         openLanguageSettings={openLanguageSettings}
         openThemePicker={() => setThemePickerOpenRequest((current) => current + 1)}
         checkForUpdates={checkForDesktopUpdates}
+        askFlower={openGlobalAskFlower}
       />
       <DesktopLauncherShell
         mainContentId="redeven-desktop-main"
@@ -6502,6 +6537,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         trailingActions={(
           <div class="flex items-center gap-1">
+            <TopBarIconButton label={i18n().t('environmentCenter.askFlowerCardTitle')} onClick={openGlobalAskFlower}>
+              <FlowerIcon class="h-4 w-4" />
+            </TopBarIconButton>
             <Show when={!environmentsVisible()}>
               <button
                 type="button"
@@ -6697,7 +6735,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </div>
         </Show>
         <Show when={tessivenVisited()}><div class="h-full min-h-0" style={{ display: tessivenVisible() ? undefined : 'none' }} data-desktop-page="tessiven" aria-hidden={!tessivenVisible() ? 'true' : undefined} inert={!tessivenVisible()}>
-          <TessivenPage locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
+          <TessivenPage registerPageContext={read => { readTessivenContext = read; onCleanup(() => { if (readTessivenContext === read) readTessivenContext = undefined; }); }} locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
             renderFlower={surface => {
               return <Show keyed when={flowerIdentityKey()}>{environmentID => <DesktopFlowerRuntimeBoundary embedded
                 snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())} i18n={i18n()}
@@ -6757,6 +6795,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                         modelReadResource: flowerModelReadResource,
                       });
                       return <FlowerSurface
+                        registerContextReader={read => { readFlowerContext = read; onCleanup(() => { if (readFlowerContext === read) readFlowerContext = undefined; }); }}
                         engaged={flowerVisible()}
                         transcriptVisible={flowerVisible()}
                         draftCoordinator={flowerDraftCoordinator}
@@ -6802,6 +6841,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <FlowerTurnLauncherWindow
         open={flowerTurnLauncherOpen()}
         intent={flowerTurnLauncherIntent()}
+        screenshot={{ label: i18n().t('environmentCenter.screenshot'), failed: i18n().t('environmentCenter.screenshotFailed'),
+          capture: signal => launcherScreenshotSource ? captureManualScreenshot(launcherScreenshotSource, signal, window.redevenDesktopShell?.captureScreenshot)
+            : Promise.reject(new Error('source_unavailable')) }}
         modelSource={flowerTurnLauncherAdapter}
         modelCopy={flowerSurfaceCopy()}
         anchor={flowerTurnLauncherAnchor()}

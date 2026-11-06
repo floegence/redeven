@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { PluginBackgroundStatus } from './PluginBackgroundStatus';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
@@ -372,8 +373,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   const selectedItem = createMemo(() => allItems().find((item) => item.inventoryKey === selectedInventoryKey()));
-  props.registerPageContext?.(() => ({ tab: activeTab(), query: query(), category: category(), source: sourceFilter(), lifecycle: lifecycleFilter(),
-    selected_plugin: selectedItem() ? { plugin_id: selectedItem()!.pluginID, name: selectedItem()!.displayName } : undefined }));
+  registerFlowerPageReader(() => ({ tab: activeTab(), query: query(), category: category(), source: sourceFilter(), lifecycle: lifecycleFilter(),
+    selected_plugin: selectedItem() ? { plugin_id: selectedItem()!.pluginID, name: selectedItem()!.displayName } : undefined }), props.registerPageContext);
 
   createEffect(() => {
     const item = selectedItem();

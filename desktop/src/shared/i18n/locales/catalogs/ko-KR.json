@@ -2738,7 +2738,9 @@
     "cloudSyncDetails": "동기화 세부 정보",
     "cloudTechnicalDetails": "기술 세부 정보",
     "cloudAwaitingSync": "아직 동기화되지 않음",
-    "cloudAwaitingSyncDetail": "Redeven Cloud 환경을 불러오려면 새로 고치세요."
+    "cloudAwaitingSyncDetail": "Redeven Cloud 환경을 불러오려면 새로 고치세요.",
+    "screenshot": "현재 화면 캡처",
+    "screenshotFailed": "화면을 캡처하지 못했습니다. 원래 페이지를 열어 두고 메시지가 표시되면 현재 탭을 선택하세요."
   },
   "gatewayAccess": {
     "localService": "로컬 호스트",

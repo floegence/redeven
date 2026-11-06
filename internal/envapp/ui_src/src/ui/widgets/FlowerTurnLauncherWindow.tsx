@@ -90,6 +90,7 @@ type FlowerTurnLauncherWindowProps = Readonly<{
   onDraftChange?: (draft: string) => void;
   autoFocus?: boolean;
   modelSource?: FlowerTurnLauncherPanelProps['modelSource'];
+  screenshot?: FlowerTurnLauncherPanelProps['screenshot'];
   onClose: () => void;
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
 }>;
@@ -546,6 +547,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             draft={props.draft}
             onDraftChange={props.onDraftChange}
             autoFocus={props.autoFocus}
+            screenshot={props.screenshot}
             modelSource={props.modelSource}
             onClose={props.onClose}
             onSubmit={props.onSubmit}

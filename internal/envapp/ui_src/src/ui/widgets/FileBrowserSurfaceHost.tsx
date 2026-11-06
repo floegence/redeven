@@ -1,3 +1,4 @@
+import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { Show, createEffect, createMemo, createSignal } from 'solid-js';
 import {
   DEFAULT_FILE_BROWSER_SURFACE_PERSISTENCE_KEY,
@@ -40,11 +41,13 @@ export function FileBrowserSurfaceHost() {
       <div class="redeven-file-preview-surface-window h-full min-h-0 overflow-hidden">
         <Show when={presentation()} keyed>
           {(browser) => (
+            <FlowerContextSource id="files:window" pageID="files" pageName={presentation()?.title ?? DEFAULT_FILE_BROWSER_SURFACE_TITLE} mode="overlay" selected={fileBrowserSurface.controller.open()}>
             <RemoteFileBrowser
               stateScope={browser.stateScope}
               initialPathOverride={browser.path}
               homePathOverride={browser.homePath}
             />
+            </FlowerContextSource>
           )}
         </Show>
       </div>

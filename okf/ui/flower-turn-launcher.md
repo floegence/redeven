@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower turn submission, outbox and input recall
 tags: [ui, flower, composer, commands]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -46,7 +46,7 @@ Only selected-thread canonical ordinary user messages qualify, never metadata, s
 Unmodified ArrowUp in an exactly empty textarea recalls newest eligible text. Whitespace counts as a nonempty draft. Thread changes reset history browsing while retaining each draft.
 
 ### Presentation
-All placements use localized Ask Flower... without history instructions in the placeholder. Recall restores no attachments or canonical mutations.
+Contextual PromptCard has no placeholder and opens with the real editor caret; ordinary conversation composers retain their localized concise placeholder. Recall restores no attachments or canonical mutations.
 
 # Boundaries
 

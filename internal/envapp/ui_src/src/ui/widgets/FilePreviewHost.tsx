@@ -1,3 +1,4 @@
+import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { Dynamic, Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type Component } from 'solid-js';
 import { useLayout } from '@floegence/floe-webapp-core';
@@ -204,8 +205,12 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
           </div></Portal>}</Show>
           <div data-preview-document={entry.id} role={multiple() ? 'tabpanel' : undefined} id={panelId(entry.id)} aria-labelledby={multiple() ? tabId(entry.id) : undefined} aria-label={entry.item.name}
             class="h-full min-h-0 flex-1" hidden={workspace.activeId() !== entry.id} inert={workspace.activeId() !== entry.id}>
+            <FlowerContextSource id={`preview:${entry.id}`} pageID={`preview:${entry.id}`} pageName={entry.item.name} mode="overlay"
+              state={{ path: entry.controller.item()?.path, mode: entry.controller.descriptor().mode, unsaved: entry.controller.dirty(), selection: entry.controller.selectedText() }}
+              selected={workspace.activeId() === entry.id && workspace.open()}>
             <FilePreviewPanel {...panel} active={workspace.activeId() === entry.id && workspace.open()} surface={layout.isMobile() ? 'main' : 'window'} showHeader={layout.isMobile()}
               contentRef={setContent} closeConfirmVariant="none" />
+            </FlowerContextSource>
           </div>
         </>;
       };

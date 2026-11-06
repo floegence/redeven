@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { prepareCenterApplication } from '../services/centerApplication';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { StableText } from '@floegence/floe-webapp-core/ui';
@@ -805,7 +806,6 @@ export function EnvCodespacesPage(props: { registerPageContext?: FlowerPageConte
   const i18n = useI18n();
   const activation = (() => { try { return useViewActivation(); } catch { return null; } })();
 
-  props.registerPageContext?.(() => ({ view: 'codespaces' }));
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createLoading, setCreateLoading] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
@@ -1322,6 +1322,11 @@ export function EnvCodespacesPage(props: { registerPageContext?: FlowerPageConte
   };
 
   const spaceList = () => spaces() ?? [];
+  registerFlowerPageReader(() => ({ view: 'codespaces',
+    selected_space: codespaceContextMenu()?.space.code_space_id ?? pendingIntent()?.code_space_id ?? deleteTarget()?.code_space_id,
+    visible_spaces: spaceList().slice(0, 20).map(space => ({ id: space.code_space_id, name: space.name })),
+    truncated: spaceList().length > 20,
+  }), props.registerPageContext);
   const spacesByID = createMemo(() => new Map(spaceList().map(space => [space.code_space_id, space])));
   const runtimeStatusError = () => {
     const err = runtimeResource.error;

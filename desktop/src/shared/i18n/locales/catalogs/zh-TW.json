@@ -2738,7 +2738,9 @@
     "cloudSyncDetails": "同步詳情",
     "cloudTechnicalDetails": "技術詳情",
     "cloudAwaitingSync": "尚未同步",
-    "cloudAwaitingSyncDetail": "請重新整理以載入 Redeven Cloud 環境。"
+    "cloudAwaitingSyncDetail": "請重新整理以載入 Redeven Cloud 環境。",
+    "screenshot": "擷取目前畫面",
+    "screenshotFailed": "無法擷取此畫面。請保持來源頁面開啟，並在提示時選取目前分頁。"
   },
   "gatewayAccess": {
     "localService": "本機",

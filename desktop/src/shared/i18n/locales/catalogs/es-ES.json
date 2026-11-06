@@ -2738,7 +2738,9 @@
     "cloudSyncDetails": "Detalles de sincronización",
     "cloudTechnicalDetails": "Detalles técnicos",
     "cloudAwaitingSync": "Aún no se ha sincronizado",
-    "cloudAwaitingSyncDetail": "Actualiza para cargar tus entornos de Redeven Cloud."
+    "cloudAwaitingSyncDetail": "Actualiza para cargar tus entornos de Redeven Cloud.",
+    "screenshot": "Capturar vista",
+    "screenshotFailed": "No se pudo capturar esta vista. Mantén la página abierta y selecciona la pestaña actual cuando se solicite."
   },
   "gatewayAccess": {
     "localService": "Host local",

@@ -39,6 +39,10 @@ export type DesktopRuntimeMaintenanceResult = Readonly<{
 export type RuntimeMaintenanceContext = DesktopShellRuntimeMaintenanceContext;
 
 export interface DesktopShellBridge {
+  releaseAskFlowerSource?: () => void;
+  onAskFlowerSource?: (listener: (value: import('../../../../../../desktop/src/shared/manualScreenshotIPC').DesktopAskFlowerSource) => void) => () => void;
+  captureSourceScreenshot?: (id: string) => Promise<{ png: Uint8Array }>;
+  captureScreenshot?: import("../../../../../flower_ui/src/manualScreenshot").ScreenshotBridge;
   onManagedEntranceRequest?: (listener: (request: import('../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC').ManagedEntrancePreparationRequest) => Promise<unknown>) => () => void;
   remoteDesktopDeployment?: (request: DesktopDeploymentRequest) => Promise<DesktopDeploymentResult>;
   onRemoteDesktopDeploymentProgress?: (listener: (value: DesktopDeploymentProgress) => void) => () => void;

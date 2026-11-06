@@ -3,7 +3,7 @@ export const DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL = 'redeven-desktop:web-s
 export const DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL = 'redeven-desktop:web-service-browser-state-updated';
 
 export type DesktopWebServiceBrowserAction =
-  | Readonly<{ action: 'back' | 'forward' | 'reload' | 'stop' | 'toggle_devtools' | 'open_external' }>
+  | Readonly<{ action: 'back' | 'forward' | 'reload' | 'stop' | 'toggle_devtools' | 'open_external' | 'ask_flower' }>
   | Readonly<{ action: 'navigate'; address: string }>;
 
 export type DesktopWebServiceBrowserState = Readonly<{
@@ -38,6 +38,7 @@ export function normalizeDesktopWebServiceBrowserAction(value: unknown): Desktop
     || action === 'stop'
     || action === 'toggle_devtools'
     || action === 'open_external'
+    || action === 'ask_flower'
   ) {
     return { action };
   }

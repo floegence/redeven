@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower references, origin context and canonical admission
 tags: [ui, flower, composer, references, floret]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -20,6 +20,20 @@ Ordered file/directory/page/thread chips hold connection-memory local IDs/labels
 Capture requires no resource read or editor replacement; submission uses exact visible text, terminal current screen only, excluding unloaded/unauthorized facts.
 
 Desktop Activity companion in both hosts captures origin immediately on explicit New or explicit open with no selected thread,including close reversal. Page switches/existing-thread opens never add context. Automatic reference alone cannot enable empty Send. Reuse context-preview/text component for draft/admitted snapshots without draft-authority transfer.
+
+## Global Ask Flower
+
+Redeven-owned pages expose pull readers through Floe's connection-local context-source registry. The deepest interacted source wins; menu/card focus preserves that origin. Instance IDs distinguish same-type Workbench widgets and retained preview tabs. Inputs, reading selections, file paths, terminal visible output, plugin identity and current thread identity are bounded facts, never instructions or execution authority. Hidden/inert sources cannot be captured. No background project scan is performed.
+
+The global header action and `Mod+Shift+J` open one PromptCard; repeating the command focuses its existing draft. Activity, Workbench, preview overlays, standalone Tessiven and the Desktop launcher share this behavior. Desktop CodeSpace, Web Service and hosted application child windows forward title/credential-free URL through their session owner; they never gain shell IPC authority. User-opened external browsers and other OS applications are outside this scope.
+
+Each fresh submission creates a task. Merely opening the card creates nothing. Context freezes at open; Send and unknown-admission Retry use the existing immutable request/staging path. No source watcher, automatic screenshot or model-driven capture continues during the answer.
+
+### Explicit screenshots
+
+The camera tool is the only screenshot trigger. It adds a previewable/removable image through ordinary attachment staging. Capture errors retain draft text and references; closing/reopening cancels the operation and discards late results. Source navigation or ownership changes reject the result, without silently choosing another window.
+
+Desktop captures only the main-process-bound WebContents and visible region, with pre/post checks, visible privacy-marker rejection and bounded PNG size. Browser capture requires the native picker and a matching current-tab capture handle; browsers without that verification report unavailable. Acquired tracks always stop. Prompt chrome remains mounted/focused but is omitted for the capture frame; it is restored before image encoding. Cross-origin embedded content is captured as pixels only, not inspected as host DOM; the image is a user-reviewed attachment, not a promise of automatic secret redaction.
 
 ## Thread references
 Right-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.
@@ -46,3 +60,8 @@ Labels,paths/search/context are information,never filesystem/target/execution au
 
 - `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.
 - `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.
+
+- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerContextSource.tsx` - Source ownership adapter.
+- `redeven:internal/flower_ui/src/manualScreenshot.ts` - Explicit gesture and cancellation.
+- `redeven:desktop/src/main/manualScreenshot.ts` - Authorized native capture.
+- `redeven:desktop/scripts/check-global-ask-flower.mjs` - Built Desktop/new-task/image/retry acceptance.

@@ -12,7 +12,7 @@ Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floet
 
 # Contract
 
-Pins: Floe Boot/Core/Protocol v0.93.2, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.
+Pins: Floe Boot/Core/Protocol v0.94.1, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.
 
 ## Mechanism
 
@@ -21,6 +21,8 @@ Vite loads feature styles with their lazy page chunks. Resource presentation
 components import their shared header stylesheet; the root stylesheet does not
 duplicate these imports. Every document retains the enforced 122 KiB gzip
 initial CSS budget, including Desktop development builds.
+
+Floe owns instance-based context-source capture, retained reading selection and composable PromptCard toolbar actions. Redeven supplies semantic readers and screenshot authorization.
 
 Floe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).
 

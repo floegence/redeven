@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { ActivityFlowerAnchorRegistrar } from '../flower/activityFlowerAnchor';
 import { TerminalLayoutPicker } from './TerminalLayoutPicker';
 import { TerminalViewList } from './TerminalViewList';
@@ -2292,15 +2293,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sessions().find((session) => session.id === sid) ?? null;
   });
 
-  props.registerPageContext?.(() => {
+  registerFlowerPageReader(() => {
     const session = activeSession();
     if (!session) return undefined;
     const screenText = readTerminalScreenText(viewportRegistry.get(session.id) ?? null);
     return {
       session: { id: session.id, name: session.name, working_directory: session.workingDir },
       ...(screenText ? { screen_text: screenText } : {}),
+      selection: readTerminalSelectionText(viewportRegistry.get(session.id) ?? null),
     };
-  });
+  }, props.registerPageContext);
 
   const [terminalChromeDeadlineRevision, setTerminalChromeDeadlineRevision] = createSignal(0);
   const fallbackRemoteOpeningObservedAtBySession = new Map<string, number>();

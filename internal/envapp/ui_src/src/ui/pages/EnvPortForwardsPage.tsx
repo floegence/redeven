@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
   FeedbackIndicator,
@@ -2189,11 +2190,11 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   // Search/filter state
   const [searchQuery, setSearchQuery] = createSignal('');
-  props.registerPageContext?.(() => {
+  registerFlowerPageReader(() => {
     const service = managementTarget()?.service;
     return { view: archiveView(), query: searchQuery(),
       selected_service: canRead() && service ? { id: service.service_id, name: service.name, workspace_path: service.workspace_path, template_id: service.template_id } : undefined };
-  });
+  }, props.registerPageContext);
   const [address, setAddress] = createSignal('');
   const [addressValidationVisible, setAddressValidationVisible] = createSignal(false);
   const [recentSession, setRecentSession] = createSignal<ForwardSession | null>(null);

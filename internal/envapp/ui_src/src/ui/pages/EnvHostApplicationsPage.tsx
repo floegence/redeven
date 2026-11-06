@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { type FeedbackIndicatorEntry, Button, Dropdown, Input } from '@floegence/floe-webapp-core/ui';
 import { createEnvCachedResource } from '../services/envResourceCache';
@@ -103,8 +104,8 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   let relaying = false;
   let relaySourceReceiving = false;
   let completingSetup = false;
-  props.registerPageContext?.(() => ({ query: query(), category: category(), running_only: runningOnly(),
-    selected_application: canRead() && selectedApplication() ? { id: selectedApplication()!.id, name: selectedApplication()!.name } : undefined }));
+  registerFlowerPageReader(() => ({ query: query(), category: category(), running_only: runningOnly(),
+    selected_application: canRead() && selectedApplication() ? { id: selectedApplication()!.id, name: selectedApplication()!.name } : undefined }), props.registerPageContext);
   const [quitting, setQuitting] = createSignal<{ app: HostApplication; instances: string[]; force?: boolean } | null>(null);
   const [quitBusy, setQuitBusy] = createSignal(false);
   const [quitError, setQuitError] = createSignal('');

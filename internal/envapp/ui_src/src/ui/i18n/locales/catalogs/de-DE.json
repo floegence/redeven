@@ -1035,7 +1035,9 @@
       "showingAttachedSnapshot": "Der angehängte Snapshot, den Flower erhält, wird angezeigt.",
       "queuedWithMessage": "Zusammen mit Ihrer „Flower fragen“-Nachricht in die Warteschlange gestellt.",
       "openLiveFilePreviewAction": "Live-Dateivorschau öffnen"
-    }
+    },
+    "screenshot": "Ansicht aufnehmen",
+    "screenshotFailed": "Diese Ansicht konnte nicht aufgenommen werden. Lassen Sie die Seite geöffnet und wählen Sie bei Aufforderung den aktuellen Tab."
   },
   "runtimeMonitor": {
     "permissionTitle": "Leseberechtigung erforderlich",

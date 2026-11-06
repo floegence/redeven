@@ -1,4 +1,5 @@
-import { Show, createMemo, type JSX } from 'solid-js';
+import { FlowerContextSource } from '../flower/FlowerContextSource';
+import { Show, createMemo, createUniqueId, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { EnvAppFloatingWindowStackLayer } from '../utils/envAppFloatingWindowStack';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -34,6 +35,7 @@ export interface PreviewWindowProps {
 }
 
 export function PreviewWindow(props: PreviewWindowProps) {
+  const sourceID = `preview:${createUniqueId()}`;
   const layout = useLayout();
   const i18n = useI18n();
   const isMobile = createMemo(() => layout.isMobile());
@@ -61,7 +63,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           class={cn('file-preview-floating-window overflow-hidden rounded-md', props.floatingClass)}
           contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"
         >
-          {props.children}
+          <FlowerContextSource id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
         </PersistentFloatingWindow>
       )}
     >
@@ -83,7 +85,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           props.mobileClass,
         )}
       >
-        {props.children}
+        <FlowerContextSource id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
       </Dialog>
     </Show>
   );

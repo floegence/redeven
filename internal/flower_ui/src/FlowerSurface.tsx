@@ -649,6 +649,8 @@ export type FlowerSurfaceProps = Readonly<{
   embeddedConversation?: FlowerEmbeddedConversation;
   /** Read and freeze the current host page for a new draft only. */
   captureNewConversationContext?: () => FlowerPageContextSnapshot | undefined;
+  /** Pull current visible thread identity without copying transcript state. */
+  registerContextReader?: (read: () => Readonly<Record<string, unknown>>) => void;
   /** Host-owned presentation shared with Ask Flower; snapshot validity stays here. */
   renderTaskFilePreviewContent?: Component<FlowerTaskFilePreviewContentProps>;
   renderContextSnapshotPreview?: Component<FlowerContextSnapshotPreviewProps>;
@@ -1676,6 +1678,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		const threadID = trimString(selectedThreadID());
 		return threadID ? threadCache().summaries.get(threadID) : undefined;
 	});
+  props.registerContextReader?.(() => ({ thread_id: selectedThreadID(), title: selectedThreadSummary()?.title, working_directory: selectedThreadSummary()?.working_dir }));
   const selectedThreadSettings = createMemo(() => {
     const detail = selectedThread();
     const summary = selectedThreadSummary();

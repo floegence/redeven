@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import electron from 'electron';
+import { build } from 'esbuild';
+import { PNG } from '../../internal/envapp/ui_src/node_modules/pngjs/lib/png.js';
+import { _electron, chromium } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
+import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
+import { createBuiltFlowerPreview } from './flower-preview.mjs';
+
+// A marker beneath the real card proves that captured pixels omit prompt chrome.
+async function prepareCaptureProof(page) {
+  return page.evaluate(() => {
+    const source = document.getElementById('redeven-desktop-main').getBoundingClientRect();
+    const card = document.querySelector('[data-floe-prompt-card]').getBoundingClientRect();
+    const x = Math.max(source.left, card.left) + 18;
+    const y = Math.max(source.top, card.top) + 18;
+    if (x >= Math.min(source.right, card.right) || y >= Math.min(source.bottom, card.bottom)) throw new Error('Capture proof requires an overlapping source and card.');
+    const marker = document.createElement('div'); marker.id = 'capture-proof';
+    Object.assign(marker.style, { position: 'fixed', left: `${x - 6}px`, top: `${y - 6}px`, width: '12px', height: '12px', background: 'rgb(225, 86, 165)', zIndex: '1', pointerEvents: 'none' });
+    const reference = marker.cloneNode(); reference.id = 'capture-proof-reference';
+    const referenceX = Math.min(source.right, innerWidth) - 18;
+    reference.style.left = `${referenceX - 6}px`;
+    document.body.append(marker, reference);
+    if (!document.elementFromPoint(x, y)?.closest('.floe-prompt-card-positioner')) throw new Error('The card must cover the proof marker before capture.');
+    const left = Math.max(0, Math.floor(source.left)); const top = Math.max(0, Math.floor(source.top));
+    return { x: x - left, referenceX: referenceX - left, y: y - top, width: Math.min(innerWidth, Math.ceil(source.right)) - left, height: Math.min(innerHeight, Math.ceil(source.bottom)) - top };
+  });
+}
+function verifyCaptureProof(bytes, proof) {
+  const image = PNG.sync.read(bytes);
+  const x = Math.floor(proof.x * image.width / proof.width);
+  const y = Math.floor(proof.y * image.height / proof.height);
+  const offset = (y * image.width + x) * 4;
+  const referenceOffset = (y * image.width + Math.floor(proof.referenceX * image.width / proof.width)) * 4;
+  const actual = Array.from(image.data.subarray(offset, offset + 3));
+  const reference = Array.from(image.data.subarray(referenceOffset, referenceOffset + 3));
+  assert.ok(reference[0] > reference[1] + 60 && reference[2] > reference[1] + 40, 'The unobstructed proof marker must remain visible.');
+  assert.ok(actual.every((value, index) => Math.abs(value - reference[index]) <= 3), `Screenshot must expose the marker beneath the omitted card: ${actual} versus ${reference}.`);
+}
+
+const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 180000 });
+await session.run(async () => {
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), [path.join(root, 'desktop')], { stdio: 'inherit' });
+  const state = await session.directory(await mkdtemp(path.join(tmpdir(), 'redeven-global-ask-')));
+  const output = path.join(root, 'desktop/dist/global-ask-flower-acceptance');
+  await mkdir(output, { recursive: true });
+  const preview = await createBuiltFlowerPreview(session, state);
+  await build({ stdin: { contents: "import { bootstrapDesktopShellBridge } from './desktop/src/preload/desktopShell'; bootstrapDesktopShellBridge();", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(state, 'preload.cjs') });
+  await build({ entryPoints: [path.join(root, 'desktop/src/main/manualScreenshot.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(state, 'capture.cjs') });
+  await writeFile(path.join(state, 'main.cjs'), `const { app, BrowserWindow, ipcMain } = require('electron');
+const { captureAuthorizedPage } = require('./capture.cjs');
+app.whenReady().then(() => { const win = new BrowserWindow({ width: 1440, height: 900, useContentSize: true,
+webPreferences: { preload: ${JSON.stringify(path.join(state, 'preload.cjs'))}, contextIsolation: true, sandbox: true } });
+global.captureCount = 0;
+ipcMain.handle('redeven-desktop:manual-screenshot', async (event, input) => { if(event.sender !== win.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('wrong source');
+global.captureCount++; global.captureOpacity = await event.sender.executeJavaScript("getComputedStyle(document.querySelector('.floe-prompt-card-positioner')).opacity"); const image = await captureAuthorizedPage(event.sender, { ...input, valid: () => event.sender === win.webContents });
+require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.png'))}, image.png); return image; }); win.loadURL('about:blank'); });`);
+  const app = await session.launchElectron(_electron, { executablePath: electron, args: [path.join(state, 'main.cjs'), `--user-data-dir=${state}/profile`], cwd: state, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
+  const page = await app.firstWindow(); page.setDefaultTimeout(20000);
+  const snapshot = preview.mixedEnvironmentFixture().snapshot;
+  snapshot.environments = snapshot.environments.map(entry => ({ ...entry, runtime_service: { ...(entry.runtime_service ?? entry.local_environment_runtime_service), compatibility_epoch: preview.RUNTIME_SERVICE_COMPATIBILITY_EPOCH, protocol_version: preview.RUNTIME_SERVICE_PROTOCOL_VERSION, compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: 'inspecting' } } }));
+  await page.addInitScript(snapshot => { window.navigationSnapshot = { ...snapshot, navigation_revision: 1 }; }, snapshot);
+  await page.goto(new URL('flower-navigation.html', preview.url).href);
+  await page.evaluate(() => window.navigationFixture.releaseRuntime());
+  await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+  const card = page.locator('[data-floe-prompt-card]'); await card.waitFor();
+  const editor = card.locator('textarea');
+  assert.equal(await editor.getAttribute('placeholder'), null);
+  await editor.fill('Inspect this environment');
+  assert.equal(await app.evaluate(() => global.captureCount), 0);
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+J' : 'Control+Shift+J');
+  assert.equal(await editor.inputValue(), 'Inspect this environment');
+  const nativeProof = await prepareCaptureProof(page);
+  await card.getByRole('button', { name: 'Capture view', exact: true }).click();
+  await card.getByText(/Screenshot-.*\.png/).first().waitFor();
+  assert.equal(await app.evaluate(() => global.captureCount), 1);
+  assert.equal(await app.evaluate(() => global.captureOpacity), '0');
+  verifyCaptureProof(await readFile(path.join(output, 'native-source.png')), nativeProof);
+  await page.locator('[id^=capture-proof]').evaluateAll(elements => elements.forEach(element => element.remove()));
+  assert.equal(await editor.isEnabled(), true);
+  await card.getByRole('combobox').click();
+  await page.getByRole('option').filter({ hasText: 'claude-sonnet-4.5' }).last().waitFor();
+  assert.ok(await page.getByText('Team Gateway', { exact: true }).count());
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: path.join(output, 'desktop-card.png') });
+  await card.locator('.floe-prompt-card-submit').click();
+  await page.waitForFunction(() => window.navigationFixture.turnRequests.length === 1);
+  const first = await page.evaluate(() => window.navigationFixture.turnRequests[0]);
+  assert.equal(first.thread_id, undefined);
+  assert.ok(first.create.client_request_id);
+  assert.equal(first.input.context_action.context[0].kind, 'text_snapshot');
+  assert.equal((await page.evaluate(() => window.navigationFixture.uploads.length)), 1);
+  await card.locator('.floe-prompt-card-submit').click();
+  await page.waitForFunction(() => window.navigationFixture.turnRequests.length === 2);
+  assert.deepEqual(await page.evaluate(() => window.navigationFixture.turnRequests[1]), first);
+  assert.equal(await app.evaluate(() => global.captureCount), 1);
+  const browser = await session.launchBrowser(chromium, { headless: false, args: ['--auto-select-tab-capture-source-by-title=Redeven capture acceptance', '--allow-http-screen-capture'] });
+  const browserPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await browserPage.addInitScript(snapshot => { window.navigationSnapshot = { ...snapshot, navigation_revision: 1 }; }, snapshot);
+  await browserPage.goto(new URL('flower-navigation.html', preview.url).href);
+  await browserPage.evaluate(() => { document.title = 'Redeven capture acceptance'; window.navigationFixture.releaseRuntime(); });
+  await browserPage.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+  const browserCard = browserPage.locator('[data-floe-prompt-card]');
+  await browserPage.evaluate(() => {
+    const original = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getDisplayMedia = async options => { try { const stream = await original(options); window.captureDiagnostic = { handle: stream.getVideoTracks()[0].getCaptureHandle?.(), settings: stream.getVideoTracks()[0].getSettings() }; return stream; } catch (error) { window.captureDiagnostic = { error: String(error) }; throw error; } };
+  });
+  const browserProof = await prepareCaptureProof(browserPage);
+  await browserCard.getByRole('button', { name: 'Capture view', exact: true }).click();
+  try { await browserCard.getByText(/Screenshot-.*\.png/).first().waitFor({ timeout: 20000 }); }
+  catch (error) { console.error('Browser capture:', await browserPage.evaluate(() => ({ capture: window.captureDiagnostic, feedback: document.querySelector('[role=alert]')?.textContent, support: typeof navigator.mediaDevices.setCaptureHandleConfig }))); throw error; }
+  const pixels = await browserCard.locator('img').evaluate(async image => Array.from(new Uint8Array(await (await fetch(image.src)).arrayBuffer())));
+  await writeFile(path.join(output, 'browser-source.png'), Buffer.from(pixels));
+  verifyCaptureProof(Buffer.from(pixels), browserProof);
+  await browserPage.locator('[id^=capture-proof]').evaluateAll(elements => elements.forEach(element => element.remove()));
+  await browserPage.screenshot({ path: path.join(output, 'browser-card.png') });
+  await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: true, nativeCapture: true, chromiumTabCapture: true, automaticCaptures: 0, uploads: 1, retryRetainsRequest: true, floe: JSON.parse(await readFile(path.join(root, 'desktop/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version }, null, 2));
+  console.log('Global Ask Flower native acceptance passed:', output);
+});

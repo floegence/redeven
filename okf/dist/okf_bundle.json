@@ -10739,15 +10739,15 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 3122,
+      "body_length": 3306,
       "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Manifest/lock pins define the consumed release; Floe owns asset monitoring and per-view recovery, while Redeven supplies authenticated product integration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.93.2, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
-          "char_count": 1618
+          "body": "Pins: Floe Boot/Core/Protocol v0.94.1, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns instance-based context-source capture, retained reading selection and composable PromptCard toolbar actions. Redeven supplies semantic readers and screenshot authorization.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "char_count": 1802
         },
         {
           "id": "boundaries",
@@ -21877,7 +21877,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "composer",
           "floret",
@@ -21888,15 +21888,15 @@
         "title": "Flower references, origin context and canonical admission",
         "type": "UI Contract"
       },
-      "body_length": 4078,
+      "body_length": 6707,
       "summary": "Connection-local chips carry authorized discovery and frozen page/thread context into explicit Send. Floret alone owns admitted ordered references. Labels and paths grant no authority; source failures retain drafts and outbox reconciliation never overwrites newer input or creates duplicate canonical records.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Reference drafts\nLauncher/Tessiven linked chips wrap/scroll in bounded input;editable @ requires whitespace boundary/collapsed caret. Focus changes color without changing1px geometry/shadow;retain candidate/action focus. Discover under immutable thread cwd or new-thread directory draft;slashless token uses bounded global matching. Root failures Retry,inaccessible descendants skip within bound.\n\nOrdered file/directory/page/thread chips hold connection-memory local IDs/labels,never another connection/persistence. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Queue preview binds exact ThreadID/QueueID/ReferenceID;resubmit reauthorizes. Only outbox retains original ordinary launch until canonical confirmation/terminal cleanup;after admission read canonical references through current authorization,no second queryable mapping.\n\n## Origin page\nCapture requires no resource read or editor replacement; submission uses exact visible text, terminal current screen only, excluding unloaded/unauthorized facts.\n\nDesktop Activity companion in both hosts captures origin immediately on explicit New or explicit open with no selected thread,including close reversal. Page switches/existing-thread opens never add context. Automatic reference alone cannot enable empty Send. Reuse context-preview/text component for draft/admitted snapshots without draft-authority transfer.\n\n## Thread references\nRight-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.\n\n## Context actions\nOne authorized privacy-checked mapper emits ordered MessageReference and UserInput.Context snapshots. Malformed/forged/unknown input or failed projection rejects admission and preserves editable drafts.\n\nOne assistant.ask.flower action carries target/source/presentation/typed items. Runtime enforces privacy matrix:file_path for files,terminal_selection for terminal,process_snapshot for monitoring,bounded text_snapshot for Git/environment. Never reconstruct references from product action copies. Product routing commands independently resolve/authorize environment target. Missing thread/reference means absence;other Floret failures remain unavailable,no product fallback.",
-          "char_count": 2485
+          "body": "## Reference drafts\nLauncher/Tessiven linked chips wrap/scroll in bounded input;editable @ requires whitespace boundary/collapsed caret. Focus changes color without changing1px geometry/shadow;retain candidate/action focus. Discover under immutable thread cwd or new-thread directory draft;slashless token uses bounded global matching. Root failures Retry,inaccessible descendants skip within bound.\n\nOrdered file/directory/page/thread chips hold connection-memory local IDs/labels,never another connection/persistence. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Queue preview binds exact ThreadID/QueueID/ReferenceID;resubmit reauthorizes. Only outbox retains original ordinary launch until canonical confirmation/terminal cleanup;after admission read canonical references through current authorization,no second queryable mapping.\n\n## Origin page\nCapture requires no resource read or editor replacement; submission uses exact visible text, terminal current screen only, excluding unloaded/unauthorized facts.\n\nDesktop Activity companion in both hosts captures origin immediately on explicit New or explicit open with no selected thread,including close reversal. Page switches/existing-thread opens never add context. Automatic reference alone cannot enable empty Send. Reuse context-preview/text component for draft/admitted snapshots without draft-authority transfer.\n\n## Global Ask Flower\n\nRedeven-owned pages expose pull readers through Floe's connection-local context-source registry. The deepest interacted source wins; menu/card focus preserves that origin. Instance IDs distinguish same-type Workbench widgets and retained preview tabs. Inputs, reading selections, file paths, terminal visible output, plugin identity and current thread identity are bounded facts, never instructions or execution authority. Hidden/inert sources cannot be captured. No background project scan is performed.\n\nThe global header action and `Mod+Shift+J` open one PromptCard; repeating the command focuses its existing draft. Activity, Workbench, preview overlays, standalone Tessiven and the Desktop launcher share this behavior. Desktop CodeSpace, Web Service and hosted application child windows forward title/credential-free URL through their session owner; they never gain shell IPC authority. User-opened external browsers and other OS applications are outside this scope.\n\nEach fresh submission creates a task. Merely opening the card creates nothing. Context freezes at open; Send and unknown-admission Retry use the existing immutable request/staging path. No source watcher, automatic screenshot or model-driven capture continues during the answer.\n\n### Explicit screenshots\n\nThe camera tool is the only screenshot trigger. It adds a previewable/removable image through ordinary attachment staging. Capture errors retain draft text and references; closing/reopening cancels the operation and discards late results. Source navigation or ownership changes reject the result, without silently choosing another window.\n\nDesktop captures only the main-process-bound WebContents and visible region, with pre/post checks, visible privacy-marker rejection and bounded PNG size. Browser capture requires the native picker and a matching current-tab capture handle; browsers without that verification report unavailable. Acquired tracks always stop. Prompt chrome remains mounted/focused but is omitted for the capture frame; it is restored before image encoding. Cross-origin embedded content is captured as pixels only, not inspected as host DOM; the image is a user-reviewed attachment, not a promise of automatic secret redaction.\n\n## Thread references\nRight-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.\n\n## Context actions\nOne authorized privacy-checked mapper emits ordered MessageReference and UserInput.Context snapshots. Malformed/forged/unknown input or failed projection rejects admission and preserves editable drafts.\n\nOne assistant.ask.flower action carries target/source/presentation/typed items. Runtime enforces privacy matrix:file_path for files,terminal_selection for terminal,process_snapshot for monitoring,bounded text_snapshot for Git/environment. Never reconstruct references from product action copies. Product routing commands independently resolve/authorize environment target. Missing thread/reference means absence;other Floret failures remain unavailable,no product fallback.",
+          "char_count": 4737
         },
         {
           "id": "boundaries",
@@ -21909,8 +21909,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Source.\n- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Tests.\n\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Source.\n\n- [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).\n- [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).\n\n- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.\n- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.",
-          "char_count": 922
+          "body": "- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Source.\n- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Tests.\n\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Source.\n\n- [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).\n- [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).\n\n- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.\n- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.\n\n- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerContextSource.tsx` - Source ownership adapter.\n- `redeven:internal/flower_ui/src/manualScreenshot.ts` - Explicit gesture and cancellation.\n- `redeven:desktop/src/main/manualScreenshot.ts` - Authorized native capture.\n- `redeven:desktop/scripts/check-global-ask-flower.mjs` - Built Desktop/new-task/image/retry acceptance.",
+          "char_count": 1299
         }
       ],
       "evidence": [
@@ -21943,6 +21943,26 @@
           "id": "redeven:desktop/src/welcome/environmentFlowerContext.test.ts:0:tests.",
           "source": "redeven:desktop/src/welcome/environmentFlowerContext.test.ts",
           "description": "Tests."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/flower/FlowerContextSource.tsx:0:source ownership adapter.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/flower/FlowerContextSource.tsx",
+          "description": "Source ownership adapter."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/manualScreenshot.ts:0:explicit gesture and cancellation.",
+          "source": "redeven:internal/flower_ui/src/manualScreenshot.ts",
+          "description": "Explicit gesture and cancellation."
+        },
+        {
+          "id": "redeven:desktop/src/main/manualScreenshot.ts:0:authorized native capture.",
+          "source": "redeven:desktop/src/main/manualScreenshot.ts",
+          "description": "Authorized native capture."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-global-ask-flower.mjs:0:built desktop/new-task/image/retry acceptance.",
+          "source": "redeven:desktop/scripts/check-global-ask-flower.mjs",
+          "description": "Built Desktop/new-task/image/retry acceptance."
         }
       ],
       "snippet": "Connection-local chips carry authorized discovery and frozen page/thread context into explicit Send. Floret alone owns admitted ordered references. Labels and paths grant no authority; source failures retain drafts and outbox reconciliation",
@@ -24019,7 +24039,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-05",
         "tags": [
           "commands",
           "composer",
@@ -24029,15 +24049,15 @@
         "title": "Flower turn submission, outbox and input recall",
         "type": "UI Contract"
       },
-      "body_length": 4090,
+      "body_length": 4153,
       "summary": "One immutable transport outbox captures ordinary submitted text and resources before asynchronous admission. Request identity survives receipt/live ordering and explicit recovery, while newer composer edits remain independent. Canonical confirmation retires transport state; recalling history never submits or restores attachments.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Submission\nCore commands reject missing, duplicate, invalid or conflicting IDs; only the legacy RPC adapter may fill a missing one. [Goals](../ai/flower-goals.md) share the outbox. Empty-thread creation retains text/reference/attachment authority; first Send binds staged resources to the authorized canonical thread. Unknown effect outcomes are terminal with safe explanation and no replay action.\n\n### Immediate send feedback\nThe immutable transport outbox owns submitted text, references and attachment\nmetadata before IndexedDB or HTTP completes. Ordinary sends render a pending\nuser row immediately and consume only the captured draft; newer edits stay in\nthe composer. Request-key message and section identities survive canonical\nadmission, including receipt/live ordering and prepended history. Images reserve\nthe same thumbnail geometry and use the authorized staged preview until admitted.\nFailed and unknown outcomes retain the frozen request for explicit recovery;\nserver 5xx responses never prove rejection or authorize a fresh request identity.\n\nProduct admission uses published SendAck and narrow canonical summaries. HTTP\nand RPC return admission identity without a post-commit history read; authorized\nwindow observation supplies presentation separately. Agent preparation binds the\nalready persisted execution authority to the admitted turn. No duplicate\npost-admission authority write or second conversation lifecycle is introduced.\nFull model history remains an engine execution requirement, not a prerequisite\nfor painting the submitted message.\n\n### Restored data and preserved inputs\nNew submissions capture storage generation immediately, even behind paused dispatch. Rejected input stays copyable/restorable; running it requires explicit new submission, never resumed old approvals/effects.\n\n### Context preview presentation\nOne Env App `FlowerContextPreviewWindow` uses existing preview/text components for launcher and draft/canonical snapshots. Launcher owns attachment IO, sequencing and URL cleanup; Flower owns validity. Related-surface markers preserve input ownership; Escape dismisses preview before companion.\n\n## Input recall\n### Candidates and ownership\nOnly selected-thread canonical ordinary user messages qualify, never metadata, secrets or structured answers. [Composer references](flower-composer-references.md#reference-drafts) owns draft scope.\n\n### Keyboard interaction\nUnmodified ArrowUp in an exactly empty textarea recalls newest eligible text. Whitespace counts as a nonempty draft. Thread changes reset history browsing while retaining each draft.\n\n### Presentation\nAll placements use localized Ask Flower... without history instructions in the placeholder. Recall restores no attachments or canonical mutations.",
-          "char_count": 2764
+          "body": "## Submission\nCore commands reject missing, duplicate, invalid or conflicting IDs; only the legacy RPC adapter may fill a missing one. [Goals](../ai/flower-goals.md) share the outbox. Empty-thread creation retains text/reference/attachment authority; first Send binds staged resources to the authorized canonical thread. Unknown effect outcomes are terminal with safe explanation and no replay action.\n\n### Immediate send feedback\nThe immutable transport outbox owns submitted text, references and attachment\nmetadata before IndexedDB or HTTP completes. Ordinary sends render a pending\nuser row immediately and consume only the captured draft; newer edits stay in\nthe composer. Request-key message and section identities survive canonical\nadmission, including receipt/live ordering and prepended history. Images reserve\nthe same thumbnail geometry and use the authorized staged preview until admitted.\nFailed and unknown outcomes retain the frozen request for explicit recovery;\nserver 5xx responses never prove rejection or authorize a fresh request identity.\n\nProduct admission uses published SendAck and narrow canonical summaries. HTTP\nand RPC return admission identity without a post-commit history read; authorized\nwindow observation supplies presentation separately. Agent preparation binds the\nalready persisted execution authority to the admitted turn. No duplicate\npost-admission authority write or second conversation lifecycle is introduced.\nFull model history remains an engine execution requirement, not a prerequisite\nfor painting the submitted message.\n\n### Restored data and preserved inputs\nNew submissions capture storage generation immediately, even behind paused dispatch. Rejected input stays copyable/restorable; running it requires explicit new submission, never resumed old approvals/effects.\n\n### Context preview presentation\nOne Env App `FlowerContextPreviewWindow` uses existing preview/text components for launcher and draft/canonical snapshots. Launcher owns attachment IO, sequencing and URL cleanup; Flower owns validity. Related-surface markers preserve input ownership; Escape dismisses preview before companion.\n\n## Input recall\n### Candidates and ownership\nOnly selected-thread canonical ordinary user messages qualify, never metadata, secrets or structured answers. [Composer references](flower-composer-references.md#reference-drafts) owns draft scope.\n\n### Keyboard interaction\nUnmodified ArrowUp in an exactly empty textarea recalls newest eligible text. Whitespace counts as a nonempty draft. Thread changes reset history browsing while retaining each draft.\n\n### Presentation\nContextual PromptCard has no placeholder and opens with the real editor caret; ordinary conversation composers retain their localized concise placeholder. Recall restores no attachments or canonical mutations.",
+          "char_count": 2827
         },
         {
           "id": "boundaries",
@@ -25894,5 +25914,5 @@
       ]
     }
   ],
-  "source_sha256": "4cc14eaa77b3960faa382134ddced76fd4a7754a4841929175b095d3173c1178"
+  "source_sha256": "8a3464ba0c6920df3eb43523ae84c97db63e6d89791303b1438c609f778cbcd4"
 }

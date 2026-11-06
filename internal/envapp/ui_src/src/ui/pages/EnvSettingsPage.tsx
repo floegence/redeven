@@ -1,3 +1,4 @@
+import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import './runtime-settings-compact.css';
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
@@ -101,6 +102,7 @@ const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
 
 function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue } = {}) {
   const ctx = props.context ?? useEnvSettingsPage();
+  registerFlowerPageReader(() => ({ section: ctx.activeSection() }));
   const i18n = useI18n();
 
   const localizedItems = createMemo(() => (

@@ -1,7 +1,10 @@
+import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
+import { captureManualScreenshot, type ManualScreenshotSource } from '../../../../flower_ui/src/manualScreenshot';
+import { buildAskFlowerContextAction } from './contextActions/askFlower';
 import type { ActivityFlowerAnchorPalette, ActivityFlowerAnchorRegistrar } from './flower/activityFlowerAnchor';
 import { installCenterEntryActivity } from './services/centerEntryActivity';
 import { prepareCenterPluginOrigin } from './services/pluginWebOrigin';
-import { createFlowerPageContextRegistry, flowerPageContextSnapshot, type FlowerPageContextRegistrar } from './flower/flowerPageContext';
+import { flowerPageContextSnapshot } from './flower/flowerPageContext';
 import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
@@ -1216,24 +1219,19 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
   const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
-  const flowerPageContexts = createFlowerPageContextRegistry();
-  const registerPageContext = (pageID: string): FlowerPageContextRegistrar => read => {
-    onCleanup(flowerPageContexts.register(pageID, read));
-  };
+  const flowerContextSources = createFlowerContextSources();
+  onCleanup(() => flowerContextSources.dispose());
+  let externalScreenshot: ((signal: AbortSignal) => Promise<File>) | undefined;
+  let flowerScreenshotSource: ManualScreenshotSource | undefined;
   const captureNewConversationContext = () => {
     if (standaloneTessiven || viewMode() !== 'activity' || layout.isMobile() || flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench') return undefined;
     const pageID = layout.sidebarActiveTab();
     if (pageID === 'ai') return undefined;
-    const plugin = pinnedActivityPluginTiles().find(tile => pluginActivityComponentID(tile.item.inventoryKey) === pageID);
-    const pluginTarget = plugin ? activityPluginPageRuntimes.get(plugin.item.inventoryKey)?.target() : undefined;
-    const pageName = plugin?.item.displayName ?? components().find(component => component.id === pageID)?.name;
+    const source = captureFlowerSource(true);
+    const pageName = source?.value.pageName ?? components().find(component => component.id === pageID)?.name;
     if (!pageName) return undefined;
-    return flowerPageContextSnapshot({
-      environmentID: envId(), environmentName: environmentName(), pageID, pageName, capturedAtMs: Date.now(),
-      state: plugin ? { plugin_id: plugin.item.pluginID, plugin_name: plugin.item.displayName,
-        instance_id: pluginTarget?.pluginInstanceID, surface_id: pluginTarget?.surfaceID }
-        : flowerPageContexts.read(pageID),
-    });
+    return flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(), pageID: source?.value.pageID ?? pageID, pageName,
+      capturedAtMs: Date.now(), state: source?.value.state });
   };
 
   const activeSurface = createMemo<EnvSurfaceId>(() => {
@@ -1910,7 +1908,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         id: pluginActivityComponentID(inventoryKey),
         name: tile.item.displayName,
         icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
-        component: runtime.component,
+        component: () => <FlowerContextSource id={`activity:plugin:${inventoryKey}`} pageID={pluginActivityComponentID(inventoryKey)}
+          pageName={tile.item.displayName} mode="activity" selected={viewMode() === 'activity' && layout.sidebarActiveTab() === pluginActivityComponentID(inventoryKey)}>
+          <runtime.component />
+        </FlowerContextSource>,
         sidebar: {
           order: 102 + index,
           fullScreen: true,
@@ -2579,11 +2580,52 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (restoreFocus) setActivityFlowerComposerFocusRequest((request) => request + 1);
   };
 
+  const captureFlowerSource = (excludeConversation = false) => {
+    const active = flowerContextSources.capture();
+    if (active && (!excludeConversation || active.value.pageID !== 'ai') && (
+      active.value.mode === 'overlay' || (active.value.mode === viewMode()
+        && (viewMode() !== 'activity' || active.value.pageID === layout.sidebarActiveTab())))) return active;
+    const page = viewMode() === 'activity' ? layout.sidebarActiveTab() : 'workbench';
+    const pageElement = Array.from(document.querySelectorAll<HTMLElement>('[data-flower-context-source]')).find(element =>
+      element.dataset.flowerContextMode === viewMode() && element.dataset.flowerContextPage === page && element.getClientRects().length > 0);
+    return pageElement ? flowerContextSources.capture(pageElement) : undefined;
+  };
+  const bindScreenshotSource = () => {
+    externalScreenshot = undefined;
+    const source = captureFlowerSource();
+    const environment = envId();
+    const mode = viewMode();
+    const page = layout.sidebarActiveTab();
+    const sourceKey = (state: Readonly<Record<string, unknown>> | undefined) => JSON.stringify([
+      state?.path, state?.directory, state?.repository, state?.canvas_id, state?.instance_id, state?.diff, state?.thread_id,
+      (state?.session as { id?: string } | undefined)?.id,
+    ]);
+    const identity = sourceKey(source?.value.state);
+    flowerScreenshotSource = source ? { element: source.element, valid: () => source.element.isConnected &&
+      environment === envId() && mode === viewMode() && (mode !== 'activity' || page === layout.sidebarActiveTab())
+      && flowerContextSources.capture(source.element)?.id === source.id
+      && sourceKey(flowerContextSources.capture(source.element)?.value.state) === identity } : undefined;
+  };
+  const openGlobalAskFlower = () => {
+    if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+    const source = captureFlowerSource();
+    const pageID = source?.value.pageID ?? (viewMode() === 'activity' ? layout.sidebarActiveTab() : 'workbench');
+    const snapshot = flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
+      pageID, pageName: source?.value.pageName ?? environmentName(), capturedAtMs: Date.now(),
+      state: { ...source?.value.state, ...(source ? { source_instance_id: source.id } : {}),
+        ...(source?.selection ? { selection: Array.from(source.selection).slice(0, 6000).join('') } : {}) } });
+    const context = { kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content };
+    openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
+      context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source?.id }) },
+      source ? { x: source.rect.x + Math.min(28, source.rect.width / 4), y: source.rect.y + Math.min(48, source.rect.height / 4) } : undefined);
+  };
+
   const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
     if (!hasRWXPermissions(env())) {
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
+    bindScreenshotSource();
     const capturedAnchor = anchor ?? capturePromptCardAnchor();
     const capturedMode = viewMode();
     if (flowerProductPanelRef?.contains(document.activeElement)) {
@@ -2644,6 +2686,20 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   onMount(() => {
+    const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(source => {
+      if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+      const context = { kind: 'text_snapshot' as const, title: source.title || environmentName(), content: JSON.stringify(source, null, 2) };
+      openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
+        context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source.id }) }, { x: 32, y: 80 });
+      if (!flowerTurnLauncherOpen()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
+      externalScreenshot = async signal => {
+        signal.throwIfAborted();
+        const result = await window.redevenDesktopShell?.captureSourceScreenshot?.(source.id);
+        signal.throwIfAborted(); if (!result) throw new Error('source_unavailable');
+        return new File([new Uint8Array(result.png)], `Screenshot-${Date.now()}.png`, { type: 'image/png' });
+      };
+    });
+    onCleanup(() => stopAsk?.());
     const stop = window.redevenDesktopShell?.onRemoteDesktopFiles?.(() => openSurface('files'));
     onCleanup(() => stop?.());
   });
@@ -2808,6 +2864,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   const closeFlowerTurnLauncher = (restoreOrigin = true) => {
+    window.redevenDesktopShell?.releaseAskFlowerSource?.();
+    externalScreenshot = undefined;
+    flowerScreenshotSource = undefined;
     flowerTurnLauncherRequest = null;
     const handoff = flowerTurnLauncherHandoff();
     if (restoreOrigin && handoff?.mode === 'activity') {
@@ -4002,7 +4061,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const renderPluginCenter = (embedded = false) => (
         <PluginCenterView
-          registerPageContext={embedded ? undefined : registerPageContext(PLUGIN_CENTER_ACTIVITY_ID)}
           visible={embedded ? workbenchPluginCenterOpen() && viewMode() === 'workbench' : viewMode() === 'activity' && layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID}
           pluginWidgetCounts={pluginWidgetCounts()}
           projection={pluginInventoryProjection() ?? { items: [] }}
@@ -4047,15 +4105,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
 
   const ActivityTerminalPage = () => <EnvTerminalPage
-    registerPageContext={registerPageContext('terminal')}
     registerActivityFlowerAnchor={canUseFlower() ? registerActivityFlowerAnchor : undefined}
   />;
-  const ActivityMonitorPage = () => <EnvMonitorPage registerPageContext={registerPageContext('monitor')} />;
-  const ActivityFileBrowserPage = () => <EnvFileBrowserPage registerPageContext={registerPageContext('files')} />;
-  const ActivityCodespacesPage = () => <EnvCodespacesPage registerPageContext={registerPageContext('codespaces')} />;
-  const ActivityPortForwardsPage = () => <EnvPortForwardsPage registerPageContext={registerPageContext('ports')} />;
-  const ActivityHostApplicationsPage = () => <EnvHostApplicationsPage registerPageContext={registerPageContext('applications')} />;
-  const ActivityContainersPage = () => <EnvContainersPage registerPageContext={registerPageContext('containers')} />;
+  const ActivityMonitorPage = () => <EnvMonitorPage />;
+  const ActivityFileBrowserPage = () => <EnvFileBrowserPage />;
+  const ActivityCodespacesPage = () => <EnvCodespacesPage />;
+  const ActivityPortForwardsPage = () => <EnvPortForwardsPage />;
+  const ActivityHostApplicationsPage = () => <EnvHostApplicationsPage />;
+  const ActivityContainersPage = () => <EnvContainersPage />;
 
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
@@ -4094,7 +4151,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       id: ENV_TESSIVEN_ACTIVITY_ID,
       name: i18n.t('shell.tessivenLabel'),
       icon: ActivityBarTessivenIcon,
-      component: () => <EnvTessivenPage registerPageContext={registerPageContext(ENV_TESSIVEN_ACTIVITY_ID)} openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
+      component: () => <EnvTessivenPage openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
       sidebar: { order: 97, fullScreen: true },
     });
     list.push({
@@ -4106,7 +4163,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
     list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: ActivityBarSettingsIcon, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
     list.push({ id: PENDING_ACTIVITY_PLUGIN_ID, name: i18n.t('uiCopy.plugin.continuity.loading'), icon: ActivityBarPluginsIcon, component: ActivityPageLoading, sidebar: { order: 101, fullScreen: true } });
-    return list;
+    return list.map(item => ({ ...item, component: () => <FlowerContextSource
+      id={`activity:${item.id}`} pageID={item.id} pageName={item.name} mode="activity"
+      selected={viewMode() === 'activity' && layout.sidebarActiveTab() === item.id}>
+      <item.component />
+    </FlowerContextSource> }));
   });
 
   const pageModules = { terminal: EnvTerminalPage, monitor: EnvMonitorPage, files: EnvFileBrowserPage,
@@ -4750,6 +4811,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
 
     if (canUseFlower()) {
+      list.push({ id: 'redeven.askFlower', title: i18n.t('flowerTurnLauncher.windowTitle'),
+        category: commandCategory, keybind: 'mod+shift+j', allowWhileTyping: true, icon: FlowerNavigationIcon, execute: openGlobalAskFlower });
       list.push({
         id: 'redeven.env.goToFlower',
         title: i18n.t('shell.commandPalette.goToFlowerTitle'),
@@ -5002,6 +5065,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const HeaderActions = () => (
     <div class="flex items-center gap-1">
+      <Show when={canUseFlower()}><TopBarIconButton label={i18n.t('flowerTurnLauncher.windowTitle')}
+        tooltip={topBarTooltip(i18n.t('flowerTurnLauncher.windowTitle'))} onClick={openGlobalAskFlower}>
+        <ActivityBarFlowerIcon class="w-4 h-4" />
+      </TopBarIconButton></Show>
       <Show when={!layout.isMobile()}>
         <EnvDisplayModeSwitcher
           mode={viewModeSelection.visual()}
@@ -5332,6 +5399,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         aria-hidden={recoveryVisible() || workbenchPluginCenterBlocking() ? 'true' : undefined}
       >
         <Show when={activityContentAvailable()}>
+          <FlowerContextSource id="workbench:canvas" pageID="workbench" pageName="Workbench" mode="workbench">
           <EnvWorkbenchPage
             inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
             dockItems={pluginDockItems()}
@@ -5351,6 +5419,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
               workbenchPluginSurfaceController = controller;
             }}
           />
+          </FlowerContextSource>
         </Show>
         <Show when={viewMode() === 'workbench' && !activityContentAvailable()}>
           {accessGatePanel()}
@@ -5360,7 +5429,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <PluginCenterDrawer open={workbenchPluginCenterOpen() && viewMode() === 'workbench' && !recoveryVisible()}
           onOpenChange={setWorkbenchPluginCenterOpen} onPresenceChange={onPluginCenterPresenceChange}
           title={i18n.t('uiCopy.plugin.centerTitle')}>
-          {renderPluginCenter(true)}
+          <FlowerContextSource id="workbench:plugins" pageID="plugins" pageName={i18n.t('uiCopy.plugin.centerTitle')} mode="overlay" selected={workbenchPluginCenterOpen() && viewMode() === 'workbench'}>{renderPluginCenter(true)}</FlowerContextSource>
         </PluginCenterDrawer>
       </Show>
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>
@@ -5406,7 +5475,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       )}>
         <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
           <Suspense fallback={<ActivityPageLoading />}>
-            <EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone />
+            <div class="h-full min-h-0 flex flex-col">
+              <div class="flex shrink-0 justify-end px-2 py-1"><TopBarIconButton label={i18n.t('flowerTurnLauncher.windowTitle')} onClick={openGlobalAskFlower}><ActivityBarFlowerIcon class="h-4 w-4" /></TopBarIconButton></div>
+              <div class="min-h-0 flex-1"><EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone /></div>
+            </div>
           </Suspense>
         </ErrorBoundary>
       </Show>
@@ -5516,7 +5588,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
 
   return (
-    <EnvContext.Provider
+    <FlowerContextSources.Provider value={flowerContextSources}><EnvContext.Provider
       value={{
         resourceCacheAccess,
         flowerScopeKey,
@@ -5669,6 +5741,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                     anchor={flowerTurnLauncherAnchor()}
                     onClose={closeFlowerTurnLauncher}
                     onSubmit={submitFlowerTurnLauncher}
+                    screenshot={{ label: i18n.t('flowerTurnLauncher.screenshot'), failed: i18n.t('flowerTurnLauncher.screenshotFailed'),
+                      capture: signal => externalScreenshot ? externalScreenshot(signal) : flowerScreenshotSource ? captureManualScreenshot(flowerScreenshotSource, signal, window.redevenDesktopShell?.captureScreenshot)
+                        : Promise.reject(new Error('source_unavailable')) }}
                   />
               </FloeRegistryRuntime>
             </RuntimeUpdateContext.Provider>
@@ -5676,6 +5751,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         </FileBrowserSurfaceContext.Provider>
         </DownloadContext.Provider>
       </TerminalSessionCatalogProvider>
-    </EnvContext.Provider>
+    </EnvContext.Provider></FlowerContextSources.Provider>
   );
 }

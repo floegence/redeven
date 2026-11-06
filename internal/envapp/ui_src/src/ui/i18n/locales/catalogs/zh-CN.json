@@ -1035,7 +1035,9 @@
       "showingAttachedSnapshot": "正在显示将发送给 Flower 的附件快照。",
       "queuedWithMessage": "已随你的 Ask Flower 消息排队。",
       "openLiveFilePreviewAction": "打开实时文件预览"
-    }
+    },
+    "screenshot": "截取当前视图",
+    "screenshotFailed": "无法截取此视图。请保持来源页面打开，并在提示时选择当前标签页。"
   },
   "runtimeMonitor": {
     "permissionTitle": "需要读取权限",

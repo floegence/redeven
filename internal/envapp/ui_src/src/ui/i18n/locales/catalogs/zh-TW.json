@@ -1035,7 +1035,9 @@
       "showingAttachedSnapshot": "正在顯示將傳送給 Flower 的附件快照。",
       "queuedWithMessage": "已連同你給 Flower 的訊息排入佇列。",
       "openLiveFilePreviewAction": "開啟即時檔案預覽"
-    }
+    },
+    "screenshot": "擷取目前畫面",
+    "screenshotFailed": "無法擷取此畫面。請保持來源頁面開啟，並在提示時選取目前分頁。"
   },
   "runtimeMonitor": {
     "permissionTitle": "需要讀取權限",
