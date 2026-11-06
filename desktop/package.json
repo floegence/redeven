@@ -21,6 +21,7 @@
     "test:startup-continuity": "node scripts/check-startup-continuity.mjs",
     "test:flower-startup": "node scripts/check-flower-startup.mjs",
     "test:office-preview": "node scripts/check-office-preview.mjs",
+    "test:ask-flower-previews": "node scripts/check-ask-flower-previews.mjs",
     "test:global-ask-flower": "node scripts/check-global-ask-flower.mjs",
     "test:flower-media": "node scripts/check-flower-media.mjs",
     "test": "vitest run && vitest run --config vitest.client.config.mts",

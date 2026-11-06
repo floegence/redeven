@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "{target} の添付スナップショットをプレビュー"
     },
     "preview": {
-      "imageSnapshotNotice": "画像スナップショットは Flower に送信されますが、インライン画像表示はライブファイルプレビューに残ります。",
-      "pdfSnapshotNotice": "PDF スナップショットは Flower に送信されますが、インライン PDF 表示はライブファイルプレビューに残ります。",
-      "documentSnapshotNotice": "ドキュメントスナップショットは Flower に送信されますが、インラインドキュメント表示はライブファイルプレビューに残ります。",
-      "spreadsheetSnapshotNotice": "スプレッドシートスナップショットは Flower に送信されますが、インラインスプレッドシート表示はライブファイルプレビューに残ります。",
-      "genericSnapshotNotice": "このスナップショットは Flower に送信されますが、インラインプレビューはテキスト内容のみ利用できます。",
       "attachmentRendererFailed": "添付プレビューレンダラーはこのスナップショットを開けませんでした。引き続き Flower に送信するか、ライブファイルプレビューを使用できます。",
       "attachmentPreviewFailedShort": "添付スナップショットをプレビューできませんでした。引き続き Flower に送信できます。",
       "attachmentPreviewFailed": "添付スナップショットをプレビューできませんでした。引き続き Flower に送信するか、ライブファイルプレビューを使用できます。",
-      "openLiveFilePreviewHelper": "ソースファイルを確認するためにライブファイルプレビューを開きます。",
-      "loadingPreview": "プレビューを読み込み中...",
       "showingPartialContent": "一部の内容を表示しています（切り詰め済み）。",
       "showingFirstContentPart": "内容の先頭部分を表示しています。",
       "imageTooLarge": "この画像は大きすぎてプレビューできません。",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "このファイルタイプはプレビューできません。",
       "showingFirstContextPart": "このコンテキストの先頭部分を表示しています。",
       "showingFirstProcessSnapshotPart": "プロセススナップショットの先頭部分を表示しています。",
-      "showingAttachedSnapshot": "Flower が受け取る添付スナップショットを表示しています。",
-      "queuedWithMessage": "Ask Flower メッセージと一緒にキューに入っています。",
       "openLiveFilePreviewAction": "ライブファイルプレビューを開く"
     },
     "screenshot": "表示中の画面を撮影",

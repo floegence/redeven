@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "Pré-visualizar snapshot anexado de {target}"
     },
     "preview": {
-      "imageSnapshotNotice": "Snapshots de imagem são enviados ao Flower, mas a renderização inline da imagem permanece na prévia ao vivo do arquivo.",
-      "pdfSnapshotNotice": "Snapshots de PDF são enviados ao Flower, mas a renderização inline do PDF permanece na prévia ao vivo do arquivo.",
-      "documentSnapshotNotice": "Snapshots de documento são enviados ao Flower, mas a renderização inline do documento permanece na prévia ao vivo do arquivo.",
-      "spreadsheetSnapshotNotice": "Snapshots de planilha são enviados ao Flower, mas a renderização inline da planilha permanece na prévia ao vivo do arquivo.",
-      "genericSnapshotNotice": "Este snapshot é enviado ao Flower, mas a prévia inline está disponível apenas para conteúdo de texto.",
       "attachmentRendererFailed": "O renderizador de prévia do anexo não conseguiu abrir este snapshot. Você ainda pode enviá-lo ao Flower ou usar a prévia ao vivo do arquivo.",
       "attachmentPreviewFailedShort": "Não foi possível pré-visualizar o snapshot anexado. Você ainda pode enviá-lo ao Flower.",
       "attachmentPreviewFailed": "Não foi possível pré-visualizar o snapshot anexado. Você ainda pode enviá-lo ao Flower ou usar a prévia ao vivo do arquivo.",
-      "openLiveFilePreviewHelper": "Abra a prévia ao vivo do arquivo para inspecionar o arquivo de origem.",
-      "loadingPreview": "Carregando prévia...",
       "showingPartialContent": "Mostrando conteúdo parcial (truncado).",
       "showingFirstContentPart": "Mostrando a primeira parte do conteúdo.",
       "imageTooLarge": "Esta imagem é grande demais para pré-visualizar.",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "A prévia não está disponível para este tipo de arquivo.",
       "showingFirstContextPart": "Mostrando a primeira parte deste contexto.",
       "showingFirstProcessSnapshotPart": "Mostrando a primeira parte do snapshot do processo.",
-      "showingAttachedSnapshot": "Mostrando o snapshot anexado que o Flower receberá.",
-      "queuedWithMessage": "Na fila com sua mensagem Ask Flower.",
       "openLiveFilePreviewAction": "Abrir prévia ao vivo do arquivo"
     },
     "screenshot": "Capturar visualização",

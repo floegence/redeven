@@ -76,6 +76,13 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   assert.equal(await editor.getAttribute('placeholder'), null);
   await editor.fill('Inspect this environment');
   assert.equal(await app.evaluate(() => global.captureCount), 0);
+  await card.locator('.flower-composer-context-source').first().click();
+  const contextPreview = page.locator('[role=dialog].flower-turn-launcher-related-surface');
+  await contextPreview.locator('pre').waitFor();
+  assert.ok((await contextPreview.locator('pre').innerText()).includes('environment'));
+  await contextPreview.getByRole('button', { name: 'Close', exact: true }).click();
+  await contextPreview.waitFor({ state: 'hidden' });
+  assert.equal(await editor.inputValue(), 'Inspect this environment');
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+J' : 'Control+Shift+J');
   assert.equal(await editor.inputValue(), 'Inspect this environment');
   const nativeProof = await prepareCaptureProof(page);
@@ -84,6 +91,14 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   assert.equal(await app.evaluate(() => global.captureCount), 1);
   assert.equal(await app.evaluate(() => global.captureOpacity), '0');
   verifyCaptureProof(await readFile(path.join(output, 'native-source.png')), nativeProof);
+  await card.locator('.flower-composer-context-source').filter({ hasText: /Screenshot-.*\.png/ }).click();
+  await contextPreview.locator('img').waitFor();
+  await page.waitForFunction(() => document.querySelector('[role=dialog].flower-turn-launcher-related-surface img')?.naturalWidth > 0);
+  const previewBytes = Buffer.from(await contextPreview.locator('img').evaluate(async image => [...new Uint8Array(await (await fetch(image.src)).arrayBuffer())]));
+  assert.deepEqual(previewBytes, await readFile(path.join(output, 'native-source.png')));
+  await contextPreview.getByRole('button', { name: 'Close', exact: true }).click();
+  await contextPreview.waitFor({ state: 'hidden' });
+  assert.equal(await editor.inputValue(), 'Inspect this environment');
   await page.locator('[id^=capture-proof]').evaluateAll(elements => elements.forEach(element => element.remove()));
   assert.equal(await editor.isEnabled(), true);
   await card.getByRole('combobox').click();
@@ -145,6 +160,6 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   }
   await browserPage.locator('[id^=capture-proof]').evaluateAll(elements => elements.forEach(element => element.remove()));
   await browserPage.screenshot({ path: path.join(output, 'browser-card.png') });
-  await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: true, rightClickEntry: true, selectedEnvironment: ownerID, nativeCapture: true, chromiumTabCapture: true, consecutiveBrowserCaptures: 3, automaticCaptures: 0, uploads: 1, retryRetainsRequest: true, floe: JSON.parse(await readFile(path.join(root, 'desktop/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version }, null, 2));
+  await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: true, rightClickEntry: true, selectedEnvironment: ownerID, nativeCapture: true, contextPreview: true, imagePreview: true, chromiumTabCapture: true, consecutiveBrowserCaptures: 3, automaticCaptures: 0, uploads: 1, retryRetainsRequest: true, floe: JSON.parse(await readFile(path.join(root, 'desktop/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version }, null, 2));
   console.log('Global Ask Flower native acceptance passed:', output);
 });

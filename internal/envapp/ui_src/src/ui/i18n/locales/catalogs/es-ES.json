@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "Previsualizar instantánea adjunta de {target}"
     },
     "preview": {
-      "imageSnapshotNotice": "Las instantáneas de imagen se envían a Flower, pero el renderizado de imagen inline permanece en la vista previa en vivo del archivo.",
-      "pdfSnapshotNotice": "Las instantáneas PDF se envían a Flower, pero el renderizado PDF inline permanece en la vista previa en vivo del archivo.",
-      "documentSnapshotNotice": "Las instantáneas de documento se envían a Flower, pero el renderizado de documento inline permanece en la vista previa en vivo del archivo.",
-      "spreadsheetSnapshotNotice": "Las instantáneas de hoja de cálculo se envían a Flower, pero el renderizado inline permanece en la vista previa en vivo del archivo.",
-      "genericSnapshotNotice": "Esta instantánea se envía a Flower, pero la vista previa inline solo está disponible para contenido de texto.",
       "attachmentRendererFailed": "El renderizador de vista previa del adjunto no pudo abrir esta instantánea. Aún puedes enviarla a Flower o usar la vista previa en vivo del archivo.",
       "attachmentPreviewFailedShort": "No se pudo previsualizar la instantánea adjunta. Aún puedes enviarla a Flower.",
       "attachmentPreviewFailed": "No se pudo previsualizar la instantánea adjunta. Aún puedes enviarla a Flower o usar la vista previa en vivo del archivo.",
-      "openLiveFilePreviewHelper": "Abre la vista previa en vivo del archivo para inspeccionar el archivo fuente.",
-      "loadingPreview": "Cargando vista previa...",
       "showingPartialContent": "Mostrando contenido parcial (truncado).",
       "showingFirstContentPart": "Mostrando la primera parte del contenido.",
       "imageTooLarge": "Esta imagen es demasiado grande para previsualizar.",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "La vista previa no está disponible para este tipo de archivo.",
       "showingFirstContextPart": "Mostrando la primera parte de este contexto.",
       "showingFirstProcessSnapshotPart": "Mostrando la primera parte de la instantánea del proceso.",
-      "showingAttachedSnapshot": "Mostrando la instantánea adjunta que recibirá Flower.",
-      "queuedWithMessage": "En cola con tu mensaje Ask Flower.",
       "openLiveFilePreviewAction": "Abrir vista previa en vivo del archivo"
     },
     "screenshot": "Capturar vista",

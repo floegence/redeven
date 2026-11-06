@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "預覽 {target} 的附件快照"
     },
     "preview": {
-      "imageSnapshotNotice": "影像快照會傳送給 Flower，但內嵌影像顯示仍保留在即時檔案預覽中。",
-      "pdfSnapshotNotice": "PDF 快照會傳送給 Flower，但內嵌 PDF 顯示仍保留在即時檔案預覽中。",
-      "documentSnapshotNotice": "文件快照會傳送給 Flower，但內嵌文件顯示仍保留在即時檔案預覽中。",
-      "spreadsheetSnapshotNotice": "試算表快照會傳送給 Flower，但內嵌試算表顯示仍保留在即時檔案預覽中。",
-      "genericSnapshotNotice": "此快照會傳送給 Flower，但只有文字內容支援內嵌預覽。",
       "attachmentRendererFailed": "附件預覽工具無法開啟此快照。你仍可將其傳送給 Flower，或使用即時檔案預覽。",
       "attachmentPreviewFailedShort": "無法預覽附件快照。你仍可將其傳送給 Flower。",
       "attachmentPreviewFailed": "無法預覽附件快照。你仍可將其傳送給 Flower，或使用即時檔案預覽。",
-      "openLiveFilePreviewHelper": "開啟即時檔案預覽以檢查來源檔案。",
-      "loadingPreview": "正在載入預覽...",
       "showingPartialContent": "正在顯示部分內容（已截斷）。",
       "showingFirstContentPart": "正在顯示內容的開頭部分。",
       "imageTooLarge": "此影像過大，無法預覽。",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "此檔案類型無法預覽。",
       "showingFirstContextPart": "正在顯示此情境的開頭部分。",
       "showingFirstProcessSnapshotPart": "正在顯示處理程序快照的開頭部分。",
-      "showingAttachedSnapshot": "正在顯示將傳送給 Flower 的附件快照。",
-      "queuedWithMessage": "已連同你給 Flower 的訊息排入佇列。",
       "openLiveFilePreviewAction": "開啟即時檔案預覽"
     },
     "screenshot": "擷取目前畫面",

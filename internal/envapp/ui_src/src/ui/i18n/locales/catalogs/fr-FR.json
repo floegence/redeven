@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "Prévisualiser l’instantané joint de {target}"
     },
     "preview": {
-      "imageSnapshotNotice": "Les instantanés d’image sont envoyés à Flower, mais le rendu intégré des images reste dans l’aperçu en direct du fichier.",
-      "pdfSnapshotNotice": "Les instantanés PDF sont envoyés à Flower, mais le rendu intégré des PDF reste dans l’aperçu en direct du fichier.",
-      "documentSnapshotNotice": "Les instantanés de document sont envoyés à Flower, mais le rendu intégré des documents reste dans l’aperçu en direct du fichier.",
-      "spreadsheetSnapshotNotice": "Les instantanés de feuille de calcul sont envoyés à Flower, mais leur rendu intégré reste dans l’aperçu en direct du fichier.",
-      "genericSnapshotNotice": "Cet instantané est envoyé à Flower, mais l’aperçu intégré est disponible uniquement pour le contenu texte.",
       "attachmentRendererFailed": "Le moteur de rendu de l’aperçu de pièce jointe n’a pas pu ouvrir cet instantané. Vous pouvez toujours l’envoyer à Flower ou utiliser l’aperçu en direct du fichier.",
       "attachmentPreviewFailedShort": "Impossible de prévisualiser l’instantané joint. Vous pouvez toujours l’envoyer à Flower.",
       "attachmentPreviewFailed": "Impossible de prévisualiser l’instantané joint. Vous pouvez toujours l’envoyer à Flower ou utiliser l’aperçu en direct du fichier.",
-      "openLiveFilePreviewHelper": "Ouvrez l’aperçu en direct du fichier pour inspecter le fichier source.",
-      "loadingPreview": "Chargement de l’aperçu...",
       "showingPartialContent": "Affichage partiel du contenu (tronqué).",
       "showingFirstContentPart": "Affichage de la première partie du contenu.",
       "imageTooLarge": "Cette image est trop volumineuse pour l’aperçu.",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "L’aperçu n’est pas disponible pour ce type de fichier.",
       "showingFirstContextPart": "Affichage de la première partie de ce contexte.",
       "showingFirstProcessSnapshotPart": "Affichage de la première partie de l’instantané du processus.",
-      "showingAttachedSnapshot": "Affichage de l’instantané joint que Flower recevra.",
-      "queuedWithMessage": "Mis en file avec votre message adressé à Flower.",
       "openLiveFilePreviewAction": "Ouvrir l’aperçu en direct du fichier"
     },
     "screenshot": "Capturer la vue",

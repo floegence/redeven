@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-06: Fix frozen Ask Flower reference/image previews, preserve their content viewport and qualify visible content in the built Env App and Desktop.
+
 - 2026-11-06: Document context-menu discovery, frozen right-click origins, existing action deduplication and native input boundaries.
 
 - 2026-11-06: Clarify model-visible terminal lifetime, computer operation limits,

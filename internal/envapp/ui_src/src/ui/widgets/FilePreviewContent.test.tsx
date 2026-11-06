@@ -204,7 +204,7 @@ describe('FilePreviewContent', () => {
     (host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null)?.click();
     (host.querySelector('button[aria-label="Download file"]') as HTMLButtonElement | null)?.click();
 
-    expect(onAskFlower).toHaveBeenCalledWith('selected from editor');
+    expect(onAskFlower).toHaveBeenCalledWith('selected from editor', undefined);
     expect(onDownload).toHaveBeenCalledTimes(1);
   });
 

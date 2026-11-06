@@ -38,6 +38,7 @@ vi.mock('solid-js/web', async (importOriginal) => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  LOCAL_INTERACTION_SURFACE_ATTR: (await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>()).LOCAL_INTERACTION_SURFACE_ATTR,
   PromptCard: (await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>()).PromptCard,
   resolveFloatingWindowViewport: (await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>()).resolveFloatingWindowViewport,
   createFloatingPresence: (options: { open: () => boolean }) => ({
@@ -165,6 +166,7 @@ vi.mock('./PreviewWindow', () => ({
       <div data-testid="preview-window" data-z-index={String(props.zIndex ?? '')} class={props.floatingClass ?? props.mobileClass}>
         <div>{props.title}</div>
         <div>{props.description}</div>
+        <div>{props.headerActions}</div>
         <div>{props.children}</div>
         <div>{props.footer}</div>
       </div>
@@ -962,7 +964,7 @@ describe('FlowerTurnLauncherWindow', () => {
 
     await vi.waitFor(() => {
       expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
-      expect(host.textContent).toContain('Showing the attached snapshot that Flower will receive.');
+      expect(host.textContent).not.toContain('Showing the attached snapshot that Flower will receive.');
       expect(host.textContent).toContain('export default [];');
     });
   });
@@ -999,7 +1001,7 @@ describe('FlowerTurnLauncherWindow', () => {
     } finally { dispose(); }
   });
 
-  it('shows a lightweight attached snapshot notice for spreadsheet files instead of parsing them inline', async () => {
+  it('previews the frozen spreadsheet bytes without a placeholder notice', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1035,7 +1037,9 @@ describe('FlowerTurnLauncherWindow', () => {
 
     await vi.waitFor(() => {
       expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
-      expect(host.textContent).toContain('Spreadsheet snapshots are sent to Flower');
+      expect(host.querySelector('[data-preview-mode]')?.getAttribute('data-preview-mode')).toBe('xlsx');
+      expect(host.querySelector('[data-preview-bytes]')?.getAttribute('data-preview-bytes')).toBe('[1,2,3]');
+      expect(host.textContent).not.toContain('Spreadsheet snapshots are sent to Flower');
       expect(host.textContent).toContain('Open live file preview');
       expect(host.textContent).not.toContain('Maximum call stack size exceeded');
     });

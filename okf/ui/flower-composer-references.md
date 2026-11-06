@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower references, origin context and canonical admission
 tags: [ui, flower, composer, references, floret]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -34,6 +34,27 @@ Each fresh submission creates a task. Merely opening the card creates nothing. C
 The camera tool is the only screenshot trigger. It adds a previewable/removable image through ordinary attachment staging. Capture errors retain draft text and references; closing/reopening cancels the operation and discards late results. Source navigation or ownership changes reject the result, without silently choosing another window.
 
 Desktop captures only the main-process-bound WebContents and visible region, with pre/post checks, visible privacy-marker rejection and bounded PNG size. Browser capture requires the native picker, a matching current-tab capture handle and native Region Capture. A bounded frame reader drains pre-crop frames and accepts the first new cropped frame; an explicit minimum frame rate keeps static sources responsive. Browsers without these verified capabilities report unavailable. Frames close and acquired tracks always stop. Prompt chrome remains mounted/focused but is omitted for the capture frame; it is restored before image encoding. Cross-origin embedded content is captured as pixels only, not inspected as host DOM; the image is a user-reviewed attachment, not a promise of automatic secret redaction.
+
+## Reference previews
+
+Preview the frozen reference body or queued attachment itself. Text snapshots are
+selectable, scrollable plain text; they are not synthetic file paths or live
+editor documents. Screenshot previews decode an object URL of the same File
+that submission stages. Closing, replacing, or disposing the launcher releases
+preview URLs and invalidates pending reads without changing the draft. Other
+supported attachment formats use the existing bounded file renderers.
+
+Keep identity and close controls in the header. Omit synthetic path/download
+bars, queued-message descriptions, format-placeholder notices, and a duplicate
+footer close action. Source navigation remains an explicit header action where
+available. Actual truncation and failures remain visible. Context registration
+wrappers preserve the full constrained flex viewport on desktop and mobile.
+
+`desktop/scripts/check-ask-flower-previews.mjs --binary <runtime> --output <dir>`
+qualifies the built Env App against an isolated real local Runtime: right-click
+Files, inspect the exact frozen context, explicitly capture and open an image,
+compare preview bytes and source pixels, reopen, and retain the draft. The global
+Desktop acceptance also opens context/image references before new-task submission.
 
 ## Thread references
 Right-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.

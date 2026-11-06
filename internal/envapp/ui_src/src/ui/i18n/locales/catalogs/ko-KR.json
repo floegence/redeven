@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "{target}의 첨부 스냅샷 미리보기"
     },
     "preview": {
-      "imageSnapshotNotice": "이미지 스냅샷은 Flower로 전송되지만, 인라인 이미지 렌더링은 실시간 파일 미리보기에 남습니다.",
-      "pdfSnapshotNotice": "PDF 스냅샷은 Flower로 전송되지만, 인라인 PDF 렌더링은 실시간 파일 미리보기에 남습니다.",
-      "documentSnapshotNotice": "문서 스냅샷은 Flower로 전송되지만, 인라인 문서 렌더링은 실시간 파일 미리보기에 남습니다.",
-      "spreadsheetSnapshotNotice": "스프레드시트 스냅샷은 Flower로 전송되지만, 인라인 스프레드시트 렌더링은 실시간 파일 미리보기에 남습니다.",
-      "genericSnapshotNotice": "이 스냅샷은 Flower로 전송되지만, 인라인 미리보기는 텍스트 콘텐츠에만 사용할 수 있습니다.",
       "attachmentRendererFailed": "첨부 파일 미리보기 렌더러가 이 스냅샷을 열 수 없습니다. 계속 Flower로 보내거나 실시간 파일 미리보기를 사용할 수 있습니다.",
       "attachmentPreviewFailedShort": "첨부 스냅샷을 미리볼 수 없습니다. 계속 Flower로 보낼 수 있습니다.",
       "attachmentPreviewFailed": "첨부 스냅샷을 미리볼 수 없습니다. 계속 Flower로 보내거나 실시간 파일 미리보기를 사용할 수 있습니다.",
-      "openLiveFilePreviewHelper": "원본 파일을 검사하려면 실시간 파일 미리보기를 여세요.",
-      "loadingPreview": "미리보기 로드 중...",
       "showingPartialContent": "일부 콘텐츠를 표시 중입니다(잘림).",
       "showingFirstContentPart": "콘텐츠의 첫 부분을 표시 중입니다.",
       "imageTooLarge": "이 이미지는 너무 커서 미리볼 수 없습니다.",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "이 파일 형식은 미리볼 수 없습니다.",
       "showingFirstContextPart": "이 컨텍스트의 첫 부분을 표시 중입니다.",
       "showingFirstProcessSnapshotPart": "프로세스 스냅샷의 첫 부분을 표시 중입니다.",
-      "showingAttachedSnapshot": "Flower가 받을 첨부 스냅샷을 표시 중입니다.",
-      "queuedWithMessage": "Ask Flower 메시지와 함께 대기열에 추가되었습니다.",
       "openLiveFilePreviewAction": "실시간 파일 미리보기 열기"
     },
     "screenshot": "현재 화면 캡처",

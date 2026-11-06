@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "预览 {target} 的附件快照"
     },
     "preview": {
-      "imageSnapshotNotice": "图像快照会发送给 Flower，但内联图像渲染仍保留在实时文件预览中。",
-      "pdfSnapshotNotice": "PDF 快照会发送给 Flower，但内联 PDF 渲染仍保留在实时文件预览中。",
-      "documentSnapshotNotice": "文档快照会发送给 Flower，但内联文档渲染仍保留在实时文件预览中。",
-      "spreadsheetSnapshotNotice": "电子表格快照会发送给 Flower，但内联电子表格渲染仍保留在实时文件预览中。",
-      "genericSnapshotNotice": "此快照会发送给 Flower，但只有文本内容支持内联预览。",
       "attachmentRendererFailed": "附件预览渲染器无法打开此快照。你仍可将其发送给 Flower，或使用实时文件预览。",
       "attachmentPreviewFailedShort": "无法预览附件快照。你仍可将其发送给 Flower。",
       "attachmentPreviewFailed": "无法预览附件快照。你仍可将其发送给 Flower，或使用实时文件预览。",
-      "openLiveFilePreviewHelper": "打开实时文件预览以检查源文件。",
-      "loadingPreview": "正在加载预览...",
       "showingPartialContent": "正在显示部分内容（已截断）。",
       "showingFirstContentPart": "正在显示内容的开头部分。",
       "imageTooLarge": "此图像过大，无法预览。",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "此文件类型无法预览。",
       "showingFirstContextPart": "正在显示此上下文的开头部分。",
       "showingFirstProcessSnapshotPart": "正在显示进程快照的开头部分。",
-      "showingAttachedSnapshot": "正在显示将发送给 Flower 的附件快照。",
-      "queuedWithMessage": "已随你的 Ask Flower 消息排队。",
       "openLiveFilePreviewAction": "打开实时文件预览"
     },
     "screenshot": "截取当前视图",

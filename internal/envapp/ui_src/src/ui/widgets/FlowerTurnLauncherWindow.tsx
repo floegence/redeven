@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
   FlowerTurnLauncherPanel as SharedFlowerTurnLauncherPanel,
@@ -16,9 +16,7 @@ import type {
 import {
   describeFilePreview,
   FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
-  getExtDot,
   isLikelyTextContent,
-  mimeFromExtDot,
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
 import { basenameFromPath, fileItemFromPath } from '../utils/filePreviewItem';
@@ -151,6 +149,7 @@ function contextPreviewStateForText(params: {
   subtitle: string;
   item: FileItem;
   text: string;
+  snapshot?: boolean;
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
@@ -161,6 +160,7 @@ function contextPreviewStateForText(params: {
     item: params.item,
     descriptor: FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
     text: params.text,
+    snapshot: params.snapshot,
     helper: params.helper,
     actionLabel: params.actionLabel,
     onAction: params.onAction,
@@ -228,7 +228,6 @@ async function buildFileLikeContextPreview(params: {
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
-  blob?: Blob;
   copy: ReturnType<typeof useI18n>;
 }): Promise<FlowerContextPreviewState> {
   const descriptor = describeFilePreview(params.name);
@@ -258,31 +257,6 @@ async function buildFileLikeContextPreview(params: {
       actionLabel: params.actionLabel,
       onAction: params.onAction,
     }), bytes: params.bytes, truncated: truncated || preview.truncated };
-  }
-
-  if (descriptor.mode === 'image') {
-    if (truncated) {
-      return contextPreviewStateForMessage({
-        title: params.title,
-        subtitle: params.subtitle,
-        item: params.item,
-        message: params.copy.t('flowerTurnLauncher.preview.imageTooLarge'),
-        helper: helperParts.join(' ') || undefined,
-      });
-    }
-    const mime = mimeFromExtDot(getExtDot(params.name)) ?? 'application/octet-stream';
-    return {
-      title: params.title,
-      subtitle: params.subtitle,
-      item: params.item,
-      descriptor,
-      objectUrl: URL.createObjectURL(params.blob ?? new Blob([params.bytes], { type: mime })),
-      bytes: params.bytes,
-      truncated,
-      helper: helperParts.join(' ') || undefined,
-      actionLabel: params.actionLabel,
-      onAction: params.onAction,
-    };
   }
 
   if (descriptor.mode === 'pdf' || descriptor.mode === 'docx' || descriptor.mode === 'pptx') {
@@ -400,6 +374,10 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
     setContextBrowser(null);
   };
 
+  createEffect(on(() => props.open, open => {
+    if (!open) { closeContextPreview(); closeContextBrowser(); }
+  }));
+
   onCleanup(() => {
     closeContextPreview();
     closeContextBrowser();
@@ -423,31 +401,13 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       i18n.t('flowerTurnLauncher.contextPreviewTitle'),
     );
     const descriptor = describeFilePreview(action.file.name || item.name);
-    const helper = livePath
-      ? i18n.t('flowerTurnLauncher.preview.showingAttachedSnapshot')
-      : i18n.t('flowerTurnLauncher.preview.queuedWithMessage');
     const actionLabel = livePath ? i18n.t('flowerTurnLauncher.preview.openLiveFilePreviewAction') : undefined;
     const onAction = livePath ? () => void openFullFilePreview(livePath) : undefined;
 
-    if (descriptor.mode !== 'text' && descriptor.mode !== 'markdown' && descriptor.mode !== 'html' && descriptor.mode !== 'binary') {
-      const message = descriptor.mode === 'image'
-        ? i18n.t('flowerTurnLauncher.preview.imageSnapshotNotice')
-        : descriptor.mode === 'pdf'
-          ? i18n.t('flowerTurnLauncher.preview.pdfSnapshotNotice')
-          : descriptor.mode === 'docx'
-            ? i18n.t('flowerTurnLauncher.preview.documentSnapshotNotice')
-            : descriptor.mode === 'xlsx'
-              ? i18n.t('flowerTurnLauncher.preview.spreadsheetSnapshotNotice')
-              : i18n.t('flowerTurnLauncher.preview.genericSnapshotNotice');
-      updateContextPreview(contextPreviewStateForMessage({
-        title: action.title,
-        subtitle: action.subtitle,
-        item,
-        message,
-        helper,
-        actionLabel,
-        onAction,
-      }));
+    // The queued File is the exact frozen attachment; never resolve a live path.
+    if (descriptor.mode === 'image') {
+      updateContextPreview({ title: action.title, subtitle: action.subtitle, item, descriptor,
+        objectUrl: URL.createObjectURL(action.file), actionLabel, onAction });
       return;
     }
 
@@ -455,11 +415,12 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       title: action.title,
       subtitle: action.subtitle,
       item,
-      helper: i18n.t('flowerTurnLauncher.preview.loadingPreview'),
     }));
 
     try {
-      const bytes = await readBlobBytes(action.file);
+      const plan = getRedevenFilePreviewReadPlan(descriptor);
+      const truncated = action.file.size > plan.maxBytes;
+      const bytes = await readBlobBytes(truncated ? action.file.slice(0, plan.readBytes) : action.file);
       if (seq !== previewRequestSeq) return;
       const nextPreview = await buildFileLikeContextPreview({
         title: action.title,
@@ -467,11 +428,10 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         item,
         name: action.file.name || item.name,
         bytes,
+        truncated,
         copy: i18n,
-        helper,
         actionLabel,
         onAction,
-        blob: action.file,
       });
       if (seq !== previewRequestSeq) {
         revokeContextPreviewResources(nextPreview);
@@ -486,7 +446,6 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         subtitle: action.subtitle,
         item,
         message,
-        helper: actionLabel ? i18n.t('flowerTurnLauncher.preview.openLiveFilePreviewHelper') : undefined,
         error: message,
         actionLabel,
         onAction,
@@ -507,6 +466,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
       });
       return;
     }
+    closeContextPreview();
     if (action.type === 'open_text_context_preview') {
       const preview = trimPreviewBody(action.body);
       updateContextPreview(contextPreviewStateForText({
@@ -514,6 +474,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         subtitle: action.subtitle,
         item: fileItemForContextPreview(action.source_path || action.subtitle, action.title, i18n.t('flowerTurnLauncher.contextPreviewTitle')),
         text: preview.body,
+        snapshot: true,
         helper: preview.truncated ? i18n.t('flowerTurnLauncher.preview.showingFirstContextPart') : undefined,
       }));
       return;
@@ -525,6 +486,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         subtitle: action.subtitle,
         item: fileItemForContextPreview(`process://${action.pid}`, action.title, i18n.t('flowerTurnLauncher.contextPreviewTitle')),
         text: preview.body,
+        snapshot: true,
         helper: preview.truncated ? i18n.t('flowerTurnLauncher.preview.showingFirstProcessSnapshotPart') : undefined,
       }));
       return;

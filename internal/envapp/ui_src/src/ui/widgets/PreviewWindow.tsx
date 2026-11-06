@@ -63,7 +63,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           class={cn('file-preview-floating-window overflow-hidden rounded-md', props.floatingClass)}
           contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"
         >
-          <FlowerContextSource id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
+          <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col overflow-hidden" id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
         </PersistentFloatingWindow>
       )}
     >
@@ -71,8 +71,9 @@ export function PreviewWindow(props: PreviewWindowProps) {
         open={props.open}
         onOpenChange={props.onOpenChange}
         title={props.title}
-        header={props.titleContent ? <div class="flex min-h-10 shrink-0 items-center gap-2 border-b border-border px-2">
-          {props.titleContent}
+        header={props.titleContent || props.headerActions ? <div class="flex min-h-10 shrink-0 items-center gap-2 border-b border-border px-2">
+          {props.titleContent ?? <span class="min-w-0 flex-1 truncate text-sm font-semibold">{props.title}</span>}
+          {props.headerActions}
           <Button size="icon" variant="ghost" class="size-8 shrink-0" aria-label={i18n.t('common.actions.close')} onClick={() => props.onOpenChange(false)}><X class="size-4" /></Button>
         </div> : undefined}
         bodyDescription={props.description}
@@ -85,7 +86,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           props.mobileClass,
         )}
       >
-        <FlowerContextSource id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
+        <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col overflow-hidden" id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
       </Dialog>
     </Show>
   );

@@ -1022,16 +1022,9 @@
       "previewAttachedSnapshotForTarget": "Angehängten Snapshot für {target} vorschauen"
     },
     "preview": {
-      "imageSnapshotNotice": "Bild-Snapshots werden an Flower gesendet, aber die Inline-Bilddarstellung bleibt in der Live-Dateivorschau.",
-      "pdfSnapshotNotice": "PDF-Snapshots werden an Flower gesendet, aber die Inline-PDF-Darstellung bleibt in der Live-Dateivorschau.",
-      "documentSnapshotNotice": "Dokument-Snapshots werden an Flower gesendet, aber die Inline-Dokumentdarstellung bleibt in der Live-Dateivorschau.",
-      "spreadsheetSnapshotNotice": "Tabellen-Snapshots werden an Flower gesendet, aber die Inline-Tabellendarstellung bleibt in der Live-Dateivorschau.",
-      "genericSnapshotNotice": "Dieser Snapshot wird an Flower gesendet, aber die Inline-Vorschau ist nur für Textinhalte verfügbar.",
       "attachmentRendererFailed": "Der Anhang-Vorschaurenderer konnte diesen Snapshot nicht öffnen. Sie können ihn trotzdem an Flower senden oder die Live-Dateivorschau verwenden.",
       "attachmentPreviewFailedShort": "Der Anhang-Snapshot konnte nicht angezeigt werden. Sie können ihn trotzdem an Flower senden.",
       "attachmentPreviewFailed": "Der Anhang-Snapshot konnte nicht angezeigt werden. Sie können ihn trotzdem an Flower senden oder die Live-Dateivorschau verwenden.",
-      "openLiveFilePreviewHelper": "Öffnen Sie die Live-Dateivorschau, um die Quelldatei zu prüfen.",
-      "loadingPreview": "Vorschau wird geladen...",
       "showingPartialContent": "Teilinhalt wird angezeigt (gekürzt).",
       "showingFirstContentPart": "Der erste Teil des Inhalts wird angezeigt.",
       "imageTooLarge": "Dieses Bild ist zu groß für die Vorschau.",
@@ -1042,8 +1035,6 @@
       "unavailableFileType": "Für diesen Dateityp ist keine Vorschau verfügbar.",
       "showingFirstContextPart": "Der erste Teil dieses Kontexts wird angezeigt.",
       "showingFirstProcessSnapshotPart": "Der erste Teil des Prozess-Snapshots wird angezeigt.",
-      "showingAttachedSnapshot": "Der angehängte Snapshot, den Flower erhält, wird angezeigt.",
-      "queuedWithMessage": "Zusammen mit Ihrer „Flower fragen“-Nachricht in die Warteschlange gestellt.",
       "openLiveFilePreviewAction": "Live-Dateivorschau öffnen"
     },
     "screenshot": "Ansicht aufnehmen",
