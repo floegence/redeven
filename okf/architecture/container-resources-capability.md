@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Container resource capability, console and usage facts
 tags: [architecture, containers, docker, podman]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -24,6 +24,7 @@ Native resource services own endpoint-bound execution, admission and reconciliat
 - One `ContainerRunDraft`/serializer feeds existing preflight/hash/operation admission. Never persist environment values/host paths in UI state. Retain draft through preflight/confirmation; clear only on success or explicit close.
 - Use sortable desktop tables, fewer columns in narrow Workbench and mobile cards/full-screen details. Missing/stopped/unreachable/denied engines show detection state rather than stale inventory.
 - Keep restrained typography, semantic surfaces and brief bounded feedback; published primitives own menu/dialog position, focus and presence.
+- The log toolbar stays at content height; its viewer receives the remaining detail-body height, with the existing bounded gap and responsive wrapping. Sparse or empty logs must not stretch the toolbar.
 
 ## Volume observations
 References include stopped containers; sizes report occupied bytes, never capacity. Failed size reads retain inventory with unavailable metrics.
@@ -51,6 +52,7 @@ Volume usage is an observation, not a capacity, quota, free-space, billing, or c
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Responsive log geometry and interaction acceptance.
 
 - `redeven:internal/containerengine/volume_usage.go` - Source.
 - `redeven:internal/containerengine/volume_usage_test.go` - Tests.

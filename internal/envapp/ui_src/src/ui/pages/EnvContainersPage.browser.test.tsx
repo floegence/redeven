@@ -1256,6 +1256,64 @@ describe('native Containers responsive product surface', () => {
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
+  it.each([
+    { width: 1440, height: 1100, variant: 'activity' as const, count: 4 },
+    { width: 1440, height: 1100, variant: 'activity' as const, count: 0 },
+    { width: 900, height: 900, variant: 'workbench' as const, count: 4 },
+    { width: 640, height: 900, variant: 'workbench' as const, count: 80 },
+    { width: 390, height: 844, variant: 'activity' as const, count: 4 },
+  ])('keeps log controls compact at $width x $height in $variant with $count lines', async ({ width, height, variant, count }) => {
+    await page.viewport(width, height);
+    const api = await import('../services/containerResourcesApi');
+    vi.mocked(api.tailContainerLogs).mockResolvedValueOnce(Array.from({ length: count }, (_, index) => ({
+      timestamp_unix_ms: 1_725_000_000_000 + index * 1000,
+      message: `Application ready ${index + 1}`,
+    })));
+    const mounted = mount(variant, 'dark');
+    dispose = mounted.dispose;
+    await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
+    requestContainerResourceNavigation({
+      engine: 'docker', endpointID: 'desktop-linux', view: 'containers',
+      identity: 'e2c83fcda4850de717be32128754ce4764efb434',
+    });
+    await page.getByRole('tab', { name: 'Logs', exact: true }).click();
+    await expect.poll(() => mounted.host.querySelectorAll('.container-log-view > div').length).toBe(count);
+    await settle();
+
+    const toolbar = mounted.host.querySelector<HTMLElement>('.container-tool-toolbar')!;
+    const search = toolbar.querySelector<HTMLElement>('.container-search-control')!;
+    const logView = mounted.host.querySelector<HTMLElement>('.container-log-view')!;
+    const toolbarBounds = toolbar.getBoundingClientRect();
+    const searchBounds = search.getBoundingClientRect();
+    const logBounds = logView.getBoundingClientRect();
+    const controls = Array.from(toolbar.children) as HTMLElement[];
+    const controlsTop = Math.min(...controls.map((control) => control.getBoundingClientRect().top));
+    const controlsBottom = Math.max(...controls.map((control) => control.getBoundingClientRect().bottom));
+
+    expect(controlsTop - toolbarBounds.top).toBeLessThanOrEqual(1);
+    expect(toolbarBounds.bottom - controlsBottom).toBeLessThanOrEqual(1);
+    expect(logBounds.top - toolbarBounds.bottom).toBeCloseTo(14, 0);
+    expect(searchBounds.height).toBeLessThanOrEqual(48);
+    expect(logBounds.height).toBeGreaterThanOrEqual(width < 700 ? 340 : 420);
+    expect(logBounds.right).toBeLessThanOrEqual(width);
+    if (count < 80) {
+      const detailBody = mounted.host.querySelector<HTMLElement>('.container-detail-body')!;
+      const bottomPadding = Number.parseFloat(getComputedStyle(detailBody).paddingBottom);
+      expect(detailBody.getBoundingClientRect().bottom - logBounds.bottom).toBeCloseTo(bottomPadding, 0);
+    }
+    await page.screenshot({ path: `__screenshots__/container-logs-${width}-${height}-${count}.png` });
+
+    if (count > 0) {
+      await page.getByRole('textbox', { name: 'Search logs' }).fill('ready 1');
+      await expect.poll(() => logView.children.length).toBeGreaterThan(0);
+      expect(Array.from(logView.children).every((line) => line.textContent?.includes('ready 1'))).toBe(true);
+      await page.getByRole('button', { name: 'Wrap', exact: true }).click();
+      expect(logView.dataset.wrap).toBe('false');
+      await page.getByTitle('Pause', { exact: true }).click();
+      await expect.element(page.getByTitle('Resume', { exact: true })).toBeVisible();
+    }
+  });
+
   it('fills the detail body with Exec and reconnects from the inline retry action', async () => {
     await page.viewport(1440, 900);
     browserHarness.listRuntimes.mockResolvedValue([{

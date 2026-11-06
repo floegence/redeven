@@ -671,6 +671,7 @@
 .container-files-view,
 .container-inspect-view,
 .container-stats-dashboard { display: grid; min-height: 100%; gap: 14px; }
+.container-tool-view { grid-template-rows: auto 1fr; }
 .container-tool-toolbar { justify-content: flex-end; }
 .container-tool-toolbar .container-search-control { margin-right: auto; }
 

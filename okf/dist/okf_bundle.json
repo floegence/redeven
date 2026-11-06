@@ -10273,7 +10273,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-06",
         "tags": [
           "architecture",
           "containers",
@@ -10283,15 +10283,15 @@
         "title": "Container resource capability, console and usage facts",
         "type": "Architecture Contract"
       },
-      "body_length": 4401,
+      "body_length": 4741,
       "summary": "Native resource services own endpoint-bound execution, admission and reconciliation; the console presents typed authorized facts and drafts. Missing engines and partial volume inspections stay explicit. UI reachability, size or reference guesses never grant mutation authority or replace resource preflight.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Authority\n- [Runtime execution](containers-operation-observation.md#engine-execution) owns discovery, endpoint binding, typed CLI reads and normalization; [volume usage](#volume-observations) owns reference completeness and independent usage reads.\n- Strictly decode mutations and reject unknown fields. Keep uncertain outcomes explicit. Server gates `/_redeven_proxy/api/container-resources` and `container-resource-operations`; disabled controls are only presentation.\n- Renderer cannot construct argv, skip admission or mutate managed resources. DTOs expose typed redacted facts, excluding environment/label values, credentials, sockets/certificates, remote URLs and Compose paths. Terminal sessions retain Write/Execute checks.\n- [Console](#console) projects established targets/capabilities. Direct engine reachability proves resource readiness; host-service management state cannot replace that probe.\n\n## Console\n- Persist only resource view/key per `redeven.containers` instance. Preserve target identity even for same-name resources. Existing actions reuse their source; creation uses the sole compatible engine or asks Docker/Podman within its dialog.\n- One compact header owns refresh/Operations; Workbench suppresses duplicate title. [Operation observation](containers-operation-observation.md#operation-ownership) owns progress/errors.\n- Compose input is 1–8 ordered absolute YAML paths, optional absolute env-file and at most 16 profiles, represented as arrays. No retired directory-only or lazy-picker alternate path.\n- One `ContainerRunDraft`/serializer feeds existing preflight/hash/operation admission. Never persist environment values/host paths in UI state. Retain draft through preflight/confirmation; clear only on success or explicit close.\n- Use sortable desktop tables, fewer columns in narrow Workbench and mobile cards/full-screen details. Missing/stopped/unreachable/denied engines show detection state rather than stale inventory.\n- Keep restrained typography, semantic surfaces and brief bounded feedback; published primitives own menu/dialog position, focus and presence.\n\n## Volume observations\nReferences include stopped containers; sizes report occupied bytes, never capacity. Failed size reads retain inventory with unavailable metrics.\n\n### Reference completeness\nVolume inventory and detail return `referenced_containers`, `used_by`, and `references_complete`. The native console renders incomplete observations as Unknown and excludes them from both In use and Unused filters. A partial Used by view may show known references together with an incomplete-inspection notice.\n\n### Disk usage\n`GET /container-resources/volume-disk-usage` is an independent, Read-only, no-store observation. Unexpected layouts fail visibly instead of being interpreted as an empty measurement.\n\nDisk usage never authorizes cleanup or overrides the reference preflight.",
-          "char_count": 2887
+          "body": "## Authority\n- [Runtime execution](containers-operation-observation.md#engine-execution) owns discovery, endpoint binding, typed CLI reads and normalization; [volume usage](#volume-observations) owns reference completeness and independent usage reads.\n- Strictly decode mutations and reject unknown fields. Keep uncertain outcomes explicit. Server gates `/_redeven_proxy/api/container-resources` and `container-resource-operations`; disabled controls are only presentation.\n- Renderer cannot construct argv, skip admission or mutate managed resources. DTOs expose typed redacted facts, excluding environment/label values, credentials, sockets/certificates, remote URLs and Compose paths. Terminal sessions retain Write/Execute checks.\n- [Console](#console) projects established targets/capabilities. Direct engine reachability proves resource readiness; host-service management state cannot replace that probe.\n\n## Console\n- Persist only resource view/key per `redeven.containers` instance. Preserve target identity even for same-name resources. Existing actions reuse their source; creation uses the sole compatible engine or asks Docker/Podman within its dialog.\n- One compact header owns refresh/Operations; Workbench suppresses duplicate title. [Operation observation](containers-operation-observation.md#operation-ownership) owns progress/errors.\n- Compose input is 1–8 ordered absolute YAML paths, optional absolute env-file and at most 16 profiles, represented as arrays. No retired directory-only or lazy-picker alternate path.\n- One `ContainerRunDraft`/serializer feeds existing preflight/hash/operation admission. Never persist environment values/host paths in UI state. Retain draft through preflight/confirmation; clear only on success or explicit close.\n- Use sortable desktop tables, fewer columns in narrow Workbench and mobile cards/full-screen details. Missing/stopped/unreachable/denied engines show detection state rather than stale inventory.\n- Keep restrained typography, semantic surfaces and brief bounded feedback; published primitives own menu/dialog position, focus and presence.\n- The log toolbar stays at content height; its viewer receives the remaining detail-body height, with the existing bounded gap and responsive wrapping. Sparse or empty logs must not stretch the toolbar.\n\n## Volume observations\nReferences include stopped containers; sizes report occupied bytes, never capacity. Failed size reads retain inventory with unavailable metrics.\n\n### Reference completeness\nVolume inventory and detail return `referenced_containers`, `used_by`, and `references_complete`. The native console renders incomplete observations as Unknown and excludes them from both In use and Unused filters. A partial Used by view may show known references together with an incomplete-inspection notice.\n\n### Disk usage\n`GET /container-resources/volume-disk-usage` is an independent, Read-only, no-store observation. Unexpected layouts fail visibly instead of being interpreted as an empty measurement.\n\nDisk usage never authorizes cleanup or overrides the reference preflight.",
+          "char_count": 3090
         },
         {
           "id": "boundaries",
@@ -10304,8 +10304,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/containerengine/container_exec.go` - Source.\n- `redeven:internal/containerengine/resource_read.go` - Source.\n\n- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Tests.\n\n- `redeven:internal/containerengine/volume_usage.go` - Source.\n- `redeven:internal/containerengine/volume_usage_test.go` - Tests.",
-          "char_count": 424
+          "body": "- `redeven:internal/containerengine/container_exec.go` - Source.\n- `redeven:internal/containerengine/resource_read.go` - Source.\n\n- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Responsive log geometry and interaction acceptance.\n\n- `redeven:internal/containerengine/volume_usage.go` - Source.\n- `redeven:internal/containerengine/volume_usage_test.go` - Tests.",
+          "char_count": 561
         }
       ],
       "evidence": [
@@ -10328,6 +10328,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx:0:tests.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx",
           "description": "Tests."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx:0:responsive log geometry and interaction acceptance.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx",
+          "description": "Responsive log geometry and interaction acceptance."
         },
         {
           "id": "redeven:internal/containerengine/volume_usage.go:0:source.",
@@ -25970,5 +25975,5 @@
       ]
     }
   ],
-  "source_sha256": "756eccb59d013e7fdac4d8c7ef60b273b8f1fea1faf5e1f1e365a9f4a1ea57eb"
+  "source_sha256": "82018622028e367079e3c594d8afbc979440d59bda172c8aeeac25ab5ca85a49"
 }
