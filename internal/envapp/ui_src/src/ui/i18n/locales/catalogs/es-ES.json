@@ -7350,10 +7350,7 @@
         "automaticUpdatesHint": "Actualizar desde la fuente original mientras esta sesión esté abierta. Los cambios de permisos o funciones requieren revisión.",
         "preferenceFailed": "No se pudo guardar la preferencia de actualización. Recarga e inténtalo de nuevo."
       },
-      "directCreationTitle": "Configuración del plugin",
       "flowerCreationPlaceholder": "Cuéntale a Flower qué debe hacer este plugin…",
-      "directCreationHint": "Elige una plantilla y configura aquí los detalles del plugin.",
-      "generateCandidate": "Generar versión candidata",
       "creation": {
         "drafts": "Borradores",
         "noDrafts": "Tus borradores de plugins aparecerán aquí.",

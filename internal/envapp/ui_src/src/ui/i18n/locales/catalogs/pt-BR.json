@@ -7350,10 +7350,7 @@
         "automaticUpdatesHint": "Atualizar da origem enquanto esta sessão estiver aberta. Alterações de permissões ou recursos exigem revisão.",
         "preferenceFailed": "Não foi possível salvar a preferência de atualização. Atualize a página e tente novamente."
       },
-      "directCreationTitle": "Configuração do plugin",
       "flowerCreationPlaceholder": "Conte ao Flower o que este plugin deve fazer…",
-      "directCreationHint": "Escolha um modelo e configure os detalhes do plugin aqui.",
-      "generateCandidate": "Gerar versão candidata",
       "creation": {
         "drafts": "Rascunhos",
         "noDrafts": "Seus rascunhos de plugins aparecerão aqui.",

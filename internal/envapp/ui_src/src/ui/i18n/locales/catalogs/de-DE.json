@@ -7350,10 +7350,7 @@
         "automaticUpdatesHint": "Bei geöffneter Sitzung aus der ursprünglichen Quelle aktualisieren. Änderungen an Berechtigungen oder Funktionen müssen geprüft werden.",
         "preferenceFailed": "Die Update-Einstellung konnte nicht gespeichert werden. Bitte neu laden und erneut versuchen."
       },
-      "directCreationTitle": "Plugin-Einrichtung",
       "flowerCreationPlaceholder": "Beschreibe Flower, was dieses Plugin tun soll…",
-      "directCreationHint": "Wählen Sie eine Vorlage und konfigurieren Sie hier die Plugin-Details.",
-      "generateCandidate": "Kandidaten generieren",
       "creation": {
         "drafts": "Entwürfe",
         "noDrafts": "Ihre Plugin-Entwürfe werden hier angezeigt.",

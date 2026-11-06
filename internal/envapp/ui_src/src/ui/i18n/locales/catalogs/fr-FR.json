@@ -7350,10 +7350,7 @@
         "automaticUpdatesHint": "Mettre à jour depuis la source d’origine lorsque cette session est ouverte. Les modifications des autorisations ou des fonctionnalités nécessitent une vérification.",
         "preferenceFailed": "Impossible d’enregistrer la préférence de mise à jour. Actualisez et réessayez."
       },
-      "directCreationTitle": "Configuration du plugin",
       "flowerCreationPlaceholder": "Indiquez à Flower ce que ce plugin doit faire…",
-      "directCreationHint": "Choisissez un modèle et configurez les détails du plugin ici.",
-      "generateCandidate": "Générer une version candidate",
       "creation": {
         "drafts": "Brouillons",
         "noDrafts": "Vos brouillons de plugins apparaîtront ici.",

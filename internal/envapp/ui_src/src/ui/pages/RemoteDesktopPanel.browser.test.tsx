@@ -192,6 +192,8 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
     await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).length).toBe(0);
     const initialHeight = dialog.getBoundingClientRect().height;
+    const content = flow.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
+    const initialContentHeight = content.getBoundingClientRect().height;
     const actionWidth = flow.querySelector('.remote-desktop-flow-footer > button:last-child')!.getBoundingClientRect().width;
     await userEvent.click(flow.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
     await expect.poll(()=>flow.querySelector('input[type=password]')).not.toBeNull();
@@ -208,7 +210,11 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     expect(dialog.contains(document.activeElement)).toBe(true);
     expect(getComputedStyle(flow.querySelector('.remote-desktop-step-title')!).boxShadow).toBe('none');
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
-    await expect.poll(() => Math.abs(dialog.getBoundingClientRect().height - initialHeight)).toBeLessThan(1);
+    expect(content.getBoundingClientRect().height).toBe(340);
+    expect(Math.abs(dialog.getBoundingClientRect().height - (initialHeight - initialContentHeight + 340))).toBeLessThan(1);
+    expect(content.scrollHeight).toBeLessThanOrEqual(content.clientHeight + 1);
+    expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+    expect(flow.querySelector<HTMLElement>('.remote-desktop-flow-footer')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(850);
     if (reducedMotion === 'no-preference') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-step-applying.png' });
     state.status.mockResolvedValue({ ...setupNeeded, capabilities: { ...setupNeeded.capabilities, state: 'ready', screen: true, input: true }, login_service: { ...setupNeeded.login_service, state: 'active' } });
     finishDeployment({ ok: true });

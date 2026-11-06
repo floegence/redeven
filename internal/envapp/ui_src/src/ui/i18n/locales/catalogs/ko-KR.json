@@ -7346,10 +7346,7 @@
         "automaticUpdatesHint": "이 세션이 열려 있는 동안 원래 출처에서 업데이트합니다. 권한이나 기능이 변경되면 확인이 필요합니다.",
         "preferenceFailed": "업데이트 설정을 저장하지 못했습니다. 새로 고친 후 다시 시도하세요."
       },
-      "directCreationTitle": "플러그인 설정",
       "flowerCreationPlaceholder": "이 플러그인에서 원하는 기능을 Flower에게 알려 주세요…",
-      "directCreationHint": "템플릿을 선택하고 여기에서 플러그인 세부 정보를 설정하세요.",
-      "generateCandidate": "후보 생성",
       "creation": {
         "drafts": "초안",
         "noDrafts": "작성한 플러그인 초안이 여기에 표시됩니다.",

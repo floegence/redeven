@@ -7346,10 +7346,7 @@
         "automaticUpdatesHint": "このセッションを開いている間、元の取得元から更新します。権限や機能の変更には確認が必要です。",
         "preferenceFailed": "更新設定を保存できませんでした。再読み込みして再試行してください。"
       },
-      "directCreationTitle": "プラグイン設定",
       "flowerCreationPlaceholder": "このプラグインで実現したいことを Flower に伝えてください…",
-      "directCreationHint": "テンプレートを選択し、ここでプラグインの詳細を設定します。",
-      "generateCandidate": "候補を生成",
       "creation": {
         "drafts": "下書き",
         "noDrafts": "プラグインの下書きがここに表示されます。",

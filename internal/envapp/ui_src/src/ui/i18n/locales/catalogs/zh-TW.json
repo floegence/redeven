@@ -7346,10 +7346,7 @@
         "automaticUpdatesHint": "目前工作階段開啟時從原始來源更新。權限或功能變更時需要確認。",
         "preferenceFailed": "無法儲存更新偏好。請重新整理後再試。"
       },
-      "directCreationTitle": "外掛設定",
       "flowerCreationPlaceholder": "告訴 Flower 這個外掛需要做什麼…",
-      "directCreationHint": "選擇範本，並在此設定外掛詳細資料。",
-      "generateCandidate": "產生候選版本",
       "creation": {
         "drafts": "草稿",
         "noDrafts": "你建立的外掛草稿會顯示在這裡。",
