@@ -266,8 +266,6 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const browser = useFileBrowser();
   const unregister = props.registerPageStateReader?.(() => ({
     view: browser.viewMode(), sort: browser.sortConfig(), filter: browser.filterQueryApplied(),
-    selected_paths: browser.getSelectedItemsList().slice(0, 16).map(item => item.path),
-    selected_count: browser.getSelectedItemsList().length,
   }));
   if (unregister) onCleanup(unregister);
   const drag = useFileBrowserDrag();

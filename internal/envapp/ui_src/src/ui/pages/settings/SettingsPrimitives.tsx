@@ -1,3 +1,4 @@
+import { createFlowerContextTarget } from '../../flower/FlowerContextSource';
 import {
   FeedbackIndicator,
   type FeedbackIndicatorEntry,
@@ -11,7 +12,7 @@ import {
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
-import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, onMount, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
@@ -114,6 +115,8 @@ export function SettingsSection(props: SettingsSectionProps) {
   let actionsRef: HTMLDivElement | undefined;
   return (
     <FloeSettingsSection
+      ref={createFlowerContextTarget(() => ({ id: props.title, label: props.title,
+        state: { description: props.description, ...(props.error ? { error: props.error } : {}) } }))}
       class="redeven-settings-section"
       data-settings-card={props.title}
       variant={props.variant}
@@ -206,7 +209,10 @@ export function SettingsList(props: { children: JSX.Element; class?: string }) {
 }
 
 export function SettingRow(props: SettingRowProps) {
-  return <FloeSettingRow {...props} class={cn('redeven-setting-row', props.class)} />;
+  const bindContext = createFlowerContextTarget(() => ({ id: props.title, label: props.title, state: { description: props.description } }));
+  const row = <FloeSettingRow {...props} class={cn('redeven-setting-row', props.class)} />;
+  onMount(() => { if (row instanceof HTMLElement) bindContext(row); });
+  return row;
 }
 
 export function CapabilityTag(props: { active?: boolean; children: JSX.Element }) {

@@ -6,6 +6,9 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { GlobalFlowerContextMenu } from '../../../../../flower_ui/src/GlobalFlowerContextMenu';
 import { createFlowerContextSources, FlowerContextSource, FlowerContextSources } from '../flower/FlowerContextSource';
 import { FloatingContextMenu } from './FloatingContextMenu';
+import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { Dialog } from '../primitives/EnvAppModal';
+import { I18nProvider } from '../i18n';
 import { Copy } from '@floegence/floe-webapp-core/icons';
 
 let dispose: (() => void) | undefined;
@@ -22,7 +25,7 @@ it('right-clicks the exact nested preview instance, freezes selection, and keeps
     const [menu, setMenu] = createSignal(false);
     return <GlobalFlowerContextMenu label="Ask Flower" editingLabels={labels} onError={error => { throw error; }}
       prepare={request => {
-        const source = registry.capture(request.target);
+        const source = registry.captureTarget(request.target, request.selection);
         const snapshot = { id: source?.id, state: source?.value.state, selection: request.selection };
         return () => submitted(snapshot);
       }}>
@@ -74,4 +77,25 @@ it('keeps object-specific Ask Flower once and preserves the native operation', a
   expect(document.querySelectorAll('[role=menuitem]')).toHaveLength(2);
   await page.getByRole('menuitem', { name: 'Ask Flower' }).click();
   expect(action).toHaveBeenCalledOnce();
+});
+
+
+it('keeps portal dialog body and title within their own context boundary', async () => {
+  const registry = createFlowerContextSources();
+  const submitted = vi.fn(); const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <LayoutProvider><I18nProvider><FlowerContextSources.Provider value={registry}>
+    <GlobalFlowerContextMenu label="Ask Flower" editingLabels={labels} onError={error => { throw error; }}
+      prepare={request => { const source = registry.captureTarget(request.target, request.selection); return () => submitted(source?.value); }}>
+      <FlowerContextSource id="containers" pageID="containers" pageName="Containers" mode="activity" state={{ filter: 'active', selected_resource: 'old-container' }}>
+        <Dialog open onOpenChange={() => {}} title="Rename environment"><p>Current display name</p></Dialog>
+      </FlowerContextSource>
+    </GlobalFlowerContextMenu>
+  </FlowerContextSources.Provider></I18nProvider></LayoutProvider>, host);
+  for (const label of ['Rename environment', 'Current display name']) {
+    await page.getByText(label, { exact: true }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+    expect(submitted).toHaveBeenLastCalledWith(expect.objectContaining({ pageName: 'Rename environment', mode: 'overlay' }));
+    expect(submitted.mock.lastCall![0].state).toBeUndefined();
+  }
+  registry.dispose();
 });

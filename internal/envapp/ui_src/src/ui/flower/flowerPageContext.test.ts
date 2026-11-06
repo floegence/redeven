@@ -6,21 +6,20 @@ describe('Activity page context snapshots', () => {
     const snapshot = flowerPageContextSnapshot({ environmentID: 'env', environmentName: 'Development', pageID: 'files',
       pageName: 'Files', capturedAtMs: 1, state: { query: '🪷'.repeat(9000) } });
     expect(Array.from(snapshot.content).length).toBeLessThanOrEqual(6000);
-    expect(JSON.parse(snapshot.content).state.truncated).toBe(true);
+    expect(snapshot.content.endsWith('\n…')).toBe(true);
     expect(snapshot.content).not.toMatch(/[\uD800-\uDBFF]$/u);
   });
 
-  it('bounds long terminal screens while preserving page identity, valid JSON and the latest visible lines', () => {
+  it('bounds long terminal screens while preserving page identity and the latest visible lines', () => {
     const screen = `${'quoted "path" 🪷\n'.repeat(1000)}$ latest prompt`;
     const snapshot = flowerPageContextSnapshot({ environmentID: 'env', environmentName: 'Development',
       pageID: 'terminal', pageName: 'Terminal', capturedAtMs: 1,
       state: { session: { id: 'session-1', working_directory: '/workspace' }, screen_text: screen } });
     expect(Array.from(snapshot.content).length).toBeLessThanOrEqual(6000);
-    const captured = JSON.parse(snapshot.content);
-    expect(captured.page.id).toBe('terminal');
-    expect(captured.state.session.id).toBe('session-1');
-    expect(captured.state.screen_text.startsWith('...')).toBe(true);
-    expect(captured.state.screen_text.endsWith('$ latest prompt')).toBe(true);
-    expect(captured.state.screen_text).not.toMatch(/^\.\.\.[\uDC00-\uDFFF]/u);
+    expect(snapshot.content).toContain('Terminal (terminal)');
+    expect(snapshot.content).toContain('session.id: session-1');
+    expect(snapshot.content).toContain('screen_text:\n…\n');
+    expect(snapshot.content.endsWith('$ latest prompt')).toBe(true);
+    expect(snapshot.content).not.toMatch(/…\n[\uDC00-\uDFFF]/u);
   });
 });

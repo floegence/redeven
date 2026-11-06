@@ -1,3 +1,4 @@
+import { createFlowerContextTarget } from '../FlowerContextSource';
 import { Card, Dialog, DialogPlacementProvider, StableText, Input, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
@@ -94,6 +95,8 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
 
   return (
     <div
+      ref={createFlowerContextTarget(() => ({ id: props.item.thread_id, label: title(),
+        state: { thread_id: props.item.thread_id, status: props.item.status, working_directory: props.item.working_dir } }))}
       data-flower-thread-card
       data-flower-pin-action={props.onPin && itemCanPin() ? 'true' : undefined}
       data-pinned={props.item.pinned ? 'true' : 'false'}
@@ -878,7 +881,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                 const group = () => groupByKey().get(key.slice(6));
                 if (key.startsWith('group:directory:')) {
                   const path = key.slice('group:directory:'.length);
-                  return <div class="flower-directory-header" data-flower-directory-header={path}
+                  return <div ref={createFlowerContextTarget(() => ({ id: path, label: path || copy().noDirectory, state: { directory: path } }))} class="flower-directory-header" data-flower-directory-header={path}
                     data-dragging={directoryDrag()?.path === path ? 'true' : undefined}
                     data-drop-before={directoryDrag()?.target?.path === path && directoryDrag()?.target?.placement === 'before' ? 'true' : undefined}>
                     <button type="button" class="flower-directory-toggle" aria-expanded={!collapsed().has(path)}
@@ -971,7 +974,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                 <For each={[0, 1]}>{column => <div class="flower-workspaces-column">
                   <For each={workspacePaths().slice(column * Math.ceil(workspacePaths().length / 2), (column + 1) * Math.ceil(workspacePaths().length / 2))}>{path => {
                     const threads = () => workspaceGroupByPath().get(path)?.threads ?? [];
-                    return <Card variant="well" class="flower-workspace-card" role="group" aria-label={path || copy().noDirectory} data-flower-workspace={path}>
+                    return <Card ref={createFlowerContextTarget(() => ({ id: path, label: path || copy().noDirectory, state: { directory: path } }))} variant="well" class="flower-workspace-card" role="group" aria-label={path || copy().noDirectory} data-flower-workspace={path}>
                       <div class="flower-workspace-heading">
                         <div class="flower-workspace-icon"><Folder class="h-4 w-4" /></div>
                         <div class="flower-workspace-identity">
@@ -999,7 +1002,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
               const threadID = key.slice('thread:'.length);
               const item = createMemo<FlowerThreadListItem>(previous => itemByID().get(threadID) ?? previous!);
               const indicator = () => flowerThreadIndicator(item(), copy());
-              return <div class="flower-workspace-thread" data-flower-workspace-thread-id={threadID} data-flower-thread-indicator={indicator().visual} data-pinned={item().pinned ? 'true' : undefined} data-active={props.activeThreadID === threadID ? 'true' : undefined}>
+              return <div ref={createFlowerContextTarget(() => ({ id: threadID, label: item().title, state: { thread_id: threadID, status: item().status, working_directory: item().working_dir } }))} class="flower-workspace-thread" data-flower-workspace-thread-id={threadID} data-flower-thread-indicator={indicator().visual} data-pinned={item().pinned ? 'true' : undefined} data-active={props.activeThreadID === threadID ? 'true' : undefined}>
                 <button type="button" class="flower-workspace-thread-select" aria-current={props.activeThreadID === threadID ? 'true' : undefined}
                   aria-label={[item().title, indicator().ariaStatus, indicator().attention === 'unread' ? copy().unread : '', item().pinned ? copy().pinnedGroup : ''].filter(Boolean).join(', ')}
                   onClick={() => {

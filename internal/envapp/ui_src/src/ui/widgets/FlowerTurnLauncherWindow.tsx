@@ -86,6 +86,7 @@ type FlowerTurnLauncherWindowProps = Readonly<{
   placement?: 'window' | 'panel';
   draft?: string;
   onDraftChange?: (draft: string) => void;
+  onLockedChange?: (locked: boolean) => void;
   autoFocus?: boolean;
   modelSource?: FlowerTurnLauncherPanelProps['modelSource'];
   screenshot?: FlowerTurnLauncherPanelProps['screenshot'];
@@ -508,6 +509,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             copy={createFlowerTurnLauncherCopy(i18n)}
             draft={props.draft}
             onDraftChange={props.onDraftChange}
+            onLockedChange={props.onLockedChange}
             autoFocus={props.autoFocus}
             screenshot={props.screenshot}
             modelSource={props.modelSource}
@@ -528,6 +530,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
           copy={createFlowerTurnLauncherCopy(i18n)}
           draft={props.draft}
           onDraftChange={props.onDraftChange}
+            onLockedChange={props.onLockedChange}
           autoFocus={props.autoFocus}
           onClose={props.onClose}
           onSubmit={props.onSubmit}

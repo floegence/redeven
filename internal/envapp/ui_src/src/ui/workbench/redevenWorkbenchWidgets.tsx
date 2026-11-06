@@ -472,7 +472,8 @@ export function localizedRedevenWorkbenchWidgets(t: I18nHelpers['t']): readonly 
   return redevenWorkbenchWidgets.map((definition) => ({
     ...definition,
     body: props => <FlowerContextSource id={`workbench:${props.widgetId}`} pageID={definition.type}
-      pageName={localizedWorkbenchWidgetCopy(definition.type, t)?.label ?? definition.label} mode="workbench" selected={props.selected}>
+      pageName={props.title || localizedWorkbenchWidgetCopy(definition.type, t)?.label || definition.label} mode="workbench" selected={props.selected} enabled={!props.filtered}
+      boundary={body => body.closest<HTMLElement>('[data-floe-workbench-widget-id]') ?? body}>
       <definition.body {...props} />
     </FlowerContextSource>,
     ...(localizedWorkbenchWidgetCopy(definition.type, t) ?? {}),

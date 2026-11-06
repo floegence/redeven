@@ -1208,6 +1208,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   }>;
 
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
+  const [flowerTurnLauncherLocked, setFlowerTurnLauncherLocked] = createSignal(false);
   let flowerTurnLauncherRequest: FlowerTurnLaunchInput | null = null;
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
@@ -2467,8 +2468,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       context_action: {
         ...contextAction,
         execution_context: {
-          ...contextAction.execution_context,
           ...flowerTurnExecutionContext(),
+          ...contextAction.execution_context,
         },
       },
     };
@@ -2596,62 +2597,57 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (restoreFocus) setActivityFlowerComposerFocusRequest((request) => request + 1);
   };
 
-  const captureFlowerSource = (excludeConversation = false, target?: EventTarget) => {
-    const active = target ? flowerContextSources.capture(target) : flowerContextSources.capture();
-    if (active && (!excludeConversation || active.value.pageID !== 'ai') && (
-      active.value.mode === 'overlay' || (active.value.mode === viewMode()
-        && (viewMode() !== 'activity' || active.value.pageID === layout.sidebarActiveTab())))) return active;
-    const page = viewMode() === 'activity' ? layout.sidebarActiveTab() : 'workbench';
-    const pageElement = Array.from(document.querySelectorAll<HTMLElement>('[data-flower-context-source]')).find(element =>
-      element.dataset.flowerContextMode === viewMode() && element.dataset.flowerContextPage === page && element.getClientRects().length > 0);
-    return pageElement ? flowerContextSources.capture(pageElement) : undefined;
+  const captureFlowerSource = (excludeConversation = false, target?: EventTarget, selection = '') => {
+    // An explicit target is never substituted with the active page.
+    const source = target ? flowerContextSources.captureTarget(target, selection) : flowerContextSources.capture();
+    if (!source || (excludeConversation && source.value.pageID === 'ai')) return undefined;
+    if (target || source.value.mode === 'overlay' || (source.value.mode === viewMode()
+      && (viewMode() !== 'activity' || (source.value.kind === 'object' ? (source.value.state?.surface as { id?: string } | undefined)?.id : source.value.pageID) === layout.sidebarActiveTab()))) return source;
+    return undefined;
   };
-  const bindScreenshotSource = (source = captureFlowerSource()) => {
+  const bindScreenshotSource = (source: ReturnType<typeof captureFlowerSource>, target: EventTarget | undefined = source?.element) => {
     externalScreenshot = undefined;
     const environment = envId();
     const mode = viewMode();
     const page = layout.sidebarActiveTab();
-    const sourceKey = (state: Readonly<Record<string, unknown>> | undefined) => JSON.stringify([
-      state?.path, state?.directory, state?.repository, state?.canvas_id, state?.instance_id, state?.diff, state?.thread_id,
-      (state?.session as { id?: string } | undefined)?.id,
-    ]);
-    const identity = sourceKey(source?.value.state);
-    flowerScreenshotSource = source ? { element: source.element, valid: () => source.element.isConnected &&
-      environment === envId() && mode === viewMode() && (mode !== 'activity' || page === layout.sidebarActiveTab())
-      && flowerContextSources.capture(source.element)?.id === source.id
-      && sourceKey(flowerContextSources.capture(source.element)?.value.state) === identity } : undefined;
+    const current = () => target ? flowerContextSources.captureTarget(target) : undefined;
+    flowerScreenshotSource = source ? { element: source.value.screenshotElement ?? source.element, valid: () => source.element.isConnected &&
+      environment === envId() && mode === viewMode() && (source.value.kind === 'navigation' || mode !== 'activity' || page === layout.sidebarActiveTab())
+      && current()?.id === source.id && current()?.value.resourceKey === source.value.resourceKey } : undefined;
   };
   const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
-    const source = captureFlowerSource(false, request?.target);
-    const pageID = source?.value.pageID ?? (viewMode() === 'activity' ? layout.sidebarActiveTab() : 'workbench');
-    const snapshot = flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
-      pageID, pageName: source?.value.pageName ?? environmentName(), capturedAtMs: Date.now(),
-      state: { ...source?.value.state, ...(source ? { source_instance_id: source.id } : {}),
-        ...((request?.selection || source?.selection) ? { selection: Array.from(request?.selection || source?.selection || '').slice(0, 6000).join('') } : {}) } });
-    const context = { kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content };
+    const source = captureFlowerSource(false, request?.target, request?.selection ?? '');
+    const snapshot = source ? flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
+      pageID: source.value.pageID, pageName: source.value.pageName, capturedAtMs: Date.now(),
+      state: { ...source.value.state, kind: source.value.kind ?? 'surface',
+        ...(source.selection ? { selection: Array.from(source.selection).slice(0, 6000).join('') } : {}) } }) : undefined;
+    const executionContext = flowerTurnExecutionContext();
+    const contexts = snapshot ? [{ kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content }] : [];
     return () => {
-      if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
-      openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
-      context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source?.id }) },
+      if (flowerTurnLauncherLocked()) return;
+      if (flowerTurnLauncherOpen() && !request) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+      openFlowerTurnLauncher({ id: flowerTurnLauncherOpen() ? flowerTurnLauncherIntent()?.id ?? createClientId() : createClientId(), source_surface: 'flower_composer', context_items: contexts,
+      ...(contexts.length ? { context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: contexts, surfaceId: source?.id, executionContext }) } : {}) },
       request ? { x: request.x, y: request.y } : source ? { x: source.rect.x + Math.min(28, source.rect.width / 4), y: source.rect.y + Math.min(48, source.rect.height / 4) } : undefined);
-      bindScreenshotSource(source);
+      bindScreenshotSource(source, request?.target);
     };
   };
   const openGlobalAskFlower = () => prepareGlobalAskFlower()();
 
   const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
+    if (flowerTurnLauncherLocked()) return;
     if (!hasRWXPermissions(env())) {
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
-    bindScreenshotSource();
+    bindScreenshotSource(captureFlowerSource());
     const capturedAnchor = anchor ?? capturePromptCardAnchor();
     const capturedMode = viewMode();
     if (flowerProductPanelRef?.contains(document.activeElement)) {
       activityNotesViewportAnchor()?.focus({ preventScroll: true });
     }
     const contextualIntent = withFlowerTurnExecutionContext(intent);
-    setFlowerTurnLauncherIntent(contextualIntent);
+    setFlowerTurnLauncherIntent(flowerTurnLauncherOpen() ? { ...contextualIntent, id: flowerTurnLauncherIntent()?.id ?? intent.id } : contextualIntent);
     setFlowerTurnLauncherAnchor(capturedAnchor ?? null);
     setFlowerTurnLauncherHandoff({
       mode: capturedMode,
@@ -2706,7 +2702,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   onMount(() => {
     const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(source => {
-      if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+      if (flowerTurnLauncherLocked()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
       const context = { kind: 'text_snapshot' as const, title: source.title || environmentName(), content: JSON.stringify(source, null, 2) };
       openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
         context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source.id }) }, { x: 32, y: 80 });
@@ -4548,6 +4544,37 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
   });
 
+  const flowerNavigationBindings = new Map<string, () => void>();
+  onCleanup(() => { flowerNavigationBindings.forEach(remove => remove()); flowerNavigationBindings.clear(); });
+  const bindFlowerShell = (element: HTMLElement) => {
+    const remove = flowerContextSources.register({ id: 'shell', element, activateOnInteraction: false,
+      read: target => {
+        const node = target instanceof Element ? target : element;
+        const region = node.closest<HTMLElement>('nav, header, [role="navigation"], [role="banner"]');
+        const navigation = region?.matches('nav, [role="navigation"]');
+        const id = region ? navigation ? 'navigation' : 'topbar' : 'shell';
+        const label = i18n.t(region ? navigation ? 'shell.accessibility.primaryNavigationLabel' : 'shell.accessibility.topBarLabel' : 'shell.accessibility.mainLabel');
+        return { kind: 'shell', pageID: id, pageName: label, mode: 'overlay', screenshotElement: region ?? element };
+      },
+    });
+    onCleanup(remove);
+  };
+  const withFlowerNavigation = (item: ActivityBarItem): ActivityBarItem => ({
+    ...item, buttonRef: button => {
+      item.buttonRef?.(button);
+      flowerNavigationBindings.get(item.id)?.();
+      flowerNavigationBindings.delete(item.id);
+      if (!button) return;
+      const remove = flowerContextSources.register({ id: `navigation:${item.id}`, element: button,
+        activateOnInteraction: false,
+        read: () => ({ kind: 'navigation', pageID: item.id, pageName: [...activityItems(), ...activityBottomItems()].find(entry => entry.id === item.id)?.label ?? item.label, mode: 'overlay',
+          screenshotElement: button.closest<HTMLElement>('nav') ?? button,
+          state: { navigation: { id: item.id } } }),
+      });
+      flowerNavigationBindings.set(item.id, remove);
+    },
+  });
+
   const activityItems = (): ActivityBarItem[] => {
     const items: ActivityBarItem[] = [];
     const pluginPanelItem: ActivityBarItem = {
@@ -5351,8 +5378,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       )}
       sidebarContent={() => <></>}
       logo={<ShellLogo />}
-      activityItems={activityItems()}
-      activityBottomItems={activityBottomItems()}
+      activityItems={activityItems().map(withFlowerNavigation)}
+      activityBottomItems={activityBottomItems().map(withFlowerNavigation)}
       topBarActions={<HeaderActions />}
     >
       <div class="h-full min-h-0 overflow-hidden flex flex-col">
@@ -5609,7 +5636,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
 
   return (
-    <GlobalFlowerContextMenu enabled={canUseFlower() && hasRWXPermissions(env())} label={i18n.t('flowerTurnLauncher.windowTitle')}
+    <GlobalFlowerContextMenu disabled={flowerTurnLauncherLocked()} enabled={canUseFlower() && hasRWXPermissions(env())} label={i18n.t('flowerTurnLauncher.windowTitle')}
       editingLabels={{ undo: i18n.t('editContextMenu.undo'), redo: i18n.t('editContextMenu.redo'), cut: i18n.t('editContextMenu.cut'), copy: i18n.t('editContextMenu.copy'), paste: i18n.t('editContextMenu.paste'), selectAll: i18n.t('editContextMenu.selectAll'), openLink: i18n.t('editContextMenu.openLink'), copyLink: i18n.t('editContextMenu.copyLink') }}
       onError={error => notify.error(i18n.t('shell.notifications.copyFailedTitle'), String(error))} prepare={prepareGlobalAskFlower}>
     <FlowerContextSources.Provider value={flowerContextSources}><EnvContext.Provider
@@ -5730,7 +5757,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                     <h1 class="floe-window-status__title">{i18n.t(restartRestoreFailed() ? 'sessionRestart.failed' : 'sessionRestart.restoring')}</h1>
                   </div></section>
                 )}>
-                  <div class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
+                  <div ref={bindFlowerShell} class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
                     {standaloneTessiven ? renderStandaloneTessiven() : renderMainShell()}
                   </div>
                 </Show>
@@ -5758,6 +5785,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                   <FlowerTurnLauncherWindow
                     open={flowerTurnLauncherOpen()}
                     intent={flowerTurnLauncherIntent()}
+                    onLockedChange={setFlowerTurnLauncherLocked}
                     modelSource={{
                       loadSettings: async () => (await createFlowerTurnLauncherAdapter()).loadSettings(),
                       loadModelDirectory: async refresh => (await createFlowerTurnLauncherAdapter()).loadModelDirectory!(refresh),

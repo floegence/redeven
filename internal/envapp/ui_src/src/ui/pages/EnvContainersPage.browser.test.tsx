@@ -1,3 +1,6 @@
+import { GlobalFlowerContextMenu } from '../../../../../flower_ui/src/GlobalFlowerContextMenu';
+import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from '../flower/FlowerContextSource';
+import { flowerPageContextSnapshot } from '../flower/flowerPageContext';
 import '../../index.css';
 
 import { commands, page, userEvent } from 'vitest/browser';
@@ -273,6 +276,46 @@ describe('native Containers responsive product surface', () => {
     document.body.replaceChildren();
     document.documentElement.classList.remove('dark');
     await page.viewport(1280, 720);
+  });
+
+  it('uses the actual container row through right-click, preview and submission', async () => {
+    await page.viewport(1440, 900);
+    const registry = createFlowerContextSources();
+    const submitted = vi.fn(async () => {});
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0'; document.body.append(host);
+    const [intent, setIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
+    const unmount = render(() => <ThemeProvider><I18nProvider><LayoutProvider>
+      <GlobalFlowerContextMenu label="Ask Flower" onError={error => { throw error; }}
+        editingLabels={{ undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select all', openLink: 'Open link', copyLink: 'Copy link' }}
+        prepare={request => {
+          const source = registry.captureTarget(request.target, request.selection)!;
+          const snapshot = flowerPageContextSnapshot({ environmentID: 'env-26', environmentName: 'udesk26', pageID: source.value.pageID,
+            pageName: source.value.pageName, state: source.value.state, capturedAtMs: Date.now() });
+          return () => setIntent({ id: 'row', source_surface: 'flower_composer', context_items: [{ kind: 'text_snapshot', title: snapshot.title, content: snapshot.content }] });
+        }}>
+        <FlowerContextSources.Provider value={registry}><FlowerContextSource id="containers" pageID="containers" pageName="Containers" mode="activity">
+          <EnvContainersPage />
+        </FlowerContextSource></FlowerContextSources.Provider>
+        <SharedLauncher open={!!intent()} intent={intent()} onClose={() => setIntent(null)} onSubmit={submitted} />
+      </GlobalFlowerContextMenu>
+    </LayoutProvider></I18nProvider></ThemeProvider>, host);
+    dispose = () => { unmount(); registry.dispose(); };
+    await expect.poll(() => host.querySelectorAll('[data-container-resource-row]').length).toBeGreaterThan(1);
+    const row = [...host.querySelectorAll<HTMLElement>('[data-container-resource-row]')].find(row => row.textContent?.includes('postgres-development'))!;
+    await userEvent.click(row.querySelector('.container-resource-name')!, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-floe-prompt-card] .flower-composer-context-source')!);
+    await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')?.textContent).toContain('postgres-development');
+    const preview = document.querySelector('[data-flower-context-preview-text]')!.textContent!;
+    expect(preview).toContain('engine: docker'); expect(preview).toContain('endpoint_id: desktop-linux');
+    expect(preview).not.toContain('redeven-api'); expect(preview).not.toContain('filter:');
+    await page.screenshot({ path: '__screenshots__/ask-container-row-context.png' });
+    document.querySelector<HTMLButtonElement>('.flower-context-preview-window [data-floe-floating-window-control="close"]')!.click();
+    await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')).toBeNull();
+    await userEvent.fill(document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!, 'Inspect this container');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await expect.poll(() => submitted.mock.calls.length).toBe(1);
+    expect((submitted.mock.calls[0] as unknown as [import('../../../../../flower_ui/src/FlowerTurnLauncherWindow').FlowerTurnLauncherSubmitInput])[0].intent.context_items[0]).toEqual({ kind: 'text_snapshot', title: 'postgres-development', content: preview });
   });
 
   it.each([390, 1440])('keeps service operation feedback readable without horizontal overflow at %spx', async (width) => {
@@ -1462,7 +1505,7 @@ describe('native Containers responsive product surface', () => {
       await userEvent.click(prompt.querySelector<HTMLButtonElement>('.flower-composer-context-source')!);
       await expect.poll(() => document.querySelector('.flower-context-preview-window')?.textContent, { timeout: 10_000 }).toContain('permission_denied');
       expect(document.querySelector('.flower-context-preview-window')?.textContent).toContain('udesk26');
-      await userEvent.click(document.querySelector<HTMLButtonElement>('[data-flower-context-preview-close]')!);
+      await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-context-preview-window [data-floe-floating-window-control=close]')!);
       await expect.poll(() => document.querySelector('.flower-context-preview-window')).toBeNull();
       expect(editor.value).toBe('Please diagnose and help configure this engine.');
       expect(document.documentElement.classList.contains('dark')).toBe(appearance === 'dark');

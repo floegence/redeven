@@ -137,7 +137,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       notification.error(i18n.t('filePreview.saveFailedTitle'), i18n.t('filePreview.saveFailedMessage', { path, message }));
     },
   });
-  registerFlowerPageReader(() => ({ path: controller.item()?.path, mode: controller.descriptor().mode, unsaved: controller.dirty(), selection: controller.selectedText() }));
+  registerFlowerPageReader(() => ({ path: controller.item()?.path, mode: controller.descriptor().mode, unsaved: controller.dirty() }), undefined, () => controller.item()?.path);
   const [openLifecycle, setOpenLifecycle] = createSignal<PreviewOpenLifecycle>({ phase: 'idle' });
   const [dismissedSyncedPreviewKey, setDismissedSyncedPreviewKey] = createSignal('');
   const [pendingWidgetRemoval, setPendingWidgetRemoval] = createSignal(false);

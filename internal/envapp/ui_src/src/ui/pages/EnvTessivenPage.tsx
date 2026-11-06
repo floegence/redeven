@@ -52,7 +52,7 @@ export default function EnvTessivenPage(props: {
     : null;
   return (
     <FlowerContextSource id="tessiven:canvas" pageID="tessiven:canvas" pageName="Tessiven" mode="overlay" selected={props.visible}>
-    <TessivenPage registerPageContext={read => registerFlowerPageReader(read, props.registerPageContext)}
+    <TessivenPage registerPageContext={read => registerFlowerPageReader(read, props.registerPageContext, () => String(read().canvas_id ?? ''))}
       locale={i18n.locale()}
       visible={props.visible}
       standalone={props.standalone}

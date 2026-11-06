@@ -135,8 +135,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
       readings: { sampled_at_ms: data()!.timestampMs, cpu_percent: data()!.cpuUsage, cpu_cores: data()!.cpuCores,
         memory_used_bytes: data()!.memoryUsedBytes, memory_total_bytes: data()!.memoryTotalBytes,
         network_received_bytes_per_second: data()!.networkSpeedReceived, network_sent_bytes_per_second: data()!.networkSpeedSent },
-      selected_process: (() => { const process = data()!.processes.find(item => item.pid === selectedProcessPid());
-        return process ? { pid: process.pid, name: process.name, username: process.username } : undefined; })(),
     } : {}),
   }), props.registerPageContext);
 

@@ -50,6 +50,7 @@ export type FlowerTurnLauncherPanelProps = Readonly<{
   modelSource?: Pick<FlowerSurfaceAdapter, 'loadSettings' | 'loadModelDirectory' | 'subscribeModelDirectory'>;
   draft?: string;
   onDraftChange?: (draft: string) => void;
+  onLockedChange?: (locked: boolean) => void;
   screenshot?: Readonly<{ label: string; failed: string; capture: (signal: AbortSignal) => Promise<File> }>;
   onClose: () => void;
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
@@ -135,6 +136,8 @@ export function createFlowerTurnLauncherPanelController(
   });
   const userPrompt = () => props.draft ?? internalUserPrompt();
   const admissionUnknown = () => launchErrorKind() === 'unknown' && Boolean(launchError());
+  createEffect(() => props.onLockedChange?.(props.open && (sending() || admissionUnknown())));
+  onCleanup(() => props.onLockedChange?.(false));
   const visiblePrompt = () => admissionUnknown() ? pendingRequest()?.prompt ?? '' : userPrompt();
   const setUserPrompt = (value: string) => {
     setInternalUserPrompt(value);
@@ -178,6 +181,19 @@ export function createFlowerTurnLauncherPanelController(
     const intent = props.intent;
     // Reversing an unfinished exit keeps the same editor, draft and request.
     if (footerPlacement === 'window' && intent && intent === presentedIntent && textareaEl?.isConnected) return;
+    if (intent && presentedIntent && intent.id === presentedIntent.id) {
+      if (untrack(sending) || untrack(admissionUnknown)) return;
+      const current = untrack(editableIntent);
+      const previousAutomatic = new Set(presentedIntent.pending_attachments ?? []);
+      const manualAttachments = current?.pending_attachments?.filter(file => !previousAutomatic.has(file)) ?? [];
+      setEditableIntent({ ...intent, pending_attachments: [...intent.pending_attachments ?? [], ...manualAttachments] });
+      setValidationError('');
+      setLaunchError('');
+      setPendingRequest(null);
+      setClientRequestID(createFlowerClientRequestID());
+      presentedIntent = intent;
+      return;
+    }
     presentedIntent = intent;
     resetLauncherState(intent);
   });

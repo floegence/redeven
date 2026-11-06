@@ -100,3 +100,7 @@ Concepts own current contracts and original qualification outcomes; Git retains 
   discovery, cached resolution and restart using published Floret v7.107.0.
   Document field provenance, capability-gated Ultra, sparse manual overrides,
   unknown input display and endpoint-window warnings.
+
+## 2026-11-06
+
+Clarify strict Ask Flower target ownership, frozen readable references, draft retargeting, screenshot resource identity and bounded contributed menu icons.

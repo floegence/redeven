@@ -1,4 +1,4 @@
-import { registerFlowerPageReader } from '../flower/FlowerContextSource';
+import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import './runtime-settings-compact.css';
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
@@ -165,7 +165,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
             label: groupTitle(group.id, group.title, i18n.t),
             items: filteredItems().filter((item) => (group.sections as readonly string[]).includes(item.id)).map((item) => ({
               ...item,
-              attributes: { 'data-settings-nav-item': item.id, title: item.label },
+              attributes: { 'data-settings-nav-item': item.id, title: item.label, ref: createFlowerContextTarget(() => ({ id: item.id, label: item.label, state: { navigation: item.id } })) },
             })),
           }))}
           search={<div class="relative">
@@ -196,7 +196,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                   testId={`settings-section-${item.id}`}
                   class="absolute inset-0 overflow-auto"
                   render={() => (
-                    <div class="floe-settings-page redeven-settings-page">
+                    <div ref={createFlowerContextTarget(() => ({ id: item.id, label: navLabel(item.id, item.id, i18n.t), state: { section: item.id } }))} class="floe-settings-page redeven-settings-page">
                       <Show when={ctx.settings.error}>
                         <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
                           <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />

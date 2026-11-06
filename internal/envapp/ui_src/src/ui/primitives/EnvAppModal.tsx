@@ -1,27 +1,26 @@
 import {
   Button,
-  Dialog as FloeDialog,
   type ConfirmDialogProps,
   type DialogProps,
 } from '@floegence/floe-webapp-core/ui';
 import { useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import type { JSX } from 'solid-js';
+import { FlowerContextDialog } from '../../../../../flower_ui/src/FlowerContextDialog';
 
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 export function Dialog(props: Omit<DialogProps, 'globalZIndex'>): JSX.Element {
-  return <FloeDialog {...props} globalZIndex={ENV_APP_FLOATING_LAYER.productModal} />;
+  return <FlowerContextDialog {...props} globalZIndex={ENV_APP_FLOATING_LAYER.productModal} />;
 }
 
 export function ConfirmDialog(props: Omit<ConfirmDialogProps, 'globalZIndex'>): JSX.Element {
   const floe = useResolvedFloeConfig();
   return (
-    <FloeDialog
+    <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={props.title}
       bodyDescription={props.bodyDescription}
-      globalZIndex={ENV_APP_FLOATING_LAYER.productModal}
       footer={<>
         <Button
           variant="ghost"
@@ -41,6 +40,6 @@ export function ConfirmDialog(props: Omit<ConfirmDialogProps, 'globalZIndex'>): 
       </>}
     >
       {props.children}
-    </FloeDialog>
+    </Dialog>
   );
 }

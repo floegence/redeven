@@ -1,4 +1,4 @@
-import { registerFlowerPageReader } from '../flower/FlowerContextSource';
+import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { type FeedbackIndicatorEntry, Button, Dropdown, Input } from '@floegence/floe-webapp-core/ui';
 import { createEnvCachedResource } from '../services/envResourceCache';
@@ -104,8 +104,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   let relaying = false;
   let relaySourceReceiving = false;
   let completingSetup = false;
-  registerFlowerPageReader(() => ({ query: query(), category: category(), running_only: runningOnly(),
-    selected_application: canRead() && selectedApplication() ? { id: selectedApplication()!.id, name: selectedApplication()!.name } : undefined }), props.registerPageContext);
+  registerFlowerPageReader(() => ({ query: query(), category: category(), running_only: runningOnly() }), props.registerPageContext);
   const [quitting, setQuitting] = createSignal<{ app: HostApplication; instances: string[]; force?: boolean } | null>(null);
   const [quitBusy, setQuitBusy] = createSignal(false);
   const [quitError, setQuitError] = createSignal('');
@@ -705,7 +704,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
             <section class="host-apps-running" aria-label={i18n.t('hostApplications.running')}>
               <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.running')}</h2><span>{runningApplications().length}</span></div>
               <p class="host-apps-hint">{i18n.t(isMac() ? 'hostApplications.macRunningHint' : 'hostApplications.linuxRunningHint')}</p>
-              <div class="host-apps-session-grid host-apps-process-grid"><For each={runningApplications().map(item => item.app.id)}>{appID => { const item = () => processesByID().get(appID)!; return  <div class={`host-app-session host-app-process ${redevenSurfaceRoleClass('panelInteractive')}`}>
+              <div class="host-apps-session-grid host-apps-process-grid"><For each={runningApplications().map(item => item.app.id)}>{appID => { const item = () => processesByID().get(appID)!; const contextRef = createFlowerContextTarget(() => ({ id: appID, label: item().app.name, state: { application_id: appID, running: true } })); return <div ref={contextRef} class={`host-app-session host-app-process ${redevenSurfaceRoleClass('panelInteractive')}`}>
                 <div class="host-app-process-row">
                   <button class="host-app-session-open" aria-label={`${i18n.t('hostApplications.resume')} · ${item().app.name}`} onClick={() => void open(item().app)} disabled={!canLaunch() || busy()[item().app.id]}>
                     <ApplicationIcon app={item().app} /><span class="min-w-0"><strong class="block truncate">{item().app.name}</strong><span class="host-app-status"><span class="host-app-status-dot" />{i18n.t('hostApplications.macAppRunning')}</span></span>
@@ -738,7 +737,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
               </div>
             </div>
             <Show when={apps().length} fallback={<Show when={ready()}><div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div></Show>}>
-              <div class="host-apps-grid"><For each={apps().map(app => app.id)}>{appID => { const app = () => applicationsByID().get(appID)!; return  <div class="host-app-tile-wrap">
+              <div class="host-apps-grid"><For each={apps().map(app => app.id)}>{appID => { const app = () => applicationsByID().get(appID)!; const contextRef = createFlowerContextTarget(() => ({ id: appID, label: app().name, state: { application_id: appID, description: app().description, running: runningByApp().has(appID) || runningApplicationIDs().has(appID) } })); return <div ref={contextRef} class="host-app-tile-wrap">
                 <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app().id)} disabled={busy()[app().id] || (applicationResource.ready() && !canLaunch())} aria-disabled={!canLaunch()} onClick={() => void open(app())} aria-label={`${i18n.t((runningByApp().has(app().id) || runningApplicationIDs().has(app().id)) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app().name}`}>
                   <ApplicationIcon app={app()} />
                   <div class="host-app-tile-copy">

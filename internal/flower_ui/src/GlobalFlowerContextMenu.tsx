@@ -4,6 +4,7 @@ import { FlowerContextMenuIcon } from './icons/FlowerSoftAuraIcon';
 
 export function GlobalFlowerContextMenu(props: {
   enabled?: boolean;
+  disabled?: boolean;
   label: string;
   editingLabels: ContextMenuEditingLabels;
   onError: (error: unknown) => void;
@@ -12,7 +13,7 @@ export function GlobalFlowerContextMenu(props: {
 }) {
   return <ContextMenuActions enabled={props.enabled} label={props.label} zIndex={5100}
     editing={{ labels: props.editingLabels, onError: props.onError }}
-    actions={request => [{ id: 'assistant.ask.flower', label: props.label,
+    actions={request => [{ id: 'assistant.ask.flower', label: props.label, disabled: props.disabled,
       icon: () => <FlowerContextMenuIcon />, onSelect: props.prepare(request) }]}>
     {props.children}
   </ContextMenuActions>;

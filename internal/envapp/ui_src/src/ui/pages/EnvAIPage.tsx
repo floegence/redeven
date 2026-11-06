@@ -223,7 +223,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
           threadListPreferenceStorage={threadListPreferenceStorage}
           embeddedConversation={props.embeddedConversation}
           captureNewConversationContext={props.captureNewConversationContext}
-          registerContextReader={registerFlowerPageReader}
+          registerContextReader={read => registerFlowerPageReader(read, undefined, () => String(read().thread_id ?? ''))}
           renderContextSnapshotPreview={FlowerContextSnapshotPreview}
           adapter={adapter}
           filesystemScopeKey={filesystemPicker.scopeKey}

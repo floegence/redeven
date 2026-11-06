@@ -48,5 +48,5 @@ export function FlowerWorkbenchIcon(props: { class?: string }) {
 }
 
 export function FlowerContextMenuIcon(props: { class?: string }) {
-  return <FlowerWorkbenchIcon class={props.class} />;
+  return <FlowerWorkbenchIcon class={cn('h-3.5 w-3.5 shrink-0', props.class)} />;
 }

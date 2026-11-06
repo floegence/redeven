@@ -2,6 +2,7 @@ import { For, createEffect, createMemo, createSignal, createUniqueId, onCleanup,
 import { cn } from '@floegence/floe-webapp-core';
 import {
   SurfaceFloatingLayer,
+  ContextMenuActionIcon,
   useContextMenuActions,
   handleMenuKeyboardNavigation,
   type MenuDismissReason,
@@ -18,6 +19,7 @@ const FLOATING_CONTEXT_MENU_MAX_HEIGHT_PX = 512;
 
 type FloatingContextMenuActionItem = Readonly<{
   id: string;
+  contextActionId?: string;
   kind: 'action';
   label: string;
   icon: Component<{ class?: string }>;
@@ -78,11 +80,15 @@ function eventOccursWithin(event: Event, element: HTMLElement | null): boolean {
 export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) => {
   const sharedActions = useContextMenuActions()?.claim()?.actions ?? [];
   const menuItems = createMemo<readonly FloatingContextMenuItem[]>(() => {
-    const existing = new Set(props.items.map(item => item.id === 'ask-flower' ? 'assistant.ask.flower' : item.id));
+    const existing = new Set(props.items.map(item => item.kind === 'action' && item.contextActionId ? item.contextActionId : item.id === 'ask-flower' ? 'assistant.ask.flower' : item.id));
     return [...sharedActions.filter(action => !existing.has(action.id)).map(action => ({
       id: action.id, kind: 'action' as const, label: action.label, disabled: action.disabled,
-      icon: () => action.icon?.(), onSelect: () => { props.onDismiss('outside-pointer'); action.onSelect(); },
-    })), ...props.items];
+      icon: (iconProps: { class?: string }) => <ContextMenuActionIcon icon={action.icon} class={iconProps.class} />, onSelect: () => { props.onDismiss('outside-pointer'); action.onSelect(); },
+    })), ...props.items.map(item => {
+      if (item.kind !== 'action') return item;
+      const sharedID = item.contextActionId ?? (item.id === 'ask-flower' ? 'assistant.ask.flower' : item.id);
+      return sharedActions.some(action => action.id === sharedID && action.disabled) ? { ...item, disabled: true } : item;
+    })];
   });
   let menuEl: HTMLDivElement | null = null;
   let dismissalRequested = false;
@@ -282,7 +288,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
               aria-describedby={disabledDescriptionID()}
               title={actionItem().disabledReason || (props.width ? actionItem().label : undefined)}
               data-floating-menu-item-id={itemId}
-              data-context-action-id={itemId === 'ask-flower' ? 'assistant.ask.flower' : itemId}
+              data-context-action-id={actionItem().contextActionId ?? (itemId === 'ask-flower' ? 'assistant.ask.flower' : itemId)}
               onClick={() => {
                 if (!itemDisabled()) actionItem().onSelect();
               }}

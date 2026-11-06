@@ -1,3 +1,4 @@
+import { flowerPageContextSnapshot } from '../flower/flowerPageContext';
 import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { ActivityFlowerAnchorRegistrar } from '../flower/activityFlowerAnchor';
 import { TerminalLayoutPicker } from './TerminalLayoutPicker';
@@ -2300,9 +2301,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return {
       session: { id: session.id, name: session.name, working_directory: session.workingDir },
       ...(screenText ? { screen_text: screenText } : {}),
-      selection: readTerminalSelectionText(viewportRegistry.get(session.id) ?? null),
     };
-  }, props.registerPageContext);
+  }, props.registerPageContext, () => activeSession()?.id);
 
   const [terminalChromeDeadlineRevision, setTerminalChromeDeadlineRevision] = createSignal(0);
   const fallbackRemoteOpeningObservedAtBySession = new Map<string, number>();
@@ -4345,12 +4345,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const currentItem = sessionListItemById().get(item.id);
     if (!currentItem) return;
     const workingDir = normalizeAskFlowerAbsolutePath(currentItem.localWorkingDir);
-    const selection = buildTerminalContextSnapshot(
-      currentItem.id,
-      viewportRegistry.get(currentItem.id) ?? null,
-    );
+    const snapshot = flowerPageContextSnapshot({ environmentID: '', environmentName: '', pageID: currentItem.id,
+      pageName: currentItem.title || currentItem.label, capturedAtMs: Date.now(),
+      state: { kind: 'object', session: { id: currentItem.id, name: currentItem.label, working_directory: workingDir },
+        remote: currentItem.remote, process_running: currentItem.processRunning } });
     setTerminalSidebarMenu(null);
-    const handoff = () => openTerminalAskFlowerContext({ x: anchor.x, y: anchor.y, workingDir, selection });
+    const handoff = () => env.openFlowerTurnLauncher(attachAskFlowerContextAction({
+      id: createClientId(), source_surface: 'flower_composer',
+      ...(workingDir ? { suggested_working_dir: workingDir } : {}),
+      context_items: [{ kind: 'text_snapshot', title: snapshot.title, content: snapshot.content }],
+    }, currentItem.id), anchor);
     if (isMobileLayout() && sessionDrawerOpen()) {
       setSessionDrawerOpen(false);
       queueMicrotask(handoff);
@@ -4529,6 +4533,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return [
       {
         id: 'sidebar-ask-flower',
+        contextActionId: 'assistant.ask.flower',
         kind: 'action',
         label: i18n.t('terminal.askFlower'),
         icon: FlowerContextMenuIcon,

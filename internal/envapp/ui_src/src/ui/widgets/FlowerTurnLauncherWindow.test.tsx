@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Show } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { render as renderRoot } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setFlowerTurnLauncherAttachmentSourcePath } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
@@ -582,6 +582,24 @@ describe('FlowerTurnLauncherWindow', () => {
     trigger.click();
     expect(host.querySelector('[role=group][aria-label=Gateway] [role=option]')?.getAttribute('aria-selected')).toBe('true');
     expect(host.querySelector('[role=group][aria-label=Primary] [role=option]')?.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('freezes an uncertain send against retargeting and releases the launcher lock on close', async () => {
+    const locked = vi.fn();
+    const onSubmit = vi.fn(async (_input: FlowerTurnLauncherSubmitInput) => { throw flowerTurnAdmissionError('unknown', new Error('response lost')); });
+    const [intent, setIntent] = createSignal({ ...baseIntent, initial_prompt: 'Frozen question' });
+    const [open, setOpen] = createSignal(true);
+    const host = document.createElement('div'); document.body.appendChild(host);
+    render(() => <FlowerTurnLauncherWindow open={open()} intent={intent()} onLockedChange={locked} onClose={() => setOpen(false)} onSubmit={onSubmit} />, host);
+    const send = host.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!;
+    send.click(); await flushAsync();
+    expect(locked).toHaveBeenLastCalledWith(true);
+    setIntent({ ...baseIntent, initial_prompt: 'Wrong replacement', context_items: [] });
+    send.click(); await flushAsync();
+    expect(onSubmit.mock.calls[1][0]).toBe(onSubmit.mock.calls[0][0]);
+    expect(onSubmit.mock.calls[1][0].prompt).toBe('Frozen question');
+    setOpen(false); await flushAsync();
+    expect(locked).toHaveBeenLastCalledWith(false);
   });
 
   it('keeps the captured files and model when discovery finishes after unknown admission', async () => {

@@ -18,7 +18,7 @@ export function WorkbenchGitDiffWidget(props: WorkbenchWidgetBodyProps) {
       && previous?.newPath === next?.newPath
       && previous?.changeType === next?.changeType,
   });
-  registerFlowerPageReader(() => ({ diff: target() }));
+  registerFlowerPageReader(() => ({ diff: target() }), undefined, () => JSON.stringify(target()));
   const path = () => target()?.newPath || target()?.path || target()?.oldPath || '';
   createEffect(() => workbench.updateWidgetTitle(props.widgetId, path() ? `${i18n.t('gitDiff.title')} · ${path()}` : i18n.t('gitDiff.title')));
   return (

@@ -79,7 +79,8 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   await card.locator('.flower-composer-context-source').first().click();
   const contextPreview = page.locator('[role=dialog].flower-turn-launcher-related-surface');
   await contextPreview.locator('pre').waitFor();
-  assert.ok((await contextPreview.locator('pre').innerText()).includes('environment'));
+  assert.ok((await contextPreview.locator('pre').innerText()).includes('kind: surface'));
+  assert.ok(!(await contextPreview.locator('pre').innerText()).includes('captured_at'));
   await contextPreview.getByRole('button', { name: 'Close', exact: true }).click();
   await contextPreview.waitFor({ state: 'hidden' });
   assert.equal(await editor.inputValue(), 'Inspect this environment');
@@ -130,9 +131,10 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   await card.locator('.floe-prompt-card-submit').click();
   await page.waitForFunction(() => window.navigationFixture.turnRequests.length === 1);
   const selectedRequest = await page.evaluate(() => window.navigationFixture.turnRequests[0]);
-  assert.equal(JSON.parse(selectedRequest.input.context_action.context[0].content).environment.id, ownerID);
+  assert.ok(selectedRequest.input.context_action.context[0].content.includes(`environment.id: ${ownerID}`));
   assert.equal(selectedRequest.input.context_action.source.surface_id, ownerID);
-  assert.ok(selectedRequest.input.context_action.context.some(item => item.content.includes(`Environment ID: ${ownerID}`)));
+  assert.equal(selectedRequest.input.context_action.context.length, 1);
+  assert.ok(!selectedRequest.input.context_action.context[0].content.includes('thread_id:'));
   assert.equal(selectedRequest.thread_id, undefined);
   assert.equal(await app.evaluate(() => global.captureCount), 1);
   const browser = await session.launchBrowser(chromium, { headless: false, args: ['--auto-select-tab-capture-source-by-title=Redeven capture acceptance', '--allow-http-screen-capture'] });

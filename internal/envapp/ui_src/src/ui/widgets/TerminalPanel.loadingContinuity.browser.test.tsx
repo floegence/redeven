@@ -867,7 +867,7 @@ describe('TerminalPanel loading continuity', () => {
       pageID: 'terminal', pageName: 'Terminal', capturedAtMs: 1, state: readPage() });
     const frozenScreen = screen;
     screen = 'scrolled history currently visible';
-    expect(JSON.parse(frozen.content).state.screen_text).toBe(frozenScreen);
+    expect(frozen.content).toContain(frozenScreen);
     expect(readPage()?.screen_text).toBe(screen);
 
     const surface = host.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;

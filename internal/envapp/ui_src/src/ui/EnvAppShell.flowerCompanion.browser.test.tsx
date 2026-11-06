@@ -22,6 +22,7 @@ let floeRegistryComponents = (): any[] => [];
 let testFilesMenu = false;
 let testDesktopBridge = false;
 let testRealFlowerLauncher = false;
+let testRealFlowerPreview = false;
 let registeredCommands: Array<{ id: string; execute: () => void }> = [];
 let pluginCreationNavigationFixture: { open: (instanceID: string) => Promise<void>; navigate?: (commit: () => unknown) => Promise<boolean> } | undefined;
 let pluginCreationInventory: any | undefined;
@@ -903,8 +904,10 @@ vi.mock('./pages/EnvAIPage', () => ({
   },
 }));
 
-vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
-  FlowerTurnLauncherWindow: (props: any) => testRealFlowerLauncher ? <SharedFlowerTurnLauncherWindow {...props} /> : (
+vi.mock('./widgets/FlowerTurnLauncherWindow', async importOriginal => {
+  const actual = await importOriginal<typeof import('./widgets/FlowerTurnLauncherWindow')>();
+  return ({
+  FlowerTurnLauncherWindow: (props: any) => testRealFlowerPreview ? <actual.FlowerTurnLauncherWindow {...props} /> : testRealFlowerLauncher ? <SharedFlowerTurnLauncherWindow {...props} /> : (
     <Show when={props.open && props.intent}>
       <div style={{ position: 'fixed', top: '100px', 'z-index': 200 }} data-testid="flower-turn-launcher" data-placement={props.placement ?? 'window'}>
         <button
@@ -921,7 +924,7 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
       </div>
     </Show>
   ),
-}));
+}); });
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
   mapEnvFlowerSettings: () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [] }),
   createEnvLocalFlowerSurfaceAdapter: () => ({
@@ -1228,6 +1231,7 @@ beforeEach(() => {
   testFilesMenu = false;
   testDesktopBridge = false;
   testRealFlowerLauncher = false;
+  testRealFlowerPreview = false;
   pluginCreationNavigationFixture = undefined;
   pluginCreationInventory = undefined;
   setAssetRecoveryReason(null);
@@ -1533,7 +1537,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(sent.thread_id).toBeUndefined();
     const context = sent.context_action as { context: Array<{ kind: string; content: string }> };
     expect(context.context[0].kind).toBe('text_snapshot');
-    expect(JSON.parse(context.context[0].content).page).toBeTruthy();
+    expect(context.context[0].content.length).toBeGreaterThan(0);
   });
 
   it('opens the global command with a frozen context and preserves the draft on repeated invocation', async () => {
@@ -1549,9 +1553,42 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledOnce());
     const sent = flowerLaunchTurnMock.mock.calls[0]![0];
     expect(sent.thread_id).toBeUndefined();
-    const context = sent.context_action as { context: Array<{ kind: string; content: string }> };
-    expect(context.context[0].kind).toBe('text_snapshot');
-    expect(JSON.parse(context.context[0].content).page).toBeTruthy();
+    expect(sent.context_action).toBeUndefined(); // This fixture has no active reading source.
+  });
+
+  it('right-clicks every navigation entry over Containers and previews exactly what is submitted', async () => {
+    testRealFlowerLauncher = true; testRealFlowerPreview = true;
+    await page.viewport(1440, 900);
+    const fixture = await mountShell();
+    const rail = fixture.host.querySelector('[data-floe-shell-slot="activity-bar"]')!;
+    const button = (identity: string) => rail.querySelector(`[data-floe-rail-icon="${identity}"]`)!.closest('button')!;
+    await userEvent.click(button('containers'));
+    let lastPreview = '';
+    for (const identity of ['files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'settings']) {
+      const target = button(identity);
+      const label = target.getAttribute('aria-label')!;
+      await userEvent.click(target, { button: 'right' });
+      await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+      const editor = document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!;
+      if (identity === 'files') await userEvent.fill(editor, 'Keep my question');
+      expect(editor.value).toBe('Keep my question');
+      const chip = document.querySelector<HTMLButtonElement>('[data-floe-prompt-card] .flower-composer-context-source')!;
+      expect(chip.textContent).toContain(label);
+      await userEvent.click(chip);
+      await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')?.textContent).toContain('kind: navigation');
+      lastPreview = document.querySelector('[data-flower-context-preview-text]')!.textContent!;
+      expect(lastPreview).toContain(label);
+      for (const excluded of ['selected_resource', 'selected_paths', 'filter:', 'view:', 'screen_text:', 'source_instance_id', 'containers']) expect(lastPreview).not.toContain(excluded);
+      document.querySelector<HTMLButtonElement>('.flower-context-preview-window [data-floe-floating-window-control="close"]')!.click();
+      await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')).toBeNull();
+    }
+    await page.screenshot({ path: '__screenshots__/ask-navigation-context.png' });
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledOnce());
+    const sent = flowerLaunchTurnMock.mock.calls[0]![0];
+    expect(sent.thread_id).toBeUndefined();
+    expect((sent.context_action as { context: { content: string }[] }).context).toHaveLength(1);
+    expect((sent.context_action as { context: { content: string }[] }).context[0].content).toBe(lastPreview);
   });
 
   it('keeps prepared Ask Flower settings when retrying unknown admission after personal preferences change', async () => {

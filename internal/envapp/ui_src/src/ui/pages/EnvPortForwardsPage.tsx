@@ -1,4 +1,4 @@
-import { registerFlowerPageReader } from '../flower/FlowerContextSource';
+import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
   FeedbackIndicator,
@@ -1797,7 +1797,9 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
     else if (id === 'uninstall') props.onUninstall();
   };
   return (
-    <div class="web-service-managed" data-selected={props.selected || undefined}
+    <div ref={createFlowerContextTarget(() => ({ id: props.service.service_id, label: props.service.name,
+      state: { service_id: props.service.service_id, workspace_path: props.service.workspace_path,
+        template_id: props.service.template_id, status: props.service.status ?? props.service.observed_state } }))} class="web-service-managed" data-selected={props.selected || undefined}
       data-testid="managed-service-row"
       data-managed-service-id={props.service.service_id}
     >
@@ -2274,11 +2276,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   // Search/filter state
   const [searchQuery, setSearchQuery] = createSignal('');
-  registerFlowerPageReader(() => {
-    const service = managementTarget()?.service;
-    return { view: archiveView(), query: searchQuery(),
-      selected_service: canRead() && service ? { id: service.service_id, name: service.name, workspace_path: service.workspace_path, template_id: service.template_id } : undefined };
-  }, props.registerPageContext);
+  registerFlowerPageReader(() => ({ view: archiveView(), query: searchQuery() }), props.registerPageContext);
   const [address, setAddress] = createSignal('');
   const [addressValidationVisible, setAddressValidationVisible] = createSignal(false);
   const [recentSession, setRecentSession] = createSignal<ForwardSession | null>(null);

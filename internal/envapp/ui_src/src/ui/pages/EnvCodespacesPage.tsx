@@ -1,4 +1,6 @@
-import { registerFlowerPageReader } from '../flower/FlowerContextSource';
+import { flowerPageContextSnapshot } from '../flower/flowerPageContext';
+import { buildAskFlowerContextAction } from '../contextActions/askFlower';
+import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { prepareCenterApplication } from '../services/centerApplication';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { StableText } from '@floegence/floe-webapp-core/ui';
@@ -476,6 +478,8 @@ function CodespaceCard(props: {
 
   return (
     <CodespaceCardFrame
+      ref={createFlowerContextTarget(() => ({ id: props.space.code_space_id, label: props.space.name || props.space.code_space_id,
+        state: { code_space_id: props.space.code_space_id, running: props.space.running, workspace_path: props.space.workspace_path } }))}
       class={cn(
         redevenSurfaceRoleClass("panelInteractive"),
         props.contextMenuOpen ? "ring-1 ring-primary/40" : undefined,
@@ -1273,7 +1277,13 @@ export function EnvCodespacesPage(props: { registerPageContext?: FlowerPageConte
       return;
     }
 
-    env.openFlowerTurnLauncher(result.intent, anchor);
+    const snapshot = flowerPageContextSnapshot({ environmentID: '', environmentName: '', pageID: menu.space.code_space_id,
+      pageName: menu.space.name || menu.space.code_space_id, capturedAtMs: Date.now(),
+      state: { kind: 'object', code_space_id: menu.space.code_space_id, running: menu.space.running, workspace_path: menu.space.workspace_path } });
+    const contexts = [{ kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content }, ...result.intent.context_items.map(item => item.kind === 'file_path' ? { kind: item.kind, path: item.path, is_directory: item.is_directory } : item)];
+    env.openFlowerTurnLauncher({ ...result.intent, source_surface: 'flower_composer', context_items: contexts,
+      context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: contexts, surfaceId: menu.space.code_space_id,
+        suggested_working_dir: result.intent.suggested_working_dir }) }, anchor);
   };
 
   const canOpenCodespaceInTerminal = (space: SpaceStatus): boolean => (
@@ -1323,7 +1333,6 @@ export function EnvCodespacesPage(props: { registerPageContext?: FlowerPageConte
 
   const spaceList = () => spaces() ?? [];
   registerFlowerPageReader(() => ({ view: 'codespaces',
-    selected_space: codespaceContextMenu()?.space.code_space_id ?? pendingIntent()?.code_space_id ?? deleteTarget()?.code_space_id,
     visible_spaces: spaceList().slice(0, 20).map(space => ({ id: space.code_space_id, name: space.name })),
     truncated: spaceList().length > 20,
   }), props.registerPageContext);

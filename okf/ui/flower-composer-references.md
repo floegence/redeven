@@ -23,11 +23,13 @@ Desktop Activity companion in both hosts captures origin immediately on explicit
 
 ## Global Ask Flower
 
-Redeven-owned pages expose pull readers through Floe's connection-local context-source registry. The deepest interacted source wins; menu/card focus preserves that origin. Instance IDs distinguish same-type Workbench widgets and retained preview tabs. Inputs, reading selections, file paths, terminal visible output, plugin identity and current thread identity are bounded facts, never instructions or execution authority. Hidden/inert sources cannot be captured. No background project scan is performed.
+Floe owns connection-local target resolution and compact contributed menu icon slots. An explicit right-click or keyboard menu resolves only the nearest declared owner; unavailable owners and unregistered targets never borrow the active page. Navigation buttons publish their own identity and do not replace the active reading source. Shell blank areas publish only their region. Domain rows/cards, thread/directory groups, plugin details and settings sections register their own facts on existing nodes; parent context contributes identity only. Workbench sources own the whole widget frame, including its title. Product dialogs register their own portal boundary and block the background page. Page readers exclude stale object selections. Files, terminal output and processes retain their specialized reference paths; terminal sidebar entries publish session identity without reading a hidden buffer.
 
-The global header action and `Mod+Shift+J` open one PromptCard; repeating the command focuses its existing draft. Activity, Workbench, preview overlays, standalone Tessiven and the Desktop launcher share this behavior. Desktop CodeSpace, Web Service and hosted application child windows forward title/credential-free URL through their session owner; they never gain shell IPC authority. User-opened external browsers and other OS applications are outside this scope.
+The global header action and `Mod+Shift+J` use the valid active reading source, or open without an automatic reference. Repeating a global command focuses the existing draft. An explicit new target replaces automatic references, preserves typed text, selected model and manual attachments, and cancels an unfinished screenshot. Sending and unknown admission lock the target; local/global menu composition retains one canonical action ID. A changed editable target receives a fresh request identity. Each fresh submission creates a task; opening creates nothing.
 
-Each fresh submission creates a task. Merely opening the card creates nothing. Context freezes at open; Send and unknown-admission Retry use the existing immutable request/staging path. No source watcher, automatic screenshot or model-driven capture continues during the answer.
+`internal/flower_ui/src/FlowerContextSource.tsx` owns product source registration for both hosts. `flowerPageContext.ts` produces the same bounded plain-text body used by preview and submission, without serialized page/state wrappers or DOM-instance metadata. Right-click capture freezes facts and execution binding before menu focus changes. Subsequent navigation does not rewrite them. Explicit resource keys invalidate a screenshot when the subject changes; live measurements alone do not invalidate a stable subject. Send and unknown-admission Retry retain the existing immutable request/staging path. No source watcher, automatic screenshot or model-driven capture continues during the answer.
+
+Desktop CodeSpace, Web Service and hosted application child windows forward title/credential-free URL through their session owner; they never gain shell IPC authority. User-opened external browsers and other OS applications remain outside this scope. Embedded content without an explicit semantic contract supplies host-known identity only.
 
 ### Explicit screenshots
 
@@ -53,8 +55,7 @@ wrappers preserve the full constrained flex viewport on desktop and mobile.
 `desktop/scripts/check-ask-flower-previews.mjs --binary <runtime> --output <dir>`
 qualifies the built Env App against an isolated real local Runtime: right-click
 Files, inspect the exact frozen context, explicitly capture and open an image,
-compare preview bytes and source pixels, reopen, and retain the draft. The global
-Desktop acceptance also opens context/image references before new-task submission.
+compare preview bytes and source pixels, reopen, and retain the draft. It then right-clicks navigation over Containers, checks target isolation and compact icons, and clicks Send twice. A local scripted provider verifies exact frozen text and image bytes, invokes the real read-only file tool, and returns an answer that must appear in Flower. Both tasks must complete with distinct thread IDs. The global Desktop acceptance also verifies new-task submission and immutable unknown-admission retry.
 
 ## Thread references
 Right-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.
@@ -106,3 +107,8 @@ Behavior coverage includes the actual canvas menu, nested preview selection,
 object-action deduplication, background-to-new-task submission, and native
 content-view menu ownership. Built Desktop acceptance also verifies the clicked
 environment, explicit screenshots, attachments and unknown-admission retry.
+
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Real shell navigation targets, preview/submission equality and exclusion of unrelated page state.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Actual container row target and reference preview.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - Composite Flower icon in the real custom menu row.
+- `redeven:internal/ai/flower_file_context_integration_test.go` - Canonical reference, actual fake-provider request and restart equality.

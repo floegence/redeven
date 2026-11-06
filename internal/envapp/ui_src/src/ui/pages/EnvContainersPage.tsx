@@ -1,4 +1,4 @@
-import { registerFlowerPageReader } from '../flower/FlowerContextSource';
+import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
   Button,
@@ -852,11 +852,12 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   const [detailRetry, setDetailRetry] = createSignal(0);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>(defaultResourceFilter(restored.view));
-  registerFlowerPageReader(() => {
-    const entry = selectedEntry();
-    return { view: view(), query: searchQuery(), filter: resourceFilter(),
-      selected_resource: entry ? { engine: entry.target.engine, endpoint_id: entry.target.endpoint_id, id: resourceIdentity(view(), entry.item) } : undefined };
-  }, props.registerPageContext);
+  const resourceContext = (entry: ContainerResourceEntry) => ({
+    id: resourceIdentity(view(), entry.item), label: resourceName(view(), entry.item), resourceKey: entry.key,
+    state: { resource_kind: view(), engine: entry.target.engine, endpoint_id: entry.target.endpoint_id,
+      status: resourceStatus(view(), entry.item) },
+  });
+  registerFlowerPageReader(() => ({ view: view(), query: searchQuery(), filter: resourceFilter() }), props.registerPageContext);
   const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
   const [operationsOpen, setOperationsOpen] = createSignal(false);
   const [selectedOperationID, setSelectedOperationID] = createSignal('');
@@ -3922,7 +3923,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                         const item = () => entry().item;
                         const container = () => entry().item as ContainerInventoryItem;
                         const sample = () => view() === 'containers' ? statsForContainer(entry()) : undefined;
-                        return <tr tabindex={0} data-container-resource-row data-container-resource-row-index={index()} onClick={() => selectResource(entry())} onKeyDown={(event) => handleTableKey(event, index())}>
+                        const contextRef = createFlowerContextTarget(() => resourceContext(entry()));
+                        return <tr ref={contextRef} tabindex={0} data-container-resource-row data-container-resource-row-index={index()} onClick={() => selectResource(entry())} onKeyDown={(event) => handleTableKey(event, index())}>
                           <td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="container-resource-name" title={resourceName(view(), item())}>{resourceName(view(), item())}</span><Show when={view() === 'compose-projects' && (item() as ComposeProjectInventoryItem).saved}><span class="container-saved-project" title={(item() as ComposeProjectInventoryItem).source || i18n.t('containers.compose.saved')}><Check class="h-3 w-3" />{i18n.t('containers.compose.saved')}</span></Show><Show when={runtimeBadgeVisible(entry())}><span class="container-runtime-badge">{runtimeName(entry().target.engine)}</span></Show><Show when={resourceManagement(item())?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td>
                           <td class="container-status-column"><Show when={view() === 'volumes'} fallback={<Show when={view() === 'images'} fallback={renderStatus(resourceStatus(view(), item()))}><span class="container-usage-dot" data-active={resourceActive(view(), item())} /></Show>}><button type="button" class="container-volume-usage-link" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); selectResource(entry()); setDetailTab('used-by'); }}>{renderVolumeUsage(item() as VolumeInventoryItem)}</button></Show></td>
                           <Show when={view() === 'volumes' && showVolumeSizeColumn()}><td class="container-volume-size">{volumeSizeLabel(entry())}</td></Show>
@@ -3934,8 +3936,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                       }}</For></tbody>
                     </table>
                   </div>
-                  <div class="container-mobile-list" data-container-mobile-list><For each={filteredInventory().map(entry => entry.key)}>{(key) => { const entry = () => inventoryByKey().get(key)!; return (
-                    <button type="button" class="container-mobile-card" onClick={() => selectResource(entry())}>
+                  <div class="container-mobile-list" data-container-mobile-list><For each={filteredInventory().map(entry => entry.key)}>{(key) => { const entry = () => inventoryByKey().get(key)!; const contextRef = createFlowerContextTarget(() => resourceContext(entry())); return (
+                    <button ref={contextRef} type="button" class="container-mobile-card" onClick={() => selectResource(entry())}>
                       <span class="container-resource-icon" data-tone={resourceStatusTone(resourceStatus(view(), entry().item))}><ViewIcon view={view()} class="h-4 w-4" /></span>
                       <span class="min-w-0 flex-1"><strong title={resourceName(view(), entry().item)}>{resourceName(view(), entry().item)}</strong><small>{view() === 'volumes' ? volumeSizeLabel(entry()) : view() === 'containers' ? (entry().item as ContainerInventoryItem).image?.reference || '—' : view() === 'images' ? `${formatBytes((entry().item as ImageInventoryItem).size_bytes)} · ${i18n.t('containers.usage.containers', { count: (entry().item as ImageInventoryItem).referenced_containers ?? 0 })}` : resourceIdentity(view(), entry().item)}</small></span>
                       <Show when={view() === 'volumes'} fallback={<Show when={view() === 'images'} fallback={renderStatus(resourceStatus(view(), entry().item))}><span class="sr-only">{i18n.t('containers.usage.containers', { count: (entry().item as ImageInventoryItem).referenced_containers ?? 0 })}</span></Show>}>{renderVolumeUsage(entry().item as VolumeInventoryItem)}</Show>
@@ -3945,7 +3947,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
               </Show>
             </div>
           </div>
-        }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2 title={resourceName(view(), item)}>{resourceName(view(), item)}</h2><Show when={resourceIdentity(view(), item) !== resourceName(view(), item)}><small title={resourceIdentity(view(), item)}>{shortResourceIdentity(resourceIdentity(view(), item))}</small></Show></div><Show when={view() === 'volumes'}>{renderVolumeUsage(item as VolumeInventoryItem)}</Show><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><Tabs class="container-detail-tabs" items={detailTabItems()} activeId={detailTab()} onChange={(id) => selectDetailTab(id as DetailTab)} size="md" ariaLabel={viewLabel(view())} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-detail-tabs__scroller', tab: 'container-detail-tabs__tab', indicator: 'container-tab-indicator' }} /><div class="container-detail-body"><Show when={detailTab() !== 'exec'}>{renderDetailContent()}</Show><Show when={view() === 'containers' && containerExecAvailable()}>{renderExecPanel()}</Show></div></article>}</Show>
+        }>{(item) => <article ref={createFlowerContextTarget(() => ({ ...resourceContext(selectedEntry()!), state: { ...resourceContext(selectedEntry()!).state, tab: detailTab() } }))} class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2 title={resourceName(view(), item)}>{resourceName(view(), item)}</h2><Show when={resourceIdentity(view(), item) !== resourceName(view(), item)}><small title={resourceIdentity(view(), item)}>{shortResourceIdentity(resourceIdentity(view(), item))}</small></Show></div><Show when={view() === 'volumes'}>{renderVolumeUsage(item as VolumeInventoryItem)}</Show><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><Tabs class="container-detail-tabs" items={detailTabItems()} activeId={detailTab()} onChange={(id) => selectDetailTab(id as DetailTab)} size="md" ariaLabel={viewLabel(view())} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-detail-tabs__scroller', tab: 'container-detail-tabs__tab', indicator: 'container-tab-indicator' }} /><div class="container-detail-body"><Show when={detailTab() !== 'exec'}>{renderDetailContent()}</Show><Show when={view() === 'containers' && containerExecAvailable()}>{renderExecPanel()}</Show></div></article>}</Show>
         </Show>}>{renderContainerServicesPage()}</Show>
       </main>
 

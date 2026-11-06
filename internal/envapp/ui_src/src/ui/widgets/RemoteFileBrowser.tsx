@@ -770,7 +770,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ...(pageMode() === 'git' ? { git_view: gitSubview(), repository: repoInfo()?.repoRootPath,
       branch: selectedGitBranchName() || undefined, commit: selectedCommitHash() || undefined } : {}),
     ...(pageMode() === 'files' && activeDirectorySnapshotReady() ? readFilePageState?.() : {}),
-  }), props.registerPageContext);
+  }), props.registerPageContext, () => pageMode() === 'git' ? `${repoInfo()?.repoRootPath}:${gitSubview()}` : activeDirectoryPath());
 
   const [gitCommitMessage, setGitCommitMessage] = createSignal('');
   const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');

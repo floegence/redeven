@@ -1,4 +1,4 @@
-import { registerFlowerPageReader } from '../flower/FlowerContextSource';
+import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { PluginBackgroundStatus } from './PluginBackgroundStatus';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
@@ -373,8 +373,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   const selectedItem = createMemo(() => allItems().find((item) => item.inventoryKey === selectedInventoryKey()));
-  registerFlowerPageReader(() => ({ tab: activeTab(), query: query(), category: category(), source: sourceFilter(), lifecycle: lifecycleFilter(),
-    selected_plugin: selectedItem() ? { plugin_id: selectedItem()!.pluginID, name: selectedItem()!.displayName } : undefined }), props.registerPageContext);
+  registerFlowerPageReader(() => ({ tab: activeTab(), query: query(), category: category(), source: sourceFilter(), lifecycle: lifecycleFilter() }), props.registerPageContext);
 
   createEffect(() => {
     const item = selectedItem();
@@ -1149,6 +1148,8 @@ export function PluginCenterDetails(props: {
   };
   return (
     <aside
+      ref={createFlowerContextTarget(() => ({ id: props.item?.inventoryKey ?? 'plugin-details', label: props.item?.displayName ?? i18n.t('uiCopy.plugin.technicalDetails'),
+        state: { plugin_id: props.item?.pluginID, instance_id: props.item?.pluginInstanceID, version: props.item?.version } }))}
       data-plugin-center-details={props.item?.inventoryKey ?? ''}
       data-detail-layout={props.split ? 'split' : 'page'}
       aria-labelledby={props.item ? props.headingId : undefined}

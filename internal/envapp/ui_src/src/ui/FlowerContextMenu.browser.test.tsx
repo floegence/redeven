@@ -1,10 +1,12 @@
 import '../index.css';
 import './flower-feature.css';
-import { createSignal } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { FileBrowserProvider, FileContextMenu, useFileBrowser } from '@floegence/floe-webapp-core/file-browser';
+import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
+import { FlowerContextMenu } from '../../../../flower_ui/src/FlowerContextMenu';
 import { FlowerThreadList } from '../../../../flower_ui/src/threads/FlowerThreadList';
 import type { FlowerThreadListItem } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -171,4 +173,32 @@ it.each(['light', 'dark'])('paints destructive hover and keyboard selection in %
   expect(document.activeElement).toBe(item);
   expect(getComputedStyle(item).backgroundColor).toBe(hoverBackground);
   await page.screenshot({ element: menu, path: `__screenshots__/flower-context-menu-delete-${theme}.png` });
+});
+
+
+it.each(['light', 'dark'])('bounds the contributed Flower icon inside the real custom menu in %s', async theme => {
+  await page.viewport(1280, 800); document.documentElement.classList.add(theme);
+  const host = document.createElement('div'); document.body.append(host);
+  disposers.push(render(() => {
+    const [open, setOpen] = createSignal(false);
+    let trigger!: HTMLButtonElement;
+    return <GlobalFlowerContextMenu label="Ask Flower" onError={error => { throw error; }}
+      editingLabels={{ undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select all', openLink: 'Open link', copyLink: 'Copy link' }} prepare={() => () => {}}>
+      <button ref={trigger} onContextMenu={event => { event.preventDefault(); setOpen(true); }}>Directory</button>
+      <Show when={open()}><FlowerContextMenu x={300} y={120} label="Directory actions" resolveRestore={() => trigger} onClose={() => setOpen(false)}>
+        <button class="flower-thread-menu-item" role="menuitem">/goal</button>
+        <button class="flower-thread-menu-item" role="menuitem">Open directory</button>
+      </FlowerContextMenu></Show>
+    </GlobalFlowerContextMenu>;
+  }, host));
+  await page.getByRole('button', { name: 'Directory', exact: true }).click({ button: 'right' });
+  const item = document.querySelector<HTMLElement>('[data-context-action-id="assistant.ask.flower"]')!;
+  const slot = item.querySelector<HTMLElement>('.floe-context-action-icon')!;
+  const svg = slot.querySelector('svg')!;
+  expect(slot.getBoundingClientRect().width).toBe(14);
+  expect(slot.getBoundingClientRect().height).toBe(14);
+  expect(svg.getBoundingClientRect().width).toBeLessThanOrEqual(14);
+  expect(svg.getBoundingClientRect().height).toBeLessThanOrEqual(14);
+  expect(item.getBoundingClientRect().height).toBe(26);
+  await page.screenshot({ element: document.querySelector<HTMLElement>('.flower-thread-context-menu')!, path: `__screenshots__/flower-contributed-icon-${theme}.png` });
 });

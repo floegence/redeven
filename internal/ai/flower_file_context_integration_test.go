@@ -1,11 +1,16 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/floegence/floret/v7/identity"
@@ -128,4 +133,82 @@ func TestFileContextSendPreservesRuntimeAuthorityThroughReplayRestartAndFork(t *
 			}
 		})
 	}
+}
+
+func TestAskFlowerTargetSnapshotReachesCanonicalHistoryAndProviderUnchanged(t *testing.T) {
+	const facts = "Terminal (terminal)\nDevelopment (env_local)\n\nkind: navigation\nnavigation.id: terminal\nnavigation.name: Terminal"
+	var mu sync.Mutex
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		requests = append(requests, string(body))
+		mu.Unlock()
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		slowOpenAIMock{}.handle(w, req)
+	}))
+	defer server.Close()
+	stateDir := t.TempDir()
+	svc := openRealtimeTestService(t, stateDir, server.URL)
+	defer func() { _ = svc.Close() }()
+	meta := testSendTurnMeta()
+	meta.EndpointID = "env_local"
+	thread, err := svc.CreateThread(t.Context(), meta, "Navigation context", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := &ContextActionEnvelope{SchemaVersion: ContextActionSchemaVersion, ActionID: contextActionAskFlowerID, Provider: contextActionFlowerProvider,
+		Target: ContextActionTarget{TargetID: "current", Locality: contextActionLocalityAuto}, Source: ContextActionSource{Surface: "flower_composer"},
+		Context: []ContextActionContextItem{{Kind: "text_snapshot", Title: "Terminal", Content: facts}}, Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100}}
+	_, err = runTypedTurnForTest(t, t.Context(), svc, meta, "navigation-context", RunStartRequest{ThreadID: thread.ThreadID, Input: RunInput{Text: "Explain this entry", ContextAction: action}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookup := func() {
+		input, found, err := svc.threadRuntime.(flruntime.ThreadSendReader).LookupSend(t.Context(), flruntime.LookupSendInput{ThreadID: identity.ThreadID(thread.ThreadID), RequestKey: "navigation-context"})
+		if err != nil || !found || len(input.References) != 1 || input.References[0].Text != facts || input.References[0].Label != "Terminal" {
+			t.Fatalf("canonical snapshot changed: %#v %v", input, err)
+		}
+	}
+	lookup()
+	mu.Lock()
+	captured := append([]string(nil), requests...)
+	mu.Unlock()
+	encoded, _ := json.Marshal(facts)
+	found := false
+	for _, body := range captured {
+		var request struct {
+			Input []struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"input"`
+		}
+		if err := json.Unmarshal([]byte(body), &request); err != nil {
+			t.Fatal(err)
+		}
+		for _, message := range request.Input {
+			for _, content := range message.Content {
+				if strings.Contains(content.Text, string(encoded[1:len(encoded)-1])) {
+					found = true
+				}
+			}
+		}
+		if strings.Contains(body, "selected_paths") || strings.Contains(body, "selected_resource") || strings.Contains(body, "filter: active") {
+			t.Fatalf("unrelated context reached provider: %s", body)
+		}
+	}
+	if !found {
+		t.Fatal("exact frozen context did not reach the provider")
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	svc = openRealtimeTestService(t, stateDir, server.URL)
+	lookup()
 }

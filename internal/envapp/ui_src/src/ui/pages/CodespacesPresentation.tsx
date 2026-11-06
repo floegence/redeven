@@ -62,12 +62,13 @@ export function CodespacesGrid(props: { children: JSX.Element; hidden?: boolean 
 
 /** Loading and loaded cards share every layout boundary. */
 export function CodespaceCardFrame(props: {
+  ref?: (element: HTMLDivElement) => void;
   title: JSX.Element; description: JSX.Element; status: JSX.Element;
   path?: JSX.Element; details: JSX.Element; actions: JSX.Element; class?: string; skeleton?: boolean;
   onContextMenu?: (event: MouseEvent) => void;
 }) {
   const i18n = useI18n();
-  return <Card class={cn('codespace-card min-w-0', props.class)} onContextMenu={props.onContextMenu}
+  return <Card ref={props.ref} class={cn('codespace-card min-w-0', props.class)} onContextMenu={props.onContextMenu}
     data-codespace-skeleton={props.skeleton ? 'true' : undefined}>
     <CardHeader class="p-3 pb-1">
       <div class="flex items-start justify-between gap-2">

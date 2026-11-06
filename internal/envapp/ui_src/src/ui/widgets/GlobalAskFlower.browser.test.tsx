@@ -5,6 +5,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { FlowerTurnLauncherWindow, type FlowerTurnLauncherSubmitInput } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('light', 'dark'); });
@@ -54,4 +55,29 @@ describe('global Ask Flower manual screenshots', () => {
     await new Promise(done => requestAnimationFrame(done));
     await expect.element(page.getByText('late.png', { exact: true })).not.toBeInTheDocument();
   });
+});
+
+it('replaces automatic context while preserving the draft and manually attached screenshot', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  let update!: (intent: FlowerTurnLauncherIntent) => void;
+  const submitted: FlowerTurnLauncherSubmitInput[] = [];
+  const attachment = new File(['manual'], 'manual.txt', { type: 'text/plain' });
+  dispose = render(() => {
+    const [intent, setIntent] = createSignal<FlowerTurnLauncherIntent>({ id: 'draft', source_surface: 'flower_composer',
+      context_items: [{ kind: 'text_snapshot', title: 'First', content: 'first facts' }] });
+    update = setIntent;
+    return <LayoutProvider><FlowerTurnLauncherWindow open intent={intent()} onClose={() => {}}
+      screenshot={{ label: 'Capture view', failed: 'failed', capture: async () => attachment }}
+      onSubmit={async input => { submitted.push(input); }} /></LayoutProvider>;
+  }, host);
+  await page.getByRole('textbox', { name: 'You' }).fill('Keep this draft');
+  await page.getByRole('button', { name: 'Capture view' }).click();
+  await expect.element(page.getByText('manual.txt', { exact: true })).toBeVisible();
+  update({ id: 'draft', source_surface: 'flower_composer', context_items: [{ kind: 'text_snapshot', title: 'Second', content: 'second facts' }] });
+  expect(document.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Keep this draft');
+  await expect.element(page.getByText('manual.txt', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Launch turn', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0].intent.context_items).toEqual([{ kind: 'text_snapshot', title: 'Second', content: 'second facts' }]);
+  expect(submitted[0].intent.pending_attachments).toEqual([attachment]);
 });

@@ -1,3 +1,6 @@
+import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
+import { createFlowerContextSources, FlowerContextSources } from '../../../internal/flower_ui/src/FlowerContextSource';
+import { flowerPageContextSnapshot } from '../../../internal/flower_ui/src/flowerPageContext';
 import { GlobalFlowerContextMenu } from '../../../internal/flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { captureManualScreenshot, type ManualScreenshotSource } from '../../../internal/flower_ui/src/manualScreenshot';
@@ -30,7 +33,6 @@ import {
   CommandPalette,
   createFloatingPresence,
   capturePromptCardAnchor,
-  Dialog,
   Dropdown,
   Input,
   SegmentedControl,
@@ -2742,6 +2744,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const signOutOwnerAvailable = () => !signOutAuthorityRevoked() && signOutIdentityAvailable();
   createEffect(() => { if (signOutControlPlaneTarget() && !signOutIdentityAvailable()) setSignOutAuthorityRevoked(true); });
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
+  const [flowerTurnLauncherLocked, setFlowerTurnLauncherLocked] = createSignal(false);
   const flowerTurnLauncherViewportInsets = createAskFlowerWindowViewportInsets({
     open: flowerTurnLauncherOpen,
     chrome: window.redevenDesktopWindowChrome,
@@ -6324,6 +6327,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     navigateWelcomeSurface('flower');
   }
 
+  const flowerContextSources = createFlowerContextSources();
+  onCleanup(() => flowerContextSources.dispose());
   let readTessivenContext: (() => Readonly<Record<string, unknown>>) | undefined;
   let readFlowerContext: (() => Readonly<Record<string, unknown>>) | undefined;
   let launcherScreenshotSource: ManualScreenshotSource | undefined;
@@ -6338,21 +6343,33 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   };
   const bindLauncherScreenshot = () => { launcherScreenshotSource = readLauncherScreenshot(); };
   const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
-    const ownerID = request?.target.closest<HTMLElement>('[data-owner-id]')?.dataset.ownerId;
-    const selectedEnvironment = ownerID ? snapshot().environments.find(environment => environment.id === ownerID) : undefined;
+    const owner = request?.target.closest<HTMLElement>('[data-owner-id]');
+    const selectedEnvironment = owner ? snapshot().environments.find(environment => environment.id === owner.dataset.ownerId) : undefined;
     const environment = selectedEnvironment ?? settingsSession()?.environment ?? flowerRuntimeEnvironment();
     if (!environment) return openFlowerSurface;
+    const subject = request ? flowerContextSources.captureTarget(request.target, request.selection) : undefined;
+    const main = document.getElementById('redeven-desktop-main');
+    const inContent = !request || Boolean(main?.contains(request.target));
     const page = visibleSurface();
-    const title = page === 'connect_environment' ? i18n().t('environmentCenter.title') : page === 'environment_settings' ? i18n().t('environmentCenter.environmentSettings') : page === 'flower' ? 'Flower' : 'Tessiven';
-    const context = { kind: 'text_snapshot' as const, title,
-      content: JSON.stringify({ page, ...(request?.selection ? { selection: Array.from(request.selection).slice(0, 6000).join('') } : {}), ...(page === 'flower' ? readFlowerContext?.() : page === 'tessiven' ? readTessivenContext?.() : {}), environment: { id: environment.id, name: environment.label }, captured_at: new Date().toISOString() }, null, 2) };
+    const title = subject ? subject.value.pageName : selectedEnvironment ? selectedEnvironment.label : !inContent ? i18n().t('shell.accessibility.topBarLabel')
+      : page === 'connect_environment' ? i18n().t('environmentCenter.title') : page === 'environment_settings' ? i18n().t('environmentCenter.environmentSettings') : page === 'flower' ? 'Flower' : 'Tessiven';
+    const captured = flowerPageContextSnapshot({ environmentID: '', environmentName: '',
+      pageID: subject?.value.pageID ?? selectedEnvironment?.id ?? (inContent ? page : 'topbar'), pageName: title, capturedAtMs: Date.now(),
+      state: { kind: subject ? subject.value.kind ?? 'surface' : selectedEnvironment ? 'object' : inContent ? 'surface' : 'shell',
+        ...(subject ? subject.value.state : selectedEnvironment ? { environment: { id: selectedEnvironment.id, name: selectedEnvironment.label } }
+          : inContent ? (page === 'flower' ? readFlowerContext?.() : page === 'tessiven' ? readTessivenContext?.() : {}) : {}),
+        ...((subject?.selection ?? request?.selection) ? { selection: subject?.selection ?? request?.selection } : {}) } });
+    const context = { kind: 'text_snapshot' as const, title, content: captured.content };
     const base = buildEnvironmentFlowerTurnLauncherIntent(environment);
-    const screenshotSource = readLauncherScreenshot();
+    const screenshotSource = subject ? { element: subject.element, valid: () => subject.element.isConnected && flowerContextSources.captureTarget(subject.element)?.value.resourceKey === subject.value.resourceKey }
+      : owner ? { element: owner, valid: () => owner.isConnected && owner.dataset.ownerId === selectedEnvironment?.id }
+      : inContent ? readLauncherScreenshot() : undefined;
     return () => {
-      if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+      if (flowerTurnLauncherLocked()) return;
+      if (flowerTurnLauncherOpen() && !request) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
       launcherScreenshotSource = screenshotSource;
-      setFlowerTurnLauncherIntent({ ...base, context_items: [context],
-        context_action: { ...base.context_action, context: [context, ...base.context_action.context] } });
+      setFlowerTurnLauncherIntent({ ...base, id: flowerTurnLauncherOpen() ? flowerTurnLauncherIntent()?.id ?? base.id : base.id, context_items: [context],
+        context_action: { ...base.context_action, context: [context] } });
       setFlowerTurnLauncherAnchor(request ? { x: request.x, y: request.y } : { x: 32, y: 80 });
       setFlowerTurnLauncherOpen(true);
     };
@@ -6384,13 +6401,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     anchor?: FlowerTurnLauncherAnchor,
   ): void {
+    if (flowerTurnLauncherLocked()) return;
     const blocker = runtimeFlowerBlocker(environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment()));
     if (blocker && blocker.code !== 'runtime_not_ready') {
       void openFlowerSurface();
       return;
     }
     bindLauncherScreenshot();
-    setFlowerTurnLauncherIntent(buildEnvironmentFlowerTurnLauncherIntent(environment));
+    const intent = buildEnvironmentFlowerTurnLauncherIntent(environment);
+    setFlowerTurnLauncherIntent(flowerTurnLauncherOpen() ? { ...intent, id: flowerTurnLauncherIntent()?.id ?? intent.id } : intent);
     setFlowerTurnLauncherAnchor(anchor ?? capturePromptCardAnchor() ?? null);
     setFlowerTurnLauncherOpen(true);
   }
@@ -6484,7 +6503,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return environment ? environmentOperationState(environment, activeActionProgress(), busyState()) : undefined;
   });
   return (
-    <GlobalFlowerContextMenu label={i18n().t('environmentCenter.askFlowerCardTitle')}
+    <FlowerContextSources.Provider value={flowerContextSources}><GlobalFlowerContextMenu disabled={flowerTurnLauncherLocked()} label={i18n().t('environmentCenter.askFlowerCardTitle')}
       editingLabels={{ undo: i18n().t('editContextMenu.undo'), redo: i18n().t('editContextMenu.redo'), cut: i18n().t('editContextMenu.cut'), copy: i18n().t('editContextMenu.copy'), paste: i18n().t('editContextMenu.paste'), selectAll: i18n().t('editContextMenu.selectAll'), openLink: i18n().t('editContextMenu.openLink'), copyLink: i18n().t('editContextMenu.copyLink') }}
       prepare={prepareGlobalAskFlower} onError={error => showActionToast(getErrorMessage(error), 'error')}>
       <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
@@ -6852,6 +6871,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <FlowerTurnLauncherWindow
         open={flowerTurnLauncherOpen()}
         intent={flowerTurnLauncherIntent()}
+        onLockedChange={setFlowerTurnLauncherLocked}
         screenshot={{ label: i18n().t('environmentCenter.screenshot'), failed: i18n().t('environmentCenter.screenshotFailed'),
           capture: signal => launcherScreenshotSource ? captureManualScreenshot(launcherScreenshotSource, signal, window.redevenDesktopShell?.captureScreenshot)
             : Promise.reject(new Error('source_unavailable')) }}
@@ -7294,7 +7314,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
         </div>
       </Dialog>
-    </GlobalFlowerContextMenu>
+    </GlobalFlowerContextMenu></FlowerContextSources.Provider>
   );
 }
 

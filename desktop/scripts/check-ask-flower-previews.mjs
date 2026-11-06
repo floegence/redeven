@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
+import http from 'node:http';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import electron from 'electron';
@@ -22,6 +23,55 @@ const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 240
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 await session.run(async () => {
   await mkdir(output, { recursive: true });
+  const providerRequests = [];
+  const expected = new Map();
+  let providerError;
+  let proofPath;
+  let providerSequence = 0;
+  const toolCalls = new Set();
+  const strings = value => typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : [];
+  const provider = http.createServer(async (request, response) => {
+    try {
+      if (request.url === '/v1/models') { response.end(JSON.stringify({ data: [{ id: 'gpt-5-mini' }] })); return; }
+      const chunks = []; for await (const chunk of request) chunks.push(chunk);
+      const input = JSON.parse(Buffer.concat(chunks)); const sequence = ++providerSequence;
+      response.setHeader('Content-Type', 'text/event-stream');
+      const event = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
+      const complete = items => { event({ type: 'response.completed', response: { id: `ask-${sequence}`, status: 'completed', output: items, usage: { input_tokens: 200, output_tokens: 40 } } }); response.end(); };
+      const reply = text => {
+        const item = { type: 'message', id: `message-${sequence}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] };
+        event({ type: 'response.output_item.added', output_index: 0, item: { ...item, status: 'in_progress', content: [] } });
+        event({ type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: item.id, delta: text });
+        event({ type: 'response.output_item.done', output_index: 0, item }); complete([item]);
+      };
+      if (!input.tools?.length) { reply('Ask Flower acceptance'); return; }
+      const texts = strings(input.input);
+      const marker = [...expected.keys()].find(key => texts.some(text => text.includes(key)));
+      assert.ok(marker, 'The actual user prompt reaches the provider');
+      const facts = expected.get(marker);
+      assert.ok(texts.some(text => text.includes(facts) || text.includes(JSON.stringify(facts).slice(1, -1))), 'Exact preview facts reach the provider');
+      assert.equal(input.model, 'gpt-5-mini');
+      const images = value => value && typeof value === 'object' ? value.type === 'input_image' ? [value] : Object.values(value).flatMap(images) : [];
+      const imageParts = images(input.input);
+      if (marker === 'QUALIFY_ASK_IMAGE') {
+        const native = await readFile(path.join(output, 'captured.png'));
+        assert.ok(imageParts.some(part => part.image_url === `data:image/png;base64,${native.toString('base64')}`), 'Exact captured pixels reach the provider');
+      }
+      const results = (input.input ?? []).filter(item => item.type === 'function_call_output' && toolCalls.has(item.call_id));
+      providerRequests.push({ marker, model: input.model, referencesExact: true, imageParts: imageParts.length, toolResults: results.length });
+      if (!results.length) {
+        assert.ok(input.tools.some(tool => tool.name === 'file_read'));
+        const id = `read-${sequence}`; toolCalls.add(id);
+        const item = { type: 'function_call', id, call_id: id, name: 'file_read', arguments: JSON.stringify({ file_path: proofPath }) };
+        event({ type: 'response.output_item.added', output_index: 0, item }); event({ type: 'response.output_item.done', output_index: 0, item }); complete([item]); return;
+      }
+      assert.ok(results.some(item => String(item.output).includes('Ask Flower preview acceptance')), 'A real read tool returns the isolated fixture');
+      reply(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`);
+    } catch (error) { providerError = error.stack ?? String(error); if (!response.headersSent) response.writeHead(500); response.end(); }
+  });
+  await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
+  await session.port(provider.address().port);
+  await session.defer('Ask Flower qualification provider', async () => { provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); });
   execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), [path.join(root, 'desktop')], { stdio: 'inherit' });
   const state = await session.directory(await mkdtemp(path.join(os.homedir(), '.redeven-ask-preview-')));
   await session.target(path.resolve(binary), state);
@@ -29,7 +79,8 @@ await session.run(async () => {
   await copyFile(binary, path.join(state, 'redeven'));
   const directory = path.join(state, 'files');
   await mkdir(directory);
-  await writeFile(path.join(directory, 'preview-evidence.txt'), 'Ask Flower preview acceptance\nThe reference and screenshot must remain readable.\n');
+  proofPath = path.join(directory, 'preview-evidence.txt');
+  await writeFile(proofPath, 'Ask Flower preview acceptance\nThe reference and screenshot must remain readable.\n');
   const startupFile = path.join(state, 'startup.json');
   const runtime = await session.spawn(path.join(state, 'redeven'), ['run', '--mode', 'desktop', '--state-root', path.join(state, 'state'),
     '--local-ui-bind', '127.0.0.1:0', '--local-ui-protocol', 'http', '--presentation', 'machine', '--startup-report-file', startupFile],
@@ -44,6 +95,11 @@ await session.run(async () => {
     await delay(50);
   }
   assert.ok(startup, logs);
+  const api = async (route, method = 'GET', body) => {
+    const response = await fetch(new URL(route, startup.local_ui_url), { method, headers: { 'Content-Type': 'application/json', Origin: new URL(startup.local_ui_url).origin }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const result = await response.json(); assert.ok(response.ok && result.ok !== false, JSON.stringify(result)); return result.data ?? result;
+  };
+  await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Ask Flower qualification', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 128000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'qualification-only' }], web_search_provider_key_patches: [] });
   await build({ stdin: { contents: "import { bootstrapDesktopShellBridge } from './desktop/src/preload/desktopShell'; bootstrapDesktopShellBridge();", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(state, 'preload.cjs') });
   await build({ entryPoints: [path.join(root, 'desktop/src/main/manualScreenshot.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(state, 'capture.cjs') });
   await writeFile(path.join(state, 'main.cjs'), `const { app, BrowserWindow, ipcMain } = require('electron');
@@ -58,7 +114,7 @@ global.captures = 0; ipcMain.handle('redeven-desktop:manual-screenshot', async (
 win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`);
   const app = await session.launchElectron(_electron, { executablePath: electron, args: [path.join(state, 'main.cjs'), `--user-data-dir=${state}/profile`], cwd: state, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
   const page = await app.firstWindow(); page.setDefaultTimeout(15000);
-  const report = { passed: false, carriers: 'Electron with built Env App and real local runtime', previews: [] };
+  const report = { passed: false, carriers: 'Electron with built Env App and real local runtime', previews: [], targets: [], sends: [], providerRequests };
   try {
     await page.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
     await page.goto(startup.local_ui_url);
@@ -77,9 +133,10 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     const preview = page.locator('.flower-context-preview-window');
     const text = preview.locator('[data-flower-context-preview-text]');
     await text.waitFor();
-    const context = JSON.parse(await text.textContent());
-    assert.equal(context.page.id, 'files');
-    assert.equal(context.state.directory, directory);
+    const context = await text.textContent();
+    assert.ok(context.includes('File Browser (files)'));
+    assert.ok(context.includes(`directory: ${directory}`));
+    assert.ok(!context.includes('selected_paths:'));
     assert.ok((await text.boundingBox()).height > 240);
     assert.equal(await preview.locator('.redeven-file-preview-toolbar').count(), 0);
     assert.equal(await preview.locator('[data-flower-context-preview-close]').count(), 0);
@@ -125,9 +182,67 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     assert.equal(await app.evaluate(() => global.captures), 1);
     await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
     await page.screenshot({ path: path.join(output, 'image-reopened.png') });
+    await preview.locator('[data-floe-floating-window-control="close"]').click();
+    await preview.waitFor({ state: 'hidden' });
+    const sendAndVerify = async (marker, facts) => {
+      expected.set(marker, facts);
+      await card.locator('textarea').fill(`${marker}: inspect the attached context and read ${proofPath}.`);
+      const received = page.waitForResponse(response => response.request().method() === 'POST' && /\/ai\/(?:threads\/[^/]+\/)?turns$/.test(new URL(response.url()).pathname));
+      await card.locator('.floe-prompt-card-submit').click();
+      const response = await received;
+      const sent = response.request().postDataJSON();
+      assert.equal(sent.thread_id, undefined);
+      assert.equal(sent.input.context_action.context[0].content, facts);
+      const receipt = (await response.json()).data;
+      assert.ok(receipt.thread_id);
+      let detail;
+      for (let attempt = 0; attempt < 600; attempt++) {
+        assert.ok(!providerError, providerError);
+        detail = await api(`/_redeven_proxy/api/ai/threads/${receipt.thread_id}`);
+        assert.notEqual(detail.current.last_outcome, 'failed', JSON.stringify(detail.current));
+        if (detail.current.activity === 'idle' && detail.current.last_outcome === 'completed') break;
+        await delay(50);
+      }
+      assert.equal(detail.current.last_outcome, 'completed');
+      await card.waitFor({ state: 'hidden' });
+      await page.getByText(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`, { exact: true }).filter({ visible: true }).waitFor();
+      assert.ok(!report.sends.some(previous => previous.threadID === receipt.thread_id), 'Every Ask creates a new task');
+      report.sends.push({ marker, threadID: receipt.thread_id, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true });
+      await page.screenshot({ path: path.join(output, `completed-${marker}.png`) });
+    };
+    await sendAndVerify('QUALIFY_ASK_IMAGE', context);
+    const rail = page.locator('[data-floe-shell-slot="activity-bar"]');
+    const navigation = identity => rail.locator(`[data-floe-rail-icon="${identity}"]`).locator('xpath=ancestor::button[1]');
+    await navigation('containers').click();
+    await page.locator('[data-flower-context-page="containers"]').filter({ visible: true }).waitFor();
+    for (const identity of ['files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'settings']) {
+      const target = navigation(identity);
+      const label = await target.getAttribute('aria-label');
+      await target.click({ button: 'right' });
+      const action = page.getByRole('menuitem', { name: 'Ask Flower', exact: true });
+      const slot = action.locator('.floe-context-action-icon');
+      assert.ok((await slot.boundingBox()).width <= 14);
+      assert.ok((await slot.locator('svg').boundingBox()).height <= 14);
+      await action.click(); await card.waitFor();
+      if (identity === 'files') await card.locator('textarea').fill('Keep this question across targets');
+      assert.equal(await card.locator('textarea').inputValue(), 'Keep this question across targets');
+      const chip = card.locator('.flower-composer-context-source').first();
+      assert.ok((await chip.innerText()).includes(label));
+      await chip.click(); await text.waitFor();
+      const context = await text.innerText();
+      assert.ok(context.includes('kind: navigation'));
+      assert.ok(context.includes(label));
+      for (const unwanted of ['containers', 'filter:', 'selected_paths', 'screen_text:', 'source_instance_id']) assert.ok(!context.includes(unwanted), `${identity}: ${unwanted}`);
+      await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
+      await page.screenshot({ path: path.join(output, `navigation-${identity}.png`) });
+      report.targets.push({ identity, label, context, iconBounded: true });
+      await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
+    }
+    await sendAndVerify('QUALIFY_ASK_NAVIGATION', report.targets.at(-1).context);
+    assert.equal(await app.evaluate(() => global.captures), 1);
     report.passed = true; report.captureCount = 1; report.draftRetained = true;
   } catch (error) {
-    report.error = error.stack ?? String(error);
+    report.error = error.stack ?? String(error); report.providerError = providerError;
     await page.screenshot({ path: path.join(output, 'failure.png') });
     throw error;
   } finally {

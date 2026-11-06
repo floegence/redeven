@@ -3985,12 +3985,12 @@ describe('EnvAppShell environment entry affordances', () => {
 
       const capture = host.querySelector<HTMLButtonElement>('[data-testid="mock-capture-page-context"]')!;
       capture.click();
-      const pluginSnapshot = JSON.parse(JSON.parse(capture.dataset.snapshot!).content);
-      expect(pluginSnapshot.page.id).toBe(activityID);
-      expect(pluginSnapshot.environment.id).toBe('env_local');
-      expect(pluginSnapshot.state).toMatchObject({ plugin_id: examplePluginProjection('enabled').items[0].pluginID });
-      expect(pluginSnapshot.state).not.toHaveProperty('sort');
-      expect(pluginSnapshot.state).not.toHaveProperty('document');
+      const pluginSnapshot = JSON.parse(capture.dataset.snapshot!).content as string;
+      expect(pluginSnapshot).toContain(activityID);
+      expect(pluginSnapshot).toContain('env_local');
+      expect(pluginSnapshot).toContain(`plugin_id: ${examplePluginProjection('enabled').items[0].pluginID}`);
+      expect(pluginSnapshot).not.toContain('sort:');
+      expect(pluginSnapshot).not.toContain('document:');
 
       const composer = host.querySelector<HTMLTextAreaElement>('[data-testid="activity-flower-composer"]')!;
       composer.focus();
@@ -4009,9 +4009,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => sidebarActiveTabValue === 'monitor');
       await flushUntil(() => host.querySelector('[data-testid="activity-view-monitor"]')?.textContent?.includes('activity main') === true);
       capture.click();
-      expect(JSON.parse(JSON.parse(capture.dataset.snapshot!).content)).toMatchObject({
-        page: { id: 'monitor' }, state: { sort: 'cpu', show_internal_sessions: false },
-      });
+      expect(JSON.parse(capture.dataset.snapshot!).content).toContain('sort: cpu');
+      expect(JSON.parse(capture.dataset.snapshot!).content).toContain('show_internal_sessions: false');
       expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
       expect(firstPage.closest('[data-testid^="activity-view-"]')?.getAttribute('style')).toContain('display: none');
 

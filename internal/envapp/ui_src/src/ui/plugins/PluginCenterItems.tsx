@@ -1,3 +1,4 @@
+import { createFlowerContextTarget } from '../flower/FlowerContextSource';
 import { StableText, Button, Card, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -111,6 +112,8 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   };
   return (
     <Card
+      ref={createFlowerContextTarget(() => ({ id: props.item.inventoryKey, label: displayName(),
+        state: { plugin_id: props.item.pluginID, instance_id: props.item.pluginInstanceID, version: version() } }))}
       role="article"
       data-plugin-directory-card={props.item.inventoryKey}
       class={cn(
