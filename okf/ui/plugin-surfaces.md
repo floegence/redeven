@@ -25,9 +25,9 @@ Authenticated session-ready invokes idempotent Host recoverEnabled without timer
 ### Activity pages/windows
 Allocate a fresh PluginSurfaceSlot only when placement and document are visible. Hidden unopened placements retain layout without iframe/authority; close requires no open/revoke round trip. Once opening starts, hiding retains independent slot/draft/selection/undo/pending work. Visible placements may open concurrently; each actual open captures current context revision and delivers later changes once. Windows use openSurfaceInSlot. Open/bridge failure replaces iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page.
 
-Equivalent metadata preserves container/iframe/state; slot lifecycle owns visibility. Instance/surface/management-revision/runtime-generation changes retire leases. Cold open shows one themed accessible waiting surface, then ready or recovery/details; never rotate bootstrap labels. The published platform waits for the replacement document parser/module graph and initial SDK context delivery before revealing its frame. Product does not add timers, paint requirements or inspect application DOM.
+Equivalent metadata preserves container/iframe/state; slot lifecycle owns visibility. Instance/surface/management-revision/runtime-generation changes retire leases. Cold open shows one themed accessible waiting surface, then ready or recovery/details; never rotate bootstrap labels. ReDevPlugin 3.23.2 waits for the replacement document parser/module graph and initial SDK context delivery before revealing its frame. Product does not add timers, paint requirements or inspect application DOM.
 
-Stable pinned-page component functions allow names/icons/order updates without remounting siblings or losing edits. Published Floe retained views own sibling isolation/DOM order: moving the same iframe can reload it. Acceptance checks inner document/draft and container; add no second keep-alive stack.
+Stable pinned-page component functions own their context wrapper; names/icons/order updates do not remount siblings or lose edits. Published Floe retained views own sibling isolation/DOM order: moving the same iframe can reload it. Acceptance checks inner document/draft and container; add no second keep-alive stack.
 
 ### Workbench and teardown
 [Layout continuity](#layout-continuity) owns bindings/removal/recovery. Overlays cannot forward input, guess focus or create bridges; Workbench unpin removes only shortcut. One abort-aware FIFO dialog handles independent confirmations with initial Cancel focus. Hidden/retired/revoked surfaces cannot approve queued work; retired surfaces cannot download. Shell never uploads/retains export bytes.
@@ -42,6 +42,9 @@ Containers retain identity while SDK leases retire. Committed/unknown platform o
 Manifest kinds remain view|command|background with semantic roles; product placements are not manifest fields. Redeven never verifies packages/releases, mints tokens, serves assets, grants implicit permissions or directly calls business adapters. Retention grants no authority, platform-store inspection, reconstruction of deleted placements or unsaved plugin memory.
 
 # Evidence
+
+- `redeven:scripts/smoke_desktop_plugin_first_presentation.mjs`: isolated Desktop acceptance of dark/light cold opens, delayed modules, input retention, fresh reopening and titlebar controls.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceOpening.browser.test.tsx`: first-visible geometry and zero content padding.
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginQuickPin.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinButton.test.tsx`: reject duplicate pending clicks; failed updates preserve authoritative selection/Retry.
