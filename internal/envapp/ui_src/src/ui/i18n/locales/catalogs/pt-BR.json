@@ -8107,6 +8107,8 @@
     "deployUpdate": "Atualizar área de trabalho remota",
     "deployStop": "Parar área de trabalho remota",
     "deployUninstall": "Desinstalar área de trabalho remota",
+    "deployAuthorizationSummary": "Gerenciar a área de trabalho remota requer permissões de administrador.",
+    "deployPermissionDetails": "Detalhes das permissões",
     "deployScope": "Esta ação gerencia um serviço do sistema com permissões root neste host. Ele pode ativar telas, capturar a área de trabalho e as telas de login ou bloqueio e enviar entradas de teclado e mouse. Usa um socket local privado, não abre portas públicas e pode ser desinstalado aqui. Não desbloqueia discos criptografados.",
     "deployHint": "Configure a área de trabalho remota por esta conexão SSH. Não é necessário confirmar na tela do host.",
     "deployPasswordHint": "Usada apenas nesta operação SSH. O Redeven não salva a senha nem a envia ao serviço da área de trabalho.",

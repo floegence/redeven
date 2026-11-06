@@ -65,6 +65,8 @@ export const enUS = defineDictionary({
     "deployUpdate": "Update remote desktop",
     "deployStop": "Stop remote desktop",
     "deployUninstall": "Uninstall remote desktop",
+    "deployAuthorizationSummary": "Managing remote desktop requires administrator access.",
+    "deployPermissionDetails": "Permission details",
     "deployScope": "This action manages a root system service on this host. It can wake displays, capture the desktop and login or lock screen, and inject keyboard and mouse input. It uses a private local socket, opens no public port, and can be uninstalled here. It cannot unlock encrypted disks.",
     "deployHint": "Set up remote desktop through this SSH connection. No confirmation on the host’s screen is needed.",
     "deployPasswordHint": "Used only for this SSH operation. Redeven does not save it or send it to the desktop service.",

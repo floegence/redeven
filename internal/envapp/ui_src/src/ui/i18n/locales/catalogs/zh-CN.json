@@ -8103,6 +8103,8 @@
     "deployUpdate": "更新远程桌面",
     "deployStop": "停止远程桌面",
     "deployUninstall": "卸载远程桌面",
+    "deployAuthorizationSummary": "管理远程桌面服务需要管理员授权。",
+    "deployPermissionDetails": "权限说明",
     "deployScope": "此操作将在此主机上管理具有 root 权限的系统服务。它可以唤醒显示器、捕获桌面及登录或锁屏画面，并注入键盘和鼠标输入。服务使用私有本地套接字，不开放公网端口，可在此卸载。它不能解锁加密磁盘。",
     "deployHint": "通过当前 SSH 连接设置远程桌面，无需在目标主机的屏幕上确认。",
     "deployPasswordHint": "仅用于本次 SSH 操作。Redeven 不会保存密码，也不会将其传给桌面服务。",

@@ -8107,6 +8107,8 @@
     "deployUpdate": "Actualizar escritorio remoto",
     "deployStop": "Detener escritorio remoto",
     "deployUninstall": "Desinstalar escritorio remoto",
+    "deployAuthorizationSummary": "Gestionar el escritorio remoto requiere permisos de administrador.",
+    "deployPermissionDetails": "Detalles de los permisos",
     "deployScope": "Esta acción administra un servicio del sistema con permisos root en este host. Puede activar las pantallas, capturar el escritorio y las pantallas de inicio de sesión o bloqueo, y enviar entradas del teclado y del ratón. Usa un socket local privado, no abre puertos públicos y se puede desinstalar aquí. No puede desbloquear discos cifrados.",
     "deployHint": "Configure el escritorio remoto mediante esta conexión SSH. No se necesita confirmación en la pantalla del host.",
     "deployPasswordHint": "Se usa solo para esta operación SSH. Redeven no la guarda ni la envía al servicio de escritorio.",

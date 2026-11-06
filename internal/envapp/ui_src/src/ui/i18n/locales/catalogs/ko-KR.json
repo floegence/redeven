@@ -8103,6 +8103,8 @@
     "deployUpdate": "원격 데스크톱 업데이트",
     "deployStop": "원격 데스크톱 중지",
     "deployUninstall": "원격 데스크톱 제거",
+    "deployAuthorizationSummary": "원격 데스크톱 관리에는 관리자 권한이 필요합니다.",
+    "deployPermissionDetails": "권한 세부 정보",
     "deployScope": "이 작업은 이 호스트에서 root 권한을 가진 시스템 서비스를 관리합니다. 디스플레이를 깨우고 데스크톱, 로그인 및 잠금 화면을 캡처하며 키보드와 마우스 입력을 전달할 수 있습니다. 서비스는 비공개 로컬 소켓을 사용하며 공개 포트를 열지 않습니다. 여기서 제거할 수 있으며 암호화된 디스크는 잠금 해제할 수 없습니다.",
     "deployHint": "현재 SSH 연결로 원격 데스크톱을 설정합니다. 대상 호스트 화면에서 확인할 필요가 없습니다.",
     "deployPasswordHint": "이번 SSH 작업에만 사용됩니다. Redeven은 암호를 저장하거나 데스크톱 서비스에 전달하지 않습니다.",

@@ -561,8 +561,12 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
             <div class="remote-desktop-flow-stage" data-phase="authorizing">
             <h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t('remoteDesktop.authorizeStep')}</h4>
             <div class="remote-desktop-flow-copy">
-              <p>{i18n.t('remoteDesktop.deployScope')}</p>
-              <Show when={deploymentConnectIntent()}><p class="remote-desktop-flow-note">{i18n.t('remoteDesktop.deployHint')}</p></Show>
+              <p>{i18n.t('remoteDesktop.deployAuthorizationSummary')}</p>
+              <details class="remote-desktop-permission-details">
+                <summary><ChevronRight size={14} aria-hidden="true" /><span>{i18n.t('remoteDesktop.deployPermissionDetails')}</span></summary>
+                <p>{i18n.t('remoteDesktop.deployScope')}</p>
+                <Show when={deploymentConnectIntent()}><p class="remote-desktop-flow-note">{i18n.t('remoteDesktop.deployHint')}</p></Show>
+              </details>
             </div>
             <label class="remote-desktop-credential">
               <span>{i18n.t('remoteDesktop.deployAuthMethod')}</span>

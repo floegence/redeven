@@ -94,6 +94,23 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
   await settleDialog(dialog);
   expectCompactFooter(flow);
   expectFlowWithinViewport(dialog, 320, 780);
+  const permissionDetails = flow.querySelector<HTMLDetailsElement>('.remote-desktop-permission-details');
+  expect(permissionDetails).not.toBeNull();
+  expect(permissionDetails!.open).toBe(false);
+  const authorizationSummary = flow.querySelector<HTMLElement>('.remote-desktop-flow-copy > p')!;
+  expect(authorizationSummary.getBoundingClientRect().height).toBeLessThanOrEqual(Number.parseFloat(getComputedStyle(authorizationSummary).lineHeight) * 3 + 1);
+  await expect.element(page.elementLocator(permissionDetails!.querySelector('p')!)).not.toBeVisible();
+  permissionDetails!.querySelector('summary')!.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(permissionDetails!.open).toBe(true);
+  await expect.element(page.elementLocator(permissionDetails!.querySelector('p')!)).toBeVisible();
+  await settleDialog(dialog);
+  expectCompactFooter(flow);
+  expectFlowWithinViewport(dialog, 320, 780);
+  if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-permissions-expanded-narrow-zh-CN.png' });
+  await userEvent.keyboard('{Enter}');
+  expect(permissionDetails!.open).toBe(false);
+  await settleDialog(dialog);
   expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
   expect(flow.scrollWidth).toBeLessThanOrEqual(flow.clientWidth + 1);
   for (const control of flow.querySelectorAll<HTMLElement>('input, button')) {
@@ -151,6 +168,11 @@ it.each([
     await settleDialog(dialog);
     expectCompactFooter(flow);
     expectFlowWithinViewport(dialog, width, height);
+    if (height >= 600) {
+      const method = content.querySelector<HTMLSelectElement>('select')!;
+      expect(method.getBoundingClientRect().top).toBeGreaterThanOrEqual(content.getBoundingClientRect().top);
+      expect(method.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom);
+    }
     await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-compact-authorization-${width}-${height}-${locale}.png` });
 
     await userEvent.click(flow.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);

@@ -8107,6 +8107,8 @@
     "deployUpdate": "Remotedesktop aktualisieren",
     "deployStop": "Remotedesktop stoppen",
     "deployUninstall": "Remotedesktop deinstallieren",
+    "deployAuthorizationSummary": "Die Remotedesktop-Verwaltung erfordert Administratorrechte.",
+    "deployPermissionDetails": "Berechtigungsdetails",
     "deployScope": "Diese Aktion verwaltet einen Systemdienst mit root-Rechten auf diesem Host. Er kann Bildschirme aufwecken, den Desktop sowie Anmelde- und Sperrbildschirme erfassen und Tastatur- und Mauseingaben senden. Er verwendet einen privaten lokalen Socket, öffnet keinen öffentlichen Port und kann hier deinstalliert werden. Verschlüsselte Laufwerke kann er nicht entsperren.",
     "deployHint": "Richten Sie den Remotedesktop über diese SSH-Verbindung ein. Eine Bestätigung am Bildschirm des Hosts ist nicht erforderlich.",
     "deployPasswordHint": "Wird nur für diesen SSH-Vorgang verwendet. Redeven speichert es nicht und gibt es nicht an den Desktopdienst weiter.",
