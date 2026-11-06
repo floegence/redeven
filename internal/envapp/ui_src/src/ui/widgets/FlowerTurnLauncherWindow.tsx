@@ -32,6 +32,7 @@ import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowSta
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import { desktopWindowChromeBridge } from '../services/desktopWindowChrome';
 import { createAskFlowerWindowViewportInsets } from '../../../../../../desktop/src/shared/askFlowerWindowViewport';
+import { captureManualScreenshot, type ManualScreenshotSource } from '../../../../../flower_ui/src/manualScreenshot';
 
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
 const FLOWER_TURN_LAUNCHER_STACK_ID = 'flower-turn-launcher';
@@ -90,6 +91,8 @@ type FlowerTurnLauncherWindowProps = Readonly<{
   autoFocus?: boolean;
   modelSource?: FlowerTurnLauncherPanelProps['modelSource'];
   screenshot?: FlowerTurnLauncherPanelProps['screenshot'];
+  screenshotSource?: () => ManualScreenshotSource | undefined;
+  externalScreenshot?: () => ((signal: AbortSignal) => Promise<File>) | undefined;
   onClose: () => void;
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
 }>;
@@ -511,7 +514,16 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             onDraftChange={props.onDraftChange}
             onLockedChange={props.onLockedChange}
             autoFocus={props.autoFocus}
-            screenshot={props.screenshot}
+            screenshot={props.screenshot ?? (props.screenshotSource ? {
+              label: i18n.t('flowerTurnLauncher.screenshot'), failed: i18n.t('flowerTurnLauncher.screenshotFailed'),
+              capture: signal => {
+                const external = props.externalScreenshot?.();
+                if (external) return external(signal);
+                const source = props.screenshotSource?.();
+                return source ? captureManualScreenshot(source, signal, window.redevenDesktopShell?.captureScreenshot)
+                  : Promise.reject(new Error('source_unavailable'));
+              },
+            } : undefined)}
             modelSource={props.modelSource}
             onClose={props.onClose}
             onSubmit={props.onSubmit}

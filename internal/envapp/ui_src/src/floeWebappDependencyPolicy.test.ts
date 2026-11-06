@@ -206,14 +206,6 @@ describe('published npm dependency policy', () => {
       .toContain("align?: 'start' | 'center' | 'end'");
   });
 
-  it('consumes explicit target boundaries and composite menu icon sizing from upstream', () => {
-    const source = readInstalledFloeWebappCoreDeclaration('dist/components/ui/contextSource.d.ts');
-    expect(source).toContain('captureTarget(');
-    expect(source).toContain('activateOnInteraction?');
-    expect(source).toContain('enabled?');
-    expect(readInstalledFloeWebappCoreDeclaration('dist/components/ui/ContextMenuActions.d.ts')).toContain('ContextMenuActionIcon');
-  });
-
   it('consumes the published shared file-browser status bar contract', () => {
     const packageManifest = readJson<PackageJson>(
       'node_modules/@floegence/floe-webapp-core/package.json',

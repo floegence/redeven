@@ -27,6 +27,7 @@ await session.run(async () => {
   const expected = new Map();
   let providerError;
   let proofPath;
+  let expectedModelImage;
   let providerSequence = 0;
   const toolCalls = new Set();
   const strings = value => typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : [];
@@ -55,8 +56,8 @@ await session.run(async () => {
       const images = value => value && typeof value === 'object' ? value.type === 'input_image' ? [value] : Object.values(value).flatMap(images) : [];
       const imageParts = images(input.input);
       if (marker === 'QUALIFY_ASK_IMAGE') {
-        const native = await readFile(path.join(output, 'captured.png'));
-        assert.ok(imageParts.some(part => part.image_url === `data:image/png;base64,${native.toString('base64')}`), 'Exact captured pixels reach the provider');
+        assert.ok(imageParts.some(part => typeof part.image_url === 'string' && part.image_url.startsWith(`data:${expectedModelImage.mimeType};base64,`)
+          && hash(Buffer.from(part.image_url.split(',')[1], 'base64')) === expectedModelImage.sha256), 'The exact prepared representation of the captured screenshot reaches the provider');
       }
       const results = (input.input ?? []).filter(item => item.type === 'function_call_output' && toolCalls.has(item.call_id));
       providerRequests.push({ marker, model: input.model, referencesExact: true, imageParts: imageParts.length, toolResults: results.length });
@@ -116,7 +117,10 @@ global.captures = 0; ipcMain.handle('redeven-desktop:manual-screenshot', async (
 win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`);
   const app = await session.launchElectron(_electron, { executablePath: electron, args: [path.join(state, 'main.cjs'), `--user-data-dir=${state}/profile`], cwd: state, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
   const page = await app.firstWindow(); page.setDefaultTimeout(15000);
-  const report = { passed: false, carriers: 'Electron with built Env App and real local runtime', previews: [], targets: [], sends: [], providerRequests };
+  const report = { passed: false, carriers: 'Electron with built Env App and real local runtime',
+    commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+    floe: JSON.parse(await readFile(path.join(root, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version,
+    previews: [], targets: [], sends: [], providerRequests };
   try {
     await page.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
     await page.goto(startup.local_ui_url);
@@ -165,6 +169,8 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     const bytes = Buffer.from(await image.evaluate(async element => [...new Uint8Array(await (await fetch(element.src)).arrayBuffer())]));
     const captured = await readFile(path.join(output, 'captured.png'));
     assert.equal(hash(bytes), hash(captured));
+    expectedModelImage = JSON.parse(execFileSync('go', ['run', './scripts/fixtures/ask_flower_model_image', path.join(output, 'captured.png')], { cwd: root, env: { ...process.env, GOWORK: 'off' }, encoding: 'utf8' }));
+    assert.equal(expectedModelImage.sourceSHA256, hash(captured));
     const png = PNG.sync.read(bytes);
     const offset = (Math.floor(proof.y * png.height / proof.height) * png.width + Math.floor(proof.x * png.width / proof.width)) * 4;
     const pixel = [...png.data.subarray(offset, offset + 3)];
@@ -176,7 +182,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     assert.equal((await preview.innerText()).trim(), title.trim());
     await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
     await page.screenshot({ path: path.join(output, 'image.png') });
-    report.previews.push({ type: 'screenshot', sha256: hash(bytes), width: png.width, height: png.height, pixelProof: true, visible: true });
+    report.previews.push({ type: 'screenshot', sha256: hash(bytes), width: png.width, height: png.height, pixelProof: true, visible: true, modelImage: expectedModelImage });
     await preview.locator('[data-floe-floating-window-control="close"]').click();
     await preview.waitFor({ state: 'hidden' });
     assert.equal(await card.locator('textarea').inputValue(), 'Inspect this file browser context');
@@ -223,7 +229,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     const navigation = identity => rail.locator(`[data-floe-rail-icon="${identity}"]`).locator('xpath=ancestor::button[1]');
     await navigation('containers').click();
     await page.locator('[data-flower-context-page="containers"]').filter({ visible: true }).waitFor();
-    await page.locator('[data-floe-shell-slot="top-bar"] button').first().click({ button: 'right' });
+    await page.locator('[data-floe-shell-slot="top-bar"] button').filter({ visible: true }).first().click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
     await card.locator('.flower-composer-context-source').first().click(); await text.waitFor();
     const shellContext = await text.innerText();
@@ -232,7 +238,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     report.shell = { context: shellContext, targetExact: true, extraHeaderAction: false };
     await page.screenshot({ path: path.join(output, 'shell-context.png') });
     await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
-    for (const identity of ['files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'settings']) {
+    for (const identity of ['flower', 'files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'containers', 'connections', 'launchpad', 'settings']) {
       const target = navigation(identity);
       const label = await target.getAttribute('aria-label');
       await target.click({ button: 'right' });
@@ -242,7 +248,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       assert.ok((await slot.locator('svg').boundingBox()).height <= 14);
       if (identity === 'files') await page.screenshot({ path: path.join(output, 'compact-context-menu.png') });
       await action.click(); await card.waitFor();
-      if (identity === 'files') await card.locator('textarea').fill('Keep this question across targets');
+      if (identity === 'flower') await card.locator('textarea').fill('Keep this question across targets');
       assert.equal(await card.locator('textarea').inputValue(), 'Keep this question across targets');
       const chip = card.locator('.flower-composer-context-source').first();
       assert.ok((await chip.innerText()).includes(label));
@@ -250,7 +256,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       const context = await text.innerText();
       assert.ok(context.includes('kind: navigation'));
       assert.ok(context.includes(label));
-      for (const unwanted of ['containers', 'filter:', 'selected_paths', 'screen_text:', 'source_instance_id']) assert.ok(!context.includes(unwanted), `${identity}: ${unwanted}`);
+      for (const unwanted of [...(identity === 'containers' ? [] : ['containers']), 'filter:', 'selected_paths', 'screen_text:', 'source_instance_id']) assert.ok(!context.includes(unwanted), `${identity}: ${unwanted}`);
       await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
       await page.screenshot({ path: path.join(output, `navigation-${identity}.png`) });
       report.targets.push({ identity, label, context, iconBounded: true });

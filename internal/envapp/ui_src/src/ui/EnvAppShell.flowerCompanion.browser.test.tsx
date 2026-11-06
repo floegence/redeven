@@ -1605,13 +1605,13 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const button = (identity: string) => rail.querySelector(`[data-floe-rail-icon="${identity}"]`)!.closest('button')!;
     await userEvent.click(button('containers'));
     let lastPreview = '';
-    for (const identity of ['files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'settings']) {
+    for (const identity of ['flower', 'files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'containers', 'connections', 'launchpad', 'settings']) {
       const target = button(identity);
       const label = target.getAttribute('aria-label')!;
       await userEvent.click(target, { button: 'right' });
       await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
       const editor = document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!;
-      if (identity === 'files') await userEvent.fill(editor, 'Keep my question');
+      if (identity === 'flower') await userEvent.fill(editor, 'Keep my question');
       expect(editor.value).toBe('Keep my question');
       const chip = document.querySelector<HTMLButtonElement>('[data-floe-prompt-card] .flower-composer-context-source')!;
       expect(chip.textContent).toContain(label);
@@ -1619,7 +1619,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')?.textContent).toContain('kind: navigation');
       lastPreview = document.querySelector('[data-flower-context-preview-text]')!.textContent!;
       expect(lastPreview).toContain(label);
-      for (const excluded of ['selected_resource', 'selected_paths', 'filter:', 'view:', 'screen_text:', 'source_instance_id', 'containers']) expect(lastPreview).not.toContain(excluded);
+      for (const excluded of ['selected_resource', 'selected_paths', 'filter:', 'view:', 'screen_text:', 'source_instance_id', ...(identity === 'containers' ? [] : ['containers'])]) expect(lastPreview).not.toContain(excluded);
       document.querySelector<HTMLButtonElement>('.flower-context-preview-window [data-floe-floating-window-control="close"]')!.click();
       await expect.poll(() => document.querySelector('[data-flower-context-preview-text]')).toBeNull();
     }

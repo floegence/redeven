@@ -1,7 +1,7 @@
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
-import { captureManualScreenshot, type ManualScreenshotSource } from '../../../../flower_ui/src/manualScreenshot';
+import type { ManualScreenshotSource } from '../../../../flower_ui/src/manualScreenshot';
 import { buildAskFlowerContextAction } from './contextActions/askFlower';
 import type { ActivityFlowerAnchorPalette, ActivityFlowerAnchorRegistrar } from './flower/activityFlowerAnchor';
 import { installCenterEntryActivity } from './services/centerEntryActivity';
@@ -5793,9 +5793,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                     anchor={flowerTurnLauncherAnchor()}
                     onClose={closeFlowerTurnLauncher}
                     onSubmit={submitFlowerTurnLauncher}
-                    screenshot={{ label: i18n.t('flowerTurnLauncher.screenshot'), failed: i18n.t('flowerTurnLauncher.screenshotFailed'),
-                      capture: signal => externalScreenshot ? externalScreenshot(signal) : flowerScreenshotSource ? captureManualScreenshot(flowerScreenshotSource, signal, window.redevenDesktopShell?.captureScreenshot)
-                        : Promise.reject(new Error('source_unavailable')) }}
+                    screenshotSource={() => flowerScreenshotSource}
+                    externalScreenshot={() => externalScreenshot}
                   />
               </FloeRegistryRuntime>
             </RuntimeUpdateContext.Provider>
