@@ -16,7 +16,12 @@ function bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-type CaptureTrack = MediaStreamTrack & { getCaptureHandle?: () => { handle?: string; origin?: string } | null };
+type CaptureTrack = MediaStreamTrack & {
+  getCaptureHandle?: () => { handle?: string; origin?: string } | null;
+  cropTo?: (target: unknown) => Promise<void>;
+};
+type CropAPI = { fromElement: (element: Element) => Promise<unknown> };
+type TrackProcessorAPI = new (options: { track: MediaStreamTrack; maxBufferSize: number }) => { readable: ReadableStream<VideoFrame> };
 
 export function screenshotRegion(element: HTMLElement): ScreenshotRegion {
   const bounds = element.getBoundingClientRect();
@@ -38,7 +43,7 @@ export async function captureManualScreenshot(source: ManualScreenshotSource, si
   };
   check();
   let stream: MediaStream | undefined;
-  let video: HTMLVideoElement | undefined;
+  let reader: ReadableStreamDefaultReader<VideoFrame> | undefined;
   let captureStyle: HTMLStyleElement | undefined;
   const restore = () => { captureStyle?.remove(); captureStyle = undefined; };
   const stop = () => stream?.getTracks().forEach(track => track.stop());
@@ -54,9 +59,9 @@ export async function captureManualScreenshot(source: ManualScreenshotSource, si
       check();
       const track = stream.getVideoTracks()[0] as CaptureTrack | undefined;
       if (track?.getCaptureHandle?.()?.handle !== handle || track.getCaptureHandle?.()?.origin !== location.origin) throw new Error('select_current_tab');
-      video = document.createElement('video'); video.muted = true; video.srcObject = stream;
-      await bounded(video.play(), signal);
-      check();
+      await bounded(track.applyConstraints({ frameRate: { min: 5, ideal: 30 } }), signal);
+      if (!track.cropTo || !(globalThis as typeof globalThis & { CropTarget?: CropAPI }).CropTarget
+        || !(globalThis as typeof globalThis & { MediaStreamTrackProcessor?: TrackProcessorAPI }).MediaStreamTrackProcessor) throw new Error('capture_unavailable');
     }
     check();
     // Keep the editor mounted and focused; omit only prompt chrome from this frame.
@@ -66,8 +71,6 @@ export async function captureManualScreenshot(source: ManualScreenshotSource, si
     captureStyle.textContent = '.floe-prompt-card-positioner, .flower-turn-launcher-related-surface { opacity: 0 !important; }';
     document.head.append(captureStyle);
     await bounded(new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))), signal);
-    // Capture timestamps must follow the committed hidden frame, not the style write.
-    const chromeHiddenAt = performance.now();
     check();
     const region = screenshotRegion(source.element);
     let blob: Blob;
@@ -77,39 +80,46 @@ export async function captureManualScreenshot(source: ManualScreenshotSource, si
       restore();
       blob = new Blob([new Uint8Array(result.png)], { type: 'image/png' });
     } else {
-      const frame = video!;
+      const track = stream!.getVideoTracks()[0] as CaptureTrack;
+      const crop = (globalThis as typeof globalThis & { CropTarget: CropAPI }).CropTarget;
+      const target = await bounded(crop.fromElement(source.element), signal);
+      const Processor = (globalThis as typeof globalThis & { MediaStreamTrackProcessor: TrackProcessorAPI }).MediaStreamTrackProcessor;
+      reader = new Processor({ track, maxBufferSize: 1 }).readable.getReader();
+      let cropped = false;
+      let expired = false;
+      // Drain pre-crop frames continuously. The crop completion boundary only
+      // guarantees future track frames; it cannot clear a consumer's old buffer.
+      const nextFrame = (async () => {
+        while (true) {
+          const result = await reader!.read();
+          if (!result.value) throw new Error('capture_unavailable');
+          if (cropped && !expired) return result.value;
+          result.value.close();
+          if (expired) throw new Error('capture_unavailable');
+        }
+      })();
+      void nextFrame.catch(() => undefined);
+      let frame: VideoFrame | undefined;
       try {
-        // Wait for the first compositor frame after the chrome has been omitted.
-        let callback = 0;
-        try {
-          await bounded(new Promise<void>((resolve, reject) => {
-            const inspect: VideoFrameRequestCallback = (_time, metadata) => {
-              if (typeof metadata.captureTime !== 'number') { reject(new Error('capture_unavailable')); return; }
-              if (metadata.captureTime >= chromeHiddenAt) resolve();
-              else callback = frame.requestVideoFrameCallback(inspect);
-            };
-            callback = frame.requestVideoFrameCallback(inspect);
-          }), signal);
-        } finally { frame.cancelVideoFrameCallback(callback); }
+        await bounded(track.cropTo!(target).then(() => { cropped = true; }), signal);
+        frame = await bounded(nextFrame, signal);
         check();
-        const track = stream!.getVideoTracks()[0] as CaptureTrack;
         if (track.getCaptureHandle?.()?.handle !== handle) throw new Error('source_unavailable');
         const canvas = document.createElement('canvas');
-        const scaleX = frame.videoWidth / innerWidth; const scaleY = frame.videoHeight / innerHeight;
-        canvas.width = Math.round(region.width * scaleX); canvas.height = Math.round(region.height * scaleY);
-        if (!canvas.width || !canvas.height || Math.abs(scaleX - scaleY) > 0.1) throw new Error('capture_unavailable');
+        canvas.width = frame.displayWidth; canvas.height = frame.displayHeight;
+        if (!canvas.width || !canvas.height) throw new Error('capture_unavailable');
         const context = canvas.getContext('2d'); if (!context) throw new Error('capture_unavailable');
-        context.drawImage(frame, region.x * scaleX, region.y * scaleY, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+        context.drawImage(frame, 0, 0);
         restore();
         blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('capture_unavailable')), 'image/png'));
-      } finally { frame.pause(); frame.srcObject = null; }
+      } finally { expired = true; frame?.close(); void nextFrame.then(value => { if (value !== frame) value.close(); }, () => undefined); }
     }
     check();
     if (!blob.size) throw new Error('capture_unavailable');
     return new File([blob], `Screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`, { type: 'image/png' });
   } finally {
+    if (reader) void reader.cancel().catch(() => undefined);
     stop(); signal.removeEventListener('abort', stop);
-    if (video) { video.pause(); video.srcObject = null; }
     restore();
     if (!bridge) {
       try { devices?.setCaptureHandleConfig?.({ handle: '', exposeOrigin: false, permittedOrigins: [] }); }

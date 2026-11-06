@@ -43,7 +43,7 @@ export function RemoteDesktopLauncher() {
   const i18n = useI18n();
   // The launcher owns preparation. Dialog presence only attaches its view;
   // dismissing the modal must not dispose the operation or its subscription.
-  const content = createMemo(() => started() ? <FlowerContextSource id="remote-desktop:dialog" pageID="remote-desktop" pageName={i18n.t('remoteDesktop.title')} mode="overlay" selected={open()}><RemoteDesktopPanel active={open()} onActivityChange={setActivity} onConnected={() => setOpen(false)} /></FlowerContextSource> : undefined);
+  const content = createMemo(() => started() ? <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col" id="remote-desktop:dialog" pageID="remote-desktop" pageName={i18n.t('remoteDesktop.title')} mode="overlay" selected={open()}><RemoteDesktopPanel active={open()} onActivityChange={setActivity} onConnected={() => setOpen(false)} /></FlowerContextSource> : undefined);
   return <>
     <Button variant="outline" onClick={() => { setStarted(true); setOpen(true); }}><RemoteDesktopIcon class="w-4 h-4" /><Show when={!open() && activity()} fallback={i18n.t('remoteDesktop.title')}>{key => <span role="status">{i18n.t(key())}</span>}</Show></Button>
     <Dialog open={open()} onOpenChange={setOpen} title={i18n.t('remoteDesktop.title')} closeLabel={i18n.t('common.actions.close')} escapeKeyPhase="bubble"

@@ -14,7 +14,7 @@ export function registerFlowerPageReader(read: () => FlowerPageContextState | un
   registrar?.(read);
 }
 
-export function FlowerContextSource(props: { id: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; selected?: boolean; state?: FlowerPageContextState; children: JSX.Element }) {
+export function FlowerContextSource(props: { id: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; selected?: boolean; class?: string; state?: FlowerPageContextState; children: JSX.Element }) {
   const sources = useContext(FlowerContextSources);
   let element!: HTMLDivElement;
   let reader: (() => FlowerPageContextState | undefined) | undefined;
@@ -37,7 +37,7 @@ export function FlowerContextSource(props: { id: string; pageID: string; pageNam
     onCleanup(() => remove?.());
   });
   createEffect(() => { if (props.selected) activate(); });
-  return <div ref={element} class="h-full min-h-0 w-full" data-flower-context-source={id} data-flower-context-page={props.pageID} data-flower-context-mode={props.mode}>
+  return <div ref={element} class={props.class ?? "h-full min-h-0 w-full"} data-flower-context-source={id} data-flower-context-page={props.pageID} data-flower-context-mode={props.mode}>
     <ContextReader.Provider value={register}>{props.children}</ContextReader.Provider>
   </div>;
 }

@@ -111,14 +111,16 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
     navigator.mediaDevices.getDisplayMedia = async options => { try { const stream = await original(options); window.captureDiagnostic = { handle: stream.getVideoTracks()[0].getCaptureHandle?.(), settings: stream.getVideoTracks()[0].getSettings() }; return stream; } catch (error) { window.captureDiagnostic = { error: String(error) }; throw error; } };
   });
   const browserProof = await prepareCaptureProof(browserPage);
-  await browserCard.getByRole('button', { name: 'Capture view', exact: true }).click();
-  try { await browserCard.getByText(/Screenshot-.*\.png/).first().waitFor({ timeout: 20000 }); }
-  catch (error) { console.error('Browser capture:', await browserPage.evaluate(() => ({ capture: window.captureDiagnostic, feedback: document.querySelector('[role=alert]')?.textContent, support: typeof navigator.mediaDevices.setCaptureHandleConfig }))); throw error; }
-  const pixels = await browserCard.locator('img').evaluate(async image => Array.from(new Uint8Array(await (await fetch(image.src)).arrayBuffer())));
-  await writeFile(path.join(output, 'browser-source.png'), Buffer.from(pixels));
-  verifyCaptureProof(Buffer.from(pixels), browserProof);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await browserCard.getByRole('button', { name: 'Capture view', exact: true }).click();
+    try { await browserCard.locator('img').nth(attempt).waitFor({ timeout: 20000 }); }
+    catch (error) { console.error('Browser capture:', await browserPage.evaluate(() => ({ capture: window.captureDiagnostic, feedback: document.querySelector('[role=alert]')?.textContent, support: typeof navigator.mediaDevices.setCaptureHandleConfig }))); throw error; }
+    const pixels = await browserCard.locator('img').nth(attempt).evaluate(async image => Array.from(new Uint8Array(await (await fetch(image.src)).arrayBuffer())));
+    await writeFile(path.join(output, 'browser-source.png'), Buffer.from(pixels));
+    verifyCaptureProof(Buffer.from(pixels), browserProof);
+  }
   await browserPage.locator('[id^=capture-proof]').evaluateAll(elements => elements.forEach(element => element.remove()));
   await browserPage.screenshot({ path: path.join(output, 'browser-card.png') });
-  await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: true, nativeCapture: true, chromiumTabCapture: true, automaticCaptures: 0, uploads: 1, retryRetainsRequest: true, floe: JSON.parse(await readFile(path.join(root, 'desktop/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version }, null, 2));
+  await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: true, nativeCapture: true, chromiumTabCapture: true, consecutiveBrowserCaptures: 3, automaticCaptures: 0, uploads: 1, retryRetainsRequest: true, floe: JSON.parse(await readFile(path.join(root, 'desktop/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version }, null, 2));
   console.log('Global Ask Flower native acceptance passed:', output);
 });

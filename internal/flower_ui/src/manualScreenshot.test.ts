@@ -51,6 +51,33 @@ describe('manual screenshots', () => {
     expect(stop).toHaveBeenCalledTimes(1);
     expect(devices.setCaptureHandleConfig).toHaveBeenLastCalledWith({ handle: '', exposeOrigin: false, permittedOrigins: [] });
   });
+  it('drains pre-crop frames and closes the fresh frame and stream', async () => {
+    const closed = [vi.fn(), vi.fn()]; let handle = ''; let cropped = false;
+    const pending: Array<(value: ReadableStreamReadResult<VideoFrame>) => void> = [];
+    const frames = closed.map(close => ({ displayWidth: 300, displayHeight: 200, close } as unknown as VideoFrame));
+    const reader = { read: vi.fn(() => new Promise<ReadableStreamReadResult<VideoFrame>>(resolve => pending.push(resolve))), cancel: vi.fn(async () => undefined) };
+    const track = { stop: vi.fn(), getCaptureHandle: () => ({ handle, origin: location.origin }), applyConstraints: vi.fn(async () => undefined),
+      cropTo: vi.fn(async () => {
+        pending.shift()!({ done: false, value: frames[0]! });
+        await Promise.resolve(); cropped = true;
+        setTimeout(() => pending.shift()!({ done: false, value: frames[1]! }), 0);
+      }) };
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      setCaptureHandleConfig: (config: { handle: string }) => { handle = config.handle; },
+      getDisplayMedia: vi.fn(async () => ({ getVideoTracks: () => [track], getTracks: () => [track] })),
+    } });
+    vi.stubGlobal('CropTarget', { fromElement: vi.fn(async source => { expect(source).toBe(element); return 'target'; }) });
+    vi.stubGlobal('MediaStreamTrackProcessor', class { readable = { getReader: () => reader }; });
+    const draw = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn(frame => { expect(cropped).toBe(true); expect(frame).toBe(frames[1]); }) } as unknown as CanvasRenderingContext2D);
+    const encode = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['image'], { type: 'image/png' })));
+    try {
+      const file = await captureManualScreenshot({ element, valid: () => true }, new AbortController().signal);
+      expect(file.type).toBe('image/png'); expect(track.cropTo).toHaveBeenCalledWith('target');
+      expect(track.applyConstraints).toHaveBeenCalledWith({ frameRate: { min: 5, ideal: 30 } });
+      expect(closed[0]).toHaveBeenCalledOnce(); expect(closed[1]).toHaveBeenCalledOnce();
+      expect(reader.cancel).toHaveBeenCalledOnce(); expect(track.stop).toHaveBeenCalledOnce();
+    } finally { draw.mockRestore(); encode.mockRestore(); }
+  });
   it('clips the visible source and rejects a detached source', () => {
     element.getBoundingClientRect = () => ({ left: -20, top: -10, right: 300, bottom: 200 }) as DOMRect;
     expect(screenshotRegion(element)).toEqual({ x: 0, y: 0, width: 300, height: 200 });
