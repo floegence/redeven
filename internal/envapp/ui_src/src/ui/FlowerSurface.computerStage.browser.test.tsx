@@ -195,7 +195,11 @@ describe('Flower computer stage', () => {
     expect(document.querySelector('[data-floe-floating-window-titlebar]')).not.toBeNull();
     const rate = document.querySelector<HTMLSelectElement>('.flower-computer-frame-rate select')!;
     expect(rate.value).toBe('3');
-    expect([...rate.options].map(option => option.value)).toEqual(['3', '5', '10', '15', '30']);
+    const rateControl = document.querySelector<HTMLButtonElement>('.flower-computer-frame-rate [role="combobox"]')!;
+    rateControl.click();
+    await waitFor(() => document.querySelectorAll('[role="listbox"] [role="option"]').length === 5);
+    expect([...document.querySelectorAll('[role="listbox"] [role="option"]')].map(option => option.textContent?.trim())).toEqual(['3 FPS', '5 FPS', '10 FPS', '15 FPS', '30 FPS']);
+    rateControl.click();
     expect([...document.querySelectorAll('[data-floe-floating-window-footer] .flower-computer-zoom')].map(button => button.textContent)).toEqual(['Fit to window', 'Actual size']);
     expect(document.querySelector('.flower-computer-stage-frame')).not.toBeNull();
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({
@@ -224,7 +228,7 @@ describe('Flower computer stage', () => {
     expect(document.querySelector('.flower-computer-stage')?.textContent).not.toContain('Resume control');
     expect(document.querySelector('.flower-computer-stage [aria-label="Resume control"]')).toBeNull();
     const viewerCommandsBeforeRetry = setComputerViewer.mock.calls.length;
-    document.querySelector<HTMLButtonElement>('.flower-computer-header-actions button')!.click();
+    document.querySelector<HTMLButtonElement>('.flower-computer-header-actions button[aria-label="Retry"]')!.click();
     await waitFor(() => loadComputerFrame.mock.calls.length === 5);
     expect(setComputerViewer.mock.calls.length).toBeGreaterThan(viewerCommandsBeforeRetry);
     // Completion retires the ephemeral sampler. A reopened viewer must load
