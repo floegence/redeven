@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PluginPlatformRequestError, type PluginExecutionEventList, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
 import { EXAMPLE_PLUGIN_PACKAGE, exampleInspection } from './plugins/examplePluginPackage.test-fixture';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
+let registerFlowerPageReader: typeof import('./flower/FlowerContextSource').registerFlowerPageReader;
 
 const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
@@ -972,6 +973,7 @@ vi.mock('./plugins/PluginSurfaceFrame', () => ({
 }));
 vi.mock('./plugins/ActivityPluginSurfacePage', () => ({
   ActivityPluginSurfacePage: (props: any) => {
+    registerFlowerPageReader(() => ({ plugin_id: props.target()?.pluginID, instance_id: props.target()?.pluginInstanceID, surface_id: props.target()?.surfaceID }));
     activityPluginPageState.interact = () => props.onInteraction?.({ kind: 'activation' });
     const requestClose = async () => {
       activityPluginPageState.closeCalls += 1;
@@ -1272,7 +1274,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
 }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: (props: any) => {
-  props.registerPageContext?.(() => ({ sort: 'cpu', show_internal_sessions: false }));
+  registerFlowerPageReader(() => ({ sort: 'cpu', show_internal_sessions: false }), props.registerPageContext);
   return <div>activity main</div>;
 } }));
 vi.mock('./pages/EnvTessivenPage', () => ({ default: (props: any) => <div data-testid="tessiven-page" data-visible={String(props.visible)} data-standalone={String(Boolean(props.standalone))} /> }));
@@ -1597,6 +1599,7 @@ beforeEach(async () => {
   Object.defineProperty(window, 'sessionStorage', { configurable: true, value: sessionStorage });
   Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: sessionStorage });
   vi.resetModules();
+  ({ registerFlowerPageReader } = await import('./flower/FlowerContextSource'));
   // EnvAppShell loads PluginCenterView through Solid's lazy boundary. Resolve
   // the mocked module before each mount so the harness exercises the same
   // registry handoff deterministically instead of racing the async mock.
@@ -3984,6 +3987,13 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelectorAll('[data-activity-plugin-surface-page]')).toHaveLength(1);
 
       const capture = host.querySelector<HTMLButtonElement>('[data-testid="mock-capture-page-context"]')!;
+      // jsdom has no layout; context capture requires a visible source rectangle.
+      const presentContextSources = () => {
+        for (const source of host.querySelectorAll<HTMLElement>('[data-flower-context-source]')) {
+          source.getBoundingClientRect = () => testDOMRect(0, 0, 800, 600);
+        }
+      };
+      presentContextSources();
       capture.click();
       const pluginSnapshot = JSON.parse(capture.dataset.snapshot!).content as string;
       expect(pluginSnapshot).toContain(activityID);
@@ -4008,6 +4018,7 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('[data-activity-id="monitor"]') as HTMLButtonElement).click();
       await flushUntil(() => sidebarActiveTabValue === 'monitor');
       await flushUntil(() => host.querySelector('[data-testid="activity-view-monitor"]')?.textContent?.includes('activity main') === true);
+      presentContextSources();
       capture.click();
       expect(JSON.parse(capture.dataset.snapshot!).content).toContain('sort: cpu');
       expect(JSON.parse(capture.dataset.snapshot!).content).toContain('show_internal_sessions: false');
