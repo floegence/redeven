@@ -17,6 +17,8 @@ First load and terminal failures use the full unboxed status surface. After succ
 
 The existing coordinator waits for Desktop transport readiness inside published source acquisition instead of racing another connection controller. A ready bridge plus repeated retryable upper-layer transport failures requests bounded SSH verification once per protocol attempt; it neither restarts Runtime nor replays requests. Local artifact fetch/body acquisition has a 15-second deadline and preserves caller cancellation and upstream retry classification. Paused/failed Desktop state cannot acquire new credentials.
 
+Optional recovery artwork loads separately with fixed placeholder geometry; asset failure cannot hide status or controls.
+
 A 30-second stalled-app timeout shows an actionable failure instead of an endless loading surface.
 
 Each established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `paused`, `ready`, or `failed` phase, completed attempt count, optional SSH transport generation, known retry and recovery timestamps, a structured failure, and explicitly allowed actions.

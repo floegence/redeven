@@ -5,7 +5,7 @@ import './connection-recovery.css';
 export type ConnectionIllustrationState = 'waiting' | 'connecting' | 'paused' | 'offline' | 'failed' | 'succeeded';
 
 export function ConnectionRecoveryIllustration(props: Readonly<{ state: ConnectionIllustrationState }>) {
-  // Inline artwork stays available when the Runtime cannot serve assets.
+  // Optional artwork loads separately; recovery status/actions never depend on it.
   // Motion describes connection work only; stopped and terminal states stay still.
   return (
     <svg

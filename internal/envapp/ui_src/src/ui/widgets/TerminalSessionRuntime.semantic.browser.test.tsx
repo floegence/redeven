@@ -950,6 +950,25 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.root.querySelector('[data-terminal-semantic-error="true"]')).toBeNull();
   });
 
+  it('discards queued terminal input across a disconnected attachment without replay', async () => {
+    const runtime = harness({ controller: false }); mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'retained work'));
+    await waitForPaint();
+    let finish!: () => void;
+    runtime.interactInput.mockImplementationOnce(() => new Promise<undefined>(resolve => { finish = () => resolve(undefined); }));
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    const type = (value: string) => { input.value = value; input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: value, bubbles: true })); };
+    type('first');
+    await vi.waitFor(() => expect(runtime.interactInput).toHaveBeenCalledOnce());
+    type('queued');
+    runtime.setConnected(false); runtime.emitDisconnected(); await waitForPaint();
+    runtime.setConnected(true);
+    await vi.waitFor(() => expect(runtime.attachWithPresentation).toHaveBeenCalledTimes(2));
+    finish(); await waitForPaint();
+    expect(runtime.interactInput).toHaveBeenCalledOnce();
+    expect(runtime.sendInput).not.toHaveBeenCalled();
+  });
+
   it('keeps unclassified attachment failures blocking instead of silently retrying', async () => {
     const runtime = harness(); mounted.push(runtime);
     await vi.waitFor(() => expect(runtime.attachWithPresentation).toHaveBeenCalledOnce());

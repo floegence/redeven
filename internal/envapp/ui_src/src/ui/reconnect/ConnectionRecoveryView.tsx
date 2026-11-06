@@ -1,5 +1,5 @@
 import { writeTextToClipboard } from '../utils/clipboard';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { ErrorBoundary, For, Show, Suspense, createEffect, createMemo, createSignal, lazy, onCleanup, onMount } from 'solid-js';
 import { Copy, Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
@@ -8,7 +8,10 @@ import { Tooltip } from '../primitives/Tooltip';
 import { openConnectionCenter } from '../services/desktopShellBridge';
 import { reopenEnvironmentPage } from '../utils/windowNavigation';
 import { createConnectionRecoveryPresentation, type ConnectionRecoveryStepID } from './createConnectionRecoveryPresentation';
-import { ConnectionRecoveryIllustration, type ConnectionIllustrationState } from './ConnectionRecoveryIllustration';
+import type { ConnectionIllustrationState } from './ConnectionRecoveryIllustration';
+
+const ConnectionRecoveryIllustration = lazy(() => import('./ConnectionRecoveryIllustration').then(module => ({ default: module.ConnectionRecoveryIllustration })));
+const IllustrationPlaceholder = () => <div class="mx-auto mb-5 h-28 w-60" aria-hidden="true" />;
 import type { ConnectionRecoverySnapshot } from './createRuntimeReconnectController';
 
 export type ConnectionRecoveryViewProps = Readonly<{
@@ -140,7 +143,7 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
     >
       <div class="floe-window-status__content" data-recovery-content>
         <div>
-          <ConnectionRecoveryIllustration state={illustrationState()} />
+          <ErrorBoundary fallback={<IllustrationPlaceholder />}><Suspense fallback={<IllustrationPlaceholder />}><ConnectionRecoveryIllustration state={illustrationState()} /></Suspense></ErrorBoundary>
           <p class="floe-window-status__identity">{props.environmentName}</p>
           <div role={props.snapshot.state === 'failed' ? undefined : 'status'} aria-live="polite" aria-atomic="true">
             {/* This heading receives announcement focus; keyboard indicators remain on the actions. */}

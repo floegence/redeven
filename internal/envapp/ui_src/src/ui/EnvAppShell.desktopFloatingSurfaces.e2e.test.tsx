@@ -268,7 +268,8 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
   TopBarIconButton: (props: any) => <button type="button" onClick={props.onClick}>{props.children}</button>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Button: (props: any) => (
     <button
       type="button"

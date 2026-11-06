@@ -652,8 +652,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     send: () => Promise<void>,
     interact: (size: GridSize) => Promise<void>,
   ) => {
+    const operation = attachmentOperation;
+    // Keep input ordering within the current attachment attempt only.
+    const current = () => !disposed && operation === attachmentOperation
+      && props.connected() && props.viewActive() && props.active();
+    if (!current()) return;
     const run = async () => {
-      if (!props.connected() || !props.viewActive() || !props.active()) return;
+      if (!current()) return;
       const requested = measure();
       try {
         if (isController && sameGrid(appliedSize, requested)) {
@@ -662,12 +667,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           await interact(requested);
         }
       } catch (error) {
-        if (!disposed) failClosed(error, 'terminal_input_failed');
+        if (current()) failClosed(error, 'terminal_input_failed');
         throw error;
       }
     };
     if (pendingInteractions === 0 && isController && sameGrid(appliedSize, measure())) {
-      void send().catch((error) => failClosed(error, 'terminal_input_failed'));
+      void send().catch((error) => { if (current()) failClosed(error, 'terminal_input_failed'); });
       return;
     }
     pendingInteractions += 1;
