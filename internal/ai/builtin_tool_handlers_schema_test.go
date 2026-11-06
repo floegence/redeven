@@ -49,6 +49,17 @@ func TestAskUserResponseModesMatchFloret(t *testing.T) {
 	if err := json.Unmarshal(redevenDefinition.InputSchema, &redevenSchema); err != nil {
 		t.Fatalf("parse Redeven ask_user schema: %v", err)
 	}
+	coreJSON, err := json.Marshal(coreDefinitions[0].InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var canonicalSchema map[string]any
+	if err := json.Unmarshal(coreJSON, &canonicalSchema); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(redevenSchema, canonicalSchema) {
+		t.Error("capability schema differs from the canonical runtime control schema")
+	}
 
 	coreModes := schemaResponseModeEnum(t, coreDefinitions[0].InputSchema)
 	redevenModes := schemaResponseModeEnum(t, redevenSchema)

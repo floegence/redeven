@@ -157,9 +157,9 @@ func TestProviderToolNameGuidanceAtWireBoundary(t *testing.T) {
 }
 
 func toolNameGuidanceRequest() ModelGatewayRequest {
-	wanted := map[string]bool{"computer.exec": true, "computer.select_target": true, "attachment.materialize": true, "file.present": true, "file.edit": true, "terminal.exec": true}
+	wanted := map[string]bool{"ask_user": true, "computer.exec": true, "computer.select_target": true, "attachment.materialize": true, "file.present": true, "file.edit": true, "terminal.exec": true}
 	var definitions []ToolDef
-	for _, definition := range builtInToolDefinitions() {
+	for _, definition := range builtInModelCapabilityDefinitions() {
 		if wanted[definition.Name] {
 			definitions = append(definitions, definition)
 		}
@@ -224,6 +224,9 @@ func assertToolNameGuidanceWire(t *testing.T, raw []byte, request ModelGatewayRe
 		renderedSchema := fn["parameters"]
 		if canonicalNames {
 			renderedSchema = fn["input_schema"]
+		}
+		if definition.Name == "ask_user" {
+			assertCanonicalAskUserWireGuidance(t, renderedSchema)
 		}
 		if !reflect.DeepEqual(schema, renderedSchema) {
 			t.Errorf("name guidance changed %s argument schema", name)

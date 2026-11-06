@@ -106,7 +106,7 @@ func TestOpenAIStrictWireAcceptsFlowerToolset(t *testing.T) {
 				provider.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 				protocol = "openai-responses"
 			}
-			result, err := gateway.StreamTurn(t.Context(), ModelGatewayRequest{Model: "gpt-6.1-sol", Protocol: protocol, Tools: builtInToolDefinitions(), Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}}}, nil)
+			result, err := gateway.StreamTurn(t.Context(), ModelGatewayRequest{Model: "gpt-6.1-sol", Protocol: protocol, Tools: builtInModelCapabilityDefinitions(), Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}}}, nil)
 			if err != nil || result.Text != "Hello." {
 				t.Fatalf("Flower request rejected: text=%q error=%v", result.Text, err)
 			}

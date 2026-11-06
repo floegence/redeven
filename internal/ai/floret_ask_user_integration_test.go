@@ -137,6 +137,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	for _, raw := range request["tools"].([]any) {
 		if tool, ok := raw.(map[string]any); ok && tool["name"] == "ask_user" {
 			hasAskUser = true
+			assertCanonicalAskUserWireGuidance(t, tool["parameters"])
 		}
 	}
 	if !hasAskUser {
@@ -232,6 +233,27 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		t.Fatal("response replay dispatched another provider request")
 	}
 
+}
+
+func assertCanonicalAskUserWireGuidance(t *testing.T, raw any) {
+	t.Helper()
+	schema := raw.(map[string]any)
+	properties := schema["properties"].(map[string]any)
+	questions := properties["questions"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []struct {
+		properties    map[string]any
+		name, meaning string
+	}{
+		{properties, "required_from_user", "plain-language"},
+		{properties, "evidence_refs", "empty array"},
+		{questions, "response_mode", "custom-text answer"},
+		{questions, "choices_exhaustive", "false"},
+	} {
+		description, _ := field.properties[field.name].(map[string]any)["description"].(string)
+		if !strings.Contains(description, field.meaning) {
+			t.Errorf("provider wire lacks %s guidance: %q", field.name, description)
+		}
+	}
 }
 
 func requestContainsPairedToolHistory(request map[string]any, toolName string) bool {
