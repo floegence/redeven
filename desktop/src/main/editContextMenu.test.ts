@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import type { BrowserWindow, ContextMenuParams } from 'electron';
+import type { BrowserWindow, ContextMenuParams, WebContents } from 'electron';
 import { REDEVEN_SUPPORTED_LOCALES } from '../shared/i18n';
 import { attachDesktopEditContextMenu, desktopEditMenuItems } from './editContextMenu';
 
@@ -43,4 +43,40 @@ describe('native edit context menu', () => {
     window.emit('close');
     expect(native.closePopup).toHaveBeenCalledTimes(2);
   });
+});
+
+it('adds an owned-window action on blank content while keeping native frame editing', () => {
+  native.build.mockReturnValue(native);
+  const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false });
+  const window = Object.assign(new EventEmitter(), { webContents: contents, isDestroyed: () => false });
+  const ask = vi.fn();
+  attachDesktopEditContextMenu(window as unknown as BrowserWindow, () => 'en-US', {
+    actions: origin => [{ id: 'assistant.ask.flower', label: 'Ask Flower', click: () => ask(origin.selectionText) }],
+  });
+  contents.emit('context-menu', {}, { ...params, isEditable: false, selectionText: '' });
+  expect(native.build.mock.lastCall?.[0]).toEqual([expect.objectContaining({ id: 'assistant.ask.flower' })]);
+  contents.emit('context-menu', {}, params);
+  const items = native.build.mock.lastCall?.[0];
+  expect(items.map((item: {role?:string}) => item.role).filter(Boolean)).toContain('paste');
+  items[0].click(); expect(ask).toHaveBeenCalledWith('selected text');
+  expect(native.popup).toHaveBeenLastCalledWith(expect.objectContaining({ frame: params.frame }));
+});
+
+it('binds a separate content view without consuming its parent window requests', () => {
+  native.build.mockReturnValue(native);
+  native.popup.mockClear();
+  native.closePopup.mockClear();
+  const parent = Object.assign(new EventEmitter(), { isDestroyed: () => false });
+  const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false });
+  const window = Object.assign(new EventEmitter(), { webContents: parent, isDestroyed: () => false });
+  attachDesktopEditContextMenu(window as unknown as BrowserWindow, () => 'en-US', {
+    contents: contents as unknown as WebContents,
+    actions: () => [{ id: 'assistant.ask.flower', label: 'Ask Flower', click: vi.fn() }],
+  });
+  parent.emit('context-menu', {}, params);
+  expect(native.popup).not.toHaveBeenCalled();
+  contents.emit('context-menu', {}, params);
+  expect(native.popup).toHaveBeenCalledOnce();
+  contents.emit('did-start-navigation');
+  expect(native.closePopup).toHaveBeenCalledWith(window);
 });

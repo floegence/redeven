@@ -1,4 +1,4 @@
-import { Menu, type BrowserWindow, type ContextMenuParams, type MenuItemConstructorOptions } from 'electron';
+import { Menu, type BrowserWindow, type WebContents, type ContextMenuParams, type MenuItemConstructorOptions } from 'electron';
 import { createDesktopI18n } from '../shared/i18n/desktopI18n';
 import type { RedevenLocale } from '../shared/i18n/localeMeta';
 
@@ -18,19 +18,25 @@ export function desktopEditMenuItems(params: Pick<ContextMenuParams, 'isEditable
 }
 
 /** Renderer-owned menus preventDefault; only unhandled native requests arrive here. */
-export function attachDesktopEditContextMenu(window: BrowserWindow, locale: () => RedevenLocale): void {
+export function attachDesktopEditContextMenu(window: BrowserWindow, locale: () => RedevenLocale, options?: {
+  contents?: WebContents;
+  actions?: (params: ContextMenuParams) => MenuItemConstructorOptions[];
+}): void {
+  const contents = options?.contents ?? window.webContents;
   let active: Menu | undefined;
   const close = () => { active?.closePopup(window); active = undefined; };
-  window.webContents.on('context-menu', (_event, params) => {
-    const items = desktopEditMenuItems(params, locale());
+  contents.on('context-menu', (_event, params) => {
+    const extras = options?.actions?.(params) ?? [];
+    const editing = desktopEditMenuItems(params, locale());
+    const items = [...extras, ...(extras.length && editing.length ? [{ type: 'separator' as const }] : []), ...editing];
     close();
-    if (!items.length || window.isDestroyed() || window.webContents.isDestroyed()) return;
+    if (!items.length || window.isDestroyed() || contents.isDestroyed()) return;
     const menu = Menu.buildFromTemplate(items);
     active = menu;
     menu.popup({ window, frame: params.frame ?? undefined, x: params.x, y: params.y, sourceType: params.menuSourceType,
       callback: () => { if (active === menu) active = undefined; },
     });
   });
-  window.webContents.on('did-start-navigation', close);
+  contents.on('did-start-navigation', close);
   window.on('close', close);
 }

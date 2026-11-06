@@ -5,7 +5,9 @@
     "cut": "切り取り",
     "copy": "コピー",
     "paste": "貼り付け",
-    "selectAll": "すべて選択"
+    "selectAll": "すべて選択",
+    "openLink": "リンクを開く",
+    "copyLink": "リンクをコピー"
   },
   "gatewayWorkspace": {
     "addresses": "アクセスアドレス",

@@ -8140,7 +8140,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     },
   });
   const trackedWindow = trackBrowserWindow(win);
-  attachDesktopEditContextMenu(win, () => desktopLanguageState().getSnapshot().resolved_locale);
+  attachDesktopEditContextMenu(win, () => desktopLanguageState().getSnapshot().resolved_locale, { actions: params => ownedWindowAskMenuItems(win.webContents, params) });
 
   if (usesDesktopChrome) {
     desktopThemeState().registerWindow(win);
@@ -8403,6 +8403,8 @@ async function openSessionCodespaceLoadingWindow(
   });
   const window = tracked.browserWindow;
   attachAskFlowerShortcut(window.webContents, record);
+  nativeFlowerOwners.set(window.webContents.id, record);
+  window.webContents.once('destroyed', () => nativeFlowerOwners.delete(window.webContents.id));
   const webSession = session.fromPartition(partition);
   owner = new CodeSpaceNativeWindow({
     identity,
@@ -8979,6 +8981,7 @@ function createWebServiceBrowserController(
   };
   win.webContents.on('before-input-event', handleDevToolsShortcut);
   contentView.webContents.on('before-input-event', handleDevToolsShortcut);
+  attachDesktopEditContextMenu(win, () => desktopLanguageState().getSnapshot().resolved_locale, { contents: contentView.webContents, actions: params => ownedWindowAskMenuItems(contentView.webContents, params) });
 
   webSession.webRequest.onBeforeRequest((details, callback) => {
     const redirectURL = loopbackGateway
@@ -18989,6 +18992,17 @@ function senderUtilityWindowKind(webContentsID: number): DesktopUtilityWindowKin
   return utilityWindowKindByWebContentsID.get(webContentsID) ?? 'launcher';
 }
 
+const nativeFlowerOwners = new Map<number, DesktopSessionRecord>();
+function ownedWindowAskMenuItems(source: WebContents, params: Electron.ContextMenuParams): Electron.MenuItemConstructorOptions[] {
+  const owner = nativeFlowerOwners.get(source.id) ?? sessionRecordForWebContentsID(source.id);
+  const root = owner && !owner.closing ? liveTrackedBrowserWindow(owner.root_window) : null;
+  if (!root || root.webContents === source) return [];
+  const sourceURL = source.getURL();
+  const selection = Array.from(params.selectionText || '').slice(0, 6000).join('');
+  return [{ id: 'assistant.ask.flower', label: createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('environmentCenter.askFlowerCardTitle'),
+    click: () => { if (!source.isDestroyed() && source.getURL() === sourceURL) askFlowerFromOwnedWindow(source, owner ?? undefined, selection); } }];
+}
+
 // One ephemeral origin per receiving shell. Nothing is captured until its button is clicked.
 const flowerWindowOrigins = new Map<number, { id: string; source: WebContents; url: string; record: DesktopSessionRecord; metadata: DesktopAskFlowerSource }>();
 function clearFlowerWindowOrigin(this: WebContents): void { flowerWindowOrigins.delete(this.id); }
@@ -18998,7 +19012,7 @@ function attachAskFlowerShortcut(source: WebContents, record: DesktopSessionReco
     event.preventDefault(); askFlowerFromOwnedWindow(source, record);
   });
 }
-function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRecord): void {
+function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRecord, selection = ''): void {
   const record = owner ?? sessionRecordForWebContentsID(source.id);
   const root = record && !record.closing ? liveTrackedBrowserWindow(record.root_window) : null;
   if (!root || !record || root.webContents === source || source.isDestroyed()) return;
@@ -19017,7 +19031,7 @@ function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRec
   root.webContents.once('destroyed', clearFlowerWindowOrigin);
   root.webContents.removeListener('did-navigate', clearFlowerWindowOrigin);
   root.webContents.once('did-navigate', clearFlowerWindowOrigin);
-  const metadata = { id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now() };
+  const metadata = { id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now(), ...(selection ? { selection } : {}) };
   flowerWindowOrigins.set(root.webContents.id, { id, source, url, record, metadata });
   root.webContents.send(ASK_FLOWER_SOURCE_CHANNEL, metadata);
   root.show(); root.focus();

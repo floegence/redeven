@@ -1518,6 +1518,24 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     }
   });
 
+  it('opens Ask Flower from a page background context menu and submits its frozen source', async () => {
+    testRealFlowerLauncher = true;
+    await mountShell();
+    const target = document.querySelector<HTMLElement>('[data-env-shell-background]')!;
+    await userEvent.click(target, { button: 'right' });
+    await vi.waitFor(() => expect(document.querySelector('[data-context-action-id="assistant.ask.flower"]')).toBeTruthy());
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-context-action-id="assistant.ask.flower"]')!);
+    await vi.waitFor(() => expect(document.querySelector('[data-floe-prompt-card] textarea')).toBeTruthy());
+    await userEvent.fill(document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!, 'Explain this page');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledOnce());
+    const sent = flowerLaunchTurnMock.mock.calls[0]![0];
+    expect(sent.thread_id).toBeUndefined();
+    const context = sent.context_action as { context: Array<{ kind: string; content: string }> };
+    expect(context.context[0].kind).toBe('text_snapshot');
+    expect(JSON.parse(context.context[0].content).page).toBeTruthy();
+  });
+
   it('opens the global command with a frozen context and preserves the draft on repeated invocation', async () => {
     testRealFlowerLauncher = true;
     await mountShell();

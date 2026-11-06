@@ -21888,7 +21888,7 @@
         "title": "Flower references, origin context and canonical admission",
         "type": "UI Contract"
       },
-      "body_length": 6908,
+      "body_length": 8200,
       "summary": "Connection-local chips carry authorized discovery and frozen page/thread context into explicit Send. Floret alone owns admitted ordered references. Labels and paths grant no authority; source failures retain drafts and outbox reconciliation never overwrites newer input or creates duplicate canonical records.",
       "sections": [
         {
@@ -21909,8 +21909,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Source.\n- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Tests.\n\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Source.\n\n- [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).\n- [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).\n\n- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.\n- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.\n\n- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerContextSource.tsx` - Source ownership adapter.\n- `redeven:internal/flower_ui/src/manualScreenshot.ts` - Explicit gesture and cancellation.\n- `redeven:desktop/src/main/manualScreenshot.ts` - Authorized native capture.\n- `redeven:desktop/scripts/check-global-ask-flower.mjs` - Built Desktop/new-task/image/retry acceptance.",
-          "char_count": 1299
+          "body": "- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Source.\n- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Tests.\n\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.\n- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Source.\n\n- [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).\n- [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).\n\n- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.\n- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.\n\n- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerContextSource.tsx` - Source ownership adapter.\n- `redeven:internal/flower_ui/src/manualScreenshot.ts` - Explicit gesture and cancellation.\n- `redeven:desktop/src/main/manualScreenshot.ts` - Authorized native capture.\n- `redeven:desktop/scripts/check-global-ask-flower.mjs` - Built Desktop/new-task/image/retry acceptance.\n\n## Context-menu discovery\n\nShared Floe context actions capture a specific target, anchor and selection before\nmenu focus. Env App and Desktop prepare a frozen semantic source at that boundary.\nUnhandled page/background requests show a compact menu; Workbench, file, terminal,\nGit, preview and Flower menus retain their owner and richer object actions without\nduplicate Ask Flower entries. Editing actions remain available. Desktop environment\ncards use the clicked owner. Native owned windows forward through the existing\nvalidated main-process source boundary. Remote pointer pixels and third-party\niframe documents retain their input ownership; host chrome and explicit commands\nremain the supported entry points there. A context-menu selection does not capture\nan image and never attaches to an existing task automatically.\nAttachment staging loads its upload controller only when a submission contains\nfiles; menu discovery must retain the existing initial-render asset budget.\n\nBehavior coverage includes the actual canvas menu, nested preview selection,\nobject-action deduplication, background-to-new-task submission, and native\ncontent-view menu ownership. Built Desktop acceptance also verifies the clicked\nenvironment, explicit screenshots, attachments and unknown-admission retry.",
+          "char_count": 2591
         }
       ],
       "evidence": [
@@ -25914,5 +25914,5 @@
       ]
     }
   ],
-  "source_sha256": "91ef32d60680e728c289ed1bc33c9cd7b9666d3eedd1619acde33a747c1ddaf1"
+  "source_sha256": "55a1a5e6ee767fb99a72adccf4a55af384fbd43b2e1917d72ac91002f2176f1f"
 }

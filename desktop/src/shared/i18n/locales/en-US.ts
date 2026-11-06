@@ -3,12 +3,14 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   editContextMenu: {
-    "undo": "Undo",
-    "redo": "Redo",
-    "cut": "Cut",
-    "copy": "Copy",
-    "paste": "Paste",
-    "selectAll": "Select all"
+      "undo": "Undo",
+      "redo": "Redo",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
+      "selectAll": "Select all",
+      "openLink": "Open link",
+      "copyLink": "Copy link"
   },
   gatewayMaintenance: {
     reinstallFailed: "Reinstall failed",

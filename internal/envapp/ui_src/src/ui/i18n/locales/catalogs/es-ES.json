@@ -1,4 +1,14 @@
 {
+  "editContextMenu": {
+    "undo": "Deshacer",
+    "redo": "Rehacer",
+    "cut": "Cortar",
+    "copy": "Copiar",
+    "paste": "Pegar",
+    "selectAll": "Seleccionar todo",
+    "openLink": "Abrir enlace",
+    "copyLink": "Copiar enlace"
+  },
   "floeControls": {
     "close": "Cerrar",
     "selectPlaceholder": "Seleccionar…",

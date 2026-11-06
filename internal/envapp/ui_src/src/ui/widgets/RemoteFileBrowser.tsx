@@ -5370,6 +5370,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     onAction?: (items: FileItem[], event?: ContextMenuEvent) => void;
   }): ContextMenuItem => ({
     id: 'ask-flower',
+    contextActionId: 'assistant.ask.flower',
     label: i18n.t('files.menuAskFlower'),
     type: 'custom',
     icon: (props) => <FlowerContextMenuIcon class={props.class} />,

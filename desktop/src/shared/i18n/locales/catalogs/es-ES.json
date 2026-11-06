@@ -5,7 +5,9 @@
     "cut": "Cortar",
     "copy": "Copiar",
     "paste": "Pegar",
-    "selectAll": "Seleccionar todo"
+    "selectAll": "Seleccionar todo",
+    "openLink": "Abrir enlace",
+    "copyLink": "Copiar enlace"
   },
   "gatewayWorkspace": {
     "addresses": "Direcciones de acceso",

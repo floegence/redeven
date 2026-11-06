@@ -1,4 +1,4 @@
-import { createFlowerAttachmentController, type FlowerAttachmentErrorCode } from './attachments/createFlowerAttachmentController';
+import type { FlowerAttachmentErrorCode } from './attachments/createFlowerAttachmentController';
 import type { FlowerSurfaceAdapter, FlowerTurnLaunchInput } from './contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from './copy';
 
@@ -15,6 +15,7 @@ export async function stageFlowerTurnLauncherAttachments(
   if (!source.loadAttachmentCapability || !source.createAttachmentStagingScope || !source.uploadAttachment || !prepared.model_id) {
     throw new Error(copy.errorUnavailable);
   }
+  const { createFlowerAttachmentController } = await import('./attachments/createFlowerAttachmentController');
   const messages: Record<FlowerAttachmentErrorCode, string> = {
     attachment_unavailable: copy.errorUnavailable,
     attachment_too_large: copy.errorTooLarge,

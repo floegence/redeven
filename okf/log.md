@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-06: Document context-menu discovery, frozen right-click origins, existing action deduplication and native input boundaries.
+
 - 2026-11-06: Clarify model-visible terminal lifetime, computer operation limits,
   optional-target and strict-null semantics, file routes and image bounds.
   Consume independent fetch guidance from its Floret owner; preserve execution

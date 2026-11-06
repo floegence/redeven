@@ -1,3 +1,5 @@
+import { GlobalFlowerContextMenu } from '../../../internal/flower_ui/src/GlobalFlowerContextMenu';
+import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { captureManualScreenshot, type ManualScreenshotSource } from '../../../internal/flower_ui/src/manualScreenshot';
 import { stageFlowerTurnLauncherAttachments } from '../../../internal/flower_ui/src/stageFlowerTurnLauncherAttachments';
 import { DesktopFloeLocaleProvider } from './DesktopFloeLocaleProvider';
@@ -6325,30 +6327,37 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   let readTessivenContext: (() => Readonly<Record<string, unknown>>) | undefined;
   let readFlowerContext: (() => Readonly<Record<string, unknown>>) | undefined;
   let launcherScreenshotSource: ManualScreenshotSource | undefined;
-  const bindLauncherScreenshot = () => {
+  const readLauncherScreenshot = (): ManualScreenshotSource | undefined => {
     const element = document.getElementById('redeven-desktop-main');
     const source = visibleSurface();
     const environmentID = (settingsSession()?.environment ?? flowerRuntimeEnvironment())?.id;
     const resource = () => source === 'flower' ? readFlowerContext?.().thread_id : source === 'tessiven' ? readTessivenContext?.().canvas_id : settingsSession()?.environment.id;
     const identity = resource();
-    launcherScreenshotSource = element ? { element, valid: () => element.isConnected && visibleSurface() === source
+    return element ? { element, valid: () => element.isConnected && visibleSurface() === source
       && (settingsSession()?.environment ?? flowerRuntimeEnvironment())?.id === environmentID && resource() === identity } : undefined;
   };
-  const openGlobalAskFlower = () => {
-    if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
-    const environment = settingsSession()?.environment ?? flowerRuntimeEnvironment();
-    if (!environment) { openFlowerSurface(); return; }
-    bindLauncherScreenshot();
+  const bindLauncherScreenshot = () => { launcherScreenshotSource = readLauncherScreenshot(); };
+  const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
+    const ownerID = request?.target.closest<HTMLElement>('[data-owner-id]')?.dataset.ownerId;
+    const selectedEnvironment = ownerID ? snapshot().environments.find(environment => environment.id === ownerID) : undefined;
+    const environment = selectedEnvironment ?? settingsSession()?.environment ?? flowerRuntimeEnvironment();
+    if (!environment) return openFlowerSurface;
     const page = visibleSurface();
     const title = page === 'connect_environment' ? i18n().t('environmentCenter.title') : page === 'environment_settings' ? i18n().t('environmentCenter.environmentSettings') : page === 'flower' ? 'Flower' : 'Tessiven';
     const context = { kind: 'text_snapshot' as const, title,
-      content: JSON.stringify({ page, ...(page === 'flower' ? readFlowerContext?.() : page === 'tessiven' ? readTessivenContext?.() : {}), environment: { id: environment.id, name: environment.label }, captured_at: new Date().toISOString() }, null, 2) };
+      content: JSON.stringify({ page, ...(request?.selection ? { selection: Array.from(request.selection).slice(0, 6000).join('') } : {}), ...(page === 'flower' ? readFlowerContext?.() : page === 'tessiven' ? readTessivenContext?.() : {}), environment: { id: environment.id, name: environment.label }, captured_at: new Date().toISOString() }, null, 2) };
     const base = buildEnvironmentFlowerTurnLauncherIntent(environment);
-    setFlowerTurnLauncherIntent({ ...base, context_items: [context],
-      context_action: { ...base.context_action, context: [context] } });
-    setFlowerTurnLauncherAnchor({ x: 32, y: 80 });
-    setFlowerTurnLauncherOpen(true);
+    const screenshotSource = readLauncherScreenshot();
+    return () => {
+      if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+      launcherScreenshotSource = screenshotSource;
+      setFlowerTurnLauncherIntent({ ...base, context_items: [context],
+        context_action: { ...base.context_action, context: [context, ...base.context_action.context] } });
+      setFlowerTurnLauncherAnchor(request ? { x: request.x, y: request.y } : { x: 32, y: 80 });
+      setFlowerTurnLauncherOpen(true);
+    };
   };
+  const openGlobalAskFlower = () => prepareGlobalAskFlower()();
 
   function buildEnvironmentFlowerTurnLauncherIntent(environment: DesktopEnvironmentEntry): EnvironmentFlowerTurnLauncherIntent {
     const cleanLabel = trimString(environment.label) || i18n().t('environmentCenter.thisEnvironment');
@@ -6475,7 +6484,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return environment ? environmentOperationState(environment, activeActionProgress(), busyState()) : undefined;
   });
   return (
-    <>
+    <GlobalFlowerContextMenu label={i18n().t('environmentCenter.askFlowerCardTitle')}
+      editingLabels={{ undo: i18n().t('editContextMenu.undo'), redo: i18n().t('editContextMenu.redo'), cut: i18n().t('editContextMenu.cut'), copy: i18n().t('editContextMenu.copy'), paste: i18n().t('editContextMenu.paste'), selectAll: i18n().t('editContextMenu.selectAll'), openLink: i18n().t('editContextMenu.openLink'), copyLink: i18n().t('editContextMenu.copyLink') }}
+      prepare={prepareGlobalAskFlower} onError={error => showActionToast(getErrorMessage(error), 'error')}>
       <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
         recoverGateway={async gateway => {
           if (gateway.service_state?.status !== 'not_started' || !gateway.service_state.can_start) return false;
@@ -7283,7 +7294,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
         </div>
       </Dialog>
-    </>
+    </GlobalFlowerContextMenu>
   );
 }
 

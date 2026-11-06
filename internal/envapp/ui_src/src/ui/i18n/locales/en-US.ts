@@ -6,6 +6,16 @@ import { enUSActivityChrome } from './activityChrome';
 import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
+  editContextMenu: {
+      "undo": "Undo",
+      "redo": "Redo",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
+      "selectAll": "Select all",
+      "openLink": "Open link",
+      "copyLink": "Copy link"
+  },
   floeControls: {
     "close": "Close",
     "selectPlaceholder": "Select…",

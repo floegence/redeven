@@ -65,3 +65,23 @@ Labels,paths/search/context are information,never filesystem/target/execution au
 - `redeven:internal/flower_ui/src/manualScreenshot.ts` - Explicit gesture and cancellation.
 - `redeven:desktop/src/main/manualScreenshot.ts` - Authorized native capture.
 - `redeven:desktop/scripts/check-global-ask-flower.mjs` - Built Desktop/new-task/image/retry acceptance.
+
+## Context-menu discovery
+
+Shared Floe context actions capture a specific target, anchor and selection before
+menu focus. Env App and Desktop prepare a frozen semantic source at that boundary.
+Unhandled page/background requests show a compact menu; Workbench, file, terminal,
+Git, preview and Flower menus retain their owner and richer object actions without
+duplicate Ask Flower entries. Editing actions remain available. Desktop environment
+cards use the clicked owner. Native owned windows forward through the existing
+validated main-process source boundary. Remote pointer pixels and third-party
+iframe documents retain their input ownership; host chrome and explicit commands
+remain the supported entry points there. A context-menu selection does not capture
+an image and never attaches to an existing task automatically.
+Attachment staging loads its upload controller only when a submission contains
+files; menu discovery must retain the existing initial-render asset budget.
+
+Behavior coverage includes the actual canvas menu, nested preview selection,
+object-action deduplication, background-to-new-task submission, and native
+content-view menu ownership. Built Desktop acceptance also verifies the clicked
+environment, explicit screenshots, attachments and unknown-admission retry.

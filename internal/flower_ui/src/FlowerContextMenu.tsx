@@ -1,7 +1,7 @@
 import type { JSX } from 'solid-js';
 import { createEffect, createMemo, onCleanup } from 'solid-js';
 import { useResizeObserver } from '@floegence/floe-webapp-core';
-import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { SurfaceFloatingLayer, ContextMenuActionItems } from '@floegence/floe-webapp-core/ui';
 
 /** Flower menus share projected placement and keyboard/focus ownership. */
 export function FlowerContextMenu(props: Readonly<{
@@ -134,6 +134,7 @@ export function FlowerContextMenu(props: Readonly<{
           });
         }}
       >
+        <ContextMenuActionItems itemClass="flower-thread-menu-item" onClose={() => props.onClose(false)} />
         {props.children}
       </div>
     </SurfaceFloatingLayer>

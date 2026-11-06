@@ -1,3 +1,5 @@
+import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
+import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
 import { captureManualScreenshot, type ManualScreenshotSource } from '../../../../flower_ui/src/manualScreenshot';
 import { buildAskFlowerContextAction } from './contextActions/askFlower';
@@ -2580,8 +2582,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (restoreFocus) setActivityFlowerComposerFocusRequest((request) => request + 1);
   };
 
-  const captureFlowerSource = (excludeConversation = false) => {
-    const active = flowerContextSources.capture();
+  const captureFlowerSource = (excludeConversation = false, target?: EventTarget) => {
+    const active = target ? flowerContextSources.capture(target) : flowerContextSources.capture();
     if (active && (!excludeConversation || active.value.pageID !== 'ai') && (
       active.value.mode === 'overlay' || (active.value.mode === viewMode()
         && (viewMode() !== 'activity' || active.value.pageID === layout.sidebarActiveTab())))) return active;
@@ -2590,9 +2592,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       element.dataset.flowerContextMode === viewMode() && element.dataset.flowerContextPage === page && element.getClientRects().length > 0);
     return pageElement ? flowerContextSources.capture(pageElement) : undefined;
   };
-  const bindScreenshotSource = () => {
+  const bindScreenshotSource = (source = captureFlowerSource()) => {
     externalScreenshot = undefined;
-    const source = captureFlowerSource();
     const environment = envId();
     const mode = viewMode();
     const page = layout.sidebarActiveTab();
@@ -2606,19 +2607,23 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       && flowerContextSources.capture(source.element)?.id === source.id
       && sourceKey(flowerContextSources.capture(source.element)?.value.state) === identity } : undefined;
   };
-  const openGlobalAskFlower = () => {
-    if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
-    const source = captureFlowerSource();
+  const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
+    const source = captureFlowerSource(false, request?.target);
     const pageID = source?.value.pageID ?? (viewMode() === 'activity' ? layout.sidebarActiveTab() : 'workbench');
     const snapshot = flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
       pageID, pageName: source?.value.pageName ?? environmentName(), capturedAtMs: Date.now(),
       state: { ...source?.value.state, ...(source ? { source_instance_id: source.id } : {}),
-        ...(source?.selection ? { selection: Array.from(source.selection).slice(0, 6000).join('') } : {}) } });
+        ...((request?.selection || source?.selection) ? { selection: Array.from(request?.selection || source?.selection || '').slice(0, 6000).join('') } : {}) } });
     const context = { kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content };
-    openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
+    return () => {
+      if (flowerTurnLauncherOpen()) { document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')?.focus({ preventScroll: true }); return; }
+      openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
       context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source?.id }) },
-      source ? { x: source.rect.x + Math.min(28, source.rect.width / 4), y: source.rect.y + Math.min(48, source.rect.height / 4) } : undefined);
+      request ? { x: request.x, y: request.y } : source ? { x: source.rect.x + Math.min(28, source.rect.width / 4), y: source.rect.y + Math.min(48, source.rect.height / 4) } : undefined);
+      bindScreenshotSource(source);
+    };
   };
+  const openGlobalAskFlower = () => prepareGlobalAskFlower()();
 
   const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
     if (!hasRWXPermissions(env())) {
@@ -5588,6 +5593,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
 
   return (
+    <GlobalFlowerContextMenu enabled={canUseFlower() && hasRWXPermissions(env())} label={i18n.t('flowerTurnLauncher.windowTitle')}
+      editingLabels={{ undo: i18n.t('editContextMenu.undo'), redo: i18n.t('editContextMenu.redo'), cut: i18n.t('editContextMenu.cut'), copy: i18n.t('editContextMenu.copy'), paste: i18n.t('editContextMenu.paste'), selectAll: i18n.t('editContextMenu.selectAll'), openLink: i18n.t('editContextMenu.openLink'), copyLink: i18n.t('editContextMenu.copyLink') }}
+      onError={error => notify.error(i18n.t('shell.notifications.copyFailedTitle'), String(error))} prepare={prepareGlobalAskFlower}>
     <FlowerContextSources.Provider value={flowerContextSources}><EnvContext.Provider
       value={{
         resourceCacheAccess,
@@ -5751,6 +5759,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         </FileBrowserSurfaceContext.Provider>
         </DownloadContext.Provider>
       </TerminalSessionCatalogProvider>
-    </EnvContext.Provider></FlowerContextSources.Provider>
+    </EnvContext.Provider></FlowerContextSources.Provider></GlobalFlowerContextMenu>
   );
 }

@@ -2,6 +2,7 @@ import { For, createEffect, createMemo, createSignal, createUniqueId, onCleanup,
 import { cn } from '@floegence/floe-webapp-core';
 import {
   SurfaceFloatingLayer,
+  useContextMenuActions,
   handleMenuKeyboardNavigation,
   type MenuDismissReason,
 } from '@floegence/floe-webapp-core/ui';
@@ -75,6 +76,14 @@ function eventOccursWithin(event: Event, element: HTMLElement | null): boolean {
 }
 
 export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) => {
+  const sharedActions = useContextMenuActions()?.claim()?.actions ?? [];
+  const menuItems = createMemo<readonly FloatingContextMenuItem[]>(() => {
+    const existing = new Set(props.items.map(item => item.id === 'ask-flower' ? 'assistant.ask.flower' : item.id));
+    return [...sharedActions.filter(action => !existing.has(action.id)).map(action => ({
+      id: action.id, kind: 'action' as const, label: action.label, disabled: action.disabled,
+      icon: () => action.icon?.(), onSelect: () => { props.onDismiss('outside-pointer'); action.onSelect(); },
+    })), ...props.items];
+  });
   let menuEl: HTMLDivElement | null = null;
   let dismissalRequested = false;
   let lastFocusedItemId: string | null = null;
@@ -84,7 +93,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   // `open` on the next frame so the enter transition actually runs. Dismissal
   // unmounts the layer, so there is no exit state to hold.
   const [presence, setPresence] = createSignal<'entering' | 'open'>('entering');
-  const itemsById = createMemo(() => new Map(props.items.map((item) => [item.id, item])));
+  const itemsById = createMemo(() => new Map(menuItems().map((item) => [item.id, item])));
 
   const dismiss = (reason: FloatingContextMenuDismissReason) => {
     if (dismissalRequested) return;
@@ -156,7 +165,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   onCleanup(() => props.menuRef?.(null));
 
   createEffect(() => {
-    const focusTopology = props.items.map((item) => (
+    const focusTopology = menuItems().map((item) => (
       item.kind === 'action'
         ? `${item.id}:${Boolean(item.disabled || item.disabledReason)}:${Boolean(props.focusDisabledItems)}`
         : `${item.id}:separator`
@@ -175,7 +184,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         (item) => item.dataset.floatingMenuItemId === lastFocusedItemId,
       );
       const nextItem = sameItem ?? focusableItems.find((item) => {
-        const itemIndex = props.items.findIndex(
+        const itemIndex = menuItems().findIndex(
           (candidate) => candidate.id === item.dataset.floatingMenuItemId,
         );
         return itemIndex >= lastFocusedItemIndex;
@@ -196,9 +205,9 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
       estimatedSize={{
         width: props.width ?? FLOATING_CONTEXT_MENU_WIDTH_PX,
         height: FLOATING_CONTEXT_MENU_VERTICAL_PADDING_PX
-          + Math.max(1, props.items.filter((item) => item.kind === 'action').length)
+          + Math.max(1, menuItems().filter((item) => item.kind === 'action').length)
             * FLOATING_CONTEXT_MENU_ACTION_HEIGHT_PX
-          + props.items.filter((item) => item.kind === 'separator').length
+          + menuItems().filter((item) => item.kind === 'separator').length
             * FLOATING_CONTEXT_MENU_SEPARATOR_HEIGHT_PX,
       }}
       role="menu"
@@ -235,7 +244,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         const item = (event.target as Element | null)?.closest<HTMLElement>('[data-floating-menu-item-id]');
         if (!item?.dataset.floatingMenuItemId) return;
         lastFocusedItemId = item.dataset.floatingMenuItemId;
-        lastFocusedItemIndex = Math.max(0, props.items.findIndex((candidate) => candidate.id === lastFocusedItemId));
+        lastFocusedItemIndex = Math.max(0, menuItems().findIndex((candidate) => candidate.id === lastFocusedItemId));
       }}
       onKeyDown={(event) => {
         handleMenuKeyboardNavigation(event, {
@@ -246,7 +255,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         });
       }}
     >
-      <For each={props.items.map((item) => item.id)}>
+      <For each={menuItems().map((item) => item.id)}>
         {(itemId, index) => {
           const item = () => itemsById().get(itemId)!;
           if (!isActionItem(item())) {
@@ -273,6 +282,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
               aria-describedby={disabledDescriptionID()}
               title={actionItem().disabledReason || (props.width ? actionItem().label : undefined)}
               data-floating-menu-item-id={itemId}
+              data-context-action-id={itemId === 'ask-flower' ? 'assistant.ask.flower' : itemId}
               onClick={() => {
                 if (!itemDisabled()) actionItem().onSelect();
               }}

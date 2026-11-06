@@ -8,6 +8,7 @@ import { createDefaultWorkbenchState } from '@floegence/floe-webapp-core/workben
 import { I18nProvider } from '../../i18n';
 import { redevenWorkbenchFilterBarWidgetTypes, redevenWorkbenchWidgets } from '../redevenWorkbenchWidgets';
 import { RedevenWorkbenchSurface } from './RedevenWorkbenchSurface';
+import { GlobalFlowerContextMenu } from '../../../../../../flower_ui/src/GlobalFlowerContextMenu';
 
 let dispose: (() => void) | undefined;
 afterEach(() => {
@@ -62,4 +63,30 @@ it('keeps Work Mode first, leads with Flower, Files, and Terminal, and places pl
   host.querySelector<HTMLButtonElement>('[data-workbench-dock-item="pin:second"]')!.focus();
   await userEvent.keyboard('{Enter}');
   expect(onPin).toHaveBeenCalledTimes(1);
+});
+
+it('adds Ask Flower to the real canvas menu while retaining Workbench actions', async () => {
+  await page.viewport(1280, 800);
+  const host = document.createElement('div');
+  host.style.height = '800px';
+  document.body.append(host);
+  const [state, setState] = createSignal(createDefaultWorkbenchState([]));
+  const ask = vi.fn();
+  dispose = render(() => <FloeConfigProvider config={{ storage: { enabled: false } }}>
+    <ThemeProvider><I18nProvider>
+      <GlobalFlowerContextMenu label="Ask Flower" onError={error => { throw error; }}
+        editingLabels={{ undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select all', openLink: 'Open link', copyLink: 'Copy link' }}
+        prepare={request => () => ask(request.target.closest('.workbench-canvas') !== null)}>
+        <RedevenWorkbenchSurface state={state} setState={setState} widgetDefinitions={[]} />
+      </GlobalFlowerContextMenu>
+    </I18nProvider></ThemeProvider>
+  </FloeConfigProvider>, host);
+  await expect.poll(() => host.querySelector('.workbench-canvas')).toBeTruthy();
+  await userEvent.click(host.querySelector('.workbench-canvas')!, { button: 'right' });
+  await expect.element(page.getByRole('menuitem', { name: 'Ask Flower', exact: true })).toBeVisible();
+  expect(document.querySelectorAll('[role=menu]')).toHaveLength(1);
+  expect(document.querySelectorAll('[role=menuitem]').length).toBeGreaterThan(1);
+  await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+  expect(ask).toHaveBeenCalledWith(true);
+  await expect.poll(() => document.querySelector('[role=menu]')).toBeNull();
 });

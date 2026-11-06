@@ -67,7 +67,10 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   await page.addInitScript(snapshot => { window.navigationSnapshot = { ...snapshot, navigation_revision: 1 }; }, snapshot);
   await page.goto(new URL('flower-navigation.html', preview.url).href);
   await page.evaluate(() => window.navigationFixture.releaseRuntime());
-  await page.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+  await page.locator('#redeven-desktop-main').click({ button: 'right', position: { x: 24, y: 32 } });
+  await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).waitFor();
+  await page.screenshot({ path: path.join(output, 'desktop-menu.png') });
+  await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
   const card = page.locator('[data-floe-prompt-card]'); await card.waitFor();
   const editor = card.locator('textarea');
   assert.equal(await editor.getAttribute('placeholder'), null);
@@ -99,12 +102,33 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   await page.waitForFunction(() => window.navigationFixture.turnRequests.length === 2);
   assert.deepEqual(await page.evaluate(() => window.navigationFixture.turnRequests[1]), first);
   assert.equal(await app.evaluate(() => global.captureCount), 1);
+  await page.reload();
+  await page.evaluate(() => window.navigationFixture.releaseRuntime());
+  const owners = page.locator('[data-owner-id]:visible');
+  await owners.first().waitFor();
+  assert.ok(await owners.count() > 1, 'Environment selection requires multiple visible owners.');
+  const selectedOwner = owners.last();
+  const ownerID = await selectedOwner.getAttribute('data-owner-id');
+  await selectedOwner.locator('.redeven-environment-title').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+  await card.locator('textarea').fill('Inspect the environment I selected');
+  await card.locator('.floe-prompt-card-submit').click();
+  await page.waitForFunction(() => window.navigationFixture.turnRequests.length === 1);
+  const selectedRequest = await page.evaluate(() => window.navigationFixture.turnRequests[0]);
+  assert.equal(JSON.parse(selectedRequest.input.context_action.context[0].content).environment.id, ownerID);
+  assert.equal(selectedRequest.input.context_action.source.surface_id, ownerID);
+  assert.ok(selectedRequest.input.context_action.context.some(item => item.content.includes(`Environment ID: ${ownerID}`)));
+  assert.equal(selectedRequest.thread_id, undefined);
+  assert.equal(await app.evaluate(() => global.captureCount), 1);
   const browser = await session.launchBrowser(chromium, { headless: false, args: ['--auto-select-tab-capture-source-by-title=Redeven capture acceptance', '--allow-http-screen-capture'] });
   const browserPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await browserPage.addInitScript(snapshot => { window.navigationSnapshot = { ...snapshot, navigation_revision: 1 }; }, snapshot);
   await browserPage.goto(new URL('flower-navigation.html', preview.url).href);
   await browserPage.evaluate(() => { document.title = 'Redeven capture acceptance'; window.navigationFixture.releaseRuntime(); });
-  await browserPage.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+  await browserPage.locator('#redeven-desktop-main').click({ button: 'right', position: { x: 24, y: 32 } });
+  await browserPage.getByRole('menuitem', { name: 'Ask Flower', exact: true }).waitFor();
+  await browserPage.screenshot({ path: path.join(output, 'browser-menu.png') });
+  await browserPage.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
   const browserCard = browserPage.locator('[data-floe-prompt-card]');
   await browserPage.evaluate(() => {
     const original = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
@@ -121,6 +145,6 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   }
   await browserPage.locator('[id^=capture-proof]').evaluateAll(elements => elements.forEach(element => element.remove()));
   await browserPage.screenshot({ path: path.join(output, 'browser-card.png') });
-  await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: true, nativeCapture: true, chromiumTabCapture: true, consecutiveBrowserCaptures: 3, automaticCaptures: 0, uploads: 1, retryRetainsRequest: true, floe: JSON.parse(await readFile(path.join(root, 'desktop/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version }, null, 2));
+  await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: true, rightClickEntry: true, selectedEnvironment: ownerID, nativeCapture: true, chromiumTabCapture: true, consecutiveBrowserCaptures: 3, automaticCaptures: 0, uploads: 1, retryRetainsRequest: true, floe: JSON.parse(await readFile(path.join(root, 'desktop/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version }, null, 2));
   console.log('Global Ask Flower native acceptance passed:', output);
 });
