@@ -1956,7 +1956,9 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       const url = new URL(initial); url.searchParams.set('plugin_draft', 'draft-1');
       window.history.pushState(window.history.state, '', url);
       window.dispatchEvent(new PopStateEvent('popstate'));
-      await expect.poll(() => document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
+      // The first workspace navigation loads the real module before the mock
+      // wrapper can render; use the same bound as the retained-shell test.
+      await expect.poll(() => document.querySelector('[data-plugin-creation-navigation-fixture]'), { timeout: 15000 }).not.toBeNull();
       await expect(pluginCreationNavigationFixture.open('installed-1')).rejects.toThrow('Plugin surface failed');
       expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('draft-1');
       expect(document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
@@ -2035,7 +2037,8 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     window.history.pushState(window.history.state, '', url);
     window.dispatchEvent(new PopStateEvent('popstate'));
     await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(true);
-    await expect.poll(() => document.querySelector('[data-plugin-creation-workspace]')).not.toBeNull();
+    await expect.poll(() => document.querySelector('[data-plugin-creation-workspace]'), { timeout: 15000 }).not.toBeNull();
+    expect(document.querySelector('[data-redeven-plugin-creation-page] .display-mode-page-shell, [data-redeven-plugin-creation-page] [data-testid="display-mode-page-shell"]')).toBeNull();
     expect(flower.isConnected).toBe(true);
     expect(document.querySelector('[data-testid="file-preview-host"]')).toBe(preview);
     expect(document.querySelector('[data-testid="activity-body-content"]')).toBe(activity);
@@ -2204,7 +2207,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       </FloatingWindow>
       <FloatingWindow open onOpenChange={() => undefined} title="Unrelated preview"
         class="unrelated-window-resize-test"
-        defaultPosition={{ x: 420, y: 20 }} defaultSize={{ width: 320, height: 240 }}>
+        defaultPosition={{ x: 920, y: 20 }} defaultSize={{ width: 320, height: 240 }}>
         <button type="button">Unrelated content</button>
       </FloatingWindow>
     </>, fixture.host));
@@ -2221,7 +2224,10 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await flushAsync();
     expect(fixture.product.dataset.presentation).toBe('expanded');
 
-    await userEvent.click(resizeHandle(unrelated));
+    const unrelatedHandle = resizeHandle(unrelated);
+    const unrelatedBounds = unrelatedHandle.getBoundingClientRect();
+    expect(document.elementFromPoint(unrelatedBounds.x + unrelatedBounds.width / 2, unrelatedBounds.y + unrelatedBounds.height / 2)).toBe(unrelatedHandle);
+    await userEvent.click(unrelatedHandle);
     await flushAsync();
     expect(fixture.product.dataset.presentation).toBe('collapsed');
   });

@@ -7407,7 +7407,22 @@
         "not_run": "未运行",
         "inventoryFailed": "已安装，但无法刷新插件列表。请重试。",
         "accessLoadFailed": "无法加载预览权限，请重试。",
-        "draftsLoadFailed": "无法加载插件草稿，请刷新重试。"
+        "draftsLoadFailed": "无法加载插件草稿，请刷新重试。",
+        "studio": "插件创作",
+        "intro": "描述你的想法，与 Flower 一起构建，再在画布上精细调整。",
+        "canvasTools": "画布工具",
+        "fit": "适应画布",
+        "phone": "手机宽度",
+        "commentHint": "右键评论，让 Flower 修改",
+        "comment": "评论",
+        "commentPlaceholder": "你希望 Flower 如何修改这里？",
+        "sendComment": "让 Flower 修改",
+        "commentStale": "预览已更新，请重新选择位置。你的评论已保留。",
+        "commentBusy": "Flower 正在处理任务。你可以继续写评论，完成后再发送。",
+        "commentTarget": "已选元素",
+        "commentPage": "整个预览",
+        "commentClose": "收起评论",
+        "commentShortcut": "⌘ / Ctrl ↵"
       }
     },
     "pluginRuntime": {

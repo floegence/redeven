@@ -29,6 +29,9 @@ const phase = async (value) => {
   await writeFile(path.join(reportRoot, 'report.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
 };
 const digest = (value) => createHash('sha256').update(value).digest('hex');
+const executable = path.join(binaryRoot, 'redeven');
+report.binarySHA256 = digest(await readFile(executable));
+report.runtimeSHA256 = digest(await readFile(path.join(binaryRoot, 'redevplugin-runtime')));
 const originals = new Map();
 for (const file of ['config.json', 'secrets.json']) originals.set(file, await readFile(path.join(sourceProfile, file)));
 const source = JSON.parse(originals.get('config.json'));
@@ -92,9 +95,6 @@ await writeFile(
   }),
   { mode: 0o600 },
 );
-const executable = path.join(binaryRoot, 'redeven');
-report.binarySHA256 = digest(await readFile(executable));
-report.runtimeSHA256 = digest(await readFile(path.join(binaryRoot, 'redevplugin-runtime')));
 const processEnvironment = { ...process.env, HOME: home, GOWORK: 'off' };
 let runtime, browser, page;
 const errors = [];
@@ -120,7 +120,7 @@ const startProduct = async () => {
 };
 const openProduct = async (ready, draftID) => {
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US' });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', colorScheme: 'light' });
   const url = new URL('_redeven_proxy/env/', ready.local_ui_url);
   if (draftID) url.searchParams.set('plugin_draft', draftID);
   ({ page } = await openEnvPage(context, url.href));
@@ -150,6 +150,8 @@ try {
   await page.locator('[data-plugin-center-market-action]').click();
   await page.locator('[data-plugin-center-create-plugin]').click();
   let workspace = page.locator('[data-plugin-creation-workspace]');
+  await expect(page.locator('[data-redeven-plugin-creation-page] .display-mode-page-shell')).toHaveCount(0);
+  await page.screenshot({ path: path.join(reportRoot, 'creation-entry.png') });
   await workspace
     .locator('textarea')
     .first()
@@ -190,39 +192,83 @@ try {
   await frame.getByRole('button', { name: 'Reset', exact: true }).click();
   await frame.getByText('25:00', { exact: true }).waitFor();
   report.assertions.push('Actual Flower submission produces a runnable package through approved author tools');
+  await expect(workspace.getByRole('heading', { level: 1 })).toHaveText('Focus Timer');
+  await expect(workspace.locator('.plugin-creation-toolbar')).toHaveCount(1);
+  await expect(workspace.locator('.plugin-creation-section-header')).toHaveCount(0);
+  const toolbarBounds = await workspace.locator('.plugin-creation-toolbar').boundingBox();
+  assert.ok(toolbarBounds && toolbarBounds.height <= 48, 'one compact workspace toolbar');
+  report.applicationAppearance = await frame.locator('body').evaluate(element => ({
+    fontSize: getComputedStyle(element).fontSize,
+    background: getComputedStyle(element).backgroundColor,
+    viewport: { width: innerWidth, height: innerHeight },
+    overflow: document.documentElement.scrollWidth > innerWidth,
+  }));
+  assert.equal(report.applicationAppearance.overflow, false, 'desktop application fits its canvas');
+  assert.ok(parseFloat(report.applicationAppearance.fontSize) >= 12 && parseFloat(report.applicationAppearance.fontSize) <= 14, 'application body uses compact readable typography');
   report.previewOrigin = new URL(await workspace.locator('iframe').getAttribute('src')).origin;
   assert.notEqual(new URL(report.previewOrigin).hostname, new URL(page.url()).hostname);
   await phase('Generated preview verified');
   await page.screenshot({
     path: path.join(reportRoot, 'generated-preview.png'),
   });
+  const previewInstance = await workspace.locator('[data-plugin-surface-host]').getAttribute('data-surface-instance-id');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect.poll(() => frame.locator('html').evaluate(element => getComputedStyle(element).colorScheme)).toBe('dark');
+  await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', previewInstance);
+  await page.screenshot({ path: path.join(reportRoot, 'generated-preview-dark.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await workspace.getByRole('tab', { name: 'Preview', exact: true }).click();
   await frame.getByRole('button', { name: 'Start', exact: true }).waitFor();
+  assert.equal(await frame.locator('html').evaluate(element => element.scrollWidth > innerWidth), false, 'narrow application has no horizontal overflow');
+  assert.equal(await workspace.evaluate(element => element.scrollWidth > innerWidth), false, 'narrow workspace has no horizontal overflow');
   await page.screenshot({
     path: path.join(reportRoot, 'generated-preview-mobile.png'),
   });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await phase('Generating a revision after responsive preview');
-  await workspace.locator('textarea').first().fill(
-    'Keep this same plugin draft and timer. Add a compact visible heading with the exact text Focus session ready. Preserve Start, Pause, Reset and the initial 25:00 display. Set the plugin package version to 0.1.1, keep the original plugin identity and bindings, update the real tests as needed, and run plugin_author.build. Do not install or grant permissions. Continue until a new successful artifact is returned.',
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('html')).toHaveClass(/light/);
+  await expect.poll(() => frame.locator('html').evaluate(element => getComputedStyle(element).colorScheme)).toBe('light');
+  await phase('Generating a revision from a real canvas comment');
+  const ordinaryDraft = 'Keep this unrelated unfinished idea in the composer';
+  await workspace.locator('.plugin-creation-flower-composer textarea').fill(ordinaryDraft);
+  await frame.getByRole('button', { name: 'Start', exact: true }).click({ button: 'right' });
+  const comment = workspace.getByRole('dialog', { name: 'Comment', exact: true });
+  await expect(comment).toBeVisible();
+  await expect(comment.locator('.plugin-canvas-comment-target')).toContainText('Start');
+  await comment.getByRole('textbox').fill(
+    'Change the selected Start button label to Begin focus. Add a compact heading with the exact text Focus session ready. Keep this same plugin identity, Pause, Reset and the initial 25:00 display. Set the package version to 0.1.1, update the real tests and run plugin_author.build. Do not install or grant permissions. Continue until the new successful artifact is returned.',
   );
-  const send = workspace.getByRole('button', { name: 'Send', exact: true });
-  await send.waitFor({ timeout: 120000 });
-  await send.click();
+  await expect(comment.getByRole('button', { name: 'Ask Flower to change', exact: true })).toBeEnabled({ timeout: 120000 });
+  await page.screenshot({ path: path.join(reportRoot, 'canvas-comment.png') });
+  await comment.getByRole('button', { name: 'Ask Flower to change', exact: true }).click();
+  await expect(workspace.locator('.plugin-creation-flower-composer textarea')).toHaveValue(ordinaryDraft);
   const apply = workspace.getByRole('button', { name: 'Update preview', exact: true });
   await apply.waitFor({ timeout: 900000 });
   await expect(workspace.getByRole('button', { name: 'Stop', exact: true })).toBeHidden({ timeout: 900000 });
   await expect(apply).toBeEnabled();
+  await expect(frame.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
+  await expect(frame.getByRole('button', { name: 'Begin focus', exact: true })).toHaveCount(0);
+  await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', previewInstance);
+  report.assertions.push('A completed revision leaves the original application and surface instance active until explicit preview update');
   await phase('Applying the generated revision');
-  await apply.click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await workspace.getByRole('tab', { name: 'Preview', exact: true }).click();
+  await workspace.getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Update preview', exact: true }).click();
   await frame.getByText('Focus session ready', { exact: true }).waitFor({ timeout: 60000 });
   await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', /.+/, { timeout: 30000 });
-  await expect(workspace.locator('.plugin-creation-section-header')).toContainText('0.1.1');
+  await expect(workspace.locator('.plugin-creation-version')).toContainText('0.1.1');
   await expect(workspace).toHaveAttribute('data-project-id', report.draftID);
   await expect(workspace).toHaveAttribute('data-thread-id', report.threadID);
   await expect(workspace.locator('[data-plugin-surface-diagnostics]')).toHaveCount(0);
-  report.assertions.push('A second real Flower turn builds and explicitly applies a revision within the same draft and thread');
+  await frame.getByRole('button', { name: 'Begin focus', exact: true }).waitFor();
+  await page.screenshot({ path: path.join(reportRoot, 'revised-preview-mobile.png') });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: path.join(reportRoot, 'revised-preview.png') });
+  await expect(workspace.locator('.plugin-creation-flower-composer textarea')).toHaveValue(ordinaryDraft);
+  await workspace.locator('.plugin-creation-flower-composer textarea').fill('');
+  report.assertions.push('A native sandbox right-click comment changes the selected element through the same real Flower thread, preserves unsent composer text and builds an explicitly applied revision');
   await phase('Generated revision applied');
   await workspace.getByRole('button', { name: 'Install in this environment', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm installation', exact: true }).click();
@@ -247,7 +293,7 @@ try {
   report.assertions.push('A complete product process restart restores the durable draft, canonical thread, revision and installation');
   await workspace.waitFor({ state: 'detached' });
   const installedFrame = page.frameLocator('iframe').last();
-  await installedFrame.getByRole('button', { name: 'Start', exact: true }).waitFor();
+  await installedFrame.getByRole('button', { name: 'Begin focus', exact: true }).waitFor();
   await installedFrame.getByText('25:00', { exact: true }).waitFor();
   await installedFrame.getByText('Focus session ready', { exact: true }).waitFor();
   report.installedOrigin = new URL(await page.locator('iframe').last().getAttribute('src')).origin;
@@ -255,6 +301,39 @@ try {
   await page.screenshot({
     path: path.join(reportRoot, 'installed-application.png'),
   });
+  const localizedContext = await browser.newContext({
+    viewport: { width: 1440, height: 900 }, locale: 'zh-CN', colorScheme: 'light',
+  });
+  try {
+    const localizedURL = new URL('_redeven_proxy/env/', restarted.local_ui_url);
+    localizedURL.searchParams.set('plugin_draft', report.draftID);
+    const { page: localizedPage } = await openEnvPage(localizedContext, localizedURL.href);
+    localizedPage.on('pageerror', error => errors.push({ phase: 'Chinese canvas review', message: error.message, stack: error.stack }));
+    const localizedWorkspace = localizedPage.locator('[data-plugin-creation-workspace]');
+    await expect(localizedWorkspace).toHaveAttribute('data-thread-id', report.threadID);
+    await expect(localizedWorkspace.getByRole('button', { name: '适应画布', exact: true })).toBeVisible();
+    const localizedFrame = localizedWorkspace.frameLocator('iframe');
+    await localizedFrame.getByRole('button', { name: 'Begin focus', exact: true }).waitFor({ timeout: 60000 });
+    await localizedPage.screenshot({ path: path.join(reportRoot, 'revised-preview-zh-CN.png') });
+    await localizedFrame.getByRole('button', { name: 'Begin focus', exact: true }).click({ button: 'right' });
+    const localizedComment = localizedWorkspace.getByRole('dialog', { name: '评论', exact: true });
+    await expect(localizedComment).toBeVisible();
+    await localizedComment.getByRole('textbox', { name: '你希望 Flower 如何修改这里？', exact: true }).fill('让这个按钮更简洁，并与计时器对齐。');
+    await expect(localizedComment.getByRole('button', { name: '让 Flower 修改', exact: true })).toBeEnabled({ timeout: 30000 });
+    await localizedPage.screenshot({ path: path.join(reportRoot, 'canvas-comment-zh-CN.png') });
+    await localizedComment.getByRole('textbox').fill('');
+    await localizedComment.getByRole('button', { name: '收起评论', exact: true }).click();
+    await localizedPage.setViewportSize({ width: 390, height: 844 });
+    await localizedWorkspace.getByRole('tab', { name: '预览', exact: true }).click();
+    await expect(localizedFrame.getByRole('button', { name: 'Begin focus', exact: true })).toBeVisible();
+    assert.equal(await localizedWorkspace.evaluate(element => element.scrollWidth > innerWidth), false, 'Chinese canvas fits a narrow viewport');
+    await localizedPage.screenshot({ path: path.join(reportRoot, 'revised-preview-mobile-zh-CN.png') });
+    await localizedWorkspace.locator('.plugin-creation-toolbar > button').first().click();
+    await localizedWorkspace.waitFor({ state: 'detached' });
+    report.assertions.push('The actual restored draft renders Chinese canvas controls and native right-click comments at desktop and mobile widths');
+  } finally {
+    await localizedContext.close();
+  }
   report.assertions.push(
     'Product review installs the current preview, survives reload and opens the formal application',
   );
@@ -277,7 +356,7 @@ try {
   await page.getByRole('tab', { name: /^Installed/ }).click();
   const installedCard = page.locator('[data-plugin-directory-card]').filter({ hasText: 'Focus Timer' });
   await installedCard.getByRole('button', { name: 'Open', exact: true }).click();
-  await installedFrame.getByRole('button', { name: 'Start', exact: true }).click();
+  await installedFrame.getByRole('button', { name: 'Begin focus', exact: true }).click();
   await installedFrame.getByText('24:59', { exact: true }).waitFor({ timeout: 5000 });
   await installedFrame.getByRole('button', { name: 'Pause', exact: true }).click();
   await installedFrame.getByRole('button', { name: 'Reset', exact: true }).click();

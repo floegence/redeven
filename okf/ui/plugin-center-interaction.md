@@ -40,9 +40,23 @@ the draft reader; they do not turn connection startup into a failed draft read.
 Files, Terminal, the ordinary Flower surface and Workbench retain their existing
 instances while this page is active. The dedicated embedded Flower surface owns
 one composer; requirements discussion and direct creation submit through it.
-Desktop conversation/preview columns use a 38/62 balance with a usable minimum
-conversation width. Compact screens select conversation or preview through
-44-pixel tabs. The toolbar stays quiet and matches the shell's typography.
+A new draft has one centered creation composer on a quiet canvas, without an
+empty split preview. After submission the conversation occupies a compact
+280–328px column and the application becomes the primary canvas. Fit and phone
+width controls resize the same live iframe without moving or recreating it. Compact screens select conversation or preview through
+44-pixel icon tabs within the same toolbar, with accessible names and a visible
+project title. The dedicated page omits the ordinary display-mode top bar. One compact
+toolbar owns preview sizes, comments, build status and
+installation; permissions remain in its overflow menu. The live application fills
+the remaining area without a nested header, card border or bottom tool dock.
+Both the workspace and directly opened draft library use the shared Desktop drag contract and native window-control
+insets; removing the outer header must not place actions under system controls.
+The toolbar preserves a user-assigned draft title; otherwise it shows the
+verified active preview name, falling back to the localized untitled label only
+before a preview is available. This display choice does not rename stored drafts.
+The compact checks action reflects actual running, failed, passed or unrun stages;
+it never displays a success icon before checks have passed. Detailed output opens
+on demand without adding another permanent header.
 
 Directory cards use 13-pixel names, 12-pixel summaries, 32-pixel icons and 12-pixel
 padding; selection and status do not enlarge cards or duplicate refresh content.
@@ -85,6 +99,37 @@ After an authoritative `not_committed` outcome, Try again requests a fresh revie
 of the current preview instead of querying the same terminal failure forever.
 Unknown outcomes retain the original request and never authorize another install.
 
+## Canvas comments
+
+Native right-click observations use the released upstream opt-in context-menu
+callback on the same sandbox channel. Product never reads cross-origin DOM.
+The selection binds the exact artifact, preview generation and current platform
+frame. Normalized geometry draws a non-interactive outline and pin; a compact
+selection-adjacent comment popover accepts explicit submission and clamps to the
+canvas edges. Its target, text and send action form one compact editing surface. Keyboard context menus and the toolbar's
+whole-preview comment provide alternatives. Closing the panel preserves text.
+Compact screens retain 44-pixel comment action targets and legible input without
+adding another header or permanently covering the application.
+Their whole-preview comment and preview-update actions sit in the existing overflow
+menu, preserving readable title space across translated labels. A pending update
+marks that menu with a small dot; applying it remains an explicit choice. Selecting
+the comment action opens the preview tab. Once a comment is accepted, compact
+screens return to the conversation so Flower progress is visible; the live preview
+remains mounted. New edits made during submission keep the comment editor open.
+
+Comments are independent of the canonical composer and enter its existing durable
+Flower outbox for the same dedicated thread. Unsent text, references and files
+remain untouched. Pending or uncertain sends cannot be duplicated; normal outbox
+recovery remains authoritative. Selection text is untrusted quoted context and
+never grants execution authority. Source edits and builds retain normal approval;
+preview application and installation remain explicit existing actions.
+
+Only comment text is cached under the authenticated draft key. Reload, preview
+replacement, navigation, resizing and subsequent application interaction require
+a new selection; text survives. Submission rechecks the live frame and artifact.
+Failed local persistence keeps unload protection and blocks navigation. Draft
+deletion removes its composer and comment snapshots after surface closure.
+
 ## Restore saved data
 
 Installed plugin details expose Restore saved data in the existing action menu. Discovery is read-only, including for enabled plugins. The user selects a retained record by date and instance suffix; Disable and continue is explicit when needed, and the Host then produces the exact review. A short confirmation states that current data is also retained. No permanent card, technical hash wall or automatic re-enable is added.
@@ -110,5 +155,8 @@ Management presentation never creates a second lifecycle or permission authority
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCreationWorkspace.browser.test.tsx` - Product interaction tests using fixture HTTP responses.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPreviewUpdates.browser.test.tsx` - Container lifetime across conversation suspension, identical-byte apply, rejected updates and cancelled close; the surface is a fixture.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginComposerPersistence.browser.test.tsx` - Real browser IndexedDB text/File restoration.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCanvasWorkflow.browser.test.tsx` - Artifact-bound comment state, viewport invalidation, single-toolbar Desktop control insets and persistence failures; the sandbox is a fixture.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx` - Real Flower outbox admission, retained ordinary input and exact-request recovery after lost receipts.
+- `redeven:scripts/check_plugin_creation_model.mjs` - Explicit real-model qualification for generation, right-click revision, preview apply, installation, restart and draft deletion; separate from fixture layout evidence.
 
 - `redeven:internal/envapp/ui_src/scripts/checkPluginCreationContinuity.mjs` - Built product Files, native Terminal and saved-composer continuity qualification; its plugin runtime is admission-only.

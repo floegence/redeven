@@ -5585,7 +5585,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       <Show when={pluginCreationOpen()}>
         <AppViewport>
           <div class="relative h-full min-h-0 overflow-hidden" data-redeven-plugin-creation-page>
-            <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}><Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}><Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense></Show></DisplayModePageShell>
+            <Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}>
+              <Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense>
+            </Show>
           </div>
         </AppViewport>
       </Show>

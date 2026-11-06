@@ -3,6 +3,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { ArrowLeft, Plus, Refresh } from '@floegence/floe-webapp-core/icons';
 import { useI18n } from '../i18n';
 import { listPluginDrafts, type PluginDraft } from './pluginCreationApi';
+import './plugin-creation-workspace.css';
 export function PluginDraftLibrary(props: { onOpen: (id: string) => void; onBack: () => void }): JSX.Element {
   const i18n = useI18n();
   const [drafts, setDrafts] = createSignal<readonly PluginDraft[]>([]);
@@ -30,8 +31,8 @@ export function PluginDraftLibrary(props: { onOpen: (id: string) => void; onBack
     disposed = true;
   });
   return (
-    <section class="flex h-full min-h-0 flex-col" data-plugin-draft-library>
-      <header class="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+    <section class="redeven-plugin-creation-page" data-plugin-draft-library>
+      <header class="plugin-creation-toolbar" data-redeven-desktop-titlebar-drag-region="true">
         <Button
           variant="ghost"
           size="icon"

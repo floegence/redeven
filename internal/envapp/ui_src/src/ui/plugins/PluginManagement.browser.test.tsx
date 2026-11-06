@@ -1991,6 +1991,12 @@ describe('plugin management browser geometry and interaction', () => {
       expect(card.getAttribute('data-floe-card-variant')).toBe('default');
       expect(getComputedStyle(card).boxShadow).toBe('none');
       expect(getComputedStyle(card).borderTopColor).toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(card).paddingTop).toBe('12px');
+      const identity = card.querySelector('[data-plugin-center-item]')!.firstElementChild!;
+      const iconBounds = identity.firstElementChild!.getBoundingClientRect();
+      expect(iconBounds.width).toBeCloseTo(32, 2);
+      expect(iconBounds.height).toBeCloseTo(32, 2);
+      expect(getComputedStyle(identity.querySelector('[dir="auto"]')!).fontSize).toBe('13px');
       expect(host.querySelector('[data-plugin-center-card-primary]')?.getAttribute('data-floe-control')).toBe('button');
       expect(host.querySelector('[data-plugin-center-search]')?.getAttribute('data-floe-control')).toBe('input');
       await page.elementLocator(card).hover();

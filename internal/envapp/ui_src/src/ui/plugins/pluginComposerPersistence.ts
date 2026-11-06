@@ -34,5 +34,15 @@ export async function savePluginComposer(id: string, snapshot: FlowerComposerRes
   await transact('readwrite', (store) => store.put(snapshot, id));
 }
 export async function removePluginComposer(id: string): Promise<void> {
-  await transact('readwrite', (store) => store.delete(id));
+  await transact('readwrite', (store) => {
+    store.delete(id);
+    return store.delete(`comment:${id}`);
+  });
+}
+
+// Comments retain text only. A restored draft must select a fresh live target.
+export const loadPluginComment = (id: string) => transact<string | undefined>('readonly', store => store.get(`comment:${id}`));
+export async function savePluginComment(id: string, text: string): Promise<void> {
+  if (text) await transact('readwrite', store => store.put(text.slice(0, 4000), `comment:${id}`));
+  else await transact('readwrite', store => store.delete(`comment:${id}`));
 }

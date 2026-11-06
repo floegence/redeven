@@ -7411,7 +7411,22 @@
         "not_run": "Nicht ausgeführt",
         "inventoryFailed": "Installiert, aber die Plugin-Liste konnte nicht aktualisiert werden. Bitte erneut versuchen.",
         "accessLoadFailed": "Die Vorschau-Berechtigungen konnten nicht geladen werden. Versuchen Sie es erneut.",
-        "draftsLoadFailed": "Plugin-Entwürfe konnten nicht geladen werden. Aktualisieren Sie die Ansicht."
+        "draftsLoadFailed": "Plugin-Entwürfe konnten nicht geladen werden. Aktualisieren Sie die Ansicht.",
+        "studio": "Plugin-Studio",
+        "intro": "Beschreibe deine Idee. Entwickle sie mit Flower und verfeinere sie auf der Arbeitsfläche.",
+        "canvasTools": "Werkzeuge der Arbeitsfläche",
+        "fit": "An Arbeitsfläche anpassen",
+        "phone": "Smartphone-Breite",
+        "commentHint": "Rechtsklick zum Kommentieren",
+        "comment": "Kommentar",
+        "commentPlaceholder": "Was soll Flower hier ändern?",
+        "sendComment": "Mit Flower ändern",
+        "commentStale": "Die Vorschau hat sich geändert. Wähle die Stelle erneut; dein Kommentar bleibt erhalten.",
+        "commentBusy": "Flower arbeitet noch. Du kannst weiterschreiben und danach senden.",
+        "commentTarget": "Ausgewähltes Element",
+        "commentPage": "Gesamte Vorschau",
+        "commentClose": "Kommentar schließen",
+        "commentShortcut": "⌘ / Strg ↵"
       }
     },
     "pluginRuntime": {

@@ -7407,7 +7407,22 @@
         "not_run": "未執行",
         "inventoryFailed": "已安裝，但無法重新整理外掛程式清單。請重試。",
         "accessLoadFailed": "無法載入預覽權限，請重試。",
-        "draftsLoadFailed": "無法載入外掛草稿，請重新整理後再試。"
+        "draftsLoadFailed": "無法載入外掛草稿，請重新整理後再試。",
+        "studio": "外掛創作",
+        "intro": "描述你的想法，與 Flower 一起建立，再於畫布上細緻調整。",
+        "canvasTools": "畫布工具",
+        "fit": "符合畫布",
+        "phone": "手機寬度",
+        "commentHint": "按右鍵留言，讓 Flower 修改",
+        "comment": "留言",
+        "commentPlaceholder": "你希望 Flower 如何修改這裡？",
+        "sendComment": "讓 Flower 修改",
+        "commentStale": "預覽已更新，請重新選取位置。你的留言已保留。",
+        "commentBusy": "Flower 正在處理工作。你可以繼續撰寫留言，完成後再傳送。",
+        "commentTarget": "已選取元素",
+        "commentPage": "整個預覽",
+        "commentClose": "收起留言",
+        "commentShortcut": "⌘ / Ctrl ↵"
       }
     },
     "pluginRuntime": {

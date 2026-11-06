@@ -3,6 +3,7 @@ import { writeTextToClipboard } from '../utils/clipboard';
 import {
   PluginSurfaceSlot,
   type PluginSurfaceHost,
+  type PluginSurfaceContextMenuEvent,
 } from '@floegence/redevplugin-ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Copy, Loader2, Refresh } from '@floegence/floe-webapp-core/icons';
@@ -25,6 +26,7 @@ export type PluginSurfaceBodyProps = {
   refreshInventory?: () => Promise<boolean>;
   registerClose?: (close: (() => Promise<boolean>) | null) => void;
   onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
+  onContextMenu?: (event: PluginSurfaceContextMenuEvent) => void;
   onRetirementError: (error: unknown) => void;
 };
 
@@ -136,6 +138,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       confirm: props.confirmationQueue.createHandler(confirmationOwner),
       confirmClose,
       onInteraction: props.onInteraction,
+      onContextMenu: props.onContextMenu,
       onCleanupError: props.onRetirementError,
       surfaceContext: currentSurfaceContext,
       onError(error) {

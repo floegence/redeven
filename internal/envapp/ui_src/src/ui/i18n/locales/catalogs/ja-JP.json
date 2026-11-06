@@ -7407,7 +7407,22 @@
         "not_run": "未実行",
         "inventoryFailed": "インストール済みですが、プラグイン一覧を更新できませんでした。再試行してください。",
         "accessLoadFailed": "プレビューの権限を読み込めませんでした。もう一度お試しください。",
-        "draftsLoadFailed": "プラグインの下書きを読み込めませんでした。更新して再試行してください。"
+        "draftsLoadFailed": "プラグインの下書きを読み込めませんでした。更新して再試行してください。",
+        "studio": "プラグイン制作",
+        "intro": "アイデアを伝えて Flower と形にし、キャンバスで細部を整えましょう。",
+        "canvasTools": "キャンバスツール",
+        "fit": "キャンバスに合わせる",
+        "phone": "スマートフォン幅",
+        "commentHint": "右クリックでコメント",
+        "comment": "コメント",
+        "commentPlaceholder": "Flower にどのように変更してほしいですか？",
+        "sendComment": "Flower に変更を依頼",
+        "commentStale": "プレビューが更新されました。場所を選び直してください。コメントは保持されています。",
+        "commentBusy": "Flower が処理中です。コメントを書き続け、完了後に送信できます。",
+        "commentTarget": "選択した要素",
+        "commentPage": "プレビュー全体",
+        "commentClose": "コメントを閉じる",
+        "commentShortcut": "⌘ / Ctrl ↵"
       }
     },
     "pluginRuntime": {

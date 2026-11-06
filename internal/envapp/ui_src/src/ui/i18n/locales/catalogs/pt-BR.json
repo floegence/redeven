@@ -7411,7 +7411,22 @@
         "not_run": "Não executado",
         "inventoryFailed": "Instalado, mas não foi possível atualizar a lista de plugins. Tente novamente.",
         "accessLoadFailed": "Não foi possível carregar as permissões da prévia. Tente novamente.",
-        "draftsLoadFailed": "Não foi possível carregar os rascunhos de plugins. Atualize para tentar novamente."
+        "draftsLoadFailed": "Não foi possível carregar os rascunhos de plugins. Atualize para tentar novamente.",
+        "studio": "Estúdio de plugins",
+        "intro": "Descreva sua ideia. Crie com o Flower e refine os detalhes na tela.",
+        "canvasTools": "Ferramentas da tela",
+        "fit": "Ajustar à tela",
+        "phone": "Largura de celular",
+        "commentHint": "Clique com o botão direito para comentar",
+        "comment": "Comentário",
+        "commentPlaceholder": "O que você gostaria que o Flower alterasse aqui?",
+        "sendComment": "Pedir alteração ao Flower",
+        "commentStale": "A prévia mudou. Selecione o local novamente; seu comentário foi mantido.",
+        "commentBusy": "O Flower está trabalhando. Continue escrevendo e envie quando ele terminar.",
+        "commentTarget": "Elemento selecionado",
+        "commentPage": "Prévia inteira",
+        "commentClose": "Fechar comentário",
+        "commentShortcut": "⌘ / Ctrl ↵"
       }
     },
     "pluginRuntime": {

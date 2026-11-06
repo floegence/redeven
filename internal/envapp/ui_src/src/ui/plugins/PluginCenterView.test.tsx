@@ -260,7 +260,7 @@ describe('PluginCenterView', () => {
     const install = mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement;
     expect(details).not.toBeNull();
     expect(controlText(install)).toContain('Install');
-    expect(install.closest('[data-plugin-directory-card]')?.querySelector('.h-10.w-10')).not.toBeNull();
+    expect(install.closest('[data-plugin-directory-card]')?.querySelector('.h-8.w-8')).not.toBeNull();
     install.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('[data-external-plugin-dialog]')).not.toBeNull();

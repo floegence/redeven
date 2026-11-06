@@ -21,7 +21,7 @@ vi.mock('./PluginAuthorPreview', () => ({
 }));
 let dispose: (() => void) | undefined;
 let release: (() => void) | undefined;
-afterEach(() => {
+afterEach(async () => {
   dispose?.();
   release?.();
   vi.unstubAllGlobals();
@@ -29,6 +29,7 @@ afterEach(() => {
   lifetime.opened = 0;
   lifetime.disposed = 0;
   lifetime.close.mockReset();
+  await page.viewport(1200, 800);
 });
 it('keeps the live preview connected while a conversation resource is pending', async () => {
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -117,8 +118,8 @@ it.each(['accepted', 'cancelled', 'failed'])('closes the preview before %s draft
     await expect.poll(() => lifetime.opened).toBe(outcome === 'failed' ? 2 : 1);
   }
 });
-it.each(['applied', 'rejected', 'cancelled', 'pending'])('preserves preview lifetime when an identical-byte update is %s', async (outcome) => {
-  await page.viewport(1200, 800);
+it.each([1200, 390].flatMap(width => ['applied', 'rejected', 'cancelled', 'pending'].map(outcome => ({ width, outcome }))))('preserves preview lifetime when an identical-byte update is $outcome at $width px', async ({ width, outcome }) => {
+  await page.viewport(width, 800);
   lifetime.close.mockResolvedValue(outcome !== 'cancelled');
   let applied = false;
   let finishApply: (() => void) | undefined;
@@ -157,7 +158,10 @@ it.each(['applied', 'rejected', 'cancelled', 'pending'])('preserves preview life
       renderFlower={() => <div>Conversation fixture</div>} />
   </I18nProvider></FloeConfigProvider>, host);
   await expect.poll(() => lifetime.opened).toBe(1);
-  await page.getByRole('button', { name: 'Update preview', exact: true }).click();
+  if (width < 720) {
+    await page.getByRole('button', { name: 'More actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Update preview', exact: true }).click();
+  } else await page.getByRole('button', { name: 'Update preview', exact: true }).click();
   await expect.poll(() => lifetime.close.mock.calls.length).toBe(1);
   if (outcome === 'pending') {
     try {
@@ -165,7 +169,10 @@ it.each(['applied', 'rejected', 'cancelled', 'pending'])('preserves preview life
     } finally { finishApply?.(); }
   }
   if (outcome === 'cancelled') {
-    await expect.element(page.getByRole('button', { name: 'Update preview', exact: true })).toBeEnabled();
+    if (width < 720) {
+      await page.getByRole('button', { name: 'More actions', exact: true }).click();
+      await expect.element(page.getByRole('menuitem', { name: 'Update preview', exact: true })).toBeEnabled();
+    } else await expect.element(page.getByRole('button', { name: 'Update preview', exact: true })).toBeEnabled();
     expect(lifetime.opened).toBe(1);
     expect(lifetime.disposed).toBe(0);
     expect(fetch.mock.calls.some(([input]) => String(input).endsWith('/apply'))).toBe(false);

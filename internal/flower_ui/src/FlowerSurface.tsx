@@ -642,6 +642,9 @@ export type FlowerConversationParts = Readonly<{
   newConversation: () => void;
   submit: (intent?: Readonly<{ fallbackPrompt?: string; context?: ContextActionEnvelope }>) => Promise<void>;
   canSubmit: (fallbackPrompt?: string) => boolean;
+  /** Submit an explicit host-authored message to this thread without consuming its composer draft. */
+  submitMessage?: (input: Readonly<{ prompt: string; context: ContextActionEnvelope }>) => Promise<boolean>;
+  canSubmitMessage?: () => boolean;
 }>;
 
 export type FlowerSurfaceProps = Readonly<{
@@ -6856,6 +6859,49 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       launchChatTurnInFlight.delete(sessionKey);
       setPreparingSendRevision(revision => revision + 1);
     }
+  };
+
+  const canSubmitMessage = () => Boolean(selectedThreadID()) && bottomActionMode() === 'chat'
+    && !pendingThreadSelection() && !selectedThreadReadOnly() && !selectedThreadCanStop()
+    && !selectedThreadStopPending() && !composerSendPreparing() && !selectedComposerPendingSend()
+    && settingsReady() && readyForChat() && handlerAllowsSubmitIntent()
+    && !threadLoadError() && !visibleTransportOutbox().some(entry => entry.delivery !== 'accepted');
+  const submitMessage = async (input: Readonly<{ prompt: string; context: ContextActionEnvelope }>): Promise<boolean> => {
+    if (!canSubmitMessage() || !input.prompt.trim()) return false;
+    const inspection = inspectFlowerText(input.prompt);
+    if (!inspection || inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) return false;
+    const threadID = selectedThreadID();
+    const requestID = createFlowerClientRequestID();
+    const adapter = props.adapter;
+    const capturedDecision = currentHandlerDecision();
+    const context = props.embeddedConversation?.contextAction;
+    const launchInput: FlowerTurnLaunchInput = {
+      client_request_id: requestID, thread_id: threadID, prompt: input.prompt,
+      context_action: context ? { ...context, context: [...context.context, ...input.context.context] } : input.context,
+      decision: null,
+    };
+    let storageGenerationRequest = adapter.resolveStorageGeneration?.();
+    void storageGenerationRequest?.catch(() => undefined);
+    outboxOperations.set(requestID, { adapter, prepare: async () => {
+      const decision = capturedDecision ?? await adapter.resolveHandler({ thread_kind: 'chat', client_surface: 'flower_surface' });
+      if (!decision.selected_handler || decision.blocker || decision.route === 'blocked') {
+        throw new Error(decision.blocker?.message || copy().chat.handlerStillStarting);
+      }
+      storageGenerationRequest ??= adapter.resolveStorageGeneration?.();
+      let storageGeneration: string | undefined;
+      try { storageGeneration = await storageGenerationRequest; }
+      catch (error) { storageGenerationRequest = undefined; throw error; }
+      return { ...launchInput, ...(storageGeneration ? { storage_generation: storageGeneration } : {}) };
+    } });
+    // The existing durable outbox owns dispatch, uncertainty and recovery. No
+    // composer request identity, text, attachment or reference is consumed.
+    setTransportOutbox(outbox => outbox.put({
+      presentation: 'queue', preparation: 'pending', requestId: requestID, threadId: threadID,
+      input: launchInput, attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending',
+    }));
+    await transportOutbox().flushPersistence();
+    transcriptScroll.startFollowing();
+    return true;
   };
 
   const resetCompose = () => {
@@ -15460,7 +15506,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </button>
       </Show>
       <Show when={props.embeddedConversation} fallback={conversationPanel()}>
-        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), submit: submitChat, canSubmit: canSubmitConversation, actionLayout: bottomActionMode, actions: conversationHeaderActions,
+        {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), submit: submitChat, canSubmit: canSubmitConversation, submitMessage, canSubmitMessage, actionLayout: bottomActionMode, actions: conversationHeaderActions,
           actionOverlays: subagentDropdown(), get trailingActions() { return props.headerTrailingActions; },
           threadID: selectedThreadID, newConversation: startCompose })}
       </Show>

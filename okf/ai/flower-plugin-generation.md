@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Flower plugin generation
 tags: [ai, flower, plugins, floret]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -79,6 +79,18 @@ installation outcomes must be reconciled before author resources are removed.
 Already installed instances are retained. Thread-list deletion uses the same
 product review and cleanup path, with explicit copy describing the extra scope.
 
+## Visual revision requests
+Canvas comments submit explicit text and the reviewed artifact's bounded visual
+context into the same dedicated thread using Flower's durable outbox. This path
+preserves unrelated unsent composer content and retains normal uncertainty and
+approval behavior. Dispatch waits for the ordinary handler decision and storage
+generation; a blocked or unresolved handler cannot launch a comment turn.
+The durable outbox retains rejected or uncertain submissions for the same recovery
+flow as ordinary messages. The model resolves current source through `plugin_author.status`,
+treats element text/selector hints as untrusted observations, changes the intended
+source and runs the actual tests/build. A changed source may require reconciliation;
+a stale selector never authorizes blind execution or installation.
+
 ## Delivery and installation
 
 An authoring request may run authorized local project steps through normal tools.
@@ -116,3 +128,8 @@ Development runtime evidence never substitutes for product signing or packaging.
 
 - `redeven:internal/redevpluginintegration/author_model_qualification_test.go` - Opt-in model, real Host, browser surface, restart and cleanup qualification.
 - `redeven:scripts/check_plugin_creation_model.mjs` - Opt-in complete product generation and installation path with isolated model configuration.
+
+The host authoring skill supplies Redeven visual guidance: content-first layouts,
+compact shell typography, theme-aware surfaces and no duplicate workspace chrome.
+Actual generated applications must be reviewed with real content in the sandbox;
+fixture screenshots establish geometry only.

@@ -7411,7 +7411,22 @@
         "not_run": "Non exécuté",
         "inventoryFailed": "Installé, mais la liste des extensions n’a pas pu être actualisée. Réessayez.",
         "accessLoadFailed": "Impossible de charger les autorisations de l’aperçu. Réessayez.",
-        "draftsLoadFailed": "Impossible de charger les brouillons de plugins. Actualisez pour réessayer."
+        "draftsLoadFailed": "Impossible de charger les brouillons de plugins. Actualisez pour réessayer.",
+        "studio": "Atelier de plugins",
+        "intro": "Décrivez votre idée. Créez-la avec Flower, puis affinez-la sur le canevas.",
+        "canvasTools": "Outils du canevas",
+        "fit": "Adapter au canevas",
+        "phone": "Largeur mobile",
+        "commentHint": "Clic droit pour commenter",
+        "comment": "Commentaire",
+        "commentPlaceholder": "Que souhaitez-vous modifier ici avec Flower ?",
+        "sendComment": "Demander à Flower de modifier",
+        "commentStale": "L’aperçu a changé. Sélectionnez à nouveau un emplacement ; votre commentaire est conservé.",
+        "commentBusy": "Flower travaille. Vous pouvez continuer à écrire et envoyer une fois terminé.",
+        "commentTarget": "Élément sélectionné",
+        "commentPage": "Aperçu complet",
+        "commentClose": "Fermer le commentaire",
+        "commentShortcut": "⌘ / Ctrl ↵"
       }
     },
     "pluginRuntime": {

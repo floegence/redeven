@@ -4,6 +4,8 @@ import {
   createPluginSurfaceScope,
   createReDevPluginSurfaceTransport,
   type FetchLike,
+  type PluginSurfaceContextMenuEvent,
+  type PluginSurfaceInteractionEvent,
 } from '@floegence/redevplugin-ui';
 import { PluginSurfaceBody } from './PluginSurfaceFrame';
 import { PluginConfirmationDialog, createPluginConfirmationQueue } from './PluginConfirmationQueue';
@@ -22,6 +24,8 @@ export function PluginAuthorPreview(props: {
   centerEntry?: boolean;
   refreshInventory: () => Promise<boolean>;
   onError: (error: unknown) => void;
+  onContextMenu?: (event: PluginSurfaceContextMenuEvent) => void;
+  onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
   registerClose: (close: (() => Promise<boolean>) | null) => void;
 }): JSX.Element {
   const workspaceID = props.workspaceID;
@@ -59,6 +63,8 @@ export function PluginAuthorPreview(props: {
         visible={props.visible}
         registerClose={props.registerClose}
         onRetirementError={props.onError}
+        onContextMenu={props.onContextMenu}
+        onInteraction={props.onInteraction}
       />
       <PluginConfirmationDialog queue={confirmations} />
     </>

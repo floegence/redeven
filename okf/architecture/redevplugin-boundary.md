@@ -73,6 +73,14 @@ Private files1→chunked2 migration stays upstream, separate from control/author
 
 Host enforces read/write ceilings/read-only effects before process operations. SQLite authorizes compiled SQL,excludes host paths,bounds values/complexity/concurrency. Product maps sessions/process adapters only; no new manifest/data flags.
 
+## Visual review boundary
+Opt-in context menus are a released ReDevPlugin surface capability. Bootstrap
+collects bounded target hints and normalized viewport geometry; the SDK validates
+current source/port, frame, handle, sequence and limits. Product owns canvas
+annotations, artifact binding, comment text and Flower submission. No parent DOM
+inspection, injected application bridge, permission grant or alternate dispatcher
+is introduced. Visual metadata is untrusted model context, never authority.
+
 ## Open distribution
 Ordinary plugins require no signature, publisher trust, registration or manual directory admission. Official/community is display-only. Released platform helpers own GitHub repository-derived identity; product validates market evidence using those helpers and delegates independent source inspection to Host. Authors supply a slug, never publisher registration or signature evidence. Local/upload identities do not confer GitHub provenance. All sources use inspection, exact consent, durable receipts and independent permissions. Product update scheduling uses the current authenticated session and upstream automatic-eligibility rules; it adds no host install state machine. Signed platform releases, product runtime identity and signed runtime leases remain separate platform/product protections.
 

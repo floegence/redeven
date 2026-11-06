@@ -3,7 +3,7 @@ import {
   createFlowerComposerDraftCoordinator,
   type FlowerComposerRestartDraft,
 } from '../../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
-import { loadPluginComposer, savePluginComposer, removePluginComposer } from './pluginComposerPersistence';
+import { loadPluginComposer, savePluginComposer, removePluginComposer, loadPluginComment, savePluginComment } from './pluginComposerPersistence';
 it('retains text and attachment bytes across a fresh coordinator without old admission authority', async () => {
   const id = crypto.randomUUID();
   const file = new File(['private attachment'], 'notes.txt', { type: 'text/plain' });
@@ -23,4 +23,21 @@ it('retains text and attachment bytes across a fresh coordinator without old adm
   await removePluginComposer(id);
   expect(await loadPluginComposer(id)).toBeUndefined();
   coordinator.dispose();
+});
+it('removes only the deleted project composer and comment together', async () => {
+  const id = crypto.randomUUID(), sibling = crypto.randomUUID();
+  const value: FlowerComposerRestartDraft = {
+    scope_id: 'draft', value: { text: 'Unsent idea', mode: 'ordinary', attachments: [], references: [] }, files: [],
+  };
+  try {
+    await savePluginComposer(id, value);
+    await savePluginComment(id, 'Selected element review');
+    await savePluginComposer(sibling, value);
+    await savePluginComment(sibling, 'Another project review');
+    await removePluginComposer(id);
+    expect(await loadPluginComposer(id)).toBeUndefined();
+    expect(await loadPluginComment(id)).toBeUndefined();
+    expect((await loadPluginComposer(sibling))?.value.text).toBe('Unsent idea');
+    expect(await loadPluginComment(sibling)).toBe('Another project review');
+  } finally { await removePluginComposer(id); await removePluginComposer(sibling); }
 });

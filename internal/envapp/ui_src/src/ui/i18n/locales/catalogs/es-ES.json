@@ -7411,7 +7411,22 @@
         "not_run": "Sin ejecutar",
         "inventoryFailed": "Instalado, pero no se pudo actualizar la lista de complementos. Inténtalo de nuevo.",
         "accessLoadFailed": "No se pudieron cargar los permisos de la vista previa. Inténtalo de nuevo.",
-        "draftsLoadFailed": "No se pudieron cargar los borradores de plugins. Actualiza para volver a intentarlo."
+        "draftsLoadFailed": "No se pudieron cargar los borradores de plugins. Actualiza para volver a intentarlo.",
+        "studio": "Estudio de plugins",
+        "intro": "Describe tu idea. Créala con Flower y perfecciónala en el lienzo.",
+        "canvasTools": "Herramientas del lienzo",
+        "fit": "Ajustar al lienzo",
+        "phone": "Ancho de móvil",
+        "commentHint": "Clic derecho para comentar",
+        "comment": "Comentario",
+        "commentPlaceholder": "¿Qué quieres que Flower cambie aquí?",
+        "sendComment": "Pedir cambios a Flower",
+        "commentStale": "La vista previa cambió. Selecciona otra vez el lugar; conservamos tu comentario.",
+        "commentBusy": "Flower está trabajando. Puedes seguir escribiendo y enviar cuando termine.",
+        "commentTarget": "Elemento seleccionado",
+        "commentPage": "Toda la vista previa",
+        "commentClose": "Cerrar comentario",
+        "commentShortcut": "⌘ / Ctrl ↵"
       }
     },
     "pluginRuntime": {

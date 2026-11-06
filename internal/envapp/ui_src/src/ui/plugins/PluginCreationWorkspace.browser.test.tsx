@@ -105,7 +105,7 @@ function mount() {
   );
   return { host, onBack, submit };
 }
-it('renders a full page with a larger preview and one composer', async () => {
+it('starts with one centered composer and no empty split preview', async () => {
   await page.viewport(1200, 800);
   const { host, submit } = mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
@@ -113,7 +113,8 @@ it('renders a full page with a larger preview and one composer', async () => {
   expect(host.querySelectorAll('textarea')).toHaveLength(1);
   const conversation = host.querySelector('.plugin-creation-main')!.getBoundingClientRect();
   const preview = host.querySelector('.plugin-creation-preview')!.getBoundingClientRect();
-  expect(preview.width).toBeGreaterThan(conversation.width);
+  expect(preview.width).toBe(0);
+  expect(conversation.width).toBe(1200);
   expect(preview.right).toBeLessThanOrEqual(1200);
   await page.getByRole('button', { name: 'Create directly', exact: true }).click();
   expect(submit).toHaveBeenCalledOnce();
@@ -131,6 +132,7 @@ it('requires confirmation before deleting only the selected draft', async () => 
   await expect.poll(() => onBack.mock.calls.length).toBe(1);
 });
 it('uses accessible conversation and preview tabs on small screens', async () => {
+  draft = { ...baseDraft, thread_id: 'thread-1' };
   await page.viewport(390, 800);
   const { host } = mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
@@ -532,6 +534,7 @@ it('shows actual failed build stages and bounded command output', async () => {
   });
   mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: 'Checks', exact: true })).toHaveAttribute('data-build-state', 'failed');
   await page.getByRole('button', { name: 'Checks', exact: true }).click();
   await expect.element(page.getByText('Failed', { exact: true })).toBeVisible();
   await expect.element(page.getByText('Not run', { exact: true })).toBeVisible();
