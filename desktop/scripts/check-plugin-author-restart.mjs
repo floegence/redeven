@@ -118,7 +118,8 @@ await session.run(async () => {
     const identity = processIdentity(pid);
     assert.ok(identity);
     report.childPID = pid;
-    await session.defer('Stop surviving acceptance child', async () => { if (sameProcess(identity, processIdentity(pid))) process.kill(pid, 'SIGTERM'); });
+    await session.command('Stop surviving acceptance child', process.execPath, ['--input-type=module', '-e',
+      `import { stopOwnedProcess } from ${JSON.stringify(new URL('../../scripts/desktop_test_session.mjs', import.meta.url).href)}; await stopOwnedProcess({ identity: ${JSON.stringify(identity)}, group: false });`]);
     const restart = await welcome.evaluate(() => window.redevenDesktopLauncher.performAction({ kind: 'restart_environment_runtime', environment_id: 'local' }));
     assert.equal(restart.ok, true, JSON.stringify(restart));
     assert.equal(restart.outcome, 'restarted_environment_runtime');
@@ -143,8 +144,10 @@ await session.run(async () => {
     page = await open(true);
     await waitFor(() => page.locator('[data-plugin-creation-workspace] textarea').first().inputValue().then(value => value === edited), 30000, 'active draft restored without navigating away');
     assert.equal(await page.locator('[data-plugin-creation-workspace]').getAttribute('data-project-id'), draft);
+    await page.locator('[data-plugin-creation-workspace] [role="status"]').filter({ hasText: /^Saved$/ }).waitFor();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitFor(() => page.locator('[data-plugin-creation-workspace] textarea').first().inputValue().then(value => value === edited), 30000, 'restored draft retained after document reload');
+    await page.locator('[data-plugin-creation-workspace] [role="status"]').filter({ hasText: /^Saved$/ }).waitFor();
     assert.ok(sameProcess(identity, processIdentity(pid)), 'The same terminal child survives both restarts');
     report.assertions.push('An active canvas saves its latest edit before restart, returns to the same draft and survives a subsequent reload');
     await page.screenshot({ path: path.join(evidence, 'desktop-author-restarted.png') });
