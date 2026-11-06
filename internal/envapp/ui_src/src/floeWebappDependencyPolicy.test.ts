@@ -11,9 +11,9 @@ const FLOE_WEBAPP_DEPENDENCIES = [
 ] as const;
 
 const FLOE_WEBAPP_RELEASE_SET = {
-  '@floegence/floe-webapp-boot': '0.96.0',
-  '@floegence/floe-webapp-core': '0.96.0',
-  '@floegence/floe-webapp-protocol': '0.96.0',
+  '@floegence/floe-webapp-boot': '0.97.1',
+  '@floegence/floe-webapp-core': '0.97.1',
+  '@floegence/floe-webapp-protocol': '0.97.1',
 } as const;
 
 const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
@@ -199,6 +199,11 @@ describe('published npm dependency policy', () => {
     expect(frame).toContain('renderPending?');
     expect(frame).toContain('active?');
     expect(frame).toContain('onPresentationStateChange?');
+  });
+
+  it('consumes logical edge alignment from the published anchored layer owner', () => {
+    expect(readInstalledFloeWebappCoreDeclaration('dist/components/ui/SurfaceAnchoredLayer.d.ts'))
+      .toContain("align?: 'start' | 'center' | 'end'");
   });
 
   it('consumes the published shared file-browser status bar contract', () => {

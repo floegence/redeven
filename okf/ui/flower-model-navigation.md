@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower model and navigation presentation
 tags: [ai, flower, models, navigation]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -13,6 +13,8 @@ Flower separates Desktop/environment sources, unavailable models and first setup
 
 ## Mechanism
 The composer always keeps its model label visible without an availability spinner or busy status.
+
+The model picker aligns to the logical start edge of its trigger through the published Floe anchored-layer API, retaining surface boundary clamping. Its bounded scroll viewport exposes the complete configured catalog; selection and recent thread activity never reorder provider groups or model rows. Alias folding retains the selected identity in the original catalog slot. Closing retains the displayed selection and rows until unmount. Search, keyboard navigation, unavailable rows and management remain available. Selection focus restores only after saving and exit settle, to the visible model entry or More button, without overriding a newer focus choice.
 
 Runtime status distinguishes no Desktop provider (`not_configured`), configured but unavailable keys or catalog (`missing_keys` or `empty`), and actual connection or protocol errors.
 
@@ -39,5 +41,7 @@ The header switcher is only a product-specific compact presentation; it does not
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx` - New/existing threads across five widths, catalog order, exit geometry, keyboard and delayed-save focus.
+- `redeven:desktop/scripts/check-flower-model-picker.mjs` - Built Electron picker acceptance at desktop and narrow widths, with per-frame geometry and owned-process cleanup.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Source.

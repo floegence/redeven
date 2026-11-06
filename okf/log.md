@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-06: Stabilize the [Flower model picker](ui/flower-model-navigation.md) with upstream logical-edge anchoring, fixed catalog ordering, a complete scrollable catalog and settled focus restoration.
+
 - 2026-11-06: Fix frozen Ask Flower reference/image previews, preserve their content viewport and qualify visible content in the built Env App and Desktop.
 
 - 2026-11-06: Reduce [file mutation tools](ai/tool-permission-runtime.md) to complete writes and contextual patches; remove the separate literal-replacement execution surface and preserve historical typed Activity navigation.

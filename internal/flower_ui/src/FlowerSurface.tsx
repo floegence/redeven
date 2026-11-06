@@ -1235,8 +1235,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let composerApprovalCardRef: HTMLElement | undefined;
   let previousComposerApprovalAnnouncementKey = '';
   const [modelMenuOpen, setModelMenuOpen] = createSignal(false);
+  const [restoreModelMenuFocus, setRestoreModelMenuFocus] = createSignal(false);
   const [modelQuery, setModelQuery] = createSignal('');
-  const [modelMenuExpanded, setModelMenuExpanded] = createSignal(false);
   let modelSearchRef: HTMLInputElement | undefined;
   const [modelTrigger, setModelTrigger] = createSignal<HTMLButtonElement>();
   let modelMenuRef: HTMLDivElement | undefined;
@@ -2541,11 +2541,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const closeModelMenu = (restoreFocus = false) => {
     setModelMenuOpen(false);
-    if (restoreFocus) queueMicrotask(() => { if (!modelMenuOpen()) modelTrigger()?.focus({ preventScroll: true }); });
+    setRestoreModelMenuFocus(restoreFocus);
   };
   const openModelMenu = () => {
     if (!composerModelInteractive() || modelPatchPending()) return;
-    if (!modelMenuPresence.mounted()) { setModelQuery(''); setModelMenuExpanded(false); }
+    setRestoreModelMenuFocus(false);
+    if (!modelMenuPresence.mounted()) setModelQuery('');
     setModelMenuOpen(true);
   };
   createEffect(() => {
@@ -2557,6 +2558,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (modelMenuOpen() && (!active || active === document.body || active === previousFocus || active === modelTrigger()) && !modelMenuRef?.contains(active)) {
         modelSearchRef?.focus({ preventScroll: true });
       }
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
+  createEffect(() => {
+    if (!restoreModelMenuFocus() || modelMenuPresence.mounted() || modelPatchPending()) return;
+    const trigger = modelTrigger();
+    const overflow = composerOverflowControlIDs().includes('model_reasoning');
+    const target = overflow && !composerMoreOpen() ? composerMoreTrigger() : trigger;
+    if (!target || target.disabled) return;
+    const focusOwned = () => !document.activeElement || document.activeElement === document.body || document.activeElement === trigger || modelMenuRef?.contains(document.activeElement);
+    if (!focusOwned()) { setRestoreModelMenuFocus(false); return; }
+    // Selection can disable or relocate the trigger. Restore to its visible,
+    // enabled entry after the closing surface releases focus.
+    const frame = requestAnimationFrame(() => {
+      if (!modelMenuOpen() && target.isConnected && !target.disabled && focusOwned()) {
+        target.focus({ preventScroll: true });
+      }
+      setRestoreModelMenuFocus(false);
     });
     onCleanup(() => cancelAnimationFrame(frame));
   });
@@ -3264,10 +3283,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return threadSnapshot ? [threadSnapshot, ...options] : options;
   });
   const selectedModelOption = createMemo(() => modelSelectOptions().find((option) => option.id === selectedComposerModelID()) ?? null);
-  const menuModelOptions = createMemo(() => flowerMenuModels(modelSelectOptions(), selectedComposerModelID(), [...threads()].sort((a, b) => b.updated_at_ms - a.updated_at_ms).map((thread) => trimString(thread.model_id)), modelQuery(), modelMenuExpanded()));
+  // Retain the closing view while the confirmed composer selection changes.
+  const menuSelectedModelID = createMemo<string>(previous => modelMenuPresence.mounted() && !modelMenuOpen() && previous !== undefined ? previous : selectedComposerModelID());
+  const menuModelOptions = createMemo<readonly (ComposerModelOption & { aliases: readonly string[] })[]>(previous => modelMenuPresence.mounted() && !modelMenuOpen() && previous ? previous : flowerMenuModels(modelSelectOptions(), menuSelectedModelID(), modelQuery()));
   const groupedModelOptions = createMemo(() => {
     const groups = new Map<string, ComposerModelOption[]>();
-    for (const model of menuModelOptions().models) {
+    for (const model of menuModelOptions()) {
       const key = `${model.source}/${model.group}`;
       groups.set(key, [...(groups.get(key) ?? []), model]);
     }
@@ -13436,7 +13457,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const modelMenuItem = (option: ComposerModelOption) => {
-    const selected = () => option.id === selectedComposerModelID();
+    const selected = () => option.id === menuSelectedModelID();
     const unavailableReason = () => option.unavailableReason ?? (option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel);
     return (
       <button
@@ -13450,8 +13471,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         disabled={option.disabled}
         onClick={() => {
           if (option.disabled) return;
-          void updateComposerModelID(option.id);
           closeModelMenu(true);
+          void updateComposerModelID(option.id);
         }}
       >
         <FlowerModelOptionContent option={option} selected={selected()} pendingLabel={copy().chat.modelsChecking} unavailableLabel={copy().settings.dialog.catalog.unavailableModel} />
@@ -13570,8 +13591,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const modelMenu = () => (
     <Show when={modelMenuPresence.mounted()}>
-      <SurfaceAnchoredLayer anchor={modelTrigger()} gap={8}
-        class="flower-model-menu-layer" style={{ 'z-index': 'calc(var(--flower-layer-subagent-dropdown, 120) + 2)' }} onAnchorDisconnect={() => closeModelMenu(false)}
+      <SurfaceAnchoredLayer anchor={modelTrigger()} align="start" gap={8}
+        class="flower-model-menu-layer" style={{ 'z-index': 'calc(var(--flower-layer-subagent-dropdown, 120) + 2)' }} onAnchorDisconnect={() => { if (modelMenuOpen()) closeModelMenu(false); }}
         data-flower-floating-layer="true">
         <div
           ref={modelMenuRef}
@@ -13592,7 +13613,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <button type="button" class="flower-model-menu-close" aria-label={copy().settings.closeModelSelection} title={copy().settings.closeModelSelection} onClick={() => closeModelMenu(true)}><X aria-hidden="true" /></button>
           </div>
           <div class="flower-model-menu-list" role="listbox" aria-label={copy().settings.dialog.catalog.search}>
-            <Show when={menuModelOptions().models.length} fallback={<p class="flower-model-menu-empty">{copy().settings.dialog.catalog.empty}</p>}>
+            <Show when={menuModelOptions().length} fallback={<p class="flower-model-menu-empty">{copy().settings.dialog.catalog.empty}</p>}>
               <For each={groupedModelOptions()}>{(group, index) => (
                 <div class={cn('flower-model-menu-group', index() > 0 && 'flower-model-menu-group-separated')} data-model-source-group={group.source} role="group" aria-label={group.label}>
                   <div class="flower-model-menu-group-label">{group.label}</div>
@@ -13601,9 +13622,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               )}</For>
             </Show>
           </div>
-          <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
-            <Button class="flower-model-menu-expand" size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
-          </Show>
           <Show when={modelAvailabilityChecking() || modelDirectory()?.error || selectedModelNeedsAttention()}>
             <p class={modelAvailabilityChecking() ? "flower-visually-hidden" : "flower-model-menu-status"} role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking
               : modelDirectory()?.error === 'directory_timeout' ? copy().chat.modelsCheckTimedOut

@@ -19,6 +19,7 @@
     "test:interaction-continuity": "node ../scripts/check_interaction_continuity.mjs",
     "test:interaction-continuity:browser": "node scripts/check-interaction-continuity.mjs",
     "test:startup-continuity": "node scripts/check-startup-continuity.mjs",
+    "test:flower-model-picker": "node scripts/check-flower-model-picker.mjs",
     "test:flower-startup": "node scripts/check-flower-startup.mjs",
     "test:office-preview": "node scripts/check-office-preview.mjs",
     "test:ask-flower-previews": "node scripts/check-ask-flower-previews.mjs",
@@ -133,7 +134,7 @@
     "vitest": "^4.1.12",
     "@silurus/ooxml": "0.89.7",
     "docx-preview": "0.3.6",
-    "@floegence/floe-webapp-core": "0.96.0",
+    "@floegence/floe-webapp-core": "0.97.1",
     "lucide-solid": "1.17.0",
     "qrcode-generator": "^2.0.4",
     "thinking-orbs": "0.3.1",
@@ -141,7 +142,7 @@
     "katex": "0.18.10"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.96.0",
+    "@floegence/floe-webapp-boot": "0.97.1",
     "@floegence/flowersec-core": "5.12.0",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz",
     "builder-util-runtime": "^9.7.0",

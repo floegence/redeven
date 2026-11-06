@@ -41,6 +41,8 @@ let receiveStream: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
 let receiveStreamID = '';
 let aiReady = false;
 const goalMode = new URLSearchParams(location.search).has('goal');
+const modelPickerMode = new URLSearchParams(location.search).has('model-picker');
+let modelPreference: string | undefined;
 const progressiveMode = new URLSearchParams(location.search).has('progressive');
 const delayedFirstPage = new URLSearchParams(location.search).has('delayed-first-page');
 const settledHistory = new URLSearchParams(location.search).has('settled-history');
@@ -141,12 +143,20 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       ai_secrets: { provider_api_key_set: { fixture: true } },
     } };
     if (route.startsWith('ai/') && !aiReady) { fixture.prematureRequests++; return unavailable(); }
+    if (route === 'ai/models' && modelPickerMode) return { ok: true, data: modelDirectoryWireFixture({ ai: { current_model_id: 'gateway/short' } }, { models: [
+      { id: 'gateway/short', label: 'Gateway / Sol', provider_name: 'Gateway', provider_type: 'openai', model_name: 'short', display_name: 'Sol' },
+      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek / DeepSeek V4.1 Flash (1017)', provider_name: 'DeepSeek', provider_type: 'deepseek', model_name: 'deepseek-v4-flash', display_name: 'DeepSeek V4.1 Flash (1017)',
+        reasoning_capability: { kind: 'effort', supported_levels: ['high'], default_level: 'high', disable_supported: true } },
+    ] }) };
     if (route === 'ai/models') return { ok: true, data: modelDirectoryWireFixture({ ai: { current_model_id: 'fixture/gpt-4.1' } }, { models: [
       { id: 'fixture/gpt-4.1', label: 'OpenAI / gpt-4.1', provider_name: 'OpenAI', provider_type: 'openai' },
       { id: 'anthropic/claude-sonnet-4.5', label: 'Anthropic / claude-sonnet-4.5', provider_name: 'Anthropic', provider_type: 'anthropic' },
       { id: 'gateway/claude-sonnet-4.5', label: 'Team Gateway / claude-sonnet-4.5', provider_name: 'Team Gateway', provider_type: 'openai_compatible' },
     ] }) };
-    if (route === 'ai/conversation_preferences') return { ok: true, data: { revision: 0, reasoning_by_model: {} } };
+    if (route === 'ai/conversation_preferences') {
+      if (request.method === 'PATCH') modelPreference = (request.body as { model_id?: string }).model_id ?? modelPreference;
+      return { ok: true, data: { revision: modelPreference ? 1 : 0, model_id: modelPreference, reasoning_by_model: {} } };
+    }
     if (route === 'ai/threads') return { ok: true, data: { threads: [thread] } };
     if (route === 'ai/storage-generation') return { ok: true, data: { storage_generation: 'a'.repeat(32) } };
     if (route === 'ai/thread-goal' && goalMode) {

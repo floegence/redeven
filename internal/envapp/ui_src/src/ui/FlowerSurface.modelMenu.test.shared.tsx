@@ -42,7 +42,7 @@ it.each(['ready', 'unavailable'] as const)('preserves the selected model and men
   expect(document.querySelector<HTMLButtonElement>('.flower-model-menu-item')?.disabled).toBe(state === 'unavailable');
 });
 
-it('searches a bounded menu, preserves a selected alias, and opens model management', async () => {
+it('searches a scrollable menu, preserves a selected alias, and opens model management', async () => {
   const base = settingsSnapshot();
   const snapshot = { ...base, model_profile: { schema_version: 1 as const, current_model_id: 'local/agent-q8', providers: [{
     id: 'local', name: 'Local models', type: 'ollama' as const, models: [
@@ -57,7 +57,7 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   (await composerModelTrigger(surface)).click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
   const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
-  expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(8);
+  expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(32);
   expect(menu.querySelector('.flower-model-menu-item')?.textContent).toContain('agent-q8');
   expect(menu.textContent).not.toContain('Q8_0');
   expect(menu.textContent).not.toContain('Aliases:');
@@ -66,7 +66,7 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   const input = menu.querySelector<HTMLInputElement>('input')!;
   await waitFor(() => document.activeElement === input);
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
-  expect(document.activeElement).toBe([...menu.querySelectorAll('.flower-model-menu-item')].at(-1));
+  expect(document.activeElement).toBe([...menu.querySelectorAll('.flower-model-menu-item:not(:disabled)')].at(-1));
   input.value = 'Local models / agent'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
   expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(1);
   expect(menu.querySelector('.flower-model-menu-copy')?.textContent).toBe('agent-q8');
@@ -79,7 +79,6 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   input.value = 'nonexistent'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
   expect(menu.textContent).toContain('No matching models');
   input.value = ''; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-  [...menu.querySelectorAll('button')].find((button) => button.textContent?.includes('Show all selected models'))!.click();
   expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(32);
   [...menu.querySelectorAll('button')].find((button) => button.textContent?.includes('Manage models'))!.click();
   await waitFor(() => Boolean(document.querySelector('.flower-settings-surface')));

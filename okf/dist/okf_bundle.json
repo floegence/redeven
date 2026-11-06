@@ -10738,15 +10738,15 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 3306,
+      "body_length": 3437,
       "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Manifest/lock pins define the consumed release; Floe owns asset monitoring and per-view recovery, while Redeven supplies authenticated product integration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.96.0, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns instance-based context-source capture, retained reading selection and composable PromptCard toolbar actions. Redeven supplies semantic readers and screenshot authorization.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
-          "char_count": 1802
+          "body": "Pins: Floe Boot/Core/Protocol v0.97.1, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns instance-based context-source capture, retained reading selection and composable PromptCard toolbar actions. Redeven supplies semantic readers and screenshot authorization.\n\nFloe owns logical-edge anchored-panel alignment and surface clamping; Flower opts into start alignment for a stable model picker.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "char_count": 1933
         },
         {
           "id": "boundaries",
@@ -22748,7 +22748,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-06",
         "tags": [
           "ai",
           "flower",
@@ -22758,15 +22758,15 @@
         "title": "Flower model and navigation presentation",
         "type": "UI Contract"
       },
-      "body_length": 2413,
+      "body_length": 3438,
       "summary": "Flower separates Desktop/environment sources, unavailable models and first setup. Thread-owned model/reasoning choices remain authoritative. Navigation distinguishes visual intent from committed content and fences stale reads. Transient action failures use notifications; canonical failures remain in their timeline.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\nThe composer always keeps its model label visible without an availability spinner or busy status.\n\nRuntime status distinguishes no Desktop provider (`not_configured`), configured but unavailable keys or catalog (`missing_keys` or `empty`), and actual connection or protocol errors.\n\n## Model identity and recovery\nThread snapshots, list items, and patches carry `model_id` and `reasoning_selection` as thread defaults. The last is a disabled, ungrouped display of a thread's missing model; Flower never silently replaces it.\n\nSee [reasoning selection ownership](../ai/model-reasoning-runtime.md#selection-controls) for loading, draft, and submission rules.\n\n## Web search presentation\nModel choices display the shared search badge from the server's readonly `web_search` projection. A provider brand or frontend model name never enables search. See [model directory ownership](../ai/model-directory-and-selection.md).\n\n## Permission and navigation\nBelow the 768px viewport breakpoint, the composer keeps permission status and selection in its own More panel, alongside any other overflow controls.\n\nSaving disables only the permission control, prevents duplicate requests, merges the authoritative settings response, and restores the confirmed value on failure.\n\nWarm sessions switch without provider or transcript remount and stale loads cannot replace the current thread.",
-          "char_count": 1386
+          "body": "## Mechanism\nThe composer always keeps its model label visible without an availability spinner or busy status.\n\nThe model picker aligns to the logical start edge of its trigger through the published Floe anchored-layer API, retaining surface boundary clamping. Its bounded scroll viewport exposes the complete configured catalog; selection and recent thread activity never reorder provider groups or model rows. Alias folding retains the selected identity in the original catalog slot. Closing retains the displayed selection and rows until unmount. Search, keyboard navigation, unavailable rows and management remain available. Selection focus restores only after saving and exit settle, to the visible model entry or More button, without overriding a newer focus choice.\n\nRuntime status distinguishes no Desktop provider (`not_configured`), configured but unavailable keys or catalog (`missing_keys` or `empty`), and actual connection or protocol errors.\n\n## Model identity and recovery\nThread snapshots, list items, and patches carry `model_id` and `reasoning_selection` as thread defaults. The last is a disabled, ungrouped display of a thread's missing model; Flower never silently replaces it.\n\nSee [reasoning selection ownership](../ai/model-reasoning-runtime.md#selection-controls) for loading, draft, and submission rules.\n\n## Web search presentation\nModel choices display the shared search badge from the server's readonly `web_search` projection. A provider brand or frontend model name never enables search. See [model directory ownership](../ai/model-directory-and-selection.md).\n\n## Permission and navigation\nBelow the 768px viewport breakpoint, the composer keeps permission status and selection in its own More panel, alongside any other overflow controls.\n\nSaving disables only the permission control, prevents duplicate requests, merges the authoritative settings response, and restores the confirmed value on failure.\n\nWarm sessions switch without provider or transcript remount and stale loads cannot replace the current thread.",
+          "char_count": 2048
         },
         {
           "id": "boundaries",
@@ -22779,11 +22779,21 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Tests.\n- `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Source.",
-          "char_count": 155
+          "body": "- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx` - New/existing threads across five widths, catalog order, exit geometry, keyboard and delayed-save focus.\n- `redeven:desktop/scripts/check-flower-model-picker.mjs` - Built Electron picker acceptance at desktop and narrow widths, with per-frame geometry and owned-process cleanup.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Tests.\n- `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Source.",
+          "char_count": 518
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx:0:new/existing threads across five widths, catalog order, exit geometry, keyboard and delayed-save focus.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx",
+          "description": "New/existing threads across five widths, catalog order, exit geometry, keyboard and delayed-save focus."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-flower-model-picker.mjs:0:built electron picker acceptance at desktop and narrow widths, with per-frame geometry and owned-process cleanup.",
+          "source": "redeven:desktop/scripts/check-flower-model-picker.mjs",
+          "description": "Built Electron picker acceptance at desktop and narrow widths, with per-frame geometry and owned-process cleanup."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx:0:tests.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx",
@@ -25975,5 +25985,5 @@
       ]
     }
   ],
-  "source_sha256": "82018622028e367079e3c594d8afbc979440d59bda172c8aeeac25ab5ca85a49"
+  "source_sha256": "702eb5c589685ac08420d4cea0667784cfed0e83baa1e6b0977bc980c64f3590"
 }

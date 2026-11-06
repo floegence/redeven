@@ -13,7 +13,7 @@ import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 import type { EnvAppTranslationKey } from './i18n/locales';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
-import { adapter, composerModelTrigger, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, composerModelTrigger, deferred, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 it.each([390, 1280])('keeps model search and management visible at %s px', async (width) => {
   await page.viewport(width, 900);
@@ -49,7 +49,6 @@ it.each([390, 1280])('keeps model search and management visible at %s px', async
     expect(Number.parseFloat(getComputedStyle(action).fontSize)).toBeLessThan(composerFontSize);
   }
   expect([...menu.querySelectorAll('[role="status"]')].some(status => !status.textContent?.trim())).toBe(false);
-  [...menu.querySelectorAll('button')].find((button) => button.textContent?.includes('Show all selected models'))!.click();
   expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
   const footer = menu.querySelector<HTMLElement>('.flower-model-menu-footer')!.getBoundingClientRect();
   expect(footer.bottom).toBeLessThanOrEqual(menu.getBoundingClientRect().bottom);
@@ -157,7 +156,7 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
   expect(Number.parseFloat(getComputedStyle(selected).outlineWidth)).toBeGreaterThanOrEqual(2);
   await userEvent.keyboard('{Escape}');
   await waitFor(() => !document.querySelector('.flower-model-menu'));
-  expect(document.activeElement).toBe(activeTrigger);
+  await waitFor(() => document.activeElement === activeTrigger);
   const moreLayer = activeTrigger.closest<HTMLElement>('.flower-composer-more-layer');
   expect(moreLayer, 'narrow-screen trigger retains its current anchored surface').not.toBeNull();
   expect(getComputedStyle(moreLayer!).visibility).toBe('visible');
@@ -167,4 +166,94 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
   document.querySelector<HTMLButtonElement>('.flower-model-menu-close')!.click();
   await waitFor(() => document.activeElement === activeTrigger);
   await waitFor(() => !document.querySelector('.flower-model-menu'));
+});
+
+
+it.each([1280, 1024, 768, 390, 320].flatMap(width => [false, true].map(existing => ({ width, existing }))))('keeps picker position, rows and exit stable at $width px (existing thread: $existing)', async ({ width, existing }) => {
+  await page.viewport(width, 900);
+  const initial: FlowerSettingsSnapshot = { ...settingsSnapshot(), model_profile: { schema_version: 1, current_model_id: 'gateway/short', providers: [
+    { id: 'gateway', name: 'Gateway', type: 'openai', models: [{ model_name: 'short', display_name: 'Sol' }] },
+    { id: 'deepseek', name: 'DeepSeek', type: 'deepseek', models: [{ model_name: 'deepseek-v4-flash', display_name: 'DeepSeek V4.1 Flash (1017)', reasoning_capability: { kind: 'effort', supported_levels: ['high'], default_level: 'high', disable_supported: true } }] },
+  ] }, provider_secrets: ['gateway', 'deepseek'].map(provider_id => ({ provider_id, provider_api_key_configured: true, web_search_api_key_configured: false })) };
+  let snapshot = initial;
+  let conversation = thread({ model_id: 'gateway/short' });
+  const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot,
+    persistDefaultModel: async modelID => (snapshot = { ...snapshot, model_profile: { ...snapshot.model_profile!, current_model_id: modelID } }),
+    listThreads: async () => existing ? [conversation] : [],
+    loadThread: async () => liveBootstrap(conversation),
+    setThreadModel: async (_threadID, model_id) => { conversation = { ...conversation, model_id, settings_revision: (conversation.settings_revision ?? 0) + 1, updated_at_ms: conversation.updated_at_ms + 1 }; return liveBootstrap(conversation, conversation.updated_at_ms); },
+  });
+  surface.style.cssText = 'width:100%;height:100vh';
+  if (existing) {
+    if (width < 768) await page.viewport(1280, 900);
+    await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"] button')));
+    surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.click();
+    await waitFor(() => surface.querySelector('main')?.dataset.flowerSelectedThreadId === 'thread-1' && surface.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
+    if (width < 768) await page.viewport(width, 900);
+  }
+  await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('Sol') === true);
+  let originalLeft: number | undefined;
+  let originalOrder: string[] | undefined;
+  for (const name of ['DeepSeek V4.1 Flash (1017)', 'Sol', 'DeepSeek V4.1 Flash (1017)', 'Sol']) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const trigger = await composerModelTrigger(surface);
+    await waitFor(() => !trigger.disabled);
+    trigger.click();
+    await waitFor(() => Boolean(document.querySelector('.flower-model-menu:not([inert])')));
+    const menu = document.querySelector<HTMLElement>('.flower-model-menu:not([inert])')!;
+    await waitFor(() => menu.dataset.floatingPresence === 'open');
+    await Promise.all(menu.getAnimations().map(animation => animation.finished));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const bounds = menu.getBoundingClientRect();
+    const order = [...menu.querySelectorAll<HTMLElement>('.flower-model-menu-name')].map(row => row.textContent!);
+    const groups = [...menu.querySelectorAll<HTMLElement>('.flower-model-menu-group-label')].map(row => row.textContent!);
+    expect(groups).toEqual(['Gateway', 'DeepSeek']);
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(width);
+    if (originalLeft === undefined) { originalLeft = bounds.left; originalOrder = order; }
+    else { expect(Math.abs(bounds.left - originalLeft)).toBeLessThanOrEqual(1); expect(order).toEqual(originalOrder); }
+    const before = menu.closest<HTMLElement>('.flower-model-menu-layer')!.getBoundingClientRect();
+    [...menu.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')].find(row => row.querySelector('.flower-model-menu-name')?.textContent === name)!.click();
+    const exitDeadline = performance.now() + 1500;
+    while (menu.isConnected && performance.now() < exitDeadline) {
+      const layer = menu.closest<HTMLElement>('.flower-model-menu-layer')!.getBoundingClientRect();
+      expect(Math.abs(layer.left - before.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(layer.top - before.top)).toBeLessThanOrEqual(1);
+      expect([...menu.querySelectorAll<HTMLElement>('.flower-model-menu-name')].map(row => row.textContent!)).toEqual(order);
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    }
+    expect(menu.isConnected).toBe(false);
+    await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes(name) === true);
+    await waitFor(() => document.activeElement === document.querySelector('button.flower-model-reasoning-model-trigger') || document.activeElement === surface.querySelector('.flower-composer-more-button'));
+  }
+});
+
+
+it('restores selection focus after a delayed save without overriding a newer typing target', async () => {
+  const initial = settingsSnapshot();
+  const snapshot: FlowerSettingsSnapshot = { ...initial, model_profile: { ...initial.model_profile!, providers: initial.model_profile!.providers.map(provider => ({ ...provider,
+    models: [...provider.models, { model_name: 'second', display_name: 'Second model' }],
+  })) } };
+  let saved = deferred<FlowerSettingsSnapshot>();
+  const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [], persistDefaultModel: () => saved.promise });
+  surface.style.cssText = 'width:100%;height:100vh';
+  await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('gpt-5.2') === true);
+  const trigger = await composerModelTrigger(surface);
+  trigger.click();
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu:not([inert])')));
+  [...document.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')].find(row => row.textContent?.includes('Second model'))!.click();
+  await waitFor(() => !document.querySelector('.flower-model-menu'));
+  expect(trigger.disabled).toBe(true);
+  saved.resolve(snapshot);
+  await waitFor(() => document.activeElement === trigger && !trigger.disabled);
+  saved = deferred<FlowerSettingsSnapshot>();
+  trigger.click();
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu:not([inert])')));
+  [...document.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')].find(row => row.textContent?.includes('gpt-5.2'))!.click();
+  const composer = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  composer.focus();
+  saved.resolve(snapshot);
+  await waitFor(() => !trigger.disabled && !document.querySelector('.flower-model-menu'));
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  expect(document.activeElement).toBe(composer);
 });
