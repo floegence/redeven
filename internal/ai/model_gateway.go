@@ -2656,22 +2656,24 @@ func buildAssistantHistoryMessage(text string, reasoning string, calls []ToolCal
 			if callID == "" || name == "" {
 				continue
 			}
-			args := cloneAnyMap(call.Args)
-			if args == nil {
-				args = map[string]any{}
-			}
-			b, _ := json.Marshal(args)
-			rawArgs := strings.TrimSpace(string(b))
-			if rawArgs == "" || rawArgs == "null" || !json.Valid(b) {
-				rawArgs = "{}"
-				b = []byte(rawArgs)
+			rawArgs := call.ArgsJSON
+			if rawArgs == "" {
+				args := cloneAnyMap(call.Args)
+				if args == nil {
+					args = map[string]any{}
+				}
+				b, _ := json.Marshal(args)
+				rawArgs = strings.TrimSpace(string(b))
+				if rawArgs == "" || rawArgs == "null" || !json.Valid(b) {
+					rawArgs = "{}"
+				}
 			}
 			parts = append(parts, ContentPart{
 				Type:       "tool_call",
 				ToolCallID: callID,
 				ToolName:   name,
 				ArgsJSON:   rawArgs,
-				JSON:       b,
+				JSON:       []byte(rawArgs),
 			})
 		}
 	}

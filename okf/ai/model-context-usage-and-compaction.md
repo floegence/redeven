@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Context usage, measurement and compaction
 tags: [ai, models, context, compaction]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -26,7 +26,7 @@ records without this evidence remain unknown; no error-text inference is used.
 
 Aggregate image evidence carries exact image counts or decoded bytes, with
 preparation/response stage; counts never occupy byte or token fields. Desktop
-RPC v6 reconstructs the typed upstream cause before Engine recovery; older peers
+RPC reconstructs the typed upstream cause before Engine recovery; incompatible peers
 are rejected at the version handshake. During recovery
 the inline divider says “Organizing image history…” in every shipped locale and
 shows measured cause details. Token utilization remains independently measured.
@@ -57,7 +57,7 @@ Runtime-grouped messages when Retry follows retained reasoning with a new tool
 call. Desktop forwards opaque state unchanged; confirmed effects and native
 history survive restart and Fork without replaying the tool.
 
-RPC v6 applies one-part request credit, bounded response reassembly and per-request
+RPC applies one-part request credit, bounded response reassembly and per-request
 cancellation. Prepared handles transfer ownership only after the client acknowledges
 the result; cancellation before acknowledgment releases them on Desktop. A slow consumer cannot fill another request's queue or close the
 shared connection; incompatible older peers fail the version handshake.

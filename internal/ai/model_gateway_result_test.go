@@ -119,6 +119,52 @@ func TestFloretProviderRejectsIncompleteModelGatewayToolCallBeforeDispatch(t *te
 
 var _ ModelGateway = fixedModelGatewayResult{}
 
+func TestModelGatewayPreservesRawArgumentsForEngineValidation(t *testing.T) {
+	for _, arguments := range []string{`{"value": unquoted}`, `[]`, `null`, `{"integer":9007199254740993}`} {
+		t.Run(arguments, func(t *testing.T) {
+			// Decode the actual RPC envelope rather than constructing an internal call.
+			raw, _ := json.Marshal(map[string]any{"finish_reason": "tool_calls", "tool_calls": []any{map[string]any{"id": "call", "name": "inspect", "args_json": arguments}}})
+			var result ModelGatewayResult
+			if err := json.Unmarshal(raw, &result); err != nil {
+				t.Fatal(err)
+			}
+			if err := validateModelGatewayResult(result); err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := json.Marshal(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(encoded, &result); err != nil {
+				t.Fatal(err)
+			}
+			calls, err := floretToolCallsFromFlower(result.ToolCalls)
+			if err != nil || len(calls) != 1 || calls[0].Args != arguments {
+				t.Fatalf("calls=%+v err=%v", calls, err)
+			}
+			adapter := &floretProviderAdapter{}
+			messages, err := adapter.floretMessagesToFlowerWithResolver(t.Context(), []flprovider.Message{{Role: flprovider.RoleAssistant, ToolCalls: calls}}, nil)
+			if err != nil || len(messages) != 1 || messages[0].Content[0].ArgsJSON != arguments {
+				t.Fatalf("history=%+v err=%v", messages, err)
+			}
+			history := buildToolCallMessages(result.ToolCalls, "")
+			if len(history) != 1 || history[0].Content[0].ArgsJSON != arguments {
+				t.Fatalf("gateway history lost raw arguments: %+v", history)
+			}
+		})
+	}
+}
+
+func TestModelGatewayRejectsConflictingArgumentAuthorities(t *testing.T) {
+	var result ModelGatewayResult
+	if err := json.Unmarshal([]byte(`{"tool_calls":[{"id":"call","name":"inspect","args":{},"args_json":"{broken"}]}`), &result); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateModelGatewayResult(result); err == nil {
+		t.Fatal("ambiguous argument authorities accepted")
+	}
+}
+
 func TestFloretProviderForwardsArgumentFragmentsWithoutParsing(t *testing.T) {
 	adapter := &floretProviderAdapter{}
 	var arguments strings.Builder

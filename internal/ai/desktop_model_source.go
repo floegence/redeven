@@ -35,7 +35,7 @@ import (
 
 const (
 	DesktopModelSourceProviderType      = "desktop_model_source"
-	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v6"
+	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v7"
 	DesktopModelSourceDefaultSource     = "desktop_local_environment"
 	desktopModelSourceModelIDPrefix     = "desktop:model_"
 	defaultDesktopModelSourceRPCTimeout = 30 * time.Second

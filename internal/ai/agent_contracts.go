@@ -121,6 +121,9 @@ type ToolCall struct {
 	ID   string         `json:"id"`
 	Name string         `json:"name"`
 	Args map[string]any `json:"args"`
+	// ArgsJSON carries exact provider argument text, including rejected syntax.
+	// It is mutually exclusive with Args; Floret owns model input validation.
+	ArgsJSON string `json:"args_json,omitempty"`
 }
 
 type ToolResult struct {

@@ -19,8 +19,16 @@ import (
 )
 
 // Exercise the shipped terminal schema through the real product gateway and
-// service. The invalid spelling must never reach the terminal handler.
+// service. Rejected arguments must never reach the terminal handler.
 func TestFlowerToolArgumentCorrectionEpisodesAndExplicitRetry(t *testing.T) {
+	for _, malformed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("malformed_%t", malformed), func(t *testing.T) {
+			testFlowerToolArgumentCorrectionEpisodesAndExplicitRetry(t, malformed)
+		})
+	}
+}
+
+func testFlowerToolArgumentCorrectionEpisodesAndExplicitRetry(t *testing.T, malformed bool) {
 	state := t.TempDir()
 	effect := filepath.Join(state, "confirmed.txt")
 	var requests atomic.Int32
@@ -51,11 +59,15 @@ func TestFlowerToolArgumentCorrectionEpisodesAndExplicitRetry(t *testing.T) {
 			return
 		}
 		args := map[string]any{"command": fmt.Sprintf("printf x >> '%s'; printf CONFIRMED_PRODUCT_RESULT_%d", effect, step), "yield_ms": 1000}
-		if step%2 == 1 || step >= 7 {
+		reject := step%2 == 1 || step >= 7
+		if reject && !malformed {
 			delete(args, "yield_ms")
 			args["yield_time_ms"] = 1000
 		}
 		encoded, _ := json.Marshal(args)
+		if reject && malformed {
+			encoded = []byte(strings.Replace(string(encoded), `"yield_ms":1000`, `"yield_ms":unquoted`, 1))
+		}
 		callID := fmt.Sprintf("terminal-%d", step)
 		output := []any{}
 		if step == 1 {
@@ -104,7 +116,7 @@ func TestFlowerToolArgumentCorrectionEpisodesAndExplicitRetry(t *testing.T) {
 			t.Fatalf("unsafe or inconsistent failure: view=%+v detail=%+v err=%v", view, detail.Current.Failure, err)
 		}
 		raw, _ := json.Marshal(detail.Current.Items)
-		if strings.Contains(string(raw), "yield_time_ms") || strings.Contains(string(raw), "tool_validation_error") || !strings.Contains(string(raw), "Inspecting the runtime.") {
+		if strings.Contains(string(raw), "yield_time_ms") || strings.Contains(string(raw), "unquoted") || strings.Contains(string(raw), "tool_validation_error") || !strings.Contains(string(raw), "Inspecting the runtime.") {
 			t.Fatal("correction feedback leaked or accepted output lost")
 		}
 		contents, err := os.ReadFile(effect)

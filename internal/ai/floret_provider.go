@@ -678,9 +678,6 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 			parts = append(parts, ContentPart{Type: "reasoning", Text: msg.Reasoning})
 		}
 		for _, call := range msg.ToolCalls {
-			if !json.Valid([]byte(call.Args)) {
-				return nil, fmt.Errorf("floret model message %d tool %q has invalid JSON args", i, call.Name)
-			}
 			parts = append(parts, ContentPart{
 				Type:       "tool_call",
 				ToolCallID: call.ID,
@@ -738,6 +735,10 @@ func floretToolCallsFromFlower(calls []ToolCall) ([]flprovider.ToolCall, error) 
 	for _, call := range calls {
 		id := strings.TrimSpace(call.ID)
 		name := strings.TrimSpace(call.Name)
+		if call.ArgsJSON != "" {
+			out = append(out, flprovider.ToolCall{ID: id, Name: name, Args: call.ArgsJSON})
+			continue
+		}
 		b, err := json.Marshal(call.Args)
 		if err != nil || !json.Valid(b) {
 			return nil, fmt.Errorf("invalid Flower tool args for %s", name)

@@ -650,6 +650,20 @@ func TestPromptQualificationFixturesAndOracles(t *testing.T) {
 func evaluatePromptQualificationResponse(t *testing.T, tc promptQualificationCase, defs []ToolDef, result ModelGatewayResult) []string {
 	t.Helper()
 	issues := []string{}
+	// Decode a detached inspection view; retained responses keep exact wire bytes.
+	result.ToolCalls = slices.Clone(result.ToolCalls)
+	for index := range result.ToolCalls {
+		call := &result.ToolCalls[index]
+		if call.ArgsJSON != "" {
+			if call.Args != nil {
+				issues = append(issues, "conflicting argument authorities for "+call.Name)
+				continue
+			}
+			if err := json.Unmarshal([]byte(call.ArgsJSON), &call.Args); err != nil || call.Args == nil {
+				issues = append(issues, "invalid raw arguments for "+call.Name)
+			}
+		}
+	}
 	for _, call := range result.ToolCalls {
 		index := slices.IndexFunc(defs, func(def ToolDef) bool { return def.Name == call.Name })
 		if index < 0 {
@@ -695,6 +709,22 @@ func evaluatePromptQualificationResponse(t *testing.T, tc promptQualificationCas
 		issues = append(issues, "empty response")
 	}
 	return issues
+}
+
+func TestPromptQualificationInspectsRawArgumentsWithoutChangingEvidence(t *testing.T) {
+	defs := []ToolDef{{Name: "inspect", InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`)}}
+	for _, raw := range []string{`{"path":"file"}`, `{"path":unquoted}`} {
+		t.Run(raw, func(t *testing.T) {
+			result := ModelGatewayResult{ToolCalls: []ToolCall{{Name: "inspect", ArgsJSON: raw}}}
+			issues := evaluatePromptQualificationResponse(t, promptQualificationCase{}, defs, result)
+			if (len(issues) == 0) != json.Valid([]byte(raw)) {
+				t.Fatalf("issues=%v for %s", issues, raw)
+			}
+			if result.ToolCalls[0].Args != nil || result.ToolCalls[0].ArgsJSON != raw {
+				t.Fatal("qualification changed retained provider evidence")
+			}
+		})
+	}
 }
 
 // Retained replay never contacts a provider or executes tools. Assessments are

@@ -20,9 +20,9 @@ import (
 )
 
 func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
-	for _, mode := range []string{"schema", "exhaust", "mixed"} {
+	for _, mode := range []string{"schema", "exhaust", "mixed", "malformed", "malformed_exhaust"} {
 		t.Run(mode, func(t *testing.T) {
-			exhaust := mode == "exhaust"
+			exhaust := strings.Contains(mode, "exhaust")
 			stateDir := t.TempDir()
 			effectFile := filepath.Join(stateDir, "ordinary-action.txt")
 			correction := "required_from_user must be an array"
@@ -31,6 +31,10 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 			}
 			const valid = `{"reason_code":"missing_external_input","required_from_user":["Choose a device."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Device","question":"Which device should I inspect?","response_mode":"write","is_secret":false,"write_label":"Device","write_placeholder":"Type a device"}]}`
 			invalid := strings.Replace(valid, `"required_from_user":["Choose a device."]`, `"required_from_user":"[\"Choose a device.\"]"`, 1)
+			if strings.HasPrefix(mode, "malformed") {
+				invalid = strings.Replace(valid, `["Choose a device."]`, `Choose a device.`, 1)
+				correction = "invalid JSON"
+			}
 			var calls atomic.Int32
 			correctionStarted := make(chan struct{})
 			releaseCorrection := make(chan struct{})

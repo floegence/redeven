@@ -64,11 +64,7 @@ func (p *floretPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stream
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventHostedTool, HostedToolEvent: &event})
 		case flprovider.EventToolCalls:
 			for _, call := range event.ToolCalls {
-				var args map[string]any
-				if err := json.Unmarshal([]byte(call.Args), &args); err != nil || args == nil {
-					return result, errors.New("Floret returned non-object tool arguments")
-				}
-				result.ToolCalls = append(result.ToolCalls, ToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases), Args: args})
+				result.ToolCalls = append(result.ToolCalls, ToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases), ArgsJSON: call.Args})
 			}
 		case flprovider.EventSources:
 			for _, source := range event.Sources {

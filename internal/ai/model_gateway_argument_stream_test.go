@@ -80,7 +80,19 @@ func TestProviderArgumentFragmentsPreserveBytesAndLateIdentity(t *testing.T) {
 			if arguments.String() != first+last || len(fragments) != 2 || fragments[0] != first || fragments[1] != last || ends != 1 {
 				t.Fatalf("fragments=%q ends=%d", fragments, ends)
 			}
-			if len(result.ToolCalls) != 1 || result.ToolCalls[0].Args["content"] != "中文\n😀" {
+			if len(result.ToolCalls) != 1 {
+				t.Fatalf("final calls=%+v", result.ToolCalls)
+			}
+			argumentsObject := result.ToolCalls[0].Args
+			if result.ToolCalls[0].ArgsJSON != "" {
+				if result.ToolCalls[0].ArgsJSON != first+last {
+					t.Fatalf("raw arguments changed: %q", result.ToolCalls[0].ArgsJSON)
+				}
+				if err := json.Unmarshal([]byte(result.ToolCalls[0].ArgsJSON), &argumentsObject); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if argumentsObject["content"] != "中文\n😀" {
 				t.Fatalf("final arguments changed: %+v", result.ToolCalls)
 			}
 		})

@@ -22,7 +22,7 @@ func (e *modelGatewayContractError) Error() string {
 		return fmt.Sprintf("%s: missing %s", prefix, strings.Join(e.MissingFields, ", "))
 	}
 	if e.Cause != nil {
-		return fmt.Sprintf("%s: arguments are not valid JSON: %v", prefix, e.Cause)
+		return fmt.Sprintf("%s: %v", prefix, e.Cause)
 	}
 	return prefix
 }
@@ -50,14 +50,20 @@ func validateModelGatewayResult(result ModelGatewayResult) error {
 		if strings.TrimSpace(call.Name) == "" {
 			missing = append(missing, "name")
 		}
-		if call.Args == nil {
+		if call.Args == nil && strings.TrimSpace(call.ArgsJSON) == "" {
 			missing = append(missing, "args")
 		}
 		if len(missing) > 0 {
 			return &modelGatewayContractError{ToolCallIndex: index, MissingFields: missing}
 		}
+		if call.ArgsJSON != "" {
+			if call.Args != nil {
+				return &modelGatewayContractError{ToolCallIndex: index, Cause: fmt.Errorf("args and args_json are mutually exclusive")}
+			}
+			continue
+		}
 		if _, err := json.Marshal(call.Args); err != nil {
-			return &modelGatewayContractError{ToolCallIndex: index, Cause: err}
+			return &modelGatewayContractError{ToolCallIndex: index, Cause: fmt.Errorf("cannot encode arguments: %w", err)}
 		}
 	}
 	return nil

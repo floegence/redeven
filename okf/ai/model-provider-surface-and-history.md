@@ -3,13 +3,25 @@ type: AI Runtime Contract
 title: Model provider surface and history
 tags: [ai, models, providers, history]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
 Floret owns canonical provider history/rendering lineage; Redeven supplies model, prompt, permissions and ephemeral overlays at declared boundaries. History stays readable without restoring removed tools or rewriting facts. Surface changes create compatible lineage, never a host continuation store.
 
 # Contract
+
+## Tool argument ownership
+Floret owns syntax/schema validation and bounded model correction. Native Gateway
+calls and Desktop model-source RPC preserve exact nonempty argument text in
+`args_json`, including malformed JSON, rather than decoding it into an object.
+RPC v7 fences older peers before streaming because v6 requires an argument object.
+Object-based adapters retain `args`; a call cannot supply both authorities.
+Missing identity/arguments or incomplete streams remain transport failures.
+Canonical rejected calls and paired feedback cross history preparation unchanged;
+Redeven neither repairs arguments nor exposes correction feedback as Activity.
+Only validated calls may acquire authorization, execution or waiting-question
+ownership. Exhaustion retains confirmed effects and uses explicit Retry.
 
 ## Tool names
 Redeven owns the canonical-to-callable alias table at its provider boundary. Internal definitions, execution, history and Flower keep canonical names. When serialization changes a name, the detached tool description explicitly maps its canonical name to the callable name using that same table. OpenAI Responses/Chat, ChatGPT namespaces and DeepSeek receive this guidance before request measurement and freezing; unchanged names, including Anthropic definitions, receive none. Prompts, user content, scripts, argument schemas and canonical records are never text-rewritten. Returned stream/final calls still map back through the registered aliases; frozen retries retain identical guidance. This requires no Floret API, storage or dependency change.
@@ -51,6 +63,8 @@ Redeven maps typed product state,never persists envelopes,reconstructs history o
 
 # Evidence
 
+- `redeven:internal/ai/model_gateway_result_test.go` and `desktop_model_source_test.go`: raw malformed, non-object and large-integer arguments survive transport and history; ambiguous authorities fail.
+- `redeven:internal/ai/flower_control_correction_integration_test.go` and `flower_argument_correction_integration_test.go`: real DeepSeek transport to Service correction, valid questions, exhaustion, restart and explicit Retry without replaying confirmed effects.
 - `redeven:internal/ai/model_gateway_tool_names_test.go` - Real builtin definitions across 15 provider routes verify dispatched mappings, unchanged inputs/schemas, canonical stream/final identities and byte-identical retries.
 - `redeven:internal/ai/floret_runtime.go` - Source.
 - `redeven:internal/ai/floret_bootstrap.go` - Source.

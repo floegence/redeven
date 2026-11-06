@@ -71,7 +71,7 @@ func TestDesktopModelSourceOverflowDoesNotDisconnectOtherRequests(t *testing.T) 
 
 func TestDesktopModelSourceRejectsIncompatibleFramesWithoutWaiting(t *testing.T) {
 	for _, peer := range []string{"runtime", "executor"} {
-		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1", "redeven-desktop-model-source-rpc-v2", "redeven-desktop-model-source-rpc-v3", "redeven-desktop-model-source-rpc-v5"} {
+		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1", "redeven-desktop-model-source-rpc-v2", "redeven-desktop-model-source-rpc-v3", "redeven-desktop-model-source-rpc-v4", "redeven-desktop-model-source-rpc-v5", "redeven-desktop-model-source-rpc-v6"} {
 			t.Run(peer+"/"+version, func(t *testing.T) {
 				served := make(chan error, 1)
 				ready := make(chan struct{})
@@ -795,6 +795,54 @@ func TestDesktopModelSourceProviderPreservesEmptyToolArguments(t *testing.T) {
 	}
 	if len(toolCalls) != 1 || toolCalls[0].Args != "{}" {
 		t.Fatalf("Floret tool calls=%#v, want one call with empty JSON object arguments", toolCalls)
+	}
+}
+
+func TestDesktopModelSourcePreservesMalformedArgumentsForFloret(t *testing.T) {
+	const arguments = `{"required_from_user": restart permission}`
+	modelSource, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+		if frame.Method != "ai.turn.stream" {
+			return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
+		}
+		var request desktopModelSourceStreamRequest
+		if err := json.Unmarshal(frame.Params, &request); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, message := range request.Request.Messages {
+			for _, part := range message.Content {
+				if part.Type == "tool_call" && part.ToolCallID == "rejected" {
+					found = part.ArgsJSON == arguments
+				}
+			}
+		}
+		if !found {
+			t.Error("Desktop RPC lost rejected argument history")
+		}
+		return testDesktopModelSourceResult(t, frame.ID, ModelGatewayResult{
+			FinishReason: "tool_calls",
+			ToolCalls:    []ToolCall{{ID: "ask", Name: "ask_user", ArgsJSON: arguments}},
+		})
+	})
+	defer cleanup()
+	adapter := newFloretProviderAdapter(modelSource.ModelGateway("desktop:model_test"), "desktop_model_source", "desktop:model_test", ProviderControls{}, TurnBudgets{}, "")
+	stream, err := adapter.Stream(t.Context(), flprovider.Request{Messages: []flprovider.Message{
+		{Role: flprovider.RoleUser, Text: "Ask about restart."},
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "rejected", Name: "ask_user", Args: arguments}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "rejected", ToolName: "ask_user", Text: "Invalid JSON; call did not execute."}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []flprovider.ToolCall
+	for event := range stream {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+		calls = append(calls, event.ToolCalls...)
+	}
+	if len(calls) != 1 || calls[0].ID != "ask" || calls[0].Name != "ask_user" || calls[0].Args != arguments {
+		t.Fatalf("RPC lost original rejected arguments: %+v", calls)
 	}
 }
 
