@@ -3185,6 +3185,16 @@
         "remote": "远程服务",
         "unavailable": "不可用"
       },
+      "diagnostics": {
+        "permissionHealth": "访问 {engine} 时被拒绝，当前无法管理容器。",
+        "permissionManagement": "{engine} 管理工具拒绝访问，尚不能确认引擎是否运行。",
+        "permission": "{engine} 检测因权限不足受阻，具体原因尚未返回。",
+        "cliUnavailable": "{engine} 命令行工具不可用。",
+        "timeout": "{engine} 检测超时，尚不能确认引擎是否运行。",
+        "unreachable": "无法连接 {engine}，尚不能确认引擎是否运行。",
+        "stopped": "{engine} 未运行。",
+        "unknown": "无法确定 {engine} 的状态，需要进一步排查。"
+      },
       "guidance": {
         "install": "安装 {engine} 后即可在此环境中管理容器。",
         "permission": "请为当前用户授予 {engine} 访问权限后重试。",

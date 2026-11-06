@@ -100,6 +100,14 @@ type ContainerServiceCapabilities struct {
 	Restart bool `json:"restart"`
 }
 
+// ContainerServiceDiagnostic contains only typed probe facts, never command output,
+// endpoints, paths, credentials, or a guessed remediation.
+type ContainerServiceDiagnostic struct {
+	Phase            string `json:"phase"`
+	Code             string `json:"code"`
+	ObservedAtUnixMs int64  `json:"observed_at_unix_ms"`
+}
+
 // ContainerService is a product-safe projection of one active local container
 // implementation. Internal transport and configuration paths are intentionally
 // excluded from JSON.
@@ -112,6 +120,7 @@ type ContainerService struct {
 	Version             string                              `json:"version,omitempty"`
 	Rootless            *bool                               `json:"rootless,omitempty"`
 	Remote              bool                                `json:"remote"`
+	Diagnostic          *ContainerServiceDiagnostic         `json:"diagnostic,omitempty"`
 	GuidanceCode        ContainerServiceGuidanceCode        `json:"guidance_code,omitempty"`
 	Capabilities        ContainerServiceCapabilities        `json:"capabilities"`
 	ConfigurationAccess ContainerServiceConfigurationAccess `json:"configuration"`

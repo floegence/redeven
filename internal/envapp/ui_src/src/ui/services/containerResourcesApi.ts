@@ -52,6 +52,11 @@ export type ContainerService = Readonly<{
   version?: string;
   rootless?: boolean;
   remote?: boolean;
+  diagnostic?: Readonly<{
+    phase: 'discovery' | 'management' | 'health';
+    code: 'permission_denied' | 'cli_unavailable' | 'timeout' | 'unreachable' | 'stopped' | 'unknown';
+    observed_at_unix_ms: number;
+  }>;
   guidance_code?: 'install' | 'permission' | 'start_official' | 'check_active' | 'detection_failed' | 'select_docker_context' | 'externally_managed' | 'host_manager' | 'podman_daemonless' | 'podman_machine_managed' | 'remote_host';
   capabilities: Readonly<{
     start: boolean;

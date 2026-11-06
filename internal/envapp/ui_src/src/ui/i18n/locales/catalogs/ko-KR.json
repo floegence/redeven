@@ -3185,6 +3185,16 @@
         "remote": "원격 서비스",
         "unavailable": "사용할 수 없음"
       },
+      "diagnostics": {
+        "permissionHealth": "{engine} 접근이 거부되어 컨테이너를 관리할 수 없습니다.",
+        "permissionManagement": "{engine} 관리 도구가 접근을 거부했습니다. 실행 상태를 확인할 수 없습니다.",
+        "permission": "권한이 부족하여 {engine}을 확인할 수 없습니다. 구체적인 원인은 반환되지 않았습니다.",
+        "cliUnavailable": "{engine} 명령줄 도구를 사용할 수 없습니다.",
+        "timeout": "{engine} 확인 시간이 초과되었습니다. 실행 상태를 확인할 수 없습니다.",
+        "unreachable": "{engine}에 연결할 수 없습니다. 실행 상태를 확인할 수 없습니다.",
+        "stopped": "{engine}이 실행 중이 아닙니다.",
+        "unknown": "{engine} 상태를 확인하지 못했습니다. 추가 진단이 필요합니다."
+      },
       "guidance": {
         "install": "이 환경에서 컨테이너를 관리하려면 {engine}을 설치하세요.",
         "permission": "현재 사용자에게 {engine} 접근 권한을 부여한 후 다시 시도하세요.",

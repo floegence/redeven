@@ -20,6 +20,7 @@ export type ContextActionSurface =
   | 'terminal'
   | 'file_preview'
   | 'monitoring'
+  | 'container_services'
   | 'git_browser'
   | 'editor_preview'
   | 'tessiven';
@@ -134,6 +135,7 @@ const ASK_FLOWER_SURFACES: readonly ContextActionSurface[] = [
   'terminal',
   'file_preview',
   'monitoring',
+  'container_services',
   'git_browser',
   'editor_preview',
   'tessiven',
@@ -291,6 +293,7 @@ function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean
     case 'tessiven': return kind === 'tessiven_selection' || kind === 'file_path';
     case 'terminal': return kind === 'terminal_selection';
     case 'monitoring': return kind === 'process_snapshot';
+    case 'container_services':
     case 'git_browser':
     case 'desktop_welcome_environment_card': return kind === 'text_snapshot';
     case 'flower_composer': return kind === 'file_path' || kind === 'text_snapshot' || kind === 'thread_reference' || kind === 'reference_snapshot';

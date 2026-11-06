@@ -3185,6 +3185,16 @@
         "remote": "Service distant",
         "unavailable": "Indisponible"
       },
+      "diagnostics": {
+        "permissionHealth": "L’accès à {engine} a été refusé. Les conteneurs ne peuvent pas être gérés.",
+        "permissionManagement": "L’outil de gestion de {engine} a refusé l’accès. Son état de fonctionnement est inconnu.",
+        "permission": "La vérification de {engine} a été bloquée par des permissions insuffisantes. Aucune cause précise n’a été fournie.",
+        "cliUnavailable": "L’outil en ligne de commande de {engine} est indisponible.",
+        "timeout": "La vérification de {engine} a expiré. Son état de fonctionnement est inconnu.",
+        "unreachable": "Impossible de se connecter à {engine}. Son état de fonctionnement est inconnu.",
+        "stopped": "{engine} n’est pas en cours d’exécution.",
+        "unknown": "Impossible de déterminer l’état de {engine}. Un diagnostic supplémentaire est nécessaire."
+      },
       "guidance": {
         "install": "Installez {engine} pour gérer les conteneurs dans cet environnement.",
         "permission": "Accordez à l’utilisateur actuel l’accès à {engine}, puis réessayez.",

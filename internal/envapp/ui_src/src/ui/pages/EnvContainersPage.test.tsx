@@ -15,6 +15,7 @@ const harness = vi.hoisted(() => ({
   },
   setEnvironment: (_value: unknown) => undefined as void,
   goActivity: vi.fn(),
+  askFlower: vi.fn(),
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   storageWrites: [] as Array<{ key: string; value: unknown }>,
   storageValues: new Map<string, unknown>(),
@@ -47,10 +48,13 @@ const harness = vi.hoisted(() => ({
   execTerminalProps: new Map<string, any>(),
 }));
 
+vi.mock('../../../../../flower_ui/src/icons/FlowerIcon', () => ({ FlowerIcon: () => <span data-icon="flower" /> }));
+
 vi.mock('@floegence/floe-webapp-protocol', () => ({ useProtocol: () => ({ session: () => null }) }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   useNotification: () => harness.notify,
+  secureRandomUUID: () => crypto.randomUUID(),
 }));
 
 function icon(name: string) {
@@ -182,6 +186,8 @@ vi.mock('./EnvContext', async () => {
     useEnvContext: () => ({
       resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: harness.cacheScope }),
       env: environment,
+      env_id: () => 'env-26',
+      openFlowerTurnLauncher: harness.askFlower,
       goActivity: harness.goActivity,
     }),
   };
@@ -339,6 +345,7 @@ describe('native Containers page', () => {
     harness.createExecSession.mockReset().mockResolvedValue({ session_id: 'exec-session-1' });
     harness.deleteExecSession.mockReset().mockResolvedValue(undefined);
     harness.execTerminalProps.clear();
+    harness.askFlower.mockReset();
     harness.fsList.mockReset().mockResolvedValue({ entries: [] });
   });
 
@@ -472,6 +479,51 @@ describe('native Containers page', () => {
     expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_docker');
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.engineConfiguration');
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
+  });
+
+  it.each(['activity', 'workbench'] as const)('hands one blocked engine to the existing launcher in %s without configuration authority', async (variant) => {
+    harness.permissions.can_write = false;
+    harness.permissions.can_execute = false;
+    harness.permissions.can_admin = false;
+    harness.permissions.is_owner = false;
+    harness.setEnvironment({ name: 'udesk26', permissions: harness.permissions });
+    harness.listServices.mockResolvedValue([{
+      service_id: 'docker-26', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'permission',
+      guidance_code: 'host_manager', diagnostic: { phase: 'health', code: 'permission_denied', observed_at_unix_ms: 1720000000000 },
+      capabilities: { start: false, stop: false, restart: false }, configuration: { mode: 'unavailable' },
+    }]);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage variant={variant} />, host); await settle();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')!.click(); await settle();
+    const card = host.querySelector<HTMLElement>('.container-service-card')!;
+    expect(card.textContent).toContain('containers.services.diagnostics.permissionHealth');
+    expect(card.textContent).not.toContain('containers.services.guidance.host_manager');
+    const ask = card.querySelector<HTMLButtonElement>('.container-service-card__ask-flower')!;
+    expect(ask.disabled).toBe(false);
+    expect(ask.textContent).toBe('');
+    expect(ask.getAttribute('aria-label')).toBe('flowerTurnLauncher.windowTitle');
+    expect(ask.title).toBe('flowerTurnLauncher.windowTitle');
+    ask.click();
+    expect(harness.askFlower).toHaveBeenCalledOnce();
+    const [intent, anchor] = harness.askFlower.mock.calls[0];
+    expect(intent).toMatchObject({ source_surface: 'container_services', notes: [], pending_attachments: [] });
+    expect(intent.initial_prompt).toBeUndefined();
+    expect(anchor).toEqual({ x: 0, y: 0 });
+    const captured = JSON.parse(intent.context_items[0].content);
+    expect(captured).toMatchObject({ environment: { id: 'env-26', name: 'udesk26' }, service: { service_id: 'docker-26' }, diagnostic: { code: 'permission_denied' } });
+    expect(harness.preflight).not.toHaveBeenCalled();
+    expect(harness.createOperation).not.toHaveBeenCalled();
+    expect(card.getAttribute('data-state')).toBe('permission');
+    harness.listServices.mockResolvedValue([{
+      service_id: 'docker-26', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
+      capabilities: { start: false, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine'] },
+    }]);
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.refresh"]')!.click(); await settle();
+    expect(host.querySelector('.container-service-card')).toBe(card);
+    expect(card.getAttribute('data-state')).toBe('running');
+    expect(card.querySelector('.container-service-card__ask-flower')).toBeNull();
+    expect(card.querySelector('.container-service-card__guidance')).toBeNull();
+    expect(JSON.parse(intent.context_items[0].content).service.state).toBe('permission');
   });
 
   it.each([undefined, 'can_write', 'can_execute', 'can_admin'] as const)(
@@ -702,7 +754,7 @@ describe('native Containers page', () => {
       expect(card.contains(start)).toBe(true);
       expect(start.disabled).toBe(state !== 'stopped');
       if (state !== 'stopped') {
-        expect(start.title).toBe('containers.services.guidance.detection_failed');
+        expect(start.title).toBe(state === 'permission' ? 'containers.services.diagnostics.permission' : state === 'unreachable' ? 'containers.services.diagnostics.unreachable' : state === 'error' ? 'containers.services.diagnostics.unknown' : 'containers.services.guidance.detection_failed');
         start.click();
         await settle();
         expect(harness.preflight).not.toHaveBeenCalled();

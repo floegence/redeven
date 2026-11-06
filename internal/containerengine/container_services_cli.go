@@ -74,6 +74,7 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 	endpoints, err := c.listDockerContexts(ctx)
 	if err != nil {
 		base.State = containerServiceStateFromError(err)
+		base.Diagnostic = containerServiceDiagnostic("discovery", err)
 		base.ServiceID = containerServiceID(EngineDocker, base.Implementation, "local")
 		base.GuidanceCode = containerServiceGuidance(base.State)
 		return base
@@ -86,10 +87,12 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 		return base
 	}
 	if endpoint.Remote {
+		status, statusErr := c.Status(bindEngineEndpoint(ctx, *endpoint), EngineDocker)
 		return ContainerService{
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceRemote, string(endpoint.EndpointID)), Engine: EngineDocker,
-			Name: "Remote Docker", Implementation: ContainerServiceRemote, State: c.endpointServiceState(ctx, *endpoint),
-			Remote: true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
+			Name: "Remote Docker", Implementation: ContainerServiceRemote, State: containerServiceStateFromStatus(status, statusErr),
+			Diagnostic: containerServiceDiagnostic("health", statusErr),
+			Remote:     true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
 			ConfigurationAccess: unavailableContainerServiceConfiguration(),
 		}
 	}
@@ -103,12 +106,17 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 			status, statusErr = c.Status(bindEngineEndpoint(ctx, *endpoint), EngineDocker)
 		}
 		state := containerServiceStateFromStatus(status, statusErr)
+		phase := "health"
+		if managementErr != nil {
+			phase = "management"
+		}
 		if managementErr != nil && state == ContainerServiceStateStopped {
 			state = ContainerServiceStateError
 		}
 		service := ContainerService{
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerDesktop, "local"), Engine: EngineDocker,
 			Name: "Docker Desktop", Implementation: ContainerServiceDockerDesktop, State: state, Version: status.Version,
+			Diagnostic:          containerServiceDiagnostic(phase, statusErr),
 			Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
 			ConfigurationAccess: localContainerServiceConfiguration(ContainerServiceConfigurationSourceEngine, ContainerServiceConfigurationSourceDockerCLI),
 			endpointID:          endpoint.EndpointID,
@@ -128,6 +136,7 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 		ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerEngine, "local"), Engine: EngineDocker,
 		Name: "Docker Engine", Implementation: ContainerServiceDockerEngine, State: containerServiceStateFromStatus(status, statusErr),
 		Version: status.Version, endpointID: endpoint.EndpointID,
+		Diagnostic:          containerServiceDiagnostic("health", statusErr),
 		ConfigurationAccess: unavailableContainerServiceConfiguration(),
 	}
 	service.Generation = serviceGeneration(service.Version, service.State)
@@ -169,6 +178,7 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 	endpoints, err := c.listPodmanConnections(ctx)
 	if err != nil {
 		base.State = containerServiceStateFromError(err)
+		base.Diagnostic = containerServiceDiagnostic("discovery", err)
 		base.ServiceID = containerServiceID(EnginePodman, base.Implementation, "local")
 		base.GuidanceCode = containerServiceGuidance(base.State)
 		return base
@@ -200,6 +210,7 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EnginePodman, ContainerServicePodmanLocal, "local"), Engine: EnginePodman,
 			Name: "Local Podman", Implementation: ContainerServicePodmanLocal, State: containerServiceStateFromStatus(status, statusErr),
 			Version: status.Version, Rootless: rootless, endpointID: endpoint.EndpointID,
+			Diagnostic:          containerServiceDiagnostic("health", statusErr),
 			ConfigurationAccess: unavailableContainerServiceConfiguration(), GuidanceCode: ContainerServiceGuidancePodmanDaemonless,
 			Generation: serviceGeneration(status.Version, containerServiceStateFromStatus(status, statusErr)),
 		}
@@ -214,7 +225,8 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 		return ContainerService{
 			ServiceID: containerServiceID(EnginePodman, ContainerServiceRemote, string(endpoint.EndpointID)), Engine: EnginePodman,
 			Name: "Remote Podman", Implementation: ContainerServiceRemote, State: containerServiceStateFromStatus(status, statusErr),
-			Version: status.Version, Rootless: rootless, Remote: true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
+			Diagnostic: containerServiceDiagnostic("health", statusErr),
+			Version:    status.Version, Rootless: rootless, Remote: true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
 			ConfigurationAccess: unavailableContainerServiceConfiguration(),
 			Generation:          serviceGeneration(status.Version, containerServiceStateFromStatus(status, statusErr)),
 		}
@@ -225,7 +237,8 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 	}
 	return ContainerService{
 		ServiceID: containerServiceID(EnginePodman, ContainerServicePodmanMachine, machine.Name), Engine: EnginePodman,
-		Name: "Podman Machine " + machine.Name, Implementation: ContainerServicePodmanMachine, State: state, Version: status.Version, Rootless: rootless,
+		Diagnostic: containerServiceDiagnostic("health", statusErr),
+		Name:       "Podman Machine " + machine.Name, Implementation: ContainerServicePodmanMachine, State: state, Version: status.Version, Rootless: rootless,
 		Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
 		ConfigurationAccess: unavailableContainerServiceConfiguration(),
 		GuidanceCode:        ContainerServiceGuidancePodmanMachine, endpointID: endpoint.EndpointID, machineName: machine.Name,
@@ -319,9 +332,26 @@ func activeEndpoint(items []EngineEndpoint) *EngineEndpoint {
 	return nil
 }
 
-func (c *CLIClient) endpointServiceState(ctx context.Context, endpoint EngineEndpoint) ContainerServiceState {
-	status, err := c.Status(bindEngineEndpoint(ctx, endpoint), endpoint.Engine)
-	return containerServiceStateFromStatus(status, err)
+func containerServiceDiagnostic(phase string, err error) *ContainerServiceDiagnostic {
+	if err == nil {
+		return nil
+	}
+	code := "unknown"
+	switch {
+	case errors.Is(err, ErrPermissionDenied):
+		code = "permission_denied"
+	case errors.Is(err, ErrCLIUnavailable):
+		code = "cli_unavailable"
+	case errors.Is(err, ErrEngineTimeout), errors.Is(err, context.DeadlineExceeded):
+		code = "timeout"
+	case errors.Is(err, ErrBackendUnreachable):
+		code = "unreachable"
+	case errors.Is(err, ErrDaemonStopped), errors.Is(err, ErrEngineUnavailable):
+		if phase == "health" {
+			code = "stopped"
+		}
+	}
+	return &ContainerServiceDiagnostic{Phase: phase, Code: code, ObservedAtUnixMs: time.Now().UnixMilli()}
 }
 
 func containerServiceStateFromStatus(status EngineStatus, err error) ContainerServiceState {

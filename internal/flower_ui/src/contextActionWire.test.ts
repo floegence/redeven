@@ -17,6 +17,20 @@ const terminalAction = (item: Record<string, unknown>) => ({
   source: { surface: 'terminal' },
 });
 
+describe('Container service context boundary', () => {
+  const action = (item: unknown) => ({ ...composerAction([item]), source: { surface: 'container_services', surface_id: 'docker-26' } });
+  it('accepts the engine snapshot as descriptive text', () => {
+    const item = { kind: 'text_snapshot', title: 'Docker Engine', detail: 'udesk26', content: '{"diagnostic":{"code":"permission_denied"}}' };
+    expect(parseAskFlowerContextActionEnvelope(action(item))?.context).toEqual([item]);
+  });
+  it.each([
+    { kind: 'file_path', path: '/private/docker.sock', is_directory: false },
+    { kind: 'terminal_selection', working_dir: '/workspace', selection: 'sudo docker ps', selection_chars: 14 },
+  ])('rejects non-snapshot context %j', item => {
+    expect(parseAskFlowerContextActionEnvelope(action(item))).toBeNull();
+  });
+});
+
 describe('Thread reference snapshots', () => {
   const thread = { runtime_id: 'env:local-environment', thread_id: 'thread-source', title: 'Review 中文 code', status: 'idle', working_dir: '/workspace', created_at_ms: 1, updated_at_ms: 2, captured_at_ms: 3 };
   it('accepts exactly the frozen basic fields only from the composer', () => {

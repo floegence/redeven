@@ -118,6 +118,8 @@ import { useI18n } from '../i18n';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { useEnvContext } from './EnvContext';
+import { FlowerIcon } from '../../../../../flower_ui/src/icons/FlowerIcon';
+import { buildContainerServiceFlowerIntent, containerServiceDiagnosticKey, containerServiceNeedsAssistance } from '../utils/containerServiceAskFlower';
 import { ContainerExecTerminal } from '../widgets/ContainerExecTerminal';
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
 import { DEFAULT_STATE, sanitizePersistedState, type PersistedContainersState } from './containerPageState';
@@ -3782,9 +3784,19 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   };
 
   const serviceStateLabel = (state: ContainerService['state']) => i18n.t(`containers.services.states.${state}` as Parameters<typeof i18n.t>[0]);
-  const serviceGuidance = (service: ContainerService) => service.guidance_code
-    ? i18n.t(`containers.services.guidance.${service.guidance_code}` as Parameters<typeof i18n.t>[0], { engine: runtimeName(service.engine) })
-    : '';
+  const serviceGuidance = (service: ContainerService) => {
+    const diagnosticKey = containerServiceDiagnosticKey(service);
+    return diagnosticKey ? i18n.t(diagnosticKey, { engine: runtimeName(service.engine) })
+      : service.guidance_code ? i18n.t(`containers.services.guidance.${service.guidance_code}` as Parameters<typeof i18n.t>[0], { engine: runtimeName(service.engine) }) : '';
+  };
+  const askFlowerAboutService = (service: ContainerService, button: HTMLButtonElement) => {
+    if (!canRead() || !servicesResource.ready()) return;
+    const anchor = button.getBoundingClientRect();
+    env.openFlowerTurnLauncher(buildContainerServiceFlowerIntent({
+      service, environmentID: env.env_id(), environmentName: env.env()?.name ?? '',
+      summary: serviceGuidance(service), capturedAtMs: Date.now(),
+    }), { x: anchor.left, y: anchor.bottom });
+  };
 
   const renderContainerServicesSkeleton = (): JSX.Element => (
     <div class="container-services-grid container-services-grid--loading" aria-label={i18n.t('containers.loading')}>
@@ -3855,6 +3867,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                   <Show when={service().state === 'running' && service().capabilities.stop}><Button size="sm" variant="outline" onClick={() => runContainerServiceAction(service(), 'stop')} disabled={Boolean(active()) || mutationBusy() || !canRWX() || !canAdmin()}><StopFilled class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button></Show>
                   <Show when={service().state === 'running' && service().capabilities.restart}><Button size="sm" variant="outline" onClick={() => runContainerServiceAction(service(), 'restart')} disabled={Boolean(active()) || mutationBusy() || !canRWX() || !canAdmin()}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button></Show>
                   <Button size="sm" variant="ghost" onClick={() => void openServiceConfiguration(service())} disabled={service().configuration.mode !== 'local' || Boolean(active()) || !canAdmin()} title={service().configuration.mode === 'local' ? undefined : serviceGuidance(service())}><Settings class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.services.configure')}</Button>
+                  <Show when={containerServiceNeedsAssistance(service())}><Button size="sm" variant="ghost" class="container-icon-action container-service-card__ask-flower" onClick={(event) => askFlowerAboutService(service(), event.currentTarget)} disabled={!canRead() || !servicesResource.ready()} aria-label={i18n.t('flowerTurnLauncher.windowTitle')} title={i18n.t('flowerTurnLauncher.windowTitle')}><FlowerIcon class="h-4 w-4" /></Button></Show>
                   <Show when={!feedback() && operation()}>{(item) => <Button size="sm" variant="ghost" onClick={() => openServiceOperation(item())}>{i18n.t('containers.services.lifecycle.history')}<ChevronRight class="ml-1 h-3.5 w-3.5" /></Button>}</Show>
                 </div>
               </article>;

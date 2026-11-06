@@ -40,6 +40,7 @@ const (
 	contextActionSurfaceTerminal       = "terminal"
 	contextActionSurfacePreview        = "file_preview"
 	contextActionSurfaceMonitoring     = "monitoring"
+	contextActionSurfaceContainers     = "container_services"
 	contextActionSurfaceGit            = "git_browser"
 	contextActionSurfaceEditor         = "editor_preview"
 	contextActionSurfaceTessiven       = "tessiven"
@@ -321,7 +322,7 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 		contextActionSurfaceTerminal,
 		contextActionSurfacePreview,
 		contextActionSurfaceMonitoring,
-		contextActionSurfaceGit,
+		contextActionSurfaceGit, contextActionSurfaceContainers,
 		contextActionSurfaceEditor, contextActionSurfaceTessiven:
 	default:
 		return nil, ErrInvalidContextAction
@@ -454,7 +455,7 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 		return kind == contextActionKindTerminal
 	case contextActionSurfaceMonitoring:
 		return kind == contextActionKindProcess
-	case contextActionSurfaceGit:
+	case contextActionSurfaceGit, contextActionSurfaceContainers:
 		return kind == contextActionKindText
 	case contextActionSurfaceWelcomeEnv:
 		return kind == contextActionKindText

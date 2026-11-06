@@ -3185,6 +3185,16 @@
         "remote": "Entfernter Dienst",
         "unavailable": "Nicht verfügbar"
       },
+      "diagnostics": {
+        "permissionHealth": "Der Zugriff auf {engine} wurde verweigert. Container können nicht verwaltet werden.",
+        "permissionManagement": "Das Verwaltungstool von {engine} hat den Zugriff verweigert. Der Betriebszustand ist unbekannt.",
+        "permission": "Die Prüfung von {engine} wurde wegen fehlender Berechtigungen blockiert. Eine genaue Ursache wurde nicht gemeldet.",
+        "cliUnavailable": "Das Befehlszeilenwerkzeug von {engine} ist nicht verfügbar.",
+        "timeout": "Die Prüfung von {engine} hat das Zeitlimit überschritten. Der Betriebszustand ist unbekannt.",
+        "unreachable": "Keine Verbindung zu {engine}. Der Betriebszustand ist unbekannt.",
+        "stopped": "{engine} läuft nicht.",
+        "unknown": "Der Status von {engine} konnte nicht ermittelt werden. Eine weitere Diagnose ist erforderlich."
+      },
       "guidance": {
         "install": "Installieren Sie {engine}, um Container in dieser Umgebung zu verwalten.",
         "permission": "Gewähren Sie dem aktuellen Benutzer Zugriff auf {engine} und versuchen Sie es erneut.",

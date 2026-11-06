@@ -169,6 +169,13 @@ func TestDockerDesktopDiscoverySeparatesOwnershipFromHealth(t *testing.T) {
 			t.Fatal(err)
 		}
 		service := services[0]
+		if step.err == nil {
+			if service.Diagnostic != nil {
+				t.Fatalf("healthy service retained a stale diagnostic: %+v", service.Diagnostic)
+			}
+		} else if service.Diagnostic == nil || service.Diagnostic.Phase != "health" {
+			t.Fatalf("health failure lost its probe phase: %+v", service.Diagnostic)
+		}
 		if service.Implementation != ContainerServiceDockerDesktop || service.State != step.state || !service.Capabilities.Start {
 			t.Fatalf("service after health %v = %+v", step.err, service)
 		}
@@ -217,6 +224,9 @@ func TestDockerDesktopManagementFailureRetainsIdentity(t *testing.T) {
 				t.Fatal(err)
 			}
 			service := services[0]
+			if service.Diagnostic == nil || service.Diagnostic.Phase != "management" || service.Diagnostic.Code == "stopped" {
+				t.Fatalf("management failure misrepresented engine health: %+v", service.Diagnostic)
+			}
 			if service.ServiceID != containerServiceID(EngineDocker, ContainerServiceDockerDesktop, "local") || service.State != tt.state || !service.Capabilities.Start || service.GuidanceCode == "" {
 				t.Fatalf("management failure changed ownership or omitted guidance: %+v", service)
 			}

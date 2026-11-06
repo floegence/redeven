@@ -3185,6 +3185,16 @@
         "remote": "リモートサービス",
         "unavailable": "利用不可"
       },
+      "diagnostics": {
+        "permissionHealth": "{engine} へのアクセスが拒否されたため、コンテナーを管理できません。",
+        "permissionManagement": "{engine} の管理ツールがアクセスを拒否しました。稼働状態は不明です。",
+        "permission": "権限不足により {engine} の確認ができません。具体的な原因は返されていません。",
+        "cliUnavailable": "{engine} のコマンドラインツールを利用できません。",
+        "timeout": "{engine} の確認がタイムアウトしました。稼働状態は不明です。",
+        "unreachable": "{engine} に接続できません。稼働状態は不明です。",
+        "stopped": "{engine} は稼働していません。",
+        "unknown": "{engine} の状態を確認できませんでした。詳しい調査が必要です。"
+      },
       "guidance": {
         "install": "この環境でコンテナを管理するには {engine} をインストールしてください。",
         "permission": "現在のユーザーに {engine} のアクセス権を付与して再試行してください。",

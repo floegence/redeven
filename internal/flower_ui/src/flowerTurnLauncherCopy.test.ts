@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildFlowerTurnLauncherCopy } from './flowerTurnLauncherCopy';
 import type { FlowerTurnLauncherSourceSurface } from './contracts/flowerSurfaceContracts';
 
-const sources: FlowerTurnLauncherSourceSurface[] = ['desktop_welcome_environment_card', 'file_browser', 'terminal', 'file_preview', 'monitoring', 'git_browser', 'editor_preview', 'tessiven'];
+const sources: FlowerTurnLauncherSourceSurface[] = ['desktop_welcome_environment_card', 'file_browser', 'terminal', 'file_preview', 'monitoring', 'container_services', 'git_browser', 'editor_preview', 'tessiven'];
 
 describe('contextual launcher copy', () => {
   it.each(sources)('projects actual references without introductory copy for %s', source_surface => {

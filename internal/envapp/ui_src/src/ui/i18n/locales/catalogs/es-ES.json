@@ -3185,6 +3185,16 @@
         "remote": "Servicio remoto",
         "unavailable": "No disponible"
       },
+      "diagnostics": {
+        "permissionHealth": "Se denegó el acceso a {engine}. No se pueden administrar los contenedores.",
+        "permissionManagement": "La herramienta de administración de {engine} denegó el acceso. Se desconoce si está en ejecución.",
+        "permission": "La comprobación de {engine} se bloqueó por falta de permisos. No se indicó una causa específica.",
+        "cliUnavailable": "La herramienta de línea de comandos de {engine} no está disponible.",
+        "timeout": "La comprobación de {engine} agotó el tiempo de espera. Se desconoce si está en ejecución.",
+        "unreachable": "No se puede conectar con {engine}. Se desconoce si está en ejecución.",
+        "stopped": "{engine} no está en ejecución.",
+        "unknown": "No se pudo determinar el estado de {engine}. Se necesita un diagnóstico adicional."
+      },
       "guidance": {
         "install": "Instala {engine} para gestionar contenedores en este entorno.",
         "permission": "Concede al usuario actual acceso a {engine} y vuelve a intentarlo.",

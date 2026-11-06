@@ -1462,6 +1462,7 @@ export type FlowerTurnLauncherSourceSurface =
   | 'terminal'
   | 'file_preview'
   | 'monitoring'
+  | 'container_services'
   | 'git_browser'
   | 'editor_preview'
   | 'tessiven';

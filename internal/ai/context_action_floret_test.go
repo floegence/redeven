@@ -11,6 +11,23 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
+func TestContainerServiceContextAcceptsOnlyDescriptiveSnapshots(t *testing.T) {
+	for _, item := range []ContextActionContextItem{
+		{Kind: contextActionKindFilePath, Path: "/private/docker.sock"},
+		{Kind: contextActionKindTerminal, WorkingDir: "/workspace", Selection: "sudo docker ps", SelectionChars: 14},
+	} {
+		action := &ContextActionEnvelope{
+			SchemaVersion: ContextActionSchemaVersion, ActionID: contextActionAskFlowerID, Provider: contextActionFlowerProvider,
+			Target: ContextActionTarget{TargetID: "current", Locality: contextActionLocalityAuto},
+			Source: ContextActionSource{Surface: contextActionSurfaceContainers}, Context: []ContextActionContextItem{item},
+			Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+		}
+		if _, err := normalizeAskFlowerContextActionEnvelope(action); !errors.Is(err, ErrInvalidContextAction) {
+			t.Fatalf("accepted non-snapshot container context %s: %v", item.Kind, err)
+		}
+	}
+}
+
 func TestResolveFlowerCanonicalReferenceTargetAuthorityUsesOnlyServerState(t *testing.T) {
 	t.Parallel()
 
@@ -413,6 +430,7 @@ func TestFloretContextProjectionBuildsCanonicalReferencesAndDurableContextTogeth
 		wantText    string
 		wantLocator bool
 	}{
+		{name: "container engine", surface: "container_services", item: ContextActionContextItem{Kind: "text_snapshot", Title: "Docker Engine", Content: `{"environment":{"id":"env-26","name":"udesk26"},"diagnostic":{"phase":"health","code":"permission_denied"}}`}, wantKind: flruntime.MessageReferenceText, wantText: "permission_denied"},
 		{name: "text", surface: "git_browser", item: ContextActionContextItem{Kind: "text_snapshot", Title: "Quoted text", Content: "selected lines"}, wantKind: flruntime.MessageReferenceText, wantText: "selected lines"},
 		{name: "file", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src/main.ts"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
 		{name: "image", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/changsha.jpg"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},

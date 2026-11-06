@@ -3185,6 +3185,16 @@
         "remote": "Serviço remoto",
         "unavailable": "Indisponível"
       },
+      "diagnostics": {
+        "permissionHealth": "O acesso ao {engine} foi negado. Não é possível gerenciar os contêineres.",
+        "permissionManagement": "A ferramenta de gerenciamento do {engine} negou o acesso. Não foi possível determinar se o mecanismo está em execução.",
+        "permission": "A verificação do {engine} foi bloqueada por permissões insuficientes. Nenhuma causa específica foi informada.",
+        "cliUnavailable": "A ferramenta de linha de comando do {engine} está indisponível.",
+        "timeout": "A verificação do {engine} excedeu o tempo limite. Não foi possível determinar se o mecanismo está em execução.",
+        "unreachable": "Não é possível conectar ao {engine}. Não foi possível determinar se o mecanismo está em execução.",
+        "stopped": "{engine} não está em execução.",
+        "unknown": "Não foi possível determinar o estado do {engine}. É necessário um diagnóstico adicional."
+      },
       "guidance": {
         "install": "Instale o {engine} para gerenciar contêineres neste ambiente.",
         "permission": "Conceda ao usuário atual acesso ao {engine} e tente novamente.",

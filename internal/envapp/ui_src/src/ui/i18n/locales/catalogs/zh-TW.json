@@ -3185,6 +3185,16 @@
         "remote": "遠端服務",
         "unavailable": "無法使用"
       },
+      "diagnostics": {
+        "permissionHealth": "存取 {engine} 時遭拒，目前無法管理容器。",
+        "permissionManagement": "{engine} 管理工具拒絕存取，目前無法確認引擎是否執行中。",
+        "permission": "{engine} 檢測因權限不足而受阻，尚未傳回具體原因。",
+        "cliUnavailable": "{engine} 命令列工具無法使用。",
+        "timeout": "{engine} 檢測逾時，目前無法確認引擎是否執行中。",
+        "unreachable": "無法連線至 {engine}，目前無法確認引擎是否執行中。",
+        "stopped": "{engine} 未執行。",
+        "unknown": "無法判定 {engine} 的狀態，需要進一步排查。"
+      },
       "guidance": {
         "install": "安裝 {engine} 後即可在此環境中管理容器。",
         "permission": "請授予目前使用者 {engine} 存取權限後再試。",

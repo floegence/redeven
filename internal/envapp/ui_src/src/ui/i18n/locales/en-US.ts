@@ -3558,6 +3558,16 @@ export const enUS = defineDictionary({
       runningContainers: 'Running containers', affectedServices: 'Affected Web Services',
       states: { running: 'Running', stopped: 'Stopped', not_installed: 'Not installed', permission: 'Permission required', unreachable: 'Unreachable', error: 'Detection failed' },
       implementations: { docker_desktop: 'Docker Desktop', docker_engine: 'Docker Engine', podman_machine: 'Podman Machine', podman_local: 'Local Podman', remote: 'Remote service', unavailable: 'Unavailable' },
+      diagnostics: {
+        permissionHealth: "Access to {engine} was denied. Containers cannot be managed.",
+        permissionManagement: "The {engine} management tool denied access. Its running state is unknown.",
+        permission: "The {engine} check was blocked by insufficient permissions. No specific cause was returned.",
+        cliUnavailable: "The {engine} command-line tool is unavailable.",
+        timeout: "The {engine} check timed out. Its running state is unknown.",
+        unreachable: "Cannot connect to {engine}. Its running state is unknown.",
+        stopped: "{engine} is not running.",
+        unknown: "Could not determine the {engine} status. Further diagnosis is needed.",
+      },
       guidance: {
         install: 'Install {engine} to manage containers in this environment.', permission: 'Grant the current user access to {engine}, then retry.',
         start_official: 'Start {engine} with its official host tool, then retry.', check_active: 'Check the active {engine} service and retry.',

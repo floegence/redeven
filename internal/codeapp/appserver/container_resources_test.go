@@ -38,6 +38,7 @@ func (f *appserverContainerServiceEngine) ContainerServices(context.Context) ([]
 	return []containerengine.ContainerService{{
 		ServiceID: appserverContainerServiceID, Engine: containerengine.EngineDocker, Name: "Docker Engine",
 		Implementation: containerengine.ContainerServiceDockerEngine, State: containerengine.ContainerServiceStateStopped,
+		Diagnostic:   &containerengine.ContainerServiceDiagnostic{Phase: "health", Code: "stopped", ObservedAtUnixMs: 1720000000000},
 		Capabilities: containerengine.ContainerServiceCapabilities{Start: true},
 		ConfigurationAccess: containerengine.ContainerServiceConfigurationAccess{
 			Mode:    containerengine.ContainerServiceConfigurationLocal,
@@ -494,6 +495,9 @@ func TestContainerServicesRequireAdminForConfigurationAndKeepSecretsOutOfAudit(t
 	response := serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services", "")
 	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), appserverContainerServiceID) || !strings.Contains(response.Body.String(), `"configuration":{"mode":"local","sources":["engine"]}`) || strings.Contains(response.Body.String(), "secret") || strings.Contains(response.Body.String(), "configure_proxy") {
 		t.Fatalf("service list status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"diagnostic":{"phase":"health","code":"stopped","observed_at_unix_ms":1720000000000}`) {
+		t.Fatalf("read-only service list lost diagnostic facts: %s", response.Body.String())
 	}
 	response = serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services/"+appserverContainerServiceID+"/configuration", "")
 	if response.Code != http.StatusForbidden {

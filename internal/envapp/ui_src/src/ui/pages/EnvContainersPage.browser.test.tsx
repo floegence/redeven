@@ -1,8 +1,11 @@
 import '../../index.css';
 
 import { commands, page, userEvent } from 'vitest/browser';
-import { ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
+import { LayoutProvider, ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
+import { FlowerTurnLauncherWindow as SharedLauncher } from '../widgets/FlowerTurnLauncherWindow';
+import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../i18n';
@@ -10,6 +13,7 @@ import { requestContainerResourceNavigation } from '../services/containerResourc
 
 const browserHarness = vi.hoisted(() => ({
   scope: '',
+  askFlower: vi.fn(),
   phase: () => 'ready' as 'ready' | 'revalidating',
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   listRuntimes: vi.fn(),
@@ -36,10 +40,17 @@ vi.mock('../widgets/ContainerExecTerminal', () => ({
   },
 }));
 
+vi.mock('../widgets/FilePreviewContext', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../widgets/FilePreviewContext')>(),
+  useFilePreviewContext: () => ({ openPreview: vi.fn() }),
+}));
+
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     resourceCacheAccess: () => ({ phase: browserHarness.phase(), generation: 0, scope: browserHarness.scope }),
-    env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
+    env_id: () => 'env-26',
+    openFlowerTurnLauncher: browserHarness.askFlower,
+    env: () => ({ name: 'udesk26', permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
     goActivity: vi.fn(),
   }),
 }));
@@ -50,11 +61,13 @@ vi.mock('../services/uiStorage', async (importOriginal) => ({
   writeUIStorageJSON: vi.fn(),
 }));
 
-vi.mock('@floegence/floe-webapp-protocol', () => ({
+vi.mock('@floegence/floe-webapp-protocol', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-protocol')>(),
   useProtocol: () => ({ session: () => null }),
 }));
 
-vi.mock('../protocol/redeven_v1', () => ({
+vi.mock('../protocol/redeven_v1', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../protocol/redeven_v1')>(),
   useRedevenRpc: () => ({
     fs: {
       getPathContext: async () => ({
@@ -192,6 +205,7 @@ describe('native Containers responsive product surface', () => {
     vi.mocked(api.listContainerOperationEvents).mockReset().mockResolvedValue([]);
     vi.mocked(api.cancelContainerOperation).mockReset();
     browserHarness.scope = '';
+    browserHarness.askFlower.mockReset();
     browserHarness.phase = () => 'ready';
     document.documentElement.classList.add('dark');
     window.localStorage.clear();
@@ -1322,6 +1336,87 @@ describe('native Containers responsive product surface', () => {
     expect(detailPage.querySelectorAll('[data-container-monitor-panel]')).toHaveLength(3);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it.each([
+    [1440, 'en-US', 'light', 'activity'], [1440, 'zh-CN', 'dark', 'activity'],
+    [390, 'zh-TW', 'dark', 'workbench'], [320, 'zh-CN', 'light', 'workbench'],
+  ] as const)('hands a blocked engine to the shared PromptCard at %spx in %s %s %s', async (width, locale, appearance, variant) => {
+    await page.viewport(width, 900);
+    window.localStorage.setItem('redeven_ui_language_preference', locale);
+    const api = await import('../services/containerResourcesApi');
+    const blocked = {
+      service_id: 'docker-26', engine: 'docker' as const, name: 'Docker Engine', implementation: 'docker_engine' as const,
+      state: 'permission' as const, guidance_code: 'host_manager' as const,
+      diagnostic: { phase: 'health' as const, code: 'permission_denied' as const, observed_at_unix_ms: 1720000000000 },
+      capabilities: { start: false, stop: false, restart: false }, configuration: { mode: 'unavailable' as const },
+    };
+    vi.mocked(api.listContainerServices).mockResolvedValueOnce([blocked]);
+    const mounted = mount(variant, appearance); dispose = mounted.dispose;
+    await expect.poll(() => mounted.host.querySelector('.container-services-entry')).not.toBeNull();
+    mounted.host.querySelector<HTMLButtonElement>('.container-services-entry')!.click();
+    await expect.poll(() => mounted.host.querySelector('.container-service-card__ask-flower')).not.toBeNull();
+    for (const animation of document.getAnimations()) if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    await settle();
+    const card = mounted.host.querySelector<HTMLElement>('.container-service-card')!;
+    const ask = card.querySelector<HTMLButtonElement>('.container-service-card__ask-flower')!;
+    expect(ask.textContent).toBe('');
+    expect(ask.getAttribute('aria-label')).toBe(locale === 'en-US' ? 'Ask Flower' : locale === 'zh-CN' ? '询问 Flower' : '詢問 Flower');
+    expect(ask.title).toBe(ask.getAttribute('aria-label'));
+    const reason = card.querySelector('.container-service-card__guidance')!.textContent;
+    expect(reason).toContain(locale === 'en-US' ? 'was denied' : locale === 'zh-CN' ? '被拒绝' : '遭拒');
+    expect(card.querySelector('.container-service-card__actions')!.children).toHaveLength(2);
+    expect(card.querySelectorAll('button')[0].disabled).toBe(true);
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+    expect(ask.getBoundingClientRect().height).toBeGreaterThanOrEqual(width < 600 ? 44 : 24);
+    expect(ask.getBoundingClientRect().width).toBeGreaterThanOrEqual(width < 600 ? 44 : 24);
+    const before = card.getBoundingClientRect().toJSON();
+    ask.focus(); await userEvent.keyboard('{Enter}');
+    expect(browserHarness.askFlower).toHaveBeenCalledOnce();
+    const [intent, anchor] = browserHarness.askFlower.mock.calls[0];
+    expect(anchor.x).toBeCloseTo(ask.getBoundingClientRect().left, 0);
+    expect(anchor.y).toBeCloseTo(ask.getBoundingClientRect().bottom, 0);
+    const [open, setOpen] = createSignal(true);
+    const submitted = vi.fn(async (_input: import('../../../../../flower_ui/src/FlowerTurnLauncherWindow').FlowerTurnLauncherSubmitInput) => { setOpen(false); });
+    const host = document.createElement('div'); document.body.append(host);
+    function LauncherSurface() {
+      useTheme().setTheme(appearance);
+      return <I18nProvider><LayoutProvider><SharedLauncher open={open()} intent={intent as FlowerTurnLauncherIntent}
+        anchor={anchor} onClose={() => setOpen(false)} onSubmit={submitted} /></LayoutProvider></I18nProvider>;
+    }
+    const closeLauncher = render(() => <ThemeProvider><LauncherSurface /></ThemeProvider>, host);
+    try {
+      await expect.poll(() => document.querySelector('.flower-ask-card')).not.toBeNull();
+      await settle();
+      for (const animation of document.getAnimations()) if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+      const prompt = document.querySelector<HTMLElement>('.flower-ask-card')!;
+      const editor = prompt.querySelector<HTMLTextAreaElement>('textarea')!;
+      expect(editor.value).toBe('');
+      expect(editor.getAttribute('placeholder') || '').toBe('');
+      expect(prompt.querySelector('.flower-composer-context-label')?.textContent).toBe('Docker Engine');
+      const send = prompt.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!;
+      expect(send.disabled).toBe(true);
+      const rect = prompt.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(0);
+      expect(rect.right).toBeLessThanOrEqual(width);
+      expect(card.getBoundingClientRect().toJSON()).toEqual(before);
+      await userEvent.fill(editor, 'Please diagnose and help configure this engine.');
+      await userEvent.click(prompt.querySelector<HTMLButtonElement>('.flower-composer-context-source')!);
+      await expect.poll(() => document.querySelector('.flower-context-preview-window')?.textContent, { timeout: 10_000 }).toContain('permission_denied');
+      expect(document.querySelector('.flower-context-preview-window')?.textContent).toContain('udesk26');
+      await userEvent.click(document.querySelector<HTMLButtonElement>('[data-flower-context-preview-close]')!);
+      await expect.poll(() => document.querySelector('.flower-context-preview-window')).toBeNull();
+      expect(editor.value).toBe('Please diagnose and help configure this engine.');
+      expect(document.documentElement.classList.contains('dark')).toBe(appearance === 'dark');
+      await page.screenshot({ path: `__screenshots__/container-flower-${width}-${locale}-${appearance}.png` });
+      await userEvent.click(send);
+      await expect.poll(() => submitted.mock.calls.length).toBe(1);
+      const input = submitted.mock.calls[0][0];
+      expect(JSON.stringify(input)).toContain('permission_denied');
+      expect(JSON.stringify(input)).toContain('env-26');
+      expect(JSON.stringify(input)).toContain('container_services');
+      expect(card.getAttribute('data-state')).toBe('permission');
+    } finally { closeLauncher(); host.remove(); }
   });
 
   it('keeps service management readable and touchable on a narrow workbench', async () => {

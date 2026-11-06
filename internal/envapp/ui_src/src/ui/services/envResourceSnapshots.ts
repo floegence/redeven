@@ -16,7 +16,7 @@ const booleanFields = new Set(['native_ready', 'supported', 'ready', 'screen_rec
   'rootless', 'remote', 'restart_required', 'collection_stats', 'volume_files', 'exec', 'start', 'stop', 'restart',
   'references_complete', 'saved', 'digest_pinned', 'pending_changes', 'available']);
 const numberFields = new Set(['started_at_unix_ms', 'created_at_unix_ms', 'updated_at_unix_ms', 'last_opened_at_unix_ms',
-  'last_checked_at_unix_ms', 'latency_ms', 'size_bytes', 'referenced_containers', 'service_count', 'container_count',
+  'last_checked_at_unix_ms', 'observed_at_unix_ms', 'latency_ms', 'size_bytes', 'referenced_containers', 'service_count', 'container_count',
   'running_count', 'host_port', 'port', 'container_port', 'runtime_port', 'schema_version']);
 const stringListFields = new Set(['requirements', 'sources', 'tags']);
 function fields(value: unknown, names: readonly string[]): Record<string, unknown> {
@@ -83,6 +83,7 @@ export function containerServiceSnapshot(value: unknown): ContainerService[] {
     const service = identity(value, 'service_id');
     if (typeof service.name !== 'string' || !['docker', 'podman'].includes(String(service.engine)) || typeof service.state !== 'string') throw new Error('Invalid service snapshot');
     return { ...fields(service, ['service_id', 'engine', 'name', 'implementation', 'state', 'version', 'rootless', 'remote', 'guidance_code', 'restart_required', 'generation']),
+      ...(service.diagnostic ? { diagnostic: fields(service.diagnostic, ['phase', 'code', 'observed_at_unix_ms']) } : {}),
       capabilities: fields(service.capabilities, ['start', 'stop', 'restart']),
       configuration: fields(service.configuration, ['mode', 'sources']),
     } as ContainerService;
