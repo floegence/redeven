@@ -1,7 +1,7 @@
 import { Button, LinearProgress, StableText, Switch } from '@floegence/floe-webapp-core/ui';
 import { Refresh, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
 import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
-import { For, Match, Show, Switch as MatchSwitch, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
+import { For, Match, Show, Switch as MatchSwitch, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales/en-US';
@@ -75,7 +75,8 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   let disposed = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let refreshRequest: Promise<void> | undefined;
   let connectionAttempt = 0, pendingPopup: Window | null = null;
-  let panel: HTMLElement | undefined, returnFocus: HTMLElement | undefined, returnFocusKey: string | undefined;
+  let preparationScrollFrame: number | undefined;
+  let panel: HTMLElement | undefined, preparationStepsElement: HTMLOListElement | undefined, returnFocus: HTMLElement | undefined, returnFocusKey: string | undefined;
   const focusStep = (element: HTMLElement) => queueMicrotask(() => { if (!disposed && element.isConnected) element.focus({ preventScroll: true }); });
   const rememberFocus = () => { if (document.activeElement instanceof HTMLElement) { returnFocus = document.activeElement; returnFocusKey = returnFocus.dataset.desktopFocus; } };
   const restoreFocus = () => queueMicrotask(() => {
@@ -145,6 +146,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   });
   onCleanup(() => {
     disposed=true;connectionAttempt++;pendingPopup?.close();setAdministratorPassword('');
+    if (preparationScrollFrame !== undefined) cancelAnimationFrame(preparationScrollFrame);
     const current=deployment();if(current)void remoteDesktopDeploymentInDesktopShell({action:'cancel',operationId:current.id}).catch(()=>{});
     clearTimeout(refreshTimer);window.removeEventListener('focus',refresh);
   });
@@ -332,26 +334,69 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     else {setDeployment({...current,phase:'connection_failed'});if(!actionError())setActionError({title:'remoteDesktop.connectionFailed',hint:stateHint()??'remoteDesktop.connectionHint'});}
   };
   const deploymentStep = () => ['authorizing','password'].includes(deploymentPhase()) ? 0 : ['preparing','confirmation','canceling','failed'].includes(deploymentPhase()) ? 1 : 2;
-  const preparationSteps: EnvAppTranslationKey[] = ['remoteDesktop.deployStepCheck', 'remoteDesktop.deployStepComponents', 'remoteDesktop.deployStepService', 'remoteDesktop.deployStepVerify'];
+  const preparationSteps: EnvAppTranslationKey[] = ['remoteDesktop.deployStepCheck', 'remoteDesktop.deployStepServicePackage', 'remoteDesktop.deployStepRuntimePackage', 'remoteDesktop.deployStepTransfer', 'remoteDesktop.deployStepComponents', 'remoteDesktop.deployStepService', 'remoteDesktop.deployStepVerify'];
   const preparationStep = () => {
+    if (deploymentProgress()?.stage === 'authorization_required') return -1;
     switch (deploymentProgress()?.stage) {
-      case undefined: case 'checking': return 0;
-      case 'transferring': case 'preparing_media': return 1;
-      case 'authorized': case 'recovering': case 'verifying_files': case 'installing_service': case 'starting_service': case 'stopping_service': return 2;
-      case 'verification_required': return 3;
-      case 'complete': return 4;
+      case undefined: case 'connecting': case 'checking': return 0;
+      case 'preparing_service_package': return 1;
+      case 'preparing_runtime_package': return 2;
+      case 'transferring': return 3;
+      case 'preparing_media': return 4;
+      case 'authorized': case 'confirmation_required': case 'recovering': case 'verifying_files': case 'installing_service': case 'starting_service': case 'stopping_service': return 5;
+      case 'verification_required': return 6;
+      case 'complete': return 7;
       default: return -1;
     }
+  };
+  createEffect(() => {
+    const activeStep = preparationStep();
+    const list = preparationStepsElement;
+    if (activeStep < 0 || !list) return;
+    if (preparationScrollFrame !== undefined) cancelAnimationFrame(preparationScrollFrame);
+    preparationScrollFrame = requestAnimationFrame(() => {
+      preparationScrollFrame = undefined;
+      if (!list.isConnected) return;
+      const active = list.querySelector<HTMLElement>('[aria-current="step"]');
+      if (!active) return;
+      const listBounds = list.getBoundingClientRect();
+      const activeBounds = active.getBoundingClientRect();
+      const top = activeBounds.top - listBounds.top + list.scrollTop;
+      const bottom = top + activeBounds.height;
+      if (top < list.scrollTop) list.scrollTop = top;
+      else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+    });
+  });
+  const measuredProgress = () => {
+    const progress = deploymentProgress();
+    const mediaDownload = progress?.stage === 'preparing_media' && (!progress.media_state || ['downloading', 'receiving'].includes(progress.media_state));
+    const packageOrUpload = (progress?.stage === 'preparing_runtime_package' || progress?.stage === 'transferring') && Boolean(progress.transfer_file && progress.transfer_kind);
+    if (!progress || (!mediaDownload && !packageOrUpload) || !progress.expected_bytes || progress.received_bytes === undefined) return undefined;
+    return { value: Math.min(progress.received_bytes, progress.expected_bytes), total: progress.expected_bytes };
+  };
+  const receivedByteTransfer = () => {
+    const progress = deploymentProgress();
+    return progress?.transfer_file !== undefined && progress.received_bytes !== undefined ? progress : undefined;
   };
   const mediaProgress = () => {
     const progress = deploymentProgress();
     if (progress?.stage !== 'preparing_media' || !progress.expected_bytes || progress.received_bytes === undefined || progress.media_state && !['downloading', 'receiving'].includes(progress.media_state)) return undefined;
     return { value: Math.min(progress.received_bytes, progress.expected_bytes), total: progress.expected_bytes };
   };
-  const preparationDetailKeys = ['deployCheckDetail', 'deployTransferDetail', 'deployMediaCheckDetail', 'deployDownloadDetail', 'deployMediaVerifyDetail', 'deployMediaInstallDetail', 'deployMediaValidateDetail', 'deployMediaPackDetail', 'deployMediaFinishingDetail', 'deployAuthorizeDetail', 'deployRecoverDetail', 'deployFilesDetail', 'deployInstallDetail', 'deployStartDetail', 'deployStopDetail', 'deployVerifyDetail', 'connectionContinuing'] as const;
+  const preparationDetailKeys = ['deployConnectingDetail', 'deployCheckDetail', 'deployServicePackageDetail', 'deployRuntimePackageDetail', 'deployRuntimeDownloadDetail', 'deployTransferDetail', 'deployServiceUploadDetail', 'deployGraphicsUploadDetail', 'deployLicenseUploadDetail', 'deployRuntimeUploadDetail', 'deployMediaCheckDetail', 'deployDownloadDetail', 'deployMediaVerifyDetail', 'deployMediaInstallDetail', 'deployMediaValidateDetail', 'deployMediaPackDetail', 'deployMediaFinishingDetail', 'deployAuthorizeDetail', 'deployRecoverDetail', 'deployFilesDetail', 'deployInstallDetail', 'deployStartDetail', 'deployStopDetail', 'deployVerifyDetail', 'connectionContinuing'] as const;
   const preparationDetail = (): EnvAppTranslationKey => {
     switch (deploymentProgress()?.stage) {
-      case 'transferring': return 'remoteDesktop.deployTransferDetail';
+      case 'connecting': return 'remoteDesktop.deployConnectingDetail';
+      case 'preparing_service_package': return 'remoteDesktop.deployServicePackageDetail';
+      case 'preparing_runtime_package': return deploymentProgress()?.received_bytes !== undefined ? 'remoteDesktop.deployRuntimeDownloadDetail' : 'remoteDesktop.deployRuntimePackageDetail';
+      case 'transferring':
+        switch (deploymentProgress()?.transfer_file) {
+          case 'service': return 'remoteDesktop.deployServiceUploadDetail';
+          case 'graphics': return 'remoteDesktop.deployGraphicsUploadDetail';
+          case 'license': return 'remoteDesktop.deployLicenseUploadDetail';
+          case 'runtime': return 'remoteDesktop.deployRuntimeUploadDetail';
+          default: return 'remoteDesktop.deployTransferDetail';
+        }
       case 'preparing_media':
         switch (deploymentProgress()?.media_state) {
           case 'available': case 'checking': return 'remoteDesktop.deployMediaCheckDetail';
@@ -379,7 +424,10 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const preparationProgressLabel = createUniqueId();
   const deploymentStageCopy = (): EnvAppTranslationKey => {
     switch (deploymentProgress()?.stage) {
+      case 'connecting': return 'remoteDesktop.deployConnectingDetail';
       case 'checking': return 'remoteDesktop.deployChecking';
+      case 'preparing_service_package': return 'remoteDesktop.deployServicePackageDetail';
+      case 'preparing_runtime_package': return 'remoteDesktop.deployRuntimePackageDetail';
       case 'preparing_media': return 'remoteDesktop.preparing';
       case 'transferring': case 'verifying_files': return 'remoteDesktop.deployTransferring';
       case 'authorization_required': case 'authorized': return 'remoteDesktop.deployAuthorizing';
@@ -503,7 +551,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
             <span>{i18n.t(key)}</span>
           </li>}</For>
         </ol>
-        <div class="remote-desktop-flow-content">
+        <div class="remote-desktop-flow-content" data-phase={deploymentPhase()}>
           <Show when={deploymentProgress()?.host}><p>{deploymentProgress()?.host} · {deploymentProgress()?.ssh_user}</p></Show>
           <Show when={deploymentPhase()==='confirmation'}><div class="remote-desktop-flow-stage" role="alert"><h4 tabIndex={-1} ref={focusStep}>{i18n.t('remoteDesktop.deployInterruptTitle')}</h4><p>{i18n.t(deploymentProgress()?.active_connections===undefined?'remoteDesktop.deployInterruptUnknown':'remoteDesktop.deployInterruptHint')}</p><div class="remote-desktop-actions"><Button onClick={()=>void respondDeployment()}>{i18n.t('remoteDesktop.deployInterruptConfirm')}</Button></div></div></Show>
 
@@ -537,8 +585,8 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
                 <div><h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t(cancelingDeployment() ? 'remoteDesktop.deployRollback' : 'remoteDesktop.installStep')}</h4></div>
               </div>
               <Show when={operation() === 'ensure' && !cancelingDeployment() && preparationStep() >= 0} fallback={<div class="remote-desktop-deployment-progress" role="status"><p>{i18n.t(deploymentStageCopy())}</p><progress aria-label={i18n.t(deploymentStageCopy())} /></div>}>
-                <ol class="remote-desktop-preparation-steps" aria-label={i18n.t('remoteDesktop.installStep')}>
-                  <For each={preparationSteps}>{(key, index) => <li data-state={index() < preparationStep() ? 'complete' : index() === preparationStep() ? 'active' : 'upcoming'} aria-current={index() === preparationStep() ? 'step' : undefined}>
+                <ol ref={preparationStepsElement} class="remote-desktop-preparation-steps" aria-label={i18n.t('remoteDesktop.installStep')} tabIndex={0}>
+                  <For each={preparationSteps}>{(key, index) => <li data-state={preparationStep() < 0 ? 'upcoming' : index() < preparationStep() ? 'complete' : index() === preparationStep() ? 'active' : 'upcoming'} aria-current={index() === preparationStep() ? 'step' : undefined}>
                     <span class="remote-desktop-preparation-marker" aria-hidden="true"><Show when={index() < preparationStep()} fallback={index() + 1}><Check size={12} /></Show></span>
                     <div class="remote-desktop-preparation-detail"><span class="remote-desktop-preparation-label">{i18n.t(key)}</span>
                     </div>
@@ -546,10 +594,10 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
                 </ol>
                 <div class="remote-desktop-preparation-current" data-floe-surface="inset">
                   <p id={preparationProgressLabel} role="status" aria-atomic="true"><StableText reserve={preparationDetails()}>{i18n.t(preparationDetail())}</StableText></p>
-                  <div class="remote-desktop-preparation-progress" role="progressbar" aria-labelledby={preparationProgressLabel} aria-valuemin={0} aria-valuemax={mediaProgress()?.total ?? 100} aria-valuenow={mediaProgress()?.value}>
-                    <LinearProgress aria-hidden="true" value={mediaProgress()?.value} max={mediaProgress()?.total ?? 100} indeterminate={!mediaProgress()} size="sm" />
+                  <div class="remote-desktop-preparation-progress" role="progressbar" aria-labelledby={preparationProgressLabel} aria-valuemin={0} aria-valuemax={measuredProgress()?.total ?? 100} aria-valuenow={measuredProgress()?.value}>
+                    <LinearProgress aria-hidden="true" value={measuredProgress()?.value} max={measuredProgress()?.total ?? 100} indeterminate={!measuredProgress()} size="sm" />
                   </div>
-                  <div class="remote-desktop-preparation-metrics"><Show when={mediaProgress()}>{progress => <div class="remote-desktop-progress-values"><span>{i18n.t('remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().value / 1000000)} / {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().total / 1000000)}</span><span>{new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(progress().value / progress().total)}</span></div>}</Show></div>
+                  <div class="remote-desktop-preparation-metrics"><Show when={measuredProgress()}>{progress => <div class="remote-desktop-progress-values"><span>{i18n.t(deploymentProgress()?.transfer_kind === 'upload' ? 'remoteDesktop.deployUploadProgress' : 'remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().value / 1000000)} / {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().total / 1000000)}</span><span>{new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(progress().value / progress().total)}</span></div>}</Show><Show when={!measuredProgress() && receivedByteTransfer()}>{progress => <span>{i18n.t(progress().transfer_kind === 'upload' ? 'remoteDesktop.deployUploadProgress' : 'remoteDesktop.deployDownloadProgress')} · {new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(progress().received_bytes! / 1000000)}</span>}</Show></div>
                 </div>
               </Show>
             </div>

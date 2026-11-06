@@ -19,7 +19,7 @@ function fixture(mode: Mode = 'nopasswd') {
         throw new Error('Admission denied'); if (mode === 'late_proof' || mode === 'duplicate_proof' || mode === 'heartbeat_loss')
         await new Promise<void>(resolve => { settleProof = resolve; }); });
     const lease = {
-        run: async (command: string) => {
+        run: async (command: string, options: { stdinData?: Buffer; onStdinProgress?: (completedBytes: number, totalBytes: number) => void } = {}) => {
             commands.push(command);
             if (mode === 'root_runtime' && command.includes('/proc/42')) return done(1);
             if (command.startsWith('uname'))
@@ -28,6 +28,7 @@ function fixture(mode: Mode = 'nopasswd') {
                 return done(0, mode === 'echo' ? 'echo; -icanon;' : '-echo; -icanon;');
             if (command.includes('mktemp'))
                 return done(0, '/tmp/redeven-desktop-ssh-AbC123\n');
+            if (command.startsWith('cat > ') && options.stdinData) options.onStdinProgress?.(options.stdinData.length, options.stdinData.length);
             return done();
         },
         stream: (command: string, options: {
@@ -133,7 +134,7 @@ function fixture(mode: Mode = 'nopasswd') {
             return { stdin, stdout, stderr, result, closed: result.then(() => { }), kill: () => {if(mode!=='hung_cancel')finish(done(1));} };
         },
     } as unknown as DesktopSSHTransportLease;
-    const run = (secret = 'ephemeral-admin', operation: DesktopDeploymentOperation = 'ensure', method: DesktopAdministratorMethod = mode === 'root' || mode === 'echo' || mode === 'root_multistage' ? 'root' : 'sudo') => manager.manage(1, { lease, runtimePID: 42, runtimeUID:mode === 'root_runtime' ? 0 : 1000, runtimeGID:mode === 'root_runtime' ? 0 : 1000, runtimeStart:'12345', runtimeSHA256:'a'.repeat(64), loadKit: async () => kit, verifyRuntime: verify }, request(operation, method), event => {
+    const run = (secret = 'ephemeral-admin', operation: DesktopDeploymentOperation = 'ensure', method: DesktopAdministratorMethod = mode === 'root' || mode === 'echo' || mode === 'root_multistage' ? 'root' : 'sudo') => manager.manage(1, { lease, runtimePID: 42, runtimeUID:mode === 'root_runtime' ? 0 : 1000, runtimeGID:mode === 'root_runtime' ? 0 : 1000, runtimeStart:'12345', runtimeSHA256:'a'.repeat(64), loadKit: async (_architecture, _signal, progress) => { progress({ stage: 'preparing_runtime_package' }); progress({ stage: 'preparing_runtime_package', transfer_file: 'runtime', transfer_kind: 'download', received_bytes: 5, expected_bytes: 10 }); return kit; }, verifyRuntime: verify }, request(operation, method), event => {
         progress.push(event);
         if (mode === 'cancel' && event.stage === 'starting_service' || mode === 'prepare_cancel' && event.stage === 'preparing_media' && event.received_bytes)
             void manager.cancel(1, operationId);
@@ -267,7 +268,24 @@ describe('SSH desktop deployment transaction', () => {
         expect(f.progress.filter(event => event.stage === 'preparing_media' && event.media_state).map(event => event.media_state)).toEqual(['downloading', 'verifying', 'installing', 'validating', 'ready']);
         expect(parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', media_state: 'untrusted-task' })).toBeUndefined();
     });
+    it('reports package preparation and real per-file SSH upload progress', async () => {
+        const f = fixture();
+        expect(await f.run()).toMatchObject({ ok: true });
+        expect(f.progress.map(event => event.stage).slice(0, 4)).toEqual(['connecting', 'checking', 'preparing_service_package', 'preparing_runtime_package']);
+        expect(f.progress).toContainEqual(expect.objectContaining({ stage: 'preparing_runtime_package', transfer_file: 'runtime', transfer_kind: 'download', received_bytes: 5, expected_bytes: 10 }));
+        expect(f.progress).toContainEqual(expect.objectContaining({ stage: 'transferring', transfer_file: 'service', transfer_kind: 'upload', received_bytes: Buffer.byteLength('reviewed-service'), expected_bytes: Buffer.byteLength('reviewed-service') }));
+    });
     it('rejects changed bytes before transfer and excludes arbitrary progress data', async () => { const f = fixture(); f.kit.files.set('desktop-drm', Buffer.from('modified-worker')); expect(await f.run()).toMatchObject({ ok: false, code: 'deployment_failed' }); expect(f.commands).toHaveLength(1); expect(parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', received_bytes: -1 })).toBeUndefined(); expect(parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'preparing_media', received_bytes: 5, secret: 'omitted' })).toEqual({ operation_id: operationId, stage: 'preparing_media', received_bytes: 5 }); });
+    it('rejects progress with invalid stages, files, directions or byte totals', () => {
+        for (const value of [
+            { stage: 'preparing_runtime_package', transfer_file: 'service', transfer_kind: 'download', received_bytes: 1 },
+            { stage: 'transferring', transfer_file: 'runtime', transfer_kind: 'download', received_bytes: 1 },
+            { stage: 'transferring', transfer_file: '../../secret', transfer_kind: 'upload', received_bytes: 1 },
+            { stage: 'transferring', transfer_file: 'runtime', transfer_kind: 'upload', received_bytes: 11, expected_bytes: 10 },
+            { stage: 'checking', received_bytes: 1, expected_bytes: 10 },
+        ]) expect(parseDesktopDeploymentProgress({ operation_id: operationId, ...value })).toBeUndefined();
+        expect(parseDesktopDeploymentProgress({ operation_id: operationId, stage: 'transferring', transfer_file: 'service', transfer_kind: 'upload', received_bytes: 1, expected_bytes: 2, host: 'host.example' })).toMatchObject({ stage: 'transferring', transfer_file: 'service', received_bytes: 1 });
+    });
     it('preserves permission and asynchronous host cancellation guards', async () => {
         const manager = new RemoteDesktopDeployment();
         expect(await manager.manage(1, async () => { throw new DesktopDeploymentPermissionError(); }, request(), () => { })).toMatchObject({ ok: false, code: 'permission_denied' });

@@ -4,6 +4,8 @@ export type DesktopDeploymentOperation = 'ensure' | 'stop' | 'uninstall';
 export type DesktopAdministratorMethod = 'sudo' | 'root';
 const mediaStates = ['available', 'checking', 'downloading', 'receiving', 'verifying', 'installing', 'validating', 'ready', 'failed', 'cancelled', 'interrupted'] as const;
 export type DesktopDeploymentMediaState = typeof mediaStates[number];
+const transferFiles = ['service', 'graphics', 'license', 'runtime'] as const;
+export type DesktopDeploymentTransferFile = typeof transferFiles[number];
 export type DesktopDeploymentRequest = {
     action: 'capabilities';
 } | {
@@ -24,8 +26,10 @@ export type DesktopDeploymentRequest = {
 };
 export type DesktopDeploymentProgress = Readonly<{
     operation_id: string;
-    stage: 'checking' | 'preparing_media' | 'transferring' | 'authorization_required' | 'authorized' | 'confirmation_required' | 'verification_required' | 'recovering' | 'verifying_files' | 'installing_service' | 'starting_service' | 'stopping_service' | 'rolling_back' | 'rolled_back' | 'complete' | 'failed';
+    stage: 'connecting' | 'checking' | 'preparing_service_package' | 'preparing_runtime_package' | 'preparing_media' | 'transferring' | 'authorization_required' | 'authorized' | 'confirmation_required' | 'verification_required' | 'recovering' | 'verifying_files' | 'installing_service' | 'starting_service' | 'stopping_service' | 'rolling_back' | 'rolled_back' | 'complete' | 'failed';
     media_state?: DesktopDeploymentMediaState;
+    transfer_file?: DesktopDeploymentTransferFile;
+    transfer_kind?: 'download' | 'upload';
     challenge_id?: string;
     policy_digest?: string;
     service_generation?: string;
@@ -36,6 +40,13 @@ export type DesktopDeploymentProgress = Readonly<{
     received_bytes?: number;
     expected_bytes?: number;
     rollback?: 'complete' | 'failed';
+}>;
+export type DesktopDeploymentPackageProgress = Readonly<{
+    stage: 'preparing_service_package' | 'preparing_runtime_package';
+    transfer_file?: 'runtime';
+    transfer_kind?: 'download';
+    received_bytes?: number;
+    expected_bytes?: number;
 }>;
 export type DesktopDeploymentResult = Readonly<{
     ok: boolean;
@@ -76,16 +87,33 @@ export function parseDesktopDeploymentProgress(value: unknown): DesktopDeploymen
     if (!value || typeof value !== 'object')
         return;
     const event = value as DesktopDeploymentProgress;
-    if (!identifier(event.operation_id) || !['checking', 'preparing_media', 'transferring', 'authorization_required', 'authorized', 'confirmation_required', 'verification_required', 'recovering', 'verifying_files', 'installing_service', 'starting_service', 'stopping_service', 'rolling_back', 'rolled_back', 'complete', 'failed'].includes(event.stage))
+    if (!identifier(event.operation_id) || !['connecting', 'checking', 'preparing_service_package', 'preparing_runtime_package', 'preparing_media', 'transferring', 'authorization_required', 'authorized', 'confirmation_required', 'verification_required', 'recovering', 'verifying_files', 'installing_service', 'starting_service', 'stopping_service', 'rolling_back', 'rolled_back', 'complete', 'failed'].includes(event.stage))
         return;
     if (event.rollback !== undefined && !['complete', 'failed'].includes(event.rollback))
         return;
     if (event.media_state !== undefined && (event.stage !== 'preparing_media' || !mediaStates.includes(event.media_state)))
         return;
+    if (event.transfer_file !== undefined && (!transferFiles.includes(event.transfer_file)
+        || event.stage === 'preparing_runtime_package' && event.transfer_file !== 'runtime'
+        || event.stage !== 'preparing_runtime_package' && event.stage !== 'transferring'))
+        return;
+    if (event.transfer_kind !== undefined && (event.stage === 'preparing_runtime_package' && event.transfer_kind !== 'download'
+        || event.stage === 'transferring' && event.transfer_kind !== 'upload'
+        || event.stage !== 'preparing_runtime_package' && event.stage !== 'transferring'))
+        return;
+    if ((event.transfer_file === undefined) !== (event.transfer_kind === undefined))
+        return;
     for (const key of ['received_bytes', 'expected_bytes', 'active_connections'] as const) {
         if (event[key] !== undefined && (!Number.isSafeInteger(event[key]) || Number(event[key]) < 0 || Number(event[key]) > 2 ** 32))
             return;
     }
+    if (event.transfer_file !== undefined && event.received_bytes === undefined)
+        return;
+    if (event.received_bytes !== undefined && event.expected_bytes !== undefined && event.received_bytes > event.expected_bytes)
+        return;
+    if ((event.received_bytes !== undefined || event.expected_bytes !== undefined)
+        && event.stage !== 'preparing_media' && event.transfer_file === undefined)
+        return;
     if (event.challenge_id !== undefined && !identifier(event.challenge_id))
         return;
     if (event.policy_digest !== undefined && !/^[a-f0-9]{64}$/u.test(event.policy_digest))
@@ -99,6 +127,7 @@ export function parseDesktopDeploymentProgress(value: unknown): DesktopDeploymen
             return;
     return { operation_id: event.operation_id, stage: event.stage,
         ...(event.media_state ? { media_state: event.media_state } : {}),
+        ...(event.transfer_file ? { transfer_file: event.transfer_file } : {}), ...(event.transfer_kind ? { transfer_kind: event.transfer_kind } : {}),
         ...(event.administrator_method ? { administrator_method: event.administrator_method } : {}), ...(event.host ? { host: event.host } : {}), ...(event.ssh_user ? { ssh_user: event.ssh_user } : {}),
         ...(event.challenge_id ? { challenge_id: event.challenge_id } : {}), ...(event.policy_digest ? { policy_digest: event.policy_digest } : {}),
         ...(event.service_generation ? { service_generation: event.service_generation } : {}), ...(event.active_connections !== undefined ? { active_connections: event.active_connections } : {}),

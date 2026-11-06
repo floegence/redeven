@@ -139,7 +139,14 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   await expect.poll(() => dialog.querySelector('.remote-desktop-preparation-steps')).toBeTruthy();
   expect(dialog.textContent).toContain('25%');
   const progress = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-progress')!;
+  const stepsList = dialog.querySelector<HTMLOListElement>('.remote-desktop-preparation-steps')!;
   const marker = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps [data-state=active] .remote-desktop-preparation-marker')!;
+  expect(marker.getBoundingClientRect().width).toBe(14);
+  expect(marker.closest('li')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(26);
+  expect(stepsList.clientHeight).toBeLessThanOrEqual(128);
+  expect(stepsList.scrollHeight).toBeGreaterThan(stepsList.clientHeight);
+  expect(stepsList.tabIndex).toBe(0);
+  expect(dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!.getBoundingClientRect().height).toBe(340);
   expect(getComputedStyle(marker, '::before').animationName).toBe('none');
   expect(dialog.querySelector('.remote-desktop-flow-spinner, [data-floe-progress-shimmer]')).toBeNull();
   expect(getComputedStyle(progress.querySelector('[data-floe-surface-part=progress-fill]')!, '::after').animationName).toBe('none');
@@ -149,7 +156,7 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   const content = dialog.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
   const metrics = dialog.querySelector<HTMLElement>('.remote-desktop-progress-values')!;
   expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom);
-  expect(dialog.querySelector<HTMLElement>('.remote-desktop-preparation-current')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom);
+  expect(dialog.querySelector<HTMLElement>('.remote-desktop-preparation-current')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(content.getBoundingClientRect().bottom + 1);
   const cancel = dialog.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:first-child')!;
   cancel.focus();
   await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.effect?.getTiming().iterations !== Infinity).length).toBe(0);
@@ -170,7 +177,12 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-preparation-pack-${width}.png` });
   report({ stage: 'starting_service' });
   expect(dialog.textContent).toContain(copy.t('remoteDesktop.deployStartDetail'));
-  expect([...dialog.querySelectorAll<HTMLElement>('.remote-desktop-preparation-steps li')].map(row => row.dataset.state)).toEqual(['complete', 'complete', 'active', 'upcoming']);
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  expect([...dialog.querySelectorAll<HTMLElement>('.remote-desktop-preparation-steps li')].map(row => row.dataset.state)).toEqual(['complete', 'complete', 'complete', 'complete', 'complete', 'active', 'upcoming']);
+  const finalVisibleStep = stepsList.getBoundingClientRect();
+  const activeStep = stepsList.querySelector<HTMLElement>('[aria-current="step"]')!.getBoundingClientRect();
+  expect(activeStep.top).toBeGreaterThanOrEqual(finalVisibleStep.top);
+  expect(activeStep.bottom).toBeLessThanOrEqual(finalVisibleStep.bottom + 1);
   expect(document.activeElement).toBe(cancel);
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   expect((await axe.run(dialog, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
@@ -183,6 +195,31 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
     expect(getComputedStyle(dialog.querySelector('.animate-indeterminate')!).animationName).toBe('none');
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
   }
+  finish({ ok: false, code: 'canceled' });
+});
+
+it('keeps the preparation dialog compact on a short viewport', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation((request: { action: string }) => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : new Promise(resolve => { finish = resolve; }));
+  const { dialog, copy } = await launch(320);
+  await page.viewport(320, 580);
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.connect'), exact: true }));
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  await expect.poll(() => state.deployment.mock.calls.some(([request]) => request.action === 'manage')).toBe(true);
+  const request = state.deployment.mock.calls.find(([value]) => value.action === 'manage')![0];
+  state.progress.mock.calls[0][0]({ operation_id: request.operationId, stage: 'preparing_runtime_package', transfer_file: 'runtime', transfer_kind: 'download', received_bytes: 2500000 });
+  await expect.poll(() => dialog.querySelector('.remote-desktop-preparation-steps')).toBeTruthy();
+  const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+  const steps = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-steps')!;
+  const metrics = dialog.querySelector<HTMLElement>('.remote-desktop-preparation-metrics')!;
+  const cancel = dialog.querySelector<HTMLElement>('.remote-desktop-flow-footer > button:first-child')!;
+  expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(580);
+  expect(steps.clientHeight).toBeLessThanOrEqual(105);
+  expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
+  expect(cancel.getBoundingClientRect().bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   finish({ ok: false, code: 'canceled' });
 });
 

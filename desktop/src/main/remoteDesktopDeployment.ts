@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DesktopSSHTransportLease } from './sshTransportManager';
-import { parseDesktopDeploymentProgress, type DesktopAdministratorMethod, type DesktopDeploymentRequest, type DesktopDeploymentOperation, type DesktopDeploymentProgress, type DesktopDeploymentResult } from '../shared/remoteDesktopDeployment';
+import { parseDesktopDeploymentProgress, type DesktopAdministratorMethod, type DesktopDeploymentPackageProgress, type DesktopDeploymentRequest, type DesktopDeploymentOperation, type DesktopDeploymentProgress, type DesktopDeploymentResult, type DesktopDeploymentTransferFile } from '../shared/remoteDesktopDeployment';
 export type DesktopServiceKit = Readonly<{
     files: ReadonlyMap<string, Buffer>;
     serviceSHA256: string;
@@ -14,7 +14,7 @@ export type DesktopDeploymentHost = Readonly<{
     runtimeStart: string;
     runtimeSHA256: string;
     verifyRuntime: (operationId: string, challengeId: string, policyDigest: string, signal: AbortSignal) => Promise<void>;
-    loadKit: (architecture: 'amd64' | 'arm64', signal: AbortSignal) => Promise<DesktopServiceKit>;
+    loadKit: (architecture: 'amd64' | 'arm64', signal: AbortSignal, progress: (event: DesktopDeploymentPackageProgress) => void) => Promise<DesktopServiceKit>;
 }>;
 type DesktopDeploymentHostSource = DesktopDeploymentHost | ((signal: AbortSignal) => Promise<DesktopDeploymentHost>);
 export class DesktopDeploymentPermissionError extends Error {
@@ -98,9 +98,10 @@ export class RemoteDesktopDeployment {
         let rollback: DesktopDeploymentResult['rollback'];
         let host: DesktopDeploymentHost | undefined;
         try {
-            report({ stage: 'checking' });
+            report({ stage: 'connecting' });
             host = typeof source === 'function' ? await source(signal) : source;
             signal.throwIfAborted();
+            report({ stage: 'checking' });
             if (!Number.isSafeInteger(host.runtimePID) || host.runtimePID <= 0)
                 return { ok: false, code: 'invalid_request' };
             // Identity comes from the authenticated live Runtime, never renderer
@@ -118,7 +119,12 @@ export class RemoteDesktopDeployment {
                 return { ok: false, code: 'unsupported_target' };
             if (!Number.isSafeInteger(runtimeUID) || runtimeUID < 0 || runtimeUID > 2 ** 32 - 1 || !Number.isSafeInteger(runtimeGID) || runtimeGID < 0 || runtimeGID > 2 ** 32 - 1)
                 return { ok: false, code: 'unsupported_target' };
-            const kit = await host.loadKit(architecture, signal);
+            report({ stage: 'preparing_service_package' });
+            const kit = await host.loadKit(architecture, signal, event => {
+                const parsed = parseDesktopDeploymentProgress({ operation_id: operationId, ...event });
+                if (parsed)
+                    report(parsed);
+            });
             if (!sha256.test(kit.serviceSHA256) || !sha256.test(kit.workerSHA256)
                 || digest(kit.files.get('floe-host-desktop-service') ?? Buffer.alloc(0)) !== kit.serviceSHA256
                 || digest(kit.files.get('desktop-drm') ?? Buffer.alloc(0)) !== kit.workerSHA256)
@@ -129,12 +135,24 @@ export class RemoteDesktopDeployment {
                 directory = '';
                 return { ok: false, code: 'deployment_failed' };
             }
-            report({ stage: 'transferring' });
+            const transferFiles: Readonly<Record<string, DesktopDeploymentTransferFile>> = {
+                'floe-host-desktop-service': 'service', 'desktop-drm': 'graphics', 'libdrmtap.LICENSE': 'license', redeven: 'runtime',
+            };
             for (const name of ['floe-host-desktop-service', 'desktop-drm', 'libdrmtap.LICENSE', ...(operation === 'ensure' ? ['redeven'] : [])]) {
                 const data = kit.files.get(name);
                 if (!data || data.length === 0 || data.length > (name === 'redeven' ? 512 << 20 : 128 << 20))
                     return { ok: false, code: 'deployment_failed' };
-                const uploaded = await host.lease.run(`cat > ${quote(`${directory}/${name}`)}`, { stdinData: data, signal, timeout_ms: 20 * 60000, stdin_progress_timeout_ms: 30000 });
+                const transferFile = transferFiles[name];
+                report({ stage: 'transferring' });
+                let lastTransferReportAt = 0, lastTransferBytes = -1;
+                const uploaded = await host.lease.run(`cat > ${quote(`${directory}/${name}`)}`, { stdinData: data, signal, timeout_ms: 20 * 60000, stdin_progress_timeout_ms: 30000, onStdinProgress: (receivedBytes, expectedBytes) => {
+                    const now = Date.now();
+                    if (receivedBytes !== lastTransferBytes && (receivedBytes === 0 || receivedBytes === expectedBytes || now - lastTransferReportAt >= 200)) {
+                        lastTransferReportAt = now;
+                        lastTransferBytes = receivedBytes;
+                        report({ stage: 'transferring', transfer_file: transferFile, transfer_kind: 'upload', received_bytes: receivedBytes, expected_bytes: expectedBytes });
+                    }
+                } });
                 if (uploaded.exit_code !== 0)
                     return { ok: false, code: 'deployment_failed' };
             }

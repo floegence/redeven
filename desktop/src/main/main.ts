@@ -20129,16 +20129,26 @@ if (!app.requestSingleInstanceLock()) {
           sshPassword: saved?.ssh_password_configured ? saved.ssh_password : undefined, signal });
         return { lease, runtimePID: Number(authority?.runtimePID), runtimeUID: Number(authority?.runtimeUID), runtimeGID: Number(authority?.runtimeGID), runtimeStart: authority?.runtimeStart ?? '', runtimeSHA256: authority?.runtimeSHA256 ?? '',
           verifyRuntime: async (_operationId, challengeId, policyDigest, signal) => { await audit('verify', undefined, undefined, signal, {challenge_id:challengeId,policy_digest:policyDigest}); },
-          loadKit: async (architecture, signal) => {
+          loadKit: async (architecture, signal, reportPackageProgress) => {
             const kit = await loadDesktopServiceKit(bundledRuntimeExecutablePath(), architecture, signal);
             if (request.operation !== 'ensure') return kit;
+            reportPackageProgress({ stage: 'preparing_runtime_package' });
+            let lastRuntimeProgressAt = 0;
             const asset = await prepareDesktopRuntimeUploadAsset({
               runtimeReleaseTag: resolveSSHRuntimeReleaseTag(), releaseBaseURL: target.release_base_url,
               assetCacheRoot: desktopRuntimePackageCacheRoot(),
               sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
               platform: resolveDesktopSSHRemotePlatform('Linux', architecture === 'amd64' ? 'x86_64' : 'aarch64'),
               fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal), signal,
+              onDownloadProgress: progress => {
+                const now = Date.now();
+                if (progress.completed_bytes !== undefined && (now - lastRuntimeProgressAt >= 200 || progress.total_bytes !== undefined && progress.completed_bytes >= progress.total_bytes)) {
+                  lastRuntimeProgressAt = now;
+                  reportPackageProgress({ stage: 'preparing_runtime_package', transfer_file: 'runtime', transfer_kind: 'download', received_bytes: progress.completed_bytes, ...(progress.total_bytes !== undefined ? { expected_bytes: progress.total_bytes } : {}) });
+                }
+              },
             });
+            reportPackageProgress({ stage: 'preparing_runtime_package' });
             return {...kit, files:new Map([...kit.files, ['redeven', runtimeExecutableFromArchive(asset.archiveData)]])};
           } };
       }, request, progress => {
