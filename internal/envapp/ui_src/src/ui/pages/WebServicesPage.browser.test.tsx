@@ -90,6 +90,78 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => host.querySelectorAll('[data-testid="managed-service-row"]').length).toBe(records.filter((item) => item.management_state === 'active').length);
     await settle();
   }
+  for (const [width, preset, locale, reducedMotion] of [
+    [1120, 'classic-light', 'en-US', false], [360, 'classic-dark', 'zh-CN', true],
+    [480, 'classic-light', 'de-DE', false], [1120, 'classic-dark', 'zh-TW', false],
+  ] as const) it(`hands installation from the real drawer to the list at ${width} in ${preset} ${locale}`, async () => {
+    localStorage.setItem('redeven_ui_language_preference', locale);
+    await media.emulateMediaPreferences({reducedMotion: reducedMotion ? 'reduce' : 'no-preference'});
+    const template = {
+      template_id: 'handoff-template', service_family_id: 'handoff-template', name: 'Handoff dashboard', description: 'Dashboard service', source: 'custom', deployment: 'host', revision: 1,
+      duplicateable: true, editable: true, available: true, developer_preview: false, notices: [], deployments: [{deployment: 'host', available: true}],
+      default_workspace_path: '/Users/demo/Services/handoff', workspace_roots: [{id: 'home', label: 'Home', path: '/Users/demo'}],
+      spec: {schema_version: 7, kind: 'host', endpoint: {scheme: 'http'}, host: {start_script: 'exec true'}},
+    };
+    const operation: ManagedOperation = {operation_id: 'install-browser', service_id: 'install-browser-service', action: 'install', state: 'running', stage: 'release_validation', progress_current: 0, progress_total: 7};
+    let resolveReceipt!: (value: unknown) => void;
+    let installed = false;
+    let admitted = false;
+    let resolveCollection!: (value: unknown) => void;
+    const collection = new Promise(resolve => { resolveCollection = resolve; });
+    const receipt = new Promise(resolve => { resolveReceipt = resolve; });
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const normalFetch = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/catalog')) return {templates: [template]};
+      if (url.endsWith('/install-plans')) return {service_id: operation.service_id, expires_at_unix_ms: Date.now() + 60000, plan_digest: 'reviewed-install', workspace_path: template.default_workspace_path + '/instance'};
+      if (url.endsWith('/managed-web-services') && options?.method === 'POST') return receipt;
+      if (url.endsWith('/managed-web-services')) { if (admitted && !installed) return collection; return {services: records}; }
+      return normalFetch(url, options);
+    });
+    api.stream.mockImplementation(async () => new Response(new ReadableStream({start(controller) { streamController = controller; controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(operation)}\n\n`)); }}), {headers: {'Content-Type': 'text/event-stream'}}));
+    await mount(width, preset);
+    const search = host.querySelector<HTMLInputElement>('[data-testid="web-services-search"] input');
+    if (search) { search.value = 'unrelated filter'; search.dispatchEvent(new Event('input', {bubbles: true})); }
+    await userEvent.click(page.getByTestId('service-templates-button'));
+    await expect.poll(() => document.querySelector('[data-testid="service-template-primary"]')).toBeTruthy();
+    await userEvent.click(page.getByTestId('service-template-primary'));
+    const submit = document.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]');
+    expect(submit).toBeTruthy();
+    await userEvent.click(page.elementLocator(submit!));
+    await expect.poll(() => api.fetch.mock.calls.some(([url]) => String(url).endsWith('/install-plans'))).toBe(true);
+    await settle();
+    const startedAt = performance.now();
+    await userEvent.click(page.elementLocator(submit!));
+    await expect.poll(() => host.querySelector('[data-testid="managed-install-submission"]')).toBeTruthy();
+    expect(performance.now() - startedAt).toBeLessThan(1000);
+    await expect.poll(() => document.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
+    expect(document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    expect(search?.value ?? '').toBe('');
+    const pendingRow = host.querySelector<HTMLElement>('[data-testid="managed-install-submission"]')!;
+    await expect.poll(() => pendingRow.contains(document.activeElement)).toBe(true);
+    admitted = true;
+    resolveReceipt({service: {service_id: operation.service_id, template_id: template.template_id, workspace_path: template.default_workspace_path + '/instance', observed_state: 'installing'}, operation});
+    await expect.poll(() => pendingRow.querySelector('[aria-expanded]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="managed-install-submission"]')).toBe(pendingRow);
+    await userEvent.click(page.elementLocator(pendingRow.querySelector<HTMLButtonElement>('[aria-expanded]')!));
+    expect(pendingRow.querySelector('[data-testid="managed-operation-disclosure"]')).toBeTruthy();
+    assertLayout();
+    const directory = (import.meta as unknown as { env: Record<string, string> }).env.VITE_REDEVEN_MANAGEMENT_EVIDENCE_DIR;
+    if (directory) await page.screenshot({path: `${directory}/install-handoff-${width}-${preset}-${locale}.png`});
+    installed = true;
+    resolveCollection({services: [...records, {...base, service_id: operation.service_id, template_id: template.template_id, name: template.name, observed_state: 'installing', status: 'installing', active_operation: operation}]});
+    await expect.poll(() => host.querySelector(`[data-testid="managed-service-row"][data-managed-service-id="${operation.service_id}"]`)).toBeTruthy();
+    expect(host.querySelector('[data-testid="managed-install-submission"]')).toBeNull();
+    const row = host.querySelector(`[data-managed-service-id="${operation.service_id}"]`)!;
+    expect(row.querySelector('[aria-expanded="true"]')).toBeTruthy();
+    await expect.poll(() => row.contains(document.activeElement)).toBe(true);
+    expect(api.fetch.mock.calls.filter(([url, init]) => String(url).endsWith('/managed-web-services') && init?.method === 'POST')).toHaveLength(1);
+    expect(api.open).not.toHaveBeenCalled();
+    streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({...operation, state: 'succeeded', stage: 'completed', progress_current: 7})}\n\n`));
+    streamController?.close();
+    await expect.poll(() => { assertLayout(); return true; }).toBe(true);
+  });
+
   it('keeps the compact collection flush with its list region', async () => {
     await mount();
     const list = host.querySelector('[data-testid="unified-web-services-list"]')!;

@@ -448,9 +448,22 @@ func TestOCIRecommendationKeepsVerifiedDigestSelectableWhenItsTagDisappears(t *t
 	if selected.Identity.Tag != "recommended" || selected.Identity.Digest != digest || selected.Identity.ArtifactReference != host+"/team/webtop:recommended@"+digest {
 		t.Fatalf("selected fixed identity = %+v", selected.Identity)
 	}
+	// The persisted explicit-digest choice must survive loss of the browse cache.
+	selected.Identity.DigestVerified = selected.Candidate.DigestVerified
+	raw, hash, err := canonicalReleaseIdentity(selected.Identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := decodeReleaseIdentity(raw, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.verifyInstallRelease(context.Background(), &pfregistry.ManagedService{}, &resolvedRuntime{Spec: selected.Spec, Release: *persisted}); err != nil {
+		t.Fatalf("explicit digest install rechecked missing tag: %v", err)
+	}
 }
 
-func TestEnsureDefaultReleaseAvailableRejectsAStaleBuiltinOCIRecommendation(t *testing.T) {
+func TestInstallReleaseValidationRejectsAStaleBuiltinOCIRecommendation(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/v2/team/webtop/manifests/recommended" {
 			t.Fatalf("unexpected Registry request %s", request.URL)
@@ -466,10 +479,10 @@ func TestEnsureDefaultReleaseAvailableRejectsAStaleBuiltinOCIRecommendation(t *t
 		Spec:               &TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: host + "/team/webtop:recommended@" + digest}},
 		RecommendedRelease: &ReleaseIdentity{SchemaVersion: 1, Kind: "oci", Source: host + "/team/webtop", Tag: "recommended", Digest: digest},
 	}
-	if err := manager.ensureDefaultReleaseAvailable(context.Background(), template, nil); err == nil {
+	if err := manager.verifyInstallRelease(context.Background(), &pfregistry.ManagedService{}, &resolvedRuntime{Spec: *template.Spec, Release: *template.RecommendedRelease}); err == nil {
 		t.Fatal("stale built-in recommendation was accepted")
-	} else if code, _, _, retryable := ErrorDetails(err); code != "RECOMMENDED_RELEASE_UNAVAILABLE" || !retryable {
-		t.Fatalf("error = (%q, retryable=%t), want RECOMMENDED_RELEASE_UNAVAILABLE", code, retryable)
+	} else if code, _, _, retryable := ErrorDetails(err); code != "RELEASE_CANDIDATE_CHANGED" || !retryable {
+		t.Fatalf("error = (%q, retryable=%t), want RELEASE_CANDIDATE_CHANGED", code, retryable)
 	}
 }
 

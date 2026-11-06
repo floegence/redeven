@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Services
 tags: [architecture, web-services, runtime, containers, security]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -15,6 +15,9 @@ Redeven owns instances/resources/bindings/operations/forwards; verified template
 - RuntimeBinding v2/SHA-256 binds Host paths, Container name or Compose project/root. [Opening](managed-web-service-opening.md) separates entrance failure from health.
 - ServiceView actions/status/primary action own presentation; old errors cannot disable healthy instances. [Recovery](service-management-recovery.md#management-recovery) owns explicit actions.
 - portforward_registry_v2 schema 6 preserves v1 lineage: template/configuration/release/binding/digest, workspace/resources, desired/observed state, protected Forward/artifact/failures; no template snapshots/revisions/duplicate deployment. Schema 2 added ordinary-forward paths; managed open-session follows [session policy](web-service-browser-sessions.md#browser-sessions).
+
+## Install admission
+Preflight and Create inspect local template/input, notice, family, workspace and reviewed-plan contracts only. Create atomically persists service/forward/operation and returns 202 without Registry requests or Docker probes under the request lock. The operation begins at `release_validation`, verifies its persisted exact selection, then performs `environment_check` and runtime work. Failure/cancellation remains queryable before any workspace or runtime creation. GET `managed-web-services/install-requests/{request_id}` requires lifecycle permissions, is uncached and returns the durable receipt or null without executing work.
 
 ## Host release application
 Update installs/verifies, resolves final installed metadata into one digest, replaces the process and health-checks before commit. Launch/journal/registry share the final digest; enriched trust creates no false pending changes. Originally stopped services return to stopped after verification. Failure retains rollback/recovery.
@@ -31,3 +34,6 @@ No built-in service identities, copy, assets, commands or application-specific a
 - `redeven:internal/managedwebservice/host_update_identity_test.go` - Reproduces stale digest; verifies running/stopped intent.
 - `redeven:internal/managedwebservice/host_update_native_test.go` - Real process replacement, health, persisted identity, ready Open and cleanup. Install boundary is deterministic; no live npm qualification.
 - `redeven:internal/managedwebservice/image_pull_docker_integration_test.go` - Opt-in `REDEVEN_IMAGE_PULL_DOCKER_TEST=1` starts a task-owned Docker-in-Docker daemon and throttled local registry with two unique layers. Verifies measured bytes/rate, persisted command/output, pinned cache and missing-image errors; removes only its daemon and volumes. Requires cached `docker:29-dind` and Desktop host networking. `REDEVEN_IMAGE_PULL_EVIDENCE` optionally exports the running operation for UI qualification.
+
+- `redeven:internal/managedwebservice/install_admission_test.go` - Blocked Registry/Docker admission, changed identity, idempotent receipt and family exclusion.
+- `redeven:internal/managedwebservice/install_native_test.go` - Default-release verification/enrichment, real Host process and health, ready Open, matching persisted/run digests and process cleanup; package installation is deterministic.

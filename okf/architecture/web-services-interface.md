@@ -3,7 +3,7 @@ type: UI Contract
 title: Web Services interface
 tags: [architecture, ui, desktop, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -24,6 +24,9 @@ One drawer shows conclusion, compact resources and recommended actions. New know
 Template categories use published Floe Tabs with paired selection colors, roving keyboard focus and a labelled panel. Product styles never override tab ink. Template lists use compact rounded rows with source groups; the wider detail pane keeps deployment facts, runtime details and actions together. Dropdown wrappers own the sole focus target and disabled state.
 
 Both template and installed-service versions use the same bounded directory/detail workspace. Rows emphasize version and state; the selected detail owns trust, source, platform and expandable artifact identity. Current releases retain useful provenance. Narrow layouts stack independently scrollable panes, while request feedback and submission remain outside the list. Refresh and verification preserve selection, focus, scroll and footer geometry. Confirmation, stop-first and update authorization remain unchanged. Selection motion is brief and local; reduced motion removes travel.
+
+## Installation feedback
+Final install returns immediately to the active collection with an appended submission row and accessible status focus, while admission runs independently. The accepted operation supplies version validation, environment checks and deployment progress even before a full list response. Search/archive filters cannot hide the new submission. Status explicitly opens execution details; completion does not force another drawer. Rejected requests support safe fresh review, uncertain responses support receipt lookup, and accepted failures use existing service recovery. See [operation progress](managed-service-operation-progress.md#install-admission-and-handoff).
 
 ## Execution feedback
 Execution details keep one bounded command/output viewport. Downloaded bytes remain visible when the total is unknown; unknown totals keep the byte bar indeterminate. Speed is shown once measured bytes are available, while fully cached pulls show zero transfer. Layer counts remain separate. New output does not expand the panel or move a reader away from earlier lines.

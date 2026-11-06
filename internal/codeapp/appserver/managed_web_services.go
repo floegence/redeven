@@ -55,6 +55,23 @@ func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Requ
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"services": services}})
 		return true
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, managedServicesAPIBase+"/install-requests/"):
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		backend, ok := g.managed.(managedwebservice.InstallRequestBackend)
+		if !ok {
+			writeJSON(w, http.StatusNotImplemented, apiResp{OK: false, Error: "installation receipts are unavailable", ErrorCode: "INSTALL_RECEIPT_UNAVAILABLE"})
+			return true
+		}
+		receipt, err := backend.InstallRequest(r.Context(), strings.TrimPrefix(r.URL.Path, managedServicesAPIBase+"/install-requests/"))
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"receipt": receipt}})
+		return true
 	case r.Method == http.MethodPost && r.URL.Path == managedServicesAPIBase+"/install-plans":
 		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
 			return true

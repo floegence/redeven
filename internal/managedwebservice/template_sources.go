@@ -201,6 +201,10 @@ func sourceRecord(snapshot templatecontract.Snapshot, parsed *templatecontract.T
 }
 
 func (m *Manager) sourceTemplate(ctx context.Context, source pfregistry.ManagedTemplateSource, parsed *templatecontract.Template) (*Template, error) {
+	return m.sourceTemplateWithAvailability(ctx, source, parsed, true)
+}
+
+func (m *Manager) sourceTemplateWithAvailability(ctx context.Context, source pfregistry.ManagedTemplateSource, parsed *templatecontract.Template, probeRuntime bool) (*Template, error) {
 	platform := runtime.GOOS + "-" + runtime.GOARCH
 	if parsed.Spec.Kind != DeploymentHost {
 		platform = "linux-" + runtime.GOARCH
@@ -223,7 +227,7 @@ func (m *Manager) sourceTemplate(ctx context.Context, source pfregistry.ManagedT
 	if err != nil {
 		return nil, err
 	}
-	available, code, reason := m.customTemplateAvailability(ctx, spec.Kind)
+	available, code, reason := m.templateAvailability(ctx, spec.Kind, probeRuntime)
 	doc := parsed.Document
 	access := doc.DefaultAccessMode
 	if access == "" {
@@ -244,6 +248,10 @@ func (m *Manager) sourceTemplate(ctx context.Context, source pfregistry.ManagedT
 }
 
 func (m *Manager) readSourceTemplate(ctx context.Context, source pfregistry.ManagedTemplateSource) (*Template, []templatecontract.File, error) {
+	return m.readSourceTemplateWithAvailability(ctx, source, true)
+}
+
+func (m *Manager) readSourceTemplateWithAvailability(ctx context.Context, source pfregistry.ManagedTemplateSource, probeRuntime bool) (*Template, []templatecontract.File, error) {
 	m.templateSourceMu.RLock()
 	defer m.templateSourceMu.RUnlock()
 	directory, err := m.sourceDirectory(source)
@@ -261,7 +269,7 @@ func (m *Manager) readSourceTemplate(ctx context.Context, source pfregistry.Mana
 	if parsed.SHA256 != source.SHA256 || parsed.Document.TemplateID != source.DocumentTemplateID || parsed.Document.ServiceFamilyID != source.DocumentFamilyID || string(parsed.Spec.Kind) != source.Deployment {
 		return nil, nil, serviceError("TEMPLATE_SOURCE_DIGEST_MISMATCH", "The saved template source changed outside its reviewed update. Its original definition must be restored.", 409, false, nil)
 	}
-	result, err := m.sourceTemplate(ctx, source, parsed)
+	result, err := m.sourceTemplateWithAvailability(ctx, source, parsed, probeRuntime)
 	if err == nil {
 		result.SourceRuntimeSHA256 = templateRuntimeFilesDigest(files)
 	}

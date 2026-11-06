@@ -4676,7 +4676,8 @@
         "completed": "Completado",
         "cancelled": "Cancelado",
         "interrupted": "Interrumpido",
-        "failed": "Error"
+        "failed": "Error",
+        "releaseValidation": "Verificando versión"
       },
       "unavailable": {
         "platform": "La instalación directa admite Linux y macOS en x64 y arm64.",
@@ -4684,7 +4685,12 @@
         "nestedDocker": "El despliegue con Docker está deshabilitado porque este entorno ya se ejecuta en un contenedor.",
         "docker": "Docker no está disponible o no se puede acceder a su demonio.",
         "compose": "Docker Compose no está disponible en este entorno."
-      }
+      },
+      "installSubmissionFailed": "Error en la solicitud de instalación",
+      "installSubmissionUnknown": "Estado del envío desconocido",
+      "installSubmissionUnknownDetail": "No se pudo confirmar el envío. Comprueba su estado antes de volver a intentarlo.",
+      "installReviewAgain": "Revisar instalación",
+      "installCheckStatus": "Comprobar estado"
     },
     "errors": {
       "loadFailedPrefix": "No se pudieron cargar los servicios web",

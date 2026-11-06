@@ -4676,7 +4676,8 @@
         "completed": "已完成",
         "cancelled": "已取消",
         "interrupted": "已中斷",
-        "failed": "失敗"
+        "failed": "失敗",
+        "releaseValidation": "正在驗證版本"
       },
       "unavailable": {
         "platform": "直接安裝支援 Linux 和 macOS 的 x64、arm64 架構。",
@@ -4684,7 +4685,12 @@
         "nestedDocker": "目前環境已在容器內執行，因此無法使用 Docker 部署。",
         "docker": "Docker 無法使用，或無法連線至其常駐程式。",
         "compose": "目前環境中沒有可用的 Docker Compose。"
-      }
+      },
+      "installSubmissionFailed": "安裝請求失敗",
+      "installSubmissionUnknown": "提交結果待確認",
+      "installSubmissionUnknownDetail": "目前無法確認提交結果。請先檢查狀態，再決定後續操作。",
+      "installReviewAgain": "重新檢視安裝",
+      "installCheckStatus": "檢查狀態"
     },
     "errors": {
       "loadFailedPrefix": "載入 Web 服務失敗",

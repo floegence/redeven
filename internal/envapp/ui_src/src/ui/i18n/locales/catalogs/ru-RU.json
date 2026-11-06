@@ -4766,7 +4766,8 @@
         "completed": "Завершено",
         "cancelled": "Отменено",
         "interrupted": "Прервано",
-        "failed": "Ошибка"
+        "failed": "Ошибка",
+        "releaseValidation": "Проверка версии"
       },
       "unavailable": {
         "platform": "Прямая установка поддерживает Linux и macOS на x64 и arm64.",
@@ -4774,7 +4775,12 @@
         "nestedDocker": "Развертывание Docker отключено, поскольку эта среда уже работает внутри контейнера.",
         "docker": "Docker недоступен или не удается подключиться к его службе.",
         "compose": "Docker Compose недоступен в текущей среде."
-      }
+      },
+      "installSubmissionFailed": "Ошибка запроса на установку",
+      "installSubmissionUnknown": "Результат отправки неизвестен",
+      "installSubmissionUnknownDetail": "Не удалось подтвердить отправку. Проверьте статус перед повторной попыткой.",
+      "installReviewAgain": "Проверить установку",
+      "installCheckStatus": "Проверить статус"
     },
     "errors": {
       "loadFailedPrefix": "Не удалось загрузить веб-службы",

@@ -42,7 +42,7 @@ func (m *Manager) resolveRuntimeDefinition(ctx context.Context, service *pfregis
 	if service == nil {
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
-	template, err := m.Template(ctx, service.TemplateID)
+	template, err := m.template(ctx, service.TemplateID, false)
 	if err != nil {
 		return nil, err
 	}

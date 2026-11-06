@@ -32,7 +32,7 @@ func installRequestFingerprint(req CreateRequest) string {
 }
 
 func (m *Manager) PreflightInstall(ctx context.Context, req CreateRequest) (*InstallPlan, error) {
-	template, err := m.Template(ctx, req.TemplateID)
+	template, err := m.template(ctx, req.TemplateID, false)
 	if err != nil {
 		return nil, err
 	}

@@ -4676,7 +4676,8 @@
         "completed": "完了",
         "cancelled": "キャンセル済み",
         "interrupted": "中断",
-        "failed": "失敗"
+        "failed": "失敗",
+        "releaseValidation": "バージョンを検証中"
       },
       "unavailable": {
         "platform": "直接インストールは Linux と macOS の x64、arm64 に対応しています。",
@@ -4684,7 +4685,12 @@
         "nestedDocker": "現在の環境は既にコンテナ内で実行されているため、Docker デプロイは無効です。",
         "docker": "Docker を利用できないか、デーモンに接続できません。",
         "compose": "現在の環境では Docker Compose を利用できません。"
-      }
+      },
+      "installSubmissionFailed": "インストール要求に失敗しました",
+      "installSubmissionUnknown": "送信結果を確認できません",
+      "installSubmissionUnknownDetail": "送信結果を確認できませんでした。再試行する前に状態を確認してください。",
+      "installReviewAgain": "インストール内容を再確認",
+      "installCheckStatus": "状態を確認"
     },
     "errors": {
       "loadFailedPrefix": "Web サービスの読み込みに失敗しました",

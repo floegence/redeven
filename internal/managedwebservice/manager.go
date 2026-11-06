@@ -568,7 +568,12 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		return nil, err
 	}
 	m.requestMu.Lock()
-	defer m.requestMu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			m.requestMu.Unlock()
+		}
+	}()
 	parameterJSON, _ := json.Marshal(req.Parameters)
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
 	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), strings.TrimSpace(req.AccessMode), strings.TrimSpace(req.TargetReleaseID), string(parameterJSON), string(noticeJSON))
@@ -587,7 +592,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		}
 		return &CreateResult{Service: *service, Operation: *existing}, nil
 	}
-	template, err := m.Template(ctx, strings.TrimSpace(req.TemplateID))
+	template, err := m.template(ctx, strings.TrimSpace(req.TemplateID), false)
 	if err != nil {
 		return nil, err
 	}
@@ -642,23 +647,13 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	if template.Deployment == DeploymentContainer || template.Deployment == DeploymentCompose {
-		if ok, code, reason := m.dockerAvailability(ctx); !ok {
-			return nil, serviceError(code, reason, 409, true, nil)
-		}
-	}
 	configuration, secretValues, err := resolveTemplateInputs(*template.Spec, req.Parameters, req.AcceptedNoticeRevisions)
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(req.TargetReleaseID) == "" {
-		if err := m.ensureDefaultReleaseAvailable(ctx, *template, secretValues); err != nil {
-			return nil, err
-		}
-	}
 	var selectedRelease *cachedReleaseCandidate
 	if strings.TrimSpace(req.TargetReleaseID) != "" {
-		selectedRelease, err = m.resolveReleaseCandidate(ctx, "template:"+template.TemplateID, req.TargetReleaseID, secretValues, nil, template.Source)
+		selectedRelease, err = m.reviewedReleaseCandidate("template:"+template.TemplateID, req.TargetReleaseID)
 		if err != nil {
 			return nil, err
 		}
@@ -688,6 +683,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	releaseIdentity := defaultReleaseIdentity(*template)
 	if selectedRelease != nil {
 		releaseIdentity = selectedRelease.Identity
+		releaseIdentity.DigestVerified = selectedRelease.Candidate.DigestVerified
 	}
 	releaseJSON, releaseHash, err := canonicalReleaseIdentity(releaseIdentity)
 	if err != nil {
@@ -699,7 +695,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, WorkspacePath: resolved.RealAbs, WorkspaceOwnership: workspaceOwnership, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
-	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "release_validation", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
 		return nil, serviceError("SERVICE_SECRETS_WRITE_FAILED", "The managed-service secret parameters could not be stored securely.", 500, false, err)
 	}
@@ -707,46 +703,10 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		_ = os.Remove(m.serviceSecretPath(serviceID))
 		return nil, err
 	}
+	m.requestMu.Unlock()
+	locked = false
 	m.launch(service, op, operationInputs{})
 	return &CreateResult{Service: service, Operation: op}, nil
-}
-
-// ensureDefaultReleaseAvailable prevents a stale catalog recommendation from
-// becoming an implicit installation choice. Explicit candidate selections are
-// revalidated separately by resolveReleaseCandidate.
-func (m *Manager) ensureDefaultReleaseAvailable(ctx context.Context, template Template, parameters map[string]string) error {
-	if template.Source != "builtin" || template.Spec == nil || template.RecommendedRelease == nil {
-		return nil
-	}
-	recommended := template.RecommendedRelease
-	switch recommended.Kind {
-	case "oci":
-		if template.Spec.Container == nil || strings.TrimSpace(recommended.Tag) == "" || strings.TrimSpace(recommended.Digest) == "" {
-			return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is not verifiable. Refresh the version list and select an available release.", 409, true, nil)
-		}
-		items, err := m.verifyOCIReleaseTags(ctx, *template.Spec, []string{recommended.Tag})
-		if err != nil {
-			return err
-		}
-		if len(items) != 1 || !items[0].Compatible || items[0].PlatformDigest != recommended.Digest {
-			return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is no longer available at its Registry source. Refresh the version list and select an available release.", 409, true, nil)
-		}
-	case "npm":
-		if template.Spec.Host == nil || template.Spec.Host.NPM == nil {
-			return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is not verifiable. Refresh the version list and select an available release.", 409, true, nil)
-		}
-		items, err := m.discoverNPMCandidates(ctx, *template.Spec, parameters, nil, template.Source)
-		if err != nil {
-			return err
-		}
-		for _, item := range items {
-			if sameReleaseIdentity(item.Identity, *recommended) && item.Candidate.Selectable {
-				return nil
-			}
-		}
-		return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is no longer available at its package Registry. Refresh the version list and select an available release.", 409, true, nil)
-	}
-	return nil
 }
 
 func defaultReleaseIdentity(template Template) ReleaseIdentity {
@@ -1244,7 +1204,20 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 }
 
 func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, resolved *resolvedRuntime) error {
+	m.progress(op, "release_validation", 0)
+	if err := m.verifyInstallRelease(ctx, service, resolved); err != nil {
+		return err
+	}
+	// Integrity enrichment changes the resolved runtime digest before launch.
+	fresh, err := m.resolveCurrentRuntime(ctx, service)
+	if err != nil {
+		return err
+	}
+	*resolved = *fresh
 	m.progress(op, "environment_check", 1)
+	if ok, code, reason := m.templateAvailability(ctx, resolved.Template.Deployment, true); !ok {
+		return serviceError(code, reason, 409, true, nil)
+	}
 	if err := m.ensureInstallWorkspace(ctx, service); err != nil {
 		return err
 	}

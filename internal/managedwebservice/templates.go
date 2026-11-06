@@ -29,6 +29,11 @@ var (
 )
 
 func (m *Manager) Template(ctx context.Context, templateID string) (*Template, error) {
+	return m.template(ctx, templateID, true)
+}
+
+// template loads verified definitions; admission defers runtime probes to its operation.
+func (m *Manager) template(ctx context.Context, templateID string, probeRuntime bool) (*Template, error) {
 	templateID = strings.TrimSpace(templateID)
 	if !m.isBuiltInTemplateID(templateID) {
 		if m.registry == nil {
@@ -39,7 +44,7 @@ func (m *Manager) Template(ctx context.Context, templateID string) (*Template, e
 			return nil, err
 		}
 		if source != nil {
-			item, _, err := m.readSourceTemplate(ctx, *source)
+			item, _, err := m.readSourceTemplateWithAvailability(ctx, *source, probeRuntime)
 			return item, err
 		}
 		record, err := m.registry.GetManagedTemplate(ctx, templateID)
@@ -49,9 +54,9 @@ func (m *Manager) Template(ctx context.Context, templateID string) (*Template, e
 		if record == nil {
 			return nil, serviceError("TEMPLATE_NOT_FOUND", "The managed Web Service template was not found.", 404, false, nil)
 		}
-		return m.templateFromRecord(ctx, *record)
+		return m.templateRecord(ctx, *record, probeRuntime)
 	}
-	items, err := m.Catalog(ctx)
+	items, err := m.builtInTemplates(ctx, probeRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +261,10 @@ func completeBuiltInDuplicateSpec(spec TemplateSpec) bool {
 }
 
 func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.ManagedTemplate) (*Template, error) {
+	return m.templateRecord(ctx, record, true)
+}
+
+func (m *Manager) templateRecord(ctx context.Context, record pfregistry.ManagedTemplate, probeRuntime bool) (*Template, error) {
 	spec, err := verifiedTemplateSpec(record.SpecJSON, record.SpecSHA256)
 	if errors.Is(err, errTemplateSpecIdentityMismatch) {
 		return nil, serviceError("TEMPLATE_IDENTITY_MISMATCH", "The saved template definition identity has changed.", 409, false, err)
@@ -263,7 +272,7 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 	if err != nil {
 		return nil, serviceError("TEMPLATE_SPEC_INVALID", "The saved template definition is invalid or no longer satisfies the template policy.", 409, false, err)
 	}
-	available, code, reason := m.customTemplateAvailability(ctx, spec.Kind)
+	available, code, reason := m.templateAvailability(ctx, spec.Kind, probeRuntime)
 	defaultWorkspacePath, err := m.defaultWorkspacePath(record.TemplateID)
 	if err != nil {
 		return nil, err
@@ -287,7 +296,7 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 	return result, nil
 }
 
-func (m *Manager) customTemplateAvailability(ctx context.Context, kind Deployment) (bool, string, string) {
+func (m *Manager) templateAvailability(ctx context.Context, kind Deployment, probeRuntime bool) (bool, string, string) {
 	switch kind {
 	case DeploymentHost:
 		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
@@ -295,8 +304,14 @@ func (m *Manager) customTemplateAvailability(ctx context.Context, kind Deploymen
 		}
 		return true, "", ""
 	case DeploymentContainer:
+		if !probeRuntime {
+			return true, "", ""
+		}
 		return m.dockerAvailability(ctx)
 	case DeploymentCompose:
+		if !probeRuntime {
+			return true, "", ""
+		}
 		if ok, code, reason := m.dockerAvailability(ctx); !ok {
 			return ok, code, reason
 		}

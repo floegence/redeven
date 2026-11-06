@@ -163,10 +163,17 @@ func (c *BuiltinCatalog) definition(templateID string) (catalogTemplate, bool) {
 }
 
 func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
+	return m.builtInTemplates(ctx, true)
+}
+
+func (m *Manager) builtInTemplates(ctx context.Context, probeRuntime bool) ([]Template, error) {
 	if m.catalog == nil {
 		return nil, errors.New("managed service template catalog is unavailable")
 	}
-	dockerAvailable, dockerReasonCode, dockerReason := m.dockerAvailability(ctx)
+	dockerAvailable, dockerReasonCode, dockerReason := true, "", ""
+	if probeRuntime {
+		dockerAvailable, dockerReasonCode, dockerReason = m.dockerAvailability(ctx)
+	}
 	items := make([]Template, 0, len(m.catalog.templates))
 	for _, definition := range m.catalog.templates {
 		available, reasonCode, reason := true, "", ""

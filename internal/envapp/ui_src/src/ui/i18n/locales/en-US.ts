@@ -4525,6 +4525,12 @@ export const enUS = defineDictionary({
       reconfigureFailed: 'Service configuration failed',
       logs: 'View logs',
       operationStarting: 'Submitting request…',
+      installSubmissionFailed: "Installation request failed",
+      installSubmissionUnknown: "Submission status unknown",
+      installSubmissionUnknownDetail: "The submission could not be confirmed. Check its status before trying again.",
+      installReviewAgain: "Review installation",
+      installCheckStatus: "Check status",
+
       operationDetailsTitle: '{name} progress',
       operationProgress: 'Operation progress',
       operationAction: 'Action',
@@ -4678,6 +4684,7 @@ export const enUS = defineDictionary({
         unknown: 'Unknown',
       },
       stages: {
+        releaseValidation: "Verifying version",
         environmentCheck: 'Checking environment',
         downloading: 'Downloading package',
         pulling: 'Pulling image',

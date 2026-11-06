@@ -343,8 +343,8 @@ func releaseRegistryHost(reference string) string {
 	return "registry-1.docker.io"
 }
 
-func (m *Manager) resolveReleaseCandidate(ctx context.Context, scope, candidateID string, parameters map[string]string, current *ReleaseIdentity, templateSource string) (*cachedReleaseCandidate, error) {
-	candidateID = strings.TrimSpace(candidateID)
+func (m *Manager) reviewedReleaseCandidate(scope, id string) (*cachedReleaseCandidate, error) {
+	candidateID := strings.TrimSpace(id)
 	m.releaseMu.Lock()
 	cached, ok := m.releaseItems[candidateID]
 	m.releaseMu.Unlock()
@@ -353,6 +353,14 @@ func (m *Manager) resolveReleaseCandidate(ctx context.Context, scope, candidateI
 	}
 	if cached.Candidate.VerificationStatus != "verified" || !cached.Candidate.Selectable {
 		return nil, serviceError("RELEASE_CANDIDATE_UNVERIFIED", "Verify this release before selecting it.", 409, true, nil)
+	}
+	return &cached, nil
+}
+
+func (m *Manager) resolveReleaseCandidate(ctx context.Context, scope, candidateID string, parameters map[string]string, current *ReleaseIdentity, templateSource string) (*cachedReleaseCandidate, error) {
+	cached, err := m.reviewedReleaseCandidate(scope, candidateID)
+	if err != nil {
+		return nil, err
 	}
 	if cached.Candidate.SourceKind == "oci" {
 		var items []containerengine.OCIRelease
@@ -372,7 +380,7 @@ func (m *Manager) resolveReleaseCandidate(ctx context.Context, scope, candidateI
 		if len(items) != 1 || !items[0].Compatible {
 			return nil, serviceError("RELEASE_CANDIDATE_CHANGED", "The selected release changed at its source. Refresh the version list and review it again.", 409, true, nil)
 		}
-		fresh := verifiedOCIReleaseCandidate(releaseBrowseContext{Scope: cached.Scope, TemplateID: cached.TemplateID, Spec: cached.Spec, Current: current, TemplateSource: templateSource}, cached, items[0])
+		fresh := verifiedOCIReleaseCandidate(releaseBrowseContext{Scope: cached.Scope, TemplateID: cached.TemplateID, Spec: cached.Spec, Current: current, TemplateSource: templateSource}, *cached, items[0])
 		if !sameReleaseIdentity(fresh.Identity, cached.Identity) {
 			return nil, serviceError("RELEASE_CANDIDATE_CHANGED", "The selected release changed at its source. Refresh the version list and review it again.", 409, true, nil)
 		}

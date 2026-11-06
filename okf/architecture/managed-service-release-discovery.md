@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed service release discovery and version selection
 tags: [architecture, web-services, releases, npm, oci, updates]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -16,6 +16,9 @@ Registries provide release candidates; Manager validates immutable identity, com
 - Host npm declares exact default, HTTPS registry, executable, optional Secret token and non-secret environment. Tokens exist only in requests/task-owned `0600` npm files, never persistent state, argv, logs, hooks or plaintext cache keys. Compatibility/stopped-state checks remain backend-owned.
 - Single-container OCI discovers its repository; Compose has no single release identity. Consume cursors only after successful pages. After a failed recommendation check, disable install until verified selection or closing the template flow.
 - `managed_service_update_v2` is the sole old/target/phase journal; failure restores verified prior release/binding. [Version interaction](#version-interaction) owns selection, notices, stop guidance and handoff.
+
+## Install release validation
+Admission reads a verified, unexpired candidate locally and persists its exact identity. The background operation refreshes Registry metadata before runtime effects; changed/unavailable releases fail the accepted operation. npm verifies exact version, SHA-512 integrity and Node compatibility, enriches missing default integrity once and resolves the final runtime digest before launch. OCI validates tag plus pinned platform digest; explicitly reviewed digest-only verification persists `digest_verified` in ReleaseIdentity so a missing tag cannot silently change that choice on retry/restart. Later recommendations never retarget a saved install.
 
 ## Version interaction
 - Installed version opens the drawer; never auto-select the first result. Keep service/current-version header, restored candidates during refresh and one scrolling viewport. Notices stay below the list without shifting prior rows; footer links to outstanding confirmation.

@@ -493,3 +493,47 @@ func TestManagedInspectionIsReadOnlyAndNeverCached(t *testing.T) {
 		}
 	}
 }
+
+type installReceiptBackend struct {
+	managedBackendStub
+	receipt  *managedwebservice.CreateResult
+	requests []string
+}
+
+func (b *installReceiptBackend) InstallRequest(_ context.Context, id string) (*managedwebservice.CreateResult, error) {
+	b.requests = append(b.requests, id)
+	return b.receipt, nil
+}
+func TestInstallReceiptRouteIsReadOnlyPermissionFencedAndUncached(t *testing.T) {
+	backend := &installReceiptBackend{}
+	channel := "ch_install_receipt"
+	for _, test := range []struct{ full, found bool }{{false, false}, {true, false}, {true, true}} {
+		backend.requests = nil
+		if test.found {
+			backend.receipt = &managedwebservice.CreateResult{Service: pfregistry.ManagedService{ServiceID: "mws_receipt"}, Operation: pfregistry.ManagedOperation{OperationID: "mop_receipt", Action: "install"}}
+		}
+		server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channel, session.Meta{CanRead: true, CanWrite: test.full, CanExecute: test.full})}
+		request := httptest.NewRequest(http.MethodGet, managedServicesAPIBase+"/install-requests/request-receipt", nil)
+		request.Header.Set("Origin", envOriginWithChannel(channel))
+		response := httptest.NewRecorder()
+		server.handleManagedWebServicesAPI(response, request)
+		if !test.full {
+			if response.Code != http.StatusForbidden || len(backend.requests) != 0 {
+				t.Fatalf("unauthorized receipt: %d %+v", response.Code, backend.requests)
+			}
+			continue
+		}
+		if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || len(backend.requests) != 1 || backend.requests[0] != "request-receipt" {
+			t.Fatalf("receipt: %d %s", response.Code, response.Body.String())
+		}
+		if !test.found && !strings.Contains(response.Body.String(), `"receipt":null`) {
+			t.Fatal(response.Body.String())
+		}
+		if test.found && !strings.Contains(response.Body.String(), `"operation_id":"mop_receipt"`) {
+			t.Fatal(response.Body.String())
+		}
+		if backend.createCalls != 0 || backend.operateCalls != 0 {
+			t.Fatal("receipt query mutated lifecycle")
+		}
+	}
+}

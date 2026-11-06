@@ -4676,7 +4676,8 @@
         "completed": "Abgeschlossen",
         "cancelled": "Abgebrochen",
         "interrupted": "Unterbrochen",
-        "failed": "Fehlgeschlagen"
+        "failed": "Fehlgeschlagen",
+        "releaseValidation": "Version wird geprüft"
       },
       "unavailable": {
         "platform": "Die Direktinstallation unterstützt Linux und macOS auf x64 und arm64.",
@@ -4684,7 +4685,12 @@
         "nestedDocker": "Die Docker-Bereitstellung ist deaktiviert, weil diese Umgebung bereits in einem Container ausgeführt wird.",
         "docker": "Docker ist nicht verfügbar oder sein Daemon ist nicht erreichbar.",
         "compose": "Docker Compose ist in dieser Umgebung nicht verfügbar."
-      }
+      },
+      "installSubmissionFailed": "Installationsanfrage fehlgeschlagen",
+      "installSubmissionUnknown": "Übermittlungsstatus unbekannt",
+      "installSubmissionUnknownDetail": "Die Übermittlung konnte nicht bestätigt werden. Prüfen Sie den Status, bevor Sie es erneut versuchen.",
+      "installReviewAgain": "Installation prüfen",
+      "installCheckStatus": "Status prüfen"
     },
     "errors": {
       "loadFailedPrefix": "Webdienste konnten nicht geladen werden",

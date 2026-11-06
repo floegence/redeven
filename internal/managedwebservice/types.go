@@ -204,6 +204,8 @@ type ReleaseIdentity struct {
 	Platform          string `json:"platform,omitempty"`
 	ArtifactReference string `json:"artifact_reference,omitempty"`
 	Trust             string `json:"trust,omitempty"`
+	// Persist explicit digest verification independently of a removable tag.
+	DigestVerified bool `json:"digest_verified,omitempty"`
 }
 
 type ReleaseCandidate struct {
@@ -394,6 +396,10 @@ type ReconfigureRequest struct {
 	PlanDigest      string           `json:"plan_digest"`
 	AcceptedRiskIDs []string         `json:"accepted_risk_ids,omitempty"`
 	Administrator   bool             `json:"-"`
+}
+
+type InstallRequestBackend interface {
+	InstallRequest(context.Context, string) (*CreateResult, error)
 }
 
 type CreateResult struct {

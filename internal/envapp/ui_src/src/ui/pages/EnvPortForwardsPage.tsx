@@ -345,6 +345,66 @@ type ManagedReconfigureRequest = Readonly<{
   plan_digest: string;
   accepted_risk_ids: string[];
 }>;
+type ManagedInstallReceipt = Readonly<{
+  service: Pick<ManagedService, 'service_id' | 'template_id' | 'workspace_path' | 'observed_state'>;
+  operation: ManagedOperation;
+}>;
+type ManagedInstallSubmission = Readonly<{
+  requestID: string;
+  serviceID: string;
+  template: ManagedCatalogTemplate;
+  presentation: ServiceTemplatePresentation;
+  workspace: string;
+  accessMode: WebServiceAccessMode;
+  parameters: Readonly<Record<string, string>>;
+  notices: Readonly<Record<string, boolean>>;
+  release: SelectedTemplateRelease | null;
+  phase: 'submitting' | 'accepted' | 'failed' | 'unknown';
+  message?: string;
+}>;
+
+export function ManagedInstallSubmissionRow(props: {
+  submission: ManagedInstallSubmission;
+  operation?: ManagedOperation | null;
+  onReview: () => void;
+  onCheck: () => void;
+  checking: boolean;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onCancel: () => void;
+}) {
+  const i18n = useI18n();
+  let element: HTMLDivElement | undefined;
+  const serviceID = props.submission.serviceID;
+  onCleanup(() => {
+    if (!element?.contains(document.activeElement)) return;
+    window.requestAnimationFrame(() => {
+      if (document.activeElement !== document.body) return;
+      document.querySelector<HTMLElement>(`[data-managed-service-id="${serviceID}"] [data-install-focus]`)?.focus({preventScroll: true});
+    });
+  });
+  const label = () => props.submission.phase === 'failed' ? i18n.t('webServices.managed.installSubmissionFailed')
+    : props.submission.phase === 'unknown' ? i18n.t('webServices.managed.installSubmissionUnknown')
+    : props.operation ? managedOperationActivityLabel(props.operation, i18n) : i18n.t('webServices.managed.operationStarting');
+  return <div ref={element} class="web-service-managed" data-testid="managed-install-submission" data-managed-service-id={props.submission.serviceID}>
+    <div class={serviceRowGridClass}>
+      <div class="web-service-identity"><ServiceTemplateIdentity template={props.submission.presentation} compact metadata={<div class="web-service-metadata"><span>{props.submission.presentation.deploymentLabel}</span><span class="web-service-workspace" title={props.submission.workspace}><FolderOpen class="h-3 w-3 shrink-0" aria-hidden="true" /><span>{workspaceBasename(props.submission.workspace)}</span></span></div>} /></div>
+      <div class="web-service-status" role="status" aria-live="polite" tabIndex={-1} data-install-focus>
+        <Show when={props.submission.phase === 'submitting' || (props.submission.phase === 'accepted' && (!props.operation || managedOperationActive(props.operation)))}><ManagedOperationSpinner /></Show>
+        <Show when={props.operation} fallback={<span class="web-service-state">{label()}</span>}>
+          <button type="button" class="web-service-status-trigger" aria-expanded={props.expanded} onClick={() => props.onExpandedChange(!props.expanded)}>{label()}<ChevronDown class="h-3 w-3 shrink-0" aria-hidden="true" /></button>
+        </Show>
+      </div>
+      <div class={serviceRowActionsClass}>
+        <Show when={props.submission.phase === 'failed'}><Button size="sm" variant="outline" class="web-service-button web-service-manage" onClick={props.onReview}>{i18n.t('webServices.managed.installReviewAgain')}</Button></Show>
+        <Show when={props.submission.phase === 'unknown'}><Button size="sm" variant="outline" class="web-service-button web-service-manage" disabled={props.checking} onClick={props.onCheck}>{i18n.t('webServices.managed.installCheckStatus')}</Button></Show>
+      </div>
+    </div>
+    <Show when={props.expanded && props.operation}>{operation => <ManagedOperationDisclosure operation={operation()} presentationPhase="visible" deployment={props.submission.template.deployment} expanded canCancel onExpandedChange={props.onExpandedChange} onCancel={props.onCancel} />}</Show>
+    <Show when={props.submission.message}><div class="web-service-notice" role={props.submission.phase === 'failed' ? 'alert' : 'status'}>{props.submission.message}</div></Show>
+  </div>;
+}
+
 type TemplateDrawerView = 'catalog' | 'install' | 'editor';
 export type TemplateEditorDraft = {
   templateID?: string;
@@ -838,6 +898,7 @@ export function PortForwardRow(props: {
 
 function managedStageLabel(stage: string, i18n: WebServicesI18n): string {
   switch (stage) {
+    case 'release_validation': return i18n.t('webServices.managed.stages.releaseValidation');
     case 'environment_check': return i18n.t('webServices.managed.stages.environmentCheck');
     case 'downloading': return i18n.t('webServices.managed.stages.downloading');
     case 'pulling': return i18n.t('webServices.managed.stages.pulling');
@@ -897,15 +958,26 @@ function managedOperationFailureMessage(operation: ManagedOperation, i18n: WebSe
 }
 
 function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string {
+  if (errorCode.startsWith('RELEASE_SOURCE_') || errorCode === 'RECOMMENDED_RELEASE_UNAVAILABLE') return releaseSourceErrorLabel(errorCode, i18n);
+  const releaseReasons = new Set(['NODE_RANGE_UNSUPPORTED', 'NODE_VERSION_UNAVAILABLE', 'PLATFORM_UNAVAILABLE', 'RELEASE_IDENTITY_UNVERIFIABLE', 'RELEASE_NOT_FOUND']);
+  if (releaseReasons.has(errorCode)) return i18n.t(`webServices.managed.releaseReason.${errorCode}` as EnvAppTranslationKey);
   switch (errorCode) {
     case 'STOP_SCRIPT_FAILED':
     case 'STOP_SCRIPT_UNAVAILABLE':
     case 'UNINSTALL_SCRIPT_FAILED':
     case 'UNINSTALL_SCRIPT_UNAVAILABLE': return i18n.t('webServices.management.problems.hookFailed');
+    case 'RESOURCE_PLAN_STALE':
+    case 'RELEASE_CANDIDATE_CHANGED':
+    case 'RELEASE_CANDIDATE_EXPIRED':
+    case 'RELEASE_CANDIDATE_UNVERIFIED':
     case 'UPDATE_PLAN_EXPIRED':
     case 'UPDATE_PLAN_STALE':
     case 'NOTICE_ACKNOWLEDGEMENT_REQUIRED':
     case 'NOTICE_ACKNOWLEDGEMENT_STALE': return i18n.t('webServices.managed.updatePreparationChanged');
+    case 'INSTANCE_ALREADY_EXISTS':
+    case 'RESOURCE_IN_USE': return i18n.t(managementProblemKey(errorCode));
+    case 'DOCKER_UNAVAILABLE': return i18n.t('webServices.managed.unavailable.docker');
+    case 'COMPOSE_UNAVAILABLE': return i18n.t('webServices.managed.unavailable.compose');
     case 'OPERATION_CONFLICT': return i18n.t('webServices.managed.openUnavailableOperation');
     case 'UI_REQUEST_FAILED': return i18n.t('webServices.collection.requestFailed');
     case 'IMAGE_PULL_TIMEOUT': return i18n.t('webServices.managed.imagePullTimeout');
@@ -978,6 +1050,7 @@ function managedOperationStages(operation: ManagedOperation, deployment: Managed
     case 'uninstall': return ['stopping', 'uninstalling', 'completed'];
     default:
       return [
+        'release_validation',
         'environment_check',
         deployment === 'host' ? 'downloading' : 'pulling',
         'verifying',
@@ -1745,7 +1818,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
             <span class="web-service-access">{i18n.t(props.service.access_mode === 'desktop_loopback' ? 'webServices.accessMode.desktopLoopbackShort' : 'webServices.accessMode.unifiedProxyShort')}</span>
           </div>
         } /></div>
-        <div class="web-service-status" data-testid="managed-service-status" role="status" aria-live="polite">
+        <div class="web-service-status" data-testid="managed-service-status" role="status" aria-live="polite" tabIndex={-1} data-install-focus>
           <Show when={operation() || notices().length} fallback={<ServiceStatusIndicator label={statusLabel()} tone={managedStatusTone(props.service.status ?? props.service.observed_state)} />}>
           <Tooltip content={[operation() ? managedOperationActivityLabel(operation()!, i18n) : '', ...notices()].filter(Boolean).join('\n') || statusLabel()}
             placement="top" anchorClass="web-service-status-anchor" delay={0} clickToToggle={!operation() && notices().length > 0}>
@@ -2230,7 +2303,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   });
   const forwardsRefreshing = () => forwardResource.snapshot().refreshing;
   const collectionRetained = () => forwardResource.data() !== undefined || managedResource.data() !== undefined;
-  const collectionRenderable = () => Boolean(forwardResource.data()?.length || managedResource.data()?.length)
+  const collectionRenderable = () => installSubmissions().length > 0 || Boolean(forwardResource.data()?.length || managedResource.data()?.length)
     || ((forwardResource.data() !== undefined || !!forwardResource.snapshot().error || (permissionReady() && !ctx.env()?.permissions?.can_execute))
       && (managedResource.data() !== undefined || !!managedResource.snapshot().error || (permissionReady() && !canRead())));
   const initialForwardsLoading = () => !collectionRenderable()
@@ -2261,7 +2334,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     },
   });
   const [managedInstallSubmitting, setManagedInstallSubmitting] = createSignal(false);
-	const [installReview, setInstallReview] = createSignal<{ plan_digest: string; workspace_path: string; fingerprint: string } | null>(null);
+  const [installSubmissions, setInstallSubmissions] = createSignal<readonly ManagedInstallSubmission[]>([]);
+  const [checkingInstallRequests, setCheckingInstallRequests] = createSignal<readonly string[]>([]);
+  const patchInstallSubmission = (requestID: string, patch: Partial<ManagedInstallSubmission>) => setInstallSubmissions(current => current.map(item => item.requestID === requestID ? {...item, ...patch} : item));
+  const dropInstallSubmission = (requestID: string) => setInstallSubmissions(current => current.filter(item => item.requestID !== requestID));
+  const installSubmissionForID = (requestID: string) => installSubmissions().find(item => item.requestID === requestID)!;
+  const visibleInstallSubmissions = createMemo(() => installSubmissions().filter(item => !managedState().some(service => service.service_id === item.serviceID) && archiveView() === 'active'));
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
+	const [installReview, setInstallReview] = createSignal<{ service_id: string; expires_at_unix_ms: number; plan_digest: string; workspace_path: string; fingerprint: string } | null>(null);
 	const [installParameters,setInstallParameters]=createSignal<Record<string,string>>({});
   const [workspacePath, setWorkspacePath] = createSignal('');
   const [managedAccessMode, setManagedAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
@@ -2402,8 +2483,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         return Array.isArray(response.services) ? response.services : [];
       });
       if (generation !== managedLoadGeneration) return;
-      managedOperationPresentation.pruneServices(new Set(nextServices.map((service) => service.service_id)));
+      managedOperationPresentation.pruneServices(new Set([...nextServices.map(service => service.service_id), ...installSubmissions().map(item => item.serviceID)]));
       setManagedLoadError(false);
+      const serviceIDs = new Set(nextServices.map(service => service.service_id));
+      for (const submission of installSubmissions()) {
+        if (!serviceIDs.has(submission.serviceID)) continue;
+        const operation = managedOperations.operationForService(submission.serviceID);
+        if (operation && !managedOperationActive(operation)) managedOperations.clear(operation.operation_id);
+      }
+      setInstallSubmissions(current => current.filter(item => !serviceIDs.has(item.serviceID)));
       for (const service of nextServices) {
         const activeOperation = service.active_operation;
         if (!activeOperation || managedOperations.knows(activeOperation.operation_id)) continue;
@@ -2469,7 +2557,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 		return { forward: result.forward, app_path: result.app_path, managed_entrance:result.managed_entrance };
 	};
 
+  let installReviewSession = 0;
   const closeTemplateDrawer = () => {
+    installReviewSession++;
+    setManagedInstallSubmitting(false);
 	setInstallParameters({});setInstallReview(null);
     setTemplateDrawerOpen(false);
     setTemplateDrawerView('catalog');
@@ -2483,68 +2574,108 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
 	const installRequest = () => ({ template_id: selectedTemplate()?.template_id, deployment: selectedTemplate()?.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters: {...selectedTemplateRelease()?.parameters, ...installParameters()}, accepted_notice_revisions: acceptedNoticeRevisions(selectedTemplate()?.notices, installNoticeAcceptances()), target_release_id: selectedTemplateRelease()?.candidate.candidate_id });
 	createEffect(() => { const review = installReview(); if (review && review.fingerprint !== JSON.stringify(installRequest())) setInstallReview(null); });
+  const acceptInstallReceipt = (submission: ManagedInstallSubmission, result: ManagedInstallReceipt, authority: () => boolean) => {
+    if (!authority() || disposed) return;
+    if (result.service.service_id !== submission.serviceID || result.operation.service_id !== submission.serviceID || result.operation.action !== 'install') {
+      patchInstallSubmission(submission.requestID, { phase: 'unknown', message: i18n.t('webServices.managed.installSubmissionUnknownDetail') });
+      return;
+    }
+    patchInstallSubmission(submission.requestID, { phase: 'accepted', message: undefined });
+    const operationPromise = managedOperations.track(result.operation);
+    void operationPromise.then(async operation => {
+      if (!authority() || disposed) return;
+      await loadManaged(false);
+      if (!authority() || disposed) return;
+      bumpRefresh();
+      if (operation.state !== 'succeeded') {
+        notify.error(i18n.t('webServices.notifications.failedToAddTitle'), managedOperationFailureMessage(operation, i18n));
+      } else notify.success(i18n.t('webServices.notifications.serviceAddedTitle'), i18n.t('webServices.notifications.serviceAddedMessage'));
+    }).catch(error => {
+      if (!authority() || disposed || (error instanceof DOMException && error.name === 'AbortError')) return;
+      patchInstallSubmission(submission.requestID, {phase: 'unknown', message: i18n.t('webServices.managed.operationStreamFailed')});
+      void loadManaged(false);
+    }).finally(() => { if (authority() && !disposed && managedState().some(service => service.service_id === submission.serviceID)) managedOperations.clear(result.operation.operation_id); });
+    const target = submission.release?.candidate;
+    const targetLabel = target?.version || target?.tag || submission.presentation.defaultReleaseLabel;
+    if (targetLabel) setOperationReleases(current => ({...current, [result.operation.operation_id]: {target: targetLabel}}));
+    void loadManaged(false);
+  };
+
+  const checkInstallSubmission = async (submission: ManagedInstallSubmission) => {
+    if (!canManageManagedService() || checkingInstallRequests().includes(submission.requestID)) return;
+    const authority = managedResource.captureAuthority();
+    setCheckingInstallRequests(current => [...current, submission.requestID]);
+    try {
+      const result = await fetchLocalApiJSON<{receipt: ManagedInstallReceipt | null}>(`/_redeven_proxy/api/managed-web-services/install-requests/${encodeURIComponent(submission.requestID)}`, {method: 'GET'});
+      if (!authority() || disposed) return;
+      if (result.receipt) acceptInstallReceipt(submission, result.receipt, authority);
+      else patchInstallSubmission(submission.requestID, {phase: 'unknown', message: i18n.t('webServices.managed.installSubmissionUnknownDetail')});
+    } catch {
+      if (authority() && !disposed) patchInstallSubmission(submission.requestID, {phase: 'unknown', message: i18n.t('webServices.managed.installSubmissionUnknownDetail')});
+    } finally { if (authority() && !disposed) setCheckingInstallRequests(current => current.filter(id => id !== submission.requestID)); }
+  };
+
+  const reviewInstallSubmission = (submission: ManagedInstallSubmission) => {
+    if (submission.phase !== 'failed') return;
+    beginTemplateInstall(submission.template);
+    setWorkspacePath(submission.workspace);
+    setManagedAccessMode(submission.accessMode);
+    setInstallParameters({...submission.parameters});
+    setInstallNoticeAcceptances({...submission.notices});
+    setSelectedTemplateRelease(submission.release);
+    setTemplateDrawerOpen(true);
+    dropInstallSubmission(submission.requestID);
+  };
+
   const installManaged = async () => {
     const template = selectedTemplate();
-    const requestedRelease = selectedTemplateRelease()?.candidate;
-    if (!template || managedInstallSubmitting() || !template.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.template_id === template.template_id && (service.management_state ?? 'active') === 'active') || !canManageManagedService()) return;
-    setManagedInstallSubmitting(true);
-    try {
-		if (!installReview()) {
-			const request = installRequest();
-			const plan = await fetchLocalApiJSON<{ plan_digest: string; workspace_path: string }>('/_redeven_proxy/api/managed-web-services/install-plans', { method: 'POST', body: JSON.stringify(request) });
-			if (JSON.stringify(request) !== JSON.stringify(installRequest())) return;
-			setWorkspacePath(plan.workspace_path);
-			setInstallReview({ ...plan, fingerprint: JSON.stringify(installRequest()) });
-			return;
-		}
-		const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ ...installRequest(), request_id: managedRequestID(), plan_digest: installReview()?.plan_digest }) });
-      const operationPromise = managedOperations.track(result.operation);
-      void operationPromise
-        .then(async (operation) => {
-          await loadManaged(false);
-          bumpRefresh();
-          if (operation.state !== 'succeeded') {
-            notify.error(i18n.t('webServices.notifications.failedToAddTitle'), managedOperationFailureMessage(operation, i18n));
-            return;
-          }
-          notify.success(i18n.t('webServices.notifications.serviceAddedTitle'), i18n.t('webServices.notifications.serviceAddedMessage'));
-        })
-        .catch((error) => {
-          if (error instanceof DOMException && error.name === 'AbortError') return;
-		const message = error instanceof LocalApiError && error.code === 'RECOMMENDED_RELEASE_UNAVAILABLE'
-			? releaseSourceErrorLabel(error, i18n)
-			: error instanceof Error ? error.message : String(error);
-		notify.error(i18n.t('webServices.notifications.failedToAddTitle'), message);
-        })
-        .finally(() => managedOperations.clear(result.operation.operation_id));
-
+    if (!template || managedInstallSubmitting() || !template.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some(service => service.template_id === template.template_id && (service.management_state ?? 'active') === 'active') || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService()) return;
+    const authority = managedResource.captureAuthority();
+    const request = installRequest();
+    const review = installReview();
+    const reviewSession = installReviewSession;
+    if (!review) {
+      setManagedInstallSubmitting(true);
+      try {
+        const plan = await fetchLocalApiJSON<{service_id: string; expires_at_unix_ms: number; plan_digest: string; workspace_path: string}>('/_redeven_proxy/api/managed-web-services/install-plans', {method: 'POST', body: JSON.stringify(request)});
+        if (!authority() || disposed || reviewSession !== installReviewSession || JSON.stringify(request) !== JSON.stringify(installRequest())) return;
+        setWorkspacePath(plan.workspace_path);
+        setInstallReview({...plan, fingerprint: JSON.stringify(installRequest())});
+      } catch (error) {
+        if (authority() && !disposed && reviewSession === installReviewSession) notify.error(i18n.t('webServices.notifications.failedToAddTitle'), error instanceof Error ? error.message : String(error));
+      } finally { if (authority() && !disposed && reviewSession === installReviewSession) setManagedInstallSubmitting(false); }
+      return;
+    }
+    if (review.expires_at_unix_ms <= Date.now()) { setInstallReview(null); return; }
+    const requestID = managedRequestID();
+    const body = JSON.stringify({...request, request_id: requestID, plan_digest: review.plan_digest});
+    const secretNames = new Set((template.effective_spec?.parameters ?? template.spec?.parameters ?? []).filter(parameter => parameter.type === 'secret').map(parameter => parameter.name));
+    const release = selectedTemplateRelease();
+    const submission: ManagedInstallSubmission = {
+      requestID, serviceID: review.service_id, template, presentation: templatePresentation(template), workspace: review.workspace_path, accessMode: managedAccessMode(),
+      parameters: Object.fromEntries(Object.entries(request.parameters).filter(([name]) => !secretNames.has(name))), notices: {...installNoticeAcceptances()},
+      release: release ? {candidate: release.candidate, parameters: {}} : null, phase: 'submitting',
+    };
+    batch(() => {
+      setInstallSubmissions(current => [...current, submission]);
       setSearchQuery('');
+      setArchiveView('active');
       closeTemplateDrawer();
-      const serviceRelease = result.service.release_status.current_release;
-      const targetRelease = serviceRelease ? releaseIdentityLabel(serviceRelease) : '';
-      const requestedReleaseLabel = requestedRelease?.version || requestedRelease?.tag || requestedRelease?.digest || requestedRelease?.integrity || '';
-      const targetReleaseLabel = targetRelease && targetRelease !== '—' ? targetRelease : requestedReleaseLabel;
-      if (targetReleaseLabel) setOperationReleases(current => ({ ...current, [result.operation.operation_id]: { target: targetReleaseLabel } }));
-      setManagementTarget({ service: result.service, action: 'inspect' });
-      void loadManaged(false).then(() => {
-        window.requestAnimationFrame(() => {
-          const row = Array.from(document.querySelectorAll<HTMLElement>('[data-managed-service-id]'))
-            .find((item) => item.dataset.managedServiceId === result.service.service_id);
-          if (typeof row?.scrollIntoView === 'function') {
-            row.scrollIntoView({
-              block: 'nearest',
-              behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-            });
-          }
-        });
-      });
+    });
+    window.requestAnimationFrame(() => {
+      if (!authority() || disposed || templateDrawerOpen()) return;
+      const row = pageRoot?.querySelector<HTMLElement>(`[data-managed-service-id="${submission.serviceID}"]`);
+      row?.querySelector<HTMLElement>('[data-install-focus]')?.focus({preventScroll: true});
+      row?.scrollIntoView?.({block: 'nearest', behavior: 'auto'});
+    });
+    try {
+      const result = await fetchLocalApiJSON<ManagedInstallReceipt>('/_redeven_proxy/api/managed-web-services', {method: 'POST', body});
+      acceptInstallReceipt(submission, result, authority);
     } catch (error) {
-      const message = error instanceof LocalApiError && error.code === 'RECOMMENDED_RELEASE_UNAVAILABLE'
-        ? releaseSourceErrorLabel(error, i18n)
-        : error instanceof Error ? error.message : String(error);
-      notify.error(i18n.t('webServices.notifications.failedToAddTitle'), message);
-    } finally {
-      setManagedInstallSubmitting(false);
+      if (!authority() || disposed) return;
+      const rejected = error instanceof LocalApiError && error.code !== 'HTTP_ERROR' && error.status >= 400 && error.status < 500 && error.status !== 408;
+      const message = rejected ? managedFailureMessage(error.code, i18n) : i18n.t('webServices.managed.installSubmissionUnknownDetail');
+      patchInstallSubmission(requestID, {phase: rejected ? 'failed' : 'unknown', message});
     }
   };
 
@@ -2654,6 +2785,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       default: return template?.reason ?? '';
     }
   };
+
+  createEffect(on(() => [managedResource.identity(), ctx.resourceCacheAccess?.().generation, canManageManagedService()], () => {
+    managedOperations.dispose();
+    for (const operationID of managedOperationPresentation.operationIDs()) managedOperations.clear(operationID);
+    managedOperationPresentation.pruneServices(new Set());
+    setInstallSubmissions([]);
+    setCheckingInstallRequests([]);
+    setManagedInstallSubmitting(false);
+  }, {defer: true}));
 
   const installedServiceForTemplate = (template: ManagedCatalogTemplate) => managedState().find((service) => (service.management_state ?? 'active') === 'active' && service.template_id === template.template_id);
   const templateOpenUnavailableReason = (service: ManagedService | undefined) => {
@@ -3011,6 +3151,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
   const openTemplateCatalog = () => {
+    installReviewSession++;
+    setManagedInstallSubmitting(false);
     setTemplateDrawerView('catalog');
     setSelectedTemplateID(null);
     setTemplateDraft(null);
@@ -3020,7 +3162,9 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
 	const beginTemplateInstall = (template: ManagedCatalogTemplate, preserveRelease = false) => {
-    if (!template.available || installedServiceForTemplate(template)) return;
+    if (!template.available || installedServiceForTemplate(template) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed')) return;
+    installReviewSession++;
+    setManagedInstallSubmitting(false);
 		if (!preserveRelease) {
 			setSelectedTemplateRelease(null);
 			setTemplateRecommendationUnavailable(false);
@@ -3626,7 +3770,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                 <div class="web-services-toolbar-heading">
                   <h2 ref={collectionHeading} id="web-services-collection-title" tabindex="-1" title={archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}>{archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}</h2>
                   <FeedbackIndicator label={i18n.t('webServices.collection.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => collectionHeading} entries={collectionRetained() && (forwardsCheckFailed() || managedLoadError()) ? [{ id: 'collection', severity: 'error', summary: i18n.t('webServices.collection.refreshFailed'), detail: <><Show when={forwardResource.snapshot().error}>{error => <p>{String(error())}</p>}</Show><Show when={managedResource.snapshot().error}>{error => <p>{String(error())}</p>}</Show></>, actions: <Button size="sm" variant="outline" disabled={forwardsRefreshing() || managedLoading()} onClick={() => { bumpRefresh(); void loadManaged(true); }}>{i18n.t('common.actions.retry')}</Button> }] : []} />
-                  <Show when={forwardResource.data() !== undefined || managedResource.data() !== undefined}><span class="text-xs tabular-nums text-muted-foreground">{filteredForwards().length + filteredManagedServices().length}</span></Show>
+                  <Show when={forwardResource.data() !== undefined || managedResource.data() !== undefined}><span class="text-xs tabular-nums text-muted-foreground">{filteredForwards().length + filteredManagedServices().length + visibleInstallSubmissions().length}</span></Show>
                 </div>
                 <div class="web-services-toolbar-actions" data-testid="web-services-toolbar-actions">
 
@@ -3677,9 +3821,9 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
               <Show when={!collectionRetained() && (forwardsCheckFailed() || managedLoadError())}><div class="web-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" /><p>{i18n.t(forwardsRenderable() || managedState().length ? 'webServices.collection.refreshFailed' : 'webServices.errors.loadFailedPrefix')}</p></div></Show>
               <Show when={initialForwardsLoading()}><WebServicesListSkeleton /></Show>
 
-              <Show when={collectionRenderable() && (collectionRetained() || !(forwardsCheckFailed() || managedLoadError()))}>
-                <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !ctx.env()?.permissions?.can_execute} />}>
-                  <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
+              <Show when={collectionRenderable() && (installSubmissions().length > 0 || collectionRetained() || !(forwardsCheckFailed() || managedLoadError()))}>
+                <Show when={unmanagedForwards().length > 0 || managedState().length > 0 || visibleInstallSubmissions().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !ctx.env()?.permissions?.can_execute} />}>
+                  <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0 || visibleInstallSubmissions().length > 0} fallback={
                     <div class="flex flex-col items-center justify-center px-4 py-12">
                       <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{searchQuery() ? i18n.t('webServices.search.noMatches', { query: searchQuery() }) : i18n.t('webServices.collection.archiveEmpty')}</p>
                       <Show when={searchQuery()}><Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button></Show>
@@ -3716,6 +3860,19 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                           />
                         )}</Show>
                       )}</For>
+                      <For each={visibleInstallSubmissions().map(item => item.requestID)}>{requestID => {
+                        const submission = () => installSubmissionForID(requestID);
+                        const operation = () => managedPresentedOperation(submission().serviceID);
+                        return <ManagedInstallSubmissionRow
+                          submission={submission()} operation={operation()}
+                          expanded={Boolean(expandedManagedOperations()[operation()?.operation_id ?? ''])}
+                          onExpandedChange={expanded => { const current = operation(); if (current) setManagedOperationExpanded(current.operation_id, expanded); }}
+                          onCancel={() => void cancelManagedOperation(managedRowOperation(submission().serviceID))}
+                          checking={checkingInstallRequests().includes(requestID)}
+                          onReview={() => reviewInstallSubmission(submission())}
+                          onCheck={() => void checkInstallSubmission(submission())}
+                        />;
+                      }}</For>
                       <For each={filteredForwards().map(forward => forward.forward_id)}>{(forwardID) => {
                         const forward = () => forwardsByID().get(forwardID)!;
                         return (
@@ -3854,7 +4011,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
             <div class="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{templateDrawerView() === 'install' ? i18n.t('common.actions.close') : i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
-              <Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}><StableText reserve={[i18n.t('webServices.managed.operationStarting'), i18n.t('webServices.managed.installStart'), i18n.t('webServices.management.reviewInstall')]}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : installReview() ? i18n.t('webServices.managed.installStart') : i18n.t('webServices.management.reviewInstall')}</StableText></Button>
+              <Button data-testid="managed-install-submit" size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}><StableText reserve={[i18n.t('webServices.managed.operationStarting'), i18n.t('webServices.managed.installStart'), i18n.t('webServices.management.reviewInstall')]}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : installReview() ? i18n.t('webServices.managed.installStart') : i18n.t('webServices.management.reviewInstall')}</StableText></Button>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
                 <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}><StableText reserve={[i18n.t('webServices.managed.savingTemplate'), i18n.t('webServices.managed.saveTemplate')]}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</StableText></Button>
