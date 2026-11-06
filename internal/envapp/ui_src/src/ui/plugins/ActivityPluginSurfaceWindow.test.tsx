@@ -29,7 +29,6 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
-  Pin: () => <span aria-hidden="true" />,
   AlertTriangle: () => <span aria-hidden="true" />,
   Refresh: () => <span aria-hidden="true" />,
 }));
@@ -137,24 +136,12 @@ function mountWindow(overrides: Partial<Parameters<typeof ActivityPluginSurfaceW
 }
 
 describe('ActivityPluginSurfaceWindow', () => {
-  it('pins from the window header without retiring or remounting its live surface', async () => {
-    const [pinned, setPinned] = createSignal(false);
-    const onSetActivityPin = vi.fn((value: boolean) => { setPinned(value); });
-    const { mount, props } = mountWindow({ get activityPinned() { return pinned(); }, onSetActivityPin });
-    const iframe = mount.querySelector('iframe');
-    const pin = mount.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-    pin.click();
-    await Promise.resolve();
-    expect(onSetActivityPin).toHaveBeenCalledWith(true);
-    expect(pin.getAttribute('aria-pressed')).toBe('true');
-    expect(mount.querySelector('iframe')).toBe(iframe);
-    expect(harness.closeBody).not.toHaveBeenCalled();
-    expect(props.onClosed).not.toHaveBeenCalled();
-    pin.click();
-    await Promise.resolve();
-    expect(onSetActivityPin).toHaveBeenLastCalledWith(false);
-    expect(mount.querySelector('iframe')).toBe(iframe);
-    expect(harness.closeBody).not.toHaveBeenCalled();
+  it.each([false, true])('keeps pin actions out of the floating window when mobile is %s', (mobile) => {
+    harness.mobile = mobile;
+    const { mount } = mountWindow();
+    expect(mount.querySelector('[data-plugin-quick-pin]')).toBeNull();
+    expect(mount.querySelector('iframe')).not.toBeNull();
+    expect(mount.querySelector('[data-window-close]')).not.toBeNull();
   });
 
   it('binds modal semantics and moves initial focus into the plugin iframe', async () => {

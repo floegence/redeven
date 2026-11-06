@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin discovery, placement and layout continuity
 tags: [ui, plugins, activity, workbench, plugin-center]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -15,7 +15,7 @@ Redeven owns navigation, pins and persisted geometry; released ReDevPlugin owns 
 ### Discovery and pinning
 Activity Bar Plugins opens a Shell-root Launcher without navigation. Search intersects category with NFKC/locale-folded names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay without grid reflow and restore row focus.
 
-Tiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/Shift+F10 offers information/current-mode Activity Bar or Workbench Dock pins; pinning keeps Launcher open, dismiss restores tile focus. Plugin Center has explicit 44px touch pins; cards/details/Activity headers also offer Activity pins.
+Tiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/Shift+F10 offers information/current-mode Activity Bar or Workbench Dock pins; pinning keeps Launcher open, dismiss restores tile focus. Plugin Center has explicit 44px touch pins; cards/details and pinned Activity context menus also offer Activity pins. Floating plugin windows show only their identity and window controls; they do not duplicate shortcut pin actions.
 
 Use environment-scoped Shell preferences with independent Activity/Workbench pins and synchronized selected/accessibility state. Pins grant no launch/enable/authority. Activity unpin first completes exact retirement; failed close retains pin/error. Other windows/siblings retain lifetimes.
 
@@ -25,7 +25,7 @@ Authenticated session-ready invokes idempotent Host recoverEnabled without timer
 ### Activity pages/windows
 Allocate a fresh PluginSurfaceSlot only when placement and document are visible. Hidden unopened placements retain layout without iframe/authority; close requires no open/revoke round trip. Once opening starts, hiding retains independent slot/draft/selection/undo/pending work. Visible placements may open concurrently; each actual open captures current context revision and delivers later changes once. Windows use openSurfaceInSlot. Open/bridge failure replaces iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page.
 
-Equivalent metadata preserves container/iframe/state; slot lifecycle owns visibility. Instance/surface/management-revision/runtime-generation changes retire leases. Cold open shows one themed accessible waiting surface, then ready or recovery/details; never rotate bootstrap labels.
+Equivalent metadata preserves container/iframe/state; slot lifecycle owns visibility. Instance/surface/management-revision/runtime-generation changes retire leases. Cold open shows one themed accessible waiting surface, then ready or recovery/details; never rotate bootstrap labels. The published platform waits for the replacement document parser/module graph and initial SDK context delivery before revealing its frame. Product does not add timers, paint requirements or inspect application DOM.
 
 Stable pinned-page component functions allow names/icons/order updates without remounting siblings or losing edits. Published Floe retained views own sibling isolation/DOM order: moving the same iframe can reload it. Acceptance checks inner document/draft and container; add no second keep-alive stack.
 

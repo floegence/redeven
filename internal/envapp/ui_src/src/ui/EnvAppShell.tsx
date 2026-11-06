@@ -5607,8 +5607,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             refreshInventory={refreshPluginSurfaceInventory}
             instanceID={window.instanceID}
             target={window.target()}
-            activityPinned={hasPluginPlacementPin(pluginPlacementPins(), 'activity', 'instance:' + window.target().pluginInstanceID)}
-            onSetActivityPin={(pinned) => setPluginPin('activity', 'instance:' + window.target().pluginInstanceID, pinned)}
             coordinator={pluginSurfaceCoordinator}
             confirmationQueue={pluginConfirmationQueue}
             visible={viewMode() === 'activity'}

@@ -643,14 +643,11 @@ function browserCoordinator(): PluginSurfacePlacementCoordinator {
 
 function mountActivityWindow(): HTMLElement {
   const host = fixedHost();
-  const [pinned, setPinned] = createSignal(false);
   const queue = createPluginConfirmationQueue();
   disposers.push(render(() => (
     <LayoutProvider><NotificationProvider>
       <ActivityPluginSurfaceWindow
         instanceID="activity_browser_plugin"
-        activityPinned={pinned()}
-        onSetActivityPin={(value) => { setPinned(value); }}
         target={metricsItem.defaultLaunchTarget!}
         coordinator={browserCoordinator()}
         confirmationQueue={queue}
@@ -1916,24 +1913,9 @@ describe('plugin management browser geometry and interaction', () => {
       expectInsideViewport(activity, viewport);
       expectNoHorizontalOverflow(activity);
       expect(activity.querySelector('[data-plugin-surface-host]')).not.toBeNull();
-      const frame = activity.querySelector('iframe');
-      const pin = activity.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-      expectInsideViewport(pin, viewport);
-      if (viewport.width < 768) {
-        expectTouchTarget(pin);
-        const titlebar = activity.querySelector('[data-floe-floating-window-titlebar]')!.getBoundingClientRect();
-        const pinBounds = pin.getBoundingClientRect();
-        expect(pinBounds.top).toBeGreaterThanOrEqual(titlebar.top);
-        expect(pinBounds.bottom).toBeLessThanOrEqual(titlebar.bottom);
-        expect(pin.contains(document.elementFromPoint(pinBounds.x + 8, pinBounds.y + 8))).toBe(true);
-      }
-      const bounds = activity.getBoundingClientRect();
-      await page.elementLocator(pin).click();
-      expect(pin.getAttribute('aria-pressed')).toBe('true');
-      expect(activity.querySelector('iframe')).toBe(frame);
-      expect(activity.getBoundingClientRect().x).toBe(bounds.x);
-      expect(activity.getBoundingClientRect().y).toBe(bounds.y);
-      await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-window-' + viewport.width + '.png' });
+      expect(activity.querySelector('[data-plugin-quick-pin]')).toBeNull();
+      expect(activity.querySelector('[data-floe-floating-window-control="close"]')).not.toBeNull();
+      await page.screenshot({ path: '../../../.vitest-attachments/plugin-window-chrome-' + viewport.width + '.png' });
 
       while (disposers.length > 0) disposers.pop()?.();
       document.body.replaceChildren();

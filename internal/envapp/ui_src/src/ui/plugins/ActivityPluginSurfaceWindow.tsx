@@ -6,7 +6,6 @@ import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js'
 import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
-import { PluginPinButton } from './PluginPinButton';
 import { PluginSurfaceContainer, type PluginSurfaceResolver } from './PluginSurfaceContainer';
 import { isolateDocumentBranch } from './modalIsolation';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
@@ -17,8 +16,6 @@ import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowSta
 
 export type ActivityPluginSurfaceWindowProps = {
   instanceID: string;
-  activityPinned?: boolean;
-  onSetActivityPin?: (pinned: boolean) => void | Promise<void>;
   target: PluginSurfaceLaunchTarget;
   resolveSurface?: PluginSurfaceResolver;
   refreshInventory?: () => Promise<boolean>;
@@ -297,12 +294,6 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         if (!open) void requestClose();
       }}
       title={title()}
-      headerActions={props.onSetActivityPin ? (
-        <PluginPinButton pluginName={props.target.displayName ?? props.target.pluginID}
-          pinned={Boolean(props.activityPinned)} disabled={closing() || closeFailed()}
-          class={layout.isMobile() ? 'h-11 w-11 sm:h-11 sm:w-11' : 'h-7 w-7 sm:h-7 sm:w-7'}
-          onSetPinned={(pinned) => props.onSetActivityPin?.(pinned)} />
-      ) : undefined}
       stackId={stackId}
       onActivate={() => props.onActivate(props.instanceID)}
       persistenceKey={`plugin-surface:${props.target.pluginInstanceID}:${props.target.surfaceID}:activity`}
@@ -311,7 +302,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
       compactBelow={768}
       viewportInsets={layout.isMobile() ? { top: 4, right: 4, bottom: 4, left: 4 } : undefined}
       surfaceRef={bindSurface}
-      class={'redeven-plugin-activity-window overflow-hidden rounded-md' + (layout.isMobile() && props.onSetActivityPin ? ' [&_[data-floe-floating-window-titlebar]]:min-h-12' : '')}
+      class="redeven-plugin-activity-window overflow-hidden rounded-md"
       contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"
     >
       <span
