@@ -4677,6 +4677,7 @@
         "docker": "Docker no está disponible o no se puede acceder a su demonio.",
         "compose": "Docker Compose no está disponible en este entorno."
       },
+      "installReady": "Listo para instalar",
       "installSubmissionFailed": "Error en la solicitud de instalación",
       "installSubmissionUnknown": "Estado del envío desconocido",
       "installSubmissionUnknownDetail": "No se pudo confirmar el envío. Comprueba su estado antes de volver a intentarlo.",

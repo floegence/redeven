@@ -4,6 +4,7 @@ import { render } from 'solid-js/web';
 import { FloeConfigProvider, builtInShellThemePresets, ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
+import axe from 'axe-core';
 import { I18nProvider } from '../i18n';
 import { SUPPORTED_LOCALES } from '../i18n/localeMeta';
 import { EnvPortForwardsPage } from './EnvPortForwardsPage';
@@ -85,11 +86,158 @@ describe('Web Services product interaction', () => {
     host = document.createElement('div');
     host.style.cssText = `width:${width}px;height:840px;position:relative;`;
     document.body.append(host);
-    function Surface() { const theme = useTheme(); theme.selectShellTheme(['classic-dark', 'soft-black'].includes(preset) ? 'dark' : 'light', preset); return <I18nProvider><EnvPortForwardsPage /></I18nProvider>; }
+    function Surface() { const theme = useTheme(); theme.selectShellTheme((preset.endsWith('dark') || preset === 'soft-black') ? 'dark' : 'light', preset); return <I18nProvider><EnvPortForwardsPage /></I18nProvider>; }
     dispose = render(() => <FloeConfigProvider config={{ theme: { shellPresets: builtInShellThemePresets }, storage: { enabled: false } }}><ThemeProvider><Surface /></ThemeProvider></FloeConfigProvider>, host);
     await expect.poll(() => host.querySelectorAll('[data-testid="managed-service-row"]').length).toBe(records.filter((item) => item.management_state === 'active').length);
     await settle();
   }
+  function installFixture(requiredNotice = false) {
+    const template = {
+      template_id: 'compact-harness', service_family_id: 'compact-harness', name: 'Example Harness', description: 'Run Example Harness directly in this Environment.', source: 'builtin', deployment: 'host', revision: 1,
+      duplicateable: true, editable: false, available: true, developer_preview: true, deployments: [{deployment: 'host', available: true}],
+      recommended_release: {schema_version: 1, kind: 'npm', source: '@example/harness', version: '0.2.0-rc.2'},
+      default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-harness-host', workspace_roots: [{id: 'home', label: 'Home', path: '/Users/demo'}],
+      default_access_mode: 'desktop_loopback', source_url: 'https://example.com/harness',
+      localizations: {'en-US': {name: 'Example Harness', description: 'Run Example Harness directly in this Environment.', notices: {'trusted-workspace': {title: 'Use a trusted workspace', description: 'The service can modify the selected files.'}}}},
+      notices: requiredNotice ? [{id: 'trusted-workspace', revision: 1, severity: 'warning', acknowledgement_required: true, title: 'Use a trusted workspace', description: 'The service can modify the selected files.'}] : [],
+      spec: {schema_version: 7, kind: 'host', endpoint: {scheme: 'http'}, host: {npm: {package_name: '@example/harness', version: '0.2.0-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'harness'}, start_script: 'exec harness'}},
+    };
+    const normalFetch = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/catalog')) return {templates: [template]};
+      if (url.endsWith('/release-candidates')) return {schema_version: 2, check_status: 'fresh', catalog_status: 'complete', has_more: false, loaded_count: 1, candidates: [{schema_version: 2, candidate_id: 'recommended', source_kind: 'npm', source: '@example/harness', version: '0.2.0-rc.2', channel: 'preview', trust: 'registry_verified', selectable: true, verification_status: 'verified', is_recommended: true, recommendation_status: 'available', relation: 'same'}]};
+      return normalFetch(url, options);
+    });
+    return template;
+  }
+  async function openInstall() {
+    await userEvent.click(page.getByTestId('service-templates-button'));
+    await expect.poll(() => document.querySelector('[data-testid="service-template-primary"]')).toBeTruthy();
+    await userEvent.click(page.getByTestId('service-template-primary'));
+    await expect.poll(() => document.querySelector('[data-testid="managed-install-form"]')).toBeTruthy();
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    await Promise.allSettled(panel.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+    await document.fonts.ready;
+    return panel;
+  }
+  for (const preset of ['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark']) for (const width of [1440, 390]) {
+    const locale = width === 390 ? 'de-DE' : preset.endsWith('dark') ? 'zh-TW' : 'zh-CN';
+    it(`keeps installation focused and keyboard accessible in ${preset} at ${width}px ${locale}`, async () => {
+      localStorage.setItem('redeven_ui_language_preference', locale);
+      const template = installFixture();
+      await mount(Math.min(width, 1120), preset);
+      await page.viewport(width, 960);
+      const panel = await openInstall();
+      const form = panel.querySelector<HTMLElement>('[data-testid="managed-install-form"]')!;
+      const details = panel.querySelector<HTMLDetailsElement>('[data-testid="managed-install-options"]')!;
+      const workspace = panel.querySelector<HTMLElement>('[data-testid="managed-workspace-path"]')!;
+      expect(form.textContent?.split('0.2.0-rc.2')).toHaveLength(2);
+      expect(form.innerText).not.toContain(template.description);
+      expect(details.open).toBe(false);
+      expect(details.querySelector<HTMLElement>('fieldset')!.checkVisibility()).toBe(false);
+      expect(workspace.textContent).toBe(template.default_workspace_path);
+      expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth + 1);
+      expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      expect(panel.getBoundingClientRect().width).toBeLessThanOrEqual(width === 390 ? 390 : 672);
+      const submit = panel.querySelector<HTMLElement>('[data-testid="managed-install-submit"]')!;
+      expect(submit.getBoundingClientRect().bottom).toBeLessThanOrEqual(960);
+      const audit = async () => {
+        const result = await axe.run(panel);
+        expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => ({id: v.id, targets: v.nodes.map(n => n.target)}))).toEqual([]);
+      };
+      await audit();
+      const directory = import.meta.env.VITE_REDEVEN_MANAGEMENT_EVIDENCE_DIR;
+      if (directory) await page.screenshot({path: `${directory}/install-compact-${width}-${preset}-${locale}.png`});
+      details.querySelector('summary')!.focus();
+      await userEvent.keyboard('{Enter}');
+      expect(details.open).toBe(true);
+      const radios = details.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+      expect(radios).toHaveLength(2);
+      expect(radios[1].checked).toBe(true);
+      radios[1].focus();
+      await userEvent.keyboard('{ArrowLeft}');
+      await expect.poll(() => radios[0].checked).toBe(true);
+      expect(document.activeElement).toBe(radios[0]);
+      expect(details.querySelector('.service-install-options__value')?.textContent).toBe(radios[0].closest('label')?.textContent);
+      expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      await audit();
+      if (directory) await page.screenshot({path: `${directory}/install-options-${width}-${preset}-${locale}.png`});
+      await userEvent.click(page.elementLocator(panel.querySelector<HTMLButtonElement>('[data-testid="managed-install-version"] button')!));
+      await expect.poll(() => document.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy();
+      expect(document.querySelector('[data-release-id="recommended"]')).toBeTruthy();
+      await userEvent.keyboard('{Escape}');
+      await expect.poll(() => document.querySelector('[data-testid="managed-release-candidates"]')).toBeNull();
+      expect(workspace.textContent).toBe(template.default_workspace_path);
+    });
+  }
+  for (const locale of SUPPORTED_LOCALES) it(`keeps the complete install form usable at 320px in ${locale}`, async () => {
+    localStorage.setItem('redeven_ui_language_preference', locale);
+    await media.emulateMediaPreferences({reducedMotion: 'reduce'});
+    installFixture(true);
+    await mount(320, 'porcelain-dark');
+    await page.viewport(320, 720);
+    const panel = await openInstall();
+    const details = panel.querySelector<HTMLDetailsElement>('[data-testid="managed-install-options"]')!;
+    details.querySelector('summary')!.focus();
+    await userEvent.keyboard('{Enter}');
+    const assertContained = (element: HTMLElement) => {
+      const bounds = element.getBoundingClientRect();
+      expect(bounds.left, element.textContent ?? '').toBeGreaterThanOrEqual(-1);
+      expect(bounds.right, element.textContent ?? '').toBeLessThanOrEqual(321);
+      expect(element.scrollWidth, element.textContent ?? '').toBeLessThanOrEqual(element.clientWidth + 1);
+    };
+    for (const element of panel.querySelectorAll<HTMLElement>('.service-install, .service-install-field__heading, [data-testid="managed-workspace-path"], [role="radiogroup"], [data-floe-choice-variant], [data-testid="managed-install-submit"]')) assertContained(element);
+    const submit = panel.querySelector<HTMLElement>('[data-testid="managed-install-submit"]')!;
+    expect(submit.getBoundingClientRect().bottom).toBeLessThanOrEqual(720);
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+    const consent = panel.querySelector<HTMLElement>('[data-testid="managed-template-notices"]')!;
+    consent.scrollIntoView({block: 'nearest'});
+    await settle();
+    expect(consent.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+    expect(consent.getBoundingClientRect().bottom).toBeLessThan(submit.getBoundingClientRect().top);
+    expect(details.open).toBe(true);
+  });
+  it('keeps mandatory consent visible and reviews the chosen mode before handing installation to the list', async () => {
+    const template = installFixture(true);
+    const normalFetch = api.fetch.getMockImplementation()!;
+    let resolvePlan!: (value: unknown) => void;
+    const plan = new Promise(resolve => {resolvePlan = resolve;});
+    const operation = {operation_id: 'compact-install', service_id: 'compact-install', action: 'install', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7};
+    api.stream.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify(operation)}\n\n`, {headers: {'Content-Type': 'text/event-stream'}}));
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/install-plans')) return plan;
+      if (url.endsWith('/managed-web-services') && options?.method === 'POST') return {service: {...base, service_id: operation.service_id, template_id: template.template_id}, operation};
+      return normalFetch(url, options);
+    });
+    await mount();
+    const panel = await openInstall();
+    const submit = panel.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
+    const notice = panel.querySelector<HTMLElement>('[data-testid="managed-template-notices"]')!;
+    expect(notice.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(notice.closest('details')).toBeNull();
+    expect(submit.disabled).toBe(true);
+    await userEvent.click(page.elementLocator(notice.querySelector<HTMLInputElement>('input[type=checkbox]')!.closest('label')!));
+    expect(submit.disabled).toBe(false);
+    const details = panel.querySelector<HTMLDetailsElement>('[data-testid="managed-install-options"]')!;
+    details.querySelector('summary')!.focus();
+    await userEvent.keyboard('{Enter}');
+    const radios = details.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    radios[1].focus(); await userEvent.keyboard('{ArrowLeft}');
+    await userEvent.click(page.elementLocator(submit));
+    await expect.poll(() => api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/install-plans')).length).toBe(1);
+    expect(submit.disabled).toBe(true);
+    expect(document.querySelector('[data-testid="managed-install-form"]')).toBeTruthy();
+    expect(api.fetch.mock.calls.find(([url]) => String(url).endsWith('/install-plans'))?.[1]?.body).toContain('"access_mode":"unified_proxy"');
+    resolvePlan({service_id: operation.service_id, expires_at_unix_ms: Date.now() + 60000, plan_digest: 'compact-reviewed', workspace_path: template.default_workspace_path + '/instance'});
+    await expect.poll(() => panel.querySelector('.service-install-ready')?.textContent).toBe('Ready to install');
+    expect(submit.disabled).toBe(false);
+    expect(panel.querySelector('[data-testid="managed-workspace-path"]')?.textContent).toBe(template.default_workspace_path + '/instance');
+    await userEvent.click(page.elementLocator(submit));
+    await expect.poll(() => document.querySelector('[data-testid="managed-install-form"]')).toBeNull();
+    const requests = api.fetch.mock.calls.filter(([url, options]) => String(url).endsWith('/managed-web-services') && options?.method === 'POST');
+    expect(requests).toHaveLength(1);
+    expect(JSON.parse(String(requests[0][1]?.body))).toMatchObject({access_mode: 'unified_proxy', accepted_notice_revisions: {'trusted-workspace': 1}, plan_digest: 'compact-reviewed'});
+  });
   for (const [width, preset, locale, reducedMotion] of [
     [1120, 'classic-light', 'en-US', false], [360, 'classic-dark', 'zh-CN', true],
     [480, 'classic-light', 'de-DE', false], [1120, 'classic-dark', 'zh-TW', false],

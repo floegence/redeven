@@ -4767,6 +4767,7 @@
         "docker": "Docker недоступен или не удается подключиться к его службе.",
         "compose": "Docker Compose недоступен в текущей среде."
       },
+      "installReady": "Всё готово к установке",
       "installSubmissionFailed": "Ошибка запроса на установку",
       "installSubmissionUnknown": "Результат отправки неизвестен",
       "installSubmissionUnknownDetail": "Не удалось подтвердить отправку. Проверьте статус перед повторной попыткой.",

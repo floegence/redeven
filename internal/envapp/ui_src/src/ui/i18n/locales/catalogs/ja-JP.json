@@ -4677,6 +4677,7 @@
         "docker": "Docker を利用できないか、デーモンに接続できません。",
         "compose": "現在の環境では Docker Compose を利用できません。"
       },
+      "installReady": "インストールの準備完了",
       "installSubmissionFailed": "インストール要求に失敗しました",
       "installSubmissionUnknown": "送信結果を確認できません",
       "installSubmissionUnknownDetail": "送信結果を確認できませんでした。再試行する前に状態を確認してください。",

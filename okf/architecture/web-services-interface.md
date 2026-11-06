@@ -26,6 +26,8 @@ Template categories use published Floe Tabs with paired selection colors, roving
 Both template and installed-service versions use the same bounded directory/detail workspace. Rows emphasize version and state; the selected detail owns trust, source, platform and expandable artifact identity. Current releases retain useful provenance. Narrow layouts stack independently scrollable panes, while request feedback and submission remain outside the list. Refresh and verification preserve selection, focus, scroll and footer geometry. Confirmation, stop-first and update authorization remain unchanged. Selection motion is brief and local; reduced motion removes travel.
 
 ## Installation feedback
+The installation drawer uses a bounded compact form: service identity and environment, one selected version with its change action, then a complete wrapping workspace path with its folder action. Avoid repeated version facts, nested recommendation cards and default explanatory paragraphs. Optional deployment facts and access mode live in a closed disclosure whose summary shows the selected mode. Published Floe button radios retain native keyboard selection. Custom workspace warnings, release advisories and required template acknowledgements remain outside that disclosure; consent still gates review and installation. The footer has one primary review/install action, a template-list return and the drawer's existing close control; narrow layouts give the primary action its own full-width row. Successful review adds a short status without repeating the plan.
+
 Final install returns immediately to the active collection with an appended submission row and accessible status focus, while admission runs independently. The accepted operation supplies version validation, environment checks and deployment progress even before a full list response. Search/archive filters cannot hide the new submission. Status explicitly opens execution details; completion does not force another drawer. Rejected requests support safe fresh review, uncertain responses support receipt lookup, and accepted failures use existing service recovery. See [operation progress](managed-service-operation-progress.md#install-admission-and-handoff).
 
 ## Execution feedback
@@ -41,6 +43,7 @@ The shell retains only collection and loading-presentation styles; management an
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/pages/WebServicesPage.browser.test.tsx` - Compact installation across Classic/Porcelain light/dark and desktop/narrow layouts, localized path wrapping, keyboard selection, accessibility, consent, delayed review and immediate collection handoff.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceCatalogDesign.browser.test.tsx` - Classic/Porcelain light/dark, desktop/narrow contrast, keyboard, accessibility and reduced-motion acceptance.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceVersions.browser.test.tsx` - Version verification, consent, stop-first, update and Workbench continuity.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Product presentation.

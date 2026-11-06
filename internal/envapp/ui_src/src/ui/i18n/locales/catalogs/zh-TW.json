@@ -4677,6 +4677,7 @@
         "docker": "Docker 無法使用，或無法連線至其常駐程式。",
         "compose": "目前環境中沒有可用的 Docker Compose。"
       },
+      "installReady": "可以開始安裝",
       "installSubmissionFailed": "安裝請求失敗",
       "installSubmissionUnknown": "提交結果待確認",
       "installSubmissionUnknownDetail": "目前無法確認提交結果。請先檢查狀態，再決定後續操作。",

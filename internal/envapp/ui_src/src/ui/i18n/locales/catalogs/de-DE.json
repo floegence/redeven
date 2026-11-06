@@ -4677,6 +4677,7 @@
         "docker": "Docker ist nicht verfügbar oder sein Daemon ist nicht erreichbar.",
         "compose": "Docker Compose ist in dieser Umgebung nicht verfügbar."
       },
+      "installReady": "Bereit zur Installation",
       "installSubmissionFailed": "Installationsanfrage fehlgeschlagen",
       "installSubmissionUnknown": "Übermittlungsstatus unbekannt",
       "installSubmissionUnknownDetail": "Die Übermittlung konnte nicht bestätigt werden. Prüfen Sie den Status, bevor Sie es erneut versuchen.",

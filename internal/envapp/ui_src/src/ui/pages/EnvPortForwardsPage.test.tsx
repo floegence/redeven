@@ -1643,6 +1643,14 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
     await flushPage();
 
+    const installSurface = host.querySelector<HTMLElement>('[data-testid="managed-install-form"]');
+    expect(installSurface).toBeTruthy();
+    expect(controlText(installSurface)).not.toContain('Versions are read directly');
+    expect(controlText(installSurface)).not.toContain('Choose the directory this service can access.');
+    expect(controlText(installSurface)).not.toContain('Host deployment');
+    expect(controlText(installSurface)?.split('0.1.1-rc.2')).toHaveLength(2);
+    expect(installSurface?.querySelector<HTMLDetailsElement>('[data-testid="managed-install-options"]')?.open).toBe(false);
+
     const workspace = host.querySelector<HTMLElement>('[data-testid="managed-workspace-path"]');
     expect(workspace?.dataset.path).toBe(template.default_workspace_path);
     expect(workspace?.dataset.path).not.toBe(template.workspace_roots[0]?.path);

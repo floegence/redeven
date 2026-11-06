@@ -13,6 +13,8 @@ import {
   Textarea,
   Tag,
   SegmentedControl,
+  RadioGroup,
+  RadioOption,
   type DropdownItem,
   DirectoryPicker,
 } from '@floegence/floe-webapp-core/ui';
@@ -1892,6 +1894,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
 function AccessModePicker(props: Readonly<{
   value: WebServiceAccessMode;
   targetURL: string;
+  compact?: boolean;
   disabled?: boolean;
   onChange: (mode: WebServiceAccessMode) => void;
 }>) {
@@ -1926,7 +1929,7 @@ function AccessModePicker(props: Readonly<{
   return (
     <fieldset data-testid="web-service-access-mode">
       <legend class="mb-1.5 text-xs font-medium">{i18n.t('webServices.accessMode.label')}</legend>
-      <div class="grid gap-2 sm:grid-cols-2">
+      <Show when={props.compact} fallback={<div class="grid gap-2 sm:grid-cols-2">
         <For each={options()}>{(option) => {
           const selected = () => props.value === option.value;
           return (
@@ -1950,7 +1953,14 @@ function AccessModePicker(props: Readonly<{
             </button>
           );
         }}</For>
-      </div>
+      </div>}>
+        <RadioGroup size="sm" variant="button" orientation="horizontal" value={props.value} disabled={props.disabled}
+          aria-label={i18n.t('webServices.accessMode.label')}
+          onChange={value => props.onChange(value as WebServiceAccessMode)}>
+          <For each={options()}>{option => <RadioOption value={option.value} disabled={props.disabled || option.disabled} label={i18n.t(option.value === 'unified_proxy' ? 'webServices.accessMode.unifiedProxyShort' : 'webServices.accessMode.desktopLoopbackShort')} />}</For>
+        </RadioGroup>
+        <p class="mt-2 text-xs leading-5 text-muted-foreground">{options().find(option => option.value === props.value)?.description}</p>
+      </Show>
     </fieldset>
   );
 }
@@ -3996,7 +4006,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
       <EnvAppDrawer
         open={templateDrawerOpen()}
-        class="service-template-explorer-drawer"
+        class={templateDrawerView() === 'install' ? 'service-template-install-drawer' : 'service-template-explorer-drawer'}
         bodyClass="h-full"
         onOpenChange={(open) => {
           if (templateSaving()) return;
@@ -4006,10 +4016,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         bodyDescription={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
         footer={templateDrawerView() === 'catalog' ? undefined : (
-          <div class="flex w-full items-center justify-between gap-2">
+          <div class={cn('flex w-full items-center justify-between gap-2', templateDrawerView() === 'install' && 'service-install-footer')}>
             <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); setTemplateRecommendationUnavailable(false); }} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <div class="ml-auto flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{templateDrawerView() === 'install' ? i18n.t('common.actions.close') : i18n.t('webServices.actions.cancel')}</Button>
+              <Show when={templateDrawerView() !== 'install'}><Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button></Show>
               <Show when={templateDrawerView() === 'install'}>
               <Button data-testid="managed-install-submit" size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}><StableText reserve={[i18n.t('webServices.managed.operationStarting'), i18n.t('webServices.managed.installStart'), i18n.t('webServices.management.reviewInstall')]}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : installReview() ? i18n.t('webServices.managed.installStart') : i18n.t('webServices.management.reviewInstall')}</StableText></Button>
               </Show>
@@ -4045,110 +4055,71 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
           </Show>
 
           <Show when={templateDrawerView() === 'install' && selectedTemplate()} keyed>{(template) => (
-            <div class="space-y-5">
-				<Show when={installReview()}><p role="status" class="rounded-md border p-3 text-[length:var(--floe-type-body)]">{i18n.t('webServices.management.installReviewed')}</p></Show>
-				<For each={template.effective_spec?.parameters ?? template.spec?.parameters ?? []}>{(parameter) => <div class="space-y-1"><label class="block text-xs font-medium" for={`install-parameter-${parameter.name}`}>{parameter.label || parameter.name}{parameter.required ? ' *' : ''}</label><Input id={`install-parameter-${parameter.name}`} type={parameter.type==='secret' ? 'password' : 'text'} autocomplete="off" required={parameter.required} value={installParameters()[parameter.name] ?? selectedTemplateRelease()?.parameters[parameter.name] ?? parameter.default ?? ''} onInput={(event) => setInstallParameters((current) => ({...current,[parameter.name]:event.currentTarget.value}))} /><Show when={parameter.description}><p class="text-xs text-muted-foreground">{parameter.description}</p></Show></div>}</For>
-              <Show when={selectedTemplatePresentation()} keyed>{(presentation) => (
-                <div class="service-template-install-identity rounded-xl border p-4">
-                  <ServiceTemplateIdentity template={presentation} />
-                </div>
-              )}</Show>
-			  <section class="service-template-install-section border-t pt-4">
-				<div class="flex items-start justify-between gap-3">
-					<div><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.versions')}</h3><p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.releaseSelectionDescription')}</p></div>
-					<Button size="sm" variant="outline" onClick={() => openTemplateReleasePicker(template.template_id)} disabled={managedInstallSubmitting()}>{i18n.t('webServices.managed.chooseVersion')}</Button>
-				</div>
-				<div class="mt-3 rounded-lg border bg-muted/20 p-3"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{template.source === 'builtin' ? i18n.t('webServices.managed.recommendedVersion') : i18n.t('webServices.managed.defaultVersion')}</div><div class="mt-1 font-mono text-[length:var(--floe-type-body)] text-foreground">{selectedTemplateRelease()?.candidate.version || selectedTemplateRelease()?.candidate.tag || (template.recommended_release ? releaseIdentityLabel(template.recommended_release) : '—')}</div></div>
-				<Show when={templateRecommendationUnavailable()}><p class="mt-2 text-xs text-warning">{i18n.t('webServices.managed.releaseSourceError.RECOMMENDED_RELEASE_UNAVAILABLE')}</p></Show>
-				<Show when={installReleaseRiskHints().length > 0}><div class="mt-3"><ManagedReleaseRiskHints riskIDs={installReleaseRiskHints()} /></div></Show>
-			  </section>
-              <section class="service-template-install-section border-t pt-4">
-                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.workspaceSection')}</h3>
-                <p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.workspaceSectionDescription')}</p>
-                <div class="service-template-workspace-picker mt-3" data-recommended={workspaceUsesRecommendedPath()}>
-                  <div class="flex min-w-0 items-center gap-3">
-                    <span class="service-template-workspace-picker__icon flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" aria-hidden="true">
-                      <FolderOpen class="h-4 w-4" />
-                    </span>
-                    <div class="min-w-0 flex-1">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-xs font-medium text-foreground">{i18n.t('webServices.managed.workspace')}</span>
-                        <Show when={workspaceUsesRecommendedPath()}>
-                          <span class="service-template-workspace-picker__badge rounded-full px-2 py-0.5 text-[10px] font-semibold">{i18n.t('webServices.managed.recommended')}</span>
-                        </Show>
-                      </div>
-                      <p
-                        class={`mt-1 font-mono text-xs text-muted-foreground ${installReview() ? "break-all" : "truncate"}`}
-                        title={workspacePath()}
-                        data-testid="managed-workspace-path"
-                        data-path={workspacePath()}
-                      >
-                        {workspacePath() || i18n.t('webServices.managed.workspacePlaceholder')}
-                      </p>
+            <div class="service-install" data-testid="managed-install-form">
+              <Show when={selectedTemplatePresentation()}>{presentation => (
+                <header class="service-install-identity">
+                  <ServiceTemplateIdentity template={presentation()} compact metadata={
+                    <div class="service-install-context">
+                      <span>{presentation().deploymentLabel}</span><span aria-hidden="true">·</span>
+                      <span>{ctx.env()?.name || ctx.env_id()}</span>
+                      <Show when={template.source === 'builtin'}><span aria-hidden="true">·</span><span>{i18n.t('webServices.managed.builtIn')}</span></Show>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      class="shrink-0 gap-1.5"
-                      data-testid="managed-workspace-picker-trigger"
-                      onClick={openWorkspacePicker}
-                      disabled={managedInstallSubmitting()}
-                    >
-                      <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
-                      {i18n.t('webServices.managed.chooseWorkspace')}
-                    </Button>
+                  } />
+                </header>
+              )}</Show>
+
+              <div class="service-install-fields">
+                <section class="service-install-field" data-testid="managed-install-version">
+                  <div class="service-install-field__heading">
+                    <h3>{i18n.t('webServices.managed.versions')}</h3>
+                    <Button size="sm" variant="ghost" onClick={() => openTemplateReleasePicker(template.template_id)} disabled={managedInstallSubmitting()}>{i18n.t('webServices.managed.chooseVersion')}</Button>
                   </div>
-                </div>
-                <div class={cn('mt-2 flex items-start gap-2 text-[11px] leading-4', workspaceUsesRecommendedPath() ? 'text-muted-foreground' : 'text-warning')}>
-                  <Show when={workspaceUsesRecommendedPath()} fallback={<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}>
-                    <ShieldCheck class="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                  <div class="service-install-release">
+                    <span class="font-mono">{selectedTemplateRelease()?.candidate.version || selectedTemplateRelease()?.candidate.tag || (template.recommended_release ? releaseIdentityLabel(template.recommended_release) : '—')}</span>
+                    <Show when={!selectedTemplateRelease() && template.source === 'builtin'}><Tag size="sm" tone="soft">{i18n.t('webServices.managed.recommended')}</Tag></Show>
+                  </div>
+                  <Show when={templateRecommendationUnavailable()}><p class="service-install-warning" role="status">{i18n.t('webServices.managed.releaseSourceError.RECOMMENDED_RELEASE_UNAVAILABLE')}</p></Show>
+                </section>
+
+                <section class="service-install-field" data-testid="managed-install-workspace">
+                  <div class="service-install-field__heading">
+                    <h3>{i18n.t('webServices.managed.workspaceSection')}</h3>
+                    <Button type="button" size="sm" variant="ghost" data-testid="managed-workspace-picker-trigger" onClick={openWorkspacePicker} disabled={managedInstallSubmitting()}>{i18n.t('webServices.managed.chooseWorkspace')}</Button>
+                  </div>
+                  <div class="service-install-workspace">
+                    <FolderOpen class="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span class="min-w-0 break-all font-mono" title={workspacePath()} data-testid="managed-workspace-path" data-path={workspacePath()}>{workspacePath() || i18n.t('webServices.managed.workspacePlaceholder')}</span>
+                  </div>
+                  <Show when={!workspaceUsesRecommendedPath()}>
+                    <p class="service-install-warning"><AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{i18n.t('webServices.managed.workspaceCustomDescription')}</p>
+                    <Show when={template.default_workspace_path}><Button type="button" size="sm" variant="ghost" class="service-install-reset" onClick={() => setWorkspacePath(template.default_workspace_path)} disabled={managedInstallSubmitting()}><Refresh class="mr-1.5 h-3 w-3" aria-hidden="true" />{i18n.t('webServices.managed.restoreRecommendedWorkspace')}</Button></Show>
                   </Show>
-                  <div>
-                    <div>{workspaceUsesRecommendedPath() ? i18n.t('webServices.managed.workspaceSafeDefaultDescription') : i18n.t('webServices.managed.workspaceCustomDescription')}</div>
-                    <Show when={workspaceUsesRecommendedPath()}><div>{i18n.t('webServices.managed.workspaceCreatedOnDeploy')}</div></Show>
-                  </div>
+                </section>
+
+                <For each={template.effective_spec?.parameters ?? template.spec?.parameters ?? []}>{parameter => <div class="service-install-parameter">
+                  <label for={`install-parameter-${parameter.name}`}>{parameter.label || parameter.name}{parameter.required ? ' *' : ''}</label>
+                  <Input id={`install-parameter-${parameter.name}`} type={parameter.type === 'secret' ? 'password' : 'text'} autocomplete="off" required={parameter.required} value={installParameters()[parameter.name] ?? selectedTemplateRelease()?.parameters[parameter.name] ?? parameter.default ?? ''} onInput={event => setInstallParameters(current => ({...current, [parameter.name]: event.currentTarget.value}))} />
+                  <Show when={parameter.description}><p class="text-xs text-muted-foreground">{parameter.description}</p></Show>
+                </div>}</For>
+              </div>
+
+              <details class="service-install-options" data-testid="managed-install-options">
+                <summary><ChevronRight class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span>{i18n.t('webServices.managed.deploymentInformation')}</span><span class="service-install-options__value">{i18n.t(managedAccessMode() === 'desktop_loopback' ? 'webServices.accessMode.desktopLoopbackShort' : 'webServices.accessMode.unifiedProxyShort')}</span></summary>
+                <div class="service-install-options__body">
+                  <AccessModePicker compact value={managedAccessMode()} targetURL={`${template.spec?.endpoint.scheme ?? 'http'}://127.0.0.1`} disabled={managedInstallSubmitting()} onChange={setManagedAccessMode} />
+                  <dl><div><dt>{i18n.t('webServices.managed.dataLocation')}</dt><dd>{i18n.t('webServices.managed.managedPrivateData')}</dd></div></dl>
+                  <Show when={workspaceUsesRecommendedPath()}><p class="text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.workspaceCreatedOnDeploy')}</p></Show>
+                  <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
                 </div>
-                <Show when={!workspaceUsesRecommendedPath() && template.default_workspace_path}>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    class="mt-1.5 gap-1.5 px-2 text-xs"
-                    onClick={() => setWorkspacePath(template.default_workspace_path)}
-                    disabled={managedInstallSubmitting()}
-                  >
-                    <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
-                    {i18n.t('webServices.managed.restoreRecommendedWorkspace')}
-                  </Button>
-                </Show>
-              </section>
-              <section class="service-template-install-section border-t pt-4">
-                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.deploymentInformation')}</h3>
-                <dl class="mt-3 grid gap-x-5 gap-y-3 text-xs sm:grid-cols-2">
-                  <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.currentEnvironment')}</dt><dd class="mt-1 font-medium text-foreground">{ctx.env()?.name || ctx.env_id()}</dd></div>
-                  <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.deployment')}</dt><dd class="mt-1 font-medium text-foreground">{managedDeploymentLabel(template.deployment, i18n)}</dd></div>
-                  <div><dt class="text-muted-foreground">{template.source === 'builtin' ? i18n.t('webServices.managed.recommendedVersion') : i18n.t('webServices.managed.defaultVersion')}</dt><dd class="mt-1 font-mono text-foreground">{template.recommended_release ? releaseIdentityLabel(template.recommended_release) : i18n.t('webServices.managed.customVersion')}</dd></div>
-                  <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.dataLocation')}</dt><dd class="mt-1 text-foreground">{i18n.t('webServices.managed.managedPrivateData')}</dd></div>
-                </dl>
-              </section>
-              <section class="service-template-install-section border-t pt-4">
-                <AccessModePicker
-                  value={managedAccessMode()}
-                  targetURL={`${template.spec?.endpoint.scheme ?? 'http'}://127.0.0.1`}
-                  disabled={managedInstallSubmitting()}
-                  onChange={setManagedAccessMode}
-                />
-              </section>
-              <Show when={(template.notices?.length ?? 0) > 0}>
-                <ManagedTemplateNotices
-                  notices={localizedManagedNotices(template.notices, template.localizations, i18n.locale(), template.default_locale)}
-                  accepted={installNoticeAcceptances()}
-                  disabled={managedInstallSubmitting()}
-                  onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
-                />
+              </details>
+
+              <Show when={installReleaseRiskHints().length > 0 || (template.notices?.length ?? 0) > 0}>
+                <div class="service-install-notices">
+                  <ManagedReleaseRiskHints riskIDs={installReleaseRiskHints()} quiet />
+                  <Show when={(template.notices?.length ?? 0) > 0}><ManagedTemplateNotices presentation="inline" notices={localizedManagedNotices(template.notices, template.localizations, i18n.locale(), template.default_locale)} accepted={installNoticeAcceptances()} disabled={managedInstallSubmitting()} onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances(current => ({...current, [noticeID]: accepted}))} /></Show>
+                </div>
               </Show>
-              <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
+              <Show when={installReview()}><p role="status" class="service-install-ready"><Check class="h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.installReady')}</p></Show>
             </div>
           )}</Show>
 

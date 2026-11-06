@@ -4516,6 +4516,7 @@ export const enUS = defineDictionary({
       reconfigureFailed: 'Service configuration failed',
       logs: 'View logs',
       operationStarting: 'Submitting request…',
+      installReady: "Ready to install",
       installSubmissionFailed: "Installation request failed",
       installSubmissionUnknown: "Submission status unknown",
       installSubmissionUnknownDetail: "The submission could not be confirmed. Check its status before trying again.",

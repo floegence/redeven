@@ -197,38 +197,39 @@
     background: color-mix(in srgb, var(--redeven-surface-control-muted) 46%, transparent);
   }
 
-  .service-template-install-identity {
-    border-color: var(--redeven-stroke-panel);
-    background: color-mix(in srgb, var(--redeven-surface-control-muted) 48%, var(--redeven-surface-panel));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 20%, transparent);
-  }
-
-  .service-template-install-section {
-    border-color: var(--redeven-stroke-divider);
-  }
-
-  .service-template-workspace-picker {
-    padding: 12px;
-    border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--redeven-stroke-divider) 84%, transparent);
-    background: color-mix(in srgb, var(--redeven-surface-control-muted) 56%, transparent);
-    transition: border-color 150ms ease, background-color 150ms ease;
-  }
-
-  .service-template-workspace-picker[data-recommended='true'] {
-    border-color: color-mix(in srgb, var(--redeven-status-success-border) 48%, var(--redeven-stroke-divider));
-    background: color-mix(in srgb, var(--redeven-status-success) 5%, var(--redeven-surface-control-muted));
-  }
-
-  .service-template-workspace-picker__icon {
-    color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
-    background: color-mix(in srgb, var(--redeven-surface-panel-elevated) 76%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--redeven-stroke-divider) 62%, transparent);
-  }
-
-  .service-template-workspace-picker__badge {
-    color: var(--redeven-status-success);
-    background: color-mix(in srgb, var(--redeven-status-success) 10%, transparent);
+  .service-install { display: flex; min-width: 0; flex-direction: column; gap: 20px; max-width: 38rem; margin-inline: auto; }
+  .service-install-identity { padding: 4px 0 8px; }
+  .service-install-identity h3 { white-space: normal; overflow-wrap: anywhere; }
+  .service-install-context { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; color: var(--floe-ink-soft); font-size: 11px; line-height: 1.5; }
+  .service-install-fields { border-top: 1px solid var(--floe-line-quiet); border-bottom: 1px solid var(--floe-line-quiet); }
+  .service-install-field { padding: 12px 0 16px; }
+  .service-install-field + .service-install-field, .service-install-parameter { border-top: 1px solid var(--floe-line-quiet); }
+  .service-install-field__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+  .service-install-field__heading h3, .service-install-parameter label { color: var(--floe-ink-soft); font-size: 12px; font-weight: 500; }
+  .service-install-field__heading button { min-width: 0; height: auto; min-height: 28px; padding: 4px 8px; white-space: normal; text-align: end; }
+  .service-install-release { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+  .service-install-workspace { display: flex; align-items: flex-start; gap: 8px; color: var(--foreground); font-size: 12px; line-height: 1.7; }
+  .service-install-workspace > svg { margin-top: 2px; color: var(--floe-ink-soft); }
+  .service-install-parameter { display: grid; gap: 8px; padding: 16px 0; }
+  .service-install-warning { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; color: var(--warning); font-size: 11px; line-height: 1.6; }
+  .service-install-warning > svg { margin-top: 2px; }
+  .service-install-reset { margin-top: 6px; padding-inline: 0; font-size: 11px; }
+  .service-install-options > summary { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; list-style: none; color: var(--floe-ink-soft); font-size: 12px; }
+  .service-install-options > summary::-webkit-details-marker { display: none; }
+  .service-install-options > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: var(--floe-radius-sm); }
+  .service-install-options[open] > summary > svg { transform: rotate(90deg); }
+  .service-install-options__value { margin-left: auto; text-align: end; font-size: 11px; color: var(--floe-ink-soft); }
+  .service-install-options__body { display: grid; gap: 16px; padding: 16px 0 0 22px; }
+  .service-install-options__body dl { font-size: 12px; }
+  .service-install-options__body dt { color: var(--floe-ink-soft); margin-bottom: 4px; }
+  .service-install-options__body dd { color: var(--foreground); }
+  .service-install-notices { display: grid; gap: 16px; padding-top: 4px; }
+  .service-install-ready { display: flex; gap: 7px; align-items: center; color: var(--floe-ink-soft); font-size: 12px; }
+  @media (max-width: 639px) { .service-install { gap: 16px; } .service-install-options__body { padding-left: 0; } }
+  @media (max-width: 479px) {
+    .service-install-footer { flex-wrap: wrap; }
+    .service-install-footer > div { width: 100%; margin-left: 0; }
+    .service-install-footer [data-testid='managed-install-submit'] { width: 100%; }
   }
 
   .service-template-editor__section {
@@ -342,8 +343,7 @@
   }
 
   .service-template-category-transition,
-  .service-template-scheme-picker__option,
-  .service-template-workspace-picker {
+  .service-template-scheme-picker__option {
     animation: none !important;
     transform: none !important;
     transition: none !important;
@@ -359,5 +359,9 @@
 }
 
 .service-template-loading-list { display: grid; gap: 12px; padding-top: 40px; }
+[data-floe-dialog-panel].env-app-drawer-panel.service-template-install-drawer { width: min(42rem, calc(100% - 4rem)); }
+@media (max-width: 639px) {
+  [data-floe-dialog-panel].env-app-drawer-panel.service-template-install-drawer { width: 100%; }
+}
 .service-template-loading-list > span { height: 76px; border-radius: var(--radius); background: var(--redeven-surface-control-muted); }
 .service-template-loading-detail { height: 320px; border-radius: var(--radius); background: var(--redeven-surface-control-muted); }

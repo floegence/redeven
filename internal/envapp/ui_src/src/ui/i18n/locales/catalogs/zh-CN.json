@@ -4677,6 +4677,7 @@
         "docker": "Docker 不可用或无法连接其守护进程。",
         "compose": "当前环境中没有可用的 Docker Compose。"
       },
+      "installReady": "可以开始安装",
       "installSubmissionFailed": "安装请求失败",
       "installSubmissionUnknown": "提交结果待确认",
       "installSubmissionUnknownDetail": "尚无法确认提交结果。请先检查状态，再决定后续操作。",
