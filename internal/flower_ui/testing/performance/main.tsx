@@ -36,8 +36,8 @@ function setup() {
   const request = { logical_request_id: 'performance-request', attempt_id: 'performance-attempt', attempt_epoch: 1,
     started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 128 };
   const call = { thread_id: initial.thread_id, turn_id: initial.turn_id!, run_id: initial.run_id!, logical_request_id: request.logical_request_id,
-    attempt_id: request.attempt_id, attempt_epoch: 1, call_id: 'performance-edit', name: 'file.edit', arguments_complete: false,
-    preview: { display_name: 'example.ts', additions: 8, deletions: 3 } };
+    attempt_id: request.attempt_id, attempt_epoch: 1, call_id: 'performance-write', name: 'file.write', arguments_complete: false,
+    preview: { display_name: 'example.ts', additions: 8 } };
   fixture.replace({ ...initial, view_version: initial.view_version + 1, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request }, tool_call_previews: [call] });
   const root = document.getElementById('root')!;
   root.style.height = '100vh';

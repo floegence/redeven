@@ -46,7 +46,7 @@ func TestStrictToolRequiredOrderPreservesDeclaredProperties(t *testing.T) {
 
 func TestFileToolSchemasKeepDeclaredOrderAcrossStrictAndFrozenReplay(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
-		if def.Name != "file.write" && def.Name != "file.edit" {
+		if def.Name != "file.write" {
 			continue
 		}
 		// Transport-only target selection is removed by the existing runtime surface.
@@ -74,9 +74,6 @@ func TestFileToolSchemasKeepDeclaredOrderAcrossStrictAndFrozenReplay(t *testing.
 				t.Fatal(err)
 			}
 			want := []string{"file_path", "content"}
-			if def.Name == "file.edit" {
-				want = []string{"file_path", "old_string", "new_string", "replace_all"}
-			}
 			if !reflect.DeepEqual(order, want) {
 				t.Fatalf("%s strict=%v order=%v", def.Name, strict, order)
 			}

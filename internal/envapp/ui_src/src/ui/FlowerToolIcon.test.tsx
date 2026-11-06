@@ -11,7 +11,7 @@ const disposers: (() => void)[] = [];
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); document.body.replaceChildren(); });
 
 describe('semantic tool icons', () => {
- it.each(['file.edit', 'file.write', 'apply_patch', 'tessiven.edit'])('gives %s a pencil and synchronized writing stroke', name => {
+ it.each(['file.write', 'apply_patch', 'tessiven.edit'])('gives %s a pencil and synchronized writing stroke', name => {
   const host = document.createElement('div');
   disposers.push(render(() => <FlowerToolIcon toolName={name} running={false} />, host));
   expect(host.querySelector('[data-flower-writing-part="pencil"]'), name).not.toBeNull();
@@ -60,7 +60,7 @@ describe('semantic tool icons', () => {
    expect(host.querySelector('svg'),name).not.toBeNull(); dispose();
   }
  });
- it.each(['file.edit', 'file.write', 'apply_patch', 'tessiven.edit'])('keeps the %s pencil and removes all running effects on completion', name => {
+ it.each(['file.write', 'apply_patch', 'tessiven.edit'])('keeps the %s pencil and removes all running effects on completion', name => {
   const cancel = vi.fn();
   const animate = vi.spyOn(SVGElement.prototype, 'animate').mockReturnValue({ cancel, finished: Promise.resolve() } as unknown as Animation);
   const [running, setRunning] = createSignal(true);
@@ -80,7 +80,7 @@ describe('semantic tool icons', () => {
   let reduce = false; let change = () => {};
   vi.spyOn(window, 'matchMedia').mockImplementation(() => ({get matches(){return reduce;},addEventListener: (_: string, listener: () => void) => { change=listener; }, removeEventListener: vi.fn()}) as unknown as MediaQueryList);
   const host=document.createElement('div'); document.body.append(host);
-  const dispose=render(() => <FlowerToolIcon toolName="file.edit" running />,host);
+  const dispose=render(() => <FlowerToolIcon toolName="file.write" running />,host);
   expect(animate).toHaveBeenCalled(); reduce=true; change(); expect(cancel).toHaveBeenCalled();
   const count=animate.mock.calls.length; change(); expect(animate).toHaveBeenCalledTimes(count);
   dispose();

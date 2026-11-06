@@ -472,11 +472,11 @@ func TestInvocationPolicies_StructuredFileTools(t *testing.T) {
 		t.Fatalf("file.write should be classified as mutating")
 	}
 
-	editArgs := map[string]any{"file_path": "/tmp/workspace/note.txt", "old_string": "a", "new_string": "b"}
-	if !RequiresApprovalForInvocation("file.edit", editArgs) {
-		t.Fatalf("file.edit should require approval")
+	patchArgs := map[string]any{"input": "*** Begin Patch\n*** Update File: /tmp/workspace/note.txt\n@@\n-a\n+b\n*** End Patch"}
+	if !RequiresApprovalForInvocation("apply_patch", patchArgs) {
+		t.Fatalf("apply_patch should require approval")
 	}
-	if !IsMutatingForInvocation("file.edit", editArgs) {
-		t.Fatalf("file.edit should be classified as mutating")
+	if !IsMutatingForInvocation("apply_patch", patchArgs) {
+		t.Fatalf("apply_patch should be classified as mutating")
 	}
 }

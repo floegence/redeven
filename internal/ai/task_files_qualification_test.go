@@ -124,7 +124,7 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 	}
 	send := func(id, threadID, input string) {
 		t.Helper()
-		request := SendUserTurnRequest{StorageGeneration: svc.storageGeneration, ThreadID: threadID, ClientRequestID: id, Input: RunInput{Text: input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 6000, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.write", "file.edit", "file.present", "attachment.read", "attachment.materialize"}}}
+		request := SendUserTurnRequest{StorageGeneration: svc.storageGeneration, ThreadID: threadID, ClientRequestID: id, Input: RunInput{Text: input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 6000, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.write", "apply_patch", "file.present", "attachment.read", "attachment.materialize"}}}
 		if id == "report" {
 			request.StagingScopeID = uploadScope.StagingScopeID
 			request.StagingCapability = uploadScope.Capability

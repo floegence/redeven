@@ -385,7 +385,7 @@ it('keeps targets, risks, unavailable reasons, and supporting context directly v
   const path = '/workspace/' + 'long-directory/'.repeat(12) + 'settings.json';
   const fixture = mountApprovals(2, { transformAction: (action, index) => ({ ...action,
     can_approve: index === 0, read_only_reason: index === 1 ? 'This action requires the task owner.' : undefined,
-    tool_name: index === 0 ? 'file.edit' : 'web_fetch',
+    tool_name: index === 0 ? 'file.write' : 'web_fetch',
     summary: index === 0 ? {
       label: 'Update project settings', description: 'Apply the selected development configuration.',
       targets: [{ kind: 'file' as const, label: path }, { kind: 'file' as const, label: '/workspace/package.json' }, { kind: 'working_directory' as const, label: '/workspace' }],

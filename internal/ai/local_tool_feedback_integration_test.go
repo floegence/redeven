@@ -17,7 +17,7 @@ import (
 )
 
 func TestLocalToolFeedbackThroughProviderAndRestart(t *testing.T) {
-	for _, scenario := range []string{"missing", "ambiguous", "directory conflict"} {
+	for _, scenario := range []string{"missing", "EOF mismatch", "directory conflict"} {
 		t.Run(scenario, func(t *testing.T) {
 			workspace := t.TempDir()
 			sub := filepath.Join(workspace, "sub")
@@ -29,13 +29,14 @@ func TestLocalToolFeedbackThroughProviderAndRestart(t *testing.T) {
 			if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			tool, code := "file.edit", "INVALID_ARGUMENTS"
-			failed := map[string]any{"file_path": "edit.txt", "old_string": "missing", "new_string": "omega"}
-			corrected := map[string]any{"file_path": "edit.txt", "old_string": "alpha\nbeta", "new_string": "omega\nbeta"}
-			wantMeta := map[string]any{"reason": "old_string_not_found", "match_count": float64(0), "file_modified": false}
-			if scenario == "ambiguous" {
-				failed["old_string"] = "alpha"
-				wantMeta["reason"], wantMeta["match_count"] = "old_string_ambiguous", float64(2)
+			tool, code := "apply_patch", "PATCH_VALIDATION_FAILED"
+			failed := map[string]any{"input": "*** Begin Patch\n*** Update File: edit.txt\n@@\n-missing\n+omega\n*** End Patch"}
+			corrected := map[string]any{"input": "*** Begin Patch\n*** Update File: edit.txt\n@@\n-alpha\n+omega\n beta\n*** End Patch"}
+			wantMeta := map[string]any{"effect": "none", "reason": "context_not_found", "chunk": float64(1), "patch_body_line": float64(1), "search_from_line": float64(1), "suggested_fixes": []any{"read the current file and regenerate the patch using its current text"}}
+			if scenario == "EOF mismatch" {
+				failed["input"] = "*** Begin Patch\n*** Update File: edit.txt\n@@\n-alpha\n+omega\n beta\n*** End of File\n*** End Patch"
+				wantMeta["reason"], wantMeta["search_from_line"], wantMeta["source_line"] = "eof_context_mismatch", float64(2), float64(1)
+				wantMeta["suggested_fixes"] = []any{"read the file tail and correct the *** End of File marker or its context"}
 			} else if scenario == "directory conflict" {
 				tool, code = "terminal.exec", "INVALID_PATH"
 				command := "printf accepted >> marker.txt; pwd -P"
@@ -155,7 +156,7 @@ func TestLocalToolFeedbackThroughProviderAndRestart(t *testing.T) {
 					t.Fatal("restart lost Activity or dispatched the provider")
 				}
 			}
-			if tool == "file.edit" {
+			if tool == "apply_patch" {
 				if got, err := os.ReadFile(path); err != nil || string(got) != "omega\nbeta\nalpha\n" {
 					t.Fatalf("correction widened replacement scope: %q, %v", got, err)
 				}

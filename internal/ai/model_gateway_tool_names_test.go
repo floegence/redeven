@@ -157,7 +157,7 @@ func TestProviderToolNameGuidanceAtWireBoundary(t *testing.T) {
 }
 
 func toolNameGuidanceRequest() ModelGatewayRequest {
-	wanted := map[string]bool{"ask_user": true, "computer.exec": true, "computer.select_target": true, "attachment.materialize": true, "file.present": true, "file.edit": true, "terminal.exec": true}
+	wanted := map[string]bool{"ask_user": true, "computer.exec": true, "computer.select_target": true, "attachment.materialize": true, "file.present": true, "file.write": true, "apply_patch": true, "terminal.exec": true}
 	var definitions []ToolDef
 	for _, definition := range builtInModelCapabilityDefinitions() {
 		if wanted[definition.Name] {
@@ -176,6 +176,11 @@ func toolNameGuidanceRequest() ModelGatewayRequest {
 
 func assertToolNameGuidanceWire(t *testing.T, raw []byte, request ModelGatewayRequest, canonicalNames bool) {
 	t.Helper()
+	for _, retired := range []string{"file.edit", "file_edit"} {
+		if bytes.Contains(raw, []byte(retired)) {
+			t.Errorf("provider request advertises retired tool %q", retired)
+		}
+	}
 	var body map[string]any
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatal(err)

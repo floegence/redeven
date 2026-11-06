@@ -29,7 +29,7 @@ describe('presentFlowerApproval', () => {
       command, operationLabel: 'Run command',
     });
   });
-  it.each(['file.write', 'file.edit'])('presents %s as a file edit', (toolName) => {
+  it.each(['file.write', 'apply_patch'])('presents %s as a file edit', (toolName) => {
     const presentation = presentFlowerApproval(action({
       tool_name: toolName,
       summary: { label: toolName, targets: [{ kind: 'file', label: '回声之王.md' }] },
@@ -122,7 +122,7 @@ it('owns tool classification and uses only declared risk facts', () => {
 });
 
 it('uses standalone operation copy independently of target position in a locale', () => {
-  const presentation = presentFlowerApproval(action({ tool_name: 'file.edit', summary: { label: '', targets: [{ kind: 'file', label: 'a.ts' }] } }),
+  const presentation = presentFlowerApproval(action({ tool_name: 'file.write', summary: { label: '', targets: [{ kind: 'file', label: 'a.ts' }] } }),
     { ...copy, editFile: 'ファイルを編集' });
   expect(presentation.operationLabel).toBe('ファイルを編集');
   expect(presentation.targets).toEqual(['a.ts']);

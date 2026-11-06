@@ -18,7 +18,7 @@ const maxFlowerArgumentPreviewBytes = 1 << 20
 
 func flowerArgumentPreviewFactory(name string) func() fltools.ArgumentPreviewer {
 	switch name {
-	case "file.edit", "file.write", "apply_patch":
+	case "file.write", "apply_patch":
 		return func() fltools.ArgumentPreviewer {
 			p := &flowerArgumentPreview{tool: name, fields: map[string]*previewString{}}
 			return p.append
@@ -76,7 +76,6 @@ type flowerArgumentPreview struct {
 	primitive     strings.Builder
 	fields        map[string]*previewString
 	patch         previewPatchCounter
-	editStats     *fltools.ArgumentPreview
 }
 
 func (p *flowerArgumentPreview) append(delta string, complete bool) (*fltools.ArgumentPreview, error) {
@@ -108,29 +107,6 @@ func (p *flowerArgumentPreview) append(delta string, complete bool) (*fltools.Ar
 	case "file.write":
 		if field := p.fields["content"]; field != nil {
 			out.Additions = integer(field.count())
-		}
-	case "file.edit":
-		old, new := p.fields["old_string"], p.fields["new_string"]
-		if old != nil {
-			out.Deletions = integer(old.count())
-		}
-		if new != nil {
-			out.Additions = integer(new.count())
-		}
-		if old != nil && new != nil && old.complete && new.complete {
-			if p.editStats == nil {
-				if old.count() > 100_000 || new.count() > 100_000 {
-					return nil, errors.New("argument preview line limit")
-				}
-				adds, dels := 0, 0
-				for _, h := range buildMutationDiffHunks(old.text.String(), new.text.String()) {
-					adds += h.newCount
-					dels += h.oldCount
-				}
-				p.editStats = &fltools.ArgumentPreview{Additions: integer(adds), Deletions: integer(dels)}
-			}
-			out.Additions = p.editStats.Additions
-			out.Deletions = p.editStats.Deletions
 		}
 	case "apply_patch":
 		if p.fields["input"] != nil {
@@ -246,8 +222,6 @@ func (p *flowerArgumentPreview) wants(key string) bool {
 	switch key {
 	case "file_path":
 		return p.tool != "apply_patch"
-	case "old_string", "new_string":
-		return p.tool == "file.edit"
 	case "content":
 		return p.tool == "file.write"
 	case "input":

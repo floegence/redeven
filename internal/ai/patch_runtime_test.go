@@ -212,6 +212,18 @@ func qualifyPatchHostedRun(t *testing.T, scratch bool) {
 // Inspect the final serialized provider request, after host and Floret shaping.
 func assertPatchProviderContract(t *testing.T, request map[string]any) {
 	t.Helper()
+	seen := map[string]bool{}
+	for _, raw := range request["tools"].([]any) {
+		tool := raw.(map[string]any)
+		name, _ := tool["name"].(string)
+		seen[name] = true
+		if name == "edit" || name == "file.edit" || name == "file_edit" {
+			t.Errorf("provider exposes removed file mutation tool %q", name)
+		}
+	}
+	if !seen["file_write"] || !seen["apply_patch"] {
+		t.Errorf("provider lost supported file mutation tools: %v", seen)
+	}
 	for _, raw := range request["tools"].([]any) {
 		tool := raw.(map[string]any)
 		if tool["name"] != "apply_patch" {

@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: AI tool permissions and dispatch
 tags: [ai, tools, permissions, dispatch]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -21,9 +21,9 @@ Redeven patch cwd resolves relative paths only; registry owns canonical/logical 
 
 Resolve symlinks/new-file ancestors before authorization. Ordered canonical resource sequence rejects swapped/changed targets. Preserve submitted paths and resolve at full preflight, each commit and Move source deletion; source/destination snapshots must match. This is not an OS sandbox or elimination of all TOCTOU races.
 
-file.edit=unique literal replacement, file.write=whole file, apply_patch=multi-chunk/file. Strict JSON/routing has no input_format/patch aliases; model name implies no freeform support. Search original source forward with anchors/EOF/ranges. Only order failures may reorder uniquely exact/nonoverlapping chunks without anchors/ranges/EOF/pure additions, using the same matcher/plan. Preserve original arguments/classifications; ambiguous chunk requests unique context, provider still requests source order.
+File mutation exposes only `file.write` for complete contents and `apply_patch` for contextual single/multi-file changes, creation, deletion and moves. There is no separate literal-replacement tool or execution alias. Strict JSON/routing has no input_format/patch aliases; model name implies no freeform support. Search original source forward with anchors/EOF/ranges. Only order failures may reorder uniquely exact/nonoverlapping chunks without anchors/ranges/EOF/pure additions, using the same matcher/plan. Preserve original arguments/classifications; ambiguous chunk requests unique context, provider still requests source order.
 
-Local `file.edit` reports missing or ambiguous literal matches as owner-typed `INVALID_ARGUMENTS`, with `reason=old_string_not_found` or `old_string_ambiguous`, the observed `match_count`, and `file_modified=false`. No write occurs. The result is non-retryable and never changes arguments; the model decides whether to inspect or submit an explicit correction. `replace_all=true` still requires at least one match and remains an explicit request to replace every occurrence.
+Historical calls/results stay immutable and readable. File/patch presentations retain canonical target navigation through typed presentation facts, without restoring a removed tool's registration, routing or execution.
 
 Pure additions append. Untouched endings remain; insertions use first ending (empty=LF); nonempty updates retain final newline. Match exact, then trailing/surrounding whitespace, then selected Unicode normalization, first permitted match. Context copies source; insertions literal, no reindent. Add/Move may replace regular files; one operation/canonical path.
 
@@ -39,9 +39,9 @@ Flower must not infer remote execution from thread context alone; it can only cl
 
 # Evidence
 
-- [Local feedback tests](../../internal/ai/local_tool_feedback_test.go) verify unchanged file bytes/metadata and identical error metadata in model text and structured results, with error codes/messages retained in Activity. [Service acceptance](../../internal/ai/local_tool_feedback_integration_test.go) verifies final HTTP output, explicit single-occurrence correction, persistence and restart using published Floret. [Provider boundary tests](../../internal/ai/model_gateway_tool_names_test.go) preserve file/terminal schemas and callable-name guidance across adapters and frozen transport retries.
+- [Local feedback tests](../../internal/ai/local_tool_feedback_test.go) verify retired invocations cannot modify files and owner diagnostics reach model text, structured results and Activity. [Service acceptance](../../internal/ai/local_tool_feedback_integration_test.go) verifies final HTTP output, explicit contextual patch correction, persistence and restart using published Floret. [Provider boundary tests](../../internal/ai/model_gateway_tool_names_test.go) preserve file/terminal schemas and callable-name guidance across adapters and frozen transport retries.
 
-- `redeven:internal/ai/tools/registry.go:299` - Source.
+- [Tool registry](../../internal/ai/tools/registry.go) - Source.
 - `redeven:internal/ai/floret_native_tools.go` - Source.
 
 - Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.

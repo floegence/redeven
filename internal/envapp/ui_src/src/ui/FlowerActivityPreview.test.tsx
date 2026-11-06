@@ -59,7 +59,7 @@ it('starts a long result as a bounded preview without changing its literal conte
 });
 
 it('keeps existing edit, terminal, and search details on their original presenters', () => {
-  for (const [tool_name, renderer] of [['tessiven.edit', 'structured'], ['file.edit', 'file'], ['terminal.exec', 'terminal'], ['rgrep', 'structured']] as const) {
+  for (const [tool_name, renderer] of [['tessiven.edit', 'structured'], ['file.write', 'file'], ['terminal.exec', 'terminal'], ['rgrep', 'structured']] as const) {
     const presentation = presentFlowerActivityItem({
       item_id: tool_name, tool_id: tool_name, tool_name, renderer, kind: 'tool',
       status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,

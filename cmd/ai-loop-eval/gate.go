@@ -308,7 +308,7 @@ func findWorkspaceScopeViolation(toolName string, args any, workspacePath string
 		return findTerminalExecWorkspaceScopeViolation(args, workspacePath)
 	case "apply_patch":
 		return findApplyPatchWorkspaceScopeViolation(args, workspacePath)
-	case "file.read", "file.edit", "file.write":
+	case "file.read", "file.write":
 		return findStructuredFileToolWorkspaceScopeViolation(args, workspacePath)
 	case "read_file", "read_files", "find", "rgrep":
 		return findReadonlyToolWorkspaceScopeViolation(toolName, args, workspacePath)

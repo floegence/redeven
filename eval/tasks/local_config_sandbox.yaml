@@ -37,7 +37,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
           - "file.write"
-          - "file.edit"
         workspace_scoped_tools:
           - "read_file"
         max_calls: 12
@@ -160,12 +159,12 @@ tasks:
           - "file.write"
           - "terminal.exec"
         max_calls: 14
-  - id: local_config_structured_edit_inside_workspace
-    title: Local-config structured file edit performs exact replacement
+  - id: local_config_patch_update_inside_workspace
+    title: Local-config patch updates the requested file content
     stage: deep
     category: local_config
     turns:
-      - "Inside ${workspace}, first create EVAL_LOCAL_SANDBOX_EDIT_NOTE.md with file.write so it contains the exact line `status=initial`, then use file.edit to replace that exact line with `status=updated`. Verify the final file content, then report the exact absolute path you changed and one verification command."
+      - "Inside ${workspace}, first create EVAL_LOCAL_SANDBOX_PATCH_NOTE.md with file.write so it contains the exact line `status=initial`, then use apply_patch to replace that exact line with `status=updated`. Verify the final file content, then report the exact absolute path you changed and one verification command."
     runtime:
       permission_type: full_access
       timeout_seconds: 70
@@ -191,23 +190,23 @@ tasks:
       tools:
         must_call:
           - "file.write"
-          - "file.edit"
+          - "apply_patch"
           - "terminal.exec"
         must_succeed:
           - "file.write"
-          - "file.edit"
+          - "apply_patch"
           - "terminal.exec"
         workspace_scoped_tools:
           - "file.write"
-          - "file.edit"
+          - "apply_patch"
           - "terminal.exec"
         max_calls: 12
-  - id: local_config_apply_patch_compatibility_inside_workspace
-    title: Local-config apply_patch compatibility path still works
+  - id: local_config_apply_patch_create_inside_workspace
+    title: Local-config apply_patch creates a workspace file
     stage: deep
     category: local_config
     turns:
-      - "Inside ${workspace}, use the apply_patch compatibility tool to create EVAL_LOCAL_APPLYPATCH_NOTE.md with a short note that says the file was created by the apply_patch compatibility eval. Verify the file content, then report the exact absolute path you changed and one verification command."
+      - "Inside ${workspace}, use the apply_patch tool to create EVAL_LOCAL_APPLYPATCH_NOTE.md with a short note that says the file was created by the apply_patch creation eval. Verify the file content, then report the exact absolute path you changed and one verification command."
     runtime:
       permission_type: full_access
       timeout_seconds: 70

@@ -172,13 +172,10 @@ func TestFlowerAuthorizedWorktreeUsesExplicitPaths(t *testing.T) {
 	if _, err := r.toolFileRead(t.Context(), FileReadArgs{FilePath: path}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.toolFileEdit(t.Context(), FileEditArgs{FilePath: path, OldString: "hello", NewString: "updated"}); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := r.toolFileWrite(t.Context(), FileWriteArgs{FilePath: filepath.Join(worktree, "new.txt"), Content: "created"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.toolApplyPatch(t.Context(), "*** Begin Patch\n*** Update File: ../sibling-worktree/README.md\n@@\n-updated\n+patched\n*** End Patch"); err != nil {
+	if _, err := r.toolApplyPatch(t.Context(), "*** Begin Patch\n*** Update File: ../sibling-worktree/README.md\n@@\n-hello\n+patched\n*** End Patch"); err != nil {
 		t.Fatalf("authorized worktree patch: %v", err)
 	}
 	patched, err := os.ReadFile(path)

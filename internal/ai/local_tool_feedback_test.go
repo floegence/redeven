@@ -56,44 +56,26 @@ func assertLocalToolFeedback(t *testing.T, r *run, source ToolResult, code aitoo
 	}
 }
 
-func TestFileEditMatchFailuresPreserveFileAndReachModel(t *testing.T) {
-	for _, tc := range []struct {
-		name, old, reason string
-		all               bool
-		count             int
-	}{
-		{"missing", "absent", "old_string_not_found", false, 0},
-		{"missing with replace all", "absent", "old_string_not_found", true, 0},
-		{"ambiguous", "alpha", "old_string_ambiguous", false, 2},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			workspace := t.TempDir()
-			path := filepath.Join(workspace, "edit.txt")
-			original := "alpha\nbeta\nalpha\n"
-			if err := os.WriteFile(path, []byte(original), 0o640); err != nil {
-				t.Fatal(err)
-			}
-			before, err := os.Stat(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			r := &run{agentHomeDir: workspace, workingDir: workspace, sessionMeta: testSendTurnMeta()}
-			args := map[string]any{"file_path": "edit.txt", "old_string": tc.old, "new_string": "omega", "replace_all": tc.all}
-			handler := &builtInToolHandler{r: r, toolName: "file.edit"}
-			result, err := handler.Execute(localToolFeedbackContext(t, "file.edit"), ToolCall{ID: "call", Name: "file.edit", Args: args})
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := os.ReadFile(path)
-			if err != nil || string(got) != original {
-				t.Fatalf("rejected edit changed file: %q, %v", got, err)
-			}
-			after, err := os.Stat(path)
-			if err != nil || !after.ModTime().Equal(before.ModTime()) || after.Mode() != before.Mode() {
-				t.Fatalf("rejected edit touched file metadata: %v", err)
-			}
-			assertLocalToolFeedback(t, r, result, aitools.ErrorCodeInvalidArguments, map[string]any{"reason": tc.reason, "match_count": tc.count, "file_modified": false})
-		})
+func TestRemovedFileEditHasNoDispatchOrPresentation(t *testing.T) {
+	workspace := t.TempDir()
+	path := filepath.Join(workspace, "note.txt")
+	const original = "alpha\nbeta\n"
+	if err := os.WriteFile(path, []byte(original), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	r := &run{agentHomeDir: workspace, workingDir: workspace, sessionMeta: testSendTurnMeta()}
+	for _, name := range []string{"edit", "file.edit"} {
+		if _, exists := aitools.LookupDefinition(name); exists || flowerArgumentPreviewFactory(name) != nil {
+			t.Fatalf("removed tool retains registration or preview: %s", name)
+		}
+		_, err := r.execTool(localToolFeedbackContext(t, name), testSendTurnMeta(), "call", name, map[string]any{"file_path": path, "old_string": "alpha", "new_string": "omega"})
+		if err == nil {
+			t.Fatalf("removed tool dispatched: %s", name)
+		}
+		got, readErr := os.ReadFile(path)
+		if readErr != nil || string(got) != original {
+			t.Fatalf("removed tool changed file: %q, %v", got, readErr)
+		}
 	}
 }
 

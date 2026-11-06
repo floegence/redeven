@@ -22,7 +22,7 @@ export type FlowerApprovalPresentation = Readonly<{
   description?: string;
 }>;
 
-const fileMutationTools = new Set(['file.write', 'file.edit', 'apply_patch']);
+const fileMutationTools = new Set(['file.write', 'apply_patch']);
 const commandTools = new Set(['terminal.exec']);
 const networkTools = new Set(['web_fetch', 'web.search']);
 

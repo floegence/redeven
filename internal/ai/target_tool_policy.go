@@ -173,7 +173,7 @@ type TargetToolAttachment struct {
 func toolRequiresTarget(toolName string) bool {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
-	case "image.read", "read_file", "file.edit", "file.write", "apply_patch",
+	case "image.read", "read_file", "file.write", "apply_patch",
 		"computer.observe", "computer.exec", "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
 		"browser.navigate", "browser.back", "browser.reload":
 		return true
@@ -201,7 +201,7 @@ func requiredTargetCapabilities(toolName string) []string {
 	switch strings.TrimSpace(toolName) {
 	case "read_file":
 		return []string{"read"}
-	case "file.edit", "file.write", "apply_patch":
+	case "file.write", "apply_patch":
 		return []string{"write"}
 	case "computer.screenshot", "computer.observe", "browser.wait_for_download", "browser.download_cursor", "browser.read_download", "computer.applications":
 		return []string{"observe"}

@@ -37,13 +37,6 @@ type FileReadResult struct {
 	Truncated   bool   `json:"truncated,omitempty"`
 }
 
-type FileEditArgs struct {
-	FilePath   string `json:"file_path"`
-	OldString  string `json:"old_string"`
-	NewString  string `json:"new_string"`
-	ReplaceAll bool   `json:"replace_all,omitempty"`
-}
-
 type FileWriteArgs struct {
 	FilePath string `json:"file_path"`
 	Content  string `json:"content"`
@@ -459,69 +452,6 @@ func (r *run) toolFileRead(ctx context.Context, args FileReadArgs) (FileReadResu
 		TotalLines:  totalLines,
 		Truncated:   endIdx < totalLines,
 	}, nil
-}
-
-func (r *run) toolFileEdit(ctx context.Context, args FileEditArgs) (FileMutationResult, error) {
-	if err := ctx.Err(); err != nil {
-		return FileMutationResult{}, err
-	}
-	if args.OldString == "" {
-		return FileMutationResult{}, errors.New("old_string is required")
-	}
-	if args.OldString == args.NewString {
-		return FileMutationResult{}, errors.New("new_string must differ from old_string")
-	}
-	path, err := r.resolveStructuredToolPath(args.FilePath, true)
-	if err != nil {
-		return FileMutationResult{}, mapToolFilePathError(err)
-	}
-	scope, err := r.runPathScope()
-	if err != nil {
-		return FileMutationResult{}, err
-	}
-	if _, err = scope.Registry.ResolveTarget(path, filesystemscope.ResolveOptions{ForWrite: true}); err != nil {
-		return FileMutationResult{}, err
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return FileMutationResult{}, mapToolFilePathError(err)
-	}
-	if info.IsDir() {
-		return FileMutationResult{}, errors.New("file_path must reference a file")
-	}
-	originalBytes, err := os.ReadFile(path)
-	if err != nil {
-		return FileMutationResult{}, mapToolFilePathError(err)
-	}
-	original := string(originalBytes)
-	matchCount := strings.Count(original, args.OldString)
-	if matchCount == 0 {
-		return FileMutationResult{}, &aitools.ToolError{
-			Code:    aitools.ErrorCodeInvalidArguments,
-			Message: "old_string was not found; file was not modified",
-			Meta:    map[string]any{"reason": "old_string_not_found", "match_count": matchCount, "file_modified": false},
-		}
-	}
-	if !args.ReplaceAll && matchCount > 1 {
-		return FileMutationResult{}, &aitools.ToolError{
-			Code:    aitools.ErrorCodeInvalidArguments,
-			Message: fmt.Sprintf("old_string matched %d times; replace_all=false requires exactly one match; file was not modified", matchCount),
-			Meta:    map[string]any{"reason": "old_string_ambiguous", "match_count": matchCount, "file_modified": false},
-		}
-	}
-	var updated string
-	if args.ReplaceAll {
-		updated = strings.ReplaceAll(original, args.OldString, args.NewString)
-	} else {
-		updated = strings.Replace(original, args.OldString, args.NewString, 1)
-	}
-	if original == updated {
-		return newFileMutationResult(path, "noop", original, updated), nil
-	}
-	if err := os.WriteFile(path, []byte(updated), info.Mode().Perm()); err != nil {
-		return FileMutationResult{}, err
-	}
-	return newFileMutationResult(path, "update", original, updated), nil
 }
 
 func (r *run) toolFileWrite(ctx context.Context, args FileWriteArgs) (FileMutationResult, error) {

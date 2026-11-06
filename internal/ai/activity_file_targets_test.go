@@ -18,7 +18,7 @@ import (
 )
 
 func TestFileActivityTargetsConfirmedExecution(t *testing.T) {
-	for _, name := range []string{"read_file", "file.edit", "file.write", "image.read"} {
+	for _, name := range []string{"read_file", "file.write", "image.read"} {
 		t.Run(name, func(t *testing.T) {
 			for _, status := range []string{"success", "error", "aborted", "rejected"} {
 				if status == "rejected" {
@@ -117,37 +117,41 @@ func (r *fileTargetQueryRuntime) Read(_ context.Context, scope threadquery.Scope
 	return threadquery.ReadPage{}, errors.New("unknown ref")
 }
 func TestHydrateFileActivityTargetsExactCanonicalIdentity(t *testing.T) {
-	svc := newTestService(t, &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}})
-	meta := testSendTurnMeta()
-	thread, err := svc.CreateThread(t.Context(), meta, "Files", "", "", svc.agentHomeDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	item := flruntime.ThreadItem{ID: "item", Kind: flruntime.ThreadItemTool, TurnID: "turn", RunID: "run", Activity: &observation.ActivityItem{ItemID: "activity", ToolID: "call", ToolName: "read_file", Status: observation.ActivityStatusSuccess, Presentation: &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererFile, Label: "a.txt", Payload: fltools.FileActivityPayload{Content: "historical snapshot"}}}}
-	before, _ := json.Marshal(item)
-	record := threadquery.Record{Ref: "correct", ThreadID: identity.ThreadID(thread.ThreadID), TurnID: "turn", RunID: "run", ToolCallID: "call", ToolName: "read_file", Status: "success"}
-	wrong := record
-	wrong.Ref = "wrong"
-	wrong.RunID = "another-run"
-	runtime := &fileTargetQueryRuntime{records: []threadquery.Record{wrong, record}, bodies: map[threadquery.RecordRef]string{"correct": "{\"status\":\"success\",\"data\":{\"file_path\":\"/no-longer-present/a.txt\"}}", "wrong": "{\"status\":\"success\",\"data\":{\"file_path\":\"/wrong/a.txt\"}}"}}
-	svc.threadRuntime = runtime
-	got, err := svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.queries != 1 || runtime.reads != 1 || got[0].Activity.Presentation.TargetRefs[0].Path != "/no-longer-present/a.txt" {
-		t.Fatalf("incorrect canonical match: %+v queries=%d reads=%d", got, runtime.queries, runtime.reads)
-	}
-	after, _ := json.Marshal(item)
-	if !reflect.DeepEqual(before, after) {
-		t.Fatal("canonical source changed")
-	}
-	if got[0].Activity.Presentation.Payload.(fltools.FileActivityPayload).Content != "historical snapshot" {
-		t.Fatal("historical content changed")
-	}
-	_, err = svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, got)
-	if err != nil || runtime.queries != 1 {
-		t.Fatalf("modern target queried again: %v", err)
+	for _, toolName := range []string{"read_file", "file.edit"} {
+		t.Run(toolName, func(t *testing.T) {
+			svc := newTestService(t, &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}})
+			meta := testSendTurnMeta()
+			thread, err := svc.CreateThread(t.Context(), meta, "Files", "", "", svc.agentHomeDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			item := flruntime.ThreadItem{ID: "item", Kind: flruntime.ThreadItemTool, TurnID: "turn", RunID: "run", Activity: &observation.ActivityItem{ItemID: "activity", ToolID: "call", ToolName: toolName, Status: observation.ActivityStatusSuccess, Presentation: &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererFile, Label: "a.txt", Payload: fltools.FileActivityPayload{Content: "historical snapshot"}}}}
+			before, _ := json.Marshal(item)
+			record := threadquery.Record{Ref: "correct", ThreadID: identity.ThreadID(thread.ThreadID), TurnID: "turn", RunID: "run", ToolCallID: "call", ToolName: toolName, Status: "success"}
+			wrong := record
+			wrong.Ref = "wrong"
+			wrong.RunID = "another-run"
+			runtime := &fileTargetQueryRuntime{records: []threadquery.Record{wrong, record}, bodies: map[threadquery.RecordRef]string{"correct": "{\"status\":\"success\",\"data\":{\"file_path\":\"/no-longer-present/a.txt\"}}", "wrong": "{\"status\":\"success\",\"data\":{\"file_path\":\"/wrong/a.txt\"}}"}}
+			svc.threadRuntime = runtime
+			got, err := svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if runtime.queries != 1 || runtime.reads != 1 || got[0].Activity.Presentation.TargetRefs[0].Path != "/no-longer-present/a.txt" {
+				t.Fatalf("incorrect canonical match: %+v queries=%d reads=%d", got, runtime.queries, runtime.reads)
+			}
+			after, _ := json.Marshal(item)
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("canonical source changed")
+			}
+			if got[0].Activity.Presentation.Payload.(fltools.FileActivityPayload).Content != "historical snapshot" {
+				t.Fatal("historical content changed")
+			}
+			_, err = svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, got)
+			if err != nil || runtime.queries != 1 {
+				t.Fatalf("modern target queried again: %v", err)
+			}
+		})
 	}
 }
 

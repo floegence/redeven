@@ -342,7 +342,6 @@ func TestBuiltInToolDefinitions_TargetScopedToolsExposeTargetID(t *testing.T) {
 	t.Parallel()
 
 	targetScoped := map[string]bool{
-		"file.edit":   true,
 		"file.write":  true,
 		"apply_patch": true,
 	}
@@ -430,5 +429,26 @@ func validateStrictObjectSchema(t *testing.T, path string, schema map[string]any
 		validateStrictObjectSchema(t, path+"[]", child)
 	default:
 		return
+	}
+}
+
+func TestBuiltInFileMutationSurface(t *testing.T) {
+	for _, definition := range builtInModelCapabilityDefinitions() {
+		if definition.Name == "edit" || definition.Name == "file.edit" {
+			t.Fatalf("removed tool remains in model capabilities: %s", definition.Name)
+		}
+	}
+	for _, permission := range []FlowerPermissionType{FlowerPermissionApprovalRequired, FlowerPermissionFullAccess} {
+		definitions := DefaultPermissionToolFilter{}.FilterTools(permission, builtInToolDefinitions())
+		got := map[string]bool{}
+		for _, definition := range definitions {
+			if definition.Mutating && (definition.Namespace == "builtin.file" || definition.Namespace == "builtin.text") {
+				got[definition.Name] = true
+			}
+		}
+		want := map[string]bool{"file.write": true, "apply_patch": true}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("permission=%s file mutation tools=%v, want=%v", permission, got, want)
+		}
 	}
 }

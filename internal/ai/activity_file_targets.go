@@ -66,9 +66,12 @@ func mutationActivityTarget(data map[string]any) *fltools.ActivityTargetRef {
 	return nil
 }
 
-func localFileActivityTool(name string) bool {
+func localFileActivityTool(name string, activity *fltools.ActivityPresentation) bool {
+	if activity != nil && (activity.Renderer == fltools.ActivityRendererFile || activity.Renderer == fltools.ActivityRendererPatch) {
+		return true
+	}
 	switch name {
-	case "read_file", "file.read", "read_files", "file.edit", "file.write", "file.present", "apply_patch", "image.read":
+	case "read_file", "file.read", "read_files", "file.write", "file.present", "apply_patch", "image.read":
 		return true
 	}
 	return false
@@ -77,7 +80,7 @@ func localFileActivityTool(name string) bool {
 // applyFileActivityTargets uses complete execution data, never display text or
 // positional references. The same mapper serves new and canonical old results.
 func applyFileActivityTargets(activity *fltools.ActivityPresentation, name string, data any) {
-	if activity == nil || !localFileActivityTool(name) {
+	if activity == nil || !localFileActivityTool(name, activity) {
 		return
 	}
 	normalized, err := normalizeJSONCompatibleToolPayload(data)
@@ -160,7 +163,7 @@ func (s *Service) hydrateActivityTargets(ctx context.Context, meta *session.Meta
 	}
 	pending := map[key]int{}
 	for i, item := range items {
-		if item.Activity == nil || item.Activity.Status != observation.ActivityStatusSuccess || (!localFileActivityTool(item.Activity.ToolName) && item.Activity.ToolName != "subagent_events" && item.Activity.ToolName != "report_to_parent") {
+		if item.Activity == nil || item.Activity.Status != observation.ActivityStatusSuccess || (!localFileActivityTool(item.Activity.ToolName, item.Activity.Presentation) && item.Activity.ToolName != "subagent_events" && item.Activity.ToolName != "report_to_parent") {
 			continue
 		}
 		activity := item.Activity.Presentation

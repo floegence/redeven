@@ -2,6 +2,8 @@
 
 - 2026-11-06: Fix frozen Ask Flower reference/image previews, preserve their content viewport and qualify visible content in the built Env App and Desktop.
 
+- 2026-11-06: Reduce [file mutation tools](ai/tool-permission-runtime.md) to complete writes and contextual patches; remove the separate literal-replacement execution surface and preserve historical typed Activity navigation.
+
 - 2026-11-06: Document context-menu discovery, frozen right-click origins, existing action deduplication and native input boundaries.
 
 - 2026-11-06: Clarify model-visible terminal lifetime, computer operation limits,
@@ -16,7 +18,7 @@
 
 - 2026-11-05: Remove directory disclosure arrows, tree rails and conversation indentation from the [Flower sidebar](ui/flower-thread-sidebar.md#directory-view), reclaiming title width while retaining folder-state disclosure and aligned incremental loading.
 
-- 2026-11-05: Clarify [terminal directory arguments](ai/terminal-tool-runtime.md) and type [file-edit matching failures](ai/tool-permission-runtime.md) with observed counts and confirmed no-effect facts; qualify explicit corrections, provider output, Activity and restart against published Floret.
+- 2026-11-05: Clarify [terminal directory arguments](ai/terminal-tool-runtime.md) and qualify [local tool feedback](ai/tool-permission-runtime.md), explicit corrections, provider output, Activity and restart against published Floret.
 
 - 2026-11-05: Replace misleading simulated installation controls with real host actions in [Browser and desktop settings](ai/computer-use-environment-settings.md).
 - 2026-11-05: Refined [Browser and desktop settings](ai/computer-use-environment-settings.md) with grouped environment controls, focused connection rows, pinned browser/platform marks and on-demand target discovery.

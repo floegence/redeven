@@ -68,7 +68,6 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
   "report_to_parent": { icon: 'message-square-text', cycle: 2300, tracks: [] },
   "subagent_events": { icon: 'list-tree', cycle: 2300, tracks: [] },
   "file.present": { icon: "file-text", cycle: 2400, tracks: [] },
-  "file.edit": writingPencilMotion,
   "file.write": writingPencilMotion,
   "attachment.materialize": writingPencilMotion,
   "apply_patch": writingPencilMotion,

@@ -240,7 +240,7 @@ describe('Flower complete interaction subtree stability', () => {
     const request = { logical_request_id: 'preview-request', attempt_id: 'preview-attempt', attempt_epoch: 1,
       started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 128 };
     fixture.replace({ ...base, view_version: 2, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request },
-      tool_call_previews: ['file.edit', 'file.write', 'apply_patch'].map((name) => ({
+      tool_call_previews: ['file.write', 'apply_patch'].map((name) => ({
         thread_id: base.thread_id, turn_id: base.turn_id!, run_id: base.run_id!,
         logical_request_id: request.logical_request_id, attempt_id: request.attempt_id, attempt_epoch: request.attempt_epoch, call_id: name, name,
         arguments_complete: false, preview: { display_name: 'example.ts', additions: 8 },
@@ -265,7 +265,7 @@ describe('Flower complete interaction subtree stability', () => {
       },
     });
     const icons = [...runtime.querySelectorAll('.flower-activity-inline-row-generating .flower-tool-icon')];
-    expect(icons).toHaveLength(3);
+    expect(icons).toHaveLength(2);
     expect(icons.every(icon => icon.getAnimations({ subtree: true }).length > 0)).toBe(true);
     disconnected.resolve();
     await waitFor(() => icons.every(icon => icon.getAnimations({ subtree: true }).length === 0));
@@ -277,7 +277,7 @@ describe('Flower complete interaction subtree stability', () => {
     await waitFor(() => icons.every(icon => icon.getAnimations({ subtree: true }).length > 0));
   });
 
-  it.each(['file.edit', 'file.write', 'apply_patch'])('keeps one animated %s row through argument generation, approval and actual zero changes', async (toolName) => {
+  it.each(['file.write', 'apply_patch'])('keeps one animated %s row through argument generation, approval and actual zero changes', async (toolName) => {
     const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
     onTestFinished(() => media.emulateMediaPreferences({ reducedMotion: 'no-preference' }));
     onTestFinished(() => page.viewport(1280, 900));
@@ -333,7 +333,7 @@ describe('Flower complete interaction subtree stability', () => {
     expect(target.getBoundingClientRect().right).toBeLessThanOrEqual(runtime.getBoundingClientRect().right + 1);
     await page.screenshot({ element: runtime, path: '__screenshots__/flower-output-progress-narrow.png' });
     const preparedCall = { ...call, arguments_complete: true, preview: { ...call.preview, display_name: names } };
-    const operation = toolName === 'file.edit' ? 'edit' : 'write';
+    const operation = 'write';
     const presentation = toolName === 'apply_patch'
       ? { renderer: 'patch', payload: { operation: 'apply_patch' } }
       : { renderer: 'file', payload: { operation, display_name: 'example.ts' } };

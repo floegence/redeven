@@ -330,50 +330,6 @@ func TestReadonlyGrep_DeniesOutsideScopePath(t *testing.T) {
 	}
 }
 
-func TestToolFileEdit_ReplacesExactMatchAndRejectsAmbiguousMatch(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "edit.txt")
-	if err := os.WriteFile(target, []byte("alpha\nbeta\nalpha\n"), 0o644); err != nil {
-		t.Fatalf("write file: %v", err)
-	}
-	r := &run{agentHomeDir: workspace, workingDir: workspace}
-
-	if _, err := r.toolFileEdit(context.Background(), FileEditArgs{
-		FilePath:  "edit.txt",
-		OldString: "alpha",
-		NewString: "omega",
-	}); err == nil || !strings.Contains(err.Error(), "replace_all=false requires exactly one match") {
-		t.Fatalf("expected ambiguous match error, got %v", err)
-	}
-
-	out, err := r.toolFileEdit(context.Background(), FileEditArgs{
-		FilePath:   "edit.txt",
-		OldString:  "alpha",
-		NewString:  "omega",
-		ReplaceAll: true,
-	})
-	if err != nil {
-		t.Fatalf("toolFileEdit replace_all: %v", err)
-	}
-	if out.ChangeType != "update" || !strings.Contains(out.UnifiedDiff, "-alpha") || !strings.Contains(out.UnifiedDiff, "+omega") {
-		t.Fatalf("unexpected mutation result=%+v", out)
-	}
-	actualPath, _ := filepath.EvalSymlinks(out.FilePath)
-	wantPath, _ := filepath.EvalSymlinks(target)
-	if out.DisplayName != "edit.txt" || actualPath != wantPath {
-		t.Fatalf("mutation path metadata=%+v", out)
-	}
-	got, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read edited file: %v", err)
-	}
-	if strings.Count(string(got), "omega") != 2 {
-		t.Fatalf("edited content=%q, want both replacements", string(got))
-	}
-}
-
 func TestDisplayNameForFilePathStripsContentRefSuffixes(t *testing.T) {
 	t.Parallel()
 

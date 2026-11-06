@@ -351,7 +351,7 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 	if strings.Contains(prompt, "Available tools for this request:") {
 		t.Error("host tool enumeration duplicates final provider definitions")
 	}
-	for _, name := range []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "file.edit", "file.write", "apply_patch", "read_file", "read_files", "rgrep"} {
+	for _, name := range []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "file.write", "apply_patch", "read_file", "read_files", "rgrep"} {
 		if strings.Contains(prompt, "- Use "+name+" ") && !names[strings.ReplaceAll(name, ".", "_")] {
 			t.Errorf("provider prompt recommends unavailable %s", name)
 		}

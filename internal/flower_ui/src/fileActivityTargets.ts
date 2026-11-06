@@ -6,7 +6,7 @@ import { readPresentationValue, retainEqualValue } from './presentationIdentity'
 // arrives, without querying canonical history on every streaming update.
 export function retainFileActivityTargets(previous: FlowerActivityItem | undefined, incoming: FlowerActivityItem): FlowerActivityItem {
   if (!previous || previous.status !== 'success' || incoming.status !== 'success') return incoming;
-  if (!['read_file', 'file.read', 'read_files', 'file.edit', 'file.write', 'apply_patch', 'image.read'].includes(incoming.tool_name ?? '')) return incoming;
+  if (incoming.renderer !== 'file' && incoming.renderer !== 'patch' && !['read_file', 'file.read', 'read_files', 'file.write', 'apply_patch', 'image.read'].includes(incoming.tool_name ?? '')) return incoming;
   const hasTargets = (activity: FlowerActivityItem) =>
     activity.target_refs?.some(ref => !!ref.path)
     || ['rows', 'mutations'].some(field => Array.isArray(activity.payload?.[field])

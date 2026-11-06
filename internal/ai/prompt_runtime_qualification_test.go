@@ -78,7 +78,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		saveCompactionQualificationJSON(t, filepath.Join(root, "report.json"), report)
 	}()
 	send := func(id, text string) *FlowerThreadDetail {
-		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: id, Input: RunInput{Text: text}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.edit", "file.write", "apply_patch"}}})
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: id, Input: RunInput{Text: text}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.write", "apply_patch"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,7 +114,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		start := len(recorder.snapshot())
-		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: consultation.ThreadID, ClientRequestID: tc.name, Input: RunInput{Text: tc.input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.edit", "file.write", "apply_patch"}}})
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: consultation.ThreadID, ClientRequestID: tc.name, Input: RunInput{Text: tc.input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.write", "apply_patch"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -426,7 +426,7 @@ func checkQualificationFixtureRules(results []flruntime.ThreadToolResult, fixtur
 				return fmt.Errorf("dependent content read before complete rules: %s", name)
 			}
 		}
-		if result.ToolName == "file.edit" || result.ToolName == "file.write" || result.ToolName == "apply_patch" {
+		if result.ToolName == "file.write" || result.ToolName == "apply_patch" {
 			if !rules || !spec {
 				return fmt.Errorf("code changed before complete applicable rules/specification")
 			}
@@ -445,7 +445,7 @@ func TestQualificationFixtureRuleOracle(t *testing.T) {
 		return flruntime.ThreadToolResult{ToolName: "terminal.exec", Content: string(b)}
 	}
 	rules, spec, source := receipt(fixtures["AGENTS.md"]), receipt(fixtures["SPEC.md"]), receipt(fixtures["calc.py"])
-	write := flruntime.ThreadToolResult{ToolName: "file.edit", Content: `{"data":{}}`}
+	write := flruntime.ThreadToolResult{ToolName: "file.write", Content: `{"data":{}}`}
 	for _, valid := range [][]flruntime.ThreadToolResult{{rules, source, {Status: "error", Content: "ERROR: rejected before execution"}}, {rules, {Status: "error", Content: "ERROR: " + spec.Content}, write}, {rules, source}, {rules, spec, write}, {receipt("calc.py\nAGENTS.md\n"), rules}, {receipt("rules "), receipt("complete\n"), source}} {
 		if err := checkQualificationFixtureRules(valid, fixtures); err != nil {
 			t.Fatal(err)

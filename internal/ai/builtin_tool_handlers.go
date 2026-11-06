@@ -31,7 +31,7 @@ func toolSuccessSummary(toolName string) string {
 		return "terminal.terminate"
 	case "attachment.read", "attachment.materialize", "image.read":
 		return toolName
-	case "file.edit", "file.write":
+	case "file.write":
 		return "file.updated"
 	case "apply_patch":
 		return "apply_patch.applied"
@@ -199,7 +199,7 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, err
 		return payload, false, nil
 	case "attachment.read", "attachment.materialize", "image.read":
 		return payload, false, nil
-	case "file.edit", "file.write":
+	case "file.write":
 		return normalizeFileMutationPayload(payload)
 	case "apply_patch":
 		return normalizeApplyPatchPayload(payload)
@@ -528,18 +528,6 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
-			Name:             "file.edit",
-			Description:      "Replace exact literal text in an existing file. Read the current text first. Include unique context for one occurrence; use replace_all only when all occurrences are intended.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Working-directory-relative or authorized absolute path."}, "old_string": map[string]any{"type": "string", "minLength": 1}, "new_string": map[string]any{"type": "string", "description": "Must differ from old_string."}, "replace_all": map[string]any{"type": "boolean"}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
-			Mutating:         true,
-			RequiresApproval: true,
-			Visibility:       ToolVisibilityStandard,
-			Capabilities:     []ToolCapabilityClass{ToolCapabilityMutation},
-			Source:           "builtin",
-			Namespace:        "builtin.file",
-			Priority:         100,
-		},
-		{
 			Name:        "file.present",
 			Description: "Verify and present an existing final deliverable at its user destination. Returns its absolute path, size, MIME and SHA-256. Never moves files or uploads bytes. Files under application state, including the scratch and staging directories listed in runtime context, are not final destinations. Call after writing the final destination.",
 			InputSchema: toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string"}, "title": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"file_path"}, "additionalProperties": false}),
@@ -547,7 +535,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.write",
-			Description:      "Create or overwrite a text file with its full content.",
+			Description:      "Create or overwrite a text file with its full content. Use apply_patch for contextual edits to existing files.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Working-directory-relative or authorized absolute path."}, "content": map[string]any{"type": "string"}}), "required": []string{"file_path", "content"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
@@ -559,7 +547,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Apply multi-chunk or multi-file changes with a Begin/End Patch. Read affected text first and include unique context. Paths must be writable under the filesystem roots and permissions in runtime context; relative paths resolve from cwd. Matching tries exact lines, then ignores trailing whitespace, surrounding whitespace, and selected Unicode punctuation/space differences, taking the first match in each permitted search pass. Context lines retain original source text; added lines are literal, without automatic indentation.",
+			Description:      "Apply contextual single-file or multi-file changes with a Begin/End Patch. Read affected text first and include unique context. Paths must be writable under the filesystem roots and permissions in runtime context; relative paths resolve from cwd. Matching tries exact lines, then ignores trailing whitespace, surrounding whitespace, and selected Unicode punctuation/space differences, taking the first match in each permitted search pass. Context lines retain original source text; added lines are literal, without automatic indentation.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"input": map[string]any{"type": "string", "description": "*** Begin Patch ... *** End Patch. Operations: *** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. One file header per canonical path; non-overlapping chunks in original file order. Exact, uniquely located disjoint chunks may be reordered. Anchors and EOF constrain the search. Unchanged lines retain their endings; insertions use the first existing ending (LF for new files), and nonempty updates end with a newline. The full change diff is in Activity; inspect affected content when needed."}}), "required": []string{"input"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,

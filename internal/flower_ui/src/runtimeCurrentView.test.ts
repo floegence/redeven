@@ -96,7 +96,7 @@ describe('streamed tool argument presentation', () => {
 
 
 describe('historical file navigation during live updates', () => {
-  it.each(['file', 'structured', 'patch'])('retains only proven targets for equal %s facts', renderer => {
+  it.each([['file', 'read_file'], ['file', 'file.edit'], ['structured', 'read_files'], ['patch', 'apply_patch']])('retains only proven targets for equal %s facts from %s', (renderer, name) => {
     const target = { kind: 'file', label: 'a.txt', path: '/unmounted/a.txt' };
     const entry = renderer === 'structured' ? { title: 'a.txt', content: 'historical snapshot', format: 'code', language: 'text' }
       : renderer === 'patch' ? { display_name: 'a.txt', change_type: 'modify', unified_diff: 'historical diff' }
@@ -104,7 +104,6 @@ describe('historical file navigation during live updates', () => {
     const field = renderer === 'structured' ? 'rows' : 'mutations';
     const payload = renderer === 'file' ? entry : { [field]: [entry] };
     const enriched = renderer === 'file' ? payload : { [field]: [{ ...entry, target }] };
-    const name = renderer === 'structured' ? 'read_files' : renderer === 'patch' ? 'apply_patch' : 'read_file';
     const rawActivity = {
       item_id: 'canonical', tool_id: 'call', tool_name: name, kind: 'tool', status: 'success',
       presentation: { renderer, payload: enriched, ...(renderer === 'file' ? { target_refs: [target] } : {}) },

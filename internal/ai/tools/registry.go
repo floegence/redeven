@@ -274,19 +274,6 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("operation", "status_code", "content_type", "format", "bytes_read", "truncated"),
 		),
 	},
-	"file.edit": {
-		Name:             "file.edit",
-		Mutating:         true,
-		RequiresApproval: true,
-		Presentation: withPresentationOptions(
-			presentation(ToolPresentationMutation, "approval", "file", "mutation", "args", "result", "error"),
-			operation("edit"),
-			labelFields("display_name"),
-			callPayloadFields("replace_all"),
-			resultPayloadFields("display_name", "change_type", "additions", "deletions", "truncated", "unified_diff", "diff_unavailable_reason"),
-			chipFields("truncated"),
-		),
-	},
 	"file.present": {
 		Name:         "file.present",
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "file_delivery", "result", "error"), operation("present"), labelFields("title"), resultPayloadFields("title", "name", "mime", "size", "sha256", "endpoint_id")),

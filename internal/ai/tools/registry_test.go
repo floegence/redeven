@@ -68,10 +68,9 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			callPayloadFields: []string{"path", "offset", "limit"},
 		},
 		{
-			toolName:          "file.edit",
-			operation:         "edit",
-			labelFields:       []string{"display_name"},
-			callPayloadFields: []string{"replace_all"},
+			toolName:    "file.write",
+			operation:   "write",
+			labelFields: []string{"display_name"},
 		},
 		{
 			toolName:          "web.search",

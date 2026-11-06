@@ -25,7 +25,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 		{Name: "ask_user", Visibility: ToolVisibilityControl},
 		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
 		{Name: "terminal.exec", Visibility: ToolVisibilityStandard},
-		{Name: "file.edit", Visibility: ToolVisibilityStandard, Mutating: true},
 		{Name: "file.write", Visibility: ToolVisibilityStandard, Mutating: true},
 		{Name: "apply_patch", Visibility: ToolVisibilityStandard, Mutating: true},
 		{Name: "use_skill", Visibility: ToolVisibilityStandard},
@@ -60,7 +59,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 			want: []string{
 				"apply_patch",
 				"ask_user",
-				"file.edit",
 				"file.write",
 				"okf.index",
 				"okf.open",
@@ -79,7 +77,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 			want: []string{
 				"apply_patch",
 				"ask_user",
-				"file.edit",
 				"file.write",
 				"okf.index",
 				"okf.open",
@@ -147,7 +144,7 @@ func TestPermissionSnapshotConsistencyForBuiltinMatrix(t *testing.T) {
 			}
 			names := toolNames(activeTools)
 			if permissionType == FlowerPermissionReadonly {
-				for _, blocked := range []string{"terminal.exec", "file.edit", "file.write", "apply_patch", "use_skill"} {
+				for _, blocked := range []string{"terminal.exec", "file.write", "apply_patch", "use_skill"} {
 					if containsString(names, blocked) {
 						t.Fatalf("readonly tool set includes %q: %v", blocked, names)
 					}

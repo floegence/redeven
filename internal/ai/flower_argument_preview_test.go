@@ -18,8 +18,6 @@ func TestFlowerArgumentPreviewChunkBoundaries(t *testing.T) {
 		{"write", "file.write", `{"file_path":"/missing/a.txt","content":"a\r\nb\n"}`, &fltools.ArgumentPreview{DisplayName: "a.txt", Additions: integer(2)}},
 		{"empty", "file.write", `{"content":""}`, &fltools.ArgumentPreview{Additions: integer(0)}},
 		{"unicode", "file.write", `{"content":"\u4e2d\ud83d\ude00\n中文😀","ignored":[true,null,{"content":"ignored"}]}`, &fltools.ArgumentPreview{Additions: integer(2)}},
-		{"edit", "file.edit", `{"old_string":"same\r\nold\r\ntail\n","new_string":"same\r\nnew\r\ntail\n","replace_all":true}`, &fltools.ArgumentPreview{Additions: integer(1), Deletions: integer(1)}},
-		{"noop", "file.edit", `{"new_string":"same","old_string":"same"}`, &fltools.ArgumentPreview{Additions: integer(0), Deletions: integer(0)}},
 		{"escaped", "file.write", `{"content":"quote: \" / \\ \t \b \f \r"}`, &fltools.ArgumentPreview{Additions: integer(1)}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -67,17 +65,17 @@ func TestFlowerArgumentPreviewPatchFormats(t *testing.T) {
 }
 
 func TestFlowerArgumentPreviewPartialAndIsolation(t *testing.T) {
-	first, second := flowerArgumentPreviewFactory("file.edit")(), flowerArgumentPreviewFactory("file.write")()
-	got, err := first(`{"old_string":"a\nb`, false)
-	if err != nil || got.Deletions == nil || *got.Deletions != 2 || got.Additions != nil {
+	first, second := flowerArgumentPreviewFactory("file.write")(), flowerArgumentPreviewFactory("file.write")()
+	got, err := first(`{"content":"a\nb`, false)
+	if err != nil || got.Additions == nil || *got.Additions != 2 || got.Deletions != nil {
 		t.Fatalf("partial %#v %v", got, err)
 	}
 	other, err := second(`{"content":"one"}`, true)
 	if err != nil || other.Additions == nil || *other.Additions != 1 || other.Deletions != nil {
 		t.Fatalf("independent %#v %v", other, err)
 	}
-	got, err = first(`","new_string":"a\nc"}`, true)
-	if err != nil || *got.Additions != 1 || *got.Deletions != 1 {
+	got, err = first(`\nc"}`, true)
+	if err != nil || *got.Additions != 3 || got.Deletions != nil {
 		t.Fatalf("complete %#v %v", got, err)
 	}
 	if flowerArgumentPreviewFactory("file.read") != nil {
@@ -86,7 +84,7 @@ func TestFlowerArgumentPreviewPartialAndIsolation(t *testing.T) {
 }
 
 func TestFlowerArgumentPreviewNamesArriveBeforeArgumentsComplete(t *testing.T) {
-	for _, tool := range []string{"file.edit", "file.write"} {
+	for _, tool := range []string{"file.write"} {
 		t.Run(tool, func(t *testing.T) {
 			parse := flowerArgumentPreviewFactory(tool)()
 			preview, err := parse(`{"file_path":"src/exam`, false)

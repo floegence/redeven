@@ -1969,17 +1969,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolReadonlyGrep(ctx, p.Query, p.Paths, p.Glob, p.CaseSensitive, p.FixedStrings, p.MaxMatches, p.ContextLines)
 
-	case "file.edit":
-		if meta == nil || !meta.CanWrite {
-			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "write permission denied"}
-		}
-		var p FileEditArgs
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolFileEdit(ctx, p)
-
 	case "file.present":
 		if err := requireRead(meta); err != nil {
 			return nil, err
