@@ -63,9 +63,13 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 		if isComputerUseTool(name) && name != "computer.targets" {
 			toolDef.BatchExclusiveGroup = "computer_control"
 		}
+		var decode func([]byte) (map[string]any, error)
+		if name == "subagents" {
+			decode = decodeSubagentsToolInput
+		}
 		tool := fltools.Define[map[string]any](
 			toolDef,
-			nil,
+			decode,
 			func(inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
 				if isComputerUseTool(inv.Name) {
 					return floretComputerResources(r, inv)

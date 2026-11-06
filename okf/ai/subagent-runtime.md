@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Flower child runtime and parent event boundary
 tags: [ai, floret, subagents, permissions]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -13,6 +13,15 @@ Floret owns canonical child threads, reports and parent-scoped lifecycle events.
 
 ## Child runtime
 The `subagents` tool supports spawn, send input, wait, list, status, inspect, close, and close all.
+
+Its flat provider schema describes conditional fields: spawn requires task_name,
+task_description and message; send_input requires target and message; close
+requires target; status/inspect require target or ids; wait requires ids. The
+existing action validator also runs as a pure Floret decoder before resources
+and effect authorization. Published Floret v7.107.8 owns bounded model correction
+and omits rejected calls from actionable Activity. Valid argument values remain
+unchanged. Child scope, stale targets, storage and permission checks remain
+execution-state checks, not input correction or permission to replay effects.
 
 The model-facing result keeps child identity, task name, status, current turn, queue count, failure and interaction facts. Display timestamps, duplicated IDs and counts, and UI action flags remain outside that projection. Spawn and wait do not repeat task descriptions; list and explicit inspect retain them. A preview is omitted only when the same result carries the complete handoff.
 
@@ -50,6 +59,9 @@ Events are observations and context inputs, not a second result store or a backg
 
 - `redeven:internal/ai/subagents_model_payload.go` - Source.
 - `redeven:internal/ai/floret_tools.go` - Source.
+- `redeven:internal/ai/subagents_arguments_test.go` - Conditional validation before effect authority and unchanged accepted inputs.
+- `redeven:internal/ai/subagents_arguments_integration_test.go` - Actual provider feedback, valid execution, user-visible Activity, restart and subsequent-turn history.
+- `redeven:internal/ai/tool_contract_clarity_test.go` - Sent schemas across provider adapters.
 
 - `redeven:internal/ai/parent_events_test.go` - Tests.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.

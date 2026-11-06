@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -77,20 +78,6 @@ func (r *run) manageSubagentsForTool(ctx context.Context, toolCallID string, arg
 		return nil, fmt.Errorf("subagents is disabled in this run")
 	}
 	action := strings.ToLower(strings.TrimSpace(anyToString(args["action"])))
-	if action == "" {
-		err := subagentArgumentsError{
-			code: "invalid_arguments.subagents.missing_action",
-			msg:  "subagents action is required",
-			meta: nil,
-		}
-		r.recordRunDiagnostic("delegation.manage.validation_error", RealtimeStreamKindLifecycle, map[string]any{
-			"action":                "",
-			"provided_keys":         subagentValidationProvidedKeys(args),
-			"contract_variant":      "unknown",
-			"validation_error_code": err.InvalidArgumentsCode(),
-		})
-		return nil, err
-	}
 	contractVariant := subagentValidationContractVariant(action, args)
 	if err := validateSubagentsArgsByAction(action, args); err != nil {
 		eventPayload := map[string]any{
@@ -142,8 +129,19 @@ func invalidSubagentArguments(code string, msg string, meta map[string]any) erro
 	}
 }
 
+func decodeSubagentsToolInput(raw []byte) (map[string]any, error) {
+	var args map[string]any
+	if err := json.Unmarshal(raw, &args); err != nil {
+		return nil, err
+	}
+	action := strings.ToLower(strings.TrimSpace(anyToString(args["action"])))
+	return args, validateSubagentsArgsByAction(action, args)
+}
+
 func validateSubagentsArgsByAction(action string, args map[string]any) error {
 	switch action {
+	case "":
+		return invalidSubagentArguments("invalid_arguments.subagents.missing_action", "subagents action is required", nil)
 	case subagentActionSpawn:
 		if _, exists := args["title"]; exists {
 			return invalidSubagentArguments("invalid_arguments.subagents.spawn_title_unsupported", "spawn does not accept title; use task_name", nil)

@@ -41,7 +41,7 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				p.chatGPT = true
 				p.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 			}
-			wanted := map[string]bool{"terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true}
+			wanted := map[string]bool{"terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true}
 			var defs []ToolDef
 			for _, def := range builtInModelCapabilityDefinitions() {
 				if wanted[def.Name] {
@@ -81,11 +81,24 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				"computer_exec": {"SCRIPT_OPERATION_LIMIT", "completed effects"},
 				"image_read":    {"width", "height", "10 MiB", "32 megapixels"},
 				"web_fetch":     {"known URL"},
+				"subagents":     {"send_input requires target and message", "close requires target", "status/inspect require target or ids", "wait requires ids"},
 			} {
 				for _, phrase := range phrases {
 					if !strings.Contains(strings.ToLower(fmt.Sprint(functions[name]["description"])), strings.ToLower(phrase)) {
 						t.Errorf("%s omits %q", name, phrase)
 					}
+				}
+			}
+			subagentsSchema := functions["subagents"]["parameters"].(map[string]any)
+			for _, keyword := range []string{"oneOf", "anyOf", "if", "then"} {
+				if _, exists := subagentsSchema[keyword]; exists {
+					t.Errorf("subagents gained provider-dependent root %s", keyword)
+				}
+			}
+			for field, phrase := range map[string]string{"task_name": "Required for spawn", "task_description": "Required for spawn", "message": "4000 UTF-8 bytes", "target": "Required for send_input and close", "ids": "required for wait"} {
+				property := subagentsSchema["properties"].(map[string]any)[field].(map[string]any)
+				if !strings.Contains(fmt.Sprint(property["description"]), phrase) {
+					t.Errorf("subagents.%s omits %q", field, phrase)
 				}
 			}
 			for _, tc := range []struct{ name, field string }{{"computer_exec", "target"}, {"tessiven_action", "generation"}, {"tessiven_runtime_action", "identity"}} {

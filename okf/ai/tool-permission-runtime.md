@@ -13,6 +13,12 @@ Redeven owns product visibility, policy, prompt and approval UI; Floret owns inv
 
 Default tools omit write_todos; historical Todo remains readable. [Goals](flower-goals.md) retains independent ownership. Registry includes read/search/file/patch/terminal/web/OKF/interaction/skills/subagents/MCP/Floret tools. Bounded typed details exclude raw/status/name-only affordances. Target media validates MIME/size/digest; never persist image bytes in tool state.
 
+Pure conditional-input validation belongs in typed tool decoders, before resource
+resolution and effect authorization. Published Floret owns bounded correction and
+paired model feedback; Redeven reuses its existing [child action validator](subagent-runtime.md).
+Projector failures remain contract failures. Stateful permission, storage and
+business failures retain their owner classifications and never imply safe replay.
+
 ## Diagnostic ownership
 Classify owner-typed/cancel/deadline/filesystem errors; unknown wording stays UNKNOWN/source text. Keywords cannot infer resource, authority, retry or replacement args. Owners resolve authorized relative/home paths. Keep patch diagnostics; removing unused suggested-fix inference proves no model-quality gain.
 
