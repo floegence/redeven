@@ -7,7 +7,15 @@ import { taskFilesEnUS } from '../../../../../flower_ui/src/taskFilesCopy';
 
 const engine = vi.hoisted(() => ({ load: vi.fn(), fromWorkbook: vi.fn() }));
 vi.mock('@silurus/ooxml/xlsx', () => ({ XlsxWorkbook: { load: engine.load }, XlsxSheetViewer: { fromWorkbook: engine.fromWorkbook } }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: Record<string, unknown>) => <button {...props} />, SurfaceFloatingLayer: (props: any) => <div>{props.children}</div> }));
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
+  Button: (props: Record<string, unknown>) => <button {...props} />,
+  SurfaceFloatingLayer: (props: any) => <div>{props.children}</div>,
+  Select: (props: { value: string; disabled?: boolean; options: Array<{ value: string; label: string }>; onChange: (value: string) => void }) =>
+    <select value={props.value} disabled={props.disabled} onChange={event => props.onChange(event.currentTarget.value)}>
+      {props.options.map(option => <option value={option.value}>{option.label}</option>)}
+    </select>,
+}));
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); dispose = undefined; document.body.replaceChildren(); vi.resetAllMocks(); });
 function fixture() {

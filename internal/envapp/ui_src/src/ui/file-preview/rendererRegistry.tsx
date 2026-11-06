@@ -34,6 +34,7 @@ export type RedevenFilePreviewRendererId =
 export type RedevenFilePreviewRenderProps = Readonly<{
   surface?: FilePreviewSurface;
   allowLocalWheel?: boolean;
+  active?: boolean;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;

@@ -1,0 +1,19 @@
+.redeven-html-preview-pending {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 0;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: var(--floe-type-body);
+}
+
+/* Delay only feedback, never the document or input response. */
+.redeven-html-preview-pending > span {
+  animation: redeven-html-preview-feedback 150ms step-end both;
+}
+
+@keyframes redeven-html-preview-feedback {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

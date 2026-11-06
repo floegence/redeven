@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview rendering, formats and viewport
 tags: [ui, files, preview, viewport, rendering]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -42,7 +42,7 @@ It renders an opaque `allow-scripts`, no-referrer iframe; it never inserts file 
 The current Activity file preview and Workbench same-file reuse rules still own placement.
 
 ### Placement and interaction
-The page fills the reading area and scrolls internally. An unselected Workbench iframe is inert and cannot intercept pointer, keyboard, or wheel input. Unrelated shell updates preserve the live document.
+The page fills the reading area and scrolls internally. An unselected Workbench iframe is inert and cannot intercept pointer, keyboard, or wheel input. Unrelated shell updates preserve the live document. Floe owns revision-fenced HTML presentation: private document-load completion plus rendering opportunities, not arbitrary application idle. Reading and rendering retain one stable localized pending surface; short feedback is delayed without delaying content. Loaded tab switches never reenter loading. Source replacement fences earlier messages, pending callbacks and link errors. Inactive HTML pauses native media and never autoplays on return; scripts/canvases are not forcibly suspended. Keep the opaque sandbox/CSP and file-size limits. Attachments render snapshot HTML/HTM/XHTML with the same 2 MiB bound and no editor permission.
 
 ### Source editing and snapshots
 Edit opens the existing HTML source editor only when write permission permits. Attachment snapshots remain read-only and show the attached bytes rather than re-reading the live file.

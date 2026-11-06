@@ -106,14 +106,16 @@ describe('Office and delimited preview acceptance', () => {
       expect(host.querySelector('table')).toBeNull();
       expect(host.querySelector('[aria-label="Text encoding"]')).toBeNull();
       expect(host.textContent).not.toContain('Basic preview');
-      const sheets = host.querySelector<HTMLSelectElement>('[aria-label="Worksheet"]')!;
-      expect([...sheets.options].map(option => option.text)).toEqual(['Identity', 'Notes']);
+      const sheets = host.querySelector<HTMLElement>('[role="combobox"][aria-label="Worksheet"]')!;
+      await userEvent.click(sheets);
+      expect([...document.querySelectorAll('[role="option"]')].map(option => option.textContent)).toEqual(['Identity', 'Notes']);
+      await userEvent.keyboard('{Escape}');
       for (const value of ['00123', '12345678901234567890', 'Beyond legacy limits']) await find(host, value);
-      await userEvent.selectOptions(sheets, '2'); await gridReady(host);
+      await userEvent.click(sheets); await userEvent.click(page.getByRole('option', { name: 'Notes', exact: true })); await gridReady(host);
       await find(host, 'Commented cell');
       await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!);
       expect(host.querySelector('[aria-label="Actual size"]')?.textContent).toBe('110%');
-      await userEvent.selectOptions(sheets, '0'); await gridReady(host);
+      await userEvent.click(sheets); await userEvent.click(page.getByRole('option', { name: 'Identity', exact: true })); await gridReady(host);
       disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren();
     }
   });
@@ -132,7 +134,7 @@ describe('Office and delimited preview acceptance', () => {
     const toolbar = host.querySelector<HTMLElement>('.flower-spreadsheet-toolbar')!;
     expect(toolbar.getBoundingClientRect().height, JSON.stringify([...toolbar.children].map(element => ({ tag: element.tagName, height: element.getBoundingClientRect().height, minHeight: getComputedStyle(element).minHeight })))).toBeLessThanOrEqual(40);
     expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
-    const controls = [...toolbar.querySelectorAll<HTMLElement>('button,select')];
+    const controls = [...toolbar.querySelectorAll<HTMLElement>('button,select')].filter(element => element.getAttribute('aria-hidden') !== 'true' && element.getBoundingClientRect().width > 0);
     for (let index = 1; index < controls.length; index++) {
       expect(controls[index].getBoundingClientRect().left).toBeGreaterThanOrEqual(controls[index - 1].getBoundingClientRect().right);
     }

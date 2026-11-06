@@ -1,3 +1,4 @@
+import { SandboxedHtmlFrame } from '@floegence/floe-webapp-core/html-preview';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { Component } from 'solid-js';
 import type { FlowerTaskFilePreviewContentProps } from '../FlowerTaskFilePreview';
@@ -6,7 +7,7 @@ import { isRichFilePreview } from '../preview/previewKinds';
 import type { TaskFilesCopy } from '../taskFilesCopy';
 const FlowerRichFilePreview = lazy(() => import('../preview/FlowerRichFilePreview').then(module => ({ default: module.FlowerRichFilePreview })));
 import { cn } from '@floegence/floe-webapp-core';
-import { Button, FloatingWindow, WindowTabs } from '@floegence/floe-webapp-core/ui';
+import { Button, FloatingWindow, RetainedPanel, WindowTabs } from '@floegence/floe-webapp-core/ui';
 
 export type FlowerAttachmentPreviewSource = Readonly<{
   id: string;
@@ -47,15 +48,16 @@ function mimeEssence(value: string): string {
   return value.trim().toLowerCase().split(';', 1)[0] ?? '';
 }
 
-function previewKind(mimeType: string): 'image' | 'pdf' | 'text' | 'unsupported' {
+function previewKind(mimeType: string, name = ''): 'image' | 'pdf' | 'text' | 'html' | 'unsupported' {
   const essence = mimeEssence(mimeType);
+  if (/\.(html?|xhtml)$/i.test(name) || essence === 'text/html' || essence === 'application/xhtml+xml') return 'html';
   if (essence.startsWith('image/')) return 'image';
   if (essence === 'application/pdf') return 'pdf';
   if (essence === 'text/plain' || essence === 'text/markdown') return 'text';
   return 'unsupported';
 }
 
-const AttachmentPreviewPanel: Component<FlowerAttachmentPreviewWindowProps & { source: FlowerAttachmentPreviewSource; open: boolean }> = (props) => {
+const AttachmentPreviewPanel: Component<FlowerAttachmentPreviewWindowProps & { source: FlowerAttachmentPreviewSource; open: boolean; active: boolean }> = (props) => {
   const [loading, setLoading] = createSignal(false);
   const [revision, setRevision] = createSignal(0);
   const [error, setError] = createSignal('');
@@ -91,13 +93,14 @@ const AttachmentPreviewPanel: Component<FlowerAttachmentPreviewWindowProps & { s
     void source.load(controller.signal).then(async (blob) => {
       if (controller.signal.aborted) return;
       const mimeType = mimeEssence(blob.type) || mimeEssence(source.mimeType);
+      if (previewKind(mimeType, source.name) === 'html' && blob.size > 2 * 1024 * 1024) throw new Error(props.unavailableLabel);
       setResolvedMimeType(mimeType);
       setBlob(blob);
-      if (previewKind(mimeType) === 'text' && !isRichFilePreview(source.name)) {
+      if ((previewKind(mimeType, source.name) === 'text' || previewKind(mimeType, source.name) === 'html') && !isRichFilePreview(source.name)) {
         const content = await blob.text();
         if (controller.signal.aborted) return;
         setText(content);
-      } else if (previewKind(mimeType) === 'image' || previewKind(mimeType) === 'pdf') {
+      } else if (previewKind(mimeType, source.name) === 'image' || previewKind(mimeType, source.name) === 'pdf') {
         activeObjectURL = URL.createObjectURL(blob);
         setObjectURL(activeObjectURL);
       }
@@ -112,7 +115,7 @@ const AttachmentPreviewPanel: Component<FlowerAttachmentPreviewWindowProps & { s
 
   onCleanup(clearContent);
 
-  const kind = createMemo(() => previewKind(resolvedMimeType() || props.source?.mimeType || ''));
+  const kind = createMemo(() => previewKind(resolvedMimeType() || props.source?.mimeType || '', props.source.name));
 
   return (
         <div class="flower-attachment-preview-surface">
@@ -124,8 +127,8 @@ const AttachmentPreviewPanel: Component<FlowerAttachmentPreviewWindowProps & { s
                   <span>{props.unavailableLabel}</span>
                 </div>
               )}>
-                <Match when={props.renderContent && blob() && isRichFilePreview(props.source.name)}>
-                  <Show when={props.renderContent}>{Content => { const Renderer = Content(); return <Renderer name={props.source.name} mime={resolvedMimeType()} blob={blob()!} />; }}</Show>
+                <Match when={props.renderContent && blob() && (isRichFilePreview(props.source.name) || kind() === 'html')}>
+                  <Show when={props.renderContent}>{Content => { const Renderer = Content(); return <Renderer active={props.active} name={props.source.name} mime={resolvedMimeType()} blob={blob()!} />; }}</Show>
                 </Match>
                 <Match when={blob() && isRichFilePreview(props.source.name)}>
                   <Suspense fallback={<div class="flower-attachment-preview-state">{props.loadingLabel}</div>}><FlowerRichFilePreview name={props.source.name} mime={resolvedMimeType()} blob={blob()!} copy={props.copy} /></Suspense>
@@ -137,6 +140,11 @@ const AttachmentPreviewPanel: Component<FlowerAttachmentPreviewWindowProps & { s
                   <object class="flower-attachment-preview-document" data={objectURL()} type="application/pdf">
                     <div class="flower-attachment-preview-state">{props.unavailableLabel}</div>
                   </object>
+                </Match>
+                <Match when={kind() === 'html'}>
+                  <SandboxedHtmlFrame class="flower-task-preview-html" html={text()} title={props.source.name} active={props.active}
+                    renderPending={() => <span class="flower-attachment-preview-state" role="status">{props.loadingLabel}</span>}
+                    labels={{ linkUnavailable: props.unavailableLabel, anchorUnavailable: props.unavailableLabel }} />
                 </Match>
                 <Match when={kind() === 'text'}>
                   <pre class="flower-attachment-preview-text">{text()}</pre>
@@ -182,11 +190,11 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
   }, []);
   const RetainedPanels = () => {
     onCleanup(() => { if (!props.source) setSources([]); });
-    return <For each={panels()}>{source => <div class="h-full min-h-0" data-attachment-preview-document={source.id}
+    return <div class="relative h-full min-h-0 flex-1"><For each={panels()}>{source => <RetainedPanel active={activeId() === source.id} class="h-full min-h-0" data-attachment-preview-document={source.id}
       tabIndex={-1} role={sources().length > 1 ? 'tabpanel' : undefined} id={panelId(source.id)} aria-labelledby={sources().length > 1 ? tabId(source.id) : undefined} aria-label={source.name}
-      hidden={activeId() !== source.id} inert={activeId() !== source.id}>
-      <AttachmentPreviewPanel {...props} source={source} open={!!props.source} />
-    </div>}</For>;
+      >
+      <AttachmentPreviewPanel {...props} source={source} open={!!props.source} active={activeId() === source.id && !!props.source} />
+    </RetainedPanel>}</For></div>;
   };
   const multiple = createMemo(() => sources().length > 1);
   const tabItems = createMemo(() => sources().map(source => ({ id: source.id, domId: tabId(source.id), panelId: panelId(source.id), label: source.name, title: source.name,

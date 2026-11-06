@@ -104,7 +104,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
         </Show>
 
         <RedevenLoadingCurtain
-          visible={!!props.loading && !resolvedError()}
+          visible={!!props.loading && !resolvedError() && props.descriptor.mode !== 'html'}
           eyebrow={i18n.t('filePreview.previewEyebrow')}
           message={props.message || i18n.t('filePreview.loadingFile')}
         />

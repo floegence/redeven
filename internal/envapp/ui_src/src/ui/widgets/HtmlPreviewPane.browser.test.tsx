@@ -187,7 +187,7 @@ describe('HTML file page preview', () => {
     const host = mount(() => <RedevenWorkbenchSurface state={state} setState={setState} widgetDefinitions={definitions} />);
     await vi.waitFor(() => expect(host.querySelector('.html-preview-frame')).toBeTruthy());
     const frame = host.querySelector<HTMLIFrameElement>('.html-preview-frame')!;
-    expect(frame.inert).toBe(false);
+    await vi.waitFor(() => expect(frame.inert).toBe(false));
     expect(frame.clientHeight).toBe(frame.parentElement!.clientHeight);
     await htmlCommands.inspectHtmlFilePreview('wheel');
     await vi.waitFor(async () => expect((await htmlCommands.inspectHtmlFilePreview()).scrollY).toBeGreaterThan(0));

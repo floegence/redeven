@@ -7,6 +7,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CDPSession, Frame, Page } from 'playwright';
 import viteConfig from './vite.config.ts';
+import { inspectPreviewContinuity } from './scripts/previewContinuityAcceptance.mjs';
 import { dragViewerHandle, qualifyComputerLauncherTouch, qualifyComputerViewer, qualifyComputerViewerSurface } from './scripts/computerViewerInteraction.mjs';
 
 const configuredBrowserPort = Number.parseInt(process.env.REDEVEN_VITEST_BROWSER_PORT ?? '', 10);
@@ -128,6 +129,10 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        inspectPreviewDocumentContinuity: async ({ page }, panelSelector: string, names: string[]) => {
+          const host = await frameForSelector(page, panelSelector);
+          return inspectPreviewContinuity(page, host, panelSelector, names);
+        },
         inspectPreviewTabMotion: async ({ page }) => {
           const frame = await frameForSelector(page, '[data-preview-document]');
           const root = frame.locator('[data-floe-geometry-surface="floating-window"]');

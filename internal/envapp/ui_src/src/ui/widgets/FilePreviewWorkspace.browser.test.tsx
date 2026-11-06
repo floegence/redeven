@@ -196,3 +196,48 @@ it.each(['light', 'dark'] as const)('keeps refined pointer sorting and blank hea
   expect(String(window.getSelection())).toBe('');
   await page.screenshot({ element: document.querySelector<HTMLElement>('[data-floe-floating-window-surface]')!, path: '__screenshots__/preview-header-motion-' + mode + '.png' });
 });
+
+it.each([{ width: 390, mode: 'light' as const }, { width: 1280, mode: 'light' as const }, { width: 390, mode: 'dark' as const }, { width: 1280, mode: 'dark' as const }])('keeps dark HTML paint, reading position and independent state at $width in $mode', async ({ width, mode }) => {
+  await page.viewport(width, 900); const workspace = mount(mode);
+  transport.read.mockImplementation(async ({ path }: { path: string }) => {
+    const bytes = new TextEncoder().encode('<style>html,body{margin:0;background:#0a1018;color:#eee}main{height:2400px;padding:24px}</style><main><h1>' + path + '</h1><input aria-label="Frame draft"></main><script>window.previewBoots=(window.previewBoots||0)+1</script>');
+    return { meta: { content_len: bytes.length }, channel: { reader: { readExactly: async () => bytes }, close: vi.fn(), stream: { reset: vi.fn() } } };
+  });
+  await workspace.openPreview(file('one.html')); await workspace.openPreview(file('two.html'));
+  await expect.poll(() => document.querySelectorAll('[data-floe-html-state="ready"]').length).toBe(2);
+  const report = await (commands as unknown as { inspectPreviewDocumentContinuity(selector: string, names: string[]): Promise<{ switches: number; whiteSamples: number }> }).inspectPreviewDocumentContinuity('[data-preview-document]', ['one.html', 'two.html']);
+  expect(report).toMatchObject({ switches: 16, whiteSamples: 0 });
+  expect(transport.read).toHaveBeenCalledTimes(2);
+  workspace.reorder(['/workspace/two.html', '/workspace/one.html']);
+  workspace.requestClose('/workspace/two.html');
+  expect(workspace.activeId()).toBe('/workspace/one.html');
+  expect(document.querySelectorAll('iframe')).toHaveLength(1);
+});
+
+it('keeps late HTML reads local and makes rapid selection authoritative', async () => {
+  await page.viewport(1280, 900); const workspace = mount();
+  await workspace.openPreview(file('ready.html'));
+  await expect.poll(() => document.querySelector('[data-floe-html-state="ready"]')).toBeTruthy();
+  const readyFrame = document.querySelector('iframe');
+  let complete!: (value: unknown) => void;
+  transport.read.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  const pending = workspace.openPreview(file('slow.html'));
+  await expect.poll(() => workspace.activeId()).toBe('/workspace/slow.html');
+  expect(document.querySelector('[data-preview-document="/workspace/slow.html"] .redeven-html-preview-pending')).toBeTruthy();
+  expect(document.querySelector('.redeven-loading-curtain')).toBeNull();
+  workspace.select('/workspace/ready.html');
+  const bytes = new TextEncoder().encode('<h1>Late document</h1>');
+  complete({ meta: { content_len: bytes.length }, channel: { reader: { readExactly: async () => bytes }, close: vi.fn(), stream: { reset: vi.fn() } } });
+  await pending;
+  await expect.poll(() => document.querySelectorAll('[data-floe-html-state="ready"]').length).toBe(2);
+  expect(workspace.activeId()).toBe('/workspace/ready.html');
+  expect(document.querySelector('[data-preview-document="/workspace/ready.html"] iframe')).toBe(readyFrame);
+  expect(document.querySelector<HTMLElement>('[data-preview-document="/workspace/slow.html"]')!.inert).toBe(true);
+  workspace.select('/workspace/slow.html'); workspace.select('/workspace/ready.html'); workspace.select('/workspace/slow.html');
+  expect(workspace.activeId()).toBe('/workspace/slow.html');
+  expect(document.querySelectorAll('[data-floe-retained-panel]:not([aria-hidden])')).toHaveLength(1);
+  expect(document.querySelector('[data-preview-document="/workspace/slow.html"]')?.getAttribute('aria-hidden')).toBeNull();
+  workspace.requestClose('/workspace/slow.html');
+  expect(workspace.activeId()).toBe('/workspace/ready.html');
+  expect(document.querySelector('iframe')).toBe(readyFrame);
+});

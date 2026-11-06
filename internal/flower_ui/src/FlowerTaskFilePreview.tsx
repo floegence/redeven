@@ -9,7 +9,7 @@ import { isRichFilePreview } from './preview/previewKinds';
 const FlowerRichFilePreview = lazy(() => import('./preview/FlowerRichFilePreview').then(module => ({ default: module.FlowerRichFilePreview })));
 import type { TaskFilesCopy } from './taskFilesCopy';
 
-export type FlowerTaskFilePreviewContentProps = { name: string; path?: string; mime: string; blob: Blob };
+export type FlowerTaskFilePreviewContentProps = { name: string; path?: string; mime: string; blob: Blob; active?: boolean };
 export type FlowerTaskFilePreviewSource = FlowerAttachmentPreviewSource & { path?: string; download?: () => void };
 
 /** The child Dialog inherits the host layer and owns focus/Escape above the retained list. */
@@ -54,6 +54,7 @@ export function FlowerTaskFilePreview(props: {
                     <div class="flower-task-preview-markdown" data-floe-scroll-viewport><FlowerMarkdownBlock diagramLabels={props.diagramLabels} content={text()} copyCodeLabel={props.copy.copyCode} codeCopiedLabel={props.copy.copied} /></div>
                   </Show>
                 }><SandboxedHtmlFrame class="flower-task-preview-html" html={text()} title={props.source.name}
+                  renderPending={() => <span class="flower-task-preview-state" role="status">{props.copy.loading}</span>}
                   labels={{ linkUnavailable: props.copy.unavailable, anchorUnavailable: props.copy.unavailable }} /></Show>
               </Show>
             }><object class="flower-attachment-preview-document" data={url()} type="application/pdf">{props.copy.unsupported}</object></Show>

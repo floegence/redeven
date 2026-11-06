@@ -10,6 +10,7 @@ import electron from 'electron';
 import { _electron } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import welcomeConfig from '../vite.welcome.config.mjs';
+import { inspectPreviewContinuity } from '../../internal/envapp/ui_src/scripts/previewContinuityAcceptance.mjs';
 
 const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 180000 });
 await session.run(async () => {
@@ -55,6 +56,24 @@ await session.run(async () => {
     await page.goto(pathToFileURL(path.join(dist, 'office-preview.html')).href);
     await page.waitForFunction(() => window.officePreview);
     assert.ok(page.url().startsWith('file:'));
+    const html = new TextEncoder().encode('<style>html,body{margin:0;background:#0a1018;color:#eee}main{height:2400px;padding:24px}</style><main><h1>Retained document</h1><input aria-label="Frame draft"></main><script>window.previewBoots=(window.previewBoots||0)+1</script>');
+    await open('one.html', 'text/html', html, true);
+    await page.waitForSelector('[data-floe-html-state="ready"]');
+    await page.evaluate(bytes => window.officePreview.open({ name: 'two.html', mime: 'text/html', bytes, attachment: true }), [...html]);
+    await page.waitForFunction(() => document.querySelectorAll('[data-floe-html-state="ready"]').length === 2);
+    report.checks.push({ htmlContinuity: await inspectPreviewContinuity(page, page, '[data-attachment-preview-document]', ['one.html', 'two.html']) });
+    await page.getByRole('button', { name: 'Close two.html', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('iframe').length === 1);
+    await page.screenshot({ path: path.join(output, 'html-retained-tabs.png') });
+    const htmlSources = process.env.REDEVEN_ACCEPTANCE_HTML ? JSON.parse(process.env.REDEVEN_ACCEPTANCE_HTML) : [];
+    if (htmlSources.length) {
+      assert.equal(htmlSources.length, 2, 'Supply exactly two local HTML acceptance files');
+      await open('acceptance-one.html', 'text/html', await readFile(htmlSources[0]), true);
+      await page.waitForSelector('[data-floe-html-state="ready"]');
+      await page.evaluate(bytes => window.officePreview.open({ name: 'acceptance-two.html', mime: 'text/html', bytes, attachment: true }), [...await readFile(htmlSources[1])]);
+      await page.waitForFunction(() => document.querySelectorAll('[data-floe-html-state="ready"]').length === 2);
+      report.checks.push({ originalHtmlContinuity: await inspectPreviewContinuity(page, page, '[data-attachment-preview-document]', ['acceptance-one.html', 'acceptance-two.html'], { interactive: false, brightnessLimit: 245 }) });
+    }
     const csv = new TextEncoder().encode('name,id,expression\nChinese,00123,"=SUM(1,2)"\nBeta,12345678901234567890,text');
     for (const attachment of [false, true]) {
       await open('literal.csv', 'text/csv', csv, attachment); await gridReady();

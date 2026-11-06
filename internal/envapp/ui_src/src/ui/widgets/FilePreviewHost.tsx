@@ -2,7 +2,7 @@ import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { Dynamic, Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type Component } from 'solid-js';
 import { useLayout } from '@floegence/floe-webapp-core';
-import { Button, WindowTabs } from '@floegence/floe-webapp-core/ui';
+import { Button, RetainedPanel, WindowTabs } from '@floegence/floe-webapp-core/ui';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { FilePreviewPanel } from './FilePreviewPanel';
 import { FilePreviewActions } from './FilePreviewActions';
@@ -191,6 +191,7 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
   return <PreviewWindow open={workspace.open()} onOpenChange={open => { if (!open) workspace.requestClose(); }}
     title={title()} titleContent={tabs()} stackId="file-preview" persistenceKey="file-preview" surfaceRef={setSurface}
     headerActions={<div ref={setActionsHost} class="flex items-center" />}>
+    <div class="relative h-full min-h-0 flex-1">
     <For each={panels()}>{entry => {
       const SessionSurface: Component<FilePreviewSurfaceProps> = panel => {
         const [content, setContent] = createSignal<HTMLDivElement>();
@@ -203,19 +204,20 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
           <Show when={actionsHost()}>{host => <Portal mount={host()}><div style={{ display: workspace.activeId() === entry.id && !layout.isMobile() ? undefined : 'none' }}>
             <FilePreviewActions {...panel} active={workspace.activeId() === entry.id && workspace.open()} compact presentation="header" contentElement={content()} />
           </div></Portal>}</Show>
-          <div data-preview-document={entry.id} role={multiple() ? 'tabpanel' : undefined} id={panelId(entry.id)} aria-labelledby={multiple() ? tabId(entry.id) : undefined} aria-label={entry.item.name}
-            class="h-full min-h-0 flex-1" hidden={workspace.activeId() !== entry.id} inert={workspace.activeId() !== entry.id}>
+          <RetainedPanel active={workspace.activeId() === entry.id} data-preview-document={entry.id} role={multiple() ? 'tabpanel' : undefined} id={panelId(entry.id)} aria-labelledby={multiple() ? tabId(entry.id) : undefined} aria-label={entry.item.name}
+            class="h-full min-h-0">
             <FlowerContextSource id={`preview:${entry.id}`} pageID={`preview:${entry.id}`} pageName={entry.item.name} mode="overlay"
               state={{ path: entry.controller.item()?.path, mode: entry.controller.descriptor().mode, unsaved: entry.controller.dirty(), selection: entry.controller.selectedText() }}
               selected={workspace.activeId() === entry.id && workspace.open()}>
             <FilePreviewPanel {...panel} active={workspace.activeId() === entry.id && workspace.open()} surface={layout.isMobile() ? 'main' : 'window'} showHeader={layout.isMobile()}
               contentRef={setContent} closeConfirmVariant="none" />
             </FlowerContextSource>
-          </div>
+          </RetainedPanel>
         </>;
       };
       return <FilePreviewDocument controller={entry.controller} surface={SessionSurface} />;
     }}</For>
+    </div>
     <Show when={!layout.isMobile()} fallback={<ConfirmDialog open={!!workspace.pendingClose()} onOpenChange={open => { if (!open) workspace.cancelClose(); }}
       title={i18n.t('filePreview.discardUnsavedTitle')} bodyDescription={confirmation()}
       confirmText={i18n.t('filePreview.discardChanges')} loading={workspace.pendingSaving()} variant="destructive" onConfirm={confirmClose}>

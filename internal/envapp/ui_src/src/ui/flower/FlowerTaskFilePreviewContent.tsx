@@ -13,17 +13,18 @@ export function FlowerTaskFilePreviewContent(props: FlowerTaskFilePreviewContent
   const [content, setContent] = createSignal<{ descriptor: FilePreviewDescriptor; bytes: Uint8Array<ArrayBuffer>; text: string; url: string }>();
   const [failed, setFailed] = createSignal(false);
   createEffect(() => {
-    const blob = props.blob, name = props.name, mime = props.mime;
+    const blob = props.blob, name = props.name, mime = props.mime.toLowerCase().split(';', 1)[0].trim();
     let active = true, url = '';
     setContent(undefined); setFailed(false);
     void (async () => {
-      const bytes = new Uint8Array(await blob.arrayBuffer());
       let descriptor = describeFilePreview(name);
+      if (descriptor.mode === 'binary' && (mime === 'text/html' || mime === 'application/xhtml+xml')) descriptor = { mode: 'html' };
+      if (descriptor.mode === 'html' && blob.size > 2 * 1024 * 1024) throw new Error('HTML preview exceeds 2 MiB');
+      const bytes = new Uint8Array(await blob.arrayBuffer());
       if (descriptor.mode === 'binary') {
         if (mime.startsWith('image/')) descriptor = { mode: 'image' };
         else if (mime === 'application/pdf') descriptor = { mode: 'pdf' };
         else if (mime === 'text/markdown') descriptor = { mode: 'markdown' };
-        else if (mime === 'text/html') descriptor = { mode: 'html' };
         else if (mime.startsWith('text/') || isLikelyTextContent(bytes)) descriptor = { mode: 'text', textPresentation: 'plain', wrapText: true };
       }
       const text = isTextFilePreview(descriptor) ? new TextDecoder().decode(bytes) : '';
@@ -40,7 +41,7 @@ export function FlowerTaskFilePreviewContent(props: FlowerTaskFilePreviewContent
       <Show when={content()} fallback={<div class="flower-task-preview-state" role="status">{i18n.t('flowerSurface.taskFiles.loading')}</div>}>{value =>
         <Show when={value().descriptor.mode !== 'binary' && value().descriptor.mode !== 'unsupported'} fallback={unavailable()}>
           <Show when={value().descriptor.mode === 'markdown'} fallback={
-            <FilePreviewContent surface="window" showHeader={false} item={{ id: props.name, name: props.name, path: props.path ?? props.name, type: 'file', size: props.blob.size }}
+            <FilePreviewContent active={props.active} surface="window" showHeader={false} item={{ id: props.name, name: props.name, path: props.path ?? props.name, type: 'file', size: props.blob.size }}
               descriptor={value().descriptor} text={value().text} bytes={value().bytes} objectUrl={value().url} resourceUrl={value().url}
               onRenderError={() => setFailed(true)} onResourceError={() => setFailed(true)} />
           }>
