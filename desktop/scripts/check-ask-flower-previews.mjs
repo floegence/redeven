@@ -58,6 +58,8 @@ await session.run(async () => {
       if (marker === 'QUALIFY_ASK_IMAGE') {
         assert.ok(imageParts.some(part => typeof part.image_url === 'string' && part.image_url.startsWith(`data:${expectedModelImage.mimeType};base64,`)
           && hash(Buffer.from(part.image_url.split(',')[1], 'base64')) === expectedModelImage.sha256), 'The exact prepared representation of the captured screenshot reaches the provider');
+      } else {
+        assert.equal(imageParts.length, 0, 'A new navigation task does not inherit the previous screenshot');
       }
       const results = (input.input ?? []).filter(item => item.type === 'function_call_output' && toolCalls.has(item.call_id));
       providerRequests.push({ marker, model: input.model, referencesExact: true, imageParts: imageParts.length, toolResults: results.length });
@@ -119,6 +121,9 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
   const page = await app.firstWindow(); page.setDefaultTimeout(15000);
   const report = { passed: false, carriers: 'Electron with built Env App and real local runtime',
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+    tree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: root, encoding: 'utf8' }).trim(),
+    workingTreeClean: execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim() === '',
+    binarySHA256: hash(await readFile(binary)),
     floe: JSON.parse(await readFile(path.join(root, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version,
     previews: [], targets: [], sends: [], providerRequests };
   try {
@@ -126,6 +131,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await page.goto(startup.local_ui_url);
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Ask Flower', exact: true }).count(), 0, 'No extra Ask Flower header icon');
+    report.extraHeaderAction = false;
     await page.getByRole('button', { name: 'File Browser', exact: true }).filter({ visible: true }).last().click();
     await page.getByTitle('Go to path', { exact: true }).filter({ visible: true }).last().click();
     await page.getByRole('textbox', { name: 'Go to path', exact: true }).fill(directory);

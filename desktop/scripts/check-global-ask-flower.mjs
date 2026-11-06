@@ -67,6 +67,7 @@ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'native-source.pn
   await page.addInitScript(snapshot => { window.navigationSnapshot = { ...snapshot, navigation_revision: 1 }; }, snapshot);
   await page.goto(new URL('flower-navigation.html', preview.url).href);
   await page.evaluate(() => window.navigationFixture.releaseRuntime());
+  assert.equal(await page.getByRole('button', { name: 'Ask Flower', exact: true }).count(), 0, 'No extra Ask Flower header icon');
   await page.locator('#redeven-desktop-main').click({ button: 'right', position: { x: 24, y: 32 } });
   await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).waitFor();
   await page.screenshot({ path: path.join(output, 'desktop-menu.png') });

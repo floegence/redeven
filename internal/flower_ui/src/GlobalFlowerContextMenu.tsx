@@ -11,7 +11,7 @@ export function GlobalFlowerContextMenu(props: {
   prepare: (request: ContextMenuRequest) => () => void;
   children: JSX.Element;
 }) {
-  return <ContextMenuActions enabled={props.enabled} label={props.label} zIndex={5100}
+  return <ContextMenuActions enabled={props.enabled} label={props.label} zIndex={5100} portalScope="viewport"
     editing={{ labels: props.editingLabels, onError: props.onError }}
     actions={request => [{ id: 'assistant.ask.flower', label: props.label, disabled: props.disabled,
       icon: () => <FlowerContextMenuIcon />, onSelect: props.prepare(request) }]}>

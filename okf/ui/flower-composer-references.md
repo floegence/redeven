@@ -95,8 +95,10 @@ Shared Floe context actions capture a specific target, anchor and selection befo
 menu focus. Env App and Desktop prepare a frozen semantic source at that boundary.
 Unhandled page/background requests show a compact menu; Workbench, file, terminal,
 Git, preview and Flower menus retain their owner and richer object actions without
-duplicate Ask Flower entries. Editing actions remain available. Desktop environment
-cards use the clicked owner. Native owned windows forward through the existing
+duplicate Ask Flower entries. Editing actions remain available.
+Global fallback menus use Floe's viewport portal so a retained Ask card cannot cover
+them; unrelated transcript scrolling must not dismiss a menu anchored in shell chrome.
+Desktop environment cards use the clicked owner. Native owned windows forward through the existing
 validated main-process source boundary. Remote pointer pixels and third-party
 iframe documents retain their input ownership; host chrome and explicit commands
 remain the supported entry points there. A context-menu selection does not capture
