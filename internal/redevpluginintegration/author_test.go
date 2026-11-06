@@ -58,8 +58,30 @@ func TestAuthorWorkspaceRealHostInstallRecoveryAndDeletion(t *testing.T) {
 	if err != nil || scope.PrivateRoot != filepath.Join(options.StateDir, "author-workspaces") {
 		t.Fatalf("author source must not fence the entire product state root: %+v %v", scope, err)
 	}
-	if _, err = integration.author.store.Initialize(authorCtx, owner, draft.WorkspaceID, "dev.example.created", "Created", "web"); err != nil {
+	if _, err = integration.author.AuthorOperation(ctx, meta, draft.WorkspaceID, "initialize", map[string]any{"plugin_id": "github.repo.42.created", "display_name": "Created", "template": "web"}); err == nil {
+		t.Fatal("generated identity accepted instead of the author slug")
+	}
+	if _, err = integration.author.AuthorOperation(ctx, meta, draft.WorkspaceID, "initialize", map[string]any{"slug": "created", "display_name": "Created", "template": "web"}); err != nil {
 		t.Fatal(err)
+	}
+	workspaceSource, err := integration.author.store.Get(authorCtx, owner, draft.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceBytes, err := os.ReadFile(filepath.Join(workspaceSource.SourceDirectory, "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source struct {
+		Schema    string         `json:"schema_version"`
+		Plugin    map[string]any `json:"plugin"`
+		Publisher map[string]any `json:"publisher"`
+	}
+	if err := json.Unmarshal(sourceBytes, &source); err != nil {
+		t.Fatal(err)
+	}
+	if source.Schema != "redevplugin.source.v1" || source.Plugin["slug"] != "created" || source.Plugin["plugin_id"] != nil || source.Publisher["publisher_id"] != nil {
+		t.Fatalf("managed author source contains generated identity: %s", sourceBytes)
 	}
 	artifact, err := integration.author.store.Capture(authorCtx, owner, draft.WorkspaceID)
 	if err != nil {

@@ -171,10 +171,10 @@ func (a *authorBackend) AuthorOperation(ctx context.Context, meta *session.Meta,
 		report, err := a.store.BuildReport(ctx, o, id)
 		return map[string]any{"workspace": w, "artifacts": artifacts, "build": report}, err
 	case "initialize":
-		pluginID, _ := args["plugin_id"].(string)
+		slug, _ := args["slug"].(string)
 		name, _ := args["display_name"].(string)
 		template, _ := args["template"].(string)
-		return a.store.Initialize(ctx, o, id, pluginID, name, template)
+		return a.store.Initialize(ctx, o, id, slug, name, template)
 	case "build":
 		artifact, failure := a.store.Build(ctx, o, id, authorproject.PipelineOptions{Generate: true, Test: true})
 		report, reportError := a.store.BuildReport(ctx, o, id)

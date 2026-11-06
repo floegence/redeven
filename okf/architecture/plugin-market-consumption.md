@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin market consumption
 tags: [architecture, plugins, market, release]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -13,7 +13,7 @@ Redeven consumes one complete public market representation. Official and communi
 
 - Startup reads the validated local cache without waiting for the market. Refresh uses ordered pages, one generation, complete inspection-derived previews, and atomic last-known-good replacement. No client capability headers, compatibility variants, per-plugin latest fan-out, or incomplete-entry fallback exists.
 - Discovery uses the `redevplugin` GitHub topic plus rechecks of already indexed repository identities. A fixed-commit `.redevplugin/index.json` selects ordinary packages in independent `<release-key>-v{version}` namespaces. No developer registration, plugin signatures, publisher trust, declaration approval, or separate third-party client path is required.
-- GitHub publishers are generated as `github.repo.<numeric-repository-id>` and plugins as `<publisher-id>.<slug>`. Authors choose only the slug. The released author CLI resolves the real source before building; the market and Host independently check that source. Forks receive distinct IDs; rename/transfer retains the same repository identity. Local/upload/direct-URL declarations never acquire GitHub provenance.
+- GitHub publishers are generated as `github.repo.<numeric-repository-id>` and plugins as `<publisher-id>.<slug>`. Source manifests use `redevplugin.source.v1` with `plugin.slug`; raw index entries use `slug`. Neither contains numeric repository IDs or generated identity. Offline local development needs no Git repository. `build --release` resolves the actual source and compiles identity before bindings/build/hash, without mutating source or index; the market and Host independently check that source. Forks receive distinct IDs; rename/transfer retains the same repository identity. Local/upload/direct-URL declarations never acquire GitHub provenance.
 - Ingest uses the released verifier and rechecks repository, release, tag commit, asset identity and bytes. Reject cross-repository plugin-ID takeover and same-version replacement. Failed scans retain the last valid projection. Market schema 11 retires old non-derived current listings while preserving ingest/audit history; it never renames package bytes or creates aliases.
 - Market retains one release per plugin/channel and bounded verified presentation/icons. It never proxies packages or grants lifecycle authority. Unavailable listings constrain discovery without revoking installations.
 - Inspection matches publisher/plugin/version, package/security/contract hashes and repository/release/asset identities. Both classifications share review and commit.

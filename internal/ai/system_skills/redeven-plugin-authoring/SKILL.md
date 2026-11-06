@@ -15,7 +15,9 @@ permissions, sandboxing, execution, and runtime preparation.
 In a Plugin Center creation conversation, call `plugin_author.status` first.
 It resolves the authenticated draft and managed source directory; never invent a
 project ID, capture another conversation, or initialize outside that directory.
-For a new empty source, use `plugin_author.initialize` with the selected template.
+For a new empty source, use `plugin_author.initialize` with a short `slug`,
+`display_name`, and the selected template. The slug contains lowercase letters,
+digits and single separating hyphens; never request a repository ID or publisher ID.
 Use normal approved file and terminal tools to edit source and install required
 dependencies. Use `plugin_author.build` for explicit pipeline execution; it runs
 project commands under the same approval boundary. `plugin_author.capture` only
@@ -81,7 +83,7 @@ When it is missing or mismatched, install the exact published module:
 ```sh
 GOWORK=off go install github.com/floegence/redevplugin/v3/cmd/redevplugin@v{{REDEVPLUGIN_PLATFORM_VERSION}}
 redevplugin version
-redevplugin init dev.example.notes "Notes" notes
+redevplugin init notes "Notes" notes
 cd notes
 npm install
 redevplugin dev .
@@ -157,19 +159,26 @@ For Worker execution, test the declared method with the verified runtime pair
 and the command's surface, method, and params options. Do not invent permission
 grants or treat a fixture as real-runtime evidence.
 
-For GitHub publication, choose a slug and run
-`redevplugin repository identity <project-root> <slug>` before the final build.
-The released CLI resolves the enclosing Git origin, or an explicit
+Author source uses `redevplugin.source.v1` and `plugin.slug`. Keep that short slug
+in `.redevplugin/index.json`; neither author input declares `plugin_id`,
+`publisher_id`, or a numeric repository ID. Local initialization, builds and
+preview work offline once dependencies are installed and need no Git repository.
+
+For GitHub publication, run `redevplugin build <project-root> --release`.
+The released CLI resolves Git origin, or an explicit
 `--repository https://github.com/owner/repo`, and generates
 `publisher_id = github.repo.<repository-id>` and
-`plugin_id = github.repo.<repository-id>.<slug>`. Never invent the numeric ID or
-copy another publisher's prefix. Refresh `.redevplugin/index.json` through
+`plugin_id = github.repo.<repository-id>.<slug>` before bindings, Worker/UI compilation and hashing.
+It writes the configured generated binding directory and package output and
+never rewrites source or the repository index. A failed lookup stops publication.
+Do not run a local build after the release build: local generation deliberately
+restores local identity. Never edit generated identity or copy another publisher's
+prefix. Create or refresh the slug-only discovery entry through
 `redevplugin scaffold repository-index`, using explicit `--replace` for an
-existing entry. If the project has generated bindings, regenerate the configured
-binding directory after identity changes, then rebuild and validate. Publish the ordinary package in its
-declared release namespace and add the `redevplugin` repository topic for discovery.
-Local drafts and uploaded packages retain their actual source category; a copied
-GitHub-shaped ID does not establish repository provenance.
+existing entry. Publish the ordinary package in its declared release namespace
+and add the `redevplugin` repository topic for discovery. Market and Host each
+validate the actual source independently. Local drafts and uploaded packages
+retain their actual source category; a copied GitHub-shaped ID does not establish repository provenance.
 
 Package the validated output directory from `redevplugin.project.json` with
 `redevplugin package <output-directory> <destination.redevplugin>`, then validate
