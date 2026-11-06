@@ -1,7 +1,7 @@
 import { Button, LinearProgress, StableText, Switch } from '@floegence/floe-webapp-core/ui';
 import { Refresh, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
 import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
-import { For, Match, Show, Switch as MatchSwitch, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
+import { For, Match, Show, Switch as MatchSwitch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales/en-US';
@@ -37,18 +37,24 @@ function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: Env
 
 export function RemoteDesktopLauncher() {
   const [open, setOpen] = createSignal(false);
+  const [started, setStarted] = createSignal(false);
+  const [activity, setActivity] = createSignal<EnvAppTranslationKey>();
   const i18n = useI18n();
+  // The launcher owns preparation. Dialog presence only attaches its view;
+  // dismissing the modal must not dispose the operation or its subscription.
+  const content = createMemo(() => started() ? <RemoteDesktopPanel active={open()} onActivityChange={setActivity} onConnected={() => setOpen(false)} /> : undefined);
   return <>
-    <Button variant="outline" onClick={() => setOpen(true)}><RemoteDesktopIcon class="w-4 h-4" />{i18n.t('remoteDesktop.title')}</Button>
+    <Button variant="outline" onClick={() => { setStarted(true); setOpen(true); }}><RemoteDesktopIcon class="w-4 h-4" /><Show when={!open() && activity()} fallback={i18n.t('remoteDesktop.title')}>{key => <span role="status">{i18n.t(key())}</span>}</Show></Button>
     <Dialog open={open()} onOpenChange={setOpen} title={i18n.t('remoteDesktop.title')} closeLabel={i18n.t('common.actions.close')} escapeKeyPhase="bubble"
       class="remote-desktop-dialog" contentClass="remote-desktop-dialog-content">
-      <Show when={open()}><RemoteDesktopPanel onConnected={() => setOpen(false)} /></Show>
+      {content()}
     </Dialog>
   </>;
 }
 
-export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
+export function RemoteDesktopPanel(props: { active?: boolean; onActivityChange?: (key: EnvAppTranslationKey | undefined) => void; onConnected?: () => void } = {}) {
   const env = useEnvContext(), i18n = useI18n();
+  const foreground = () => props.active !== false;
   const descriptionID = createUniqueId();
   const [status, setStatus] = createSignal<RemoteDesktopStatus>();
   const [loadError, setLoadError] = createSignal<Failure>();
@@ -80,11 +86,11 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const focusStep = (element: HTMLElement) => queueMicrotask(() => {
     // Reveal credential fields inside the bounded content area while keeping
     // stage-heading focus from moving the user's scroll position.
-    if (!disposed && element.isConnected) element.focus({ preventScroll: !(element instanceof HTMLInputElement) });
+    if (!disposed && foreground() && element.isConnected) element.focus({ preventScroll: !(element instanceof HTMLInputElement) });
   });
   const rememberFocus = () => { if (document.activeElement instanceof HTMLElement) { returnFocus = document.activeElement; returnFocusKey = returnFocus.dataset.desktopFocus; } };
   const restoreFocus = () => queueMicrotask(() => {
-    if (disposed) return;
+    if (disposed || !foreground()) return;
     const target = returnFocus?.isConnected ? returnFocus : returnFocusKey ? panel?.querySelector<HTMLElement>(`[data-desktop-focus="${returnFocusKey}"]`) : undefined;
     (target ?? panel?.querySelector<HTMLElement>('.remote-desktop-connect'))?.focus({ preventScroll: true });
   });
@@ -153,6 +159,15 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     if (preparationScrollFrame !== undefined) cancelAnimationFrame(preparationScrollFrame);
     const current=deployment();if(current)void remoteDesktopDeploymentInDesktopShell({action:'cancel',operationId:current.id}).catch(()=>{});
     clearTimeout(refreshTimer);window.removeEventListener('focus',refresh);
+  });
+  createEffect(() => {
+    const current = deployment();
+    props.onActivityChange?.(current?.phase === 'password' || current?.phase === 'confirmation' ? 'remoteDesktop.deployNeedsInput'
+      : current?.phase === 'preparing' ? 'remoteDesktop.preparing'
+      : current?.phase === 'canceling' ? 'remoteDesktop.deployBackgroundCanceling'
+      : current?.phase === 'complete' ? 'remoteDesktop.deployBackgroundComplete'
+      : current?.phase === 'failed' || current?.phase === 'connection_failed' ? 'remoteDesktop.deployBackgroundFailed'
+      : preparing() ? 'remoteDesktop.preparing' : undefined);
   });
 
 
@@ -225,7 +240,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     }).finally(() => { if (!disposed) setPendingApproval(undefined); });
   };
   const open = async (claim: boolean): Promise<boolean> => {
-    if (!canConnect()) return false;
+    if (!foreground() || !canConnect()) return false;
     const attempt = ++connectionAttempt;
     const canceled = () => disposed || attempt !== connectionAttempt;
     setBusy('connect'); setActionError(undefined); setConfirmation(undefined); setOpened(false);
@@ -273,13 +288,29 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const cancelConnection = () => { connectionAttempt++; pendingPopup?.close(); pendingPopup = null; setBusy(undefined); setDeployment(undefined); restoreFocus(); };
   const showConfirmation = (value: 'takeover' | 'forget') => { rememberFocus(); setConfirmation(value); };
   const closeConfirmation = () => { setConfirmation(undefined); restoreFocus(); };
+  createEffect(on(foreground, (active, previous) => {
+    if (previous === undefined) return;
+    if (active) {
+      void refresh();
+      const credential = panel?.querySelector<HTMLInputElement>('input[type=password]');
+      if (credential) focusStep(credential);
+      return;
+    }
+    setAdministratorPassword('');
+    if (opened()) { setDeployment(undefined); return; }
+    connectionAttempt++; pendingPopup?.close(); pendingPopup = null;
+    if (actionBusy() === 'connect') setBusy(undefined);
+    setConfirmation(undefined);
+    const current = deployment();
+    if (current) setDeployment({ ...current, connectAfterSetup: false, phase: current.phase === 'connecting' ? 'complete' : current.phase });
+  }));
 
   const operationLabels: Record<DesktopDeploymentOperation, EnvAppTranslationKey> = {
     ensure: 'remoteDesktop.deployEnsure', stop: 'remoteDesktop.deployStop', uninstall: 'remoteDesktop.deployUninstall',
   };
   const showDeployment = (operation: DesktopDeploymentOperation, connectAfterSetup = false) => {
     if (!full() || busy()) return;
-    rememberFocus(); setAdministratorPassword(''); setActionError(undefined);
+    rememberFocus(); setOpened(false); setAdministratorPassword(''); setActionError(undefined);
     setDeployment({ id:crypto.randomUUID(), operation, connectAfterSetup, phase:'authorizing', method:'sudo' });
   };
   const cancelDeployment = async () => {
@@ -298,7 +329,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     const id=crypto.randomUUID();
     setDeployment({...current,id,method,phase:'canceling',progress:undefined,result:undefined});
     await remoteDesktopDeploymentInDesktopShell({action:'cancel',operationId:current.id}).catch(()=>{});
-    if(!disposed&&deployment()?.id===id)setDeployment({...current,id,method,phase:'authorizing',progress:undefined,result:undefined});
+    if(!disposed&&deployment()?.id===id)setDeployment({...current,connectAfterSetup:deployment()?.connectAfterSetup??false,id,method,phase:'authorizing',progress:undefined,result:undefined});
   };
   const respondDeployment = async () => {
     const current=deployment(), challenge=current?.progress?.challenge_id;
@@ -308,7 +339,8 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     const submitted={...current,phase:'preparing' as const};
     setDeployment(submitted);
     const result=await remoteDesktopDeploymentInDesktopShell({action:'respond',operationId:current.id,challengeId:challenge,...(current.phase==='password'?{administratorPassword:credential}:{confirmed:true as const})}).catch(()=>({ok:false,code:'transport_interrupted'}));
-    if(!disposed&&deployment()===submitted&&!result.ok){void remoteDesktopDeploymentInDesktopShell({action:'cancel',operationId:current.id}).catch(()=>{});setDeployment({...submitted,phase:'failed',result});}
+    const latest=deployment();
+    if(!disposed&&latest?.id===submitted.id&&latest.phase==='preparing'&&latest.progress===submitted.progress&&!result.ok){void remoteDesktopDeploymentInDesktopShell({action:'cancel',operationId:current.id}).catch(()=>{});setDeployment({...latest,phase:'failed',result});}
   };
   const manageDeployment = async () => {
     const current=deployment();if(!current||!full()||!['authorizing','failed'].includes(current.phase))return;
@@ -317,23 +349,26 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     setDeployment(running);setAdministratorPassword('');setActionError(undefined);
     try {
       const result=await remoteDesktopDeploymentInDesktopShell({action:'manage',operationId:id,operation:current.operation,confirmed:true,administratorMethod:current.method});
-      if(disposed||deployment()?.id!==id)return;
+      const latest=deployment();
+      if(disposed||latest?.id!==id)return;
       setAdministratorPassword('');
-      if(!result.ok){setDeployment({...running,phase:'failed',result});void refresh();return;}
-      if(!current.connectAfterSetup||deployment()?.phase==='canceling'){setDeployment({...running,phase:'complete',result});void refresh();return;}
-      setDeployment({...running,phase:'connecting',result});await refresh();
-      if(disposed||deployment()?.id!==id)return;
+      if(!result.ok){setDeployment({...latest,phase:'failed',result});void refresh();return;}
+      if(!foreground()||!latest.connectAfterSetup||latest.phase==='canceling'){setDeployment({...latest,phase:'complete',result});void refresh();return;}
+      setDeployment({...latest,phase:'connecting',result});await refresh();
+      if(disposed||!foreground()||deployment()?.id!==id||deployment()?.phase!=='connecting'||!deployment()?.connectAfterSetup)return;
       await continueDeploymentConnection();
     } catch {
-      if(!disposed&&deployment()?.id===id)setDeployment({...running,phase:'failed',result:{ok:false,code:'transport_interrupted',rollback:'unknown'}});
+      const latest=deployment();
+      if(!disposed&&latest?.id===id)setDeployment({...latest,phase:'failed',result:{ok:false,code:'transport_interrupted',rollback:'unknown'}});
     }
   };
   const continueDeploymentConnection = async (claim = false) => {
-    const current=deployment();if(!current)return;
+    const current=deployment();if(!current||!foreground())return;
     if (!connectionReady()) { setDeployment({...current,phase:'connection_failed'});setActionError({title:'remoteDesktop.connectionFailed',hint:stateHint()??'remoteDesktop.connectionHint'});return; }
-    setDeployment({...current,phase:'connecting'});setActionError(undefined);
+    const connecting={...current,phase:'connecting' as const};
+    setDeployment(connecting);setActionError(undefined);
     const connected=await open(claim);
-    if(disposed||deployment()?.id!==current.id)return;
+    if(disposed||deployment()!==connecting)return;
     if(connected)setDeployment(undefined);
     else {setDeployment({...current,phase:'connection_failed'});if(!actionError())setActionError({title:'remoteDesktop.connectionFailed',hint:stateHint()??'remoteDesktop.connectionHint'});}
   };
@@ -354,6 +389,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     }
   };
   createEffect(() => {
+    if (!foreground()) return;
     const activeStep = preparationStep();
     const list = preparationStepsElement;
     if (activeStep < 0 || !list) return;
@@ -634,7 +670,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
             <Button disabled={deploymentPhase()==='password'?!administratorPassword():!!busy()} onClick={() => void (deploymentPhase()==='password'?respondDeployment():manageDeployment())}><StableText class="text-center" reserve={[i18n.t('remoteDesktop.deployConfirm'), i18n.t('remoteDesktop.installStep')]}>{i18n.t('remoteDesktop.deployConfirm')}</StableText></Button>
           </Show>
           <Show when={['preparing','canceling'].includes(deploymentPhase())}><Button disabled aria-busy="true"><StableText class="text-center" reserve={[i18n.t('remoteDesktop.deployConfirm'), i18n.t('remoteDesktop.installStep')]}>{i18n.t('remoteDesktop.installStep')}</StableText></Button></Show>
-          <Show when={deploymentPhase() === 'connection_failed'}>
+          <Show when={deploymentPhase() === 'connection_failed' || (deploymentPhase() === 'complete' && operation() === 'ensure')}>
             <Button disabled={!!busy() || refreshing()} onClick={() => {
               const attempt = deployment()?.id, reconnect=connectionReady();
               void refresh().then(() => {

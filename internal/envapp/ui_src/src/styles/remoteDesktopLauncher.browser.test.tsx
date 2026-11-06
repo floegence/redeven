@@ -12,7 +12,7 @@ import { LocalApiError } from '../ui/services/localApi';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import type { RemoteDesktopStatus } from '../ui/services/remoteDesktopApi';
 
-const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, ssh:false, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), prepare: vi.fn(), cancel: vi.fn(), deployment: vi.fn(), progress: vi.fn(), permission: vi.fn(), full: true }));
+const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, ssh:false, status: vi.fn(), create: vi.fn(), open: vi.fn(), disconnect: vi.fn(), save: vi.fn(), forget: vi.fn(), prepare: vi.fn(), cancel: vi.fn(), deployment: vi.fn(), progress: vi.fn(), permission: vi.fn(), full: true }));
 vi.mock('../ui/i18n', () => ({ useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) }));
 vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: 'Local Environment', agent: { hostname: 'server.local' }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
@@ -21,7 +21,7 @@ vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
 vi.mock('../ui/services/desktopSessionContext', async importOriginal => ({ ...await importOriginal<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'server', ...(state.ssh?{target_kind:'ssh_environment'}:{}) }) }));
 vi.mock('../ui/services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellWebServiceWindowOpenAvailable: () => true, remoteDesktopDeploymentInDesktopShell: state.deployment, onRemoteDesktopDeploymentProgress: state.progress }));
 vi.mock('../ui/services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
-vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: state.prepare, cancelRemoteDesktopPreparation: state.cancel }));
+vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: state.disconnect, prepareRemoteDesktop: state.prepare, cancelRemoteDesktopPreparation: state.cancel }));
 vi.mock('../ui/services/hostApplicationsApi', () => ({ requestHostApplicationPermission: state.permission }));
 
 const ready: RemoteDesktopStatus = { capabilities: { backend: 'macos', state: 'ready', screen: true, input: true, audio: true, clipboard: true, unattended: true, displays: [{ id: 'one', name: 'Studio Display', width: 2560, height: 1440, scale: 1, primary: true }] }, unattended: false, control_in_use: false, last_display_id: '' };
@@ -30,7 +30,7 @@ let renderErrors: string[] = [];
 beforeEach(() => {
   renderErrors = [];
   vi.resetAllMocks(); state.locale = 'zh-CN'; state.full = true; state.ssh=false;
-  state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' }); state.open.mockResolvedValue(undefined); state.deployment.mockResolvedValue({ ok: true, available: false }); state.progress.mockReturnValue(() => {});
+  state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' }); state.open.mockResolvedValue(undefined); state.disconnect.mockResolvedValue(undefined); state.deployment.mockResolvedValue({ ok: true, available: false }); state.progress.mockReturnValue(() => {});
   document.documentElement.dataset.floeShellTheme = 'porcelain-dark'; document.documentElement.classList.add('dark');
 });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark', 'light'); delete document.documentElement.dataset.floeShellTheme; expect(renderErrors).toEqual([]); });
@@ -52,6 +52,167 @@ async function launch(width = 1000) {
   await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).length).toBe(0);
   return { host, dialog, copy, trigger };
 }
+
+it('retains host preparation when the dialog is dismissed and restores its observed progress', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation(request => request.action === 'manage'
+    ? new Promise(resolve => { finish = resolve; })
+    : Promise.resolve({ ok: true, available: true }));
+  const { dialog, copy, trigger } = await launch(390);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  const request = state.deployment.mock.calls.find(([value]) => value.action === 'manage')![0];
+  state.progress.mock.calls[0][0]({ operation_id: request.operationId, stage: 'checking_transfer_cache' });
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  expect(state.deployment.mock.calls.filter(([value]) => value.action === 'cancel')).toHaveLength(0);
+  expect(trigger.textContent).toContain(copy.t('remoteDesktop.preparing'));
+  state.progress.mock.calls[0][0]({ operation_id: request.operationId, stage: 'preparing_media', media_state: 'verifying' });
+  await userEvent.click(trigger);
+  const reopened = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+  await expect.poll(() => reopened.querySelector('.remote-desktop-preparation-current')?.textContent).toContain(copy.t('remoteDesktop.deployMediaVerifyDetail'));
+  expect(state.deployment.mock.calls.filter(([value]) => value.action === 'manage')).toHaveLength(1);
+  expect(state.progress).toHaveBeenCalledTimes(1);
+  finish({ ok: false, code: 'canceled' });
+  await expect.poll(() => reopened.querySelector('.remote-desktop-deployment-result')).not.toBeNull();
+});
+
+it('finishes preparation in the background and connects only after an explicit reopened action', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation(request => request.action === 'manage'
+    ? new Promise(resolve => { finish = resolve; })
+    : Promise.resolve({ ok: true, available: true }));
+  const { dialog, copy, trigger } = await launch(390);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('common.actions.close'), exact: true }));
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  finish({ ok: true });
+  await expect.poll(() => trigger.textContent).toContain(copy.t('remoteDesktop.deployBackgroundComplete'));
+  expect(state.create).not.toHaveBeenCalled();
+  expect(state.open).not.toHaveBeenCalled();
+  await userEvent.click(trigger);
+  const reopened = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+  await expect.poll(() => reopened.querySelector('[data-phase=complete]')).not.toBeNull();
+  const connect = page.elementLocator(reopened).getByRole('button', { name: copy.t('remoteDesktop.connect'), exact: true });
+  await expect.element(connect).toBeEnabled();
+  await userEvent.click(connect);
+  await expect.poll(() => state.open.mock.calls.length).toBe(1);
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  expect(state.deployment.mock.calls.filter(([value]) => value.action === 'manage')).toHaveLength(1);
+  await userEvent.click(trigger);
+  await expect.poll(() => document.querySelector('.remote-desktop-connect')).not.toBeNull();
+});
+
+it('preserves a background password challenge and keeps explicit cancellation available', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation(request => {
+    if (request.action === 'manage') return new Promise(resolve => { finish = resolve; });
+    if (request.action === 'cancel') finish({ ok: false, code: 'canceled', rollback: 'complete' });
+    return Promise.resolve({ ok: true, available: true });
+  });
+  const { dialog, copy, trigger } = await launch(390);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  const request = state.deployment.mock.calls.find(([value]) => value.action === 'manage')![0];
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  state.progress.mock.calls[0][0]({ operation_id: request.operationId, stage: 'authorization_required', challenge_id: 'password' });
+  await expect.poll(() => trigger.textContent).toContain(copy.t('remoteDesktop.deployNeedsInput'));
+  await userEvent.click(trigger);
+  let reopened = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+  const credential = reopened.querySelector<HTMLInputElement>('input[type=password]')!;
+  await page.elementLocator(credential).fill('ephemeral-fixture');
+  await userEvent.click(page.elementLocator(reopened).getByRole('button', { name: copy.t('common.actions.close'), exact: true }));
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  expect(credential.value).toBe('');
+  expect(state.deployment.mock.calls.filter(([value]) => value.action === 'cancel')).toHaveLength(0);
+  await userEvent.click(trigger);
+  reopened = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+  const input = reopened.querySelector<HTMLInputElement>('input[type=password]')!;
+  expect(input.value).toBe('');
+  await page.elementLocator(input).fill('ephemeral-fixture');
+  await userEvent.click(page.elementLocator(reopened).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  expect(state.deployment).toHaveBeenCalledWith({ action: 'respond', operationId: request.operationId, challengeId: 'password', administratorPassword: 'ephemeral-fixture' });
+  await userEvent.click(page.elementLocator(reopened).getByRole('button', { name: copy.t('remoteDesktop.cancel'), exact: true }));
+  await expect.poll(() => reopened.querySelector('.remote-desktop-deployment-result')?.textContent).toContain(copy.t('remoteDesktop.deployCanceled'));
+  expect(state.deployment.mock.calls.filter(([value]) => value.action === 'cancel')).toHaveLength(1);
+});
+
+it('releases a late connection while preserving the completed preparation', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finishPreparation!: (value: object) => void, finishConnection!: (value: object) => void;
+  state.deployment.mockImplementation(request => request.action === 'manage'
+    ? new Promise(resolve => { finishPreparation = resolve; })
+    : Promise.resolve({ ok: true, available: true }));
+  state.create.mockImplementation(() => new Promise(resolve => { finishConnection = resolve; }));
+  const { dialog, copy, trigger } = await launch(390);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  finishPreparation({ ok: true });
+  await expect.poll(() => state.create.mock.calls.length).toBe(1);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  finishConnection({ id: 'late-setup', forward_id: 'pf-late', target_url: 'http://127.0.0.1:40201' });
+  await expect.poll(() => state.disconnect.mock.calls).toEqual([['late-setup']]);
+  expect(state.open).not.toHaveBeenCalled();
+  await userEvent.click(trigger);
+  await expect.poll(() => document.querySelector('[data-phase=complete]')).not.toBeNull();
+  expect(state.deployment.mock.calls.filter(([value]) => value.action === 'manage')).toHaveLength(1);
+});
+
+it('keeps a new preparation running after a previous successful connection', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  let finishPreparation!: (value: object) => void;
+  state.deployment.mockImplementation(request => request.action === 'manage'
+    ? new Promise(resolve => { finishPreparation = resolve; })
+    : Promise.resolve({ ok: true, available: true }));
+  const { dialog, copy, trigger } = await launch(390);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  finishPreparation({ ok: true });
+  await expect.poll(() => state.open.mock.calls.length).toBe(1);
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  await userEvent.click(trigger);
+  const reopened = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+  await expect.element(page.elementLocator(reopened.querySelector('.remote-desktop-connect')!)).toBeEnabled();
+  await userEvent.click(reopened.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.click(page.elementLocator(reopened).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true }));
+  const requests = state.deployment.mock.calls.filter(([value]) => value.action === 'manage');
+  expect(requests).toHaveLength(2);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  state.progress.mock.calls[0][0]({ operation_id: requests[1][0].operationId, stage: 'checking_transfer_cache' });
+  await userEvent.click(trigger);
+  await expect.poll(() => document.querySelector('.remote-desktop-preparation-current')?.textContent).toContain(copy.t('remoteDesktop.deployCacheCheckDetail'));
+  expect(state.deployment.mock.calls.filter(([value]) => value.action === 'cancel')).toHaveLength(0);
+  finishPreparation({ ok: false, code: 'canceled' });
+});
+
+it('releases a late session after the connection dialog is dismissed', async () => {
+  let finish!: (value: object) => void;
+  state.create.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { dialog, trigger } = await launch(390);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+  finish({ id: 'late', forward_id: 'pf-late', target_url: 'http://127.0.0.1:40201' });
+  await expect.poll(() => state.disconnect.mock.calls).toEqual([['late']]);
+  expect(state.open).not.toHaveBeenCalled();
+  await userEvent.click(trigger);
+  await expect.element(page.elementLocator(document.querySelector('.remote-desktop-connect')!)).toBeEnabled();
+});
 
 it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, width }))))('keeps the connection flow clear and compact in $locale at $width px', async ({ locale, width }) => {
   state.locale = locale;
