@@ -34,6 +34,56 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
+  it('keeps embedded application HTML as source while preserving references and file opening', async () => {
+    const source = '/managed/source/ui/index.html';
+    const seed = thread({ thread_id: 'owned-canvas', messages: [{
+      id: 'reply', role: 'assistant', status: 'complete', turn_id: 'turn', created_at_ms: 2,
+      content: `[Application source](${source})\n\n![Reference](/project/reference.png)\n\n\`\`\`html preview\n<button>Source example</button>\n\`\`\``,
+    }] });
+    const loadMessageFile = vi.fn(async () => imageBlob());
+    const openMessageFile = vi.fn(async () => undefined);
+    const surfaceAdapter: FlowerSurfaceAdapter = { ...adapter(true), listThreads: async () => [seed],
+      loadThread: async () => liveBootstrap(seed, 1), loadMessageFile, openMessageFile,
+      connectLiveStream: async function* ({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [seed] };
+        if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    };
+    const host = document.createElement('div'); host.style.height = '850px'; document.body.append(host);
+    const dispose = render(() => <FloeConfigProvider><LayoutProvider><FlowerSurface adapter={surfaceAdapter}
+      draftCoordinator={createFlowerComposerDraftCoordinator()}
+      embeddedConversation={{ scope: 'owned-canvas', threadID: seed.thread_id, htmlPreviews: false,
+        render: parts => <>{parts.conversation}{parts.composer}</> }}
+      notify={notice => { throw new Error(notice.message); }} /></LayoutProvider></FloeConfigProvider>, host);
+    onTestFinished(() => { dispose(); host.remove(); });
+    await waitFor(() => Boolean(host.querySelector('.flower-chat-md-link')) && Boolean(host.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth));
+    expect(host.querySelector('[data-media-kind="html"], iframe')).toBeNull();
+    expect(host.querySelector('pre')?.textContent).toContain('Source example');
+    expect(loadMessageFile).toHaveBeenCalledTimes(1);
+    expect(loadMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: '/project/reference.png' }));
+    await userEvent.click(host.querySelector<HTMLAnchorElement>('.flower-chat-md-link')!);
+    await vi.waitFor(() => expect(openMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: source, action: 'preview' })));
+  });
+
+  it('updates explicit HTML placement without discarding unrelated media', async () => {
+    const root = document.createElement('div'); document.body.append(root);
+    const [htmlPreviews, setHTMLPreviews] = createSignal(false);
+    const resolve = vi.fn(async () => ({ src: previewVideo }));
+    const dispose = render(() => <FlowerMarkdownBlock content={'[Clip](/demo.mp4)\n\n```html preview\n<button>Example</button>\n```'}
+      mediaEnabled htmlPreviews={htmlPreviews()} resolveMedia={resolve} copyCodeLabel="Copy" codeCopiedLabel="Copied" />, root);
+    onTestFinished(() => { dispose(); root.remove(); });
+    await waitFor(() => Boolean(root.querySelector('video')));
+    const video = root.querySelector('video');
+    expect(root.querySelector('iframe')).toBeNull();
+    setHTMLPreviews(true);
+    await waitFor(() => Boolean(root.querySelector('iframe')));
+    expect(root.querySelector('video')).toBe(video);
+    setHTMLPreviews(false);
+    await waitFor(() => !root.querySelector('iframe'));
+    expect(root.querySelector('pre')?.textContent).toContain('Example');
+    expect(root.querySelector('video')).toBe(video);
+  });
+
   it.each([1000, 360])('previews a complete HTML document in a content-first canvas at %ipx', async (width) => {
     await page.viewport(width, 800);
     const root = document.createElement('div'); document.body.appendChild(root);

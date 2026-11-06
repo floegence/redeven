@@ -150,13 +150,15 @@ try {
   await page.locator('[data-plugin-center-market-action]').click();
   await page.locator('[data-plugin-center-create-plugin]').click();
   let workspace = page.locator('[data-plugin-creation-workspace]');
+  await expect(workspace.locator('.plugin-creation-intro h2')).toBeVisible();
+  await expect(workspace.locator('textarea').first()).toBeEnabled();
   await expect(page.locator('[data-redeven-plugin-creation-page] .display-mode-page-shell')).toHaveCount(0);
   await page.screenshot({ path: path.join(reportRoot, 'creation-entry.png') });
   await workspace
     .locator('textarea')
     .first()
     .fill(
-      'Create a compact focus timer plugin in this dedicated draft. Read the redeven-plugin-authoring skill and plugin_author.status, initialize a web template with plugin_id dev.redeven.qualification.productfocus and display_name Focus Timer. Implement a 25-minute timer showing 25:00 initially, with accessible buttons named Start, Pause and Reset, a live mm:ss display, and a compact 13px interface following the host light/dark theme. Use normal tools to edit the managed source and install dependencies, then plugin_author.build. Keep the original generated bindings and real tests. Do not delegate, start another preview server, install the plugin or grant permissions; I will review it in this workspace. Continue until a successful artifact is returned.',
+      'Create a compact focus timer plugin in this dedicated draft. Read the redeven-plugin-authoring skill and plugin_author.status, initialize a web template with plugin_id dev.redeven.qualification.productfocus and display_name Focus Timer. Implement a 25-minute timer showing 25:00 initially, with accessible buttons named Start, Pause and Reset, a live mm:ss display, and a compact 13px interface following the host light/dark theme. Compose it directly on the host canvas without an enclosing card, border, shadow or repeated page header. Use normal tools to edit the managed source and install dependencies, then plugin_author.build. Keep the original generated bindings and real tests. Do not delegate, start another preview server, install the plugin or grant permissions; I will review it in this workspace. Continue until a successful artifact is returned.',
     );
   const createDirectly = workspace.getByRole('button', { name: 'Create directly', exact: true });
   report.directAction = await createDirectly.evaluate(element => {
@@ -205,6 +207,18 @@ try {
   }));
   assert.equal(report.applicationAppearance.overflow, false, 'desktop application fits its canvas');
   assert.ok(parseFloat(report.applicationAppearance.fontSize) >= 12 && parseFloat(report.applicationAppearance.fontSize) <= 14, 'application body uses compact readable typography');
+  const enclosingFrames = await frame.getByRole('button', { name: 'Start', exact: true }).evaluate(element => {
+    const result = [];
+    for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+      if (node.querySelectorAll('button').length < 3) continue;
+      const style = getComputedStyle(node);
+      const bordered = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style['border' + side + 'Width']) > 0 && style['border' + side + 'Style'] !== 'none');
+      if (bordered || style.boxShadow !== 'none') result.push(node.tagName + '.' + node.className);
+    }
+    return result;
+  });
+  assert.deepEqual(enclosingFrames, [], 'application controls belong to an unboxed composition');
+  await expect(workspace.locator('.plugin-creation-flower-conversation [data-media-kind="html"]')).toHaveCount(0);
   report.previewOrigin = new URL(await workspace.locator('iframe').getAttribute('src')).origin;
   assert.notEqual(new URL(report.previewOrigin).hostname, new URL(page.url()).hostname);
   await phase('Generated preview verified');

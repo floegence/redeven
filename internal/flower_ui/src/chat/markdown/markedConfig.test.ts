@@ -85,6 +85,23 @@ describe('createFlowerMarkdownRenderer', () => {
     expect(snippet).toContain('&lt;button&gt;Code only&lt;/button&gt;');
   });
 
+  it('keeps HTML as source when the embedding workspace already owns the live application', () => {
+    const marked = createMarkdownParser({ gfm: true });
+    marked.use({ renderer: createFlowerMarkdownRenderer({ media: true, htmlPreviews: false }) });
+    for (const href of ['/project/ui/index.html', './index.htm']) {
+      const html = marked.parse(`[Source](${href})`);
+      expect(html).toContain(`href="${href}"`);
+      expect(html).not.toContain('data-floe-markdown-media');
+    }
+    for (const language of ['html', 'html preview']) {
+      const html = marked.parse('```' + language + '\n<!doctype html><html><body>Source</body></html>\n```');
+      expect(html).toContain('flower-chat-md-code-block');
+      expect(html).not.toContain('data-floe-markdown-media');
+    }
+    expect(marked.parse('![Reference](/project/reference.png)')).toContain('data-floe-markdown-media');
+    expect(marked.parse('[Clip](/project/demo.mp4)')).toContain('data-floe-markdown-media');
+  });
+
   it('keeps external HTML pages navigable instead of creating an unsupported preview', () => {
     const marked = createMarkdownParser({ gfm: true });
     marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });

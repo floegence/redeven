@@ -613,6 +613,8 @@ export type FlowerEmbeddedConversation = Readonly<{
   placeholder?: string;
   emptyContent?: JSX.Element;
   composerContext?: JSX.Element;
+  /** Render HTML source links and code when the host already owns its live canvas. */
+  htmlPreviews?: boolean;
   onSubmit?: () => void;
   /** Observe whether the canonical composer contains unsubmitted work. */
   onDraftPresence?: (present: boolean) => void;
@@ -12162,6 +12164,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           streaming={streaming()}
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           mediaEnabled={message().role === 'assistant'}
+          htmlPreviews={props.embeddedConversation?.htmlPreviews}
           resolveSourceIcon={props.adapter.resolveSourceIcon}
           resolveMedia={media().resolve}
           onOpenMediaLink={media().openLink}

@@ -886,6 +886,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
                 threadID: draft()?.thread_id,
                 placeholder: i18n.t('uiCopy.plugin.flowerCreationPlaceholder'),
                 contextAction: context(),
+                htmlPreviews: false,
                 emptyContent: <div />,
                 onSubmit: () => setStarted(true),
                 onDraftChange: composerChanged,

@@ -7,6 +7,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { enhanceCodeBlock } from '@floegence/floe-webapp-core/code-highlight';
 import { MarkdownMedia, readMarkdownMediaPlaceholder, type MarkdownMediaLabels, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
+import { markdownMediaKind } from '@floegence/floe-webapp-core/chat-media';
 
 import { writeTextToClipboard } from '../../clipboard';
 import { createFlowerMarkdownRenderer, isFlowerHTMLPreviewFence } from './markedConfig';
@@ -32,6 +33,8 @@ export interface FlowerMarkdownBlockProps {
   streaming?: boolean;
   /** Keep media references inert even while localized media labels are loading. */
   mediaEnabled?: boolean;
+  /** An embedding workspace may already own the application's live preview. */
+  htmlPreviews?: boolean;
   copyCodeLabel: string;
   codeCopiedLabel: string;
   mediaLabels?: MarkdownMediaLabels;
@@ -51,6 +54,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   });
   marked.use({ renderer: createFlowerMarkdownRenderer({
     media: props.mediaEnabled === true,
+    get htmlPreviews() { return props.htmlPreviews; },
     diagrams: !!props.diagramLabels,
     sourceFence: token => {
       if (!props.citationLabels) return null;
@@ -221,14 +225,16 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   let priorRenderingKey: string | undefined;
   let priorStreaming = false;
   let priorMediaEnabled = false;
+  let priorHTMLPreviews = true;
   const renderingMetadata = createMemo(() => {
-    const key = JSON.stringify([props.sources, props.citationLabels?.sources, props.citationLabels?.unavailable, props.mediaEnabled]);
+    const key = JSON.stringify([props.sources, props.citationLabels?.sources, props.citationLabels?.unavailable, props.mediaEnabled, props.htmlPreviews]);
     citations.sources();
     return key;
   });
   createEffect(() => {
     const streaming = props.streaming === true;
     const mediaEnabled = props.mediaEnabled === true;
+    const htmlPreviews = props.htmlPreviews !== false;
     const textSource = props.textSource;
     const key = renderingMetadata();
     // Content is read only for a new record, snapshot replacement, or explicit
@@ -246,12 +252,16 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
           let citation = false;
           marked.walkTokens([token], child => { if (child.type === 'flowerCitation') citation = true; });
           return citation || priorRenderingKey !== key && Boolean(element.querySelector('.flower-chat-source-list'))
-            || priorMediaEnabled !== mediaEnabled && Boolean(element.querySelector('[data-floe-markdown-media]'));
+            || priorMediaEnabled !== mediaEnabled && Boolean(element.querySelector('[data-floe-markdown-media]'))
+            || priorHTMLPreviews !== htmlPreviews && (isFlowerHTMLPreviewFence(token)
+              || Array.from(element.querySelectorAll('[data-floe-markdown-media]')).some(node => readMarkdownMediaPlaceholder(node)?.kind === 'html')
+              || Array.from(element.querySelectorAll('a.flower-chat-md-link')).some(node => markdownMediaKind(node.getAttribute('href') ?? '') === 'html'));
         }, streaming);
       }
       priorRenderingKey = key;
       priorStreaming = streaming;
       priorMediaEnabled = mediaEnabled;
+      priorHTMLPreviews = htmlPreviews;
       setRemainingSourcesHTML(!streaming && props.citationLabels ? renderFlowerSourceCards(citations.remaining(), props.citationLabels) : '');
     });
   });

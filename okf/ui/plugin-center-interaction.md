@@ -49,6 +49,10 @@ project title. The dedicated page omits the ordinary display-mode top bar. One c
 toolbar owns preview sizes, comments, build status and
 installation; permissions remain in its overflow menu. The live application fills
 the remaining area without a nested header, card border or bottom tool dock.
+The embedded conversation explicitly renders HTML links and fences as source;
+the sandbox owns the live application. Source links still open through the host's
+file action, and reference images, audio and video retain their ordinary rendering.
+Other Flower conversations retain inline HTML previews.
 Both the workspace and directly opened draft library use the shared Desktop drag contract and native window-control
 insets; removing the outer header must not place actions under system controls.
 The toolbar preserves a user-assigned draft title; otherwise it shows the

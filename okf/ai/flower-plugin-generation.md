@@ -131,5 +131,8 @@ Development runtime evidence never substitutes for product signing or packaging.
 
 The host authoring skill supplies Redeven visual guidance: content-first layouts,
 compact shell typography, theme-aware surfaces and no duplicate workspace chrome.
+The primary application composition is unboxed rather than an enclosing card.
+Routine delivery describes the visible result and checks concisely; artifact
+identity and stage inventories remain in the workspace's inspection.
 Actual generated applications must be reviewed with real content in the sandbox;
 fixture screenshots establish geometry only.

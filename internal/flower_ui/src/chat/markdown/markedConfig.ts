@@ -106,7 +106,7 @@ export function isFlowerHTMLPreviewFence(token: Token): token is Tokens.Code {
   return /^\uFEFF?\s*(?:<!doctype\s+html(?:\s+[^>]*)?\s*>\s*)?<html(?:\s|>)/i.test(token.text);
 }
 
-export function createFlowerMarkdownRenderer(options: { diagrams?: boolean; media?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
+export function createFlowerMarkdownRenderer(options: { diagrams?: boolean; media?: boolean; htmlPreviews?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
   return {
     text(token: Tokens.Text | Tokens.Escape) {
       if ('tokens' in token && token.tokens) return this.parser.parseInline(token.tokens);
@@ -122,7 +122,7 @@ export function createFlowerMarkdownRenderer(options: { diagrams?: boolean; medi
       const kind = markdownMediaKind(token.href);
       // HTML previews are host-authorized local files. An external HTML page
       // stays a normal link because the isolated media preview cannot load it.
-      if (options.media && kind && !isExternalHTMLPage(token.href) && safeMediaReference(token.href)) {
+      if (options.media && kind && (kind !== 'html' || options.htmlPreviews !== false) && !isExternalHTMLPage(token.href) && safeMediaReference(token.href)) {
         return markdownMediaPlaceholder({ kind, src: token.href, title: token.text });
       }
       return renderLink(token);
@@ -133,7 +133,7 @@ export function createFlowerMarkdownRenderer(options: { diagrams?: boolean; medi
     code(token: Tokens.Code) {
       const sources = options.sourceFence?.(token);
       if (sources) return sources;
-      if (options.media && isFlowerHTMLPreviewFence(token)) {
+      if (options.media && options.htmlPreviews !== false && isFlowerHTMLPreviewFence(token)) {
         return markdownMediaPlaceholder({ kind: 'html', html: token.text, title: '' });
       }
       if (options.diagrams && token.lang?.trim().toLowerCase() === 'mermaid' && isClosedMarkdownFence(token.raw)) {
@@ -147,7 +147,7 @@ export function createFlowerMarkdownRenderer(options: { diagrams?: boolean; medi
       return `<blockquote class="flower-chat-md-blockquote">${this.parser.parse(token.tokens)}</blockquote>`;
     },
     image(token: { href: string; title?: string | null; text: string }) {
-      if (options.media && isExternalHTMLPage(token.href)) return renderLink(token);
+      if (options.media && (isExternalHTMLPage(token.href) || options.htmlPreviews === false && markdownMediaKind(token.href) === 'html')) return renderLink(token);
       if (!options.media) {
         const href = safeFlowerMarkdownHref(token.href);
         const titleAttr = token.title ? ` title="${escapeFlowerMarkdownHtml(token.title)}"` : '';

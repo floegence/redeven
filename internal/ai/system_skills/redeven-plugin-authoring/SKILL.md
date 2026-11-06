@@ -30,7 +30,9 @@ the submitted message; ask only for a decision required to proceed.
 Keep delivery messages concise: describe the visible result, checks that ran and
 anything needing review. The workspace already displays the runnable application;
 do not duplicate its document in an inline HTML preview or paste the full source
-into the conversation. Link relevant source files when useful, using their actual
+into the conversation. Do not repeat artifact IDs, package hashes or long stage
+inventories in routine delivery; those belong in the workspace's inspection.
+Link relevant source files when useful, using their actual
 absolute managed paths.
 
 ## Visual design in Redeven
@@ -41,6 +43,10 @@ installation. Do not repeat them inside the application or wrap the entire view
 in another dashboard card. Start from the user's main activity and use spacing,
 alignment and typography to establish hierarchy; avoid stacked headers, nested
 borders, oversized cards, decorative metrics and empty introductory sections.
+Use an unboxed primary content container: no enclosing rounded rectangle, border,
+shadow, or contrasting card behind the whole application. Constrain line length
+and group controls with spacing. Reserve bounded panels for a real secondary
+group, not a wrapper around the application's only task.
 
 Use the released surface context and theme integration from the actual template.
 Match the surrounding file browser, Terminal and Flower density: usually 12–13px
