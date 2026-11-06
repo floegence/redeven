@@ -12,7 +12,11 @@ Both carriers share Browser and desktop settings. Runtime capabilities, thread g
 # Contract
 
 ## Overview and navigation
-The overview identifies the actual Runtime hostname and platform, then shows the page or app used by the current conversation and three environment entries: built-in headless browser, Chrome in this environment, and desktop/applications. Opening or enabling never downloads.
+The overview identifies the actual Runtime hostname and platform, followed by one grouped settings list for the built-in browser, browser connections, and desktop/applications. Each row places its status next to its action. Conversation target status and return-to-chat prompts are absent from environment settings; manual page/app selection remains an explicit secondary entry. Overview and browser refresh read only the environment; candidates load when opening the selector or access settings. Opening or enabling never downloads.
+
+The browser page presents connected profiles with their actual Chrome/Chromium marks, inline connection status, and a shared connect/refresh action row. Refresh retains the previous observed profiles until the response arrives. Disconnected states expose the connection action, while genuine diagnostics remain visible. Pairing details, permissions explanations and advanced connection controls use secondary disclosure. Both carriers bundle unchanged, hash-pinned theSVG browser and operating-system marks; unknown identities remain generic. Layout uses published Floe surfaces and tokens, reflows at narrow widths, and reserves asynchronous action geometry.
+
+Extension setup uses a noninteractive browser illustration to locate Developer mode and show the folder-drag direction. Short numbered instructions and explicit open actions remain accessible; paths, alternate installation and longer explanations stay in Help. Illustrations never simulate a real browser control or claim installation success.
 
 Both carriers provide complete explicit localized copy.
 

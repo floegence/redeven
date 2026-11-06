@@ -1,8 +1,10 @@
 import { StableText, Button, Select } from '@floegence/floe-webapp-core/ui';
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerChromeDiagnostic, FlowerChromeStatus, FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
 
+import { FolderOpen, ChevronRight, Info } from '@floegence/floe-webapp-core/icons';
+import { FlowerChromeGuideVisual } from './FlowerChromeGuideVisual';
 import { FlowerChromeReadiness } from './FlowerChromeReadiness';
 import { chromeConnectionDiagnostic, chromeConnectionError } from './chromeConnectionDiagnostic';
 
@@ -138,12 +140,12 @@ export function FlowerChromeConnection(props: {
     setInstallationID(id); setSetup(undefined); setStep('install'); setExtensionsOpened(false); setUpdateRequired(false);
     void prepare();
   };
-  return <section class="space-y-5" data-flower-chrome-connection>
+  return <section class="flower-chrome-connection" data-flower-chrome-connection>
     <Show when={(connectionStatus()?.installations.filter(item => item.installed).length ?? 0) > 1}>
       <Select value={installationID()} onChange={value => { if (value) selectInstallation(value); }} disabled={opening()}
         aria-label={props.copy.chromeTitle} options={(connectionStatus()?.installations ?? []).filter(item => item.installed).map(item => ({ value: item.id, label: item.name }))} />
     </Show>
-    <FlowerChromeReadiness status={connectionStatus() ? { ...connectionStatus()!, profiles: connectionStatus()!.profiles.filter(profile => profile.installation_id === installationID()), browser_installed: selectedInstallation()?.installed } : undefined} diagnostic={remotePrimary() && !showDesktopGuide() && diagnostic()?.reason === 'desktop_session_unavailable' ? undefined : diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
+    <FlowerChromeReadiness status={connectionStatus() ? { ...connectionStatus()!, profiles: connectionStatus()!.profiles.filter(profile => profile.installation_id === installationID()), browser_installed: selectedInstallation()?.installed } : undefined} diagnostic={remotePrimary() && !showDesktopGuide() && diagnostic()?.reason === 'desktop_session_unavailable' ? undefined : diagnostic()} environmentName={props.environmentName} platform={setup()?.platform || props.platform} copy={props.copy}
       onRetry={diagnostic() ? () => void prepare() : undefined} retryLabel={retryLabel()} retryDisabled={opening()} />
     <Show when={status() && (phase() === 'preparing' || showDesktopGuide())}><p class="flower-body-copy" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
     <Show when={remoteAvailable() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}>
@@ -156,52 +158,31 @@ export function FlowerChromeConnection(props: {
       <Show when={remotePrimary() && !desktopGuide()}><Button variant="ghost" size="sm" onClick={() => setDesktopGuide(true)}>{props.copy.chromeDesktopAction}</Button></Show>
     </Show>
     <Show when={showDesktopGuide() && phase() !== 'preparing'}>
-    <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 flower-body-copy">
+    <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="flower-chrome-steps flower-body-copy">
       <li aria-current={step() === 'install' ? 'step' : undefined}
-        class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>
-        <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">1</span>{updateRequired() ? props.copy.setupUpdateTitle : props.copy.setupInstallTitle}
+        class="flower-chrome-step">
+        <span class="flower-chrome-step-number">1</span>{updateRequired() ? props.copy.setupUpdateTitle : props.copy.setupInstallTitle}
       </li>
       <li aria-current={step() === 'connect' ? 'step' : undefined}
-        class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'connect', 'border-border text-muted-foreground': step() !== 'connect' }}>
-        <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">2</span>{props.copy.setupConfirmTitle}
+        class="flower-chrome-step">
+        <span class="flower-chrome-step-number">2</span>{props.copy.setupConfirmTitle}
       </li>
     </ol></Show>
     <Show when={setup() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'continue' && diagnostic()?.stage !== 'prepare'}>
       <Show when={step() === 'install'} fallback={<>
-        <p class="flower-body-copy leading-relaxed text-muted-foreground">{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>
+        <div class="flower-chrome-guide-scene"><FlowerChromeGuideVisual mode="connect" copy={props.copy} chromium={selectedInstallation()?.kind !== 'google_chrome'} /><h3>{props.copy.setupConnectTitle}</h3></div>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('install')}>{props.copy.setupBack}</Button>
           <Show when={manualDesktop()} fallback={<Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>}><Button onClick={copyConnection}><StableText reserve={[props.copy.chromeConnectionLinkCopied, props.copy.chromeCopyConnectionLink]}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</StableText></Button></Show>
         </div>
       </>}>
-        <Show when={extensionsOpened()} fallback={<p class="flower-body-copy leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}><div class="space-y-4">
-          <ol class="list-decimal space-y-3 pl-5 flower-body-copy leading-relaxed">
-            <li>{props.copy.setupDeveloperMode}</li>
-            <li>{props.copy.setupDragFolderHint}
-              <div class="mt-2 rounded-md border border-border bg-muted/30 p-3" role="group" aria-label={props.copy.extensionPath}>
-                <ol class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-extension-folder-route>
-                  <li class="text-muted-foreground">{props.copy.setupHome}</li>
-                  <For each={setup()!.extension_home_path}>{(part, index) => <li class="flex min-w-0 items-center gap-2">
-                    <span aria-hidden="true" class="text-muted-foreground">›</span>
-                    <span class="break-all" classList={{ 'font-medium': index() === setup()!.extension_home_path.length - 1 }}>{part}</span>
-                  </li>}</For>
-                </ol>
-                <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{props.copy.setupFolderHint}</p>
-                <Button class="mt-2" size="sm" variant="outline" disabled={opening() || manualDesktop()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
-              </div>
-            </li>
-          </ol>
-          <details class="ml-5 text-xs leading-relaxed text-muted-foreground">
-            <summary class="w-fit cursor-pointer">{props.copy.setupManualInstall}</summary>
-            <ol class="mt-2 list-decimal space-y-2 pl-5">
-              <li>{props.copy.setupLoadUnpacked}</li>
-              <li>{props.copy.setupChooseFolder}
-                <span class="mt-1 flex items-center gap-2">{props.copy.setupHome}<kbd class="rounded border border-border px-1 py-0.5 text-[10px]">{setup()!.platform === 'darwin' ? '⌘⇧H' : 'Alt+Home'}</kbd></span>
-              </li>
-            </ol>
-          </details>
-          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.setupInstallDone}</p>
-        </div></Show>
+        <Show when={extensionsOpened()} fallback={<div class="flower-chrome-guide-scene"><FlowerChromeGuideVisual mode="intro" copy={props.copy} chromium={selectedInstallation()?.kind !== 'google_chrome'} /><p class="flower-computer-description">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p></div>}>
+          <div class="flower-chrome-guide-scene">
+            <FlowerChromeGuideVisual mode="install" copy={props.copy} chromium={selectedInstallation()?.kind !== 'google_chrome'} />
+            <div class="flower-chrome-guide-instructions"><p><span class="flower-chrome-guide-number" aria-hidden="true">1</span>{props.copy.setupDeveloperMode}</p></div>
+            <div class="flower-chrome-guide-folder-action"><span class="flower-chrome-guide-number" aria-hidden="true">2</span><div><p>{props.copy.setupDragTitle}</p><span title={setup()?.extension_path}>{setup()?.extension_home_path.at(-1)}</span></div><Button size="sm" variant="outline" icon={FolderOpen} disabled={opening() || manualDesktop()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button></div>
+          </div>
+        </Show>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Show when={extensionsOpened()} fallback={<>
             <Show when={!updateRequired()}><Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupAlreadyInstalled}</Button></Show>
@@ -215,9 +196,15 @@ export function FlowerChromeConnection(props: {
     </Show>
     <Show when={phase() === 'timeout' && !diagnostic()}><Button onClick={() => void prepare()}>{props.copy.retryConnection}</Button></Show>
     <Show when={setup() && phase() !== 'connected'}>
-      <details class="border-t border-border pt-3 text-xs text-muted-foreground">
-        <summary class="w-fit cursor-pointer">{props.copy.setupHelp}</summary>
+      <details class="flower-computer-disclosure flower-chrome-guide-help">
+        <summary><Info aria-hidden="true" />{props.copy.setupHelp}<ChevronRight aria-hidden="true" /></summary>
         <div class="mt-3 space-y-3 leading-relaxed">
+          <Show when={step() === 'install'} fallback={<p>{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>}>
+            <p>{props.copy.setupDragFolderHint}</p><p>{props.copy.setupFolderHint}</p><p>{props.copy.setupInstallDone}</p>
+            <details class="flower-computer-disclosure"><summary>{props.copy.setupManualInstall}<ChevronRight aria-hidden="true" /></summary>
+              <ol class="mt-2 list-decimal space-y-2 pl-5"><li>{props.copy.setupLoadUnpacked}</li><li>{props.copy.setupChooseFolder}<span class="mt-1 flex items-center gap-2">{props.copy.setupHome}<kbd class="rounded border border-border px-1 py-0.5 text-[10px]">{setup()!.platform === 'darwin' ? '⌘⇧H' : 'Alt+Home'}</kbd></span></li></ol>
+            </details>
+          </Show>
           <p>{props.copy.setupHostHint}</p>
           <p>{props.copy.setupLabelsHint}</p>
           <Show when={manualDesktop()}><label class="block space-y-1">{props.copy.chromeConnectionPage}<input ref={connectionInput} class="flower-settings-text-input w-full" readOnly value={connectionURL()} onFocus={event => event.currentTarget.select()} /></label><Button size="sm" variant="ghost" class="redeven-copy-action" data-copied={linkCopied() || undefined} onClick={copyConnection}><StableText reserve={[props.copy.chromeConnectionLinkCopied, props.copy.chromeCopyConnectionLink]}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</StableText></Button></Show>

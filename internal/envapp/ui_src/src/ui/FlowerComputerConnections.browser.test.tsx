@@ -14,7 +14,7 @@ import { computerUseEnUS } from '../../../../flower_ui/src/computerUseCopy';
 import { adapter, waitFor } from './FlowerSurface.navigation.testHarness';
 
 let dispose: (() => void) | undefined;
-afterEach(() => { dispose?.(); dispose = undefined; });
+afterEach(() => { dispose?.(); dispose = undefined; document.documentElement.classList.remove('dark'); });
 
 it('offers a separate browser without pretending that preparation connected or authorized a page', async () => {
   const host = document.createElement('div'); document.body.append(host);
@@ -180,9 +180,16 @@ it('stops after a failed automatic continuation and exposes explicit retry witho
   await waitFor(() => continued.mock.calls.length === 2);
 });
 
-for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['zh-CN', zhCN.flowerSurface.computer, 'darwin'], ['de-DE', deDE.flowerSurface.computer, 'linux'], ['ja-JP', jaJP.flowerSurface.computer, 'darwin']] as const) {
+for (const [locale, copy, platform, dark] of [
+  ['en-US', computerUseEnUS, 'darwin', false],
+  ['zh-CN', zhCN.flowerSurface.computer, 'darwin', false],
+  ['zh-CN-dark', zhCN.flowerSurface.computer, 'darwin', true],
+  ['de-DE', deDE.flowerSurface.computer, 'linux', false],
+  ['ja-JP', jaJP.flowerSurface.computer, 'darwin', false],
+] as const) {
   it(`keeps Chrome guidance focused and supports skip, back, help and open failure in ${locale}`, async () => {
     const { page, userEvent } = await import('vitest/browser');
+    document.documentElement.classList.toggle('dark', dark);
     const host = document.createElement('div'); document.body.append(host);
     const continued = vi.fn();
     const management = {
@@ -204,7 +211,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       await waitFor(() => dialog().getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
       expect(primary()).toHaveLength(1);
       expect(controlText(primary()[0])).toBe(copy.openExtensions);
-      expect(dialog().getBoundingClientRect().height).toBeLessThan(400);
+      expect(dialog().getBoundingClientRect().height).toBeLessThan(460);
       expect(dialog().innerText).not.toContain(copy.setupHostHint);
       expect(dialog().innerText).not.toContain('/fixture/');
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-start.png` });
@@ -222,17 +229,21 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       expect(primary()).toHaveLength(1);
       expect(dialog().innerText).toContain(copy.setupDeveloperMode);
       expect(dialog().innerText).not.toContain(copy.setupLoadUnpacked);
-      expect(dialog().innerText).toContain(copy.setupDragFolderHint);
-      expect(dialog().innerText).toContain(copy.setupInstallDone);
-      expect(dialog().querySelector('[data-extension-folder-route]')?.textContent).toContain('Redeven');
-      expect(dialog().querySelector('[data-extension-folder-route]')?.textContent).toContain('Flower Browser 123456789abcdef0');
+      expect(dialog().innerText).toContain(copy.setupDragTitle);
+      expect(dialog().innerText).not.toContain(copy.setupDragFolderHint);
+      expect(dialog().innerText).not.toContain(copy.setupInstallDone);
+      expect(dialog().querySelector('[data-guide-visual="install"]')).not.toBeNull();
+      expect(dialog().querySelector('.flower-chrome-guide-folder-action')?.textContent).toContain('Flower Browser 123456789abcdef0');
       expect(button(copy.copyExtensionPath).checkVisibility()).toBe(false);
-      expect(dialog().innerText).toContain(copy.setupFolderHint);
+      expect(dialog().innerText).not.toContain(copy.setupFolderHint);
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-install.png` });
       button(copy.openExtensionFolder).focus(); await userEvent.keyboard('{Enter}');
       await waitFor(() => !button(copy.openExtensionFolder).disabled);
       expect(management.openExtension).toHaveBeenLastCalledWith('folder', 'browser-aaaaaaaaaaaaaaaaaaaaaaaa');
       expect(continued).not.toHaveBeenCalled();
+      const summary = [...dialog().querySelectorAll('summary')].find(item => controlText(item) === copy.setupHelp)!;
+      summary.focus(); await userEvent.keyboard('{Enter}');
+      expect(dialog().innerText).toContain(copy.setupFolderHint);
       const manual = [...dialog().querySelectorAll('summary')].find(item => controlText(item) === copy.setupManualInstall)!;
       expect(manual.parentElement?.hasAttribute('open')).toBe(false);
       manual.focus(); await userEvent.keyboard('{Enter}');
@@ -242,8 +253,6 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-manual.png` });
       manual.focus(); await userEvent.keyboard('{Enter}');
       expect(dialog().innerText).not.toContain(copy.setupLoadUnpacked);
-      const summary = [...dialog().querySelectorAll('summary')].find(item => controlText(item) === copy.setupHelp)!;
-      summary.focus(); await userEvent.keyboard('{Enter}');
       const path = dialog().querySelector<HTMLInputElement>('input[readonly]')!;
       expect(path.checkVisibility()).toBe(true);
       expect(path.value).toContain('/fixture/');
@@ -251,6 +260,13 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       expect(path.checkVisibility()).toBe(false);
       await page.viewport(390, 720);
       expect(dialog().scrollWidth).toBeLessThanOrEqual(dialog().clientWidth + 1);
+      const content = dialog().querySelector<HTMLElement>('.flower-computer-content')!;
+      expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+      for (const element of dialog().querySelectorAll<HTMLElement>('.flower-chrome-guide-window, .flower-chrome-guide-folder-action, button')) {
+        if (!element.checkVisibility()) continue;
+        expect(element.scrollWidth, element.className).toBeLessThanOrEqual(element.clientWidth + 1);
+        expect(element.getBoundingClientRect().right, element.className).toBeLessThanOrEqual(content.getBoundingClientRect().right);
+      }
       await expect.poll(() => button(copy.setupInstalled).getBoundingClientRect().right).toBeLessThanOrEqual(390);
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-narrow.png` });
       button(copy.setupInstalled).click();
@@ -290,7 +306,7 @@ it('routes an incompatible installed extension back to update without continuing
   expect(continued).not.toHaveBeenCalled();
   button(computerUseEnUS.openExtensions).click();
   await waitFor(() => !!button(computerUseEnUS.setupInstalled));
-  expect(host.querySelector('[data-extension-folder-route]')?.textContent).toContain('Flower Browser fixture');
+  expect(host.querySelector('.flower-chrome-guide-folder-action')?.textContent).toContain('Flower Browser fixture');
   button(computerUseEnUS.setupInstalled).click();
   loadExtensionStatus.mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] });
   button(computerUseEnUS.openConnection).click();

@@ -98,7 +98,7 @@ export function FlowerManagedBrowser(props: {
     installing: props.copy.browserInstalling, failed: props.copy.browserInstallFailed, cancelled: props.copy.browserCancelled,
   } as Record<string, string>)[status()?.state ?? ''] ?? props.copy.checking;
   return <section class="flower-browser-install" aria-label={props.copy.managed}>
-    <div class="flower-browser-enable-row">
+    <div class="flower-browser-enable-row" data-floe-surface="raised">
       <span class="flower-computer-capability-icon" data-kind="managed" aria-hidden="true"><Sparkles /></span>
       <div><h3>{props.copy.browserEnable}</h3><p>{status()?.enabled === false ? props.copy.browserDisabledHint : props.copy.browserEnabledHint}</p></div>
       <Switch aria-label={props.copy.browserEnable} checked={status()?.enabled ?? true}

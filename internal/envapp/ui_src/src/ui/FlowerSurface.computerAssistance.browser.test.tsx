@@ -1,3 +1,4 @@
+import { controlText } from '../testSupport/controlText';
 import type { FlowerChromeStatus, FlowerComputerEnvironment, FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../index.css';
 import './flower-feature.css';
@@ -190,8 +191,8 @@ it('opens desktop repair for the current evidence and leaves the original questi
   const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
   expect(card.textContent).toContain('Install system components');
   [...card.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === 'Environment diagnostics')!.click();
-  await waitFor(() => !![...document.querySelectorAll('button')].find(item => item.textContent?.trim() === 'Verify desktop'));
-  [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === 'Verify desktop')!.click();
+  await waitFor(() => !![...document.querySelectorAll('button')].find(item => controlText(item) === 'Verify desktop'));
+  [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === 'Verify desktop')!.click();
   await waitFor(() => document.body.textContent?.includes('Private desktop verified:') === true);
   expect(s.verifyDesktop).toHaveBeenCalledTimes(1);
   expect(s.submitInput).not.toHaveBeenCalled();

@@ -1,8 +1,9 @@
 import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
-import { Check, ChevronRight, Info, MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
+import { Check, ChevronRight, Info, Refresh } from '@floegence/floe-webapp-core/icons';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerChromeDiagnostic, FlowerChromeStatus } from './contracts/flowerSurfaceContracts';
+import { FlowerComputerEnvironmentIdentity } from './FlowerComputerIdentity';
 import { chromeConnectionDiagnostic, chromeDiagnosticPresentation } from './chromeConnectionDiagnostic';
 
 // Both Chrome entry points present the Runtime's existing readiness snapshot.
@@ -10,7 +11,7 @@ import { chromeConnectionDiagnostic, chromeDiagnosticPresentation } from './chro
 export function FlowerChromeReadiness(props: {
   status?: FlowerChromeStatus; diagnostic?: FlowerChromeDiagnostic;
   environmentName?: string; platform?: string; copy: FlowerComputerCopy;
-  showConnectionStatus?: boolean; children?: JSX.Element;
+  children?: JSX.Element;
   onRetry?: () => void; retryLabel?: string; retryDisabled?: boolean;
 }) {
   const [copied, setCopied] = createSignal<string>();
@@ -31,26 +32,22 @@ export function FlowerChromeReadiness(props: {
       if (!disposed) { setCopied(text); setCopyFailed(false); }
     }, () => { if (!disposed) { setCopyFailed(true); diagnosticInput?.focus(); diagnosticInput?.select(); } });
   };
-  const title = () => presentation()?.title || (props.status?.error === 'extension_update_required' ? props.copy.setupUpdateTitle
-    : !props.status ? props.copy.unknown : connected() ? props.copy.connected : props.copy.chromeOffline);
-  const hint = () => presentation()?.hint || (props.status?.error === 'extension_update_required' ? props.copy.setupUpdateHint
-    : !props.status ? props.copy.loadFailed : connected() ? props.copy.chromeOnlineHint : props.copy.chromeConnectHint);
+  const needsAttention = () => Boolean(diagnostic()) || props.status?.error === 'extension_update_required';
+  const title = () => presentation()?.title || props.copy.setupUpdateTitle;
+  const hint = () => presentation()?.hint || props.copy.setupUpdateHint;
   return <section class="flower-chrome-readiness" data-chrome-readiness>
     <div class="flower-chrome-facts">
-      <Show when={hostname()}><div class="flower-computer-environment" aria-label={props.copy.environmentTitle}>
-        <span class="flower-computer-host"><MonitorPointer aria-hidden="true" />{hostname()}</span>
-        <Show when={platform()}><span class="flower-computer-platform">{platform() === 'darwin' ? 'macOS' : platform() === 'linux' ? 'Linux' : platform()}</span></Show>
-      </div></Show>
-      <Show when={props.status?.browser_installed !== undefined}><span class="flower-chrome-browser-state" data-ready={props.status?.browser_installed}>
+      <Show when={hostname()}><FlowerComputerEnvironmentIdentity name={hostname()!} platform={platform()} label={props.copy.environmentTitle} /></Show>
+      <Show when={!connected() && props.status?.browser_installed !== undefined}><span class="flower-chrome-browser-state" data-ready={props.status?.browser_installed}>
         <Show when={props.status?.browser_installed} fallback={<Info aria-hidden="true" />}><Check aria-hidden="true" /></Show>
         {props.status?.browser_installed ? props.copy.chromeBrowserDetected : props.copy.chromeBrowserMissing}
       </span></Show>
       <Show when={diagnostic() && !connected()}><span class="flower-chrome-connection-state">{props.copy.chromeOffline}</span></Show>
     </div>
-    <Show when={diagnostic() || props.showConnectionStatus}>
-      <div class="flower-chrome-status" data-chrome-diagnostic={diagnostic() ? '' : undefined} data-tone={diagnostic() ? 'attention' : connected() ? 'positive' : 'neutral'}>
-        <Show when={connected() && !diagnostic()} fallback={<Info class="flower-chrome-status-icon" aria-hidden="true" />}><Check class="flower-chrome-status-icon" aria-hidden="true" /></Show>
-        <div class="flower-chrome-status-copy" role={diagnostic() ? 'alert' : 'status'}>
+    <Show when={needsAttention()}>
+      <div class="flower-chrome-status" data-chrome-diagnostic={diagnostic() ? '' : undefined} data-tone="attention">
+        <Info class="flower-chrome-status-icon" aria-hidden="true" />
+        <div class="flower-chrome-status-copy" role="alert">
           <Show when={!diagnostic() || presentation()?.title}><p class="flower-chrome-status-title">{title()}</p></Show>
           <p class="flower-chrome-status-hint">{hint()}</p>
         </div>

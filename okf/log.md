@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Refined [Browser and desktop settings](ai/computer-use-environment-settings.md) with grouped environment controls, focused connection rows, pinned browser/platform marks and on-demand target discovery.
+
 - 2026-11-05: Clarify [computer script output](ai/computer-use-scripts.md) with an emitted snapshot example, structured logging and on-demand result/truncation scopes; keep independent budgets and remove prescriptive layout-recovery diagnostics.
 
 - 2026-11-05: Preserve typed [computer script cancellation](ai/computer-use-scripts.md) across interpreter retirement and closed pipes, retaining confirmed operations and independent unknown effects; qualify core read examples and locator wait signatures at the model and Activity boundaries.

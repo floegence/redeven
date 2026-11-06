@@ -1306,6 +1306,18 @@ The Docker and Podman marks identify the corresponding local container service. 
 | Docker | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/docker-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/docker-mono.svg` | Trailing newline only |
 | Podman | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/podman-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/podman-mono.svg` | Trailing newline only |
 
+## Bundled Flower Computer Icons
+
+Flower bundles five unchanged theSVG marks for browser and platform identities in Browser and desktop settings. The assets are pinned to revision bdfcb7cf0209c140f38afeb73ebccd432eff5c92; [upstream metadata](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/src/data/icons.json) declares their MIT or CC0-1.0 licenses. The Apple mark uses a theme-aware alpha mask; other marks retain their upstream colors. Brand marks identify their respective products and imply no endorsement. License texts appear in the Flower Source Icons section below.
+
+| Brand asset | License | Pinned source | Bundled file | Modification |
+| --- | --- | --- | --- | --- |
+| Apple | CC0-1.0 | [public/icons/apple/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/apple/mono.svg) | internal/flower_ui/src/assets/computer-icons/apple.svg | No; theme-aware alpha mask |
+| Linux | CC0-1.0 | [public/icons/linux/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/linux/default.svg) | internal/flower_ui/src/assets/computer-icons/linux.svg | No |
+| Windows | MIT | [public/icons/windows/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/windows/default.svg) | internal/flower_ui/src/assets/computer-icons/windows.svg | No |
+| Chrome | MIT | [public/icons/chrome/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/chrome/default.svg) | internal/flower_ui/src/assets/computer-icons/chrome.svg | No |
+| Chromium | MIT | [public/icons/chromium/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/chromium/default.svg) | internal/flower_ui/src/assets/computer-icons/chromium.svg | No |
+
 ## Bundled Flower Provider Icons
 
 Flower uses 11 unchanged theSVG assets from revision bdfcb7cf0209c140f38afeb73ebccd432eff5c92 for its provider settings and model selectors in both Desktop and Env App. The pinned [icon metadata](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/src/data/icons.json) declares MIT or CC0-1.0 per asset. Monochrome marks use a theme-aware alpha mask; color marks retain the upstream colors. Both Kimi connection types share the Kimi mark. OpenAI-compatible connections use the OpenAI mark to identify the API protocol, not to claim that the endpoint is operated by OpenAI. Brand names and marks remain the property of their respective owners and imply no endorsement. The MIT and CC0-1.0 license texts are reproduced in the Flower Source Icons section below.

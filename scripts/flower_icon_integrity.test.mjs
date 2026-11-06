@@ -4,13 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectFlowerProviderIconAssets, collectFlowerSourceIconAssets } from './flower_icon_integrity.mjs';
+import { collectFlowerProviderIconAssets, collectFlowerSourceIconAssets, collectFlowerComputerIconAssets } from './flower_icon_integrity.mjs';
 import { sha256 } from './terminal_agent_icon_integrity.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 test('verifies unchanged provider and website assets against the pinned upstream hashes', () => {
   assert.equal(collectFlowerProviderIconAssets(root).rows.length, 11);
   assert.equal(collectFlowerSourceIconAssets(root).rows.length, 27);
+  assert.equal(collectFlowerComputerIconAssets(root).rows.length, 5);
 });
 
 for (const [name, mutate, failure] of [

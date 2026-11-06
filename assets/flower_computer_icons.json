@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/glincker/thesvg",
+    "revision": "bdfcb7cf0209c140f38afeb73ebccd432eff5c92",
+    "license_metadata_path": "src/data/icons.json"
+  },
+  "assets": [
+    {
+      "identity": "apple",
+      "label": "Apple",
+      "file": "apple.svg",
+      "source_path": "public/icons/apple/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "upstream_sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "linux",
+      "label": "Linux",
+      "file": "linux.svg",
+      "source_path": "public/icons/linux/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "ee7e85d245e8cac3de69ad0e5ad131ccf5cead034f407fcdec410fcf24710185",
+      "upstream_sha256": "ee7e85d245e8cac3de69ad0e5ad131ccf5cead034f407fcdec410fcf24710185",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "windows",
+      "label": "Windows",
+      "file": "windows.svg",
+      "source_path": "public/icons/windows/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "449a3893f905fd5a3206ff6cd7ca9cb4b26f64f23d480bec2e335ccb5a395b96",
+      "upstream_sha256": "449a3893f905fd5a3206ff6cd7ca9cb4b26f64f23d480bec2e335ccb5a395b96",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "chrome",
+      "label": "Chrome",
+      "file": "chrome.svg",
+      "source_path": "public/icons/chrome/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "fa70a8395db5875747df112606379788854a86ac0d39d06914d5fd0c7ba7dc76",
+      "upstream_sha256": "fa70a8395db5875747df112606379788854a86ac0d39d06914d5fd0c7ba7dc76",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "chromium",
+      "label": "Chromium",
+      "file": "chromium.svg",
+      "source_path": "public/icons/chromium/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "f10fd8a8cdd4bb4d9057c561e9590aaf2d749cd108045c89121dc32c36cd0dfb",
+      "upstream_sha256": "f10fd8a8cdd4bb4d9057c561e9590aaf2d749cd108045c89121dc32c36cd0dfb",
+      "modified": false,
+      "monochrome": false
+    }
+  ]
+}

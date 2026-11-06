@@ -70,7 +70,8 @@ describe('Flower computer stage', () => {
       await waitFor(() => !document.querySelector('.flower-computer-stage'));
       expect(document.activeElement).toBe(viewerEntry);
       management.click();
-      await waitFor(() => listCandidates.mock.calls.length > 0);
+      await waitFor(() => !!document.querySelector('[data-flower-computer-panel="overview"]'));
+      expect(listCandidates).not.toHaveBeenCalled();
       expect(management.getAttribute('aria-expanded')).toBe('true');
       expect(document.querySelector('[role="dialog"]')).not.toBeNull();
       expect(document.querySelector('.flower-computer-stage')).toBeNull();

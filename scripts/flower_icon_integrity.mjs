@@ -52,3 +52,7 @@ export function collectFlowerSourceIconAssets(repoRoot) {
 export function collectFlowerProviderIconAssets(repoRoot) {
   return collectFlowerIconAssets(repoRoot, 'provider', 11);
 }
+
+export function collectFlowerComputerIconAssets(repoRoot) {
+  return collectFlowerIconAssets(repoRoot, 'computer', 5);
+}
