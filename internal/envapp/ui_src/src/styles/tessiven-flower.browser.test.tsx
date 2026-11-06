@@ -88,6 +88,30 @@ it('paints the canonical rounded input outline in the conversation window', asyn
   expect(composer.getBoundingClientRect().height).toBeGreaterThanOrEqual(84);
 });
 
+it('keeps equal composer insets inside the canvas conversation window', async () => {
+  await page.viewport(1200, 800);
+  mount();
+  await expect.element(editor()).toBeVisible();
+  const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
+  await expect.poll(() => output.dataset.floatingPresence).toBe('open');
+  for (const [width, height, inset] of [[1100, 700, 12], [390, 700, 12], [320, 240, 8]]) {
+    host.style.cssText = `position:absolute;left:0;top:0;width:${width}px;height:${height}px`;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const content = output.querySelector<HTMLElement>('[data-floe-floating-window-content]')!;
+    const composer = output.querySelector<HTMLElement>('.flower-composer')!;
+    const bounds = content.getBoundingClientRect();
+    const input = composer.getBoundingClientRect();
+    const left = input.left - bounds.left;
+    const right = bounds.right - input.right;
+    const dock = getComputedStyle(output.querySelector('.flower-chat-bottom-dock')!);
+    expect({ width, height, left, right, paddingLeft: dock.paddingLeft, paddingRight: dock.paddingRight }).toMatchObject({
+      left: inset, right: inset, paddingLeft: `${inset}px`, paddingRight: `${inset}px`,
+    });
+    expect(composer.scrollWidth).toBeLessThanOrEqual(composer.clientWidth);
+    await page.screenshot({ element: output, path: `__screenshots__/tessiven-composer-insets-${width}-${height}.png` });
+  }
+});
+
 it('keeps the response status lane visually continuous and compact', async () => {
   await page.viewport(1200, 800);
   mount();

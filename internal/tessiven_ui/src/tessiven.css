@@ -1654,7 +1654,8 @@
   user-select: text;
 }
 .tessiven-flower-composer--initial { animation: tessiven-flower-composer-enter 220ms ease-out both; }
-.tessiven-flower-composer .flower-chat-bottom-dock {
+/* Canvas placement owns dock insets over Flower's transcript rail padding. */
+.tessiven-flower-canvas .tessiven-flower-composer .flower-chat-bottom-dock {
   padding: 0;
   background: none;
   border: 0;
@@ -1674,7 +1675,7 @@
   padding: 0;
   flex: 0 0 auto;
 }
-.tessiven-flower-output .flower-chat-bottom-dock { padding: 0 12px 12px; }
+.tessiven-flower-output .tessiven-flower-composer .flower-chat-bottom-dock { padding: 0 12px 12px; }
 .tessiven-flower-chat {
   display: flex;
   flex: 1 1 0;
@@ -1705,7 +1706,7 @@
   mask-image: linear-gradient(to bottom, black calc(100% - min(16px, 25%)), transparent);
 }
 @container (max-height: 179px) {
-  .tessiven-flower-chat .flower-chat-bottom-dock { padding: 0 8px 8px; }
+  .tessiven-flower-chat .tessiven-flower-composer .flower-chat-bottom-dock { padding: 0 8px 8px; }
   .tessiven-flower-chat .flower-chat-bottom-dock .flower-composer[data-flower-bottom-mode] { padding: 6px; gap: 4px; }
 }
 .tessiven-flower-output {
