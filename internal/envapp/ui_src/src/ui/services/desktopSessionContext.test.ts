@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   desktopRendererStorageScopeID,
+  waitForDesktopTransportReady,
   notifyDesktopSessionAppReady,
   readDesktopSessionContextSnapshot,
   readDesktopTransportRecoverySnapshot,
@@ -161,6 +162,7 @@ describe('desktopSessionContext', () => {
     const initialSnapshot = {
       generation: 4,
       revision: 8,
+      ssh_transport_generation: 7,
       phase: 'waiting' as const,
       attempt_count: 2,
       started_at_unix_ms: 100,
@@ -212,5 +214,53 @@ describe('desktopSessionContext', () => {
     expect(requestRetry).toHaveBeenCalledTimes(1);
     unsubscribe();
     expect(subscribed).toBe(false);
+  });
+});
+
+
+describe('Desktop-aware artifact acquisition', () => {
+  function recoveryBridge() {
+    let current = { generation: 2, revision: 3, phase: 'waiting', attempt_count: 1, actions: ['retry_now'], failure: { code: 'transport_interrupted', error_name: 'Error', technical_detail: 'Connection lost' } };
+    let listener: (snapshot: unknown) => void = () => undefined;
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn((next: typeof listener) => { listener = next; return unsubscribe; });
+    setWindowHierarchy({ location: { origin: window.location.origin }, redevenDesktopSessionContext: {
+      getSnapshot: () => ({ local_environment_id: 'ssh:demo', renderer_storage_scope_id: 'ssh:demo' }),
+      getTransportRecoverySnapshot: () => current,
+      subscribeTransportRecovery: subscribe,
+    } } as unknown as Window);
+    return { unsubscribe, subscribe, emit: (patch: Partial<typeof current>) => { current = { ...current, ...patch }; listener(current); } };
+  }
+
+  it('waits for the current ready revision and ignores late observations', async () => {
+    const bridge = recoveryBridge();
+    let ready = false;
+    const work = waitForDesktopTransportReady(new AbortController().signal).then(() => { ready = true; });
+    bridge.emit({ revision: 2, phase: 'ready', actions: [] });
+    await Promise.resolve();
+    expect(ready).toBe(false);
+    bridge.emit({ revision: 4, phase: 'ready', actions: [] });
+    await work;
+    expect(ready).toBe(true);
+    expect(bridge.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it('cancels acquisition while waiting and removes its subscription', async () => {
+    const bridge = recoveryBridge();
+    const controller = new AbortController();
+    const work = waitForDesktopTransportReady(controller.signal);
+    controller.abort();
+    await expect(work).rejects.toMatchObject({ name: 'AbortError' });
+    expect(bridge.unsubscribe).toHaveBeenCalledOnce();
+    bridge.emit({ revision: 4, phase: 'ready', actions: [] });
+    expect(bridge.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it('ends acquisition when Desktop requires a fresh session', async () => {
+    const bridge = recoveryBridge();
+    const work = waitForDesktopTransportReady(new AbortController().signal);
+    bridge.emit({ revision: 4, phase: 'failed', actions: ['open_connection_center'] });
+    await expect(work).rejects.toMatchObject({ code: 'ENV_SESSION_REOPEN_REQUIRED' });
+    expect(bridge.unsubscribe).toHaveBeenCalledOnce();
   });
 });

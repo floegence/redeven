@@ -36,6 +36,7 @@ type MockBridgeOptions = Readonly<{
   startedAtUnixMS?: number;
   runtimeControlToken?: string;
   delayedShutdown?: boolean;
+  stalledHello?: boolean;
   onConnect?: (stream: ServerHttp2Stream, authority: string) => boolean;
 }>;
 
@@ -53,6 +54,7 @@ async function createMockBridgeCommand(options: MockBridgeOptions = {}) {
     const authority = String(headers[':authority'] ?? '');
     const path = String(headers[':path'] ?? '');
     if (method === 'GET' && authority === 'redeven-placement' && path === '/redeven/placement/v1/hello') {
+      if (options.stalledHello) return;
       stream.respond({ ':status': 200, 'content-type': 'application/json' });
       stream.end(JSON.stringify({
         protocol_version: RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION,
@@ -224,6 +226,113 @@ async function waitForCondition(condition: () => boolean, timeoutMS = 1_000): Pr
 beforeEach(() => {
   hostAccessMocks.spawnLocalRuntimeHostCommand.mockReset();
   hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+});
+
+describe('bounded bridge recovery', () => {
+  it('verifies the underlying SSH generation before reopening an interrupted bridge', async () => {
+    const first = await createMockBridgeCommand();
+    const second = await createMockBridgeCommand();
+    const verifyTransport = vi.fn(async () => 'retired' as const);
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockResolvedValueOnce({ ...first, verifyTransport, transport_generation: 3 }).mockResolvedValueOnce({ ...second, transport_generation: 5 });
+    const session = await startRuntimePlacementBridgeSession(sshArgs());
+    try {
+      first.interrupt(new DesktopSSHTransportInterruptedError('los', 1));
+      await waitForCondition(() => session.getRecoverySnapshot().phase === 'ready' && session.getRecoverySnapshot().generation > 0);
+      expect(verifyTransport).toHaveBeenCalledOnce();
+      expect(session.getRecoverySnapshot().ssh_transport_generation).toBe(5);
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(2);
+      expect(session.getRecoverySnapshot().phase).toBe('ready');
+    } finally { await session.stop(); second.kill(); }
+  });
+
+  it('serializes retry-now behind verification and does not reopen after stop', async () => {
+    const first = await createMockBridgeCommand();
+    const second = await createMockBridgeCommand();
+    let finishVerification!: () => void;
+    const verifyTransport = vi.fn(() => new Promise<'healthy'>(resolve => { finishVerification = () => resolve('healthy'); }));
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockResolvedValueOnce({ ...first, verifyTransport }).mockResolvedValueOnce(second);
+    const session = await startRuntimePlacementBridgeSession(sshArgs());
+    try {
+      first.interrupt(new DesktopSSHTransportInterruptedError('los', 1));
+      await waitForCondition(() => verifyTransport.mock.calls.length === 1);
+      expect(session.requestRecoveryNow()).toBe(true);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledOnce();
+      expect(session.stopRecovery()).toBe(true);
+      finishVerification();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(session.getRecoverySnapshot().phase).toBe('paused');
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledOnce();
+      session.requestRecoveryNow();
+      await waitForCondition(() => session.getRecoverySnapshot().phase === 'ready');
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(2);
+    } finally { finishVerification?.(); await session.stop(); second.kill(); }
+  });
+
+  it('verifies upper-layer stalls without disrupting a responsive bridge', async () => {
+    const command = await createMockBridgeCommand();
+    const verifyTransport = vi.fn(async () => 'healthy' as const);
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockResolvedValueOnce({ ...command, verifyTransport });
+    const session = await startRuntimePlacementBridgeSession(sshArgs());
+    try {
+      expect(session.requestRecoveryNow()).toBe(true);
+      await waitForCondition(() => verifyTransport.mock.calls.length === 1);
+      expect(session.getRecoverySnapshot().phase).toBe('ready');
+      expect(command.kill).not.toHaveBeenCalled();
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledOnce();
+    } finally { await session.stop(); }
+  });
+
+  it('replaces the bridge after upper-layer feedback retires its SSH generation', async () => {
+    const first = await createMockBridgeCommand();
+    const second = await createMockBridgeCommand();
+    const verifyTransport = vi.fn(async () => {
+      first.interrupt(new DesktopSSHTransportInterruptedError('los', 3));
+      return 'retired' as const;
+    });
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockResolvedValueOnce({ ...first, verifyTransport, transport_generation: 3 })
+      .mockResolvedValueOnce({ ...second, transport_generation: 5 });
+    const session = await startRuntimePlacementBridgeSession(sshArgs());
+    try {
+      session.requestRecoveryNow();
+      await waitForCondition(() => session.getRecoverySnapshot().ssh_transport_generation === 5);
+      expect(session.getRecoverySnapshot().phase).toBe('ready');
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(2);
+    } finally { await session.stop(); second.kill(); }
+  });
+
+  it('closes a stalled hello even when transport verification fails', async () => {
+    const command = await createMockBridgeCommand({ stalledHello: true });
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockResolvedValueOnce({ ...command, verifyTransport: async () => { throw new Error('probe failed'); } });
+    try {
+      await expect(startRuntimePlacementBridgeSession({ ...sshArgs(), connect_timeout_ms: 30 })).rejects.toThrow('deadline');
+      expect(command.kill).toHaveBeenCalledOnce();
+    } finally { command.kill(); }
+  });
+
+  it('cancels a stalled hello without verifying or retrying the shared transport', async () => {
+    const command = await createMockBridgeCommand({ stalledHello: true });
+    const verifyTransport = vi.fn();
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockResolvedValueOnce({ ...command, verifyTransport });
+    const controller = new AbortController();
+    const work = startRuntimePlacementBridgeSession({ ...sshArgs(), signal: controller.signal });
+    const rejected = expect(work).rejects.toMatchObject({ name: 'AbortError' });
+    await waitForCondition(() => hostAccessMocks.spawnSSHRuntimeHostCommand.mock.calls.length === 1);
+    controller.abort();
+    await rejected;
+    expect(verifyTransport).not.toHaveBeenCalled();
+    expect(command.kill).toHaveBeenCalled();
+  });
+
+  it('bounds an HTTP/2 hello that never completes even while the peer stays alive', async () => {
+    const command = await createMockBridgeCommand({ stalledHello: true });
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockResolvedValueOnce(command);
+    try {
+      await expect(startRuntimePlacementBridgeSession({ ...sshArgs(), connect_timeout_ms: 30 })).rejects.toThrow('deadline');
+      expect(command.kill).toHaveBeenCalled();
+    } finally { command.kill(); }
+  });
 });
 
 describe('runtime placement HTTP/2 session lifecycle', () => {

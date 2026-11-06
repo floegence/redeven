@@ -200,7 +200,7 @@ import {
   type DesktopWelcomeRuntimeHealthProbeResult,
   type DesktopWelcomeRuntimeHealthTarget,
 } from './desktopWelcomeRuntimeHealth';
-import { canReuseFreshRuntimeOpenPreflight } from './runtimeOpenPreflight';
+import { canReuseFreshRuntimeOpenPreflight, canAttemptKnownRuntimeBridge, runtimeOpenHasManagementEvidence, createRuntimeOpenConnectionBudget } from './runtimeOpenPreflight';
 import { localHostRuntimeLifecyclePlacement } from './localRuntimePlacement';
 import {
   resolveConfiguredDesktopCacheRoot,
@@ -978,7 +978,7 @@ type RuntimePlacementReadyRecord = Readonly<{
   runtime_service?: RuntimeServiceSnapshot;
 }>;
 
-type RuntimeOpenPreflightCacheDecision = 'fresh_health_reused' | 'health_refreshed' | 'fresh_health_retry_refreshed';
+type RuntimeOpenPreflightCacheDecision = 'known_bridge_verified' | 'fresh_health_reused' | 'health_refreshed' | 'fresh_health_retry_refreshed';
 
 type SavedRuntimeTargetState = Readonly<{
   running: boolean;
@@ -1197,11 +1197,8 @@ const runtimePlacementBridgeRegistry = new RuntimePlacementBridgeRegistry(
 const runtimePlacementReadyByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementReadyRecord>();
 const pendingRuntimePlacementOpenByTargetID = new Map<DesktopRuntimeTargetID, Promise<DesktopLauncherActionResult | null>>();
 const managedEnvironmentOpenRecoveryAttemptsByTargetID = new Map<DesktopRuntimeTargetID, number>();
-// A bridge handshake can race a Runtime restart. Keep one bounded automatic
-// recovery per Open request; a second failure must return an actionable result
-// instead of creating an endless confirmation/restart loop across continuations.
-const managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID = new Map<DesktopRuntimeTargetID, number>();
-const MAX_MANAGED_ENVIRONMENT_OPEN_BRIDGE_RECOVERY_ATTEMPTS = 1;
+// Retry only the connection to the same Runtime within the Open budget.
+// Transport failure never authorizes restarting the Runtime.
 const MANAGED_ENVIRONMENT_OPEN_BRIDGE_START_RETRY_DELAYS_MS = [250, 500] as const;
 const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
@@ -9311,6 +9308,15 @@ function attachSessionTransportRecovery(
       return;
     }
     sessionRecord.transport_recovery_snapshot = snapshot;
+    sessionRecord.diagnostics.recordLifecycle('transport_recovery', 'Environment transport recovery changed.', {
+      recovery_generation: snapshot.generation,
+      recovery_revision: snapshot.revision,
+      ssh_transport_generation: snapshot.ssh_transport_generation,
+      recovery_phase: snapshot.phase,
+      recovery_attempt_count: snapshot.attempt_count,
+      recovery_duration_ms: snapshot.started_at_unix_ms ? Date.now() - snapshot.started_at_unix_ms : 0,
+      failure_code: snapshot.failure?.code,
+    });
     sendSessionTransportRecoverySnapshot(sessionRecord);
   });
 }
@@ -15644,9 +15650,9 @@ async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
 }
 
 function runtimeBridgeStartCanRecover(error: unknown): boolean {
-  return error instanceof DesktopSSHRemoteCommandError
+  return !(error instanceof DesktopSSHTransportAuthenticationError) && (error instanceof DesktopSSHRemoteCommandError
     || error instanceof DesktopSSHTransportInterruptedError
-    || error instanceof DesktopSSHTransportUnavailableError;
+    || error instanceof DesktopSSHTransportUnavailableError);
 }
 
 
@@ -15730,7 +15736,6 @@ async function openRuntimePlacementBridgeFromLauncher(
     (previousOpenOperation.status !== 'running' && previousOpenOperation.status !== 'needs_confirmation')
   ) {
     managedEnvironmentOpenRecoveryAttemptsByTargetID.delete(targetID);
-    managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID.delete(targetID);
   }
   const openTaskRef: { task?: Promise<DesktopLauncherActionResult | null> } = {};
   const runOpenTask = async (): Promise<DesktopLauncherActionResult | null> => {
@@ -15768,15 +15773,12 @@ async function openRuntimePlacementBridgeFromLauncher(
       targetID,
     );
     const reusedFreshRuntimePreflight = canReuseFreshRuntimeOpenPreflight(cachedHealth, readyRecord);
-    let runtimeProbeCacheDecision: RuntimeOpenPreflightCacheDecision = reusedFreshRuntimePreflight
+    const tryKnownBridge = hostAccess.kind === 'ssh_host' && canAttemptKnownRuntimeBridge(readyRecord);
+    let runtimeProbeCacheDecision: RuntimeOpenPreflightCacheDecision = tryKnownBridge && !reusedFreshRuntimePreflight
+      ? 'known_bridge_verified'
+      : reusedFreshRuntimePreflight
       ? 'fresh_health_reused'
       : 'health_refreshed';
-    const runtimeProbeStartedAtUnixMS = Date.now();
-    if (!reusedFreshRuntimePreflight) {
-      await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
-      readyRecord = savedRuntimePlacementReadyRecord(targetID, environmentID, label, hostAccess, placement);
-    }
-    runtimeProbeDurationMS = Date.now() - runtimeProbeStartedAtUnixMS;
     const existingBridge = runtimePlacementBridgeRegistry.get(targetID);
     const effectiveHostAccess = readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess;
     const target =
@@ -15831,13 +15833,21 @@ async function openRuntimePlacementBridgeFromLauncher(
     retireSupersededEnvironmentOperations([environmentID], operation.operation_key);
     const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
     const preferences = await loadDesktopPreferencesCached();
+    let connectionBudget = createRuntimeOpenConnectionBudget(signal);
     let bridgeSession: RuntimePlacementBridgeSession | null = null;
     let bridgeLease: RuntimePlacementBridgeLease | undefined;
     let sessionRecord: DesktopSessionRecord | null = null;
     let record = existingBridge;
     try {
+      const runtimeProbeStartedAtUnixMS = Date.now();
+      if (!reusedFreshRuntimePreflight && !tryKnownBridge && !existingBridge) {
+        await connectionBudget.wait(refreshWelcomeRuntimeHealthForEnvironment(environmentID));
+        readyRecord = savedRuntimePlacementReadyRecord(targetID, environmentID, label, hostAccess, placement);
+      }
+      runtimeProbeDurationMS = Date.now() - runtimeProbeStartedAtUnixMS;
+
       if (record) {
-        bridgeLease = await runtimePlacementBridgeRegistry.acquire(targetID, operationKey, async () => record!, signal);
+        bridgeLease = await runtimePlacementBridgeRegistry.acquire(targetID, operationKey, async () => record!, connectionBudget.signal);
         record = bridgeLease.record;
       }
       if (!record) {
@@ -15854,6 +15864,16 @@ async function openRuntimePlacementBridgeFromLauncher(
             detail: 'Desktop is checking the runtime status before opening this environment.',
           });
           if (!readyRecord) {
+            const health = desktopWelcomeRuntimeHealthForEnvironment(welcomeRuntimeHealthStore.snapshot(), environmentID, targetID);
+            if (!runtimeOpenHasManagementEvidence(health)) {
+              throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
+                code: 'ssh_runtime_status_unavailable', title: 'Runtime status unavailable',
+                titleKey: 'runtimeMessage.refreshStatusTitle', summary: 'Desktop could not confirm Runtime readiness yet.',
+                summaryKey: 'runtimeMessage.runtimeReadinessUnavailable', targetLabel: label,
+                recoveryHintKey: 'runtimeMessage.refreshStatusTitle',
+              }));
+            }
+
             const recoveryAttempts = managedEnvironmentOpenRecoveryAttemptsByTargetID.get(targetID) ?? 0;
             if (recoveryAttempts >= 2) {
               const failure = desktopOperationFailurePresentation({
@@ -15882,7 +15902,6 @@ async function openRuntimePlacementBridgeFromLauncher(
                 failure,
               });
               managedEnvironmentOpenRecoveryAttemptsByTargetID.delete(targetID);
-              managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID.delete(targetID);
               return {
                 ...result,
                 operation_key: operationKey,
@@ -15907,6 +15926,7 @@ async function openRuntimePlacementBridgeFromLauncher(
               environment_id: environmentID,
               label,
             };
+            connectionBudget.dispose();
             const lifecycleResult = await runEnvironmentRuntimeLifecycleFromLauncher(recoveryRequest, {
               openRecovery: {
                 operationKey,
@@ -15954,14 +15974,14 @@ async function openRuntimePlacementBridgeFromLauncher(
                     }),
               });
               managedEnvironmentOpenRecoveryAttemptsByTargetID.delete(targetID);
-              managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID.delete(targetID);
               return {
                 ...lifecycleResult,
                 operation_key: operationKey,
               };
             }
+            connectionBudget = createRuntimeOpenConnectionBudget(signal);
             // This Open request intentionally advanced the lifecycle
-            await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+            await connectionBudget.wait(refreshWelcomeRuntimeHealthForEnvironment(environmentID));
             readyRecord = savedRuntimePlacementReadyRecord(targetID, environmentID, label, hostAccess, placement);
             if (!readyRecord) {
               throw new GatewayClientError(
@@ -15992,17 +16012,17 @@ async function openRuntimePlacementBridgeFromLauncher(
           detail: 'Desktop is opening the loopback Desktop bridge for this runtime.',
         });
         const bridgeProxyStartedAtUnixMS = Date.now();
-        let bridgeRecoveryAttempt = 0;
         let bridgeStartupRetryAttempt = 0;
         let cachedPreflightRefreshAttempted = false;
         for (;;) {
           try {
-            bridgeLease = await acquireRuntimePlacementBridgeForReadyRecord(readyRecord!, operationKey, signal, sshPassword);
-          bridgeSession = bridgeLease.record.session;
+            bridgeLease = await acquireRuntimePlacementBridgeForReadyRecord(readyRecord!, operationKey, connectionBudget.signal, sshPassword);
+            bridgeSession = bridgeLease.record.session;
             break;
           } catch (error) {
+            connectionBudget.signal.throwIfAborted();
             if (
-              reusedFreshRuntimePreflight &&
+              (reusedFreshRuntimePreflight || tryKnownBridge) &&
               !cachedPreflightRefreshAttempted &&
               hostAccess.kind === 'ssh_host' &&
               runtimeBridgeStartCanRecover(error)
@@ -16010,7 +16030,7 @@ async function openRuntimePlacementBridgeFromLauncher(
               cachedPreflightRefreshAttempted = true;
               runtimeProbeCacheDecision = 'fresh_health_retry_refreshed';
               const retryProbeStartedAtUnixMS = Date.now();
-              await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+              await connectionBudget.wait(refreshWelcomeRuntimeHealthForEnvironment(environmentID));
               runtimeProbeDurationMS = (runtimeProbeDurationMS ?? 0) + (Date.now() - retryProbeStartedAtUnixMS);
               const refreshedReadyRecord = savedRuntimePlacementReadyRecord(
                 targetID,
@@ -16041,139 +16061,25 @@ async function openRuntimePlacementBridgeFromLauncher(
                 targetID,
                 targetLabel: label,
                 title: 'Waiting for Runtime',
-                detail: 'The Runtime is still starting. Desktop will retry the connection before restarting it.',
+                detail: 'Desktop is restoring the connection to the same Runtime.',
               });
               await new Promise<void>((resolve, reject) => {
+                connectionBudget.signal.throwIfAborted();
                 const timer = setTimeout(() => {
-                  signal?.removeEventListener('abort', onAbort);
+                  connectionBudget.signal.removeEventListener('abort', onAbort);
                   resolve();
                 }, delayMS);
                 const onAbort = () => {
                   clearTimeout(timer);
-                  signal?.removeEventListener('abort', onAbort);
-                  reject(signal?.reason ?? new DOMException('Open canceled.', 'AbortError'));
+                  connectionBudget.signal.removeEventListener('abort', onAbort);
+                  reject(connectionBudget.signal.reason ?? new DOMException('Open canceled.', 'AbortError'));
                 };
-                signal?.addEventListener('abort', onAbort, { once: true });
+                connectionBudget.signal.addEventListener('abort', onAbort, { once: true });
               });
               continue;
             }
-            const bridgeRecoveryAttempts = managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID.get(targetID) ?? 0;
-            if (
-              hostAccess.kind !== 'ssh_host' ||
-              !runtimeBridgeStartCanRecover(error) ||
-              bridgeRecoveryAttempt >= 1 ||
-              bridgeRecoveryAttempts >= MAX_MANAGED_ENVIRONMENT_OPEN_BRIDGE_RECOVERY_ATTEMPTS
-            ) {
-              if (
-                hostAccess.kind === 'ssh_host' &&
-                runtimeBridgeStartCanRecover(error) &&
-                bridgeRecoveryAttempts >= MAX_MANAGED_ENVIRONMENT_OPEN_BRIDGE_RECOVERY_ATTEMPTS
-              ) {
-                throw new DesktopOperationFailureError(
-                  desktopOperationFailurePresentation({
-                    code: 'ssh_runtime_launch_failed',
-                    title: 'Runtime connection failed',
-                    summary: 'The SSH Runtime was restarted, but Desktop still could not connect to it.',
-                    recoveryHint:
-                      'Refresh status and retry Open. If it continues, update the Runtime from this environment card.',
-                    targetLabel: label,
-                    diagnostics:
-                      error instanceof DesktopSSHRemoteCommandError
-                        ? [
-                            {
-                              channel: 'ssh_runtime_bridge',
-                              label: 'SSH Runtime bridge',
-                              text: [
-                                `exit_code=${error.commandResult.exit_code ?? 'unknown'}`,
-                                error.commandResult.signal ? `signal=${error.commandResult.signal}` : '',
-                                error.commandResult.stderr,
-                                error.commandResult.stdout,
-                              ]
-                                .filter((value) => compact(value) !== '')
-                                .join('\n'),
-                            },
-                          ]
-                        : [
-                            {
-                              channel: 'ssh_runtime_bridge',
-                              label: 'SSH Runtime bridge',
-                              text: error instanceof Error ? error.message : String(error),
-                            },
-                          ],
-                  }),
-                );
-              }
-              throw error;
-            }
-            bridgeRecoveryAttempt += 1;
-            managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID.set(targetID, bridgeRecoveryAttempts + 1);
-            updateOpenConnectionOperation(operationKey, {
-              hostAccess,
-              placement,
-              phase: 'ensuring_runtime_ready',
-              environmentID,
-              environmentLabel: label,
-              targetID,
-              targetLabel: label,
-              title: 'Restarting Runtime',
-              detail:
-                'The SSH Runtime stopped while Desktop was connecting. Desktop is restarting it and will retry Open.',
-            });
-            const recoveryResult = await runEnvironmentRuntimeLifecycleFromLauncher(
-              {
-                ...request,
-                kind: 'restart_environment_runtime' as const,
-                environment_id: environmentID,
-                label,
-              },
-              {
-                openRecovery: {
-                  operationKey,
-                  requiredOperation: 'restart',
-                  confirmationContinuation: async () => {
-                    const continued = await openRuntimePlacementBridgeFromLauncher(request);
-                    return (
-                      continued ??
-                      launcherActionFailure(
-                        'runtime_not_ready',
-                        'environment',
-                        'Desktop could not continue opening this Runtime target after confirmation.',
-                        { environmentID, shouldRefreshSnapshot: true },
-                      )
-                    );
-                  },
-                },
-              },
-            );
-            if (!recoveryResult.ok) {
-              if (recoveryResult.code === 'confirmation_required') {
-                return recoveryResult;
-              }
-              throw new DesktopOperationFailureError(
-                recoveryResult.failure ??
-                  desktopOperationFailurePresentation({
-                    code: 'ssh_runtime_launch_failed',
-                    title: 'Runtime Restart Failed',
-                    summary: recoveryResult.message,
-                    recoveryHint: 'Refresh the Runtime status, then retry Open.',
-                    targetLabel: label,
-                  }),
-              );
-            }
-            await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
-            readyRecord = savedRuntimePlacementReadyRecord(targetID, environmentID, label, hostAccess, placement);
-            if (!readyRecord) {
-              throw new DesktopOperationFailureError(
-                desktopOperationFailurePresentation({
-                  code: 'ssh_runtime_status_unavailable',
-                  title: 'Runtime Recovery Incomplete',
-                  summary: 'Runtime restarted, but Desktop could not verify the SSH Runtime connection.',
-                  recoveryHint: 'Refresh the Runtime status, then retry Open.',
-                  targetLabel: label,
-                }),
-              );
-            }
-            placement = readyRecord.placement;
+            // A transport failure is not evidence that the Runtime stopped.
+            throw error;
           }
         }
         bridgeProxyDurationMS = Date.now() - bridgeProxyStartedAtUnixMS;
@@ -16193,7 +16099,7 @@ async function openRuntimePlacementBridgeFromLauncher(
           });
           readiness = await probeLocalRuntimeBridgeStartup(bridgeSession.startup, {
             timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
-            signal,
+            signal: connectionBudget.signal,
             shellCacheScope: targetID,
           });
           if (readiness.ok) {
@@ -16206,12 +16112,11 @@ async function openRuntimePlacementBridgeFromLauncher(
             label,
           );
           const recoveryAttempts = managedEnvironmentOpenRecoveryAttemptsByTargetID.get(targetID) ?? 0;
-          if (recoveryAttempts >= 2 || readinessFailure.code === 'desktop_update_required') {
+          if (recoveryAttempts >= 2 || !runtimeServiceNeedsRuntimeUpdate(bridgeSession.startup.runtime_service)) {
             throw new DesktopOperationFailureError(readinessFailure);
           }
           managedEnvironmentOpenRecoveryAttemptsByTargetID.set(targetID, recoveryAttempts + 1);
-          const requiredOperation: ManagedRuntimeLifecycleOperation =
-            readinessFailure.code === 'runtime_update_required' ? 'update_runtime' : 'restart';
+          const requiredOperation: ManagedRuntimeLifecycleOperation = 'update_runtime';
           await bridgeLease?.release();
           bridgeLease = undefined;
           bridgeSession = null;
@@ -16223,19 +16128,14 @@ async function openRuntimePlacementBridgeFromLauncher(
             environmentLabel: label,
             targetID,
             targetLabel: label,
-            title: requiredOperation === 'update_runtime' ? 'Updating Runtime' : 'Restarting Runtime',
-            detail:
-              requiredOperation === 'update_runtime'
-                ? 'Desktop is repairing or updating the Runtime before retrying Open.'
-                : 'Desktop is restarting the Runtime before retrying Open.',
+            title: 'Updating Runtime',
+            detail: 'Desktop is repairing or updating the Runtime before retrying Open.',
           });
+          connectionBudget.dispose();
           const lifecycleResult = await runEnvironmentRuntimeLifecycleFromLauncher(
             {
               ...request,
-              kind:
-                requiredOperation === 'update_runtime'
-                  ? ('update_environment_runtime' as const)
-                  : ('restart_environment_runtime' as const),
+              kind: 'update_environment_runtime' as const,
               environment_id: environmentID,
               label,
             },
@@ -16264,7 +16164,8 @@ async function openRuntimePlacementBridgeFromLauncher(
             }
             throw new DesktopOperationFailureError(lifecycleResult.failure ?? readinessFailure);
           }
-          await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+          connectionBudget = createRuntimeOpenConnectionBudget(signal);
+          await connectionBudget.wait(refreshWelcomeRuntimeHealthForEnvironment(environmentID));
           readyRecord = savedRuntimePlacementReadyRecord(targetID, environmentID, label, hostAccess, placement);
           if (!readyRecord) {
             throw new DesktopOperationFailureError(
@@ -16279,7 +16180,7 @@ async function openRuntimePlacementBridgeFromLauncher(
           }
           placement = readyRecord.placement;
           const nextBridgeStartedAtUnixMS = Date.now();
-          bridgeLease = await acquireRuntimePlacementBridgeForReadyRecord(readyRecord!, operationKey, signal, sshPassword);
+          bridgeLease = await acquireRuntimePlacementBridgeForReadyRecord(readyRecord!, operationKey, connectionBudget.signal, sshPassword);
           bridgeSession = bridgeLease.record.session;
           bridgeProxyDurationMS = (bridgeProxyDurationMS ?? 0) + (Date.now() - nextBridgeStartedAtUnixMS);
         }
@@ -16294,6 +16195,8 @@ async function openRuntimePlacementBridgeFromLauncher(
       if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
         throw launcherActionFailureForRuntimeNotOpenable(record.startup, { environmentID: record.environment_id, targetLabel: record.label });
       }
+      connectionBudget.signal.throwIfAborted();
+      connectionBudget.dispose();
       const desktopModelSourceStartedAtUnixMS = Date.now();
       await prepareDesktopModels(bridgeLease!);
       desktopModelSourceDurationMS = Date.now() - desktopModelSourceStartedAtUnixMS;
@@ -16341,7 +16244,8 @@ async function openRuntimePlacementBridgeFromLauncher(
         target: sessionRecord.target.label,
         app_ready_state: sessionRecord.app_ready_state,
       });
-    } catch (error) {
+    } catch (caught) {
+      const error = !signal?.aborted && connectionBudget.signal.aborted ? connectionBudget.signal.reason : caught;
       console.warn('[redeven:desktop-session] environment open failed', {
         session_key: sessionRecord?.session_key ?? sessionKey,
         target: label,
@@ -16377,10 +16281,11 @@ async function openRuntimePlacementBridgeFromLauncher(
         }),
         operation_key: operationKey,
       };
+    } finally {
+      connectionBudget.dispose();
     }
     resetLauncherIssueState();
     managedEnvironmentOpenRecoveryAttemptsByTargetID.delete(targetID);
-    managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID.delete(targetID);
     await mutateDesktopPreferences((current) =>
       markSavedRuntimeTargetUsed(current, {
         environment_id: record!.session.placement_target_id,

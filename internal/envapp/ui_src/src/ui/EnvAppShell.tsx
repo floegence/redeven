@@ -252,6 +252,7 @@ import {
   notifyDesktopSessionAppReady,
   readDesktopSessionContextSnapshot,
   readDesktopTransportRecoverySnapshot,
+  waitForDesktopTransportReady,
   requestDesktopTransportRecoveryNow,
   stopDesktopTransportRecovery,
   subscribeDesktopTransportRecovery,
@@ -3097,7 +3098,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const localArtifactSourceCallbacks = {
-    beforeAcquire: async () => {
+    beforeAcquire: async ({ signal }: Readonly<{ signal: AbortSignal }>) => {
+      await waitForDesktopTransportReady(signal);
       pluginSessionReadinessCoordinator.cancel('Plugin session credential is being replaced');
       setStagedPluginSession(undefined);
       setPluginSessionReady(false);
@@ -3531,9 +3533,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   const recoverySnapshot = reconnectController.snapshot;
-  const recoveryVisible = createMemo(() => recoverySnapshot().state !== 'idle');
+  const recoveryVisible = createMemo(() => recoverySnapshot().state !== 'idle' && recoverySnapshot().state !== 'succeeded');
+  const recoveryBlocking = createMemo(() => recoverySnapshot().state === 'failed' || accessLocked());
   createEffect(() => {
-    if (viewMode() !== 'workbench' || recoveryVisible()) setWorkbenchPluginCenterOpen(false);
+    if (viewMode() !== 'workbench' || recoveryBlocking()) setWorkbenchPluginCenterOpen(false);
   });
   const activityFlowerLauncherVisible = createMemo(() => (
     flowerTurnLauncherOpen() && flowerTurnLauncherHandoff()?.mode === 'activity'
@@ -3545,8 +3548,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     && activityFlowerPlacement() !== 'full_page'
     && layout.sidebarActiveTab() !== ENV_TESSIVEN_ACTIVITY_ID
     && !activityFlowerLauncherVisible()
-    && !accessGateVisible()
-    && !recoveryVisible()
+    && activityContentAvailable()
+    && !recoveryBlocking()
   ));
   const activityFlowerResidentInFullPageHost = createMemo(() => {
     const host = activityFlowerFullPageHost();
@@ -3589,8 +3592,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           ? activityFlowerResidentInFullPageHost()
           : activityFlowerCompanionVisible() && activityFlowerResidentInCompanionHost()))
     && !activityFlowerLauncherVisible()
-    && !accessGateVisible()
-    && !recoveryVisible()
+    && activityContentAvailable()
+    && !recoveryBlocking()
   ));
   const flowerSurfaceEngaged = createMemo(() => (
     flowerSurfaceVisible()
@@ -4528,7 +4531,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     closeMobileNavigation();
   };
   createEffect(() => {
-    if (!layout.isMobile() || recoveryVisible() || accessGateVisible()) {
+    if (!layout.isMobile() || recoveryBlocking() || !activityContentAvailable()) {
       setMobileNavigationPage('closed');
       afterMobileNavigationClose = undefined;
     }
@@ -5389,9 +5392,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           tabindex={-1}
         >
           <div
-            class={`h-full min-h-0 ${recoveryVisible() ? 'pointer-events-none' : ''}`}
-            inert={recoveryVisible()}
-            aria-hidden={recoveryVisible() ? 'true' : undefined}
+            class={`h-full min-h-0 ${recoveryBlocking() ? 'pointer-events-none' : ''}`}
+            inert={recoveryBlocking()}
+            aria-hidden={recoveryBlocking() ? 'true' : undefined}
           >
             <Show when={activityContentAvailable()}>
               <ActivityAppsMain
@@ -5410,6 +5413,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
               when={accessGatePhase() === 'unlock_required'}
               fallback={(
                 <ConnectionRecoveryView
+                  retainWorkspace={runtimeConnectionEstablished()}
                   snapshot={recoverySnapshot()}
                   environmentName={environmentName()}
                   onRetry={() => reconnectController.requestImmediateRetry()}
@@ -5439,14 +5443,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const renderWorkbenchContent = () => (
     <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden outline-none" tabindex={-1}>
       <div
-        class={`h-full min-h-0 ${recoveryVisible() ? 'pointer-events-none' : ''}`}
-        inert={recoveryVisible() || workbenchPluginCenterBlocking()}
-        aria-hidden={recoveryVisible() || workbenchPluginCenterBlocking() ? 'true' : undefined}
+        class={`h-full min-h-0 ${recoveryBlocking() ? 'pointer-events-none' : ''}`}
+        inert={recoveryBlocking() || workbenchPluginCenterBlocking()}
+        aria-hidden={recoveryBlocking() || workbenchPluginCenterBlocking() ? 'true' : undefined}
       >
         <Show when={activityContentAvailable()}>
           <FlowerContextSource id="workbench:canvas" pageID="workbench" pageName="Workbench" mode="workbench">
           <EnvWorkbenchPage
-            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
+            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryBlocking()}
             dockItems={pluginDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
             dockActions={workbenchDockActions()}
@@ -5471,7 +5475,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         </Show>
       </div>
       <Show when={workbenchPluginCenterVisited()}>
-        <PluginCenterDrawer open={workbenchPluginCenterOpen() && viewMode() === 'workbench' && !recoveryVisible()}
+        <PluginCenterDrawer open={workbenchPluginCenterOpen() && viewMode() === 'workbench' && !recoveryBlocking()}
           onOpenChange={setWorkbenchPluginCenterOpen} onPresenceChange={onPluginCenterPresenceChange}
           title={i18n.t('uiCopy.plugin.centerTitle')}>
           <FlowerContextSource id="workbench:plugins" pageID="plugins" pageName={i18n.t('uiCopy.plugin.centerTitle')} mode="overlay" selected={workbenchPluginCenterOpen() && viewMode() === 'workbench'}>{renderPluginCenter(true)}</FlowerContextSource>
@@ -5482,6 +5486,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           when={accessGatePhase() === 'unlock_required'}
           fallback={(
             <ConnectionRecoveryView
+              retainWorkspace={runtimeConnectionEstablished()}
               snapshot={recoverySnapshot()}
               environmentName={environmentName()}
               onRetry={() => reconnectController.requestImmediateRetry()}
@@ -5511,6 +5516,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <Show when={accessGatePhase() === 'checking' || accessGatePhase() === 'ready'} fallback={accessGatePanel()}>
           <Show when={recoveryVisible()} fallback={renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}>
             <ConnectionRecoveryView
+              retainWorkspace={runtimeConnectionEstablished()}
               snapshot={recoverySnapshot()}
               environmentName={environmentName()}
               onRetry={() => reconnectController.requestImmediateRetry()}

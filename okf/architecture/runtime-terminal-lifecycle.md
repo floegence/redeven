@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime terminal lifecycle
 tags: [architecture, runtime, terminal, floeterm]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -19,6 +19,9 @@ Overflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the re
 Env App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values.
 
 Diagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.
+
+## Attachment recovery presentation
+The product adapter classifies explicit protocol disconnect/cancellation and published session closed/going-away/liveness/timeout errors as recoverable attachment exits. The existing bounded attachment retry preserves the terminal view and PTY identity without replaying input. Session-not-found closes the corresponding view; unclassified, rejected-stream, permission and protocol failures stay blocking and cancel pending retries. Floeterm remains the live attachment, geometry and controller owner.
 
 ## Native history budgets
 Runtime persists `terminal_history_retention` with nullable `max_lines`/`max_bytes` safe nonnegative integers and applies those defaults before terminal readiness. Published terminal-go owns validation, native limit application, pruning, snapshot invalidation and atomic Presentation. Defaults affect only subsequently created sessions; existing sessions are never silently reconfigured.

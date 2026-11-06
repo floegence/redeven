@@ -24,6 +24,7 @@ function fakeTransportManager(
   const release = vi.fn(async () => undefined);
   const acquire = vi.fn(async (input) => ({
     generation: 1,
+    verifyTransport: vi.fn(async () => 'healthy' as const),
     target: input.target,
     run: runMock,
     stream: vi.fn(),

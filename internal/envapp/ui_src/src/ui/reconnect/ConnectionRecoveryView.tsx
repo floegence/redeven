@@ -13,6 +13,7 @@ import type { ConnectionRecoverySnapshot } from './createRuntimeReconnectControl
 
 export type ConnectionRecoveryViewProps = Readonly<{
   snapshot: ConnectionRecoverySnapshot;
+  retainWorkspace?: boolean;
   environmentName: string;
   onRetry: () => Promise<void>;
   onStop: () => Promise<void>;
@@ -28,6 +29,7 @@ const STEP_TRANSLATION_KEYS = {
 
 export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
   const i18n = useI18n();
+  const compact = () => props.retainWorkspace && props.snapshot.state !== 'failed';
   const presentation = createMemo(() => createConnectionRecoveryPresentation(props.snapshot));
   const [online, setOnline] = createSignal(navigator.onLine);
   const [nowMs, setNowMs] = createSignal(Date.now());
@@ -130,6 +132,7 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
   };
 
   return (
+    <Show when={compact()} fallback={
     <section
       class="floe-window-status z-20"
       data-testid="connection-recovery-view"
@@ -216,5 +219,28 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
         </details>
       </div>
     </section>
+    }>
+      <aside class="absolute inset-x-3 top-3 z-20 mx-auto w-fit max-w-[calc(100%-1.5rem)] rounded-lg border border-border bg-background px-3 py-2 shadow-sm"
+        data-recovery-compact data-testid="connection-recovery-view" data-recovery-state={props.snapshot.state}>
+        <div class="flex min-w-0 items-center gap-3">
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
+          <span class="min-w-0 truncate text-xs" role="status" aria-live="polite">{title()}</span>
+          <details class="min-w-0 text-xs">
+            <summary class="cursor-pointer whitespace-nowrap rounded px-1 py-1 text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">{i18n.t('connectionRecovery.technicalDetails')}</summary>
+            <div class="absolute left-1/2 top-full mt-1 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 max-h-[60vh] overflow-auto rounded-lg border border-border bg-background p-3 shadow-sm">
+              <p class="mb-1 truncate text-xs font-medium">{props.environmentName}</p>
+              <p class="mb-3 text-xs text-muted-foreground">{summary()}</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <Show when={canRetry()}><Button size="sm" variant="outline" disabled={retrying() || serverWait()} onClick={() => void retry()}>{i18n.t('connectionRecovery.retryNow')}</Button></Show>
+                <Show when={props.snapshot.state === 'recovering'}><Button ref={stopButton} size="sm" variant="ghost" disabled={stopping()} onClick={() => void stop()}>{i18n.t('connectionRecovery.stopRetry')}</Button></Show>
+                <Show when={props.snapshot.state === 'paused'}><Button ref={resumeButton} size="sm" disabled={retrying() || !online()} onClick={() => void retry()}>{i18n.t('connectionRecovery.resumeRetry')}</Button></Show>
+                <Button size="sm" variant="ghost" onClick={() => void copyDiagnostic()}>{i18n.t(copied() ? 'connectionRecovery.copiedDiagnostic' : 'connectionRecovery.copyDiagnostic')}</Button>
+              </div>
+              <pre class="mt-3 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-4 text-muted-foreground">{presentation().diagnostic_text}</pre>
+            </div>
+          </details>
+        </div>
+      </aside>
+    </Show>
   );
 }

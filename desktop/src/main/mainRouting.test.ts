@@ -1302,10 +1302,10 @@ describe('main routing', () => {
     );
     expect(bridgeOpenSrc).toContain('canReuseFreshRuntimeOpenPreflight(cachedHealth, readyRecord)');
     expect(bridgeOpenSrc).toContain("? 'fresh_health_reused'");
-    expect(bridgeOpenSrc).toContain('if (!reusedFreshRuntimePreflight) {');
-    expect(bridgeOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)');
+    expect(bridgeOpenSrc).toContain('if (!reusedFreshRuntimePreflight && !tryKnownBridge && !existingBridge) {');
+    expect(bridgeOpenSrc).toContain('await connectionBudget.wait(refreshWelcomeRuntimeHealthForEnvironment(environmentID))');
     expect(bridgeOpenSrc.indexOf('const existingSession = liveSession(sessionKey)')).toBeLessThan(
-      bridgeOpenSrc.indexOf('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)'),
+      bridgeOpenSrc.indexOf('await connectionBudget.wait(refreshWelcomeRuntimeHealthForEnvironment(environmentID))'),
     );
     expect(bridgeOpenSrc).not.toContain('await runtimeLifecycleCoordinator.waitForReadyMutation(lifecycleTargetKey)');
     expect(bridgeOpenSrc).toContain('launcherActionFailureFromRuntimeLifecycleError(error');
@@ -1325,16 +1325,14 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain("runtimeProbeCacheDecision = 'fresh_health_retry_refreshed'");
     expect(bridgeOpenSrc).toContain('const refreshedReadyRecord = savedRuntimePlacementReadyRecord(');
     expect(bridgeOpenSrc).toContain(
-      'The Runtime is still starting. Desktop will retry the connection before restarting it.',
+      'Desktop is restoring the connection to the same Runtime.',
     );
-    expect(bridgeOpenSrc).toContain('managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID');
-    expect(bridgeOpenSrc).toContain('MAX_MANAGED_ENVIRONMENT_OPEN_BRIDGE_RECOVERY_ATTEMPTS');
-    expect(bridgeOpenSrc).toContain('The SSH Runtime was restarted, but Desktop still could not connect to it.');
-    expect(bridgeOpenSrc).toContain(
-      'Refresh status and retry Open. If it continues, update the Runtime from this environment card.',
-    );
-    expect(bridgeOpenSrc).toContain("kind: 'restart_environment_runtime' as const");
-    expect(bridgeOpenSrc).toContain('The SSH Runtime stopped while Desktop was connecting.');
+    expect(bridgeOpenSrc).not.toContain('managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID');
+    expect(bridgeOpenSrc).not.toContain('MAX_MANAGED_ENVIRONMENT_OPEN_BRIDGE_RECOVERY_ATTEMPTS');
+    expect(bridgeOpenSrc).not.toContain('The SSH Runtime was restarted, but Desktop still could not connect to it.');
+    expect(bridgeOpenSrc).toContain('runtimeOpenHasManagementEvidence(health)');
+    expect(bridgeOpenSrc).not.toContain("kind: 'restart_environment_runtime' as const");
+    expect(bridgeOpenSrc).not.toContain('The SSH Runtime stopped while Desktop was connecting.');
     expect(bridgeOpenSrc).toContain("phase: 'checking_env_app_readiness'");
     expect(bridgeOpenSrc.match(/probeLocalRuntimeBridgeStartup\(bridgeSession\.startup/gu)).toHaveLength(1);
     expect(bridgeOpenSrc).toContain('shellCacheScope: targetID');

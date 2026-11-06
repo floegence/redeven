@@ -63,7 +63,20 @@ afterEach(() => {
 });
 
 describe('ConnectionRecoveryView', () => {
-  it('fully covers a retained page during recoverable interruptions', () => {
+  it('keeps retained work visible without a fullscreen countdown during reconnection', () => {
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = render(() => <I18nProvider><ConnectionRecoveryView retainWorkspace environmentName="Dev"
+      snapshot={{ ...failedSnapshot(), state: 'recovering', phase: 'protocol_connect', desktop_transport: undefined }}
+      onRetry={async () => undefined} onStop={async () => undefined} /></I18nProvider>, host);
+    try {
+      expect(host.querySelector('[data-recovery-compact]')).not.toBeNull();
+      expect(host.querySelector('.floe-window-status')).toBeNull();
+      expect(host.querySelector('[role="timer"]')).toBeNull();
+      expect(host.querySelector('details')?.open).toBe(false);
+      expect(host.textContent).toContain('Restoring connection');
+    } finally { dispose(); }
+  });
+  it('uses the full first-load presentation before a workspace is established', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const dispose = render(() => <I18nProvider><ConnectionRecoveryView

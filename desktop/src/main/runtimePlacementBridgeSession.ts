@@ -151,6 +151,7 @@ export type StartRuntimePlacementBridgeSessionArgs = Readonly<{
   ssh_transport_manager?: DesktopSSHTransportManager;
   fallback_local_id?: string;
   signal?: AbortSignal;
+  connect_timeout_ms?: number;
   recovery_scheduler?: Readonly<{
     backoff_ms?: readonly number[];
     wait?: (delayMS: number, signal: AbortSignal) => Promise<void>;
@@ -175,6 +176,13 @@ class RuntimePlacementBridgeHTTP2Error extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'RuntimePlacementBridgeHTTP2Error';
+  }
+}
+
+class RuntimePlacementBridgeDeadlineError extends RuntimePlacementBridgeHTTP2Error {
+  constructor() {
+    super('Runtime Placement Bridge connection deadline exceeded.');
+    this.name = 'RuntimePlacementBridgeDeadlineError';
   }
 }
 
@@ -331,8 +339,10 @@ async function spawnBridgeCommand(
 }
 
 async function closeStreamingCommand(command: RuntimeHostStreamingCommand): Promise<void> {
+  const timer = setTimeout(() => command.kill('SIGKILL'), 1_000);
+  timer.unref();
   command.kill('SIGTERM');
-  await command.closed.catch(() => undefined);
+  try { await command.closed.catch(() => undefined); } finally { clearTimeout(timer); }
 }
 
 function bridgeTransportTermination(
@@ -598,6 +608,20 @@ async function openRemoteBridgeTransport(
   signal: AbortSignal,
   id: number,
 ): Promise<RemoteBridgeTransport> {
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(new RuntimePlacementBridgeDeadlineError()), args.connect_timeout_ms ?? 15_000);
+  try {
+    return await openRemoteBridgeTransportWithinDeadline(args, AbortSignal.any([signal, deadline.signal]), id);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function openRemoteBridgeTransportWithinDeadline(
+  args: StartRuntimePlacementBridgeSessionArgs,
+  signal: AbortSignal,
+  id: number,
+): Promise<RemoteBridgeTransport> {
   const command = await spawnBridgeCommand(args, signal);
   void command.closed.catch(() => undefined);
   const connection = streamingCommandConnection(command);
@@ -615,6 +639,9 @@ async function openRemoteBridgeTransport(
   session.setLocalWindowSize(RUNTIME_PLACEMENT_BRIDGE_SESSION_WINDOW_BYTES);
   const keepalive = startHTTP2Keepalive(session, connection);
   const closed = bridgeTransportTermination(command, session);
+  const abort = () => destroyHTTP2Connection(session, connection, normalizeError(signal.reason));
+  signal.addEventListener('abort', abort, { once: true });
+  if (signal.aborted) abort();
   try {
     await waitForHTTP2Connect(session, closed, signal);
     const hello = parseRuntimePlacementBridgeHello(await readHTTP2ControlResponse(
@@ -644,9 +671,15 @@ async function openRemoteBridgeTransport(
     };
   } catch (error) {
     keepalive.stop();
+    const failure = signal.aborted ? normalizeError(signal.reason) : normalizeError(error);
+    if ((!signal.aborted || failure instanceof RuntimePlacementBridgeDeadlineError) && transportFailureIsRecoverable(failure)) {
+      await command.verifyTransport?.().catch(() => undefined);
+    }
     destroyHTTP2Connection(session, connection);
     await closeStreamingCommand(command);
-    throw error;
+    throw failure;
+  } finally {
+    signal.removeEventListener('abort', abort);
   }
 }
 
@@ -743,6 +776,7 @@ export async function startRuntimePlacementBridgeSession(
   ): DesktopSessionTransportRecoverySnapshot => {
     recoverySnapshot = freezeRecoverySnapshot({
       ...next,
+      ssh_transport_generation: currentTransport?.command.transport_generation ?? recoverySnapshot.ssh_transport_generation,
       revision: recoverySnapshot.revision + 1,
     });
     for (const listener of recoveryListeners) {
@@ -922,15 +956,18 @@ export async function startRuntimePlacementBridgeSession(
     // waiting for proxy teardown so a lingering HTTP connection cannot hold
     // lifecycle completion open indefinitely.
     if (transport) destroyHTTP2Connection(transport.session, transport.connection);
-    transport?.command.kill('SIGTERM');
+    if (retiringTransport) destroyHTTP2Connection(retiringTransport.session, retiringTransport.connection);
     failActiveStreams(error ?? new Error('Runtime Placement Bridge session is closed.'));
     await Promise.all([
       proxyClose?.().catch(() => undefined) ?? Promise.resolve(),
-      transport?.command.closed.catch(() => undefined) ?? Promise.resolve(),
+      transport ? closeStreamingCommand(transport.command) : Promise.resolve(),
+      retiringTransport ? closeStreamingCommand(retiringTransport.command) : Promise.resolve(),
     ]);
     recoveryListeners.clear();
     resolveClosed(failure ? { kind: 'failed', failure } : { kind: 'closed' });
   };
+
+  let retiringTransport: RemoteBridgeTransport | null = null;
 
   const runTransportLoop = async (transport: RemoteBridgeTransport): Promise<void> => {
     const terminalError = await transport.closed;
@@ -938,6 +975,8 @@ export async function startRuntimePlacementBridgeSession(
       return;
     }
     currentTransport = null;
+    retiringTransport = transport;
+    failActiveStreams(new Error('Runtime Placement Bridge is temporarily unavailable.'));
     if (args.host_access.kind === 'ssh_host' && transportFailureIsRecoverable(terminalError)) {
       const nextGeneration = recoverySnapshot.generation + 1;
       const firstDelayMS = recoveryBackoffMS[0] ?? DEFAULT_BRIDGE_RECOVERY_BACKOFF_MS[0];
@@ -952,9 +991,12 @@ export async function startRuntimePlacementBridgeSession(
         actions: ['retry_now'],
       });
     }
-    failActiveStreams(new Error('Runtime Placement Bridge is temporarily unavailable.'));
+    if (args.host_access.kind === 'ssh_host' && transportFailureIsRecoverable(terminalError)) {
+      await transport.command.verifyTransport?.().catch(() => undefined);
+    }
     destroyHTTP2Connection(transport.session, transport.connection);
     await closeStreamingCommand(transport.command);
+    if (retiringTransport === transport) retiringTransport = null;
     if (sessionController.signal.aborted || args.signal?.aborted) {
       await settleBridgeSession();
       return;
@@ -968,6 +1010,7 @@ export async function startRuntimePlacementBridgeSession(
 
   const attachTransport = (transport: RemoteBridgeTransport) => {
     currentTransport = transport;
+    recoverySnapshot = freezeRecoverySnapshot({ ...recoverySnapshot, ssh_transport_generation: transport.command.transport_generation });
     void runTransportLoop(transport);
   };
 
@@ -1088,7 +1131,7 @@ export async function startRuntimePlacementBridgeSession(
   };
 
   function startRecovery(): void {
-    if (closed || recoveryPaused || recoveryTask) {
+    if (closed || recoveryPaused || recoveryTask || retiringTransport) {
       return;
     }
     recoveryTask = recover().finally(() => {
@@ -1194,6 +1237,14 @@ export async function startRuntimePlacementBridgeSession(
       };
     },
     requestRecoveryNow: () => {
+      if (!closed && recoverySnapshot.phase === 'ready' && args.host_access.kind === 'ssh_host') {
+        // Upper-layer retries may expose a stalled SSH connection before the
+        // idle HTTP/2 keepalive does. Verify only; a healthy peer stays intact.
+        const verify = currentTransport?.command.verifyTransport;
+        if (!verify) return false;
+        void verify().catch(() => undefined);
+        return true;
+      }
       if (closed || (recoverySnapshot.phase !== 'waiting' && recoverySnapshot.phase !== 'paused')) {
         return false;
       }

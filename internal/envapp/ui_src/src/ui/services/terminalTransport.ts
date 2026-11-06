@@ -13,7 +13,7 @@ import {
   type SemanticTerminalLiveTransport,
   type TerminalSemanticClearResult,
 } from '@floegence/floeterm-terminal-web/live';
-import type { Session } from '@floegence/flowersec-core';
+import { SessionError, type Session } from '@floegence/flowersec-core';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
@@ -48,6 +48,9 @@ export type TerminalAttachLifecycleExit = 'disconnected' | 'session_gone';
 
 export function classifyTerminalAttachLifecycleExit(error: unknown): TerminalAttachLifecycleExit | null {
   if (isBestEffortTerminalDisconnectError(error)) return 'disconnected';
+  if (error instanceof SessionError && ['closed', 'going_away', 'liveness_failed', 'timeout', 'canceled'].includes(error.code)) {
+    return 'disconnected';
+  }
   if (error instanceof TerminalLiveServerError && error.code === TerminalLiveErrorCode.SessionNotFound) {
     return 'session_gone';
   }

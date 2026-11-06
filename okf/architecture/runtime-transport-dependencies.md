@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime transport composition and Env App recovery
 tags: [architecture, dependencies, terminal]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -16,6 +16,8 @@ Published Flowersec owns Transportv3 connection/session/RPC/streams; Floeterm ow
 Published WebSocketHTTPServerOptions.ApplicationHandler composes Gateway HTTP/Runtime on one TLS endpoint; egress.HTTPSProxy supplies explicit Cloud routing. [Web Center](web-environment-center.md) uses published controller/pinned RuntimeTLS/in-process Connector without new wire/replay. Desktop SSH placementHTTP2 remains separate. [Terminal](runtime-terminal-lifecycle.md) owns framing/history/attachment/warmup.
 
 Env App adapts published artifact sources to exact origin/environment across HTTPS,explicit HTTP,Cloud/private loopback,requiring matching Service Worker control. Reconnect uses discriminated source contract. Map Portal uppercase codes to Floe HTTP classifier; emit canonical Flowersec codes retaining terminal/retryable/Retry-After authority. Desktop generation/revision fences stale updates. One immutable diagnostic view,no business-request replay.
+
+Redeven coordinates its SSH bridge owner with the published acquisition source: wait for Desktop readiness before requesting local credentials and bound the product fetch/body to 15 seconds. Flowersec remains the only protocol retry authority. Failed session HTTP rejects mutations immediately; a retained view never queues them for reconnect. Existing published `SessionError` codes supply terminal-disconnect classification without interpreting message text or changing upstream wire contracts.
 
 # Boundaries
 

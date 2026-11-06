@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { canReuseFreshRuntimeOpenPreflight } from './runtimeOpenPreflight';
+import { canReuseFreshRuntimeOpenPreflight, canAttemptKnownRuntimeBridge, runtimeOpenHasManagementEvidence, createRuntimeOpenConnectionBudget } from './runtimeOpenPreflight';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH, type RuntimeServiceSnapshot } from '../shared/runtimeService';
 
@@ -69,5 +69,59 @@ describe('runtimeOpenPreflight', () => {
     expect(canReuseFreshRuntimeOpenPreflight(health(), ready({
       runtime_service: runtimeService({ runtime_build_time: 'other-build' }),
     }), 10_001)).toBe(false);
+  });
+});
+
+describe('bridge-first opening', () => {
+  it('uses a known openable placement as a dial hint without depending on observation age', () => {
+    expect(canAttemptKnownRuntimeBridge(ready())).toBe(true);
+    expect(canAttemptKnownRuntimeBridge(null)).toBe(false);
+    expect(canAttemptKnownRuntimeBridge(ready({ runtime_service: runtimeService({ compatibility: 'update_required' }) }))).toBe(false);
+  });
+  it('does not infer lifecycle authority from an unreachable or unverified target', () => {
+    for (const offline_reason_code of ['probe_failed', 'runtime_disconnected', 'unverified', 'auth_required'] as const) {
+      expect(runtimeOpenHasManagementEvidence(health({ status: 'offline', offline_reason_code }))).toBe(false);
+    }
+    expect(runtimeOpenHasManagementEvidence(health({ status: 'offline', offline_reason_code: 'not_started' }))).toBe(true);
+  });
+});
+
+
+describe('Runtime Open connection budget', () => {
+  it('shares one deadline across observations and connection stages', async () => {
+    vi.useFakeTimers();
+    const budget = createRuntimeOpenConnectionBudget(undefined, 100);
+    try {
+      await budget.wait(Promise.resolve('known placement'));
+      await vi.advanceTimersByTimeAsync(75);
+      const stalled = budget.wait(new Promise<void>(() => undefined));
+      const rejected = expect(stalled).rejects.toMatchObject({ name: 'TimeoutError' });
+      await vi.advanceTimersByTimeAsync(25);
+      await rejected;
+      expect(budget.signal.aborted).toBe(true);
+    } finally { budget.dispose(); vi.useRealTimers(); }
+  });
+
+  it('cancels a shared observation without admitting its late result', async () => {
+    const cancel = new AbortController();
+    const budget = createRuntimeOpenConnectionBudget(cancel.signal);
+    let finish!: () => void;
+    let admitted = false;
+    try {
+      const pending = budget.wait(new Promise<void>(resolve => { finish = resolve; })).then(() => { admitted = true; });
+      cancel.abort();
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      finish(); await Promise.resolve();
+      expect(admitted).toBe(false);
+    } finally { budget.dispose(); }
+  });
+
+  it('releases the deadline before handing an established connection to its session', async () => {
+    vi.useFakeTimers();
+    const budget = createRuntimeOpenConnectionBudget(undefined, 100);
+    budget.dispose();
+    await vi.advanceTimersByTimeAsync(101);
+    expect(budget.signal.aborted).toBe(false);
+    vi.useRealTimers();
   });
 });

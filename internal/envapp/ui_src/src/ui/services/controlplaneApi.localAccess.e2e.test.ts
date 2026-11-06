@@ -229,7 +229,7 @@ describe('controlplaneApi local access flow', () => {
       expect(String(input)).toBe('/api/local/direct/connect_artifact');
       expect(init?.method).toBe('POST');
       expect(init?.credentials).toBe('same-origin');
-      expect(init?.signal).toBe(controller.signal);
+      expect(init?.signal?.aborted).toBe(false);
       expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume123');
       return jsonResponse({
         plugin_session_credential: 'plugin-generation-secret',

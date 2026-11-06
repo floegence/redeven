@@ -176,6 +176,98 @@ describe('SSH package upload deadlines', () => {
   });
 });
 
+describe('SSH transport verification', () => {
+  it('retires a live but unresponsive generation once and never replays business commands', async () => {
+    vi.useFakeTimers();
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'recovery' });
+      const peer = await fixture.manager.acquire({ target: target(), credentialScope: 'recovery' });
+      const child = fakeProcess({ longLived: true });
+      fixture.spawnProcess.mockImplementationOnce(() => child);
+      const verification = lease.verifyTransport({ timeoutMs: 25 });
+      const concurrent = peer.verifyTransport({ timeoutMs: 25 });
+      await vi.advanceTimersByTimeAsync(26);
+      expect(await verification).toBe('retired');
+      expect(await concurrent).toBe('retired');
+      expect(fixture.masters[0]!.kill).toHaveBeenCalledOnce();
+      await expect(peer.run('mutate')).rejects.toBeInstanceOf(DesktopSSHTransportInterruptedError);
+      const fresh = await fixture.manager.acquire({ target: target(), credentialScope: 'recovery' });
+      expect(fresh.generation).toBeGreaterThan(lease.generation);
+      expect(await lease.verifyTransport()).toBe('superseded');
+      expect(fixture.masters[1]!.kill).not.toHaveBeenCalled();
+      expect(fixture.calls.some(args => args.at(-1) === 'mutate')).toBe(false);
+      await Promise.all([lease.release(), peer.release(), fresh.release()]);
+    } finally { await fixture.manager.dispose(); vi.useRealTimers(); }
+  });
+
+  it('isolates password retirement and preserves the saved credential on replacement', async () => {
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target('password'), credentialScope: 'a', sshPassword: 'a-secret' });
+      const other = await fixture.manager.acquire({ target: target('password'), credentialScope: 'b', sshPassword: 'b-secret' });
+      fixture.spawnProcess.mockImplementationOnce(() => fakeProcess({ exitCode: 255 }));
+      expect(await lease.verifyTransport()).toBe('retired');
+      const next = await fixture.manager.acquire({ target: target('password'), credentialScope: 'a' });
+      expect(next.generation).toBeGreaterThan(lease.generation);
+      expect(fixture.masters[1]!.kill).not.toHaveBeenCalled();
+      await expect(other.run('true')).resolves.toMatchObject({ exit_code: 0 });
+      const options = (fixture.spawnProcess.mock.calls as unknown as Array<[string, string[], { env: NodeJS.ProcessEnv }]>).slice().reverse().find(([, args]) => args.includes('-M'))?.[2];
+      expect(options?.env.REDEVEN_DESKTOP_SSH_PASSWORD).toBe('a-secret');
+      expect(fixture.calls.flat().join(' ')).not.toContain('secret');
+    } finally { await fixture.manager.dispose(); }
+  });
+
+  it('rejects canceled verification before probing and cancels only its waiter once shared work begins', async () => {
+    vi.useFakeTimers();
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'recovery' });
+      const count = fixture.spawnProcess.mock.calls.length;
+      await expect(lease.verifyTransport({ signal: AbortSignal.abort() })).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fixture.spawnProcess).toHaveBeenCalledTimes(count);
+      fixture.spawnProcess.mockImplementationOnce(() => fakeProcess({ longLived: true }));
+      const cancel = new AbortController();
+      const first = lease.verifyTransport({ signal: cancel.signal, timeoutMs: 25 });
+      const canceled = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+      const second = lease.verifyTransport({ timeoutMs: 25 });
+      cancel.abort();
+      await canceled;
+      await vi.advanceTimersByTimeAsync(26);
+      expect(await second).toBe('retired');
+      expect(fixture.masters[0]!.kill).toHaveBeenCalledOnce();
+    } finally { await fixture.manager.dispose(); vi.useRealTimers(); }
+  });
+
+  it('verifies the generation after the ended bridge releases its lease', async () => {
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'recovery' });
+      await lease.release();
+      fixture.spawnProcess.mockImplementationOnce(() => fakeProcess({ exitCode: 255 }));
+      expect(await lease.verifyTransport()).toBe('retired');
+      expect(fixture.masters[0]!.kill).toHaveBeenCalledOnce();
+      const replacement = await fixture.manager.acquire({ target: target(), credentialScope: 'recovery' });
+      expect(replacement.generation).toBeGreaterThan(lease.generation);
+    } finally { await fixture.manager.dispose(); }
+  });
+
+  it('keeps a responsive shared master and scopes retirement to the failed host', async () => {
+    const fixture = managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'recovery' });
+      expect(await lease.verifyTransport()).toBe('healthy');
+      expect(fixture.calls.at(-1)?.at(-1)).toBe('true');
+      expect(fixture.masters[0]!.kill).not.toHaveBeenCalled();
+      const other = await fixture.manager.acquire({ target: { ...target(), ssh_destination: 'other' }, credentialScope: 'other' });
+      fixture.spawnProcess.mockImplementationOnce(() => fakeProcess({ exitCode: 255 }));
+      expect(await lease.verifyTransport()).toBe('retired');
+      expect(fixture.masters[1]!.kill).not.toHaveBeenCalled();
+      await expect(other.run('true')).resolves.toMatchObject({ exit_code: 0 });
+    } finally { await fixture.manager.dispose(); }
+  });
+});
+
 describe('Windows native SSH transport', () => {
   it('reports a closed upload pipe through the command promise', async () => {
     const fixture = windowsManagerFixture();

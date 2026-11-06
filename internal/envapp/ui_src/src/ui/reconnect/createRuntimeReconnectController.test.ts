@@ -95,6 +95,30 @@ describe('createRuntimeReconnectController', () => {
     dispose();
   });
 
+  it('requests one SSH verification per repeated upper-layer attempt without replacing the retry owner', () => {
+    const verify = vi.fn(async () => true);
+    const retry = vi.fn(() => true);
+    let controller!: RuntimeReconnectController;
+    const dispose = createRoot(disposeRoot => {
+      controller = createRuntimeReconnectController({ enabled: () => true,
+        desktopTransport: () => ({ generation: 1, revision: 1, phase: 'ready', attempt_count: 0, actions: [] }),
+        requestDesktopRecoveryNow: verify, retryProtocolNow: retry,
+        reconnect: async () => undefined, stopRetry: () => undefined });
+      return disposeRoot;
+    });
+    try {
+      const failure = { code: 'transport_unavailable' as const, retryable: true, technical_detail: '' };
+      controller.activateWaiting(failure, { attempt: 1, terminal: false });
+      expect(verify).not.toHaveBeenCalled();
+      controller.activateWaiting(failure, { attempt: 2, terminal: false });
+      controller.activateWaiting(failure, { attempt: 2, terminal: false });
+      expect(verify).toHaveBeenCalledOnce();
+      controller.activateWaiting({ ...failure, code: 'authentication_failed', retryable: false }, { attempt: 3, terminal: true });
+      expect(verify).toHaveBeenCalledOnce();
+      expect(retry).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  });
+
   it('projects Flowersec waiting state without scheduling product retries', async () => {
     const retryProtocolNow = vi.fn(() => true);
 

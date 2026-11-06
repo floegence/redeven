@@ -14511,7 +14511,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-06",
         "tags": [
           "architecture",
           "floeterm",
@@ -14521,15 +14521,15 @@
         "title": "Runtime terminal lifecycle",
         "type": "Runtime Contract"
       },
-      "body_length": 2714,
+      "body_length": 3253,
       "summary": "Floeterm owns PTY/Ghostty VT, geometry/controller epoch, input encoding, history/reset and atomic Presentation. Redeven maps permission/session metadata/placement. Browser consumes bounded semantic streams without parsing bytes or introducing a second terminal state machine.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The runtime wraps `termgo.NewManager` so one terminal-go `SessionActor` owns each PTY, native Ghostty VT, canonical geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation.\n\nOverflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.\n\n## Terminal startup and warmup\nEnv App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values.\n\nDiagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.\n\n## Native history budgets\nRuntime persists `terminal_history_retention` with nullable `max_lines`/`max_bytes` safe nonnegative integers and applies those defaults before terminal readiness. Published terminal-go owns validation, native limit application, pruning, snapshot invalidation and atomic Presentation. Defaults affect only subsequently created sessions; existing sessions are never silently reconfigured.\n\n`/_redeven_proxy/api/terminal/history-retention` is the product settings adapter: GET reads defaults or an authorized session; admin-only PUT persists and activates defaults; POST applies explicit limits to a session using its connection ID and transport generation. Session application reuses shell/container permission and ownership checks, is principal-bound, does not transfer controller ownership, and rejects stale attachments. Limits preserve process, live screen, geometry and content epoch, while invalidating historical snapshots through the upstream history epoch. No local implementation of terminal retention or RPC retry is introduced.",
-          "char_count": 1940
+          "body": "The runtime wraps `termgo.NewManager` so one terminal-go `SessionActor` owns each PTY, native Ghostty VT, canonical geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation.\n\nOverflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.\n\n## Terminal startup and warmup\nEnv App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values.\n\nDiagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.\n\n## Attachment recovery presentation\nThe product adapter classifies explicit protocol disconnect/cancellation and published session closed/going-away/liveness/timeout errors as recoverable attachment exits. The existing bounded attachment retry preserves the terminal view and PTY identity without replaying input. Session-not-found closes the corresponding view; unclassified, rejected-stream, permission and protocol failures stay blocking and cancel pending retries. Floeterm remains the live attachment, geometry and controller owner.\n\n## Native history budgets\nRuntime persists `terminal_history_retention` with nullable `max_lines`/`max_bytes` safe nonnegative integers and applies those defaults before terminal readiness. Published terminal-go owns validation, native limit application, pruning, snapshot invalidation and atomic Presentation. Defaults affect only subsequently created sessions; existing sessions are never silently reconfigured.\n\n`/_redeven_proxy/api/terminal/history-retention` is the product settings adapter: GET reads defaults or an authorized session; admin-only PUT persists and activates defaults; POST applies explicit limits to a session using its connection ID and transport generation. Session application reuses shell/container permission and ownership checks, is principal-bound, does not transfer controller ownership, and rejects stale attachments. Limits preserve process, live screen, geometry and content epoch, while invalidating historical snapshots through the upstream history epoch. No local implementation of terminal retention or RPC retry is introduced.",
+          "char_count": 2479
         },
         {
           "id": "boundaries",
@@ -14586,7 +14586,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-06",
         "tags": [
           "architecture",
           "dependencies",
@@ -14595,15 +14595,15 @@
         "title": "Runtime transport composition and Env App recovery",
         "type": "Runtime Contract"
       },
-      "body_length": 4390,
+      "body_length": 4888,
       "summary": "Published Flowersec owns acquisition, framing, retries and connection replacement; Redeven maps exact product authorization onto one current Env App session. Views and consumers share that session without reconnecting or replaying business requests, while epochs fence obsolete Desktop observations.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Published Flowersec owns Transportv3 connection/session/RPC/streams; Floeterm owns terminal lifecycle. Pins: terminal-go v0.20.0 and Flowersec Go v5.12.0. Env App and Desktop consume Flowersec TypeScript v5.12.0. Each Env App shares one current protocol session; switching thread/Activity/Workbench/terminal/file cannot reconnect it. Register complete AI inventory in direct/remote profiles before session freeze; declared methods cannot become router404. Stop is one RPC lifecycle command,no fallback.\n\nPublished WebSocketHTTPServerOptions.ApplicationHandler composes Gateway HTTP/Runtime on one TLS endpoint; egress.HTTPSProxy supplies explicit Cloud routing. [Web Center](web-environment-center.md) uses published controller/pinned RuntimeTLS/in-process Connector without new wire/replay. Desktop SSH placementHTTP2 remains separate. [Terminal](runtime-terminal-lifecycle.md) owns framing/history/attachment/warmup.\n\nEnv App adapts published artifact sources to exact origin/environment across HTTPS,explicit HTTP,Cloud/private loopback,requiring matching Service Worker control. Reconnect uses discriminated source contract. Map Portal uppercase codes to Floe HTTP classifier; emit canonical Flowersec codes retaining terminal/retryable/Retry-After authority. Desktop generation/revision fences stale updates. One immutable diagnostic view,no business-request replay.",
-          "char_count": 1371
+          "body": "Published Flowersec owns Transportv3 connection/session/RPC/streams; Floeterm owns terminal lifecycle. Pins: terminal-go v0.20.0 and Flowersec Go v5.12.0. Env App and Desktop consume Flowersec TypeScript v5.12.0. Each Env App shares one current protocol session; switching thread/Activity/Workbench/terminal/file cannot reconnect it. Register complete AI inventory in direct/remote profiles before session freeze; declared methods cannot become router404. Stop is one RPC lifecycle command,no fallback.\n\nPublished WebSocketHTTPServerOptions.ApplicationHandler composes Gateway HTTP/Runtime on one TLS endpoint; egress.HTTPSProxy supplies explicit Cloud routing. [Web Center](web-environment-center.md) uses published controller/pinned RuntimeTLS/in-process Connector without new wire/replay. Desktop SSH placementHTTP2 remains separate. [Terminal](runtime-terminal-lifecycle.md) owns framing/history/attachment/warmup.\n\nEnv App adapts published artifact sources to exact origin/environment across HTTPS,explicit HTTP,Cloud/private loopback,requiring matching Service Worker control. Reconnect uses discriminated source contract. Map Portal uppercase codes to Floe HTTP classifier; emit canonical Flowersec codes retaining terminal/retryable/Retry-After authority. Desktop generation/revision fences stale updates. One immutable diagnostic view,no business-request replay.\n\nRedeven coordinates its SSH bridge owner with the published acquisition source: wait for Desktop readiness before requesting local credentials and bound the product fetch/body to 15 seconds. Flowersec remains the only protocol retry authority. Failed session HTTP rejects mutations immediately; a retained view never queues them for reconnect. Existing published `SessionError` codes supply terminal-disconnect classification without interpreting message text or changing upstream wire contracts.",
+          "char_count": 1869
         },
         {
           "id": "boundaries",
@@ -16539,7 +16539,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-06",
         "tags": [
           "desktop",
           "process",
@@ -16549,15 +16549,15 @@
         "title": "Desktop SSH runtime operations",
         "type": "Desktop Contract"
       },
-      "body_length": 4207,
+      "body_length": 5326,
       "summary": "Desktop uses saved SSH connection/placement for host/container Runtime. One local coordinator, operation, transport lease and temporary helper own lifecycle/recovery. Gateway/Cloud credentials grant no SSH authority; targets persist no Desktop supervisor or lifecycle lock.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Authentication and transport\nKeys bind normalized destination/port, authentication, SSH executable and credential scope. Preserve failure without substitution/replay. macOS/Linux use ControlMaster; Windows bounded native OpenSSH plus one child/private Bridge, never WSL/ControlMaster. Cancel only owned children.\n\nOmitted passwords reuse exact private scope; explicit changes reject during leases and never cross scopes. Without password, explicit connections try configured keys/agent in batch mode even for password registrations; passive status may defer. Never send empty retries. Start/Restart/Update carry transient credentials through access/certificate checks, preparation and verification without saving; observations reject passwords.\n\nConnect Timeout bounds probe/inventory/readiness; startup/packages have distinct deadlines. Windows x64 askpass accepts password/passphrase, rejects host-key prompts, writes only private stdout and preserves OpenSSH trust. Missing helper fails; no secrets in args/files/logs. Bounded includes exclude wildcard/negated picker aliases, not explicit destinations. Save exact root/container engine+ID separately from label.\n\n## Execution\nOne operation reuses transport and probes platform once. Only inventory/stop prepares the small helper; Start/Stop never build full bundles. Update verifies before mutation with visible acquisition/upload/build. Use public dependencies and install Desktop deps before Env assets.\n\nArchive bounds: 256 MiB compressed/512 MiB expanded including Runtime/Computer/signed plugins, enforced before writes and parsed once. Upload progress has its own stall deadline; command timeout resumes after final write. Stall/cancel/loss stops owned command; pipe bytes prove no receipt. Password prompts have no upload deadline.\n\nPrivate slots: runtime/managed/bin/executables 0700, stamps/evidence 0600 independent of umask. Failed normalization preserves live slot; upstream owns executable admission. Host targets require confirmed user/root, containers exact saved identity. Start/Restart/Update/Reinstall may start container; Stop never does and accepts empty inventory. Signal only verified scope; retain before/after. Wipe-reinstall may tolerate helper inventory/stop failure only when direct access can isolate root.\n\nRemote snippets perform bounded probe/stage/inventory/stop/install/start/verify/isolate/cleanup. Desktop owns order/deadlines/cancel/progress/retry; no target lock/heartbeat/supervisor.\n\n## Progress and results\nUse generated signed GitHub latest/download/redeven-install.sh with selected tag, no Portal duplicate. One Launcher Operation measures actual upload/download/acquisition bytes. Parse complete Downloading Redeven: N% records; stderr diagnostics, stdout stage path. Companion output cannot reset Runtime progress. No additional parser/process/poll.\n\n100% transfer proves no activation/readiness. Freeze measured progress on failure/cancel. Acquisition/staging/upload/unpack are preparation; only activation changes live slot. Create operation before first SSH command. Distinguish connection/engine/preparation/command/readiness errors with technical stderr. Empty successful report stays pending to deadline; nonzero read is command failure, valid blocked report Runtime failure, only nonempty malformed report invalid. All lifecycle paths share interpretation.",
-          "char_count": 3364
+          "body": "## Authentication and transport\nKeys bind normalized destination/port, authentication, SSH executable and credential scope. Preserve failure without substitution/replay. macOS/Linux use ControlMaster; Windows bounded native OpenSSH plus one child/private Bridge, never WSL/ControlMaster. Cancel only owned children.\n\nOmitted passwords reuse exact private scope; explicit changes reject during leases and never cross scopes. Without password, explicit connections try configured keys/agent in batch mode even for password registrations; passive status may defer. Never send empty retries. Start/Restart/Update carry transient credentials through access/certificate checks, preparation and verification without saving; observations reject passwords.\n\nConnect Timeout bounds probe/inventory/readiness; startup/packages have distinct deadlines. Windows x64 askpass accepts password/passphrase, rejects host-key prompts, writes only private stdout and preserves OpenSSH trust. Missing helper fails; no secrets in args/files/logs. Bounded includes exclude wildcard/negated picker aliases, not explicit destinations. Save exact root/container engine+ID separately from label.\n\n## Connection verification and opening\nA known openable placement is a dial hint even when its management observation is stale. Open creates a cancelable launcher operation first, then verifies the live bridge and Env App before admission. Unknown/unreachable management state never authorizes Start or Restart. Read-only preflight, connection retries and readiness share a 30-second budget; explicit installation/update keeps its existing lifecycle budget. Bridge establishment has a 15-second deadline and failed owned commands escalate TERM to KILL after one second.\n\nWhen a bridge fails or repeated upper protocol attempts expose a stall, the SSH owner coalesces a bounded five-second remote `true` probe for the exact generation. Local `-O check` is not peer liveness. Healthy transports remain; failed generations are fenced before owned masters/children are retired. Acquisitions await verification/retirement; late reports cannot kill replacements or other credential scopes. Canceling one verification waiter does not cancel shared verification. Never replay a business command or vary SSH QoS automatically.\n\n## Execution\nOne operation reuses transport and probes platform once. Only inventory/stop prepares the small helper; Start/Stop never build full bundles. Update verifies before mutation with visible acquisition/upload/build. Use public dependencies and install Desktop deps before Env assets.\n\nArchive bounds: 256 MiB compressed/512 MiB expanded including Runtime/Computer/signed plugins, enforced before writes and parsed once. Upload progress has its own stall deadline; command timeout resumes after final write. Stall/cancel/loss stops owned command; pipe bytes prove no receipt. Password prompts have no upload deadline.\n\nPrivate slots: runtime/managed/bin/executables 0700, stamps/evidence 0600 independent of umask. Failed normalization preserves live slot; upstream owns executable admission. Host targets require confirmed user/root, containers exact saved identity. Start/Restart/Update/Reinstall may start container; Stop never does and accepts empty inventory. Signal only verified scope; retain before/after. Wipe-reinstall may tolerate helper inventory/stop failure only when direct access can isolate root.\n\nRemote snippets perform bounded probe/stage/inventory/stop/install/start/verify/isolate/cleanup. Desktop owns order/deadlines/cancel/progress/retry; no target lock/heartbeat/supervisor.\n\n## Progress and results\nUse generated signed GitHub latest/download/redeven-install.sh with selected tag, no Portal duplicate. One Launcher Operation measures actual upload/download/acquisition bytes. Parse complete Downloading Redeven: N% records; stderr diagnostics, stdout stage path. Companion output cannot reset Runtime progress. No additional parser/process/poll.\n\n100% transfer proves no activation/readiness. Freeze measured progress on failure/cancel. Acquisition/staging/upload/unpack are preparation; only activation changes live slot. Create operation before first SSH command. Distinguish connection/engine/preparation/command/readiness errors with technical stderr. Empty successful report stays pending to deadline; nonzero read is command failure, valid blocked report Runtime failure, only nonempty malformed report invalid. All lifecycle paths share interpretation.",
+          "char_count": 4483
         },
         {
           "id": "boundaries",
@@ -16685,7 +16685,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-06",
         "tags": [
           "desktop",
           "recovery",
@@ -16695,15 +16695,15 @@
         "title": "Desktop transport recovery and model-source sessions",
         "type": "Desktop Contract"
       },
-      "body_length": 3521,
+      "body_length": 5074,
       "summary": "A placement bridge owns one immutable recovery generation and exact Environment session. Only its owner replaces transport after validation; late callbacks are fenced. Model-source lifetime survives control reconnects without delaying Env App or persisting transport history, while terminal failure withdraws interaction authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Transport recovery\n### Recovery presentation\nRecovery uses an unboxed layout within the existing shell, with generous whitespace, semantic theme colors, standard buttons, and fine separators around the authoritative countdown or active phase.\n\nA 30-second stalled-app timeout shows an actionable failure instead of an endless loading surface.\n\nEach established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `paused`, `ready`, or `failed` phase, completed attempt count, known retry and recovery timestamps, a structured failure, and explicitly allowed actions.\n\nLifecycle generation fencing cancels matching Opens so a late response cannot recreate the old session.\n\n## Model-source sessions\n- Every `DesktopSessionContextSnapshot` carries `target_route`: Local publishes declared `local_host`/`remote_desktop`; SSH, Gateway and External Local UI publish `remote_desktop`.\n- Compaction is a Runtime thread action. Desktop and Env App share canonical timeline/read-state updates rather than inventing transcript messages.\n- One Responses transport manager survives control reconnects. Idempotent `ai.thread.transport.release` releases only memory; Floret owns canonical deletion. Exact v4 transport events reject incompatible peers.",
-          "char_count": 1322
+          "body": "## Transport recovery\n### Recovery presentation\nFirst load and terminal failures use the full unboxed status surface. After successful admission, recoverable loss uses a compact out-of-flow status with expandable controls/diagnostics; it does not cover the workspace, move content, steal draft focus or expose a full-canvas countdown. Successful protocol and secure-session recovery restores the workspace immediately. Authentication loss and terminal transport failure still withdraw interaction authority.\n\nThe existing coordinator waits for Desktop transport readiness inside published source acquisition instead of racing another connection controller. A ready bridge plus repeated retryable upper-layer transport failures requests bounded SSH verification once per protocol attempt; it neither restarts Runtime nor replays requests. Local artifact fetch/body acquisition has a 15-second deadline and preserves caller cancellation and upstream retry classification. Paused/failed Desktop state cannot acquire new credentials.\n\nA 30-second stalled-app timeout shows an actionable failure instead of an endless loading surface.\n\nEach established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `paused`, `ready`, or `failed` phase, completed attempt count, optional SSH transport generation, known retry and recovery timestamps, a structured failure, and explicitly allowed actions.\n\nLifecycle generation fencing cancels matching Opens so a late response cannot recreate the old session.\n\n## Model-source sessions\n- Every `DesktopSessionContextSnapshot` carries `target_route`: Local publishes declared `local_host`/`remote_desktop`; SSH, Gateway and External Local UI publish `remote_desktop`.\n- Compaction is a Runtime thread action. Desktop and Env App share canonical timeline/read-state updates rather than inventing transcript messages.\n- One Responses transport manager survives control reconnects. Idempotent `ai.thread.transport.release` releases only memory; Floret owns canonical deletion. Exact v4 transport events reject incompatible peers.",
+          "char_count": 2141
         },
         {
           "id": "boundaries",
@@ -16716,8 +16716,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:desktop/src/main/nativeLocalTransportRecovery.test.ts:1` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.test.ts:280` - Tests.\n- `redeven:desktop/src/main/localUIURL.ts:44` - Source.\n\n- `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Source.\n- `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Tests.",
-          "char_count": 380
+          "body": "- `redeven:desktop/src/main/nativeLocalTransportRecovery.test.ts:1` - Tests.\n- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.test.ts:280` - Tests.\n- `redeven:desktop/src/main/localUIURL.ts:44` - Source.\n\n- `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Source.\n- `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Tests.\n\n- `redeven:desktop/src/main/runtimeOpenContinuity.test.ts` - Executes the production Open boundary: bridge-first dialing and no network/auth-triggered lifecycle mutation.\n- `redeven:desktop/src/main/runtimePlacementBridgeSessionLifecycle.test.ts` - Real loopback HTTP/2 stalls, verification ordering, cancellation, identity fencing and feedback recovery.\n- `redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.browser.test.tsx` - Chromium layout, focus, accessible compact controls across desktop/mobile and English/Chinese.\n- `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.recovery.test.ts` - Published acquisition/controller integration, fetch deadlines and rejection of disconnected mutations.",
+          "char_count": 1114
         }
       ],
       "evidence": [
@@ -16748,6 +16748,26 @@
           "id": "redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx:0:tests.",
           "source": "redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx",
           "description": "Tests."
+        },
+        {
+          "id": "redeven:desktop/src/main/runtimeOpenContinuity.test.ts:0:executes the production open boundary: bridge-first dialing and no network/auth-triggered lifecycle mutation.",
+          "source": "redeven:desktop/src/main/runtimeOpenContinuity.test.ts",
+          "description": "Executes the production Open boundary: bridge-first dialing and no network/auth-triggered lifecycle mutation."
+        },
+        {
+          "id": "redeven:desktop/src/main/runtimePlacementBridgeSessionLifecycle.test.ts:0:real loopback http/2 stalls, verification ordering, cancellation, identity fencing and feedback recovery.",
+          "source": "redeven:desktop/src/main/runtimePlacementBridgeSessionLifecycle.test.ts",
+          "description": "Real loopback HTTP/2 stalls, verification ordering, cancellation, identity fencing and feedback recovery."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.browser.test.tsx:0:chromium layout, focus, accessible compact controls across desktop/mobile and english/chinese.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.browser.test.tsx",
+          "description": "Chromium layout, focus, accessible compact controls across desktop/mobile and English/Chinese."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.recovery.test.ts:0:published acquisition/controller integration, fetch deadlines and rejection of disconnected mutations.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.recovery.test.ts",
+          "description": "Published acquisition/controller integration, fetch deadlines and rejection of disconnected mutations."
         }
       ],
       "snippet": "A placement bridge owns one immutable recovery generation and exact Environment session. Only its owner replaces transport after validation; late callbacks are fenced. Model-source lifetime survives control reconnects without delaying Env A",
@@ -24827,7 +24847,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-06",
         "tags": [
           "lifecycle",
           "startup",
@@ -24837,15 +24857,15 @@
         "title": "Page loading, asynchronous feedback and document recovery",
         "type": "UI Contract"
       },
-      "body_length": 5408,
+      "body_length": 5993,
       "summary": "Retain successful same-resource content through refresh while initial loads occupy final geometry. Source replacement and permission loss fence retained state. Published placeholders, stable controls and asset monitoring preserve work; only explicit user reload replaces an outdated document.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Page continuity\nWithout a successful result, retain initial presentation until authoritative data/actionable error. Keep mutation, attachment, maintenance and plugin execution progress separate from inventory loading.\n\nRefresh preserves successful same-resource content, including empty results. Equal items retain DOM identity, focus, expansion and scroll; pagination progress stays at the end. Use existing header/action indicators, accessible out-of-flow status or geometry-neutral local overlays, never temporary rows above content.\n\nInitial reads use structural placeholders in final geometry. Editors/previews/settings retain bounded responsive body viewports with reachable headers/close/footer. Use published Floe components/theme tokens without arbitrary delays/height animations.\n\nRuntime/resource/source identity scopes retention. Navigation, replacement and access loss invalidate it and fence late replies. Preserve unsaved same-resource drafts; submission requires readiness/permission. Unknown Runtime status is pending, never missing installation. Canvas opening is separate from library initialization: keep the selected card until arrival. Failed file-preview requests show their requested path/retry in the same viewport, never previous-file results. Expose real progress/permission failures/errors.\n\n- Host Applications/Web Services/Containers/Codespaces use shared frames/skeletons; [resource cache](env-resource-cache.md) owns snapshots/refresh/fencing.\n- Files keeps real workspace chrome with blank regions until the directory owner admits its first valid response.\n- Terminal/Monitoring use shared status until catalog/first live sample/error, retaining content on later attachment/polling. Metrics are not inventory.\n- Settings/Flower/Tessiven/Plugin Center/dynamic plugins use shared module status; resource/runtime/lifecycle owners govern readiness/errors.\n\n`ENV_PAGE_PRESENTATIONS` exhaustively covers `BuiltinActivityPage` loading/reload policies in Activity and Workbench. [Filesystem navigation](filesystem-picker-navigation.md) retains its security boundary.\n\n## Asynchronous layout\nUse published Button loading slot/`icon`; changing labels use `StableText` with every localized transient/completion/failure label. Host preparation has independently scrolling body/persistent action baseline. Unknown image dimensions use bounded 16:9 contain sizing; long diagrams/render errors scroll in reserved viewports.\n\n## Reload geometry\nHTML head installs Floe's independent `reload-placeholder` before external modules/styles. It serializes no HTML, resource text, images, inputs, URLs or permissions and invents no resource count. Shared page registry governs reload eligibility; [Activity navigation](activity-navigation-restoration.md) owns selection. Fresh authoritative data may change final layout.\n\n## Asset recovery\nCapture document ESM entry URLs with published `createDocumentAssetRecovery`; unobtrusive notice reports updated/unavailable content. Retain authenticated route and explicit user reload. Never retain old bundles, rewrite module names or serve HTML as JavaScript.",
-          "char_count": 3115
+          "body": "## Page continuity\nWithout a successful result, retain initial presentation until authoritative data/actionable error. Keep mutation, attachment, maintenance and plugin execution progress separate from inventory loading.\n\nRefresh preserves successful same-resource content, including empty results. Equal items retain DOM identity, focus, expansion and scroll; pagination progress stays at the end. Use existing header/action indicators, accessible out-of-flow status or geometry-neutral local overlays, never temporary rows above content.\n\nInitial reads use structural placeholders in final geometry. Editors/previews/settings retain bounded responsive body viewports with reachable headers/close/footer. Use published Floe components/theme tokens without arbitrary delays/height animations.\n\nRuntime/resource/source identity scopes retention. Navigation, replacement and access loss invalidate it and fence late replies. Preserve unsaved same-resource drafts; submission requires readiness/permission. Unknown Runtime status is pending, never missing installation. Canvas opening is separate from library initialization: keep the selected card until arrival. Failed file-preview requests show their requested path/retry in the same viewport, never previous-file results. Expose real progress/permission failures/errors.\n\n- Host Applications/Web Services/Containers/Codespaces use shared frames/skeletons; [resource cache](env-resource-cache.md) owns snapshots/refresh/fencing.\n- Files keeps real workspace chrome with blank regions until the directory owner admits its first valid response.\n- Terminal/Monitoring use shared status until catalog/first live sample/error, retaining content on later attachment/polling. Metrics are not inventory.\n- Settings/Flower/Tessiven/Plugin Center/dynamic plugins use shared module status; resource/runtime/lifecycle owners govern readiness/errors.\n\n`ENV_PAGE_PRESENTATIONS` exhaustively covers `BuiltinActivityPage` loading/reload policies in Activity and Workbench. [Filesystem navigation](filesystem-picker-navigation.md) retains its security boundary.\n\n## Connection continuity\nAn admitted same-resource workspace stays mounted and locally interactive through recoverable transport loss, including Flower drafts, pane placement and plugin drawers. A compact accessible status exposes stop/resume/retry and technical details on demand. Remote commands and submissions still require the current published session and permission; unavailable session HTTP rejects without queuing a later mutation. Initial loading, revoked access and terminal recovery failure retain their blocking surfaces. Completion does not add a success-overlay delay.\n\n## Asynchronous layout\nUse published Button loading slot/`icon`; changing labels use `StableText` with every localized transient/completion/failure label. Host preparation has independently scrolling body/persistent action baseline. Unknown image dimensions use bounded 16:9 contain sizing; long diagrams/render errors scroll in reserved viewports.\n\n## Reload geometry\nHTML head installs Floe's independent `reload-placeholder` before external modules/styles. It serializes no HTML, resource text, images, inputs, URLs or permissions and invents no resource count. Shared page registry governs reload eligibility; [Activity navigation](activity-navigation-restoration.md) owns selection. Fresh authoritative data may change final layout.\n\n## Asset recovery\nCapture document ESM entry URLs with published `createDocumentAssetRecovery`; unobtrusive notice reports updated/unavailable content. Retain authenticated route and explicit user reload. Never retain old bundles, rewrite module names or serve HTML as JavaScript.",
+          "char_count": 3700
         },
         {
           "id": "boundaries",
@@ -26062,5 +26082,5 @@
       ]
     }
   ],
-  "source_sha256": "eec42b9ef3d832693a1fbe6696bf4a762bd2955a5f85346ce35bf12eb7e929ea"
+  "source_sha256": "4db51e8f8cb43faac5e5e378210c380a50b8d8e78d29d616b7ef17df95b688b3"
 }

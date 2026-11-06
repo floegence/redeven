@@ -1,6 +1,7 @@
 import '../../index.css';
 
 import { createSignal } from 'solid-js';
+import axe from 'axe-core';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page } from 'vitest/browser';
@@ -18,6 +19,7 @@ type RecoveryFixture = Readonly<{
   theme: Theme;
   viewport: Readonly<{ width: number; height: number }>;
   snapshot: ConnectionRecoverySnapshot;
+  retainWorkspace?: boolean;
   onStop?: () => Promise<void>;
   onRetry?: () => Promise<void>;
 }>;
@@ -134,7 +136,7 @@ async function mountFixture(fixture: RecoveryFixture): Promise<HTMLElement> {
   document.body.appendChild(host);
   disposers.push(render(() => (
     <I18nProvider>
-      <ConnectionRecoveryView onStop={fixture.onStop ?? (async () => undefined)}
+      <ConnectionRecoveryView retainWorkspace={fixture.retainWorkspace} onStop={fixture.onStop ?? (async () => undefined)}
         environmentName="Remote Build Environment with a deliberately long name"
         snapshot={fixture.snapshot}
         onRetry={fixture.onRetry ?? (async () => undefined)}
@@ -235,6 +237,54 @@ describe('ConnectionRecoveryView rendered layout', () => {
       host.remove();
       await settleFrames(1);
     }
+  });
+
+  it.each([
+    { locale: 'en-US' as const, theme: 'light' as const, viewport: { width: 1280, height: 800 } },
+    { locale: 'zh-CN' as const, theme: 'dark' as const, viewport: { width: 390, height: 844 } },
+  ])('preserves draft focus and readable compact controls in $locale', async fixture => {
+    const host = await mountFixture({ ...fixture, snapshot: recoveringSnapshot(), retainWorkspace: true });
+    const draft = document.createElement('textarea');
+    draft.setAttribute('aria-label', 'Draft');
+    draft.style.cssText = 'position:absolute;top:120px;left:20px;width:240px;height:120px';
+    host.prepend(draft);
+    draft.value = 'Unsent work'; draft.focus(); draft.setSelectionRange(2, 6);
+    await settleFrames();
+    expect(document.activeElement).toBe(draft);
+    expect(draft.value).toBe('Unsent work');
+    expect(draft.selectionStart).toBe(2);
+    const notice = host.querySelector<HTMLElement>('[data-recovery-compact]')!;
+    expect(notice.getBoundingClientRect().height).toBeLessThan(80);
+    expect(host.querySelector('[role="timer"]')).toBeNull();
+    expect(host.querySelector('[inert]')).toBeNull();
+    expect(host.querySelector('h1')).toBeNull();
+    const details = notice.querySelector('details')!;
+    details.querySelector('summary')!.click();
+    await settleFrames();
+    expect(details.open).toBe(true);
+    const panel = details.querySelector('div')!;
+    expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+    expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(fixture.viewport.width);
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+    const audit = await axe.run(notice);
+    expect(audit.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+    if (import.meta.env.VITE_CONNECTION_RECOVERY_SCREENSHOTS === '1') {
+      await page.screenshot({ path: `__screenshots__/connection-compact-${fixture.locale}.png` });
+    }
+  });
+
+  it('keeps compact stop and resume keyboard focus inside the expanded controls', async () => {
+    const [snapshot, setSnapshot] = createSignal(recoveringSnapshot(false));
+    const host = await mountFixture({ locale: 'en-US', theme: 'light', viewport: { width: 390, height: 844 }, retainWorkspace: true,
+      get snapshot() { return snapshot(); },
+      onStop: async () => { setSnapshot({ ...snapshot(), state: 'paused', phase: 'paused' }); },
+      onRetry: async () => { setSnapshot({ ...snapshot(), state: 'recovering', phase: 'protocol_connect' }); },
+    });
+    host.querySelector('summary')!.click();
+    await page.getByRole('button', { name: 'Stop retrying', exact: true }).click();
+    await expect.element(page.getByRole('button', { name: 'Resume connection', exact: true })).toHaveFocus();
+    await page.getByRole('button', { name: 'Resume connection', exact: true }).click();
+    await expect.element(page.getByRole('button', { name: 'Stop retrying', exact: true })).toHaveFocus();
   });
 
   it('keeps keyboard focus on the next recovery action when stopping and resuming', async () => {

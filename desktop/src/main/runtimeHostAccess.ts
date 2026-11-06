@@ -64,6 +64,8 @@ type SpawnPreparation = Readonly<{
 }>;
 
 export type RuntimeHostStreamingCommand = Readonly<{
+  verifyTransport?: DesktopSSHTransportLease['verifyTransport'];
+  transport_generation?: number;
   stdin: Writable;
   stdout: Readable;
   stderr: Readable;
@@ -697,5 +699,7 @@ export async function spawnSSHRuntimeHostCommand(
     stderr: command.stderr,
     closed,
     kill: command.kill,
+    verifyTransport: lease.verifyTransport,
+    transport_generation: lease.generation,
   };
 }

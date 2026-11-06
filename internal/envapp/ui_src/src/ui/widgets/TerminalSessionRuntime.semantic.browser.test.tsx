@@ -1,3 +1,5 @@
+import { SessionError } from '@floegence/flowersec-core';
+import { ProtocolNotConnectedError } from '@floegence/floe-webapp-protocol';
 import axe from 'axe-core';
 import { createSignal } from 'solid-js';
 import { useViewActivation } from '@floegence/floe-webapp-core';
@@ -147,6 +149,7 @@ function harness(options: Readonly<{
     background: '#111111',
     foreground: '#eeeeee',
   });
+  const [connected, setConnected] = createSignal(true);
   const [viewActive, setViewActive] = createSignal(true);
   const [viewVisible, setViewVisible] = createSignal<boolean>();
   const [activityPage, setActivityPage] = createSignal('terminal');
@@ -290,7 +293,7 @@ function harness(options: Readonly<{
         variant="panel"
         active={active}
         visible={options.splitVisible === undefined ? undefined : () => options.splitVisible!}
-        connected={() => true}
+        connected={connected}
         protocolClient={() => transport}
         viewActive={() => viewActive() && (activation?.active() ?? true) && displayMode() === 'activity'}
         viewVisible={() => (viewVisible() ?? viewActive()) && (activation?.visible() ?? true)}
@@ -372,6 +375,8 @@ function harness(options: Readonly<{
     interactInput,
     interactInputIntent,
     interactPaste,
+    emitDisconnected: () => lifecycleHandler?.({ sessionId: SESSION.id, runtimeAttachGeneration: 1, state: 'closed', reason: 'error' }),
+    setConnected,
     setViewActive,
     setViewVisible,
     setActivityPage,
@@ -926,6 +931,37 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     await Promise.all([first, second]);
     expect(runtime.attachWithPresentation).toHaveBeenCalledOnce();
     expect(runtime.activate).toHaveBeenCalledOnce();
+  });
+
+  it.each([new ProtocolNotConnectedError(), new SessionError('closed')])('retains the terminal and retries attachment without a false permanent failure: %s', async failure => {
+    const runtime = harness(); mounted.push(runtime);
+    await vi.waitFor(() => expect(runtime.attachWithPresentation).toHaveBeenCalledOnce());
+    runtime.emitPresentation(presentation(1, 'retained work'));
+    await waitForPaint();
+    runtime.setConnected(false);
+    runtime.emitDisconnected();
+    await waitForPaint();
+    runtime.attachWithPresentation.mockRejectedValueOnce(failure);
+    runtime.setConnected(true);
+    await vi.waitFor(() => expect(runtime.attachWithPresentation).toHaveBeenCalledTimes(3));
+    expect(runtime.statuses.some(status => status.state === 'blocking')).toBe(false);
+    expect(runtime.sendInput).not.toHaveBeenCalled();
+    expect(runtime.interactInput).not.toHaveBeenCalled();
+    expect(runtime.root.querySelector('[data-terminal-semantic-error="true"]')).toBeNull();
+  });
+
+  it('keeps unclassified attachment failures blocking instead of silently retrying', async () => {
+    const runtime = harness(); mounted.push(runtime);
+    await vi.waitFor(() => expect(runtime.attachWithPresentation).toHaveBeenCalledOnce());
+    await waitForPaint();
+    runtime.setConnected(false);
+    runtime.emitDisconnected();
+    await waitForPaint();
+    runtime.attachWithPresentation.mockRejectedValueOnce(new Error('invalid terminal frame'));
+    runtime.setConnected(true);
+    await vi.waitFor(() => expect(runtime.statuses.at(-1)).toMatchObject({ state: 'blocking', failureCode: 'terminal_attach_failed', retryable: false }));
+    expect(runtime.attachWithPresentation).toHaveBeenCalledTimes(2);
+    expect(runtime.sendInput).not.toHaveBeenCalled();
   });
 
   it('fails closed when a geometry-bound interaction is rejected', async () => {

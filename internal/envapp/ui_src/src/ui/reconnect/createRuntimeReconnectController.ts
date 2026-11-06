@@ -176,6 +176,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
 
 export function createRuntimeReconnectController(args: CreateRuntimeReconnectControllerArgs): RuntimeReconnectController {
   const [snapshot, setSnapshot] = createSignal<ConnectionRecoverySnapshot>(idleSnapshot());
+  let verifiedProtocolAttempt = 0;
   let stopOperation: Promise<void> | undefined;
   let successTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
@@ -192,6 +193,7 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
 
   const reset = () => {
     clearSuccessTimer();
+    verifiedProtocolAttempt = 0;
     const current = snapshot();
     setSnapshot(idleSnapshot(current.generation, current.revision + 1));
   };
@@ -339,6 +341,11 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       if (!failure.retryable || protocol.terminal) {
         failRecovery(failure);
         return;
+      }
+      if (args.desktopTransport()?.phase === 'ready' && protocol.attempt >= 2 && protocol.attempt > verifiedProtocolAttempt
+        && failure.code === 'transport_unavailable') {
+        verifiedProtocolAttempt = protocol.attempt;
+        void args.requestDesktopRecoveryNow().catch(() => undefined);
       }
       ensureRecovery(desktopTransportBlocksProtocol() ? 'desktop_transport' : 'protocol_connect', failure);
       const current = snapshot();

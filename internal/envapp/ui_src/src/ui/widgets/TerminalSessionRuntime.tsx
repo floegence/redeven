@@ -36,6 +36,7 @@ import {
 } from '@floegence/floeterm-terminal-web/semantic';
 import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
+import { classifyTerminalAttachLifecycleExit } from '../services/terminalTransport';
 import type {
   RedevenTerminalEventSource,
   RedevenTerminalTransport,
@@ -458,7 +459,20 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       historyController?.setTransportGeneration(null);
       historySearchController?.setTransportGeneration(null);
       lastReconnectError = error instanceof Error ? error : new Error(String(error));
-      failClosed(error, 'terminal_attach_failed');
+      const lifecycleExit = classifyTerminalAttachLifecycleExit(error);
+      if (lifecycleExit === 'session_gone') {
+        clearReconnectTimer();
+        props.onSessionGone?.(sessionId);
+        return;
+      }
+      if (lifecycleExit !== 'disconnected') {
+        clearReconnectTimer();
+        failClosed(error, 'terminal_attach_failed');
+        return;
+      }
+      setRuntimeError('');
+      setLoading('reconnecting');
+      setStatus({ state: 'reconnecting', retryable: true });
       throw error;
     }
   };

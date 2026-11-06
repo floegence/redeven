@@ -511,10 +511,12 @@ export async function createLocalDirectArtifactSource<
       await options.beforeAcquire?.({ signal });
       const headers = new Headers();
       applyLocalAccessResumeHeader(headers);
+      const acquisitionSignal = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
       const response = await fetch('/api/local/direct/connect_artifact', {
-        method: 'POST', signal, headers, credentials: 'same-origin', cache: 'no-store',
+        method: 'POST', signal: acquisitionSignal, headers, credentials: 'same-origin', cache: 'no-store',
       });
       const envelope = await response.json().catch(() => null);
+      acquisitionSignal.throwIfAborted();
       if (!response.ok || envelope?.success === false) {
         // Redeven API codes use uppercase; Floe's source accepts lowercase
         // business codes and owns failure classification and Retry-After.

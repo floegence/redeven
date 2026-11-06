@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop SSH runtime operations
 tags: [desktop, ssh, runtime, process]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -17,6 +17,11 @@ Keys bind normalized destination/port, authentication, SSH executable and creden
 Omitted passwords reuse exact private scope; explicit changes reject during leases and never cross scopes. Without password, explicit connections try configured keys/agent in batch mode even for password registrations; passive status may defer. Never send empty retries. Start/Restart/Update carry transient credentials through access/certificate checks, preparation and verification without saving; observations reject passwords.
 
 Connect Timeout bounds probe/inventory/readiness; startup/packages have distinct deadlines. Windows x64 askpass accepts password/passphrase, rejects host-key prompts, writes only private stdout and preserves OpenSSH trust. Missing helper fails; no secrets in args/files/logs. Bounded includes exclude wildcard/negated picker aliases, not explicit destinations. Save exact root/container engine+ID separately from label.
+
+## Connection verification and opening
+A known openable placement is a dial hint even when its management observation is stale. Open creates a cancelable launcher operation first, then verifies the live bridge and Env App before admission. Unknown/unreachable management state never authorizes Start or Restart. Read-only preflight, connection retries and readiness share a 30-second budget; explicit installation/update keeps its existing lifecycle budget. Bridge establishment has a 15-second deadline and failed owned commands escalate TERM to KILL after one second.
+
+When a bridge fails or repeated upper protocol attempts expose a stall, the SSH owner coalesces a bounded five-second remote `true` probe for the exact generation. Local `-O check` is not peer liveness. Healthy transports remain; failed generations are fenced before owned masters/children are retired. Acquisitions await verification/retirement; late reports cannot kill replacements or other credential scopes. Canceling one verification waiter does not cancel shared verification. Never replay a business command or vary SSH QoS automatically.
 
 ## Execution
 One operation reuses transport and probes platform once. Only inventory/stop prepares the small helper; Start/Stop never build full bundles. Update verifies before mutation with visible acquisition/upload/build. Use public dependencies and install Desktop deps before Env assets.

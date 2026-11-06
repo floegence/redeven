@@ -62,8 +62,11 @@ export type SSHTransportAcquireInput = Readonly<{
   signal?: AbortSignal;
 }>;
 
+export type SSHTransportVerification = 'healthy' | 'retired' | 'superseded';
+
 export type DesktopSSHTransportLease = Readonly<{
   generation: number;
+  verifyTransport: (options?: Readonly<{ timeoutMs?: number; signal?: AbortSignal }>) => Promise<SSHTransportVerification>;
   target: DesktopSSHHostAccessDetails;
   run: (command: string, options?: SSHCommandOptions) => Promise<DesktopSSHCommandResult>;
   stream: (command: string, options?: SSHStreamOptions) => DesktopSSHStreamingCommand;
@@ -151,6 +154,8 @@ type TransportEntry = {
   master: SpawnedSSHProcess | null;
   masterStderr: string;
   connectTask: Promise<void> | null;
+  verificationTask: Promise<SSHTransportVerification> | null;
+  retirementTask: Promise<void> | null;
   waiters: number;
   leases: number;
   persistentLeases: number;
@@ -464,6 +469,8 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       master: null,
       masterStderr: '',
       connectTask: null,
+      verificationTask: null,
+      retirementTask: null,
       waiters: 0,
       leases: 0,
       persistentLeases: 0,
@@ -479,6 +486,8 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       (entry.target.connect_timeout_seconds ?? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000 + 1_000,
     ),
   ): Promise<void> {
+    await entry.verificationTask;
+    await entry.retirementTask;
     if (transportAlive(entry)) {
       return;
     }
@@ -554,7 +563,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
         ...sharedArgs(entry),
         '-O', 'check',
         ...targetArgs(entry.target),
-      ]);
+      ], undefined, undefined, undefined, Math.max(1, deadline - this.deps.now()));
       if (check.exit_code === 0 && processAlive(master)) {
         return;
       }
@@ -569,6 +578,48 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       }
       await delay(this.deps, this.readyPollMs);
     }
+  }
+
+  private async verifyTransport(entry: TransportEntry, generation: number, timeoutMs = 5_000): Promise<SSHTransportVerification> {
+    if (entry.closing || entry.generation !== generation || this.disposed) return 'superseded';
+    if (entry.verificationTask) return entry.verificationTask;
+    const task = (async (): Promise<SSHTransportVerification> => {
+      let healthy = false;
+      try {
+        // A control-socket check only proves that the local master is alive.
+        // This bounded, read-only command proves a round trip to the saved host.
+        const result = await this.runProcess(entry, [
+          ...sharedArgs(entry), ...targetArgs(entry.target), 'true',
+        ], undefined, undefined, undefined, Math.max(1, timeoutMs));
+        healthy = result.exit_code === 0 && !result.signal;
+      } catch (error) {
+        if (!(error instanceof DesktopSSHCommandTimeoutError)) throw error;
+      }
+      if (entry.closing || entry.generation !== generation || this.disposed) return 'superseded';
+      if (healthy) return 'healthy';
+      // Fence every lease before stopping owned children. A late report from
+      // this generation must never retire its replacement or another host.
+      entry.generation += 1;
+      entry.ready = false;
+      const master = entry.master;
+      entry.master = null;
+      const children = [...entry.children];
+      const retirement = Promise.all([master, ...children].map(child => this.stopProcess(child))).then(() => undefined);
+      entry.retirementTask = retirement;
+      try { await retirement; } finally { if (entry.retirementTask === retirement) entry.retirementTask = null; }
+      return 'retired';
+    })();
+    entry.verificationTask = task;
+    try { return await task; } finally { if (entry.verificationTask === task) entry.verificationTask = null; }
+  }
+
+  private async stopProcess(child: SpawnedSSHProcess | null): Promise<void> {
+    if (!processAlive(child)) return;
+    await new Promise<void>(resolve => {
+      const timer = this.deps.setTimer(() => child.kill('SIGKILL'), 1_000);
+      child.once('close', () => { this.deps.clearTimer(timer); resolve(); });
+      child.kill('SIGTERM');
+    });
   }
 
   private createLease(entry: TransportEntry, persistent: boolean): DesktopSSHTransportLease {
@@ -586,6 +637,12 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     };
     return {
       generation,
+      verifyTransport: async (options = {}) => {
+        options.signal?.throwIfAborted();
+        // Verification is owned by the shared transport; canceling one waiter
+        // cannot cancel another session's evidence gathering or retirement.
+        return waitForTask(this.verifyTransport(entry, generation, options.timeoutMs), options.signal);
+      },
       target: entry.target,
       run: async (command, options = {}) => {
         assertCurrent();
@@ -865,17 +922,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     }
     const master = entry.master;
     entry.master = null;
-    if (processAlive(master)) {
-      const closed = new Promise<void>((resolve) => master.once('close', () => resolve()));
-      master.kill('SIGTERM');
-      await closed;
-    }
-    await Promise.all([...entry.children].map(async (child) => {
-      if (!processAlive(child)) return;
-      const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
-      child.kill('SIGTERM');
-      await closed;
-    }));
+    await Promise.all([master, ...entry.children].map(child => this.stopProcess(child)));
     await this.deps.rm(entry.tempDir, { recursive: true, force: true }).catch(() => undefined);
     if (this.entries.get(entry.key) === entry) {
       this.entries.delete(entry.key);

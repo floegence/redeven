@@ -34,6 +34,7 @@ export type DesktopSessionTransportRecoverySnapshot = Readonly<{
   revision: number;
   phase: DesktopSessionTransportRecoveryPhase;
   attempt_count: number;
+  ssh_transport_generation?: number;
   started_at_unix_ms?: number;
   next_attempt_at_unix_ms?: number;
   recovered_at_unix_ms?: number;
@@ -103,6 +104,7 @@ export function normalizeDesktopSessionTransportRecoverySnapshot(
     return null;
   }
 
+  const sshGeneration = normalizePositiveInteger(candidate.ssh_transport_generation);
   const startedAtUnixMS = normalizePositiveInteger(candidate.started_at_unix_ms);
   const nextAttemptAtUnixMS = normalizePositiveInteger(candidate.next_attempt_at_unix_ms);
   const recoveredAtUnixMS = normalizePositiveInteger(candidate.recovered_at_unix_ms);
@@ -145,6 +147,7 @@ export function normalizeDesktopSessionTransportRecoverySnapshot(
     revision,
     phase,
     attempt_count: attemptCount,
+    ...(sshGeneration === null ? {} : { ssh_transport_generation: sshGeneration }),
     ...(startedAtUnixMS === null ? {} : { started_at_unix_ms: startedAtUnixMS }),
     ...(nextAttemptAtUnixMS === null ? {} : { next_attempt_at_unix_ms: nextAttemptAtUnixMS }),
     ...(recoveredAtUnixMS === null ? {} : { recovered_at_unix_ms: recoveredAtUnixMS }),

@@ -35,6 +35,7 @@ export type DesktopTransportRecoverySnapshot = Readonly<{
   revision: number;
   phase: 'ready' | 'waiting' | 'connecting' | 'paused' | 'failed';
   attempt_count: number;
+  ssh_transport_generation?: number;
   started_at_unix_ms?: number;
   next_attempt_at_unix_ms?: number;
   recovered_at_unix_ms?: number;
@@ -180,6 +181,7 @@ export function normalizeDesktopTransportRecoverySnapshot(
         action === 'retry_now' || action === 'open_connection_center' ? [action] : []
       ))
     : [];
+  const sshGeneration = positiveInteger(candidate.ssh_transport_generation);
   const startedAtUnixMS = positiveInteger(candidate.started_at_unix_ms);
   const nextAttemptAtUnixMS = positiveInteger(candidate.next_attempt_at_unix_ms);
   const recoveredAtUnixMS = positiveInteger(candidate.recovered_at_unix_ms);
@@ -188,6 +190,7 @@ export function normalizeDesktopTransportRecoverySnapshot(
     revision,
     phase,
     attempt_count: attemptCount,
+    ...(sshGeneration === null ? {} : { ssh_transport_generation: sshGeneration }),
     ...(startedAtUnixMS === null ? {} : { started_at_unix_ms: startedAtUnixMS }),
     ...(nextAttemptAtUnixMS === null ? {} : { next_attempt_at_unix_ms: nextAttemptAtUnixMS }),
     ...(recoveredAtUnixMS === null ? {} : { recovered_at_unix_ms: recoveredAtUnixMS }),
@@ -312,4 +315,31 @@ export function notifyDesktopSessionAppReady(
 export async function retryDesktopModels(): Promise<void> {
   const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
   await bridge?.retryDesktopModels?.();
+}
+
+/** Wait inside the published source acquisition; Desktop owns transport recovery. */
+export async function waitForDesktopTransportReady(signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  const initial = readDesktopTransportRecoverySnapshot();
+  if (!initial || initial.phase === 'ready') { signal.throwIfAborted(); return; }
+  await new Promise<void>((resolve, reject) => {
+    let unsubscribe = () => undefined as void;
+    let settled = false;
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe(); signal.removeEventListener('abort', abort);
+      if (error) reject(error); else resolve();
+    };
+    const abort = () => finish(signal.reason ?? new DOMException('Canceled', 'AbortError'));
+    const accept = (snapshot: DesktopTransportRecoverySnapshot) => {
+      if (snapshot.phase === 'ready') finish();
+      else if (snapshot.phase === 'failed') finish(Object.assign(new Error('Desktop session requires reopening'), { code: 'ENV_SESSION_REOPEN_REQUIRED' }));
+    };
+    signal.addEventListener('abort', abort, { once: true });
+    unsubscribe = subscribeDesktopTransportRecovery(accept);
+    accept(readDesktopTransportRecoverySnapshot() ?? initial);
+    if (signal.aborted) abort();
+    if (settled) unsubscribe();
+  });
 }

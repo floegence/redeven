@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop transport recovery and model-source sessions
 tags: [desktop, runtime, transport, recovery]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -13,11 +13,13 @@ A placement bridge owns one immutable recovery generation and exact Environment 
 
 ## Transport recovery
 ### Recovery presentation
-Recovery uses an unboxed layout within the existing shell, with generous whitespace, semantic theme colors, standard buttons, and fine separators around the authoritative countdown or active phase.
+First load and terminal failures use the full unboxed status surface. After successful admission, recoverable loss uses a compact out-of-flow status with expandable controls/diagnostics; it does not cover the workspace, move content, steal draft focus or expose a full-canvas countdown. Successful protocol and secure-session recovery restores the workspace immediately. Authentication loss and terminal transport failure still withdraw interaction authority.
+
+The existing coordinator waits for Desktop transport readiness inside published source acquisition instead of racing another connection controller. A ready bridge plus repeated retryable upper-layer transport failures requests bounded SSH verification once per protocol attempt; it neither restarts Runtime nor replays requests. Local artifact fetch/body acquisition has a 15-second deadline and preserves caller cancellation and upstream retry classification. Paused/failed Desktop state cannot acquire new credentials.
 
 A 30-second stalled-app timeout shows an actionable failure instead of an endless loading surface.
 
-Each established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `paused`, `ready`, or `failed` phase, completed attempt count, known retry and recovery timestamps, a structured failure, and explicitly allowed actions.
+Each established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `paused`, `ready`, or `failed` phase, completed attempt count, optional SSH transport generation, known retry and recovery timestamps, a structured failure, and explicitly allowed actions.
 
 Lifecycle generation fencing cancels matching Opens so a late response cannot recreate the old session.
 
@@ -49,3 +51,8 @@ Welcome Flower and Tessiven share compatibility/AI readiness. Returning to prepa
 
 - `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Source.
 - `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Tests.
+
+- `redeven:desktop/src/main/runtimeOpenContinuity.test.ts` - Executes the production Open boundary: bridge-first dialing and no network/auth-triggered lifecycle mutation.
+- `redeven:desktop/src/main/runtimePlacementBridgeSessionLifecycle.test.ts` - Real loopback HTTP/2 stalls, verification ordering, cancellation, identity fencing and feedback recovery.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.browser.test.tsx` - Chromium layout, focus, accessible compact controls across desktop/mobile and English/Chinese.
+- `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.recovery.test.ts` - Published acquisition/controller integration, fetch deadlines and rejection of disconnected mutations.

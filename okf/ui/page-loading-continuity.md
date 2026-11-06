@@ -3,7 +3,7 @@ type: UI Contract
 title: Page loading, asynchronous feedback and document recovery
 tags: [ui, startup, lifecycle, workbench]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -26,6 +26,9 @@ Runtime/resource/source identity scopes retention. Navigation, replacement and a
 - Settings/Flower/Tessiven/Plugin Center/dynamic plugins use shared module status; resource/runtime/lifecycle owners govern readiness/errors.
 
 `ENV_PAGE_PRESENTATIONS` exhaustively covers `BuiltinActivityPage` loading/reload policies in Activity and Workbench. [Filesystem navigation](filesystem-picker-navigation.md) retains its security boundary.
+
+## Connection continuity
+An admitted same-resource workspace stays mounted and locally interactive through recoverable transport loss, including Flower drafts, pane placement and plugin drawers. A compact accessible status exposes stop/resume/retry and technical details on demand. Remote commands and submissions still require the current published session and permission; unavailable session HTTP rejects without queuing a later mutation. Initial loading, revoked access and terminal recovery failure retain their blocking surfaces. Completion does not add a success-overlay delay.
 
 ## Asynchronous layout
 Use published Button loading slot/`icon`; changing labels use `StableText` with every localized transient/completion/failure label. Host preparation has independently scrolling body/persistent action baseline. Unknown image dimensions use bounded 16:9 contain sizing; long diagrams/render errors scroll in reserved viewports.

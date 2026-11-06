@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest';
+import { SessionError } from '@floegence/flowersec-core';
 import { createHash } from 'node:crypto';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import {
@@ -407,6 +408,19 @@ describe('terminal semantic live transport', () => {
       'terminal session not found',
     ))).toBe('session_gone');
     expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 409 }))).toBeNull();
+  });
+
+  it('preserves published transport failure codes and never classifies a rejected stream as reconnectable', async () => {
+    const { rpc } = createRpcMock();
+    for (const code of ['closed', 'going_away', 'liveness_failed', 'timeout', 'canceled', 'stream_rejected', 'operation_failed'] as const) {
+      const failure = new SessionError(code);
+      const openStream = vi.fn(async () => { throw failure; });
+      const bundle = createRedevenTerminalLiveBundle(rpc, () => ({ openStream } as any), 'connection-1');
+      await expect(bundle.transport.attachWithPresentation('session-1', 80, 24)).rejects.toBe(failure);
+      expect(classifyTerminalAttachLifecycleExit(failure)).toBe(['stream_rejected', 'operation_failed'].includes(code) ? null : 'disconnected');
+      expect(openStream).toHaveBeenCalledOnce();
+      bundle.transport.dispose();
+    }
   });
 
   it('allocates a distinct live connection identity for every terminal view', () => {

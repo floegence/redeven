@@ -4698,7 +4698,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('dismisses the retained Workbench manager across mode changes and connection recovery', async () => {
+  it('dismisses the Workbench manager on mode changes and preserves it through recoverable loss', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -4723,10 +4723,11 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(drawer()));
       publishProtocolWaiting({ code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' });
       await flushUntil(() => Boolean(host.querySelector('[data-testid="connection-recovery-view"]')));
-      expect(drawer()).toBeNull();
+      const retainedDrawer = drawer();
+      expect(retainedDrawer).not.toBeNull();
       publishProtocolConnected();
       await vi.waitFor(() => expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeNull(), { timeout: 2500 });
-      expect(drawer()).toBeNull();
+      expect(drawer()).toBe(retainedDrawer);
     } finally { dispose(); }
   }, 10000);
 
@@ -5515,7 +5516,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(protocolSnapshot.state).toBe('connected');
       expect(host.textContent).not.toContain('Connection needs attention');
-      expect(host.querySelector('[data-recovery-state="succeeded"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeNull();
     } finally { dispose(); }
   });
 
@@ -5651,7 +5652,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
       expect(host.textContent).toContain('Restoring connection');
-      expect(host.querySelector('[data-testid="workbench-page"]')?.closest('[aria-hidden="true"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')?.closest('[aria-hidden="true"]')).toBeNull();
       expect(retryNowMock).not.toHaveBeenCalled();
 
       const initialConnectionConfig = protocolConnectionConfig;
@@ -5690,7 +5691,8 @@ describe('EnvAppShell environment entry affordances', () => {
       const workspace = host.querySelector('[data-testid="workbench-page"]');
       publishProtocolWaiting(new Error('Runtime restarting'));
       await flushAsync();
-      expect(host.textContent).toContain('Retrying in 5s');
+      expect(host.querySelector('[data-recovery-compact]')).toBeTruthy();
+      expect(host.querySelector('[role="timer"]')).toBeNull();
       const stop = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Stop retrying');
       expect(stop).toBeTruthy();
       stop!.click();
@@ -5707,7 +5709,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => protocolSnapshot.state === 'connected');
       expect(replaceConnectionMock).toHaveBeenCalledOnce();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBe(workspace);
-      expect(host.querySelector('[data-recovery-state="succeeded"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeNull();
     } finally { dispose(); }
   });
 
@@ -5790,7 +5792,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginLifecycleMocks.loadInventoryProjection).not.toHaveBeenCalled();
       expect(pluginLifecycleMocks.recoverEnabled).not.toHaveBeenCalled();
 
-      await localDirectArtifactSourceOptions.beforeAcquire?.();
+      await localDirectArtifactSourceOptions.beforeAcquire?.({ signal: new AbortController().signal });
       const secondBinding = pluginCredential.replacePendingPluginSessionCredential('ch_attempt_2', 'credential-2');
       expect(secondBinding).toBeTruthy();
       localDirectArtifactSourceOptions.afterCredentialStaged?.(secondBinding);
@@ -5839,7 +5841,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
-  it('keeps the first Activity Flower instance hidden and inert across recovery and the access gate', async () => {
+  it('retains the first Activity Flower through recovery and withdraws it on access loss', async () => {
     vi.useFakeTimers();
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     getLocalAccessStatusMock.mockReset();
@@ -5884,8 +5886,8 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="ai-page"]')).toBe(flowerSurface);
       expect(companion.getAttribute('aria-hidden')).toBe('true');
       expect(companionInert()).toBe(true);
-      expect(flowerSurface.dataset.engaged).toBe('false');
-      expect(flowerSurface.dataset.transcriptVisible).toBe('false');
+      expect(flowerSurface.dataset.engaged).toBe('true');
+      expect(flowerSurface.dataset.transcriptVisible).toBe('true');
       expect(flowerSurface.dataset.presenceOwner).toBe('true');
       expect(activitySurfaceLifecycleState.flowerMounts).toBe(1);
       expect(activitySurfaceLifecycleState.flowerCleanups).toBe(0);
@@ -6673,7 +6675,7 @@ describe('EnvAppShell remote access gate', () => {
       );
       await flushAsync();
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
-      expect(host.textContent).toContain('Retrying in 2s');
+      expect(host.querySelector('[data-recovery-compact]')).toBeTruthy();
       expect(retryNowMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(2_000);
