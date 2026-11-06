@@ -145,6 +145,23 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 		t.Fatal("method inventory scope missing")
 	}
 	execute("const detail=await ui.ref(exportRef).node(); ui.assert(detail.role==='link'); await ui.snapshot({full:true});")
+	// Execute the core reference's authored examples against an observed HTML
+	// element, so the documented object return cannot drift into a scalar.
+	guide, _ := computerScriptHelp("core", true)
+	examples := 0
+	for _, line := range strings.Split(guide, "\n") {
+		_, example, found := strings.Cut(line, "Example: ")
+		if !found {
+			continue
+		}
+		example, _, _ = strings.Cut(example, " Details:")
+		execute(strings.ReplaceAll(example, "'observed-ref'", "exportRef"))
+		examples++
+	}
+	if examples != 2 {
+		t.Fatalf("core examples changed without qualification: %d", examples)
+	}
+	execute(`const fields=await ui.ref(exportRef).source(); ui.assert(Array.isArray(fields.fields)); const condition=await ui.ref(exportRef).waitFor({state:'visible',timeout_ms:0}); ui.assert(condition.state==='visible');`)
 
 	// A document root is not a rendered element. Rejecting its text read
 	// must produce an accurate capability rejection and leave the page usable.

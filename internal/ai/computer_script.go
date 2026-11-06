@@ -173,15 +173,24 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	defer func() { p.cancelMu.Lock(); p.cancel = nil; p.cancelMu.Unlock() }()
 	select {
 	case <-p.done:
+		if err := ctx.Err(); err != nil {
+			return TargetToolResult{}, err
+		}
 		return TargetToolResult{}, errors.New("computer script was retired")
 	default:
 	}
 	send := func(value any) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		body, err := json.Marshal(value)
 		if err != nil {
 			return err
 		}
 		_, err = p.stdin.Write(append(body, '\n'))
+		if err != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return err
 	}
 	deadline, _ := ctx.Deadline()
@@ -258,6 +267,12 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				output.Attachments = nil
 			}
 			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations), "remaining_log_bytes": max(0, 65536-logBytes), "log_limit_bytes": 65536}
+			switch {
+			case errors.Is(outputErr, context.Canceled):
+				payload["stop_reason"] = "cancelled"
+			case errors.Is(outputErr, context.DeadlineExceeded):
+				payload["stop_reason"] = "deadline_exceeded"
+			}
 			// Resource exhaustion and effect certainty are independent facts. A
 			// transport failure can consume the remaining deadline while the
 			// operation's effect is still unknown; retain both facts.
@@ -339,6 +354,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			return result, ctx.Err()
 		case msgValue, ok := <-p.lines:
 			if !ok {
+				if err := ctx.Err(); err != nil {
+					return result, err
+				}
 				return result, errors.New("computer script connection closed")
 			}
 			msg = msgValue
@@ -626,15 +644,21 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					completed = append(completed, anyToString(msg.Operation["action"]))
 				}
 			}
+			// Cancellation belongs to the host invocation. Returning it does not
+			// depend on a reply from the interpreter being retired. Prefix facts
+			// above remain authoritative, including a confirmed late completion.
+			if errors.Is(stopped, context.Canceled) || errors.Is(stopped, context.DeadlineExceeded) {
+				return result, stopped
+			}
+			if stopped == nil {
+				failedOperationIndex, failedAction = -1, ""
+			}
 			response := map[string]any{"type": "operation_result", "id": msg.ID, "result": observed.Result}
 			if stopped != nil {
 				response["error"] = "HOST_OPERATION_STOPPED"
 			}
 			if err := send(response); err != nil {
 				return result, err
-			}
-			if stopped == nil {
-				failedOperationIndex, failedAction = -1, ""
 			}
 		case "result", "error":
 			if msg.ID != call.ToolCallID {

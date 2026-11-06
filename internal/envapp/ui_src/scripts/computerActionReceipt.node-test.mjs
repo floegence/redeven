@@ -71,7 +71,7 @@ for (const boundary of ['before_preparation', 'hit_test', 'after_pointer_move', 
         const safety = controller.page.safety.bind(controller.page);
         controller.page.safety = (...args) => inputs ? Promise.reject(new Error('unavailable')) : safety(...args);
       }
-      const result = await controller.execute({tool_name:'computer.action',args:{action:'click',selector:{role:'link',name:'Report',exact:true}},full_access:true,script_operation:true});
+      const result = await controller.execute({tool_name:'computer.action',args:{action:'click',selector:{role:'link',name:'Report',exact:true},scroll_into_view:true},full_access:true,script_operation:true});
       assert.equal(JSON.stringify(result).includes('private exception'), false);
       if (boundary === 'after_input') {
         assert.equal(result.error, undefined);
