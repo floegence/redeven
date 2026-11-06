@@ -18,7 +18,7 @@
     "check:wire-schemas": "node scripts/generateRedevenWireSchemas.mjs --check",
     "preview": "vite preview --host 0.0.0.0 --port 8096",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test ../../../scripts/check_soft_surface_integration.test.mjs && node --test scripts/buildEnvApp.node-test.mjs scripts/desktopComputerLiveEvidence.node-test.mjs scripts/inputFocusSources.node-test.mjs scripts/checkThemeColorSources.node-test.mjs scripts/initialBuildGraphPolicy.node-test.mjs scripts/redevpluginRuntimeFixture.node-test.mjs scripts/terminalAgentIconIntegrity.node-test.mjs scripts/terminalCarrierRunnerPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && node scripts/checkThemeColorSources.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
+    "test": "node --test --test-name-pattern=EnvApp ../../../scripts/flower_streaming_css.test.mjs && node --test ../../../scripts/check_soft_surface_integration.test.mjs && node --test scripts/buildEnvApp.node-test.mjs scripts/desktopComputerLiveEvidence.node-test.mjs scripts/inputFocusSources.node-test.mjs scripts/checkThemeColorSources.node-test.mjs scripts/initialBuildGraphPolicy.node-test.mjs scripts/redevpluginRuntimeFixture.node-test.mjs scripts/terminalAgentIconIntegrity.node-test.mjs scripts/terminalCarrierRunnerPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && node scripts/checkThemeColorSources.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
     "test:browser": "node scripts/runVitestBrowser.mjs",
     "test:host-application-browser": "vitest run --config vitest.host-application.config.ts",
     "test:browser:headed": "node scripts/runVitestBrowser.mjs --browser.headless=false",
@@ -98,7 +98,8 @@
     "vitefu": "^1.1.3",
     "baseline-browser-mapping": "^2.11.0",
     "browserslist": "^4.28.7",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "lightningcss": "1.33.0"
   },
   "pnpm": {
     "overrides": {
@@ -130,7 +131,8 @@
       "vitefu": "^1.1.3",
       "baseline-browser-mapping": "^2.11.0",
       "browserslist": "^4.28.7",
-      "zod": "^4.6.7"
+      "zod": "^4.6.7",
+      "lightningcss": "1.33.0"
     },
     "onlyBuiltDependencies": [
       "esbuild"

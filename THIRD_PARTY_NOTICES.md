@@ -3490,29 +3490,17 @@ SOFTWARE.
 | levn | 0.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/levn/v/0.4.1 |  |
 | libavoid-js | 0.5.0-beta.5 | LGPL-2.1-or-later | Desktop shell, Env App UI | https://www.npmjs.com/package/libavoid-js/v/0.5.0-beta.5 | Reviewed as an unmodified, independently replaceable WASM library; exact artifacts, corresponding source, and license are verified below. |
 | lie | 3.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/lie/v/3.3.0 |  |
-| lightningcss-android-arm64 | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-android-arm64/v/1.32.0 |  |
 | lightningcss-android-arm64 | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-android-arm64/v/1.33.0 |  |
-| lightningcss-darwin-arm64 | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-darwin-arm64/v/1.32.0 |  |
 | lightningcss-darwin-arm64 | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-darwin-arm64/v/1.33.0 |  |
-| lightningcss-darwin-x64 | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-darwin-x64/v/1.32.0 |  |
 | lightningcss-darwin-x64 | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-darwin-x64/v/1.33.0 |  |
-| lightningcss-freebsd-x64 | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-freebsd-x64/v/1.32.0 |  |
 | lightningcss-freebsd-x64 | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-freebsd-x64/v/1.33.0 |  |
-| lightningcss-linux-arm-gnueabihf | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-arm-gnueabihf/v/1.32.0 |  |
 | lightningcss-linux-arm-gnueabihf | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-arm-gnueabihf/v/1.33.0 |  |
-| lightningcss-linux-arm64-gnu | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-arm64-gnu/v/1.32.0 |  |
 | lightningcss-linux-arm64-gnu | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-arm64-gnu/v/1.33.0 |  |
-| lightningcss-linux-arm64-musl | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-arm64-musl/v/1.32.0 |  |
 | lightningcss-linux-arm64-musl | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-arm64-musl/v/1.33.0 |  |
-| lightningcss-linux-x64-gnu | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-x64-gnu/v/1.32.0 |  |
 | lightningcss-linux-x64-gnu | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-x64-gnu/v/1.33.0 |  |
-| lightningcss-linux-x64-musl | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-x64-musl/v/1.32.0 |  |
 | lightningcss-linux-x64-musl | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-linux-x64-musl/v/1.33.0 |  |
-| lightningcss-win32-arm64-msvc | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-win32-arm64-msvc/v/1.32.0 |  |
 | lightningcss-win32-arm64-msvc | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-win32-arm64-msvc/v/1.33.0 |  |
-| lightningcss-win32-x64-msvc | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-win32-x64-msvc/v/1.32.0 |  |
 | lightningcss-win32-x64-msvc | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss-win32-x64-msvc/v/1.33.0 |  |
-| lightningcss | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss/v/1.32.0 |  |
 | lightningcss | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss/v/1.33.0 |  |
 | locate-path | 6.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/locate-path/v/6.0.0 |  |
 | lodash.escaperegexp | 4.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/lodash.escaperegexp/v/4.1.2 |  |

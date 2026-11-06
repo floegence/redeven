@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 tags: [flower, streaming, performance, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -27,6 +27,8 @@ Published createIncrementalMarkdownParser owns Marked/CJK/GFM:reset full baselin
 ## Text/layout
 New prose fades currentColor320ms through20fixed CSS highlights,no node splits/layout/delivery delay. History/corrections immediate,links/code/media keep ink. No stylesheet/computed-style/per-frame inline work. Bound32groups/owner,diff8192chars/128nodes per region;larger immediate. Completion settles;reset/dispose/hidden/reduced-motion/forced-colors clears. Hot drag/resize settles ink while text/selection/DOM stay live;only later arrivals animate. Historical/unsupported APIs schedule nothing.
 
+Both hosts pin Tailwind's Lightning CSS optimizer to 1.33.0 through matching npm/pnpm overrides. Version 1.32.0 warns on valid `::highlight()` selectors. Keep all 20 phase colors through optimization and minification; do not suppress warnings or disable optimization. `scripts/flower_streaming_css.test.mjs` exercises each installed Tailwind plugin's optimizer in both modes; host gates select their own cases.
+
 Cold sealed bodies stage across reconnect then reveal final geometry without height motion;sample table/code/list/text from first frame. Other prose stays incremental. Font completion/error listeners dispose,not detached ready promises. Companion reads latest relevant record/bounded Unicode tail. Measured offscreen sections retain DOM with content-visibility:auto/intrinsic height;near/live/focused/selected explicitly visible. Intersection controls measurement,never paint admission:scrollbar jump must paint before callback,including compositor/native-wheel blank-frame checks. Existing scroll owner corrects before paint.
 
 ## Queue/verification
@@ -45,5 +47,6 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 # Evidence
 
 - [Indexed records](../../internal/flower_ui/src/runtimeThreadRecord.test.ts)
+- [Streaming CSS optimizer regression](../../scripts/flower_streaming_css.test.mjs)
 - FlowerSurface.contextErrors shared/browser and i18n tests cover completed-response feedback.
 - [Streaming browser qualification](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx) and [current acceptance](../operations/flower-long-thread-gate.md).

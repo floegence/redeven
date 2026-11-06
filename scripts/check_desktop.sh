@@ -60,6 +60,7 @@ main() {
   (
     cd "$dir"
     ui_pkg_ensure_dependencies "$dir"
+    node --test --test-name-pattern=Desktop ../scripts/flower_streaming_css.test.mjs
     npm run lint
     npm run typecheck
     node --test scripts/build-main.test.mjs scripts/package-size.test.mjs
