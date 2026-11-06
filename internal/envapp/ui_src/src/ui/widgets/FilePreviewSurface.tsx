@@ -1,3 +1,4 @@
+import { FilePreviewSearchScope } from './FilePreviewSearch';
 import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { Show, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { useLayout } from '@floegence/floe-webapp-core';
@@ -29,6 +30,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
   const title = () => props.item?.name ?? i18n.t('filePreview.previewWindowTitle');
 
   return (
+    <FilePreviewSearchScope>
     <PreviewWindow
       open={props.open}
       onOpenChange={props.onOpenChange}
@@ -57,5 +59,6 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       />
       </FlowerContextSource>
     </PreviewWindow>
+    </FilePreviewSearchScope>
   );
 }

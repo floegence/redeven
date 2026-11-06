@@ -44,10 +44,19 @@ await session.run(async () => {
     await page.waitForFunction(() => document.querySelectorAll('iframe').length === 1);
     await page.screenshot({path:path.join(output,'retained-html.png')});
     await open('LICENSE', new TextEncoder().encode('MIT License\nCopyright Floegence\nLicense terms'));
-    await page.getByRole('button', { name: 'Find in file', exact: true }).click();
+    const headerFind = page.locator('[data-floe-floating-window-titlebar]').getByRole('button', { name: 'Find in file', exact: true });
+    await headerFind.waitFor();
+    const editor = page.locator('[data-preview-document="/acceptance/LICENSE"] .monaco-editor');
+    await editor.waitFor();
+    const editorBounds = await editor.boundingBox();
+    const documentBounds = await page.locator('[data-preview-document="/acceptance/LICENSE"]').boundingBox();
+    assert.equal(editorBounds.y, documentBounds.y, 'Monaco must not reserve a Find toolbar row');
+    assert.equal(editorBounds.height, documentBounds.height, 'Monaco must fill the document viewport');
+    await headerFind.click();
     const find = page.locator('.find-widget textarea[aria-label="Find"]');
     await find.fill('License');
     await page.waitForFunction(() => document.querySelector('.matchesCount')?.textContent === '1 of 2');
+    assert.deepEqual(await editor.boundingBox(), editorBounds, 'Opening Monaco Find must preserve viewport geometry');
     for (const label of ['Find in Selection', 'Close']) {
       const target = page.locator('.find-widget [aria-label^="' + label + '"]');
       if (label === 'Find in Selection') {
@@ -73,11 +82,22 @@ await session.run(async () => {
     }
     await open('notes.md', new TextEncoder().encode('# Reading preview\n\nHello **world**, hello world.'));
     assert.equal(await page.locator('[data-preview-document="/acceptance/LICENSE"]').evaluate(el => getComputedStyle(el).opacity), '0');
-    await page.getByRole('button', { name: 'Find in file', exact: true }).click();
+    const markdown = page.locator('[data-preview-document="/acceptance/notes.md"] .file-markdown-body');
+    const markdownBounds = await markdown.boundingBox();
+    await headerFind.click();
     await page.getByRole('searchbox').fill('hello world');
     await page.getByRole('status').filter({ hasText: '1 of 2' }).waitFor();
     await page.getByRole('searchbox').press('Enter');
     assert.equal(await page.locator('.floe-text-search [role="status"]').textContent(), '2 of 2');
+    assert.deepEqual(await markdown.boundingBox(), markdownBounds, 'Opening rendered Find must preserve viewport geometry');
+    const searchLayout = await page.locator('.redeven-preview-search-overlay').evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const owner = element.closest('[data-preview-document]').getBoundingClientRect();
+      return { absolute: getComputedStyle(element).position === 'absolute', compact: bounds.width <= 450,
+        contained: bounds.left >= owner.left && bounds.right <= owner.right,
+        noOverflow: element.scrollWidth <= element.clientWidth };
+    });
+    assert.deepEqual(searchLayout, { absolute: true, compact: true, contained: true, noOverflow: true });
     await page.screenshot({ path: path.join(output, 'markdown-search.png') });
     await page.getByRole('tab').filter({ hasText: 'LICENSE' }).click();
     assert.equal(await find.inputValue(), 'License');
@@ -85,8 +105,10 @@ await session.run(async () => {
     assert.equal(await page.getByRole('searchbox').inputValue(), 'hello world');
     await page.getByRole('searchbox').press('Escape');
     assert.equal(await page.getByRole('search').count(), 0);
+    assert.deepEqual(await markdown.boundingBox(), markdownBounds, 'Closing Find must preserve viewport geometry');
+    assert.ok(await headerFind.evaluate(element => element === document.activeElement), 'Closing Find must restore the header action focus');
     assert.equal(await page.locator('[data-floe-floating-window-surface]').count(), 1);
-    report.checks.push({ search: 'markdown-and-text', tooltip: 'stable-contained', retainedSearch: true });
+    report.checks.push({ search: 'markdown-and-text', tooltip: 'stable-contained', retainedSearch: true, searchLayout: 'header-action-and-compact-overlay', viewportUnchanged: true });
     const sources = process.env.REDEVEN_ACCEPTANCE_HTML ? JSON.parse(process.env.REDEVEN_ACCEPTANCE_HTML) : [];
     if (sources.length) {
       assert.equal(sources.length,2);

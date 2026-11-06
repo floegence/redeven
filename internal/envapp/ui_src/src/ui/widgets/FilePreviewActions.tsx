@@ -11,12 +11,13 @@ import {
 } from 'solid-js';
 import { Button, FeedbackIndicator, capturePromptCardAnchor } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
-import { Check, Copy, Download, Loader2, MoreHorizontal, Pencil, Save, X } from '@floegence/floe-webapp-core/icons';
+import { Check, Copy, Download, Loader2, MoreHorizontal, Pencil, Save, Search, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { useI18n } from '../i18n';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { isTextFilePreview } from '../utils/filePreview';
+import { useFilePreviewSearch } from './FilePreviewSearch';
 import type { FilePreviewContentProps } from './FilePreviewContent';
 
 export interface FilePreviewActionsProps extends Pick<
@@ -62,6 +63,7 @@ type PreviewAction = {
 
 export function FilePreviewActions(props: FilePreviewActionsProps) {
   const i18n = useI18n();
+  const search = useFilePreviewSearch();
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const buttonClass = () => cn(PREVIEW_HEADER_ICON_BUTTON_CLASS, props.compact ? 'size-7' : 'size-8');
   const showEditorActions = () =>
@@ -208,6 +210,14 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
 
   return (
     <div ref={actionsRoot} tabIndex={-1} class="flex shrink-0 items-center justify-end gap-1">
+      <Show when={search?.action()}>
+        {action => <button type="button" class={buttonClass()} data-redeven-preview-find
+          disabled={props.active === false || props.loading || !action().enabled()}
+          aria-label={i18n.t('filePreview.findInFile')} title={i18n.t('filePreview.findInFile')}
+          aria-expanded={action().expanded?.()} onClick={event => action().show(event.currentTarget)}>
+          <Search class="size-3.5" aria-hidden="true" />
+        </button>}
+      </Show>
       <FeedbackIndicator
         label={i18n.t('filePreview.saveFailedTitle')}
         closeLabel={i18n.t('common.actions.close')}

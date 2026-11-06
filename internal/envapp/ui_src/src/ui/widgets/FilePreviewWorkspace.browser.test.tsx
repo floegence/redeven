@@ -45,10 +45,17 @@ it.each(['light', 'dark'] as const)('searches rendered markdown and isolates Mon
   await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toBeVisible();
   const markdown = document.querySelector('.file-markdown-body')!;
   const paragraph = markdown.querySelector('p');
+  const contentBounds = markdown.getBoundingClientRect().toJSON();
+  expect(document.querySelector('.file-markdown-body [data-redeven-preview-find]')).toBeNull();
+  expect(document.querySelector('[data-floe-floating-window-titlebar] [data-redeven-preview-find]')).toBeTruthy();
   await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
   await userEvent.fill(page.getByRole('searchbox', { name: 'Find in file' }), 'Original content');
   await expect.element(page.getByRole('status').filter({ hasText: '1 of 1' })).toBeVisible();
   expect(markdown.querySelector('p')).toBe(paragraph);
+  expect(markdown.getBoundingClientRect().toJSON()).toEqual(contentBounds);
+  const overlay = document.querySelector<HTMLElement>('.redeven-preview-search-overlay')!;
+  expect(getComputedStyle(overlay).position).toBe('absolute');
+  expect(overlay.getBoundingClientRect().width).toBeLessThan(450);
   await page.screenshot({ element: document.querySelector('[data-floe-floating-window-surface]')!, path: '__screenshots__/preview-search-' + mode + '.png' });
   await userEvent.click(page.getByRole('tab').filter({ hasText: 'LICENSE' }));
   expect(document.querySelector('.monaco-editor')).toBe(editor);
@@ -92,14 +99,37 @@ it('keeps source editing, undo and search independent across file tabs', async (
   await expect.poll(() => controller.draftText()).toBe('Draft content retains undo and search');
 });
 
+it('rebinds the same header action when markdown switches between reading and editing', async () => {
+  await page.viewport(1280, 900); const workspace = mount();
+  await workspace.openPreview(file('notes.md'));
+  const find = page.getByRole('button', { name: 'Find in file', exact: true });
+  await userEvent.click(find);
+  await userEvent.fill(page.getByRole('searchbox'), 'Original');
+  await userEvent.keyboard('{Escape}');
+  workspace.activeController().beginEditing();
+  await expect.element(find).toBeEnabled();
+  await userEvent.click(find);
+  await expect.poll(() => document.querySelector('.find-widget.visible')).toBeTruthy();
+  expect(document.querySelector('[role="search"]')).toBeNull();
+  workspace.activeController().revertCurrent();
+  await expect.poll(() => document.querySelector('.monaco-editor')).toBeNull();
+  await userEvent.click(find);
+  await expect.element(page.getByRole('searchbox')).toBeVisible();
+  await userEvent.fill(page.getByRole('searchbox'), 'Original');
+  await expect.element(page.getByRole('status').filter({ hasText: '1 of 1' })).toBeVisible();
+});
+
 it('keeps markdown search usable on mobile and resets a closed document', async () => {
   await page.viewport(390, 844); const workspace = mount();
   await workspace.openPreview(file('notes.md'));
+  await expect.poll(() => document.querySelector('[role="dialog"]')?.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')).toBe(false);
+  const contentBounds = document.querySelector('.file-markdown-body')!.getBoundingClientRect().toJSON();
   await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
   await userEvent.fill(page.getByRole('searchbox'), 'missing');
   await expect.element(page.getByRole('status').filter({ hasText: 'No matches' })).toBeVisible();
   const search = document.querySelector<HTMLElement>('[role="search"]')!;
   const bounds = search.getBoundingClientRect();
+  expect(document.querySelector('.file-markdown-body')!.getBoundingClientRect().toJSON()).toEqual(contentBounds);
   expect(bounds.left).toBeGreaterThanOrEqual(0); expect(bounds.right).toBeLessThanOrEqual(390);
   expect(search.scrollWidth).toBeLessThanOrEqual(search.clientWidth);
   await page.screenshot({ element: document.querySelector('[role="dialog"]')!, path: '__screenshots__/preview-search-mobile.png' });
@@ -218,15 +248,19 @@ it('preserves the CSV source mode when switching to another file and back', asyn
   await page.viewport(1280, 900); const workspace = mount();
   await workspace.openPreview(file('report.csv'));
   await expect.element(page.getByRole('button', { name: 'Source', exact: true })).toBeVisible();
+  expect([...document.querySelectorAll<HTMLElement>('[data-floe-floating-window-titlebar] [data-redeven-preview-find]')].filter(button => button.checkVisibility())).toHaveLength(0);
   await userEvent.click(page.getByRole('button', { name: 'Source', exact: true }));
+  await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toBeEnabled();
   const preview = document.querySelector('[data-spreadsheet-format="csv"]');
   await workspace.openPreview(file('notes.md')); workspace.select('/workspace/report.csv');
   expect(document.querySelector('[data-spreadsheet-format="csv"]')).toBe(preview);
   await expect.element(page.getByRole('button', { name: 'Source', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(transport.read).toHaveBeenCalledTimes(2);
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[data-spreadsheet-format="csv"] [role="group"] button')!);
+  expect([...document.querySelectorAll<HTMLElement>('[data-floe-floating-window-titlebar] [data-redeven-preview-find]')].filter(button => button.checkVisibility())).toHaveLength(0);
 });
 
-it('reorders tabs without losing drafts and keeps only Flower and More beside window controls', async () => {
+it('reorders tabs without losing drafts and keeps compact actions beside window controls', async () => {
   await page.viewport(1280, 900); const workspace = mount();
   for (const name of ['first.md', 'second.md', 'third.md']) await workspace.openPreview(file(name));
   workspace.select('/workspace/first.md');

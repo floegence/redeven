@@ -1,3 +1,4 @@
+import { FilePreviewSearchScope } from './FilePreviewSearch';
 import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { Dynamic, Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type Component } from 'solid-js';
@@ -200,7 +201,7 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
           if (workspace.activeId() === entry.id && workspace.open()) return;
           content()?.querySelectorAll<HTMLMediaElement>('video, audio').forEach(media => media.pause());
         });
-        return <>
+        return <FilePreviewSearchScope>
           <Show when={actionsHost()}>{host => <Portal mount={host()}><div style={{ display: workspace.activeId() === entry.id && !layout.isMobile() ? undefined : 'none' }}>
             <FilePreviewActions {...panel} active={workspace.activeId() === entry.id && workspace.open()} compact presentation="header" contentElement={content()} />
           </div></Portal>}</Show>
@@ -213,7 +214,7 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
               contentRef={setContent} closeConfirmVariant="none" />
             </FlowerContextSource>
           </RetainedPanel>
-        </>;
+        </FilePreviewSearchScope>;
       };
       return <FilePreviewDocument controller={entry.controller} surface={SessionSurface} />;
     }}</For>

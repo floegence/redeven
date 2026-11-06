@@ -625,6 +625,8 @@
   gap: 5px;
 }
 
+.fm-toolbar-search-obscured { visibility: hidden; }
+
 .fm-toolbar-btn {
   display: inline-flex;
   align-items: center;

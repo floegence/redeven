@@ -1,0 +1,29 @@
+/* Search never participates in document flow or reserves a toolbar row. */
+.redeven-preview-search-overlay {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  z-index: 4;
+  width: min(26rem, calc(100% - 16px));
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  box-shadow: var(--redeven-shadow-soft, 0 6px 20px color-mix(in srgb, var(--foreground) 12%, transparent));
+}
+
+/* Keep match counts readable while the query field absorbs narrow widths. */
+.redeven-preview-search-overlay [role="status"] {
+  flex-shrink: 0;
+}
+
+.redeven-preview-search-trigger {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 12px;
+  z-index: 2;
+  border: 1px solid var(--border);
+  background: var(--background);
+}

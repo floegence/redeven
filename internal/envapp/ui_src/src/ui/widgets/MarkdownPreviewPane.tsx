@@ -9,6 +9,7 @@ import { useMarkdownPreviewPreferences } from '../services/markdownPreviewPrefer
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Search } from '@floegence/floe-webapp-core/icons';
 import { handlePreviewSearchShortcut } from './previewSearchShortcut';
+import { registerFilePreviewSearch } from './FilePreviewSearch';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -63,6 +64,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
     setEditorApi(api);
     api.editor.onDidDispose(() => setEditorApi(current => current === api ? undefined : current));
   };
+  const hostedSearch = registerFilePreviewSearch({ show: find, enabled: () => props.active !== false && !!editorApi() }, () => !!props.editing && !monacoFailed());
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const resolvedLanguage = createMemo(() => props.descriptor.language ?? 'markdown');
 
@@ -126,12 +128,10 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
   );
 
   return (
-    <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}
+    <div class={`relative flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}
       onKeyDown={event => { if (props.active !== false) handlePreviewSearchShortcut(event); }}>
-      <Show when={props.editing && !monacoFailed()}>
-        <div class="flex shrink-0 justify-end border-b border-border px-2 py-1">
-          <Button size="sm" variant="ghost" data-redeven-preview-find aria-label={i18n.t('filePreview.findInFile')} title={i18n.t('filePreview.findInFile')} disabled={!editorApi()} onClick={find}><Search class="size-3.5" /></Button>
-        </div>
+      <Show when={props.editing && !monacoFailed() && !hostedSearch}>
+          <Button class="redeven-preview-search-trigger" size="sm" variant="ghost" data-redeven-preview-find aria-label={i18n.t('filePreview.findInFile')} title={i18n.t('filePreview.findInFile')} disabled={!editorApi()} onClick={find}><Search class="size-3.5" /></Button>
       </Show>
 
       <div class="min-h-0 flex-1 overflow-hidden">

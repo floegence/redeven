@@ -214,12 +214,14 @@ describe('Workbench preview header', () => {
     const { host, state, setState } = mount('light', 0.8);
     await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toBeVisible();
     const viewport = { ...state().viewport };
+    const documentBounds = host.querySelector('.file-markdown-body')!.getBoundingClientRect().toJSON();
     await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
     await userEvent.fill(page.getByRole('searchbox'), 'preview');
     await expect.element(page.getByRole('status').filter({ hasText: '1 of 2' })).toBeVisible();
     await userEvent.keyboard('{Enter}');
     await expect.element(page.getByRole('status').filter({ hasText: '2 of 2' })).toBeVisible();
     expect(state().viewport).toEqual(viewport);
+    expect(host.querySelector('.file-markdown-body')!.getBoundingClientRect().toJSON()).toEqual(documentBounds);
     setState(current => ({ ...current, selectedWidgetId: null }));
     await expect.poll(() => [...CSS.highlights.keys()].filter(key => key.startsWith('floe-find-')).length).toBe(0);
     const shortcut = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });

@@ -1,5 +1,6 @@
-import { Dialog, DialogPlacementProvider, StableText, createTextSearch, TextSearchBar } from '@floegence/floe-webapp-core/ui';
+import { Dialog, DialogPlacementProvider, StableText, createTextSearch } from '@floegence/floe-webapp-core/ui';
 import { usePreviewSearchLabels } from '../widgets/previewSearchLabels';
+import { FilePreviewSearchOverlay, registerFilePreviewSearch } from '../widgets/FilePreviewSearch';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
@@ -175,6 +176,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   const searchLabels = usePreviewSearchLabels();
   const [searchContent, setSearchContent] = createSignal<HTMLDivElement>();
   const search = createTextSearch({ content: searchContent, active: () => props.active !== false, identity: () => props.filePath });
+  const hostedSearch = registerFilePreviewSearch({ show: search.show, enabled: () => props.active !== false, expanded: search.open });
   const [readingMode, setReadingMode] = createSignal(true);
   const [uncontrolledTextScalePercent, setUncontrolledTextScalePercent] = createSignal(
     normalizeMarkdownPreviewTextScalePercent(
@@ -782,13 +784,16 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   const renderToolbar = (placement: 'toc' | 'floating', inline = false): JSX.Element => (
     <div
       class={`fm-toolbar${placement === 'toc' ? ' fm-toolbar-toc' : ' fm-toolbar-floating'}${inline ? ' fm-toolbar-floating-inline' : ''}`}
+      classList={{ 'fm-toolbar-search-obscured': search.open() }}
       aria-label={i18n.t('uiCopy.preview.markdownControls')}
     >
       {renderTextScaleControls()}
+      <Show when={!hostedSearch}>
       <button type="button" class="fm-toolbar-btn" title={searchLabels.find} data-redeven-preview-find aria-label={searchLabels.find}
         aria-expanded={search.open()} onClick={event => search.show(event.currentTarget)}>
         <Search class="size-3.5" aria-hidden="true" />
       </button>
+      </Show>
       <button
         type="button"
         class={`fm-toolbar-btn${readingMode() ? ' fm-toolbar-active' : ''}`}
@@ -897,8 +902,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   );
 
   return (
-    <div class={`file-markdown-wrapper${props.class ? ` ${props.class}` : ''}`} style="display: flex; flex-direction: column; height: 100%; min-height: 0;" onKeyDown={search.onKeyDown}>
-      <TextSearchBar search={search} labels={searchLabels} />
+    <div class={`file-markdown-wrapper${props.class ? ` ${props.class}` : ''}`} style="position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0;" onKeyDown={search.onKeyDown}>
+      <FilePreviewSearchOverlay search={search} labels={searchLabels} />
       <div style="position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden;">
         <Show when={fatalIssue()}>
           {(issue) => (

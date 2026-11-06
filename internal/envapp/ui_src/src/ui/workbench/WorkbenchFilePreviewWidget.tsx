@@ -1,3 +1,4 @@
+import { FilePreviewSearchScope } from '../widgets/FilePreviewSearch';
 import { registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { dirnameAbsolute } from '../utils/askFlowerPath';
 import { Show, batch, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
@@ -390,11 +391,13 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   });
 
   return (
+    <FilePreviewSearchScope>
     <div ref={setBodyElement} onKeyDown={event => { if (props.selected) handlePreviewSearchShortcut(event); }} class="redeven-workbench-body-surface flex h-full min-h-0 flex-col overflow-hidden">
       <WorkbenchWidgetHeader
         titleTooltip={controller.item()?.path}
         actions={
           <FilePreviewActions
+            active={props.selected === true}
             compact
             presentation={narrowHeader() ? 'menu' : 'icons'}
             item={controller.item()}
@@ -503,5 +506,6 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       />
       </div>
     </div>
+    </FilePreviewSearchScope>
   );
 }

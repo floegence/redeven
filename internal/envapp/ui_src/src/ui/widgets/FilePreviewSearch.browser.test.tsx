@@ -4,6 +4,7 @@ import { render } from 'solid-js/web';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it } from 'vitest';
 import { TextFilePreviewPane } from './TextFilePreviewPane';
+import { FilePreviewContent } from './FilePreviewContent';
 
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
@@ -17,8 +18,12 @@ it('searches truncated text without matching line numbers or replacing content',
   dispose = render(() => <TextFilePreviewPane active={active()} path={path()} descriptor={{ mode: 'text', wrapText: false }} truncated
     text={['Literal [a.b]', '中文内容', 'Literal [a.b]'].join('\n')} />, host);
   const row = host.querySelector('code')!;
+  const viewport = host.querySelector<HTMLElement>('[data-testid="text-preview-fallback"]')!;
+  const before = viewport.getBoundingClientRect().toJSON();
+  expect(before.height).toBe(host.clientHeight);
   await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
   await userEvent.fill(page.getByRole('searchbox'), '[a.b]');
+  expect(viewport.getBoundingClientRect().toJSON()).toEqual(before);
   await expect.element(page.getByRole('status')).toHaveTextContent('1 of 2');
   expect(host.querySelector('code')).toBe(row);
   await userEvent.keyboard('{Enter}');
@@ -37,4 +42,26 @@ it('searches truncated text without matching line numbers or replacing content',
   await expect.element(page.getByRole('searchbox')).toHaveValue('');
   await userEvent.keyboard('{Escape}');
   await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toHaveFocus();
+});
+
+it.each([320, 1280])('keeps headerless text search discoverable without reserving space at %ipx', async width => {
+  await page.viewport(width, 844);
+  const host = document.createElement('div');
+  host.style.cssText = 'height:400px;width:100%'; document.body.append(host);
+  dispose = render(() => <FilePreviewContent showHeader={false} descriptor={{ mode: 'text' }} truncated
+    item={{ id: 'text', path: '/large.txt', name: 'large.txt', type: 'file' }} text={'Search this text'} />, host);
+  const viewport = host.querySelector<HTMLElement>('[data-testid="text-preview-fallback"]')!;
+  const before = viewport.getBoundingClientRect().toJSON();
+  expect(before.height).toBe(host.clientHeight);
+  await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
+  await userEvent.fill(page.getByRole('searchbox'), 'text');
+  await expect.element(page.getByRole('status')).toHaveTextContent('1 of 1');
+  expect(viewport.getBoundingClientRect().toJSON()).toEqual(before);
+  const overlay = host.querySelector<HTMLElement>('.redeven-preview-search-overlay')!;
+  expect(overlay.scrollWidth).toBeLessThanOrEqual(overlay.clientWidth);
+  const status = overlay.querySelector<HTMLElement>('[role="status"]')!;
+  expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth);
+  expect(overlay.getBoundingClientRect().height).toBeLessThanOrEqual(44);
+  expect(overlay.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+  await page.screenshot({ element: host, path: '__screenshots__/compact-text-search-' + width + '.png' });
 });
