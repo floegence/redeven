@@ -389,13 +389,6 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                 }}
               </For>
             </div>
-            <Show when={theme.theme() === 'system'}>
-              <p class="mt-1.5 text-[10px] text-muted-foreground">
-                {i18n.t(
-                  `shell.themePicker.systemResolved${activeMode() === 'light' ? 'Light' : 'Dark'}` as EnvAppTranslationKey,
-                )}
-              </p>
-            </Show>
           </div>
 
           <div class="mb-1.5 flex items-center justify-between gap-2">

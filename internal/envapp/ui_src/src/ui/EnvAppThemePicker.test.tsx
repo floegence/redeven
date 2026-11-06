@@ -203,7 +203,7 @@ describe('EnvAppThemePicker', () => {
 
       await vi.waitFor(() => expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'monokai'));
       expect(onSourceChange).not.toHaveBeenCalled();
-      expect(host.textContent).toContain('System is currently using dark mode');
+      expect(host.textContent).not.toContain('System is currently using');
     } finally {
       dispose();
     }

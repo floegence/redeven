@@ -929,8 +929,6 @@ export const enUS = {
         light: 'Light',
         dark: 'Dark',
       },
-      systemResolvedLight: 'System is currently using light mode',
-      systemResolvedDark: 'System is currently using dark mode',
       themesLabel: 'Themes',
       changeFailed: 'Could not update appearance. Try again.',
       switching: 'Switching appearance…',

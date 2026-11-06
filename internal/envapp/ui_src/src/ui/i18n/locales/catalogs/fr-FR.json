@@ -543,8 +543,6 @@
         "light": "Clair",
         "dark": "Sombre"
       },
-      "systemResolvedLight": "Le système utilise actuellement le mode clair",
-      "systemResolvedDark": "Le système utilise actuellement le mode sombre",
       "themesLabel": "Thèmes",
       "changeFailed": "Impossible de modifier l’apparence. Réessayez.",
       "switching": "Changement d’apparence…",

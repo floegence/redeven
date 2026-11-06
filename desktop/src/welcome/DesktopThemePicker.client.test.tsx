@@ -35,6 +35,7 @@ describe('Desktop appearance interaction', () => {
     expect(dialog.querySelector('.redeven-theme-picker__header')?.textContent).toBe('Theme');
     expect(dialog.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe('Color mode');
     expect(dialog.querySelector('[id$="-mode-label"]')).toBeNull();
+    expect(dialog.textContent).not.toContain('System is currently using');
   });
 
   it('selects Soft Black through the shared persistence request', async () => {

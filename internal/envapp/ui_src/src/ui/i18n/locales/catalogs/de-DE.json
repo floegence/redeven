@@ -543,8 +543,6 @@
         "light": "Hell",
         "dark": "Dunkel"
       },
-      "systemResolvedLight": "Das System verwendet derzeit den hellen Modus",
-      "systemResolvedDark": "Das System verwendet derzeit den dunklen Modus",
       "themesLabel": "Designs",
       "changeFailed": "Die Darstellung konnte nicht aktualisiert werden. Versuchen Sie es erneut.",
       "switching": "Darstellung wird geändert…",

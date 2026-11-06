@@ -543,8 +543,6 @@
         "light": "Claro",
         "dark": "Escuro"
       },
-      "systemResolvedLight": "O sistema está usando o modo claro",
-      "systemResolvedDark": "O sistema está usando o modo escuro",
       "themesLabel": "Temas",
       "changeFailed": "Não foi possível atualizar a aparência. Tente novamente.",
       "switching": "Alterando a aparência…",

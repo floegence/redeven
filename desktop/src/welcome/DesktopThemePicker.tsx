@@ -392,15 +392,6 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                 }}
               </For>
             </div>
-            <Show when={props.snapshot.source === 'system'}>
-              <p class="redeven-theme-picker__system-status">
-                {props.i18n.t(translationKey(
-                  props.snapshot.resolvedTheme === 'light'
-                    ? 'shell.themePicker.systemResolvedLight'
-                    : 'shell.themePicker.systemResolvedDark',
-                ))}
-              </p>
-            </Show>
           </div>
 
           <div class="redeven-theme-picker__themes-header">

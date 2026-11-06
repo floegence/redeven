@@ -2183,8 +2183,6 @@
         "light": "라이트",
         "dark": "다크"
       },
-      "systemResolvedLight": "현재 시스템에서 라이트 모드를 사용 중입니다",
-      "systemResolvedDark": "현재 시스템에서 다크 모드를 사용 중입니다",
       "themesLabel": "테마",
       "changeFailed": "화면 모양을 업데이트하지 못했습니다. 다시 시도하세요.",
       "switching": "화면 스타일 전환 중…",

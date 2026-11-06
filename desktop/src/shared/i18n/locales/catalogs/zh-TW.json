@@ -2183,8 +2183,6 @@
         "light": "淺色",
         "dark": "深色"
       },
-      "systemResolvedLight": "系統目前使用淺色模式",
-      "systemResolvedDark": "系統目前使用深色模式",
       "themesLabel": "主題",
       "changeFailed": "無法更新外觀，請再試一次。",
       "switching": "正在切換外觀…",
