@@ -577,7 +577,7 @@ export function ServiceTemplateDetailsPane(props: {
   };
   return (
     <aside
-      class="service-template-details min-w-0"
+      class={cn('service-template-details min-w-0', props.template.kind === 'host' && 'service-template-details--host')}
       data-testid="service-template-details"
       data-template-id={props.template.id}
       aria-label={props.template.name}
@@ -604,38 +604,68 @@ export function ServiceTemplateDetailsPane(props: {
       </div>
 
       <div class="service-template-details__body">
-        <DetailSection title={i18n.t('webServices.managed.deploymentInformation')}>
-          <DetailField label={i18n.t('webServices.managed.deployment')} value={props.template.deploymentLabel} />
-          <DetailField
-            label={i18n.t(props.template.source === 'builtin' ? 'webServices.managed.recommendedVersion' : 'webServices.managed.defaultVersion')}
-            value={props.template.defaultReleaseLabel ? `v${props.template.defaultReleaseLabel}` : i18n.t('webServices.managed.customVersion')}
-            mono
-          />
-          <DetailField label={i18n.t('webServices.managed.details.templateRevision')} value={props.template.revision} />
-          <DetailField label={i18n.t('webServices.managed.settings.accessMode')} value={props.template.defaultAccessMode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackShort') : props.template.defaultAccessMode === 'unified_proxy' ? i18n.t('webServices.accessMode.unifiedProxyShort') : '—'} />
-          <Show when={(props.template.runtimeSpec?.parameters?.length ?? 0) > 0}>
-            <DetailField label={i18n.t('webServices.managed.settings.templateParameters')} value={props.template.runtimeSpec?.parameters?.map((parameter) => parameter.name).join(', ')} mono wide />
-          </Show>
-          <Show when={props.template.diskBytes}>
-            <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(props.template.diskBytes, i18n.locale())} />
-          </Show>
-          <Show when={props.template.defaultWorkspacePath}>
-            <DetailField label={i18n.t('webServices.managed.defaultWorkspace')} value={props.template.defaultWorkspacePath} mono wide />
-          </Show>
-          <Show when={props.template.dataLocation}>
-            <DetailField label={i18n.t('webServices.managed.dataLocation')} value={props.template.dataLocation} mono wide />
-          </Show>
-        </DetailSection>
-
-        <Show when={props.template.runtimeSpec}>{(spec) => (
-          <Show when={spec().kind === 'container'} fallback={(
-            <Show when={spec().kind === 'host'} fallback={<ComposeTemplateDetails spec={spec()} />}>
-              <HostTemplateDetails spec={spec()} plan={props.template.hostLifecyclePlan} />
+        <Show when={props.template.kind === 'host'} fallback={(<>
+          <DetailSection title={i18n.t('webServices.managed.deploymentInformation')}>
+            <DetailField label={i18n.t('webServices.managed.deployment')} value={props.template.deploymentLabel} />
+            <DetailField
+              label={i18n.t(props.template.source === 'builtin' ? 'webServices.managed.recommendedVersion' : 'webServices.managed.defaultVersion')}
+              value={props.template.defaultReleaseLabel ? `v${props.template.defaultReleaseLabel}` : i18n.t('webServices.managed.customVersion')}
+              mono
+            />
+            <DetailField label={i18n.t('webServices.managed.details.templateRevision')} value={props.template.revision} />
+            <DetailField label={i18n.t('webServices.managed.settings.accessMode')} value={props.template.defaultAccessMode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackShort') : props.template.defaultAccessMode === 'unified_proxy' ? i18n.t('webServices.accessMode.unifiedProxyShort') : '—'} />
+            <Show when={(props.template.runtimeSpec?.parameters?.length ?? 0) > 0}>
+              <DetailField label={i18n.t('webServices.managed.settings.templateParameters')} value={props.template.runtimeSpec?.parameters?.map((parameter) => parameter.name).join(', ')} mono wide />
             </Show>
-          )}>
-            <ContainerTemplateDetails spec={spec()} />
-          </Show>
-        )}</Show>
+            <Show when={props.template.diskBytes}>
+              <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(props.template.diskBytes, i18n.locale())} />
+            </Show>
+            <Show when={props.template.defaultWorkspacePath}>
+              <DetailField label={i18n.t('webServices.managed.defaultWorkspace')} value={props.template.defaultWorkspacePath} mono wide />
+            </Show>
+            <Show when={props.template.dataLocation}>
+              <DetailField label={i18n.t('webServices.managed.dataLocation')} value={props.template.dataLocation} mono wide />
+            </Show>
+          </DetailSection>
+
+          <Show when={props.template.runtimeSpec}>{(spec) => (
+            <Show when={spec().kind === 'container'} fallback={<ComposeTemplateDetails spec={spec()} />}>
+              <ContainerTemplateDetails spec={spec()} />
+            </Show>
+          )}</Show>
+        </>)}>
+          <dl class="service-template-host-overview service-template-detail-grid" data-testid="host-template-overview">
+            <DetailField
+              label={i18n.t(props.template.source === 'builtin' ? 'webServices.managed.recommendedVersion' : 'webServices.managed.defaultVersion')}
+              value={props.template.defaultReleaseLabel ? `v${props.template.defaultReleaseLabel}` : i18n.t('webServices.managed.customVersion')}
+              mono
+            />
+            <Show when={props.template.defaultAccessMode}>
+              <DetailField label={i18n.t('webServices.managed.settings.accessMode')} value={i18n.t(props.template.defaultAccessMode === 'desktop_loopback' ? 'webServices.accessMode.desktopLoopbackShort' : 'webServices.accessMode.unifiedProxyShort')} />
+            </Show>
+            <Show when={props.template.diskBytes}>
+              <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(props.template.diskBytes, i18n.locale())} />
+            </Show>
+          </dl>
+          <details class="service-template-technical" data-testid="host-template-technical">
+            <summary><ChevronDown class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{i18n.t('webServices.managed.technicalDetails')}</summary>
+            <div class="service-template-technical__body">
+              <dl class="service-template-detail-grid">
+                <DetailField label={i18n.t('webServices.managed.details.templateRevision')} value={props.template.revision} />
+                <Show when={(props.template.runtimeSpec?.parameters?.length ?? 0) > 0}>
+                  <DetailField label={i18n.t('webServices.managed.settings.templateParameters')} value={props.template.runtimeSpec?.parameters?.map(parameter => parameter.name).join(', ')} mono wide />
+                </Show>
+                <Show when={props.template.defaultWorkspacePath}>
+                  <DetailField label={i18n.t('webServices.managed.defaultWorkspace')} value={props.template.defaultWorkspacePath} mono wide />
+                </Show>
+                <Show when={props.template.dataLocation}>
+                  <DetailField label={i18n.t('webServices.managed.dataLocation')} value={props.template.dataLocation} mono wide />
+                </Show>
+              </dl>
+              <Show when={props.template.runtimeSpec}>{spec => <HostTemplateDetails spec={spec()} plan={props.template.hostLifecyclePlan} />}</Show>
+            </div>
+          </details>
+        </Show>
 
         <Show when={props.template.sourceURL || props.template.dockerSourceURL}>
           <div class="service-template-detail-links flex flex-wrap gap-x-4 gap-y-2">
@@ -648,12 +678,14 @@ export function ServiceTemplateDetailsPane(props: {
           </div>
         </Show>
 
-        <div class="service-template-details__status">
-          <ServiceTemplateStatus template={props.template} detailed />
-        </div>
+        <Show when={props.template.kind !== 'host' || !props.template.available || props.template.installed}>
+          <div class="service-template-details__status">
+            <ServiceTemplateStatus template={props.template} detailed />
+          </div>
+        </Show>
       </div>
 
-      <div class="service-template-details__actions flex items-center gap-2">
+      <div class={cn('service-template-details__actions items-center gap-2', props.template.kind === 'host' ? 'service-template-host-actions' : 'flex')}>
 		<Show when={props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm)}>
 			<Button size="lg" variant="outline" class="min-h-11 shrink-0 px-3" onClick={() => props.onVersions?.()} disabled={!props.canManage}>
 				<Package class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.versions')}

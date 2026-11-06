@@ -250,6 +250,25 @@ describe('ServiceTemplateCatalog', () => {
     expect(hostDetails.textContent).toContain('45s');
   });
 
+  it('limits the host overview to deployment decisions and keeps technical details closed', () => {
+    mount({templates: [builtIn]});
+    const details = host.querySelector('[data-testid="service-template-details"]')!;
+    const overview = details.querySelector('[data-testid="host-template-overview"]');
+    expect(overview).toBeTruthy();
+    expect(overview?.querySelectorAll('.service-template-detail-field')).toHaveLength(3);
+    expect(overview?.textContent).toContain('v0.1.1-rc.2');
+    expect(overview?.textContent).toContain('Desktop local');
+    expect(overview?.textContent).toContain('512 MiB');
+    expect(overview?.textContent).not.toContain('/workspace');
+    const technical = details.querySelector<HTMLDetailsElement>('[data-testid="host-template-technical"]');
+    expect(technical?.open).toBe(false);
+    expect(technical?.querySelector('[data-testid="host-lifecycle-plan"]')).toBeTruthy();
+    expect(technical?.textContent).toContain(builtIn.dataLocation);
+    expect(technical?.textContent).toContain('45s');
+    expect(details.querySelector('.service-template-details__status')).toBeNull();
+    expect(details.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(false);
+  });
+
   it('routes category and create-menu choices through the catalog toolbar', () => {
     const actions = mount();
     const createHost = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dropdown-items] button')).find((button) => button.textContent === 'New host template')!;

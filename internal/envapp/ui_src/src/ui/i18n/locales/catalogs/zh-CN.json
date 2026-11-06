@@ -4282,6 +4282,7 @@
         "hostArtifact": "运行时制品"
       },
       "deploymentInformation": "部署信息",
+      "technicalDetails": "技术详情",
       "customVersion": "自定义",
       "managedPrivateData": "Redeven 私有受管服务存储",
       "customTemplateSafety": "自定义模板会使用当前环境权限运行。保存前请审核所有脚本和镜像；Redeven 不会提供 sudo 凭据。",

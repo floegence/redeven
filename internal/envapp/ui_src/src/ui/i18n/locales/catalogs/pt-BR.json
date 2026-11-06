@@ -4282,6 +4282,7 @@
         "hostArtifact": "Artefato de execução"
       },
       "deploymentInformation": "Informações da implantação",
+      "technicalDetails": "Detalhes técnicos",
       "customVersion": "Personalizado",
       "managedPrivateData": "Armazenamento privado de serviços gerenciados do Redeven",
       "customTemplateSafety": "Os modelos personalizados são executados com as permissões do ambiente. Revise todos os scripts e imagens antes de salvar. O Redeven nunca fornece credenciais sudo.",

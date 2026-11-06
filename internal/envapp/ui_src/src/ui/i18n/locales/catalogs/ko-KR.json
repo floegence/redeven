@@ -4282,6 +4282,7 @@
         "hostArtifact": "런타임 아티팩트"
       },
       "deploymentInformation": "배포 정보",
+      "technicalDetails": "기술 정보",
       "customVersion": "사용자 지정",
       "managedPrivateData": "Redeven 관리형 서비스 전용 저장소",
       "customTemplateSafety": "사용자 지정 템플릿은 환경 권한으로 실행됩니다. 저장하기 전에 모든 스크립트와 이미지를 검토하세요. Redeven은 sudo 자격 증명을 제공하지 않습니다.",

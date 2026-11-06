@@ -4282,6 +4282,7 @@
         "hostArtifact": "執行階段成品"
       },
       "deploymentInformation": "部署資訊",
+      "technicalDetails": "技術詳情",
       "customVersion": "自訂",
       "managedPrivateData": "Redeven 私有受管理服務儲存空間",
       "customTemplateSafety": "自訂範本會使用目前環境的權限執行。儲存前請檢查所有指令碼和映像檔；Redeven 不會提供 sudo 認證。",

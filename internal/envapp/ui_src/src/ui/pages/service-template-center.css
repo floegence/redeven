@@ -102,6 +102,15 @@
     gap: 16px 24px;
   }
 
+  .service-template-host-overview { padding: 16px 0; border-top: 1px solid var(--floe-line-quiet); }
+  .service-template-technical { padding: 10px 0; border-top: 1px solid var(--floe-line-quiet); }
+  .service-template-technical > summary { display: flex; align-items: center; gap: 8px; min-height: 32px; list-style: none; cursor: pointer; color: var(--floe-ink-soft); font-size: 12px; }
+  .service-template-technical > summary::-webkit-details-marker { display: none; }
+  .service-template-technical > summary > svg { transform: rotate(-90deg); }
+  .service-template-technical[open] > summary > svg { transform: none; }
+  .service-template-technical > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: var(--floe-radius-sm); }
+  .service-template-technical__body { display: grid; gap: 16px; padding-top: 12px; }
+
   .service-template-detail-field--wide {
     grid-column: 1 / -1;
   }
@@ -135,6 +144,8 @@
     padding: 14px 0;
     border-top: 1px solid color-mix(in srgb, var(--redeven-stroke-divider) 72%, transparent);
   }
+
+  .service-template-host-actions { display: flex; }
 
   .service-template-details__actions {
     z-index: 1;
@@ -178,6 +189,9 @@
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
     }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-details--host { height: 100%; }
+    .service-template-details--host .service-template-details__body { flex: 1; }
 
     .service-template-drawer-shell[data-view='catalog'] .service-template-details {
       position: static;
@@ -321,6 +335,10 @@
     .service-template-details__actions > * {
       width: 100%;
     }
+
+    .service-template-details--host .service-template-details__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .service-template-details--host .service-template-primary { grid-column: 1 / -1; grid-row: 1; }
+    .service-template-details--host .service-template-details__actions > :last-child:nth-child(2) { grid-column: 1 / -1; }
   }
 }
 

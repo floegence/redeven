@@ -6,6 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import axe from 'axe-core';
 import { I18nProvider, useI18n } from '../i18n';
+import { SUPPORTED_LOCALES } from '../i18n/localeMeta';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 import { ServiceTemplateCatalog, type ServiceTemplatePresentation } from './ServiceTemplateCatalog';
 import { ManagedReleaseCandidates } from './EnvPortForwardsPage';
@@ -15,6 +16,13 @@ const templates: ServiceTemplatePresentation[] = [
   { id: 'custom', name: 'Workspace dashboard', description: 'Project metrics and build results.', source: 'custom', kind: 'host', deploymentLabel: 'Host', revision: 1, defaultReleaseLabel: '1.1.0', developerPreview: false, available: true, installed: true, duplicateable: true, editable: true },
   { id: 'container', name: 'Example Desktop', description: 'A browser desktop for the current Environment.', source: 'builtin', kind: 'container', deploymentLabel: 'Container', defaultReleaseLabel: '2.4.0', revision: 3, developerPreview: false, available: true, installed: false, duplicateable: true, editable: false },
 ];
+templates[0] = {...templates[0], developerPreview: true, hostLifecyclePlan: {
+  schema_version: 1, driver: 'npm_host', runtime_bundle: 'node-24.19.0',
+  install: {ownership: 'redeven', steps: [{kind: 'prepare_verified_node_runtime', reference: 'node-24.19.0'}, {kind: 'install_npm_package_without_scripts', command_template: '<managed-node> <managed-npm-cli> install @example/studio@2.4.0 --package-lock=false --ignore-scripts'}, {kind: 'remove_temporary_registry_credentials'}, {kind: 'run_npm_lifecycle_scripts'}, {kind: 'verify_npm_release_identity'}]},
+  start: {ownership: 'template', steps: [{kind: 'run_template_script', command_template: 'exec studio --port "$REDEVEN_SERVICE_PORT"'}]},
+  stop: {ownership: 'redeven', steps: [{kind: 'terminate_managed_process_group'}]},
+  uninstall: {ownership: 'redeven', steps: [{kind: 'remove_managed_installation'}, {kind: 'remove_managed_logs'}, {kind: 'remove_managed_data_on_request'}]},
+}};
 type ReleaseResult = NonNullable<Parameters<typeof ManagedReleaseCandidates>[0]['result']>;
 const releases: ReleaseResult = {
   schema_version: 2, check_status: 'fresh', catalog_status: 'complete', has_more: false, loaded_count: 18, checked_at_unix_ms: Date.UTC(2026, 10, 3, 12),
@@ -81,6 +89,43 @@ for (const view of ['templates', 'versions'] as const) for (const preset of ['po
       await userEvent.keyboard('{ArrowLeft}');
       await expect.poll(() => panel.querySelector('[data-testid=service-template-details]')?.getAttribute('data-template-id')).toBe('host');
       expect(panel.querySelector('[role=tabpanel]')?.getAttribute('aria-labelledby')).toBe(tabs[0].id);
+      const detail = panel.querySelector<HTMLElement>('[data-testid=service-template-details]')!;
+      const technical = detail.querySelector<HTMLDetailsElement>('[data-testid=host-template-technical]')!;
+      const lifecycle = technical.querySelector<HTMLElement>('[data-testid=host-lifecycle-plan]')!;
+      const overview = detail.querySelector<HTMLElement>('[data-testid=host-template-overview]')!;
+      expect(overview.querySelectorAll('.service-template-detail-field')).toHaveLength(3);
+      expect(technical.open).toBe(false);
+      expect(lifecycle.checkVisibility()).toBe(false);
+      expect(detail.innerText).not.toContain('node-24.19.0');
+      expect(detail.innerText).not.toContain('/Users/demo/Projects');
+      expect(detail.querySelector('.service-template-details__status')).toBeNull();
+      const actions = detail.querySelector<HTMLElement>('.service-template-details__actions')!;
+      const footerTop = actions.getBoundingClientRect().top;
+      if (width < 600) {
+        expect(getComputedStyle(actions).display).toBe('grid');
+        const deploy = actions.querySelector<HTMLElement>('[data-testid=service-template-primary]')!;
+        expect(deploy.getBoundingClientRect().top).toBeLessThan(actions.children[0].getBoundingClientRect().top);
+        expect(Math.abs(actions.children[0].getBoundingClientRect().top - actions.lastElementChild!.getBoundingClientRect().top)).toBeLessThan(1);
+      }
+      if (width === 1440) {
+        const body = detail.querySelector<HTMLElement>('.service-template-details__body')!;
+        expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight + 1);
+      }
+      if (width < 600) { overview.scrollIntoView({block: 'center'}); await settle(); }
+      await page.screenshot({path: '../../../dist/compact-host-template/overview-' + preset + '-' + width + '.png'});
+      technical.querySelector('summary')!.focus();
+      await userEvent.keyboard('{Enter}');
+      expect(technical.open).toBe(true);
+      expect(lifecycle.checkVisibility()).toBe(true);
+      expect(technical.innerText).toContain('node-24.19.0');
+      expect(technical.innerText).toContain('--ignore-scripts');
+      expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      if (width === 1440) expect(actions.getBoundingClientRect().top).toBe(footerTop);
+      const expandedAudit = await axe.run(panel);
+      expect(expandedAudit.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
+      technical.querySelector('summary')!.focus();
+      await userEvent.keyboard('{Enter}');
+      expect(technical.open).toBe(false);
     } else {
       const viewport = panel.querySelector<HTMLElement>('[data-testid=managed-release-candidate-scroll]')!;
       const status = panel.querySelector<HTMLElement>('[role=status]')!;
@@ -109,6 +154,30 @@ for (const view of ['templates', 'versions'] as const) for (const preset of ['po
     await page.screenshot({ path: '../../../dist/service-catalog-design/' + view + '-' + preset + '-' + width + '.png' });
   });
 }
+for (const locale of SUPPORTED_LOCALES) it('keeps host template decisions readable at 320px in ' + locale, async () => {
+  const panel = await mount('templates', 320, 'porcelain-dark', locale);
+  const detail = panel.querySelector<HTMLElement>('[data-testid=service-template-details]')!;
+  const technical = detail.querySelector<HTMLDetailsElement>('[data-testid=host-template-technical]')!;
+  expect(technical.open).toBe(false);
+  expect(detail.innerText).not.toContain('npm_host');
+  expect(detail.querySelector<HTMLElement>('[data-testid=host-template-overview]')!.scrollWidth).toBeLessThanOrEqual(detail.clientWidth);
+  const submit = detail.querySelector<HTMLButtonElement>('[data-testid=service-template-primary]')!;
+  submit.scrollIntoView({block: 'center'});
+  await settle();
+  expect(submit.disabled).toBe(false);
+  expect(submit.getBoundingClientRect().right).toBeLessThanOrEqual(320);
+  expect(submit.getBoundingClientRect().bottom).toBeLessThanOrEqual(840);
+  technical.querySelector('summary')!.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(technical.open).toBe(true);
+  await userEvent.click(page.elementLocator(panel.querySelector<HTMLElement>('[data-testid=service-template-row][data-template-id=custom]')!));
+  const installed = panel.querySelector<HTMLElement>('[data-testid=service-template-details]')!;
+  expect(installed.getAttribute('data-template-id')).toBe('custom');
+  expect(installed.querySelector<HTMLDetailsElement>('[data-testid=host-template-technical]')!.open).toBe(false);
+  expect(installed.querySelector('.service-template-details__status')).toBeTruthy();
+  expect(installed.querySelector<HTMLButtonElement>('[data-testid=service-template-primary]')!.disabled).toBe(true);
+  expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+});
 it('keeps release selection motion quiet and removes it for reduced motion', async () => {
   await mount('versions', 1200, 'porcelain-light', 'en-US');
   document.querySelector<HTMLElement>('[data-release-id="0"]')!.click();

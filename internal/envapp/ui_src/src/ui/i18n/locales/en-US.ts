@@ -4227,6 +4227,7 @@ export const enUS = defineDictionary({
         hostArtifact: 'Runtime artifact',
       },
       deploymentInformation: 'Deployment information',
+      technicalDetails: 'Technical details',
       customVersion: 'Custom',
       managedPrivateData: 'Redeven private managed-service storage',
       customTemplateSafety: 'Custom templates run with your Environment permissions. Review every script and image before saving. Redeven never supplies sudo credentials.',

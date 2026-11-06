@@ -4282,6 +4282,7 @@
         "hostArtifact": "Laufzeitartefakt"
       },
       "deploymentInformation": "Bereitstellungsinformationen",
+      "technicalDetails": "Technische Details",
       "customVersion": "Benutzerdefiniert",
       "managedPrivateData": "Privater Redeven-Speicher für verwaltete Dienste",
       "customTemplateSafety": "Benutzerdefinierte Vorlagen werden mit den Berechtigungen Ihrer Umgebung ausgeführt. Prüfen Sie vor dem Speichern alle Skripte und Images. Redeven stellt keine sudo-Anmeldedaten bereit.",

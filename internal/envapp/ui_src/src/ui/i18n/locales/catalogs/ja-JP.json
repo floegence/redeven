@@ -4282,6 +4282,7 @@
         "hostArtifact": "ランタイムアーティファクト"
       },
       "deploymentInformation": "デプロイ情報",
+      "technicalDetails": "技術情報",
       "customVersion": "カスタム",
       "managedPrivateData": "Redeven の管理対象サービス用プライベートストレージ",
       "customTemplateSafety": "カスタムテンプレートは環境の権限で実行されます。保存前にすべてのスクリプトとイメージを確認してください。Redeven が sudo 認証情報を提供することはありません。",
