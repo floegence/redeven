@@ -52,7 +52,7 @@ export interface FilePreviewPanelProps {
   onRetry?: () => void;
   onCopyPath?: () => boolean | Promise<boolean>;
   onDownload?: () => void;
-  onAskFlower?: (selectionText: string) => void | Promise<void>;
+  onAskFlower?: (selectionText: string, anchor?: { x: number; y: number }) => void | Promise<void>;
   closeConfirmVariant?: 'dialog' | 'floating' | 'none';
   closeConfirmHost?: HTMLElement | null;
 }

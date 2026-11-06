@@ -50,7 +50,7 @@ export interface FilePreviewContentProps {
   onSave?: () => void;
   onDiscard?: () => void;
   onDownload?: () => void;
-  onAskFlower?: (selectionText: string) => void | Promise<void>;
+  onAskFlower?: (selectionText: string, anchor?: { x: number; y: number }) => void | Promise<void>;
   onRetry?: () => void;
 }
 

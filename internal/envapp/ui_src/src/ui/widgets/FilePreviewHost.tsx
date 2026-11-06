@@ -48,7 +48,7 @@ function FilePreviewDocument(props: { controller: FilePreviewController; surface
     }
   };
 
-  const handleAskFlower = (selectionText: string) => {
+  const handleAskFlower = (selectionText: string, anchor?: { x: number; y: number }) => {
     const result = buildFilePreviewFlowerTurnLauncherIntent({
       item: filePreview.controller.item(),
       selectionText,
@@ -58,7 +58,7 @@ function FilePreviewDocument(props: { controller: FilePreviewController; surface
       return;
     }
     if (!result.intent) return;
-    env.openFlowerTurnLauncher(result.intent);
+    env.openFlowerTurnLauncher(result.intent, anchor);
   };
 
   const handleDownload = async () => {

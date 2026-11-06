@@ -28,7 +28,9 @@ try {
       compatibility_message: undefined, open_readiness: { state: 'openable' }, ai_readiness: { state: 'ready' } } : undefined };
   });
   for (const width of [1440, 390]) for (const theme of ['porcelain-light', 'porcelain-dark']) for (const locale of ['en-US', 'zh-CN']) {
-    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'no-preference' });
+    const recordMotion = width === 1440 && theme === 'porcelain-dark' && locale === 'zh-CN';
+    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'no-preference',
+      ...(recordMotion ? { recordVideo: { dir: `${output}/videos`, size: { width, height: 900 } } } : {}) });
     const page = await context.newPage();
     page.on('pageerror', error => report.errors.push(error.message));
     await page.addInitScript(({ snapshot, locale }) => {
@@ -46,6 +48,22 @@ try {
       await document.fonts.ready;
     }, theme);
     await page.evaluate(() => window.navigationFixture.releaseRuntime());
+    const source = await trigger.boundingBox();
+    await trigger.evaluate(button => {
+      button.addEventListener('click', () => {
+        window.askCardEntrance = [];
+        const start = performance.now();
+        const sample = () => {
+          const element = document.querySelector('[data-floe-prompt-card]');
+          if (element) {
+            const style = getComputedStyle(element);
+            window.askCardEntrance.push({ time: performance.now() - start, opacity: Number(style.opacity), y: new DOMMatrixReadOnly(style.transform).m42 });
+          }
+          if (performance.now() - start < 600) requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      }, { once: true });
+    });
     await trigger.click();
     const card = page.locator('[data-floe-prompt-card]');
     await card.waitFor();
@@ -58,6 +76,10 @@ try {
     assert.equal(await card.locator('.floe-prompt-card-question').count(), 0, 'no introductory question');
     assert.ok(await card.evaluate(element => element.querySelector('.floe-prompt-card-references').getBoundingClientRect().bottom <= element.querySelector('textarea').getBoundingClientRect().top), 'context precedes the input');
     const bounds = await card.boundingBox();
+    const entrance = await page.evaluate(() => window.askCardEntrance);
+    assert.ok(entrance.some(frame => Math.abs(frame.y) >= 6), 'entrance visibly travels from its trigger');
+    assert.ok(entrance.some(frame => frame.opacity > 0 && frame.opacity < 1), 'entrance has rendered intermediate frames');
+    assert.ok(Math.min(Math.abs(bounds.y - source.y - source.height - 8), Math.abs(bounds.y + bounds.height - source.y - source.height + 8)) < 1, 'card stays beside its original trigger');
     assert.ok(bounds.width <= 400 && bounds.height < 220, 'content-sized input card');
     assert.ok(bounds.x >= 7 && bounds.x + bounds.width <= width - 7 && bounds.y + bounds.height < 900, 'card stays inside viewport');
     assert.equal(await card.locator('[data-floe-floating-window-titlebar], [data-floe-floating-window-resize-handle]').count(), 0);
@@ -65,23 +87,32 @@ try {
     assert.ok(await editor.getAttribute('aria-label'), 'editor has an accessible name');
     assert.equal(await card.locator('.floe-prompt-card-field').evaluate(element => getComputedStyle(element).borderBottomWidth), '0px', 'editor and toolbar have no separator');
     assert.deepEqual(await card.locator('.floe-prompt-card-attach svg path').evaluateAll(paths => paths.map(path => path.getAttribute('d'))), ['M5 12h14', 'M12 5v14'], 'attachments use the shared plus icon');
-    const fillSeparation = await card.evaluate(element => {
-      const canvas = document.createElement('canvas').getContext('2d');
-      const luminance = color => {
-        canvas.clearRect(0, 0, 1, 1); canvas.fillStyle = color; canvas.fillRect(0, 0, 1, 1);
-        const [r, g, b] = [...canvas.getImageData(0, 0, 1, 1).data].map(v => {
-          const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
-        });
-        return r * .2126 + g * .7152 + b * .0722;
-      };
-      const fill = luminance(getComputedStyle(element).backgroundColor);
-      const root = getComputedStyle(document.documentElement);
-      return ['--background', '--card'].map(token => {
-        const base = luminance(root.getPropertyValue(token));
-        return (Math.max(fill, base) + .05) / (Math.min(fill, base) + .05);
-      });
+    const activeSurface = await card.evaluate(element => {
+      const probe = document.createElement('div');
+      probe.style.background = 'var(--floe-plane-float)';
+      element.append(probe);
+      const expected = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { actual: getComputedStyle(element).backgroundColor, expected, shadow: getComputedStyle(element).boxShadow };
     });
-    assert.ok(fillSeparation.every(ratio => ratio >= 1.12), `visible card fill: ${fillSeparation}`);
+    assert.equal(activeSurface.actual, activeSurface.expected, 'active editor uses the clean floating plane');
+    assert.notEqual(activeSurface.shadow, 'none', 'neutral elevation separates the active editor');
+    const reference = await card.locator('[data-floe-prompt-reference]').first().evaluate(element => {
+      const sample = document.createElement('canvas').getContext('2d');
+      const luminance = color => {
+        sample.clearRect(0, 0, 1, 1); sample.fillStyle = color; sample.fillRect(0, 0, 1, 1);
+        const rgba = [...sample.getImageData(0, 0, 1, 1).data];
+        if (rgba[3] !== 255) return null;
+        const [r, g, b] = rgba.map(value => { const c = value / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
+        return .2126 * r + .7152 * g + .0722 * b;
+      };
+      const style = getComputedStyle(element);
+      const chip = luminance(style.backgroundColor);
+      const card = luminance(getComputedStyle(element.closest('[data-floe-prompt-card]')).backgroundColor);
+      return { contrast: chip === null ? 0 : (Math.max(chip, card) + .05) / (Math.min(chip, card) + .05), border: style.borderWidth, shadow: style.boxShadow };
+    });
+    assert.ok(reference.contrast >= 1.12, `reference fill separates from the editor: ${JSON.stringify(reference)}`);
+    assert.equal(reference.border, '0px'); assert.equal(reference.shadow, 'none');
     const model = card.getByRole('combobox');
     await page.waitForFunction(() => document.querySelector('.floe-prompt-card-selection')?.textContent?.includes('gpt-4.1'));
     assert.equal(await card.evaluate(element => getComputedStyle(element).borderWidth), '0px', 'background and elevation distinguish the card');
@@ -93,10 +124,22 @@ try {
     const exit = await editor.evaluate(element => {
       const card = element.closest('[data-floe-prompt-card]');
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      window.askCardExit = [];
+      const start = performance.now();
+      const sample = () => {
+        if (!card.isConnected) return;
+        const position = card.parentElement.getBoundingClientRect();
+        window.askCardExit.push({ time: performance.now() - start, y: new DOMMatrixReadOnly(getComputedStyle(card).transform).m42, x: position.x, top: position.y });
+        if (performance.now() - start < 500) requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
       return { state: card.dataset.floatingPresence, inert: card.inert, retained: element.value, hidden: card.getAttribute('aria-hidden') };
     });
     assert.equal(exit.state, 'exiting'); assert.equal(exit.inert, true); assert.equal(exit.hidden, 'true'); assert.ok(exit.retained.length > 0);
     await card.waitFor({ state: 'detached' });
+    const exitFrames = await page.evaluate(() => window.askCardExit);
+    assert.ok(exitFrames.some(frame => Math.abs(frame.y) >= 1), 'exit has visible directional travel');
+    assert.ok(exitFrames.every(frame => frame.x === exitFrames[0].x && frame.top === exitFrames[0].top), 'exit retains its original position');
     assert.equal(await trigger.evaluate(element => element === document.activeElement), true, 'Escape restores trigger focus');
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await trigger.click(); await card.waitFor();
@@ -154,7 +197,8 @@ try {
     await page.waitForFunction(() => !document.querySelector('.floe-prompt-card-submit').disabled);
     await card.locator('.floe-prompt-card-close').click();
     await card.waitFor({ state: 'detached' });
-    report.cases.push({ width, theme, locale, bounds, exit, reducedMotion: motion });
+    const video = recordMotion ? await page.video().path() : undefined;
+    report.cases.push({ width, theme, locale, source, bounds, entrance, exit, exitFrames, activeSurface, reference, reducedMotion: motion, video });
     await context.close();
   }
   assert.deepEqual(report.errors, []);

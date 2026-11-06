@@ -791,6 +791,7 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBeNull();
     expect(host.querySelector('.floe-prompt-card-references')?.compareDocumentPosition(host.querySelector('textarea')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(host.querySelector('.flower-composer-context-references')?.getAttribute('aria-label')).toBe('Linked context');
+    expect(host.querySelector('.flower-composer-context-reference')?.hasAttribute('data-floe-prompt-reference')).toBe(true);
     expect(host.querySelector('.floe-prompt-card-composer')?.textContent).toContain('project');
     expect(host.textContent).not.toContain('Question');
     expect(host.textContent).not.toContain('Files');

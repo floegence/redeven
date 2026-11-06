@@ -4887,7 +4887,6 @@
 
 .flower-ask-card .flower-composer-context-references { padding: 0; }
 .flower-ask-card .flower-composer-context-list { gap: var(--floe-gap-inline); }
-.flower-ask-card .flower-composer-context-reference { border: 0; border-radius: var(--floe-radius-xs); background: transparent; }
 .flower-ask-card .flower-composer-context-source { gap: var(--floe-gap-inline); padding: 0.125rem 0.25rem; }
 .flower-ask-card .flower-composer-context-label { max-width: 12rem; font-size: var(--floe-type-caption); font-weight: 400; }
 .flower-ask-card .flower-composer-context-action { width: var(--floe-control-height-xs); height: var(--floe-control-height-xs); border-radius: var(--floe-radius-xs); }

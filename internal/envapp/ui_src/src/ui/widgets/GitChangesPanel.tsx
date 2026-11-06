@@ -93,7 +93,7 @@ export interface GitChangesPanelProps {
   onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   onOpenCommitDialog?: () => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
-  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' | 'workspace_item' }>) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' | 'workspace_item' }>, anchor?: { x: number; y: number }) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
   onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
@@ -711,7 +711,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     })
   );
 
-  const contextMenuActions = (target: GitChangesContextMenuTarget): GitContextMenuActionItem[] => {
+  const contextMenuActions = (target: GitChangesContextMenuTarget, anchor: { x: number; y: number }): GitContextMenuActionItem[] => {
     const actions: GitContextMenuActionItem[] = [];
     const directoryRequest = targetDirectoryRequest(target);
     const fileTarget = itemFileTarget(target);
@@ -739,7 +739,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
               headRef: target.headRef,
               section: target.section,
               items: target.items,
-            });
+            }, anchor);
             return;
           }
           props.onAskFlower?.({
@@ -748,7 +748,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
             headRef: target.headRef,
             section: target.section,
             item: target.item,
-          });
+          }, anchor);
         },
       });
     }

@@ -101,15 +101,16 @@ describe('FilePreviewSurface', () => {
     try {
       const titlebar = host.querySelector('[data-testid="floating-titlebar"]')!;
       expect(Array.from(titlebar.querySelectorAll('button:not([aria-hidden="true"])')).map((button) => button.getAttribute('aria-label')))
-        .toEqual(['Copy path', 'Edit file', 'Ask Flower', 'Download file']);
+        .toEqual(['Ask Flower', 'More file actions']);
       expect(host.querySelector('.redeven-file-preview-toolbar')).toBeNull();
       expect(host.textContent).not.toContain('/workspace/demo.md');
-      expect(host.querySelectorAll('button[aria-label="Download file"]')).toHaveLength(1);
-      (titlebar.querySelector('button[aria-label="Copy path"]') as HTMLButtonElement).click();
+      (titlebar.querySelector('button[aria-label="More file actions"]') as HTMLButtonElement).click();
+      Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(button => button.textContent?.includes('Copy path'))!.click();
       await Promise.resolve();
       expect(onCopyPath).toHaveBeenCalledOnce();
-      expect(titlebar.querySelector('button[aria-label="Path copied"]')).toBeTruthy();
-      (titlebar.querySelector('button[aria-label="Edit file"]') as HTMLButtonElement).click();
+      expect(titlebar.querySelector('button[title="Path copied"]')).toBeTruthy();
+      (titlebar.querySelector('button[aria-label="More file actions"]') as HTMLButtonElement).click();
+      Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(button => button.textContent?.includes('Edit file'))!.click();
       expect(onStartEdit).toHaveBeenCalledOnce();
       expect(host.textContent).toContain('Document content');
     } finally {
@@ -152,9 +153,10 @@ describe('FilePreviewSurface', () => {
     } as unknown as Selection);
 
     (host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null)?.click();
-    (host.querySelector('button[aria-label="Download file"]') as HTMLButtonElement | null)?.click();
+    (host.querySelector('button[aria-label="More file actions"]') as HTMLButtonElement).click();
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(button => button.textContent?.includes('Download file'))!.click();
 
-    expect(onAskFlower).toHaveBeenCalledWith('selected from editor');
+    expect(onAskFlower).toHaveBeenCalledWith('selected from editor', undefined);
     expect(onDownload).toHaveBeenCalledTimes(1);
   });
 

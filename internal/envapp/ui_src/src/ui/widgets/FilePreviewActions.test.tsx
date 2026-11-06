@@ -96,6 +96,7 @@ describe('File preview action presentations', () => {
     };
     const open = () => {
       const more = button(host, 'More file actions');
+      more.getBoundingClientRect = () => ({ left: 720, top: 408, right: 752, bottom: 440, width: 32, height: 32 }) as DOMRect;
       more.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
       more.click();
     };
@@ -116,11 +117,11 @@ describe('File preview action presentations', () => {
       open();
       window.getSelection()!.removeAllRanges();
       button(host, 'Ask Flower').click();
-      expect(ask).toHaveBeenLastCalledWith('Preview selection');
+      expect(ask).toHaveBeenLastCalledWith('Preview selection', { x: 720, y: 444 });
       select(other);
       open();
       button(host, 'Ask Flower').click();
-      expect(ask).toHaveBeenLastCalledWith('');
+      expect(ask).toHaveBeenLastCalledWith('', { x: 720, y: 444 });
       select(body);
       open();
       setFile({ ...item, path: '/workspace/next.md' });

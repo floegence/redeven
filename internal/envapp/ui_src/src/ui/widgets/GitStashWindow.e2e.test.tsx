@@ -254,7 +254,7 @@ describe('GitStashWindow', () => {
         repoRootPath: '/workspace/repo',
         stash: expect.objectContaining({ id: 'stash-1' }),
         files: expect.arrayContaining([expect.objectContaining({ path: 'src/old.ts' })]),
-      }));
+      }), { x: 0, y: 0 });
 
       const renamedRow = host.querySelector<HTMLElement>('[data-git-stash-file="src/old.ts"]');
       await openKeyboardContextMenu(renamedRow, true);
@@ -284,7 +284,7 @@ describe('GitStashWindow', () => {
         kind: 'stash_file',
         stash: expect.objectContaining({ id: 'stash-1' }),
         file: expect.objectContaining({ newPath: 'src/new.ts' }),
-      }));
+      }), { x: 32, y: 48 });
 
       await openMouseContextMenu(renamedRow);
       findContextMenuItem('Copy Absolute Path', 'git.contextMenu.copyAbsolutePath')!.click();

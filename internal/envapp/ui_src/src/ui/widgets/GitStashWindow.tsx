@@ -120,7 +120,7 @@ export interface GitStashWindowProps {
   onRefreshStashes?: () => void;
   onRequestApply?: (stashId: string, removeAfterApply: boolean) => void;
   onRequestDrop?: (stashId: string) => void;
-  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'stash' | 'stash_file' }>) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'stash' | 'stash_file' }>, anchor?: { x: number; y: number }) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
   onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
@@ -494,7 +494,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
     file,
   });
 
-  const contextMenuItems = (target: GitStashContextMenuTarget): GitContextMenuActionItem[] => {
+  const contextMenuItems = (target: GitStashContextMenuTarget, anchor?: { x: number; y: number }): GitContextMenuActionItem[] => {
     const items: GitContextMenuActionItem[] = [];
     const repositoryRequest = buildGitDirectoryShortcutRequest({ rootPath: target.repoRootPath });
     const repositoryUnavailable = repositoryRequest ? '' : i18n.t('git.notifications.repositoryPathUnavailable');
@@ -531,7 +531,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
               repoRootPath: target.repoRootPath,
               stash: target.stash,
               file: target.file,
-            });
+            }, anchor);
             return;
           }
           props.onAskFlower?.({
@@ -539,7 +539,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
             repoRootPath: target.repoRootPath,
             stash: target.stash,
             files: target.files,
-          });
+          }, anchor);
         },
       });
     }

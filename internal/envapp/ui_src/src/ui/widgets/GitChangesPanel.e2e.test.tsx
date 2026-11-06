@@ -233,7 +233,7 @@ describe('GitChangesPanel interactions', () => {
           additions: 3,
           deletions: 1,
         },
-      });
+      }, { x: 48, y: 72 });
 
       row!.dispatchEvent(new KeyboardEvent('keydown', {
         key: 'F10',
@@ -463,7 +463,7 @@ describe('GitChangesPanel interactions', () => {
         headRef: 'feature/menu',
         section: 'changes',
         items: [item],
-      });
+      }, { x: 0, y: 0 });
 
       sectionTarget!.dispatchEvent(new KeyboardEvent('keydown', {
         key: 'F10',

@@ -9,7 +9,7 @@ import {
   onCleanup,
   type Component,
 } from 'solid-js';
-import { Button, FeedbackIndicator } from '@floegence/floe-webapp-core/ui';
+import { Button, FeedbackIndicator, capturePromptCardAnchor } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, Copy, Download, Loader2, MoreHorizontal, Pencil, Save, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
@@ -57,7 +57,7 @@ type PreviewAction = {
   icon: Component<{ class?: string }>;
   visible?: () => boolean;
   disabled?: () => boolean;
-  run: (selection?: string) => void;
+  run: (selection?: string, anchor?: { x: number; y: number }) => void;
 };
 
 export function FilePreviewActions(props: FilePreviewActionsProps) {
@@ -176,8 +176,8 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
       icon: FlowerNavigationIcon,
       visible: () => Boolean(props.onAskFlower),
       disabled: () => !props.item || Boolean(props.loading),
-      run: (selection) => {
-        void props.onAskFlower?.(selection ?? readSelection());
+      run: (selection, anchor) => {
+        void props.onAskFlower?.(selection ?? readSelection(), anchor);
       },
     },
     {
@@ -198,9 +198,10 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
       disabled: action.disabled?.(),
       onSelect: () => {
         const selection = menu()?.selection ?? '';
+        const anchor = menu();
         closeMenu();
         trigger?.focus({ preventScroll: true });
-        action.run(selection);
+        action.run(selection, anchor ? { x: anchor.x, y: anchor.y } : undefined);
       },
     })),
   );
@@ -228,7 +229,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
                 disabled={action.disabled?.()}
                 aria-label={action.label()}
                 title={action.label()}
-                onClick={() => action.run()}
+                onClick={event => action.run(undefined, capturePromptCardAnchor(event.currentTarget) ?? undefined)}
               >
                 <action.icon class={action.id === 'flower' ? 'size-5' : 'size-3.5'} />
               </button>
@@ -239,7 +240,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
         <Show when={props.presentation === 'header' && props.onAskFlower}>
           <button type="button" class={buttonClass()} disabled={!props.item || props.loading}
             aria-label={i18n.t('filePreview.askFlower')} title={i18n.t('filePreview.askFlower')}
-            onClick={() => props.onAskFlower?.(readSelection())}>
+            onClick={event => props.onAskFlower?.(readSelection(), capturePromptCardAnchor(event.currentTarget) ?? undefined)}>
             <FlowerNavigationIcon class="size-5" />
           </button>
         </Show>

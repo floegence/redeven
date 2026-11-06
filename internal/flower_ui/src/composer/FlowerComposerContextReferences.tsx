@@ -40,7 +40,7 @@ export function FlowerComposerContextReference(props: {
     <span class="flower-composer-context-icon" aria-hidden="true">{props.icon}</span>
     <span class="flower-composer-context-label">{props.label}</span>
   </>;
-  return <div class="flower-composer-context-reference">
+  return <div class="flower-composer-context-reference" data-floe-prompt-reference>
     <Show when={props.onPreview} fallback={
       <div class="flower-composer-context-source" title={props.title}>{content()}</div>
     }>

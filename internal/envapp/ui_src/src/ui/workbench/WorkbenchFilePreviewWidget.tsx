@@ -264,7 +264,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     }
   };
 
-  const handleAskFlower = (selectionText: string) => {
+  const handleAskFlower = (selectionText: string, anchor?: { x: number; y: number }) => {
     const result = buildFilePreviewFlowerTurnLauncherIntent({
       item: controller.item(),
       selectionText,
@@ -274,7 +274,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       return;
     }
     if (!result.intent) return;
-    env.openFlowerTurnLauncher(result.intent);
+    env.openFlowerTurnLauncher(result.intent, anchor);
   };
 
   const handleDownload = async () => {

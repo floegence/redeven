@@ -242,7 +242,7 @@ export interface GitBranchesPanelProps {
     branch: GitBranchSummary,
     options: GitDeleteBranchDialogConfirmOptions,
   ) => void;
-  onAskFlower?: (request: GitAskFlowerRequest) => void;
+  onAskFlower?: (request: GitAskFlowerRequest, anchor?: { x: number; y: number }) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (
     request: GitDirectoryShortcutRequest,
@@ -526,7 +526,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
       rootPath: target.context.liveRootPath,
       item: target.file,
     });
-  const contextMenuItems = (menuTarget: BranchFileContextMenuTarget): GitContextMenuActionItem[] => {
+  const contextMenuItems = (menuTarget: BranchFileContextMenuTarget, anchor: { x: number; y: number }): GitContextMenuActionItem[] => {
     const item = menuTarget.file;
     const context = menuTarget.context;
     const shortcut = fileTarget(menuTarget);
@@ -550,7 +550,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
               baseRef: context.baseRef,
               targetRef: context.targetRef,
               file: item,
-            });
+            }, anchor);
             return;
           }
           props.onAskFlower?.({
@@ -560,7 +560,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
             branchName: context.branchName,
             commit: context.commit,
             files: [item],
-          });
+          }, anchor);
         },
       });
     }
@@ -890,7 +890,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
       ? buildGitDirectoryShortcutRequest({ rootPath: shortcut.parentDirectoryPath })
       : null;
   };
-  const contextMenuItems = (context: BranchStatusItemContextMenuTarget): GitContextMenuActionItem[] => {
+  const contextMenuItems = (context: BranchStatusItemContextMenuTarget, anchor: { x: number; y: number }): GitContextMenuActionItem[] => {
     const item = context.item;
     const directory = isGitWorkspaceDirectoryEntry(item);
     const target = shortcutTarget(context);
@@ -911,7 +911,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           branch: context.branch,
           section: context.section,
           item,
-        }),
+        }, anchor),
       });
     }
     if (directory && browseRequest) {
@@ -2590,7 +2590,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       repoDetached: Boolean(props.repoSummary?.detached),
     };
   };
-  const branchContextMenuItems = (target: BranchHeaderContextTarget): GitContextMenuActionItem[] => {
+  const branchContextMenuItems = (target: BranchHeaderContextTarget, anchor: { x: number; y: number }): GitContextMenuActionItem[] => {
     const branch = target.branch;
     const directoryRequest = buildGitDirectoryShortcutRequest({ rootPath: target.liveRootPath });
     const worktreeDisabledReason = directoryRequest
@@ -2617,7 +2617,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           kind: "branch",
           repoRootPath: target.repoRootPath,
           branch,
-        }),
+        }, anchor),
       });
     }
     if (props.onOpenInTerminal) {
@@ -2743,7 +2743,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       items: visibleStatusItems().map((item) => ({ ...item })),
     };
   };
-  const statusScopeContextMenuItems = (target: BranchStatusScopeContextTarget): GitContextMenuActionItem[] => {
+  const statusScopeContextMenuItems = (target: BranchStatusScopeContextTarget, anchor: { x: number; y: number }): GitContextMenuActionItem[] => {
     const directoryRequest = buildGitDirectoryShortcutRequest({
       rootPath: target.liveRootPath,
       directoryPath: target.directoryPath,
@@ -2762,7 +2762,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           branch: target.branch,
           section: target.section,
           items: target.items,
-        }),
+        }, anchor),
       });
     }
     if (props.onOpenInTerminal) {

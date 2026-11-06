@@ -17,7 +17,7 @@ import {
   type FileBrowserRevealRequest,
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
-import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, capturePromptCardAnchor, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog } from '../primitives/EnvAppModal';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import {
@@ -4273,7 +4273,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    dispatchFlowerTurnLauncherIntent(result.intent);
+    dispatchFlowerTurnLauncherIntent(result.intent, event);
   };
 
   const handleRename = async (item: FileItem, newName: string) => {
@@ -4820,11 +4820,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     clearStashReview({ cancelInFlight: true });
   });
 
-  const dispatchFlowerTurnLauncherIntent = (intent: FlowerTurnLauncherIntent) => {
-    ctx.openFlowerTurnLauncher(intent);
+  const dispatchFlowerTurnLauncherIntent = (intent: FlowerTurnLauncherIntent, anchor?: { x: number; y: number } | null) => {
+    ctx.openFlowerTurnLauncher(intent, anchor ? { x: anchor.x, y: anchor.y } : undefined);
   };
 
-  const handleGitAskFlower = (request: GitAskFlowerRequest) => {
+  const handleGitAskFlower = (request: GitAskFlowerRequest, anchor?: { x: number; y: number }) => {
+    const capturedAnchor = anchor ?? capturePromptCardAnchor();
     void (async () => {
       const seq = ++gitAskFlowerReqSeq;
       let resolvedRequest = request;
@@ -4868,7 +4869,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         notification.error(i18n.t('git.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('git.notifications.failedToBuildGitContext'));
         return;
       }
-      dispatchFlowerTurnLauncherIntent(result.intent);
+      dispatchFlowerTurnLauncherIntent(result.intent, capturedAnchor);
     })();
   };
 
@@ -4920,7 +4921,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     })();
   };
 
-  const askFlowerFromFileBrowser = async (items: FileItem[]) => {
+  const askFlowerFromFileBrowser = async (items: FileItem[], event?: ContextMenuEvent) => {
     const normalizedItems = items.filter((item) => String(item.path ?? '').trim());
     if (normalizedItems.length <= 0) return;
 
@@ -4937,7 +4938,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    dispatchFlowerTurnLauncherIntent(result.intent);
+    dispatchFlowerTurnLauncherIntent(result.intent, event);
   };
 
   const handleCopyName = (items: FileItem[]) => {
@@ -5377,7 +5378,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         options.onAction(items, event);
         return;
       }
-      void askFlowerFromFileBrowser(items);
+      void askFlowerFromFileBrowser(items, event);
     },
   });
 

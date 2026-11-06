@@ -26,6 +26,7 @@ import {
   Checkbox,
   CommandPalette,
   createFloatingPresence,
+  capturePromptCardAnchor,
   Dialog,
   Dropdown,
   Input,
@@ -6347,7 +6348,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     setFlowerTurnLauncherIntent(buildEnvironmentFlowerTurnLauncherIntent(environment));
-    setFlowerTurnLauncherAnchor(anchor ?? null);
+    setFlowerTurnLauncherAnchor(anchor ?? capturePromptCardAnchor() ?? null);
     setFlowerTurnLauncherOpen(true);
   }
 

@@ -80,7 +80,7 @@ vi.mock('./FilePreviewSurface', () => ({
       <button
         type="button"
         data-testid="ask-flower"
-        onClick={() => props.onAskFlower('selected line')}
+        onClick={() => props.onAskFlower('selected line', { x: 820, y: 520 })}
       >
         Ask Flower
       </button>
@@ -124,7 +124,7 @@ describe('FilePreviewHost', () => {
         },
       ],
       pending_attachments: [],
-    }));
+    }), { x: 820, y: 520 });
     expect(notificationErrorMock).not.toHaveBeenCalled();
   });
 

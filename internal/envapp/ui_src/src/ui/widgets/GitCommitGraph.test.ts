@@ -115,7 +115,7 @@ describe('GitCommitGraph layout', () => {
       let actions = await openMenu();
       expect(actions).toHaveLength(6);
       actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
-      expect(askFlower).toHaveBeenCalledWith(expect.objectContaining({ kind: 'commit', commit: expect.objectContaining({ hash: 'commit-context-hash' }), files: [] }));
+      expect(askFlower).toHaveBeenCalledWith(expect.objectContaining({ kind: 'commit', commit: expect.objectContaining({ hash: 'commit-context-hash' }), files: [] }), { x: 40, y: 60 });
 
       actions = await openMenu();
       actions.find((item) => item.textContent?.includes('View Commit Details'))!.click();

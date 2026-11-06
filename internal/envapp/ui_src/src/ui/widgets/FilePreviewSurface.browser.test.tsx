@@ -121,8 +121,10 @@ describe('File preview titlebar', () => {
       expect(feedback.getAttribute('aria-hidden')).toBe('true');
       assertLayout();
       window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
-      await userEvent.click(actions.querySelector<HTMLButtonElement>('button[aria-label="Ask Flower"]')!);
-      expect(onAskFlower).toHaveBeenLastCalledWith('Selected preview paragraph.');
+      const askButton = actions.querySelector<HTMLButtonElement>('button[aria-label="Ask Flower"]')!;
+      const askBounds = askButton.getBoundingClientRect();
+      await userEvent.click(askButton);
+      expect(onAskFlower).toHaveBeenLastCalledWith('Selected preview paragraph.', { x: askBounds.left, y: askBounds.bottom });
       expect(root.getBoundingClientRect().toJSON()).toEqual(originalRect);
       actions.querySelector<HTMLButtonElement>('button[aria-label="Ask Flower"]')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       expect(root.getBoundingClientRect().toJSON()).toEqual(originalRect);

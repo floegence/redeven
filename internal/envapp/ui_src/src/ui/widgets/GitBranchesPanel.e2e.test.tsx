@@ -4341,7 +4341,7 @@ describe("GitBranchesPanel interactions", () => {
         kind: "branch_status_item",
         repoRootPath: "/workspace/repo",
         item: expect.objectContaining({ path: "src/app.ts" }),
-      }));
+      }), { x: 80, y: 90 });
 
       statusRow!.focus();
       statusRow!.dispatchEvent(new KeyboardEvent("keydown", {
@@ -4506,7 +4506,7 @@ describe("GitBranchesPanel interactions", () => {
         worktreePath: '/workspace/repo-linked',
         branch: expect.objectContaining({ name: 'feature/linked' }),
         items: [expect.objectContaining({ path: 'src/app.ts' })],
-      }));
+      }), { x: 0, y: 0 });
       actions = await openScopeMenu();
       actions.find((item) => controlText(item)?.includes('Open Terminal'))!.click();
       expect(onOpenInTerminal).toHaveBeenCalledWith({ path: '/workspace/repo-linked', preferredName: 'repo-linked' });
@@ -4597,7 +4597,7 @@ describe("GitBranchesPanel interactions", () => {
         branch,
         section: 'changes',
         item: expect.objectContaining({ directoryPath: 'internal' }),
-      });
+      }, { x: 0, y: 0 });
 
       directoryItem.directoryPath = 'internal';
       actions = await openMenu();
@@ -4684,7 +4684,7 @@ describe("GitBranchesPanel interactions", () => {
         baseRef: 'main',
         targetRef: 'feature/demo',
         file: expect.objectContaining({ newPath: 'src/new.ts' }),
-      }));
+      }), { x: 0, y: 0 });
 
       renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
@@ -4755,7 +4755,7 @@ describe("GitBranchesPanel interactions", () => {
         branchName: 'feature/demo',
         commit: expect.objectContaining({ subject: 'Stable history' }),
         files: [expect.objectContaining({ newPath: 'src/new.ts' }), expect.objectContaining({ path: 'src/deleted.ts' })],
-      }));
+      }), { x: 0, y: 0 });
 
       const renamedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => controlText(row)?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
       expect(renamedRow).toBeTruthy();

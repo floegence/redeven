@@ -257,7 +257,7 @@ export interface GitCommitGraphProps {
   selectedCommitHash?: string;
   onSelect?: (hash: string) => void;
   repoRootPath?: string;
-  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'commit' }>) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'commit' }>, anchor?: { x: number; y: number }) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
   onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
@@ -319,7 +319,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
     observer.observe(containerElement);
     onCleanup(() => observer.disconnect());
   });
-  const contextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
+  const contextMenuItems = (target: CommitContextTarget, anchor?: { x: number; y: number }): GitContextMenuActionItem[] => {
     const { commit } = target;
     const items: GitContextMenuActionItem[] = [];
     const favorite = directoryFavorites.item(target.repoRootPath ?? '', target);
@@ -335,7 +335,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
           branchName: props.branchName,
           commit,
           files: props.resolveCommitFiles?.(commit) ?? [],
-        }),
+        }, anchor),
       });
     }
     if (props.onSelect) {

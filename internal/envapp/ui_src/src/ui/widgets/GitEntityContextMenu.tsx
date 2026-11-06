@@ -129,7 +129,7 @@ export function composeGitContextMenuItems(
 
 export interface GitEntityContextMenuProps<TTarget> {
   controller: GitEntityContextMenuController<TTarget>;
-  items: (target: TTarget) => readonly GitContextMenuActionItem[];
+  items: (target: TTarget, anchor: Readonly<{ x: number; y: number }>) => readonly GitContextMenuActionItem[];
 }
 
 export function GitEntityContextMenu<TTarget>(props: GitEntityContextMenuProps<TTarget>): JSX.Element {
@@ -147,7 +147,7 @@ export function GitEntityContextMenu<TTarget>(props: GitEntityContextMenuProps<T
           focusDisabledItems
           restoreFocusOnEscape
           restoreFocusOnTab
-          items={composeGitContextMenuItems(props.items(menu.target)).map((item) => (
+          items={composeGitContextMenuItems(props.items(menu.target, { x: menu.x, y: menu.y })).map((item) => (
             item.kind === 'action'
               ? {
                   ...item,

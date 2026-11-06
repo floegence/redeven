@@ -67,7 +67,7 @@ import {
   type BottomBarCompanionPhase,
 } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
+import { DialogPlacementProvider, capturePromptCardAnchor } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { PluginPlatformRequestError, isPluginRecoveryCurrent, pluginMutationOutcome, type PluginRecoveryResult } from '@floegence/redevplugin-ui';
 
@@ -2585,13 +2585,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
+    const capturedAnchor = anchor ?? capturePromptCardAnchor();
     const capturedMode = viewMode();
     if (flowerProductPanelRef?.contains(document.activeElement)) {
       activityNotesViewportAnchor()?.focus({ preventScroll: true });
     }
     const contextualIntent = withFlowerTurnExecutionContext(intent);
     setFlowerTurnLauncherIntent(contextualIntent);
-    setFlowerTurnLauncherAnchor(anchor ?? null);
+    setFlowerTurnLauncherAnchor(capturedAnchor ?? null);
     setFlowerTurnLauncherHandoff({
       mode: capturedMode,
       activeSurface: activeSurface(),

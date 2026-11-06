@@ -958,7 +958,7 @@ vi.mock('./GitWorkspace', () => ({
     onRefresh?: () => void;
     onRefreshSelectedBranch?: () => void;
     onSelectCurrentBranch?: () => void;
-    onAskFlower?: (request: GitAskFlowerRequest) => void;
+    onAskFlower?: (request: GitAskFlowerRequest, anchor?: { x: number; y: number }) => void;
     onOpenStash?: (request?: { tab?: 'save' | 'stashes'; repoRootPath?: string; source?: 'header' | 'changes' | 'branch_status' | 'merge_blocker' }) => void;
     onDiscardWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onOpenInTerminal?: (request: { path: string; preferredName?: string }) => void;
@@ -1080,7 +1080,7 @@ vi.mock('./GitWorkspace', () => ({
                   subject: 'Initial commit',
                 },
                 files: [],
-              })}
+              }, { x: 910, y: 670 })}
             >
               mock-git-ask-commit
             </button>
@@ -1213,7 +1213,7 @@ vi.mock('./GitStashWindow', () => ({
     reviewError?: string;
     reviewLoading?: boolean;
     onRefreshStashes?: () => void;
-    onAskFlower?: (request: GitAskFlowerRequest) => void;
+    onAskFlower?: (request: GitAskFlowerRequest, anchor?: { x: number; y: number }) => void;
     onSelectStash?: (id: string) => void;
     onOpenChange?: (open: boolean) => void;
     onRequestDrop?: (stashId: string) => void;
@@ -4617,7 +4617,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('enriches commit Ask Flower requests with the stable commit detail', async () => {
+  it('retains the invocation anchor while enriching commit Ask Flower requests', async () => {
     const detail = {
       repoRootPath: '/workspace/repo',
       commit: {
@@ -4629,7 +4629,8 @@ describe('RemoteFileBrowser persistence', () => {
       },
       files: [{ changeType: 'modified', path: 'src/detail.ts' }],
     };
-    mockRpc.git.getCommitDetail.mockResolvedValueOnce(detail);
+    const pending = deferred<typeof detail>();
+    mockRpc.git.getCommitDetail.mockReturnValueOnce(pending.promise);
     const host = document.createElement('div');
     document.body.appendChild(host);
     const dispose = render(() => (
@@ -4647,7 +4648,15 @@ describe('RemoteFileBrowser persistence', () => {
       expect(button).toBeTruthy();
       button!.click();
       await flush();
+      expect(envActionSpies.openFlowerTurnLauncher).not.toHaveBeenCalled();
+      const unrelated = document.createElement('button');
+      host.append(unrelated);
+      unrelated.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 30, clientY: 45 }));
+      unrelated.focus();
+      pending.resolve(detail);
+      await flush();
       expect(mockRpc.git.getCommitDetail).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo', commit: 'abc1234' });
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[1]).toEqual({ x: 910, y: 670 });
       expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
       expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]?.context_items?.[0]?.content).toContain('src/detail.ts');
       expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]?.context_items?.[0]?.content).toContain('Detailed body');
@@ -5136,6 +5145,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[1]).toEqual({ x: 48, y: 56 });
       expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]).toMatchObject({
         source_surface: 'file_browser',
         suggested_working_dir: '/workspace/repo/src',
@@ -5375,6 +5385,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[1]).toEqual({ x: 16, y: 24 });
       expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]).toMatchObject({
         source_surface: 'file_browser',
         suggested_working_dir: '/workspace/repo/src',
