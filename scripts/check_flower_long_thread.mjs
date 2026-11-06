@@ -26,7 +26,11 @@ export function runGate({ fast = false, execute = spawnSync, exists = existsSync
   run([path.join(root, 'desktop/node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.client.config.mts', ...fastTests.filter(file => file.endsWith('.client.test.ts')).map(file => '../internal/flower_ui/src/' + file)], path.join(root, 'desktop'));
   if (fast) return;
   for (const file of browserTests) if (!exists(path.join(ui, 'src/ui', file))) throw new Error('Missing browser regression: ' + file);
-  run([path.join(ui, 'node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.browser.config.ts', ...browserTests.map(file => 'src/ui/' + file)], ui);
+  // Keep the fixed per-process deadline as the suite grows. Every browser
+  // regression still runs once, before the unchanged sustained workload.
+  for (let start = 0; start < browserTests.length; start += 5) {
+    run([path.join(ui, 'node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.browser.config.ts', ...browserTests.slice(start, start + 5).map(file => 'src/ui/' + file)], ui);
+  }
   run(['scripts/qualify_flower_long_thread.mjs']);
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

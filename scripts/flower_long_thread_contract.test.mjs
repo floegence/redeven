@@ -92,6 +92,9 @@ test('runner requires installed suites and propagates missing tools, signals and
   const calls = []; runGate({ execute: (_command, args) => { calls.push(args); return { status: 0 }; }, exists: () => true });
   assert.ok(calls.some(args => args.includes('scripts/qualify_flower_long_thread.mjs')));
   assert.ok(calls.some(args => args.includes('vitest.browser.config.ts')));
+  const browserCalls = calls.filter(args => args.includes('vitest.browser.config.ts'));
+  assert.deepEqual(browserCalls.flatMap(args => args.filter(value => value.startsWith('src/ui/'))), browserTests.map(file => 'src/ui/' + file));
+  assert.ok(browserCalls.every(args => args.filter(value => value.startsWith('src/ui/')).length <= 5));
   for (const file of fastTests) assert.ok(existsSync(new URL('../internal/flower_ui/src/' + file, import.meta.url)), file);
   for (const file of browserTests) assert.ok(existsSync(new URL('../internal/envapp/ui_src/src/ui/' + file, import.meta.url)), file);
 });

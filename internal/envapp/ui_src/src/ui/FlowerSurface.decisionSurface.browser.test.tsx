@@ -68,7 +68,8 @@ describe('Flower bottom decision surface', () => {
     Object.assign(runtime.style, { width: '1280px', height: '800px' });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fixture"] button')));
     (runtime.querySelector('[data-thread-id="thread-fixture"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelectorAll('[role="radio"]').length === 3);
+    await waitFor(() => runtime.querySelectorAll('.flower-decision-surface [role="radio"]').length === 3);
+    expect(runtime.querySelector('[data-flower-input-answer-kind="custom"]')).not.toBeNull();
     const surface = runtime.querySelector('.flower-decision-surface') as HTMLElement;
     expect(surface.querySelector('.flower-input-request-question-header')?.textContent).toBe('Release channel');
     expect(surface.querySelector('.flower-input-request-question-text')?.textContent).toBe('Which release channel should Flower use?');
