@@ -30,6 +30,85 @@ function mount(mode: 'light' | 'dark' = 'light') {
   }, host);
   return workspace;
 }
+it.each(['light', 'dark'] as const)('searches rendered markdown and isolates Monaco controls in %s', async mode => {
+  await page.viewport(1280, 900); const workspace = mount(mode);
+  await workspace.openPreview(file('LICENSE'));
+  await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toBeEnabled();
+  await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
+  await expect.poll(() => document.querySelector('.find-widget.visible')).toBeTruthy();
+  const editor = document.querySelector('.monaco-editor');
+  const editorPanel = document.querySelector<HTMLElement>('[data-preview-document="/workspace/LICENSE"]')!;
+  const editorInput = editorPanel.querySelector<HTMLTextAreaElement>('.find-widget textarea[aria-label="Find"]')!;
+  await userEvent.fill(editorInput, 'Original');
+  await workspace.openPreview(file('notes.md'));
+  await expect.poll(() => getComputedStyle(editorPanel).opacity).toBe('0');
+  await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toBeVisible();
+  const markdown = document.querySelector('.file-markdown-body')!;
+  const paragraph = markdown.querySelector('p');
+  await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
+  await userEvent.fill(page.getByRole('searchbox', { name: 'Find in file' }), 'Original content');
+  await expect.element(page.getByRole('status').filter({ hasText: '1 of 1' })).toBeVisible();
+  expect(markdown.querySelector('p')).toBe(paragraph);
+  await page.screenshot({ element: document.querySelector('[data-floe-floating-window-surface]')!, path: '__screenshots__/preview-search-' + mode + '.png' });
+  await userEvent.click(page.getByRole('tab').filter({ hasText: 'LICENSE' }));
+  expect(document.querySelector('.monaco-editor')).toBe(editor);
+  expect(editorInput.value).toBe('Original');
+  await userEvent.click(page.getByRole('tab').filter({ hasText: 'notes.md' }));
+  await expect.element(page.getByRole('searchbox')).toHaveValue('Original content');
+  await userEvent.click(page.getByRole('searchbox'));
+  await userEvent.keyboard('{Escape}');
+  expect(workspace.open()).toBe(true);
+  expect(document.querySelector('[role="search"]')).toBeNull();
+  await userEvent.click(page.getByRole('tab').filter({ hasText: 'notes.md' }));
+  await userEvent.keyboard('{Control>}{f}{/Control}');
+  await expect.element(page.getByRole('searchbox')).toBeVisible();
+  await expect.element(page.getByRole('searchbox')).toHaveFocus();
+});
+
+it('keeps source editing, undo and search independent across file tabs', async () => {
+  await page.viewport(1280, 900); const workspace = mount();
+  await workspace.openPreview(file('edit.md'));
+  workspace.activeController().beginEditing();
+  await expect.poll(() => document.querySelector('.monaco-editor')).toBeTruthy();
+  const editorCommands = commands as unknown as { pasteFilePreviewSource: (text: string) => Promise<void> };
+  await editorCommands.pasteFilePreviewSource('Draft content retains undo and search');
+  await expect.poll(() => workspace.activeController().draftText()).toBe('Draft content retains undo and search');
+  await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
+  const input = document.querySelector<HTMLTextAreaElement>('.find-widget textarea[aria-label="Find"]')!;
+  await userEvent.fill(input, 'Draft');
+  const controller = workspace.activeController();
+  const editor = document.querySelector('.monaco-editor');
+  await workspace.openPreview(file('other.md'));
+  await userEvent.click(page.getByRole('tab').filter({ hasText: 'edit.md' }));
+  expect(document.querySelector('.monaco-editor')).toBe(editor);
+  expect(input.value).toBe('Draft');
+  expect(controller.draftText()).toBe('Draft content retains undo and search');
+  await userEvent.click(input); await userEvent.keyboard('{Escape}');
+  expect(workspace.open()).toBe(true);
+  const modifier = /Mac/.test(navigator.platform) ? 'Meta' : 'Control';
+  await userEvent.keyboard(`{${modifier}>}{z}{/${modifier}}`);
+  await expect.poll(() => controller.draftText()).not.toBe('Draft content retains undo and search');
+  await userEvent.keyboard(`{${modifier}>}{Shift>}{z}{/Shift}{/${modifier}}`);
+  await expect.poll(() => controller.draftText()).toBe('Draft content retains undo and search');
+});
+
+it('keeps markdown search usable on mobile and resets a closed document', async () => {
+  await page.viewport(390, 844); const workspace = mount();
+  await workspace.openPreview(file('notes.md'));
+  await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
+  await userEvent.fill(page.getByRole('searchbox'), 'missing');
+  await expect.element(page.getByRole('status').filter({ hasText: 'No matches' })).toBeVisible();
+  const search = document.querySelector<HTMLElement>('[role="search"]')!;
+  const bounds = search.getBoundingClientRect();
+  expect(bounds.left).toBeGreaterThanOrEqual(0); expect(bounds.right).toBeLessThanOrEqual(390);
+  expect(search.scrollWidth).toBeLessThanOrEqual(search.clientWidth);
+  await page.screenshot({ element: document.querySelector('[role="dialog"]')!, path: '__screenshots__/preview-search-mobile.png' });
+  await userEvent.keyboard('{Escape}');
+  expect(workspace.open()).toBe(true);
+  workspace.requestClose();
+  await workspace.openPreview(file('fresh.md'));
+  expect(document.querySelector('[role="search"]')).toBeNull();
+});
 it.each(['light', 'dark'] as const)('keeps actual preview nodes, independent drafts and actions in %s', async mode => {
   await page.viewport(1280, 900); const workspace = mount(mode);
   await workspace.openPreview(file('report.md'));

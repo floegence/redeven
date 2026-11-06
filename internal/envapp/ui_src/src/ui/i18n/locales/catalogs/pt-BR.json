@@ -1723,7 +1723,8 @@
     "previewWindowTitle": "Previa do arquivo",
     "closeTab": "Fechar {name}",
     "previousTab": "Abas anteriores",
-    "nextTab": "Próximas abas"
+    "nextTab": "Próximas abas",
+    "findInFile": "Localizar no arquivo"
   },
   "files": {
     "title": "Arquivos",

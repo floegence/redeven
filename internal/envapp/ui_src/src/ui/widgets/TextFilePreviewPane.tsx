@@ -3,6 +3,10 @@ import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useI18n } from '../i18n';
+import { Button, TextSearchBar, createTextSearch } from '@floegence/floe-webapp-core/ui';
+import { Search } from '@floegence/floe-webapp-core/icons';
+import { handlePreviewSearchShortcut } from './previewSearchShortcut';
+import { usePreviewSearchLabels } from './previewSearchLabels';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -34,6 +38,8 @@ const EDITING_MONACO_RUNTIME_OPTIONS: CodeEditorRuntimeOptions = {
 };
 
 interface StaticTextPreviewPaneProps {
+  active?: boolean;
+  path: string;
   text: string;
   wrapText?: boolean;
   showEditorUnavailableNotice?: boolean;
@@ -47,9 +53,16 @@ function splitPreviewLines(text: string): string[] {
 function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
   const i18n = useI18n();
   const lines = createMemo(() => splitPreviewLines(props.text));
+  const labels = usePreviewSearchLabels();
+  const [content, setContent] = createSignal<HTMLDivElement>();
+  const search = createTextSearch({ content, active: () => props.active !== false, identity: () => props.path });
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden">
+    <div class="flex h-full min-h-0 flex-col overflow-hidden" onKeyDown={search.onKeyDown}>
+      <div class="flex shrink-0 justify-end border-b border-border px-2 py-1">
+        <Button size="sm" variant="ghost" data-redeven-preview-find aria-label={labels.find} title={labels.find} aria-expanded={search.open()} onClick={event => search.show(event.currentTarget)}><Search class="size-3.5" /></Button>
+      </div>
+      <TextSearchBar search={search} labels={labels} />
       <Show when={props.showEditorUnavailableNotice}>
         <div class="shrink-0 border-b border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
           {i18n.t('uiCopy.editor.plainTextFallback')}
@@ -58,6 +71,8 @@ function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
 
       <div
         data-testid="text-preview-fallback"
+        ref={setContent}
+        tabIndex={0}
         {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
         class="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 text-foreground"
       >
@@ -68,6 +83,7 @@ function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
                 <tr class="align-top">
                   <td
                     data-testid="text-preview-fallback-line-number"
+                    data-floe-text-search-exclude
                     class="select-none border-r border-border/70 px-3 py-0 text-right text-muted-foreground/70"
                   >
                     {index() + 1}
@@ -92,6 +108,7 @@ function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
 }
 
 export interface TextFilePreviewPaneProps {
+  active?: boolean;
   surface?: 'main' | 'window';
   path: string;
   descriptor: FilePreviewDescriptor;
@@ -106,6 +123,17 @@ export interface TextFilePreviewPaneProps {
 export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   const i18n = useI18n();
   const [monacoFailed, setMonacoFailed] = createSignal(false);
+  const [editorApi, setEditorApi] = createSignal<CodeEditorApi>();
+  const find = () => {
+    if (props.active === false) return;
+    const api = editorApi();
+    api?.focus();
+    void api?.editor.getAction('actions.find')?.run();
+  };
+  const handleEditorReady = (api: CodeEditorApi) => {
+    setEditorApi(api);
+    api.editor.onDidDispose(() => setEditorApi(current => current === api ? undefined : current));
+  };
   const resolvedLanguage = createMemo<string | undefined>(() => {
     return props.descriptor.language;
   });
@@ -126,6 +154,8 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   }));
   const previewFallback = (showEditorUnavailableNotice = false) => (
     <StaticTextPreviewPane
+      active={props.active}
+      path={props.path}
       text={editorValue()}
       wrapText={props.descriptor.wrapText}
       showEditorUnavailableNotice={showEditorUnavailableNotice}
@@ -143,6 +173,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   );
   const renderMonacoEditor = () => (
     <CodeEditor
+      onReady={handleEditorReady}
       path={props.path}
       language={resolvedLanguage()}
       value={editorValue()}
@@ -160,7 +191,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   );
   const renderReadonlyMonaco = () => renderMonacoEditor();
   const renderEditingMonaco = () => renderMonacoEditor();
-  const renderFallbackSurface = () => (props.editing ? editFailureFallback() : previewFallback(monacoFailed()));
+  const FallbackSurface = () => (props.editing ? editFailureFallback() : previewFallback(monacoFailed()));
 
   createEffect(on(() => [props.path, props.truncated, resolvedLanguage(), props.editing], () => {
     setMonacoFailed(false);
@@ -173,12 +204,18 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   });
 
   return (
-    <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
+    <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}
+      onKeyDown={event => { if (props.active !== false) handlePreviewSearchShortcut(event); }}>
+      <Show when={shouldUseMonaco()}>
+        <div class="flex shrink-0 justify-end border-b border-border px-2 py-1">
+          <Button size="sm" variant="ghost" data-redeven-preview-find aria-label={i18n.t('filePreview.findInFile')} title={i18n.t('filePreview.findInFile')} disabled={!editorApi()} onClick={find}><Search class="size-3.5" /></Button>
+        </div>
+      </Show>
 
       <div class="min-h-0 flex-1 overflow-hidden">
         <Show
           when={shouldUseMonaco()}
-          fallback={renderFallbackSurface()}
+          fallback={<FallbackSurface />}
         >
           <ErrorBoundary
             fallback={() => {

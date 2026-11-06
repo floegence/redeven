@@ -209,6 +209,30 @@ function select(element: Element) {
 }
 
 describe('Workbench preview header', () => {
+  it('keeps rendered search scoped to the selected projected preview', async () => {
+    await page.viewport(1400, 1000);
+    const { host, state, setState } = mount('light', 0.8);
+    await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toBeVisible();
+    const viewport = { ...state().viewport };
+    await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
+    await userEvent.fill(page.getByRole('searchbox'), 'preview');
+    await expect.element(page.getByRole('status').filter({ hasText: '1 of 2' })).toBeVisible();
+    await userEvent.keyboard('{Enter}');
+    await expect.element(page.getByRole('status').filter({ hasText: '2 of 2' })).toBeVisible();
+    expect(state().viewport).toEqual(viewport);
+    setState(current => ({ ...current, selectedWidgetId: null }));
+    await expect.poll(() => [...CSS.highlights.keys()].filter(key => key.startsWith('floe-find-')).length).toBe(0);
+    const shortcut = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });
+    host.querySelector('.file-markdown-wrapper')!.dispatchEvent(shortcut);
+    expect(shortcut.defaultPrevented).toBe(false);
+    setState(current => ({ ...current, selectedWidgetId: 'preview' }));
+    await expect.element(page.getByRole('searchbox')).toHaveValue('preview');
+    await userEvent.click(page.getByRole('searchbox'));
+    await userEvent.keyboard('{Escape}');
+    expect(host.querySelector('[role="search"]')).toBeNull();
+    expect(state().widgets).toHaveLength(1);
+  });
+
   it('keeps PPTX selection and local scrolling inside the projected preview', async () => {
     await page.viewport(1400, 1000);
     io.pdfBytes = new Uint8Array(await (await fetch(pptxFixtureUrl)).arrayBuffer());

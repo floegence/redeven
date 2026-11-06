@@ -1723,7 +1723,8 @@
     "keepCurrentDraft": "현재 초안 유지",
     "closeTab": "{name} 닫기",
     "previousTab": "이전 탭",
-    "nextTab": "다음 탭"
+    "nextTab": "다음 탭",
+    "findInFile": "파일 내 찾기"
   },
   "files": {
     "title": "파일",

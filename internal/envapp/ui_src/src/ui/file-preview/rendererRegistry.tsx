@@ -66,6 +66,7 @@ export type RedevenFilePreviewRenderer = Readonly<{
 function renderMarkdownPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   return (
     <MarkdownPreviewPane
+      active={props.active}
       path={props.item?.path ?? 'preview.md'}
       descriptor={props.descriptor}
       text={props.text ?? ''}
@@ -82,7 +83,7 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
   const format = () => delimitedFormat(props.item?.name ?? props.item?.path ?? '');
   const copy = () => Object.fromEntries(Object.keys(taskFilesEnUS).map(key => [key, i18n.t(('flowerSurface.taskFiles.' + key) as Parameters<typeof i18n.t>[0])])) as TaskFilesCopy;
-  const source = () => <TextFilePreviewPane path={props.item?.path ?? 'preview.txt'} descriptor={props.descriptor}
+  const source = () => <TextFilePreviewPane active={props.active} path={props.item?.path ?? 'preview.txt'} descriptor={props.descriptor}
     text={props.text ?? ''} draftText={props.draftText ?? props.text ?? ''} truncated={props.truncated}
     editing={props.editing} onDraftChange={props.onDraftChange} onSelectionChange={props.onSelectionChange} surface={props.surface} />;
   return <Show when={props.bytes && format()} fallback={source()}>{kind =>

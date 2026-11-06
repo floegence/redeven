@@ -17,6 +17,11 @@ Redeven owns source identity, authorization and preview modes; published rendere
 
 Lazy Floe PDF owns layers/scoped CSS. One PDF/PPTX renderer/page; identity fences callbacks/stale work. Cancellation neutral, faults local/retryable.
 
+### Text search and retained overlays
+Markdown reading views, Monaco source views and truncated/emergency text previews expose a localized Find action and scoped Ctrl/Cmd+F. Rendered-text search uses Floe `createTextSearch`/`TextSearchBar`: literal case-insensitive matches across inline markup, match counts, previous/next, Enter/Shift+Enter and Escape. CSS highlights preserve rendered nodes and native selection; navigation scrolls only the owning preview. Hidden controls and line numbers are excluded. Window-header shortcuts route to the active document; Desktop resolves the editor entry from the same published Floe instance as its theme provider. Queries stay with retained documents; replacement resets them. Inactive/unselected previews have no search input authority. Escape closes search before its preview window, including mobile dialogs.
+
+Floe owns Monaco control-hover placement/intrinsic sizing and retained-panel paint suppression. Inactive panels retain geometry, scroll, editor model and drafts while suppressing explicitly visible descendants. Redeven consumes published Floe releases rather than patching Monaco or copying overlay mechanics.
+
 ### Office/delimited
 Shared task/attachment adapters serve both hosts. Attachments retain native image/PDF/text; Env App file actions/Monaco/selected-Workbench wheel. Never pass legacy XLS/DOC/PPT to OOXML.
 
@@ -77,3 +82,6 @@ The [preview viewport contract](#viewport-and-formats) owns shared fit, controls
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.test.tsx` - Tests.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewWorkspace.browser.test.tsx` - Markdown/text search, independent retained queries and mobile dismissal.
+- `redeven:desktop/scripts/check-file-preview-continuity.mjs` - Production Electron search, hover hit testing and HTML continuity.

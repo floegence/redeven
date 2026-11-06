@@ -139,7 +139,8 @@ describe('file preview wiring', () => {
     expect(previewWindowSrc).toContain('layout.isMobile()');
     expect(previewWindowSrc).toContain('<Dialog');
     expect(previewWindowSrc).toContain('<PersistentFloatingWindow');
-    expect(previewWindowSrc).toContain('surfaceRef={props.surfaceRef}');
+    expect(previewWindowSrc).toContain('surfaceRef={bindSurface}');
+    expect(previewWindowSrc).toContain('props.surfaceRef?.(element)');
     expect(previewWindowSrc).toContain("h-full w-full");
     expect(previewWindowSrc).toContain('file-preview-floating-window');
     expect(previewWindowSrc).toContain('stackId={props.stackId}');

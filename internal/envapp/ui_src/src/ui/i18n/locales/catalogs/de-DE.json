@@ -1723,7 +1723,8 @@
     "keepCurrentDraft": "Aktuellen Entwurf behalten",
     "closeTab": "{name} schließen",
     "previousTab": "Vorherige Tabs",
-    "nextTab": "Nächste Tabs"
+    "nextTab": "Nächste Tabs",
+    "findInFile": "In Datei suchen"
   },
   "files": {
     "title": "Dateien",

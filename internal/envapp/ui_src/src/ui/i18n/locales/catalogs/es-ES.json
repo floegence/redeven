@@ -1723,7 +1723,8 @@
     "previewWindowTitle": "Vista previa del archivo",
     "closeTab": "Cerrar {name}",
     "previousTab": "Pestañas anteriores",
-    "nextTab": "Pestañas siguientes"
+    "nextTab": "Pestañas siguientes",
+    "findInFile": "Buscar en el archivo"
   },
   "files": {
     "title": "Archivos",

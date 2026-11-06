@@ -43,6 +43,50 @@ await session.run(async () => {
     await page.getByRole('button',{name:'Close two.html',exact:true}).click();
     await page.waitForFunction(() => document.querySelectorAll('iframe').length === 1);
     await page.screenshot({path:path.join(output,'retained-html.png')});
+    await open('LICENSE', new TextEncoder().encode('MIT License\nCopyright Floegence\nLicense terms'));
+    await page.getByRole('button', { name: 'Find in file', exact: true }).click();
+    const find = page.locator('.find-widget textarea[aria-label="Find"]');
+    await find.fill('License');
+    await page.waitForFunction(() => document.querySelector('.matchesCount')?.textContent === '1 of 2');
+    for (const label of ['Find in Selection', 'Close']) {
+      const target = page.locator('.find-widget [aria-label^="' + label + '"]');
+      if (label === 'Find in Selection') {
+        await page.locator('.monaco-editor .view-lines').click();
+        await page.keyboard.press('ControlOrMeta+A');
+      }
+      await target.hover();
+      await page.waitForFunction(label => [...document.querySelectorAll('.monaco-hover')].some(el => el.textContent.includes(label) && el.getBoundingClientRect().width > 0), label);
+      for (let sample = 0; sample < 8; sample++) {
+        await page.waitForTimeout(100);
+        const geometry = await target.evaluate(element => {
+          const rect = element.getBoundingClientRect();
+          const tooltip = [...document.querySelectorAll('.monaco-hover')].find(el => el.getBoundingClientRect().width > 0);
+          const bounds = tooltip?.getBoundingClientRect();
+          const viewport = element.closest('[data-preview-document]').getBoundingClientRect();
+          return { hit: element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
+            contained: !!bounds && bounds.top >= rect.bottom - 1 && bounds.left >= viewport.left - 1 && bounds.right <= viewport.right + 1 };
+        });
+        assert.ok(geometry.hit && geometry.contained, label + ': ' + JSON.stringify(geometry));
+      }
+      await page.screenshot({ path: path.join(output, 'search-tooltip-' + label.replaceAll(' ', '-') + '.png') });
+      await page.mouse.move(0, 0);
+    }
+    await open('notes.md', new TextEncoder().encode('# Reading preview\n\nHello **world**, hello world.'));
+    assert.equal(await page.locator('[data-preview-document="/acceptance/LICENSE"]').evaluate(el => getComputedStyle(el).opacity), '0');
+    await page.getByRole('button', { name: 'Find in file', exact: true }).click();
+    await page.getByRole('searchbox').fill('hello world');
+    await page.getByRole('status').filter({ hasText: '1 of 2' }).waitFor();
+    await page.getByRole('searchbox').press('Enter');
+    assert.equal(await page.locator('.floe-text-search [role="status"]').textContent(), '2 of 2');
+    await page.screenshot({ path: path.join(output, 'markdown-search.png') });
+    await page.getByRole('tab').filter({ hasText: 'LICENSE' }).click();
+    assert.equal(await find.inputValue(), 'License');
+    await page.getByRole('tab').filter({ hasText: 'notes.md' }).click();
+    assert.equal(await page.getByRole('searchbox').inputValue(), 'hello world');
+    await page.getByRole('searchbox').press('Escape');
+    assert.equal(await page.getByRole('search').count(), 0);
+    assert.equal(await page.locator('[data-floe-floating-window-surface]').count(), 1);
+    report.checks.push({ search: 'markdown-and-text', tooltip: 'stable-contained', retainedSearch: true });
     const sources = process.env.REDEVEN_ACCEPTANCE_HTML ? JSON.parse(process.env.REDEVEN_ACCEPTANCE_HTML) : [];
     if (sources.length) {
       assert.equal(sources.length,2);
@@ -54,6 +98,6 @@ await session.run(async () => {
     assert.deepEqual(report.errors,[]);
     await page.evaluate(()=>window.filePreviewAcceptance.close()); await page.waitForSelector('iframe',{state:'detached'});
     report.status='passed'; console.log(JSON.stringify(report));
-  } catch (error) { report.failure = error.stack ?? String(error); throw error; }
+  } catch (error) { report.status = 'failed'; report.failure = error.stack ?? String(error); await page.screenshot({path:path.join(output,'failure.png')}); report.dom = await page.locator('[data-preview-document]:not([aria-hidden])').evaluate(el=>el.innerHTML.slice(0,5000)).catch(()=> ''); throw error; }
   finally { await writeFile(path.join(output,'report.json'),JSON.stringify(report,null,2)); await session.closeElectron(app); }
 });

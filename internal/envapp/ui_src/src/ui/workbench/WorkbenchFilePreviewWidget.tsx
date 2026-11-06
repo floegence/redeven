@@ -14,6 +14,7 @@ import { buildFilePreviewDownloadCommand } from '../downloads/downloadCommands';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { buildFilePreviewFlowerTurnLauncherIntent } from '../utils/filePreviewAskFlower';
 import { FilePreviewActions } from '../widgets/FilePreviewActions';
+import { handlePreviewSearchShortcut } from '../widgets/previewSearchShortcut';
 import { FilePreviewPanel } from '../widgets/FilePreviewPanel';
 import { createFilePreviewController } from '../widgets/createFilePreviewController';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
@@ -389,7 +390,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   });
 
   return (
-    <div ref={setBodyElement} class="redeven-workbench-body-surface flex h-full min-h-0 flex-col overflow-hidden">
+    <div ref={setBodyElement} onKeyDown={event => { if (props.selected) handlePreviewSearchShortcut(event); }} class="redeven-workbench-body-surface flex h-full min-h-0 flex-col overflow-hidden">
       <WorkbenchWidgetHeader
         titleTooltip={controller.item()?.path}
         actions={
@@ -458,6 +459,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
         surface="main"
         showHeader={false}
         contentRef={setContentElement}
+        active={props.selected === true}
         allowLocalWheel={props.selected === true}
         item={controller.item()}
         descriptor={controller.descriptor()}

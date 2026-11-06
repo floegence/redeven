@@ -1723,7 +1723,8 @@
     "keepCurrentDraft": "保留目前草稿",
     "closeTab": "關閉 {name}",
     "previousTab": "前面的分頁",
-    "nextTab": "後面的分頁"
+    "nextTab": "後面的分頁",
+    "findInFile": "在檔案中尋找"
   },
   "files": {
     "title": "檔案",

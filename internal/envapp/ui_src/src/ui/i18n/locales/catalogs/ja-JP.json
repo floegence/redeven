@@ -1723,7 +1723,8 @@
     "keepCurrentDraft": "現在のドラフトを保持",
     "closeTab": "{name} を閉じる",
     "previousTab": "前のタブ",
-    "nextTab": "次のタブ"
+    "nextTab": "次のタブ",
+    "findInFile": "ファイル内を検索"
   },
   "files": {
     "title": "ファイル",

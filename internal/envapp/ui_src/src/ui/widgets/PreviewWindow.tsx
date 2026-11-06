@@ -1,5 +1,6 @@
+import { handlePreviewSearchShortcut } from './previewSearchShortcut';
 import { FlowerContextSource } from '../flower/FlowerContextSource';
-import { Show, createMemo, createUniqueId, type JSX } from 'solid-js';
+import { Show, createMemo, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { EnvAppFloatingWindowStackLayer } from '../utils/envAppFloatingWindowStack';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -38,6 +39,15 @@ export function PreviewWindow(props: PreviewWindowProps) {
   const sourceID = `preview:${createUniqueId()}`;
   const layout = useLayout();
   const i18n = useI18n();
+  let shortcutHost: HTMLElement | null = null;
+  const keydown = (event: KeyboardEvent) => handlePreviewSearchShortcut(event as KeyboardEvent & { currentTarget: HTMLElement });
+  const bindSurface = (element: HTMLElement | null) => {
+    shortcutHost?.removeEventListener('keydown', keydown);
+    shortcutHost = element;
+    shortcutHost?.addEventListener('keydown', keydown);
+    props.surfaceRef?.(element);
+  };
+  onCleanup(() => shortcutHost?.removeEventListener('keydown', keydown));
   const isMobile = createMemo(() => layout.isMobile());
 
   return (
@@ -59,7 +69,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           minSize={props.minSize ?? PREVIEW_WINDOW_MIN_SIZE}
           maxSize={props.maxSize}
           viewportInsets={{ top: PREVIEW_WINDOW_MARGIN_DESKTOP, right: PREVIEW_WINDOW_MARGIN_DESKTOP, bottom: PREVIEW_WINDOW_MARGIN_DESKTOP, left: PREVIEW_WINDOW_MARGIN_DESKTOP }}
-          surfaceRef={props.surfaceRef}
+          surfaceRef={bindSurface}
           class={cn('file-preview-floating-window overflow-hidden rounded-md', props.floatingClass)}
           contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"
         >
@@ -68,6 +78,8 @@ export function PreviewWindow(props: PreviewWindowProps) {
       )}
     >
       <Dialog
+        escapeKeyPhase="bubble"
+        onKeyDown={handlePreviewSearchShortcut}
         open={props.open}
         onOpenChange={props.onOpenChange}
         title={props.title}

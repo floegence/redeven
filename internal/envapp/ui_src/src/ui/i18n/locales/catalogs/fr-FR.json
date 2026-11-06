@@ -1723,7 +1723,8 @@
     "previewWindowTitle": "Apercu du fichier",
     "closeTab": "Fermer {name}",
     "previousTab": "Onglets précédents",
-    "nextTab": "Onglets suivants"
+    "nextTab": "Onglets suivants",
+    "findInFile": "Rechercher dans le fichier"
   },
   "files": {
     "title": "Fichiers",

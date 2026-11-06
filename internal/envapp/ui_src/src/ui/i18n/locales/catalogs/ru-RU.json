@@ -1767,7 +1767,8 @@
     "previewWindowTitle": "Предпросмотр файла",
     "closeTab": "Закрыть {name}",
     "previousTab": "Предыдущие вкладки",
-    "nextTab": "Следующие вкладки"
+    "nextTab": "Следующие вкладки",
+    "findInFile": "Найти в файле"
   },
   "files": {
     "title": "Файлы",

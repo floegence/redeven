@@ -6,6 +6,9 @@ import { FileMarkdown } from '../file-markdown/FileMarkdown';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { useI18n } from '../i18n';
 import { useMarkdownPreviewPreferences } from '../services/markdownPreviewPreferences';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Search } from '@floegence/floe-webapp-core/icons';
+import { handlePreviewSearchShortcut } from './previewSearchShortcut';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -33,6 +36,7 @@ const EDITING_MONACO_RUNTIME_OPTIONS: CodeEditorRuntimeOptions = {
 };
 
 export interface MarkdownPreviewPaneProps {
+  active?: boolean;
   surface?: 'main' | 'window';
   path: string;
   descriptor: FilePreviewDescriptor;
@@ -48,6 +52,17 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
   const filePreview = useFilePreviewContext();
   const markdownPreviewPreferences = useMarkdownPreviewPreferences();
   const [monacoFailed, setMonacoFailed] = createSignal(false);
+  const [editorApi, setEditorApi] = createSignal<CodeEditorApi>();
+  const find = () => {
+    if (props.active === false || !props.editing) return;
+    const api = editorApi();
+    api?.focus();
+    void api?.editor.getAction('actions.find')?.run();
+  };
+  const handleEditorReady = (api: CodeEditorApi) => {
+    setEditorApi(api);
+    api.editor.onDidDispose(() => setEditorApi(current => current === api ? undefined : current));
+  };
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const resolvedLanguage = createMemo(() => props.descriptor.language ?? 'markdown');
 
@@ -64,6 +79,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
 
   const renderMarkdownPreview = () => (
     <FileMarkdown
+      active={props.active}
       content={props.text}
       filePath={props.path}
       showToc={true}
@@ -82,6 +98,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
 
   const renderMonacoEditor = () => (
     <CodeEditor
+      onReady={handleEditorReady}
       path={props.path}
       language={resolvedLanguage()}
       value={editorValue()}
@@ -109,7 +126,13 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
   );
 
   return (
-    <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
+    <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}
+      onKeyDown={event => { if (props.active !== false) handlePreviewSearchShortcut(event); }}>
+      <Show when={props.editing && !monacoFailed()}>
+        <div class="flex shrink-0 justify-end border-b border-border px-2 py-1">
+          <Button size="sm" variant="ghost" data-redeven-preview-find aria-label={i18n.t('filePreview.findInFile')} title={i18n.t('filePreview.findInFile')} disabled={!editorApi()} onClick={find}><Search class="size-3.5" /></Button>
+        </div>
+      </Show>
 
       <div class="min-h-0 flex-1 overflow-hidden">
         <Show

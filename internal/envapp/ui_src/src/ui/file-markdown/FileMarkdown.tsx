@@ -1,4 +1,5 @@
-import { Dialog, DialogPlacementProvider, StableText } from '@floegence/floe-webapp-core/ui';
+import { Dialog, DialogPlacementProvider, StableText, createTextSearch, TextSearchBar } from '@floegence/floe-webapp-core/ui';
+import { usePreviewSearchLabels } from '../widgets/previewSearchLabels';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
@@ -19,6 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Search,
 } from '@floegence/floe-webapp-core/icons';
 import 'katex/dist/katex.min.css';
 import './FileMarkdown.css';
@@ -49,6 +51,7 @@ export interface FileMarkdownFileLinkTarget {
 }
 
 export interface FileMarkdownProps {
+  active?: boolean;
   content: string;
   filePath?: string;
   showToc?: boolean;
@@ -169,6 +172,9 @@ function tocItemsEqual(left: readonly TocItem[], right: readonly TocItem[]): boo
 
 export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   const i18n = useI18n();
+  const searchLabels = usePreviewSearchLabels();
+  const [searchContent, setSearchContent] = createSignal<HTMLDivElement>();
+  const search = createTextSearch({ content: searchContent, active: () => props.active !== false, identity: () => props.filePath });
   const [readingMode, setReadingMode] = createSignal(true);
   const [uncontrolledTextScalePercent, setUncontrolledTextScalePercent] = createSignal(
     normalizeMarkdownPreviewTextScalePercent(
@@ -779,6 +785,10 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
       aria-label={i18n.t('uiCopy.preview.markdownControls')}
     >
       {renderTextScaleControls()}
+      <button type="button" class="fm-toolbar-btn" title={searchLabels.find} data-redeven-preview-find aria-label={searchLabels.find}
+        aria-expanded={search.open()} onClick={event => search.show(event.currentTarget)}>
+        <Search class="size-3.5" aria-hidden="true" />
+      </button>
       <button
         type="button"
         class={`fm-toolbar-btn${readingMode() ? ' fm-toolbar-active' : ''}`}
@@ -887,7 +897,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   );
 
   return (
-    <div class={`file-markdown-wrapper${props.class ? ` ${props.class}` : ''}`} style="display: flex; height: 100%; min-height: 0;">
+    <div class={`file-markdown-wrapper${props.class ? ` ${props.class}` : ''}`} style="display: flex; flex-direction: column; height: 100%; min-height: 0;" onKeyDown={search.onKeyDown}>
+      <TextSearchBar search={search} labels={searchLabels} />
       <div style="position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden;">
         <Show when={fatalIssue()}>
           {(issue) => (
@@ -917,7 +928,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
             </Show>
 
             <div
-              ref={containerRef!}
+              ref={element => { containerRef = element; setSearchContent(element); }}
+              tabIndex={0}
               class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
               style={markdownTypographyStyle()}
               onClick={handleMarkdownClick}

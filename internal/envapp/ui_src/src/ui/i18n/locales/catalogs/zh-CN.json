@@ -1723,7 +1723,8 @@
     "previewWindowTitle": "文件预览",
     "closeTab": "关闭 {name}",
     "previousTab": "前面的标签页",
-    "nextTab": "后面的标签页"
+    "nextTab": "后面的标签页",
+    "findInFile": "在文件中查找"
   },
   "files": {
     "title": "文件",

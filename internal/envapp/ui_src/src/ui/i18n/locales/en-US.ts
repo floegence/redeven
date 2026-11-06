@@ -2810,6 +2810,7 @@ export const enUS = defineDictionary({
   },
   ...enUSActivityChrome,
   filePreview: {
+    findInFile: 'Find in file',
     pdf: {
       "search": "Find in PDF",
       "previous": "Previous match",
