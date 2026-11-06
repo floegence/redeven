@@ -16695,7 +16695,7 @@
         "title": "Desktop transport recovery and model-source sessions",
         "type": "Desktop Contract"
       },
-      "body_length": 3281,
+      "body_length": 3521,
       "summary": "A placement bridge owns one immutable recovery generation and exact Environment session. Only its owner replaces transport after validation; late callbacks are fenced. Model-source lifetime survives control reconnects without delaying Env App or persisting transport history, while terminal failure withdraws interaction authority.",
       "sections": [
         {
@@ -16709,8 +16709,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Transport recovery IPC is a narrow current-session capability. The separate Desktop Restart handoff exposes only the current window's bounded user-authored state to its fresh session, never ports, tokens, other Environment snapshots, Runtime handles, or launcher operations. Terminal transport failure may preserve the renderer window for diagnosis and navigation, but every previously loaded Runtime surface remains non-interactive until a fresh session is explicitly opened.\n\nPrivate-origin replacement clears browser storage. Env App includes its saved\nplugin composer/comment cache and selected draft route in this same handoff,\nflushes the active workspace before capture, and commits restored storage before\nacknowledgment. Failed capture or persistence cannot report successful restoration.\nRestored cache is user intent only; opening a draft requires fresh server authority.\n\nWelcome Flower and Tessiven share compatibility/AI readiness. Returning to preparation disposes stale initialization while parent `ComposerDraftStore` retains drafts. Plugin workers/sandboxes receive no runtime-control endpoint/token; resource access uses released ReDevPlugin brokers and registered adapters.",
-          "char_count": 1193
+          "body": "Transport recovery IPC is a narrow current-session capability. The separate Desktop Restart handoff exposes only the current window's bounded user-authored state to its fresh session, never ports, tokens, other Environment snapshots, Runtime handles, or launcher operations. Terminal transport failure may preserve the renderer window for diagnosis and navigation, but every previously loaded Runtime surface remains non-interactive until a fresh session is explicitly opened.\n\nPrivate-origin replacement clears browser storage. Env App includes its saved\nplugin composer/comment cache and selected draft route in this same handoff,\nflushes the active workspace before capture, and commits restored storage before\nacknowledgment. Failed capture or persistence cannot report successful restoration.\nRestored cache is user intent only; opening a draft requires fresh server authority.\nThe draft query and fragment are product navigation, not IPC authority. Restart\nadmission retains the exact entry origin/path and other query parameters, root\nwebContents, main frame and document generation while accepting that navigation.\n\nWelcome Flower and Tessiven share compatibility/AI readiness. Returning to preparation disposes stale initialization while parent `ComposerDraftStore` retains drafts. Plugin workers/sandboxes receive no runtime-control endpoint/token; resource access uses released ReDevPlugin brokers and registered adapters.",
+          "char_count": 1433
         },
         {
           "id": "evidence",
@@ -26042,5 +26042,5 @@
       ]
     }
   ],
-  "source_sha256": "3408eaadcf3f52b3013f19d0af580e6c480e625f33baab41e12f255b923032da"
+  "source_sha256": "f254087f0d0b1d4b3c75d5d4e0d70dd87097efaf4f8d637220f707980aa4d59f"
 }

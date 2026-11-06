@@ -25,7 +25,7 @@ import {
 } from './gatewayRefreshProgress';
 import { gatewayConnectionFromSetup, verifyGatewayConnectionChange } from './gatewayRegistration';
 import { DesktopWelcomeRuntimePoller } from './desktopWelcomeRuntimePoller';
-import { RuntimeSessionHandoff, runtimeSessionMatchesTarget } from './runtimeSessionHandoff';
+import { RuntimeSessionHandoff, runtimeSessionMatchesTarget, runtimeRestartDocumentMatches } from './runtimeSessionHandoff';
 import { sessionRestartDocumentURL, SESSION_RESTART_REOPEN_URL, SESSION_RESTART_CENTER_URL } from './sessionRestartDocument';
 import { SESSION_RESTART_INIT, SESSION_RESTART_REGISTER, SESSION_RESTART_PREPARE, SESSION_RESTART_CANCEL, SESSION_RESTART_SUBMIT, SESSION_RESTART_READ, SESSION_RESTART_RESTORED } from '../shared/sessionRestartIPC';
 import { localAccessCookieFromHeaders } from './localAccessCookie';
@@ -19601,13 +19601,13 @@ if (!app.requestSingleInstanceLock()) {
   const currentRestartDocument = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent, generation: unknown): DesktopSessionRecord | null => {
     const record = sessionRecordForWebContentsID(event.sender.id);
     return record && !record.closing && record.root_window.webContentsID === event.sender.id
-      && event.senderFrame === event.sender.mainFrame && event.senderFrame.url === record.entry_url
+      && event.senderFrame === event.sender.mainFrame && runtimeRestartDocumentMatches(event.senderFrame.url, record.entry_url)
       && generation === record.document_generation ? record : null;
   };
   ipcMain.on(SESSION_RESTART_INIT, (event) => {
     const record = sessionRecordForWebContentsID(event.sender.id);
     event.returnValue = record && !record.closing && record.root_window.webContentsID === event.sender.id
-      && event.senderFrame === event.sender.mainFrame && event.senderFrame.url === record.entry_url
+      && event.senderFrame === event.sender.mainFrame && runtimeRestartDocumentMatches(event.senderFrame.url, record.entry_url)
       ? record.document_generation : null;
   });
   ipcMain.on(SESSION_RESTART_REGISTER, (event, generation: unknown) => {

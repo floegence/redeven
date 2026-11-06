@@ -53,11 +53,12 @@ await session.run(async () => {
     const context = application.context();
     await context.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
     const welcome = await waitFor(() => context.pages().find((entry) => entry.url().includes('/welcome/')), 60000, 'Desktop welcome');
-    const open = async () => {
+    const open = async (activeDraft = false) => {
       await welcome.getByRole('button', { name: /^((Open|Show) window|(打开|显示)窗口)$/ }).first().click({ timeout: 60000 });
       const target = await waitFor(() => context.pages().find((entry) => entry.url().includes('/_redeven_proxy/env/')), 30000, 'Desktop environment window');
       target.setDefaultTimeout(30000);
-      await target.getByRole('tab', { name: 'Activity', exact: true }).waitFor();
+      if (activeDraft) await target.locator('[data-plugin-creation-workspace]').waitFor();
+      else await target.getByRole('tab', { name: 'Activity', exact: true }).waitFor();
       return target;
     };
     page = await open();
@@ -139,7 +140,7 @@ await session.run(async () => {
     const activeRestart = await welcome.evaluate(() => window.redevenDesktopLauncher.performAction({ kind: 'restart_environment_runtime', environment_id: 'local' }));
     assert.equal(activeRestart.ok, true, JSON.stringify(activeRestart));
     assert.equal(activeRestart.outcome, 'restarted_environment_runtime');
-    page = await open();
+    page = await open(true);
     await waitFor(() => page.locator('[data-plugin-creation-workspace] textarea').first().inputValue().then(value => value === edited), 30000, 'active draft restored without navigating away');
     assert.equal(await page.locator('[data-plugin-creation-workspace]').getAttribute('data-project-id'), draft);
     await page.reload({ waitUntil: 'domcontentloaded' });

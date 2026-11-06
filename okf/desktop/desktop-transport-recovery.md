@@ -35,6 +35,9 @@ plugin composer/comment cache and selected draft route in this same handoff,
 flushes the active workspace before capture, and commits restored storage before
 acknowledgment. Failed capture or persistence cannot report successful restoration.
 Restored cache is user intent only; opening a draft requires fresh server authority.
+The draft query and fragment are product navigation, not IPC authority. Restart
+admission retains the exact entry origin/path and other query parameters, root
+webContents, main frame and document generation while accepting that navigation.
 
 Welcome Flower and Tessiven share compatibility/AI readiness. Returning to preparation disposes stale initialization while parent `ComposerDraftStore` retains drafts. Plugin workers/sandboxes receive no runtime-control endpoint/token; resource access uses released ReDevPlugin brokers and registered adapters.
 

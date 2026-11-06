@@ -5,6 +5,18 @@ export function runtimeSessionMatchesTarget(session: Readonly<{ runtime_target_k
   return targetKey !== '' && session.runtime_target_key === targetKey;
 }
 
+/** The saved draft is same-document navigation, never a change of authority. */
+export function runtimeRestartDocumentMatches(frameURL: string, entryURL: string): boolean {
+  try {
+    const frame = new URL(frameURL), entry = new URL(entryURL);
+    if (!['http:', 'https:'].includes(entry.protocol) || frame.username || frame.password) return false;
+    frame.searchParams.delete('plugin_draft');
+    entry.searchParams.delete('plugin_draft');
+    frame.hash = ''; entry.hash = '';
+    return frame.href === entry.href;
+  } catch { return false; }
+}
+
 /** One bounded user-state transfer; the Runtime lifecycle remains owned by its coordinator. */
 export class RuntimeSessionHandoff {
   readonly ticket = randomUUID();

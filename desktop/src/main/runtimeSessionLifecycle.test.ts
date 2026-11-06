@@ -1,7 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { buildLocalEnvironmentDesktopTarget, buildManagedLocalRuntimeDesktopTarget } from './desktopTarget';
 import { runtimeLifecycleTargetKey } from './runtimeLifecycleCoordinator';
-import { RuntimeSessionHandoff, runtimeSessionMatchesTarget } from './runtimeSessionHandoff';
+import { RuntimeSessionHandoff, runtimeSessionMatchesTarget, runtimeRestartDocumentMatches } from './runtimeSessionHandoff';
+
+describe('Runtime restart document route', () => {
+  const entry = 'http://127.0.0.1:43210/_redeven_proxy/env/';
+  it('retains restart admission across saved draft history navigation and reload', () => {
+    expect(runtimeRestartDocumentMatches(entry, entry)).toBe(true);
+    expect(runtimeRestartDocumentMatches(entry + '?plugin_draft=draft_123', entry)).toBe(true);
+    expect(runtimeRestartDocumentMatches(entry + '?plugin_draft=library#canvas', entry)).toBe(true);
+  });
+  it.each([
+    'http://127.0.0.1:43211/_redeven_proxy/env/?plugin_draft=draft_123',
+    'https://127.0.0.1:43210/_redeven_proxy/env/',
+    'http://plugin.localhost:43210/_redeven_proxy/env/',
+    'http://127.0.0.1:43210/_redeven_proxy/env/child',
+    'http://127.0.0.1:43210/other/?plugin_draft=draft_123',
+    entry + '?token=unexpected&plugin_draft=draft_123',
+    'http://user:password@127.0.0.1:43210/_redeven_proxy/env/',
+    'data:text/html,env', 'invalid',
+  ])('rejects another document or authority: %s', url => {
+    expect(runtimeRestartDocumentMatches(url, entry)).toBe(false);
+  });
+});
 import { testProviderBoundLocalEnvironment } from '../testSupport/desktopTestHelpers';
 
 describe('managed Runtime session lifecycle', () => {
