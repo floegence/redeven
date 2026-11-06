@@ -3509,7 +3509,11 @@ func (r *run) normalizeTerminalExecCwd(cwd string, workdir string) (string, erro
 		return "", &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid cwd"}
 	}
 	if filepath.Clean(resolvedCwd) != filepath.Clean(resolvedWorkdir) {
-		return "", &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid cwd"}
+		return "", &aitools.ToolError{
+			Code:    aitools.ErrorCodeInvalidPath,
+			Message: "cwd and workdir resolve to different directories; when both are provided they must resolve to the same directory; no process was started",
+			Meta:    map[string]any{"reason": "conflicting_working_directories", "process_started": false},
+		}
 	}
 	return resolvedCwd, nil
 }

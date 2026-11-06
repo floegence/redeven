@@ -157,7 +157,7 @@ func TestProviderToolNameGuidanceAtWireBoundary(t *testing.T) {
 }
 
 func toolNameGuidanceRequest() ModelGatewayRequest {
-	wanted := map[string]bool{"computer.exec": true, "computer.select_target": true, "attachment.materialize": true, "file.present": true}
+	wanted := map[string]bool{"computer.exec": true, "computer.select_target": true, "attachment.materialize": true, "file.present": true, "file.edit": true, "terminal.exec": true}
 	var definitions []ToolDef
 	for _, definition := range builtInToolDefinitions() {
 		if wanted[definition.Name] {

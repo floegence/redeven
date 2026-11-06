@@ -496,10 +496,18 @@ func (r *run) toolFileEdit(ctx context.Context, args FileEditArgs) (FileMutation
 	original := string(originalBytes)
 	matchCount := strings.Count(original, args.OldString)
 	if matchCount == 0 {
-		return FileMutationResult{}, errors.New("old_string was not found")
+		return FileMutationResult{}, &aitools.ToolError{
+			Code:    aitools.ErrorCodeInvalidArguments,
+			Message: "old_string was not found; file was not modified",
+			Meta:    map[string]any{"reason": "old_string_not_found", "match_count": matchCount, "file_modified": false},
+		}
 	}
 	if !args.ReplaceAll && matchCount > 1 {
-		return FileMutationResult{}, fmt.Errorf("old_string matched %d times; include unique surrounding text to select one occurrence, or set replace_all=true only when every occurrence is intended", matchCount)
+		return FileMutationResult{}, &aitools.ToolError{
+			Code:    aitools.ErrorCodeInvalidArguments,
+			Message: fmt.Sprintf("old_string matched %d times; replace_all=false requires exactly one match; file was not modified", matchCount),
+			Meta:    map[string]any{"reason": "old_string_ambiguous", "match_count": matchCount, "file_modified": false},
+		}
 	}
 	var updated string
 	if args.ReplaceAll {

@@ -344,7 +344,7 @@ func TestToolFileEdit_ReplacesExactMatchAndRejectsAmbiguousMatch(t *testing.T) {
 		FilePath:  "edit.txt",
 		OldString: "alpha",
 		NewString: "omega",
-	}); err == nil || !strings.Contains(err.Error(), "replace_all=true") {
+	}); err == nil || !strings.Contains(err.Error(), "replace_all=false requires exactly one match") {
 		t.Fatalf("expected ambiguous match error, got %v", err)
 	}
 

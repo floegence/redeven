@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-05: Clarify [terminal directory arguments](ai/terminal-tool-runtime.md) and type [file-edit matching failures](ai/tool-permission-runtime.md) with observed counts and confirmed no-effect facts; qualify explicit corrections, provider output, Activity and restart against published Floret.
+
 - 2026-11-05: Replace misleading simulated installation controls with real host actions in [Browser and desktop settings](ai/computer-use-environment-settings.md).
 - 2026-11-05: Refined [Browser and desktop settings](ai/computer-use-environment-settings.md) with grouped environment controls, focused connection rows, pinned browser/platform marks and on-demand target discovery.
 

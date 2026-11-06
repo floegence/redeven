@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: AI terminal tool runtime
 tags: [ai, terminal, tools, runtime]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-05"
 ---
 # Summary
 
@@ -16,6 +16,8 @@ child-only environment variables while preserving project cwd and OS temporary
 path conventions. Cleanup waits for owned terminal processes to be reaped.
 
 PTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.
+
+`cwd` is the preferred working-directory field; `workdir` has the same semantics. When both fields are empty, the run working directory is used; relative paths resolve from it. Two nonempty fields must resolve to the same authorized directory, including equivalent symlink paths. Neither takes precedence. A conflict retains `INVALID_PATH`, with `reason=conflicting_working_directories` and `process_started=false`; rejection precedes host-work admission and process creation.
 
 On macOS/Linux, one exit worker observes command exit without reaping, kills its process group, retires numeric signaling, verifies no live members within 2 seconds, then reaps and drains output. The unreaped root pins its PID through cleanup. Child cleanup preserves shell exit codes; only confirmed Stop termination means cancellation. Stop, input failure, the 30-minute limit and Service shutdown share this worker. Unconfirmed cleanup reports a runtime error and retains workload admission. Settlement stops the watchdog.
 
@@ -43,6 +45,8 @@ and remains an error at shutdown; it never triggers effect replay.
 No authority barriers, admission receipts, recovery handles or projection-cursor waits exist. Reads never retry settlement. Open-detail polling refreshes bytes, never canonical status or provider dispatch.
 
 # Evidence
+
+- [Local tool feedback](../../internal/ai/local_tool_feedback_test.go) covers default, single-field, equivalent, symlink and conflicting directories through dispatch. [Service acceptance](../../internal/ai/local_tool_feedback_integration_test.go) verifies rejection before effects, explicit correction with a real PTY, HTTP tool output, canonical Activity and restart without replay, using published Floret and isolated synthetic providers.
 
 - `redeven:internal/ai/floret_effect_authorization.go` - Source.
 
