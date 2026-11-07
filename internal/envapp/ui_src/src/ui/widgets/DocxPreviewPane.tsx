@@ -1,4 +1,7 @@
 import { Show, createEffect, createSignal, on, onCleanup, untrack } from 'solid-js';
+import { createTextSearch } from '@floegence/floe-webapp-core/ui';
+import { FilePreviewSearchOverlay, registerFilePreviewSearch } from './FilePreviewSearch';
+import { usePreviewSearchLabels } from './previewSearchLabels';
 import { cn } from '@floegence/floe-webapp-core';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
@@ -57,12 +60,16 @@ function DocxDocument(props: {
   return <><div ref={styles} class="hidden" aria-hidden="true" /><div ref={body} class="docx-preview-pane__document" /></>;
 }
 
-export interface DocxPreviewPaneProps { onRenderError?: (message: string) => void; surface?: FilePreviewSurface; bytes?: Uint8Array<ArrayBuffer> | null }
+export interface DocxPreviewPaneProps { active?: boolean; onRenderError?: (message: string) => void; surface?: FilePreviewSurface; bytes?: Uint8Array<ArrayBuffer> | null }
 
 export function DocxPreviewPane(props: DocxPreviewPaneProps) {
   const [error, setError] = createSignal('');
   const [layout, setLayout] = createSignal<DocxLayout | null>(null);
   const [viewport, setViewport] = createSignal<HTMLDivElement>();
+  const [content, setContent] = createSignal<HTMLDivElement>();
+  const search = createTextSearch({ content, viewport, identity: () => props.bytes, active: () => props.active !== false });
+  const labels = usePreviewSearchLabels();
+  registerFilePreviewSearch({ show: search.show, enabled: () => props.active !== false && !!layout() && !error(), expanded: search.open });
   const zoom = createPreviewZoom({ viewport, content: () => {
     const value = layout(); return value ? { width: value.pageWidth, height: value.pageHeight } : null;
   }, min: 0.1, max: 3, step: 0.1 });
@@ -73,13 +80,14 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
   const width = () => (layout()?.width ?? 0) * (zoom.scale() ?? 0);
   const height = () => (layout()?.height ?? 0) * (zoom.scale() ?? 0);
   return (
-    <div class={cn('relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
+    <div onKeyDown={search.onKeyDown} class={cn('relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
+      <FilePreviewSearchOverlay search={search} labels={labels} />
       <FilePreviewZoomControls zoom={zoom} kind="Docx" />
       <div ref={setViewport} {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS} class="docx-preview-pane relative min-h-0 min-w-0 flex-1 overflow-auto p-3 [overflow-anchor:none]">
         <Show when={!error()} fallback={<FilePreviewErrorState errorType="render_error" message={error()} />}>
           <div class="relative grid place-items-center" style={{ width: `${Math.max(width(), zoom.viewportSize()?.width ?? 0)}px`, height: `${Math.max(height(), zoom.viewportSize()?.height ?? 0)}px` }}>
             <div data-preview-zoom-content class="docx-preview-pane__frame relative" style={{ width: `${width()}px`, height: `${height()}px` }}>
-              <div class="docx-preview-pane__content absolute left-0 top-0 origin-top-left" style={{ width: layout() ? `${layout()!.width}px` : 'max-content', transform: `scale(${zoom.scale() ?? 1})`, visibility: layout() && zoom.scale() !== null ? 'visible' : 'hidden' }}>
+              <div ref={setContent} class="docx-preview-pane__content absolute left-0 top-0 origin-top-left" style={{ width: layout() ? `${layout()!.width}px` : 'max-content', transform: `scale(${zoom.scale() ?? 1})`, visibility: layout() && zoom.scale() !== null ? 'visible' : 'hidden' }}>
                 <Show when={props.bytes} keyed>{bytes => <DocxDocument bytes={bytes} onLayout={setLayout} onError={message => {setError(message);props.onRenderError?.(message);}} />}</Show>
               </div>
             </div>

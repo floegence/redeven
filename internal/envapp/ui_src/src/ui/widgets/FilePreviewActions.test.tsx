@@ -2,6 +2,7 @@
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FilePreviewSearchScope, registerFilePreviewSearch } from './FilePreviewSearch';
 import { FilePreviewActions } from './FilePreviewActions';
 
 vi.mock('./FloatingContextMenu', () => ({
@@ -27,6 +28,22 @@ function button(host: ParentNode, label: string) {
 }
 
 describe('File preview action presentations', () => {
+  it.each(['icons', 'menu', 'header'] as const)('places Find only in More for %s actions', presentation => {
+    const host = document.createElement('div'); document.body.append(host);
+    const show = vi.fn();
+    const [active, setActive] = createSignal(true);
+    const Content = () => { registerFilePreviewSearch({ show, enabled: active }); return null; };
+    const dispose = render(() => <FilePreviewSearchScope><FilePreviewActions presentation={presentation} item={item} descriptor={{ mode: 'markdown' }} active={active()} /><Content /></FilePreviewSearchScope>, host);
+    try {
+      expect(host.querySelector('[data-redeven-preview-find]')).toBeNull();
+      button(host, 'More file actions').click();
+      const find = button(host, 'Find in file'); expect(find.getAttribute('role')).toBe('menuitem');
+      find.click(); expect(show).toHaveBeenCalledWith(button(host, 'More file actions'));
+      expect(host.querySelector('[role="menu"]')).toBeNull();
+      setActive(false); button(host, 'More file actions').click(); expect(button(host, 'Find in file').disabled).toBe(true);
+    } finally { dispose(); }
+  });
+
   it.each(['icons', 'menu'] as const)('shares edit availability and copy feedback in %s', async (presentation) => {
     const host = document.createElement('div');
     document.body.append(host);

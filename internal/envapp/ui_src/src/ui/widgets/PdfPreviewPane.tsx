@@ -13,6 +13,7 @@ import { loadPDFDocument, pdfAssetsUrl, type PDFDocumentProxy } from './pdfPrevi
 import { FilePreviewErrorState } from './FilePreviewErrorState';
 import { FilePreviewZoomControls } from './FilePreviewZoomControls';
 import { createPreviewZoom } from './createPreviewZoom';
+import { registerFilePreviewSearch } from './FilePreviewSearch';
 import { useI18n } from '../i18n';
 import type { FilePreviewSurface } from '../utils/filePreview';
 
@@ -75,6 +76,7 @@ function PdfPreviewPage(props: { document: PDFDocumentProxy; session: PdfDocumen
 }
 
 export interface PdfPreviewPaneProps {
+  active?: boolean;
   onRenderError?: (message: string) => void;
   surface?: FilePreviewSurface;
   bytes?: Uint8Array<ArrayBuffer> | null;
@@ -207,21 +209,28 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
     document.addEventListener('selectionchange', update);
     onCleanup(() => document.removeEventListener('selectionchange', update));
   });
-  const openSearch = () => {
+  let searchTrigger: HTMLElement | undefined;
+  const openSearch = (trigger?: HTMLElement) => {
+    if (props.active === false || !session()) return;
+    searchTrigger = trigger;
     setSearchOpen(true);
-    queueMicrotask(() => { searchInput?.focus(); searchInput?.select(); });
+    if (query()) session()?.search(query());
+    queueMicrotask(() => { if (props.active !== false && searchOpen()) { searchInput?.focus(); searchInput?.select(); } });
   };
-  const closeSearch = () => { setSearchOpen(false); session()?.clearSearch(); viewport()?.focus({ preventScroll: true }); };
+  const closeSearch = () => { setSearchOpen(false); session()?.clearSearch(); (searchTrigger?.isConnected ? searchTrigger : viewport())?.focus({ preventScroll: true }); };
+  const hostedSearch = registerFilePreviewSearch({ show: openSearch, enabled: () => props.active !== false && !!session(), expanded: searchOpen });
   return (
     <div class={cn('floe-pdf-surface relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}
       onKeyDown={event => {
-        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
+        if (props.active !== false && searchOpen() && event.key === 'Escape') {
+          event.preventDefault(); event.stopPropagation(); closeSearch();
+        } else if (props.active !== false && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
           event.preventDefault(); event.stopPropagation(); openSearch();
         }
       }}>
       <FilePreviewZoomControls zoom={zoom} kind="Pdf" metadata={<><span>PDF</span> · {loaded()?.pages.length ? i18n.tn('uiCopy.preview.pageCount', loaded()!.pages.length) : i18n.t('uiCopy.preview.noPages')}</>} />
-      <div class="pdf-document-controls absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm">
-        <Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('filePreview.pdf.search')} title={i18n.t('filePreview.pdf.search')} disabled={!session()} onClick={openSearch}><Search class="size-3.5" /></Button>
+      <Show when={!hostedSearch || props.editing}><div class="pdf-document-controls absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm">
+        <Show when={!hostedSearch}><Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('filePreview.pdf.search')} title={i18n.t('filePreview.pdf.search')} disabled={!session()} onClick={event => openSearch(event.currentTarget)}><Search class="size-3.5" /></Button></Show>
         <Show when={props.editing}>
           <Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('filePreview.pdf.highlight')} title={i18n.t(canHighlight() ? 'filePreview.pdf.highlight' : 'filePreview.pdf.selectText')} disabled={!canHighlight() || props.saving} onPointerDown={event => event.preventDefault()} onClick={() => void session()?.highlightSelection()}><Highlighter class="size-3.5" /></Button>
           <Dropdown align="start" triggerClass="flex h-8 w-7 cursor-pointer items-center justify-center rounded hover:bg-accent" triggerAriaLabel={i18n.t('filePreview.pdf.history')}
@@ -232,7 +241,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
             ]}
             onSelect={action => { if (action === 'undo') session()?.undo(); else if (action === 'redo') session()?.redo(); }} />
         </Show>
-      </div>
+      </div></Show>
       <Show when={searchOpen()}>
         <div class="pdf-search-panel absolute inset-x-2 bottom-2 z-20 mx-auto max-w-xl rounded-lg border border-border/60 bg-background/95 p-2 shadow-sm backdrop-blur-sm">
           <Show when={searchOpen()}>

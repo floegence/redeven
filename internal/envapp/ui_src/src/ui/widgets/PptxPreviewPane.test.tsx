@@ -58,7 +58,8 @@ describe('PPTX preview ownership', () => {
         expect(host.textContent).toContain('External links');
       } else {
         expect(host.textContent).not.toContain('External links');
-        expect(host.firstElementChild?.children).toHaveLength(1);
+        expect(host.querySelector('.redeven-preview-search-overlay')?.hasAttribute('hidden')).toBe(true);
+        expect(host.querySelector('.pptx-preview-pane')).toBeTruthy();
       }
       const viewport = host.querySelector<HTMLElement>('.pptx-preview-pane')!;
       viewport.scrollTop = 15000;

@@ -44,15 +44,20 @@ await session.run(async () => {
     await page.waitForFunction(() => document.querySelectorAll('iframe').length === 1);
     await page.screenshot({path:path.join(output,'retained-html.png')});
     await open('LICENSE', new TextEncoder().encode('MIT License\nCopyright Floegence\nLicense terms'));
-    const headerFind = page.locator('[data-floe-floating-window-titlebar]').getByRole('button', { name: 'Find in file', exact: true });
-    await headerFind.waitFor();
+    const more = page.locator('[data-floe-floating-window-titlebar]').getByRole('button', { name: 'More file actions', exact: true });
+    const openFind = async () => {
+      assert.equal(await page.locator('[data-floe-floating-window-titlebar] [data-redeven-preview-find]').count(), 0);
+      await more.click();
+      await page.getByRole('menuitem', { name: 'Find in file', exact: true }).click();
+    };
+    await more.waitFor();
     const editor = page.locator('[data-preview-document="/acceptance/LICENSE"] .monaco-editor');
     await editor.waitFor();
     const editorBounds = await editor.boundingBox();
     const documentBounds = await page.locator('[data-preview-document="/acceptance/LICENSE"]').boundingBox();
     assert.equal(editorBounds.y, documentBounds.y, 'Monaco must not reserve a Find toolbar row');
     assert.equal(editorBounds.height, documentBounds.height, 'Monaco must fill the document viewport');
-    await headerFind.click();
+    await openFind();
     const find = page.locator('.find-widget textarea[aria-label="Find"]');
     await find.fill('License');
     await page.waitForFunction(() => document.querySelector('.matchesCount')?.textContent === '1 of 2');
@@ -84,13 +89,13 @@ await session.run(async () => {
     assert.equal(await page.locator('[data-preview-document="/acceptance/LICENSE"]').evaluate(el => getComputedStyle(el).opacity), '0');
     const markdown = page.locator('[data-preview-document="/acceptance/notes.md"] .file-markdown-body');
     const markdownBounds = await markdown.boundingBox();
-    await headerFind.click();
+    await openFind();
     await page.getByRole('searchbox').fill('hello world');
     await page.getByRole('status').filter({ hasText: '1 of 2' }).waitFor();
     await page.getByRole('searchbox').press('Enter');
     assert.equal(await page.locator('.floe-text-search [role="status"]').textContent(), '2 of 2');
     assert.deepEqual(await markdown.boundingBox(), markdownBounds, 'Opening rendered Find must preserve viewport geometry');
-    const searchLayout = await page.locator('.redeven-preview-search-overlay').evaluate(element => {
+    const searchLayout = await page.locator('[data-preview-document="/acceptance/notes.md"] .redeven-preview-search-overlay').evaluate(element => {
       const bounds = element.getBoundingClientRect();
       const owner = element.closest('[data-preview-document]').getBoundingClientRect();
       return { absolute: getComputedStyle(element).position === 'absolute', compact: bounds.width <= 450,
@@ -106,9 +111,44 @@ await session.run(async () => {
     await page.getByRole('searchbox').press('Escape');
     assert.equal(await page.getByRole('search').count(), 0);
     assert.deepEqual(await markdown.boundingBox(), markdownBounds, 'Closing Find must preserve viewport geometry');
-    assert.ok(await headerFind.evaluate(element => element === document.activeElement), 'Closing Find must restore the header action focus');
+    assert.ok(await more.evaluate(element => element === document.activeElement), 'Closing Find must restore the header action focus');
     assert.equal(await page.locator('[data-floe-floating-window-surface]').count(), 1);
-    report.checks.push({ search: 'markdown-and-text', tooltip: 'stable-contained', retainedSearch: true, searchLayout: 'header-action-and-compact-overlay', viewportUnchanged: true });
+    report.checks.push({ search: 'markdown-and-text', tooltip: 'stable-contained', retainedSearch: true, searchLayout: 'more-menu-and-compact-overlay', viewportUnchanged: true });
+    const fixtures = path.join(root, 'internal/envapp/ui_src/src/ui/widgets/__fixtures__');
+    const documents = [
+      { name: 'search.docx', bytes: await readFile(path.join(fixtures, 'preview-pages.docx')), query: 'Second page', count: '1 of 1', viewport: '.docx-preview-pane' },
+      { name: 'search.pptx', bytes: await readFile(path.join(fixtures, 'preview-pages.pptx')), query: 'Presentation page 30', count: '1 of 1', viewport: '.pptx-preview-pane' },
+      { name: 'search.pdf', bytes: await readFile(path.join(fixtures, 'pdf/long-text.pdf')), query: 'REDEVEN-300', count: '1 of 29', viewport: '.pdf-preview-pane' },
+      { name: 'search.xlsx', bytes: await readFile(path.join(fixtures, 'preview-workbook.xlsx')), query: '00123', count: '1', viewport: '.flower-delimited-body', submit: true },
+      { name: 'search.csv', bytes: new TextEncoder().encode('name,id\nNeedle,0007'), query: 'Needle', count: '1', viewport: '.flower-delimited-body', submit: true },
+      { name: 'search.tsv', bytes: new TextEncoder().encode('name\tid\nNeedle\t0007'), query: 'Needle', count: '1', viewport: '.flower-delimited-body', submit: true },
+      { name: 'search.html', bytes: new TextEncoder().encode('<h1>Hello <b>world</b></h1><p>Hello world</p>'), query: 'hello world', count: '1 of 2', viewport: '.html-preview-frame' },
+    ];
+    for (const document of documents) {
+      await open(document.name, document.bytes);
+      const owner = page.locator('[data-preview-document="/acceptance/' + document.name + '"]');
+      await owner.locator(document.viewport).waitFor();
+      await openFind();
+      const input = page.getByRole('searchbox');
+      await input.waitFor();
+      assert.ok(await input.evaluate(element => element === window.document.activeElement));
+      const bounds = await owner.locator(document.viewport).boundingBox();
+      await input.fill(document.query); if (document.submit) await input.press('Enter');
+      await page.getByRole('status').filter({ hasText: document.count }).waitFor();
+      if (document.name.endsWith('.pptx')) {
+        await owner.locator('[data-page-number="30"] [data-pptx-search-match]').waitFor();
+        assert.ok(await owner.locator('.pptx-preview-pane__page').count() < 8);
+      }
+      if (document.name.endsWith('.html')) {
+        await input.press('Enter'); await page.getByRole('status').filter({ hasText: '2 of 2' }).waitFor();
+      }
+      await page.screenshot({ path: path.join(output, document.name + '.png') });
+      await input.press('Escape');
+      assert.equal(await page.locator('[data-floe-floating-window-surface]').count(), 1);
+      assert.deepEqual(await owner.locator(document.viewport).boundingBox(), bounds, document.name + ' search must not consume a row');
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'More file actions');
+      report.checks.push({ menuSearch: document.name, matches: document.count, viewportUnchanged: true });
+    }
     const sources = process.env.REDEVEN_ACCEPTANCE_HTML ? JSON.parse(process.env.REDEVEN_ACCEPTANCE_HTML) : [];
     if (sources.length) {
       assert.equal(sources.length,2);

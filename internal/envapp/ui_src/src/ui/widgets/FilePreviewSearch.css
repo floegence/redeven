@@ -3,7 +3,7 @@
   position: absolute;
   inset-block-start: 8px;
   inset-inline-end: 8px;
-  z-index: 4;
+  z-index: 20;
   width: min(26rem, calc(100% - 16px));
   min-width: 0;
   white-space: nowrap;

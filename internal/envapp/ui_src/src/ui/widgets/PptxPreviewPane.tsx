@@ -9,8 +9,10 @@ import {
   untrack,
 } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Button } from '@floegence/floe-webapp-core/ui';
-import { PptxDocumentSurface } from '@floegence/floe-webapp-core/pptx';
+import { Button, createTextSearch } from '@floegence/floe-webapp-core/ui';
+import { FilePreviewSearchOverlay, registerFilePreviewSearch } from './FilePreviewSearch';
+import { usePreviewSearchLabels } from './previewSearchLabels';
+import { PptxDocumentSurface, type PptxSearchResult } from '@floegence/floe-webapp-core/pptx';
 import { useI18n } from '../i18n';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
@@ -33,6 +35,7 @@ function PptxPreviewPage(props: {
   document: PptxDocumentSurface;
   layout: PageLayout;
   scale: number;
+  match?: PptxSearchResult;
 }) {
   const i18n = useI18n();
   let holder!: HTMLDivElement;
@@ -92,6 +95,8 @@ function PptxPreviewPage(props: {
             transform: 'scale(' + props.scale + ')',
           }}
         />
+        <Show when={props.match}>{match => <div aria-hidden="true" data-pptx-search-match class="pointer-events-none absolute border-2 border-primary bg-primary/20"
+          style={{ left: match().bounds.x * props.scale + 'px', top: match().bounds.y * props.scale + 'px', width: match().bounds.width * props.scale + 'px', height: match().bounds.height * props.scale + 'px' }} />}</Show>
         <Show
           when={error()}
           fallback={
@@ -132,6 +137,7 @@ function PptxPreviewPage(props: {
 }
 
 export interface PptxPreviewPaneProps {
+  active?: boolean;
   bytes?: Uint8Array<ArrayBuffer> | null;
   surface?: FilePreviewSurface;
   onRenderError?: (message: string) => void;
@@ -145,6 +151,31 @@ export function PptxPreviewPane(props: PptxPreviewPaneProps) {
   const [incomplete, setIncomplete] = createSignal(false);
   const [viewport, setViewport] = createSignal<HTMLDivElement>();
   const [scrollTop, setScrollTop] = createSignal(0);
+  const [matches, setMatches] = createSignal<PptxSearchResult[]>([]);
+  const [matchIndex, setMatchIndex] = createSignal(0);
+  const labels = usePreviewSearchLabels();
+  let indexedQuery = '';
+  let indexedDocument: PptxDocumentSurface | undefined;
+  const search = createTextSearch({
+    identity: () => props.bytes,
+    active: () => props.active !== false,
+    engine: {
+      state: () => ({ current: matches().length ? matchIndex() + 1 : 0, total: matches().length }),
+      search: (query, direction) => {
+        const active = document();
+        if (direction && active === indexedDocument && query === indexedQuery) {
+          const count = untrack(matches).length;
+          if (count) setMatchIndex(index => (index + direction + count) % count);
+          return;
+        }
+        indexedDocument = active; indexedQuery = query;
+        setMatches(active?.search(query) ?? []); setMatchIndex(0);
+      },
+      clear: () => { setMatches([]); setMatchIndex(0); },
+    },
+  });
+  const currentMatch = () => search.open() && props.active !== false ? matches()[matchIndex()] : undefined;
+  registerFilePreviewSearch({ show: search.show, expanded: search.open, enabled: () => props.active !== false && !!document() });
   const dimensions = () => {
     const active = document();
     return active
@@ -186,6 +217,14 @@ export function PptxPreviewPane(props: PptxPreviewPaneProps) {
           page.top <= scrollTop() + viewHeight + overscan
       )
       .map((page) => page.number);
+  });
+  createEffect(() => {
+    const match = currentMatch();
+    const element = viewport();
+    const page = match ? layouts()[match.slideIndex] : undefined;
+    if (!match || !element || !page) return;
+    element.scrollTop = page.top + PAGE_LABEL_SPACE + match.bounds.y * (zoom.scale() ?? 1) - element.clientHeight / 2;
+    setScrollTop(element.scrollTop);
   });
   createEffect(
     on(
@@ -239,6 +278,7 @@ export function PptxPreviewPane(props: PptxPreviewPaneProps) {
   );
   return (
     <div
+      onKeyDown={search.onKeyDown}
       class={cn(
         'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden',
         props.surface === 'window'
@@ -246,6 +286,7 @@ export function PptxPreviewPane(props: PptxPreviewPaneProps) {
           : redevenSurfaceRoleClass('main')
       )}
     >
+      <FilePreviewSearchOverlay search={search} labels={labels} />
       <Show when={document()?.hasExternalLinks || incomplete()}>
         <div class="flex shrink-0 flex-col gap-1 border-b border-border/50 px-3 py-2 text-[11px] text-muted-foreground">
           <Show when={document()?.hasExternalLinks}>
@@ -306,6 +347,7 @@ export function PptxPreviewPane(props: PptxPreviewPaneProps) {
                       {(number) => (
                         <PptxPreviewPage
                           document={active}
+                          match={currentMatch()?.slideIndex === number - 1 ? currentMatch() : undefined}
                           layout={layouts()[number - 1]!}
                           scale={zoom.scale()!}
                         />

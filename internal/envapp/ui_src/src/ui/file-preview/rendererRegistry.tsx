@@ -2,6 +2,7 @@ import { Show, Suspense, lazy, type JSX } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import type { FilePreviewDescriptor, FilePreviewSurface, PreviewMode } from '../utils/filePreview';
+import { registerFilePreviewSearch } from '../widgets/FilePreviewSearch';
 import { DocxPreviewPane } from '../widgets/DocxPreviewPane';
 import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
 import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
@@ -87,7 +88,7 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
     text={props.text ?? ''} draftText={props.draftText ?? props.text ?? ''} truncated={props.truncated}
     editing={props.editing} onDraftChange={props.onDraftChange} onSelectionChange={props.onSelectionChange} surface={props.surface} />;
   return <Show when={props.bytes && format()} fallback={source()}>{kind =>
-    <DelimitedTextPreview bytes={props.bytes!} format={kind()} copy={copy()}
+    <DelimitedTextPreview active={props.active} registerSearch={registerFilePreviewSearch} bytes={props.bytes!} format={kind()} copy={copy()}
       source={source()} editing={props.editing} truncated={props.truncated} allowLocalWheel={props.allowLocalWheel} />
   }</Show>;
 }
@@ -134,7 +135,7 @@ function renderSpreadsheetPreview(props: RedevenFilePreviewRenderProps): JSX.Ele
   const i18n = useI18n();
   const copy = () => Object.fromEntries(Object.keys(taskFilesEnUS).map(key => [key, i18n.t(('flowerSurface.taskFiles.' + key) as Parameters<typeof i18n.t>[0])])) as TaskFilesCopy;
   return <div class="h-full min-h-0 overflow-hidden" classList={{ 'redeven-file-preview-surface-window': props.surface === 'window' }}><Show when={props.bytes} fallback={<div role="alert">{copy().previewFailed}</div>}>{bytes =>
-    <SpreadsheetPreview bytes={bytes()} format="xlsx" copy={copy()} allowLocalWheel={props.allowLocalWheel} />
+    <SpreadsheetPreview active={props.active} registerSearch={registerFilePreviewSearch} bytes={bytes()} format="xlsx" copy={copy()} allowLocalWheel={props.allowLocalWheel} />
   }</Show></div>;
 }
 
@@ -178,20 +179,20 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
     modes: ['pdf'],
     render: (props) => {
       const i18n = useI18n();
-      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />}><PdfPreviewPane onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} editing={props.editing} saving={props.saving} bindPdfEditor={props.bindPdfEditor} onSelectionChange={props.onSelectionChange} /></Suspense>;
+      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />}><PdfPreviewPane active={props.active} onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} editing={props.editing} saving={props.saving} bindPdfEditor={props.bindPdfEditor} onSelectionChange={props.onSelectionChange} /></Suspense>;
     },
   },
   {
     id: 'docx',
     modes: ['docx'],
-    render: (props) => <DocxPreviewPane onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} />,
+    render: (props) => <DocxPreviewPane active={props.active} onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} />,
   },
   {
     id: 'pptx',
     modes: ['pptx'],
     render: (props) => {
       const i18n = useI18n();
-      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPptx')} />}><PptxPreviewPane onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} /></Suspense>;
+      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPptx')} />}><PptxPreviewPane active={props.active} onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} /></Suspense>;
     },
   },
   {

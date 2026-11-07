@@ -170,7 +170,7 @@ describe('file preview wiring', () => {
     expect(controllerSrc).toContain('Discard unsaved changes in ${currentName} and open ${pendingAction.item.name}?');
     expect(controllerSrc).toContain('createWorkspaceEffectRpc(client, rpc).fs.writeFile({');
     expect(controllerSrc).not.toContain("workbook.xlsx.load");
-    expect(read('../file-preview/rendererRegistry.tsx')).toContain('<SpreadsheetPreview bytes={bytes()} format="xlsx"');
+    expect(read('../file-preview/rendererRegistry.tsx')).toMatch(/<SpreadsheetPreview[^>]*bytes=\{bytes\(\)\} format="xlsx"/);
 
     expect(contextSrc).toContain("export function useFilePreviewContext()");
     expect(hostSrc).toContain('<FilePreviewSurface');

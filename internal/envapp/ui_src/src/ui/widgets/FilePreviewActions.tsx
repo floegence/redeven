@@ -17,6 +17,7 @@ import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { useI18n } from '../i18n';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { isTextFilePreview } from '../utils/filePreview';
+import { bindPreviewSearchShortcut } from './previewSearchShortcut';
 import { useFilePreviewSearch } from './FilePreviewSearch';
 import type { FilePreviewContentProps } from './FilePreviewContent';
 
@@ -128,7 +129,20 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
     setMenu({ x: rect.left, y: rect.bottom + 4, selection: pointerSelection ?? readSelection() });
     pointerSelection = undefined;
   };
+  const showSearch = () => {
+    const action = search?.action();
+    if (!action || props.active === false || props.loading || !action.enabled()) return false;
+    closeMenu();
+    action.show(trigger);
+    return true;
+  };
   const actions: PreviewAction[] = [
+    {
+      id: 'find', label: () => i18n.t('filePreview.findInFile'), icon: Search,
+      visible: () => !!search?.action(),
+      disabled: () => props.active === false || !!props.loading || !search?.action()?.enabled(),
+      run: showSearch,
+    },
     {
       id: 'copy',
       label: () => i18n.t(pathCopied() ? 'filePreview.pathCopied' : 'filePreview.copyPath'),
@@ -192,7 +206,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
   ];
   const visibleActions = createMemo(() => actions.filter((action) => !action.visible || action.visible()));
   const menuItems = createMemo<FloatingContextMenuItem[]>(() =>
-    visibleActions().filter(action => props.presentation !== 'header' || action.id !== 'flower').map((action) => ({
+    visibleActions().filter(action => props.presentation === 'header' ? action.id !== 'flower' : props.presentation === 'menu' || action.id === 'find').map((action) => ({
       id: action.id,
       kind: 'action',
       label: action.label(),
@@ -209,15 +223,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
   );
 
   return (
-    <div ref={actionsRoot} tabIndex={-1} class="flex shrink-0 items-center justify-end gap-1">
-      <Show when={search?.action()}>
-        {action => <button type="button" class={buttonClass()} data-redeven-preview-find
-          disabled={props.active === false || props.loading || !action().enabled()}
-          aria-label={i18n.t('filePreview.findInFile')} title={i18n.t('filePreview.findInFile')}
-          aria-expanded={action().expanded?.()} onClick={event => action().show(event.currentTarget)}>
-          <Search class="size-3.5" aria-hidden="true" />
-        </button>}
-      </Show>
+    <div ref={element => { actionsRoot = element; onCleanup(bindPreviewSearchShortcut(element, showSearch)); }} tabIndex={-1} class="flex shrink-0 items-center justify-end gap-1">
       <FeedbackIndicator
         label={i18n.t('filePreview.saveFailedTitle')}
         closeLabel={i18n.t('common.actions.close')}
@@ -228,10 +234,8 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
           actions: <Button size="sm" variant="outline" disabled={!props.dirty || props.saving || !props.onSave} loading={props.saving} onClick={() => void props.onSave?.()}>{i18n.t('common.actions.retry')}</Button>,
         }] : []}
       />
-      <Show
-        when={props.presentation === 'menu' || props.presentation === 'header'}
-        fallback={
-          <For each={visibleActions()}>
+      <Show when={props.presentation !== 'menu' && props.presentation !== 'header'}>
+          <For each={visibleActions().filter(action => action.id !== 'find')}>
             {(action) => (
               <button
                 type="button"
@@ -245,8 +249,8 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
               </button>
             )}
           </For>
-        }
-      >
+      </Show>
+      <Show when={props.presentation === 'menu' || props.presentation === 'header' || !!search?.action()}>
         <Show when={props.presentation === 'header' && props.onAskFlower}>
           <button type="button" class={buttonClass()} disabled={!props.item || props.loading}
             aria-label={i18n.t('filePreview.askFlower')} title={i18n.t('filePreview.askFlower')}

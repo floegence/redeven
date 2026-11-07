@@ -212,10 +212,11 @@ describe('Workbench preview header', () => {
   it('keeps rendered search scoped to the selected projected preview', async () => {
     await page.viewport(1400, 1000);
     const { host, state, setState } = mount('light', 0.8);
-    await expect.element(page.getByRole('button', { name: 'Find in file', exact: true })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: 'More file actions', exact: true })).toBeVisible();
     const viewport = { ...state().viewport };
     const documentBounds = host.querySelector('.file-markdown-body')!.getBoundingClientRect().toJSON();
-    await userEvent.click(page.getByRole('button', { name: 'Find in file', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Find in file', exact: true }));
     await userEvent.fill(page.getByRole('searchbox'), 'preview');
     await expect.element(page.getByRole('status').filter({ hasText: '1 of 2' })).toBeVisible();
     await userEvent.keyboard('{Enter}');
@@ -274,9 +275,10 @@ describe('Workbench preview header', () => {
     expect(state().viewport).toEqual(before);
     resize(320);
     await vi.waitFor(() => {
-      const tools = host.querySelector<HTMLElement>('.pdf-document-controls')!.getBoundingClientRect();
+      const tools = host.querySelector<HTMLElement>('.pdf-document-controls');
+      expect(tools).toBeNull();
       const zoom = host.querySelector<HTMLElement>('.preview-zoom-controls')!.getBoundingClientRect();
-      expect(tools.right).toBeLessThanOrEqual(zoom.left);
+      expect(zoom.right).toBeLessThanOrEqual(host.querySelector<HTMLElement>('.floe-pdf-surface')!.getBoundingClientRect().right);
     });
   });
 
@@ -376,7 +378,8 @@ describe('Workbench preview header', () => {
     await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy(), { timeout: 15000 });
     const firstPaintMs = performance.now() - start;
     expect(host.querySelectorAll('canvas').length).toBeLessThanOrEqual(5);
-    await userEvent.click(page.getByRole('button', { name: 'Find in PDF', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Find in file', exact: true }));
     await userEvent.fill(host.querySelector<HTMLInputElement>('input[type="search"]')!, 'REDEVEN-300');
     await vi.waitFor(() => expect(host.querySelector('.textLayer .highlight.selected')).toBeTruthy(), { timeout: 15000 });
     const match = host.querySelector<HTMLElement>('.textLayer .highlight.selected')!;
@@ -413,7 +416,7 @@ describe('Workbench preview header', () => {
     for (const width of [480, 479, 320, 220, 900]) {
       resize(width);
       await vi.waitFor(() =>
-        expect(Boolean(header.querySelector('button[aria-label="More file actions"]'))).toBe(width < 480),
+        expect(Boolean(header.querySelector('button[aria-label="More file actions"]'))).toBe(true),
       );
       expect(header.getBoundingClientRect().height).toBe(height);
       expect(root.querySelector('.file-markdown-body')).toBe(body);

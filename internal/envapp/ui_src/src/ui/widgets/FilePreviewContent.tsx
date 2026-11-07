@@ -1,4 +1,5 @@
 import { FilePreviewSearchScope } from './FilePreviewSearch';
+import { handlePreviewSearchShortcut } from './previewSearchShortcut';
 import type { FilePreviewErrorType } from './filePreviewErrorUtils';
 import type { BindPdfPreviewEditor } from './pdfPreviewEditor';
 import { Show, createMemo } from 'solid-js';
@@ -65,7 +66,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
 
   return (
     <FilePreviewSearchScope inherit enabled={showHeader()}>
-    <div class={cn('redeven-file-preview', props.surface === 'window' && 'redeven-file-preview-surface-window', 'flex h-full min-h-0 flex-col overflow-hidden')}>
+    <div onKeyDown={event => { if (props.active !== false) handlePreviewSearchShortcut(event); }} class={cn('redeven-file-preview', props.surface === 'window' && 'redeven-file-preview-surface-window', 'flex h-full min-h-0 flex-col overflow-hidden')}>
       <Show when={showHeader()}>
         <div class={cn('redeven-file-preview-toolbar flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-2 sm:px-3', props.surface === 'window' && 'redeven-file-preview-toolbar-window')}>
           <div class="flex min-w-0 flex-1 items-center gap-2">
