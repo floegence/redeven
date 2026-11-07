@@ -36,18 +36,49 @@ type ResourceRequest struct {
 	OperationID string   `json:"operation_id,omitempty"`
 }
 type ResourceInspection struct {
-	Generation string   `json:"generation,omitempty"`
-	RuntimeRef string   `json:"runtime_ref"`
-	Binding    *Binding `json:"binding,omitempty"`
-	Name       string   `json:"name"`
-	State      string   `json:"state"`
-	ObservedAt string   `json:"observed_at"`
-	Identity   string   `json:"identity"`
-	Actions    []string `json:"actions"`
-	Operation  any      `json:"operation,omitempty"`
+	Generation string               `json:"generation,omitempty"`
+	RuntimeRef string               `json:"runtime_ref"`
+	Binding    *Binding             `json:"binding,omitempty"`
+	Name       string               `json:"name"`
+	State      string               `json:"state"`
+	ObservedAt string               `json:"observed_at"`
+	Identity   string               `json:"identity"`
+	Actions    []string             `json:"actions"`
+	Operation  any                  `json:"operation,omitempty"`
+	Service    *ManagedServiceFacts `json:"service,omitempty"`
+}
+
+// ManagedServiceFacts is a credential-free projection, not the manager's settings.
+type ManagedServiceFacts struct {
+	Description   string                       `json:"description,omitempty"`
+	Deployment    managedwebservice.Deployment `json:"deployment"`
+	TemplateID    string                       `json:"template_id"`
+	WorkspacePath string                       `json:"workspace_path"`
+	RuntimePort   int                          `json:"runtime_port,omitempty"`
+	Release       *ResourceRelease             `json:"release,omitempty"`
+}
+type ResourceRelease struct {
+	Kind     string `json:"kind"`
+	Source   string `json:"source,omitempty"`
+	Version  string `json:"version,omitempty"`
+	Tag      string `json:"tag,omitempty"`
+	Platform string `json:"platform,omitempty"`
+}
+
+// ResourceIssue identifies a failed read without discarding independent facts.
+type ResourceIssue struct {
+	Owner      string `json:"owner"`
+	Engine     string `json:"engine,omitempty"`
+	EndpointID string `json:"endpoint_id,omitempty"`
+	ResourceID string `json:"resource_id,omitempty"`
+	Stage      string `json:"stage"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
 }
 type ResourceResult struct {
 	RuntimeRef string               `json:"runtime_ref"`
+	Complete   *bool                `json:"complete,omitempty"`
+	Issues     []ResourceIssue      `json:"issues,omitempty"`
 	Resources  []ResourceInspection `json:"resources,omitempty"`
 	Inspection *ResourceInspection  `json:"inspection,omitempty"`
 	Operation  any                  `json:"operation,omitempty"`
@@ -178,47 +209,9 @@ func (b *ResourceBackend) ExecuteLocal(ctx context.Context, meta *session.Meta, 
 		return out, ErrPermissionDenied
 	}
 	if req.Action == "list" {
-		if b.Managed != nil {
-			services, err := b.Managed.List(ctx)
-			if err != nil {
-				return out, err
-			}
-			for _, service := range services {
-				inspection := inspectManaged(req.RuntimeRef, service)
-				if !meta.CanExecute || !meta.CanWrite {
-					inspection.Actions = []string{"inspect", "logs"}
-				}
-				out.Resources = append(out.Resources, inspection)
-			}
-		}
-		if b.Containers != nil {
-			runtimes, err := b.Containers.Runtimes(ctx)
-			if err != nil {
-				return out, err
-			}
-			for _, runtime := range runtimes.Engines {
-				if runtime.State != containerengine.RuntimeStateReady || runtime.EndpointID == "" {
-					continue
-				}
-				items, err := b.Containers.Containers(ctx, containerengine.ContainerListRequest{Engine: runtime.Engine, EndpointID: runtime.EndpointID, All: true})
-				if err != nil {
-					return out, err
-				}
-				for _, item := range items {
-					if item.Management.Managed {
-						continue
-					}
-					binding := Binding{Owner: "container", ResourceID: item.ContainerID, Engine: string(runtime.Engine), EndpointID: string(runtime.EndpointID)}
-					result, err := b.ExecuteLocal(ctx, meta, ResourceRequest{RuntimeRef: req.RuntimeRef, Binding: &binding, Action: "inspect"})
-					if err != nil {
-						return out, err
-					}
-					out.Resources = append(out.Resources, *result.Inspection)
-				}
-			}
-		}
-		return out, nil
+		return b.listResources(ctx, meta, req.RuntimeRef)
 	}
+
 	if req.Binding == nil {
 		if req.Action == "inspect" {
 			return unavailableReadResult(req), nil
@@ -232,21 +225,15 @@ func (b *ResourceBackend) ExecuteLocal(ctx context.Context, meta *session.Meta, 
 		if b.Managed == nil {
 			return out, ErrOperationUnavailable
 		}
-		services, err := b.Managed.List(ctx)
+		service, err := b.Managed.Inspect(ctx, binding.ResourceID)
 		if err != nil {
 			return out, err
 		}
-		found := false
-		for _, service := range services {
-			if service.ServiceID == binding.ResourceID {
-				inspection = inspectManaged(req.RuntimeRef, service)
-				found = true
-				break
-			}
+		if service == nil || service.ServiceID != binding.ResourceID {
+			return out, ErrResourceChanged
 		}
-		if !found {
-			return out, ErrNotFound
-		}
+		inspection = inspectManaged(req.RuntimeRef, *service)
+
 	case "container":
 		if b.Containers == nil || binding.Engine == "" || binding.EndpointID == "" {
 			return out, ErrOperationUnavailable
@@ -357,7 +344,80 @@ func inspectManaged(runtime string, service managedwebservice.ServiceView) Resou
 			actions = append(actions, item.name)
 		}
 	}
-	return ResourceInspection{RuntimeRef: runtime, Binding: &Binding{Owner: "managed_service", ResourceID: service.ServiceID, Identity: identity}, Identity: identity, Name: service.Name, State: service.Status, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Actions: actions, Operation: service.ActiveOperation}
+	return ResourceInspection{RuntimeRef: runtime, Binding: &Binding{Owner: "managed_service", ResourceID: service.ServiceID, Identity: identity}, Identity: identity, Name: service.Name, State: service.Status, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Actions: actions, Operation: service.ActiveOperation, Service: managedServiceFacts(service)}
+}
+
+func managedServiceFacts(service managedwebservice.ServiceView) *ManagedServiceFacts {
+	facts := &ManagedServiceFacts{Description: service.Description, Deployment: service.Deployment, TemplateID: service.TemplateID, WorkspacePath: service.WorkspacePath, RuntimePort: service.RuntimePort}
+	if release := service.ReleaseStatus.CurrentRelease; release != nil {
+		facts.Release = &ResourceRelease{Kind: release.Kind, Source: release.Source, Version: release.Version, Tag: release.Tag, Platform: release.Platform}
+	}
+	return facts
+}
+
+func (b *ResourceBackend) listResources(ctx context.Context, meta *session.Meta, runtimeRef string) (ResourceResult, error) {
+	complete := true
+	out := ResourceResult{RuntimeRef: runtimeRef, Complete: &complete, Resources: []ResourceInspection{}}
+	issue := func(owner, engine, endpoint, resource, stage string, err error) {
+		complete = false
+		_, code, message := ResourceErrorDetails(err)
+		out.Issues = append(out.Issues, ResourceIssue{Owner: owner, Engine: engine, EndpointID: endpoint, ResourceID: resource, Stage: stage, Code: code, Message: message})
+	}
+	if b.Managed != nil {
+		services, err := b.Managed.List(ctx)
+		if err != nil {
+			issue("managed_service", "", "", "", "list", err)
+		} else {
+			for _, service := range services {
+				inspection := inspectManaged(runtimeRef, service)
+				if !meta.CanExecute || !meta.CanWrite {
+					inspection.Actions = []string{"inspect", "logs"}
+				}
+				out.Resources = append(out.Resources, inspection)
+			}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return ResourceResult{}, err
+	}
+	if b.Containers != nil {
+		runtimes, err := b.Containers.Runtimes(ctx)
+		if err != nil {
+			issue("container", "", "", "", "discovery", err)
+		} else {
+			for _, runtime := range runtimes.Engines {
+				if runtime.State == containerengine.RuntimeStateNotInstalled {
+					continue
+				}
+				if runtime.State != containerengine.RuntimeStateReady || runtime.EndpointID == "" {
+					complete = false
+					out.Issues = append(out.Issues, ResourceIssue{Owner: "container", Engine: string(runtime.Engine), EndpointID: string(runtime.EndpointID), Stage: "discovery", Code: "CONTAINER_RUNTIME_UNAVAILABLE", Message: "Container inventory unavailable: " + string(runtime.State)})
+					continue
+				}
+				items, err := b.Containers.Containers(ctx, containerengine.ContainerListRequest{Engine: runtime.Engine, EndpointID: runtime.EndpointID, All: true})
+				if err != nil {
+					issue("container", string(runtime.Engine), string(runtime.EndpointID), "", "list", err)
+					continue
+				}
+				for _, item := range items {
+					if item.Management.Managed {
+						continue
+					}
+					binding := Binding{Owner: "container", ResourceID: item.ContainerID, Engine: string(runtime.Engine), EndpointID: string(runtime.EndpointID)}
+					result, err := b.ExecuteLocal(ctx, meta, ResourceRequest{RuntimeRef: runtimeRef, Binding: &binding, Action: "inspect"})
+					if err != nil {
+						issue("container", binding.Engine, binding.EndpointID, binding.ResourceID, "inspect", err)
+						continue
+					}
+					out.Resources = append(out.Resources, *result.Inspection)
+				}
+			}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return ResourceResult{}, err
+	}
+	return out, nil
 }
 
 // ResourceError preserves a classified manager refusal across the host bridge.

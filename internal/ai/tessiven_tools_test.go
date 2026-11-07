@@ -1,12 +1,16 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/managedwebservice"
+	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/tessiven"
 )
@@ -222,4 +226,34 @@ func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
 			t.Fatal("unsupported selector accepted")
 		}
 	}
+}
+
+// A referenced resource belongs to its manager, even when no canvas library is installed.
+func TestTessivenDirectResourceDoesNotRequireCanvasLibrary(t *testing.T) {
+	manager := &directManagedFixture{}
+	r := &run{host: runHostCapabilities{tessivenResources: &tessiven.ResourceBackend{Managed: manager}}}
+	args := map[string]any{"runtime_ref": "local:local", "action": "inspect", "binding": map[string]any{"owner": "managed_service", "resourceId": "host"}}
+	result, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.inspect", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(tessiven.ResourceResult).Inspection.Binding.ResourceID != "host" || manager.calls != 1 {
+		t.Fatal("exact managed resource was not inspected")
+	}
+	if _, err := r.execTessivenTool(t.Context(), &session.Meta{}, "tessiven.inspect", args); !errors.Is(err, tessiven.ErrPermissionDenied) || manager.calls != 1 {
+		t.Fatal("read permission bypassed", err)
+	}
+	if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.list", map[string]any{}); err == nil {
+		t.Fatal("missing canvas library silently accepted")
+	}
+}
+
+type directManagedFixture struct {
+	managedwebservice.Backend
+	calls int
+}
+
+func (f *directManagedFixture) Inspect(_ context.Context, id string) (*managedwebservice.ServiceView, error) {
+	f.calls++
+	return &managedwebservice.ServiceView{ManagedService: pfregistry.ManagedService{ServiceID: id}, Deployment: managedwebservice.DeploymentHost, Status: "running"}, nil
 }

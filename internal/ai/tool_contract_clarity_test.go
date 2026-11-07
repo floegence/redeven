@@ -41,7 +41,7 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				p.chatGPT = true
 				p.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 			}
-			wanted := map[string]bool{"terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true, "subagent_events": true}
+			wanted := map[string]bool{"terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.inspect": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true, "subagent_events": true}
 			var defs []ToolDef
 			for _, def := range builtInModelCapabilityDefinitions() {
 				if wanted[def.Name] {
@@ -77,13 +77,14 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				t.Error("standalone fetch implies an absent search capability")
 			}
 			for name, phrases := range map[string][]string{
-				"terminal_exec":   {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal.terminate", "Service shutdown", "read/search files", "computer.targets"},
-				"computer_exec":   {"SCRIPT_OPERATION_LIMIT", "completed effects", "thread/turn/target", "without clearing"},
-				"image_read":      {"width", "height", "10 MiB", "32 megapixels"},
-				"web_fetch":       {"known URL"},
-				"subagents":       {"send_input requires target and message", "close requires target", "status/inspect require target or ids", "wait requires ids", "including earlier turns", "deduplicated union", "starts a new turn", "Neither deletes threads"},
-				"subagent_events": {"current parent thread", "earlier turns"},
-				"tessiven_action": {"open prepares", "neither launches a browser nor starts a stopped service", "operation_id"},
+				"terminal_exec":    {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal.terminate", "Service shutdown", "read/search files", "computer.targets"},
+				"computer_exec":    {"SCRIPT_OPERATION_LIMIT", "completed effects", "thread/turn/target", "without clearing"},
+				"image_read":       {"width", "height", "10 MiB", "32 megapixels"},
+				"web_fetch":        {"known URL"},
+				"subagents":        {"send_input requires target and message", "close requires target", "status/inspect require target or ids", "wait requires ids", "including earlier turns", "deduplicated union", "starts a new turn", "Neither deletes threads"},
+				"subagent_events":  {"current parent thread", "earlier turns"},
+				"tessiven_inspect": {"binding", "managed_service", "not canvas instance IDs", "port_forward", "Matching names or ports", "complete", "issues"},
+				"tessiven_action":  {"open prepares", "neither launches a browser nor starts a stopped service", "operation_id"},
 			} {
 				for _, phrase := range phrases {
 					if !strings.Contains(strings.ToLower(fmt.Sprint(functions[name]["description"])), strings.ToLower(phrase)) {

@@ -31,6 +31,20 @@ The command palette and `Mod+Shift+J` use the valid active reading source, or op
 
 Desktop CodeSpace, Web Service and hosted application child windows forward title/credential-free URL through their session owner; they never gain shell IPC authority. User-opened external browsers and other OS applications remain outside this scope. Embedded content without an explicit semantic contract supplies host-known identity only.
 
+### Web Service identity
+
+Managed rows freeze a `managed_web_service` resource with its current-Runtime
+`runtime_ref`, `binding.owner=managed_service`, and exact `binding.resourceId`.
+The allowlisted snapshot includes description, deployment, release identity,
+status, configured working directory and port. A workspace is not necessarily
+an installation/source directory. Manual forwards publish a separate
+`port_forward` identity and credential/query/fragment-free target; they never
+inherit a managed sibling's binding. Same-name rows remain distinct.
+Snapshots describe facts only; authorization and execution routing retain their
+existing owners. Inspect the known binding directly rather than enumerating
+canvases or substituting a service ID for a canvas instance ID. Existing facts
+can answer explanatory questions without reading private Runtime state.
+
 ### Explicit screenshots
 
 The camera tool is the only screenshot trigger. It adds a previewable/removable image through ordinary attachment staging. Capture errors retain draft text and references; closing/reopening cancels the operation and discards late results. Source navigation or ownership changes reject the result, without silently choosing another window.
@@ -56,6 +70,15 @@ wrappers preserve the full constrained flex viewport on desktop and mobile.
 qualifies the built Env App against an isolated real local Runtime: right-click
 Files, inspect the exact frozen context, explicitly capture and open an image,
 compare preview bytes and source pixels, reopen, and retain the draft. It then right-clicks navigation over Containers, checks target isolation and compact icons, and clicks Send twice. A local scripted provider verifies exact frozen text and the screenshot's prescribed model representation, invokes the real read-only file tool, and returns an answer that must appear in Flower. The original PNG remains the preview and staged attachment; the model receives the existing JPEG-85, longest-side-2560 preparation. Qualification derives the expected representation through the published Floret image API and checks its source hash, MIME type and prepared byte hash. Both tasks must complete with distinct thread IDs. The global Desktop acceptance also verifies new-task submission and immutable unknown-admission retry.
+
+`desktop/scripts/check-ask-flower-resources.mjs --binary <runtime> --output <dir>
+--provider-source <configured-runtime-dir>` uses isolated host/container/manual
+fixtures and the configured real DeepSeek model. It opens each row's context,
+clicks Send, compares preview/canonical/provider references, reads complete final
+bodies, and verifies rendered answers and exact tool bindings. Manual addresses
+must not be substituted with same-name services. A separate status question must
+inspect the original binding. Credentials stay in memory; source configuration
+hashes remain unchanged. The supervised session reclaims only its own resources.
 
 ## Thread references
 Right-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.

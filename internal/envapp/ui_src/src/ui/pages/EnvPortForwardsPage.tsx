@@ -1,3 +1,4 @@
+import { managedServiceFlowerContext, portForwardFlowerContext } from './webServiceFlowerContext';
 import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
@@ -838,6 +839,7 @@ export function PortForwardRow(props: {
 
   return (
     <div
+      ref={createFlowerContextTarget(() => portForwardFlowerContext(props.forward))}
       class={serviceRowGridClass}
       data-testid="port-forward-row"
       data-forward-id={props.forward.forward_id}
@@ -1798,9 +1800,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
     else if (id === 'uninstall') props.onUninstall();
   };
   return (
-    <div ref={createFlowerContextTarget(() => ({ id: props.service.service_id, label: props.service.name,
-      state: { service_id: props.service.service_id, workspace_path: props.service.workspace_path,
-        template_id: props.service.template_id, status: props.service.status ?? props.service.observed_state } }))} class="web-service-managed" data-selected={props.selected || undefined}
+    <div ref={createFlowerContextTarget(() => managedServiceFlowerContext(props.service))} class="web-service-managed" data-selected={props.selected || undefined}
       data-testid="managed-service-row"
       data-managed-service-id={props.service.service_id}
     >

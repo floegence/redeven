@@ -1,3 +1,5 @@
+import { createFlowerContextSources, FlowerContextSource, FlowerContextSources } from '../flower/FlowerContextSource';
+import { flowerPageContextSnapshot } from '../flower/flowerPageContext';
 import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
@@ -9,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CreateForwardDialog,
+  PortForwardRow,
   EnvPortForwardsPage,
   ForwardMetadataDialog,
   ManagedServiceRow as ManagedServiceRowComponent,
@@ -16,6 +19,8 @@ import {
   resolveWebServiceOpenRoute,
   validateTemplateDraft,
 } from './EnvPortForwardsPage';
+import { portForwardFlowerContext } from './webServiceFlowerContext';
+import type { PortForward } from './EnvPortForwardsPage';
 import { LocalApiError } from '../services/localApi';
 
 function ManagedServiceRow(props: Omit<Parameters<typeof ManagedServiceRowComponent>[0], 'operationExpanded' | 'onOperationExpandedChange'>) {
@@ -3327,3 +3332,43 @@ beforeEach(async () => {
   });
 });
 afterEach(() => releaseTestTransport?.());
+
+
+it('captures same-name host, container and manual service identities from their actual rows', () => {
+  const registry = createFlowerContextSources();
+  const host = document.createElement('div'); document.body.append(host);
+  const service = (deployment: 'host' | 'container') => ({ service_id: `mws-${deployment}`, template_id: `harness-${deployment}`, template_source: 'builtin' as const, workspace_ownership: 'user_selected' as const,
+    name: 'DeepSeek Harness', description: 'A browser coding assistant', deployment, workspace_path: `/workspace/${deployment}`,
+    release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: `pf-${deployment}`, runtime_port: deployment === 'host' ? 51378 : 60249 });
+  const noop = () => undefined;
+  const dispose = render(() => <FlowerContextSources.Provider value={registry}>
+    <FlowerContextSource id="ports" pageID="ports" pageName="Web Services" mode="activity">
+      <ManagedServiceRow service={service('host')} busy={false} canOpen canManage onOpen={noop} onOpenResource={noop} onAction={noop} onLogs={noop} onUninstall={noop} />
+      <ManagedServiceRow service={service('container')} busy={false} canOpen canManage onOpen={noop} onOpenResource={noop} onAction={noop} onLogs={noop} onUninstall={noop} />
+      <PortForwardRow forward={{forward_id:'manual',name:'DeepSeek Harness',description:'Manually added address',target_url:'http://user:password@localhost:3080/?token=secret',default_app_path:'/chat?token=secret',health:{status:'unreachable',last_checked_at_unix_ms:0,latency_ms:0,last_error:''},health_path:'/',insecure_skip_verify:false,created_at_unix_ms:0,updated_at_unix_ms:0,last_opened_at_unix_ms:0}} busy={false} onOpen={noop} onEdit={noop} onDelete={noop} />
+    </FlowerContextSource>
+  </FlowerContextSources.Provider>, host);
+  try {
+    for (const node of host.querySelectorAll<HTMLElement>('div')) node.getBoundingClientRect = () => ({x:0,y:0,width:300,height:60}) as DOMRect;
+    for (const deployment of ['host','container']) {
+      const row = host.querySelector(`[data-managed-service-id="mws-${deployment}"]`)!;
+      const snapshot = registry.captureTarget(row)!;
+      expect(snapshot.value.state).toMatchObject({ resource_kind:'managed_web_service',runtime_ref:'local:local',deployment,binding:{owner:'managed_service',resourceId:`mws-${deployment}`},workspace:{path:`/workspace/${deployment}`,role:'configured_service_working_directory'},release:{version:'1.0.0'} });
+      const text = flowerPageContextSnapshot({environmentID:'env-test',environmentName:'Test',pageID:snapshot.value.pageID,pageName:snapshot.value.pageName,state:snapshot.value.state,capturedAtMs:1}).content;
+      expect(text).toContain(`binding.resourceId: mws-${deployment}`);
+      expect(text).toContain(`deployment: ${deployment}`);
+      expect(text).not.toContain('canvas_id');
+    }
+    const manual = registry.captureTarget(host.querySelector('[data-forward-id="manual"]')!)!;
+    expect(manual.value.state).toMatchObject({resource_kind:'port_forward',forward_id:'manual',target:'http://localhost:3080/chat'});
+    expect(JSON.stringify(manual.value)).not.toMatch(/password|token|secret|managed_service/);
+  } finally { dispose();registry.dispose();host.remove(); }
+});
+
+
+it.each([undefined, '/', '/chat?token=secret'])('preserves the visible forward path and strips URL secrets (%s)', default_app_path => {
+  const forward = { forward_id: 'manual', target_url: 'http://user:password@localhost:3080/docs?token=secret#fragment', default_app_path, health: { status: 'healthy' } } as PortForward;
+  const context = portForwardFlowerContext(forward);
+  expect(context.state.target).toBe(`http://localhost:3080/${default_app_path && default_app_path !== '/' ? 'chat' : 'docs'}`);
+  expect(JSON.stringify(context)).not.toMatch(/password|token|secret|fragment/);
+});

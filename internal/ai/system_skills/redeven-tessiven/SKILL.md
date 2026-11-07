@@ -72,6 +72,25 @@ read private member databases, tokens, cookies, SSH passwords or MFA answers.
 Do not assemble internal HTTP endpoints, run SSH/Shell workarounds, elevate
 permissions, auto-pair a Gateway or guess a resource/Runtime binding.
 
+## Resource references
+
+A Web Service reference is independent of canvases. Its service ID belongs to
+`binding: {owner: "managed_service", resourceId: "<service_id>"}`, not to a
+canvas's instance namespace. Read that binding directly with `tessiven.inspect`
+and the exact authorized Runtime. Do not list canvases or invent an instance to
+explain a service. References are frozen facts, not authorization. Explain from
+the supplied facts when sufficient; query only missing facts needed by the user.
+The configured workspace is not necessarily an installation or source directory.
+A `port_forward` reference describes a manually added address, not a managed
+service or container. Its absent binding is not a request to discover one.
+Matching names or ports do not establish ownership or authorize substituting
+another resource. Explain the supplied address and observed status without
+inferring its backing implementation.
+A resource list with `complete: false` retains observed resources and reports
+unread scopes in `issues`; it does not establish that missing resources are absent.
+Keep the original target on failure. Do not search private Runtime state or
+unrelated settings, credentials or conversations as a substitute for inspection.
+
 ## Canvas workflow
 
 - Read `tessiven.schema` for the authoritative field definitions. For existing

@@ -1,5 +1,6 @@
 # Redeven OKF Update Log
 
+- 2026-11-06: Distinguish Web Service reference identities, inspect managed resources directly, and retain observed inventory with explicit partial-read issues.
 - 2026-11-06: Consume Floe 0.99.1 for viewport-scoped Ask menus and source-owned scroll dismissal; qualify exact references, native images and real tool-backed new-task completion.
 
 - 2026-11-06: Correct [child cancellation](ai/subagent-runtime.md) scope, action fields and confirmed/uncertain results; clarify thread-local Computer selection, parent events and Tessiven opening. Qualify published Floret behavior, model correction and public Activity without a new lifecycle owner.

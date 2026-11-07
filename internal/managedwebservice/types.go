@@ -541,6 +541,7 @@ type Backend interface {
 	ValidateTemplate(context.Context, TemplateWriteRequest) error
 	TemplateReleaseCandidates(context.Context, string, ReleaseCandidateRequest) (*ReleaseCandidateResult, error)
 	List(context.Context) ([]ServiceView, error)
+	Inspect(context.Context, string) (*ServiceView, error)
 	ServiceReleaseCandidates(context.Context, string, ReleaseCandidateRequest) (*ReleaseCandidateResult, error)
 	CreateUpdatePlan(context.Context, string, UpdatePlanRequest) (*UpdatePlan, error)
 	Settings(context.Context, string) (*ServiceSettingsView, error)
