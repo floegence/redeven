@@ -15,6 +15,7 @@ import {
 import { Button, Dropdown, Input, Tag, Tabs, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
+import { ServiceTemplateActions } from './ServiceTemplateActions';
 import './service-template-center.css';
 
 export type ServiceTemplateCategory = 'host' | 'container';
@@ -360,6 +361,7 @@ export type ServiceTemplateCatalogProps = Readonly<{
   templates: readonly ServiceTemplatePresentation[];
   loading: boolean;
   canManage: boolean;
+  selection?: Readonly<{ templateID: string | null; onChange: (id: string) => void }>;
   onCategoryChange: (category: ServiceTemplateCategory) => void;
   onQueryChange: (query: string) => void;
   onCreate: (kind: ServiceTemplateKind) => void;
@@ -685,34 +687,23 @@ export function ServiceTemplateDetailsPane(props: {
         </Show>
       </div>
 
-      <div class={cn('service-template-details__actions items-center gap-2', props.template.kind === 'host' ? 'service-template-host-actions' : 'flex')}>
-		<Show when={props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm)}>
-			<Button size="lg" variant="outline" class="min-h-11 shrink-0 px-3" onClick={() => props.onVersions?.()} disabled={!props.canManage}>
-				<Package class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.versions')}
-			</Button>
-		</Show>
-        <Button
-          size="lg"
-          variant="default"
-          class="service-template-primary min-h-11 min-w-0 flex-1"
-          data-testid="service-template-primary"
-          onClick={props.onDeploy}
-          disabled={!props.template.available || props.template.installed || !props.canManage}
-        >
-          {props.template.installed ? i18n.t('webServices.managed.installed') : i18n.t('webServices.managed.deploy')}
-        </Button>
+      <ServiceTemplateActions class="service-template-details__actions" secondary={<>
+        <Show when={props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm)}>
+          <Button size="lg" variant="outline" onClick={() => props.onVersions?.()} disabled={!props.canManage}>
+            <Package class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.versions')}
+          </Button>
+        </Show>
         <Dropdown
           align="end"
           items={menuItems()}
           onSelect={selectMenuItem}
           triggerAriaLabel={`${props.template.name}: ${i18n.t('webServices.managed.moreTemplateActions')}`}
-          triggerClass="shrink-0 rounded-md"
+          triggerClass="rounded-control"
           disabled={!props.template.installed && menuItems().every((item) => item.disabled)}
           trigger={(
             <span
-              data-floe-surface="raised"
-              data-floe-surface-part="button"
-              class="service-template-more inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium text-foreground"
+              data-floe-surface-part="action"
+              class="service-template-more inline-flex w-full items-center justify-center gap-1.5 rounded-control border border-[var(--floe-line-strong)] px-3.5 text-[length:var(--floe-type-control)] font-medium text-foreground hover:bg-[var(--floe-state-hover)]"
               data-testid="service-template-more"
               title={i18n.t('webServices.managed.moreTemplateActions')}
             >
@@ -721,7 +712,18 @@ export function ServiceTemplateDetailsPane(props: {
             </span>
           )}
         />
-      </div>
+      </>}>
+        <Button
+          size="lg"
+          variant="default"
+          class="service-template-primary"
+          data-testid="service-template-primary"
+          onClick={props.onDeploy}
+          disabled={!props.template.available || props.template.installed || !props.canManage}
+        >
+          {props.template.installed ? i18n.t('webServices.managed.installed') : i18n.t('webServices.managed.deploy')}
+        </Button>
+      </ServiceTemplateActions>
     </aside>
   );
 }
@@ -737,11 +739,12 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
     return { category, active: category !== previous.category };
   }, { category: props.category, active: false });
   const [requestedTemplateID, setRequestedTemplateID] = createSignal<string | null>(null);
+  const selectTemplate = (id: string) => props.selection ? props.selection.onChange(id) : setRequestedTemplateID(id);
   const builtInTemplates = createMemo(() => props.templates.filter((template) => template.source === 'builtin'));
   const gitTemplates = createMemo(() => props.templates.filter((template) => template.source === 'git'));
   const customTemplates = createMemo(() => props.templates.filter((template) => template.source === 'custom'));
   const selectedTemplate = createMemo(() => {
-    const requestedID = requestedTemplateID();
+    const requestedID = props.selection ? props.selection.templateID : requestedTemplateID();
     return props.templates.find((template) => template.id === requestedID) ?? props.templates[0];
   });
   const createItems = (): DropdownItem[] => props.category === 'host'
@@ -851,7 +854,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                         description={i18n.t('webServices.managed.builtInTemplatesDescription')}
                         templates={builtInTemplates()}
                         selectedTemplateID={selectedTemplate()?.id}
-                        onSelect={setRequestedTemplateID}
+                        onSelect={selectTemplate}
                         onKeyDown={moveRowSelection}
                       />
                       <TemplateGroup
@@ -859,7 +862,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                         description={i18n.t('webServices.sources.groupDescription')}
                         templates={gitTemplates()}
                         selectedTemplateID={selectedTemplate()?.id}
-                        onSelect={setRequestedTemplateID}
+                        onSelect={selectTemplate}
                         onKeyDown={moveRowSelection}
                       />
                       <TemplateGroup
@@ -867,7 +870,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                         description={i18n.t('webServices.managed.customTemplatesDescription')}
                         templates={customTemplates()}
                         selectedTemplateID={selectedTemplate()?.id}
-                        onSelect={setRequestedTemplateID}
+                        onSelect={selectTemplate}
                         onKeyDown={moveRowSelection}
                       />
                     </div>

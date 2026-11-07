@@ -18,6 +18,7 @@ import { Button, Dialog, Input } from '@floegence/floe-webapp-core/ui';
 import type { GitSource, Snapshot, SourceCatalog } from '@floegence/redeven-service-templates';
 import { useI18n } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
+import { ServiceTemplateActions } from './ServiceTemplateActions';
 import type { ManagedCatalogTemplate } from './EnvPortForwardsPage';
 
 type SourcePreview = {
@@ -322,58 +323,56 @@ export function GitTemplateImport(props: {
         </span>
       }
       footer={
-        <div class="flex w-full flex-wrap justify-between items-center gap-2">
-          <div class="min-w-0">
-            <Show when={currentStep() > 0}>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="min-h-8 max-w-full text-left"
-                disabled={busy()}
-                onClick={editSource}
-              >
-                <ArrowLeft class="size-3.5 shrink-0" />
-                {i18n.t(preview() && !props.template ? 'webServices.sources.editSource' : 'webServices.sources.back')}
-              </Button>
-            </Show>
-          </div>
-          <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <ServiceTemplateActions secondary={<>
+          <Show when={currentStep() > 0}>
             <Button
-              size="sm"
+              size="lg"
               variant="ghost"
-              disabled={busy() && phase() === 'confirming'}
-              onClick={() => {
-                cancel();
-                props.onClose();
-              }}
+              class="max-w-full"
+              disabled={busy()}
+              onClick={editSource}
             >
-              {i18n.t('webServices.actions.cancel')}
+              <ArrowLeft class="size-3.5 shrink-0" />
+              {i18n.t(preview() && !props.template ? 'webServices.sources.editSource' : 'webServices.sources.back')}
             </Button>
-            <Button
-              size="sm"
-              disabled={
-                busy() ||
-                !repository().trim() ||
-                (preview() ? fileLoading() || !preview()?.changed : !!catalog() && selectedPath() === undefined)
-              }
-              onClick={advance}
-              loading={busy()}
-              icon={ArrowRight}
-            >
-              {i18n.t(
-                preview()
-                  ? preview()?.expected_sha256
-                    ? 'webServices.sources.confirmUpdate'
-                    : 'webServices.sources.confirmImport'
-                  : catalog()
-                    ? 'webServices.sources.reviewTemplate'
-                    : props.template
-                      ? 'webServices.sources.check'
-                      : 'webServices.sources.findTemplates',
-              )}
-            </Button>
-          </div>
-        </div>
+          </Show>
+
+          <Button
+            size="lg"
+            variant="ghost"
+            disabled={busy() && phase() === 'confirming'}
+            onClick={() => {
+              cancel();
+              props.onClose();
+            }}
+          >
+            {i18n.t('webServices.actions.cancel')}
+          </Button>
+        </>}>
+          <Button
+            size="lg"
+            disabled={
+              busy() ||
+              !repository().trim() ||
+              (preview() ? fileLoading() || !preview()?.changed : !!catalog() && selectedPath() === undefined)
+            }
+            onClick={advance}
+            loading={busy()}
+            icon={ArrowRight}
+          >
+            {i18n.t(
+              preview()
+                ? preview()?.expected_sha256
+                  ? 'webServices.sources.confirmUpdate'
+                  : 'webServices.sources.confirmImport'
+                : catalog()
+                  ? 'webServices.sources.reviewTemplate'
+                  : props.template
+                    ? 'webServices.sources.check'
+                    : 'webServices.sources.findTemplates',
+            )}
+          </Button>
+        </ServiceTemplateActions>
       }
     >
       <div class="space-y-5 p-1 sm:p-2">

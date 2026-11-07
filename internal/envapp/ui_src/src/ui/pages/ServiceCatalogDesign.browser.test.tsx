@@ -101,11 +101,19 @@ for (const view of ['templates', 'versions'] as const) for (const preset of ['po
       expect(detail.querySelector('.service-template-details__status')).toBeNull();
       const actions = detail.querySelector<HTMLElement>('.service-template-details__actions')!;
       const footerTop = actions.getBoundingClientRect().top;
+      const deploy = actions.querySelector<HTMLElement>('[data-testid=service-template-primary]')!;
+      const secondary = actions.querySelector<HTMLElement>('.service-template-actions__secondary')!;
+      for (const action of actions.querySelectorAll<HTMLElement>('button, [data-testid=service-template-more]')) {
+        expect(action.getBoundingClientRect().height).toBe(width < 600 ? 44 : 36);
+      }
       if (width < 600) {
         expect(getComputedStyle(actions).display).toBe('grid');
-        const deploy = actions.querySelector<HTMLElement>('[data-testid=service-template-primary]')!;
-        expect(deploy.getBoundingClientRect().top).toBeLessThan(actions.children[0].getBoundingClientRect().top);
-        expect(Math.abs(actions.children[0].getBoundingClientRect().top - actions.lastElementChild!.getBoundingClientRect().top)).toBeLessThan(1);
+        expect(deploy.getBoundingClientRect().top).toBeGreaterThanOrEqual(secondary.getBoundingClientRect().bottom);
+        expect(deploy.getBoundingClientRect().width).toBe(actions.getBoundingClientRect().width);
+        expect(Math.abs(secondary.children[0].getBoundingClientRect().top - secondary.lastElementChild!.getBoundingClientRect().top)).toBeLessThan(1);
+      } else {
+        expect(deploy.getBoundingClientRect().width).toBeLessThanOrEqual(160);
+        expect(deploy.getBoundingClientRect().right).toBe(actions.getBoundingClientRect().right);
       }
       if (width === 1440) {
         const body = detail.querySelector<HTMLElement>('.service-template-details__body')!;

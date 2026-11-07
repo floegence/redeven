@@ -63,6 +63,7 @@ import {
   type ServiceTemplatePresentation,
   type ServiceTemplateRuntimeSpec,
 } from './ServiceTemplateCatalog';
+import { ServiceTemplateActions } from './ServiceTemplateActions';
 import {
   ManagedServiceSettingsDrawer,
   type ManagedServiceReconfigureDraft,
@@ -2362,6 +2363,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('host');
   const [templateSearch, setTemplateSearch] = createSignal('');
   const [selectedTemplateID, setSelectedTemplateID] = createSignal<string | null>(null);
+  const [catalogTemplateID, setCatalogTemplateID] = createSignal<string | null>(null);
+  let templateDrawerElement: HTMLDivElement | undefined;
   const [installNoticeAcceptances, setInstallNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   const [templateDraft, setTemplateDraft] = createSignal<TemplateEditorDraft | null>(null);
   const [templateValidationVisible, setTemplateValidationVisible] = createSignal(false);
@@ -3171,6 +3174,17 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     setTemplateDrawerOpen(true);
   };
 
+  const returnToTemplateCatalog = () => {
+    setInstallReviewSession(value => value + 1);
+    setTemplateDrawerView('catalog');
+    setSelectedTemplateID(null);
+    setTemplateDraft(null);
+    setTemplateValidationVisible(false);
+    setInstallNoticeAcceptances({});
+    setTemplateRecommendationUnavailable(false);
+    queueMicrotask(() => templateDrawerElement?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus());
+  };
+
 	const beginTemplateInstall = (template: ManagedCatalogTemplate, preserveRelease = false) => {
     if (!template.available || installedServiceForTemplate(template) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed')) return;
     setInstallReviewSession(value => value + 1);
@@ -3180,6 +3194,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 			setTemplateRecommendationUnavailable(false);
 		}
     setSelectedTemplateID(template.template_id);
+    setCatalogTemplateID(template.template_id);
 		setInstallParameters({});
     setWorkspacePath(template.default_workspace_path);
     setManagedAccessMode(template.default_access_mode || 'unified_proxy');
@@ -4014,21 +4029,20 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         footer={templateDrawerView() === 'catalog' ? undefined : (
-          <div class={cn('flex w-full items-center justify-between gap-2', templateDrawerView() === 'install' && 'service-install-footer')}>
-            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); setTemplateRecommendationUnavailable(false); }} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
-            <div class="ml-auto flex items-center gap-2">
-              <Show when={templateDrawerView() !== 'install'}><Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button></Show>
-              <Show when={templateDrawerView() === 'install'}>
-              <Button data-testid="managed-install-submit" size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !installPreparation.current()} aria-busy={installPreparation.loading()}>{i18n.t('webServices.managed.deploy')}</Button>
-              </Show>
-              <Show when={templateDrawerView() === 'editor'}>
-                <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}><StableText reserve={[i18n.t('webServices.managed.savingTemplate'), i18n.t('webServices.managed.saveTemplate')]}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</StableText></Button>
-              </Show>
-            </div>
-          </div>
+          <ServiceTemplateActions class={templateDrawerView() === 'install' ? 'service-install-footer' : undefined} secondary={<>
+            <Button size="lg" variant="ghost" icon={ArrowLeft} onClick={returnToTemplateCatalog} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
+            <Show when={templateDrawerView() !== 'install'}><Button size="lg" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button></Show>
+          </>}>
+            <Show when={templateDrawerView() === 'install'}>
+              <Button data-testid="managed-install-submit" size="lg" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !installPreparation.current()} aria-busy={installPreparation.loading()}>{i18n.t('webServices.managed.deploy')}</Button>
+            </Show>
+            <Show when={templateDrawerView() === 'editor'}>
+              <Button size="lg" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}><StableText reserve={[i18n.t('webServices.managed.savingTemplate'), i18n.t('webServices.managed.saveTemplate')]}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</StableText></Button>
+            </Show>
+          </ServiceTemplateActions>
         )}
       >
-        <div class="service-template-drawer-shell h-full min-h-0 space-y-4 p-1" data-view={templateDrawerView()} data-testid="service-template-drawer">
+        <div ref={templateDrawerElement} class="service-template-drawer-shell h-full min-h-0 space-y-4 p-1" data-view={templateDrawerView()} data-testid="service-template-drawer">
           <Show when={templateDrawerView() === 'catalog'}>
             <ServiceTemplateCatalog
               category={templateCategory()}
@@ -4038,6 +4052,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
               templates={filteredTemplates()}
               loading={managedLoading()}
               canManage={canManageManagedService()}
+              selection={{templateID: catalogTemplateID(), onChange: setCatalogTemplateID}}
               onCategoryChange={setTemplateCategory}
               onQueryChange={setTemplateSearch}
               onCreate={beginTemplateCreate}
@@ -4364,14 +4379,13 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                 <Show when={updateError()}><div role="alert" class="flex items-start justify-between gap-3 text-xs leading-5 text-destructive"><span>{updateError()}</span><Show when={updatePreparation.error()}><button type="button" class="shrink-0 cursor-pointer underline underline-offset-4" onClick={() => updatePreparation.refresh()}>{i18n.t('webServices.managed.retry')}</button></Show></div></Show>
               </div>
             </Show>
-            <div class="managed-release-actions flex flex-wrap items-center justify-between gap-2" data-service={releasePickerTarget()?.kind === 'service' || undefined}>
-              <Button size="sm" variant="ghost" onClick={() => void loadReleaseCandidates(releasePickerTarget(), 'refresh')} disabled={releaseCandidatesLoading() || managedReleaseSubmitting()} aria-label={i18n.t('common.actions.refresh')}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('common.actions.refresh')}</Button>
-              <div class="managed-release-primary-actions ml-auto flex min-w-0 gap-2">
-                <Button size="sm" variant="outline" onClick={closeReleasePicker}>{i18n.t('webServices.actions.cancel')}</Button>
-                <Show when={releasePickerTarget()?.kind === 'template'}><Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable}>{releaseSelectionActionLabel('webServices.managed.deploySelectedRelease')}</Button></Show>
-                <Show when={releasePickerTarget()?.kind === 'service'}><Button size="sm" variant="default" class="managed-release-submit min-w-0" data-testid="managed-release-submit" title={updateActionLabel()} aria-label={updateActionLabel()} onClick={() => void submitManagedUpdatePlan()} disabled={updateActionDisabled()}><span class="flex min-w-0 items-center"><Show when={updateActionParts().length === 2} fallback={<span class="truncate">{updateActionLabel()}</span>}><span class="shrink-0 whitespace-pre">{updateActionParts()[0]}</span><span class="min-w-0 truncate">{selectedVersionLabel()}</span><span class="shrink-0 whitespace-pre">{updateActionParts()[1]}</span></Show></span></Button></Show>
-              </div>
-            </div>
+            <ServiceTemplateActions class="managed-release-actions" secondary={<>
+              <Button size="lg" variant="ghost" onClick={() => void loadReleaseCandidates(releasePickerTarget(), 'refresh')} disabled={releaseCandidatesLoading() || managedReleaseSubmitting()} aria-label={i18n.t('common.actions.refresh')}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('common.actions.refresh')}</Button>
+              <Button size="lg" variant="outline" onClick={closeReleasePicker}>{i18n.t('webServices.actions.cancel')}</Button>
+            </>}>
+              <Show when={releasePickerTarget()?.kind === 'template'}><Button size="lg" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable}>{releaseSelectionActionLabel('webServices.managed.deploySelectedRelease')}</Button></Show>
+              <Show when={releasePickerTarget()?.kind === 'service'}><Button size="lg" variant="default" class="managed-release-submit min-w-0" data-testid="managed-release-submit" title={updateActionLabel()} aria-label={updateActionLabel()} onClick={() => void submitManagedUpdatePlan()} disabled={updateActionDisabled()}><span class="flex min-w-0 items-center"><Show when={updateActionParts().length === 2} fallback={<span class="truncate">{updateActionLabel()}</span>}><span class="shrink-0 whitespace-pre">{updateActionParts()[0]}</span><span class="min-w-0 truncate">{selectedVersionLabel()}</span><span class="shrink-0 whitespace-pre">{updateActionParts()[1]}</span></Show></span></Button></Show>
+            </ServiceTemplateActions>
           </div>}
         >
           <div class="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-1" data-testid="managed-release-drawer-body">

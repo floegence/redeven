@@ -311,10 +311,10 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(details.getBoundingClientRect().bottom).toBeLessThanOrEqual(panelRect.bottom - 10);
   });
 
-  it('keeps short-detail actions directly after the content instead of forcing them to the drawer bottom', async () => {
+  it.each(['host', 'container', 'compose'] as const)('keeps short %s template actions at the same drawer footer edge', async (kind) => {
     await page.viewport(1280, 720);
     document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '32px');
-    mountInDrawer([{ ...template, developerPreview: false, runtimeSpec: undefined }]);
+    mountInDrawer([{ ...template, kind, developerPreview: false, runtimeSpec: undefined }]);
     await settle();
 
     const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
@@ -326,7 +326,8 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const actionsRect = actions.getBoundingClientRect();
 
     expect(Math.abs(actionsRect.top - bodyRect.bottom)).toBeLessThanOrEqual(1);
-    expect(panelRect.bottom - actionsRect.bottom).toBeGreaterThan(80);
+    expect(panelRect.bottom - actionsRect.bottom).toBeGreaterThanOrEqual(10);
+    expect(panelRect.bottom - actionsRect.bottom).toBeLessThanOrEqual(32);
   });
 
   it('stacks the selected template detail pane with touchable actions on narrow screens', async () => {

@@ -1,0 +1,64 @@
+.service-template-actions {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.service-template-actions__secondary {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-template-actions__primary {
+  min-width: 0;
+  margin-left: auto;
+}
+
+.service-template-actions__primary > button {
+  min-width: 7rem;
+  max-width: 100%;
+}
+
+.service-template-actions__secondary > button,
+.service-template-actions__primary > button {
+  height: auto;
+  min-height: var(--floe-control-height-lg);
+  white-space: nowrap;
+  overflow-wrap: anywhere;
+  padding-block: 6px;
+}
+
+.service-template-actions .service-template-more {
+  min-height: var(--floe-control-height-lg);
+}
+
+@media (max-width: 639px) {
+  .service-template-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .service-template-actions__secondary > * {
+    min-width: 0;
+    flex: 1 0 auto;
+    max-width: 100%;
+  }
+
+  .service-template-actions__secondary > button,
+  .service-template-actions__primary > button,
+  .service-template-actions__secondary .service-template-more {
+    min-height: 44px;
+  }
+
+  .service-template-actions__primary,
+  .service-template-actions__primary > button {
+    width: 100%;
+    margin-left: 0;
+  }
+}

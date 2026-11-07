@@ -124,6 +124,56 @@ describe('Web Services product interaction', () => {
     await document.fonts.ready;
     return panel;
   }
+  for (const width of [1440, 900, 640, 390]) it(`keeps template actions consistent through deployment and version selection at ${width}px`, async () => {
+    installFixture();
+    await mount(Math.min(width, 1120));
+    await page.viewport(width, 960);
+    await userEvent.click(page.getByTestId('service-templates-button'));
+    const catalogDeploy = page.getByTestId('service-template-primary');
+    await expect.element(catalogDeploy).toBeVisible();
+    const catalogButton = document.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!;
+    const expectedHeight = width < 640 ? 44 : 36;
+    expect(catalogButton.getBoundingClientRect().height).toBe(expectedHeight);
+    if (width >= 640) {
+      expect(catalogButton.getBoundingClientRect().width).toBeGreaterThanOrEqual(112);
+      expect(catalogButton.getBoundingClientRect().width).toBeLessThanOrEqual(160);
+    }
+    const catalogButtonWidth = catalogButton.getBoundingClientRect().width;
+    await userEvent.click(catalogDeploy);
+    await expect.element(page.getByTestId('managed-install-submit')).toBeEnabled();
+    const submit = document.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
+    expect(submit.getBoundingClientRect().height).toBe(expectedHeight);
+    if (width >= 640) expect(submit.getBoundingClientRect().width).toBe(catalogButtonWidth);
+    const back = page.getByRole('button', {name: 'Back to templates', exact: true});
+    expect(document.querySelector('.service-install-footer button')!.getBoundingClientRect().height).toBe(expectedHeight);
+    await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('[data-testid="managed-install-version"] button')!));
+    await expect.element(page.getByTestId('managed-release-footer')).toBeVisible();
+    for (const button of document.querySelectorAll<HTMLButtonElement>('[data-testid="managed-release-footer"] button')) {
+      expect(button.getBoundingClientRect().height).toBe(expectedHeight);
+    }
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(back);
+    await expect.element(catalogDeploy).toBeVisible();
+    expect(document.querySelector('[data-testid="managed-install-form"]')).toBeNull();
+    expect(api.fetch.mock.calls.filter(([url, options]) => String(url).endsWith('/managed-web-services') && options?.method === 'POST')).toHaveLength(0);
+  });
+  it('returns to the selected template with keyboard focus after reviewing deployment', async () => {
+    const first = installFixture();
+    const second = {...first, template_id: 'second-harness', service_family_id: 'second-harness', name: 'Second Harness', localizations: {'en-US': {...first.localizations['en-US'], name: 'Second Harness'}}};
+    const normalFetch = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/catalog') ? Promise.resolve({templates: [first, second]}) : normalFetch(url, options));
+    await mount();
+    await userEvent.click(page.getByTestId('service-templates-button'));
+    await userEvent.click(page.getByRole('option', {name: /Second Harness/}));
+    await userEvent.click(page.getByTestId('service-template-primary'));
+    await expect.element(page.getByTestId('managed-install-submit')).toBeEnabled();
+    await userEvent.click(page.getByRole('button', {name: 'Back to templates', exact: true}));
+    const selected = document.querySelector<HTMLElement>('[data-testid="service-template-row"][aria-selected="true"]')!;
+    expect(selected.dataset.templateId).toBe(second.template_id);
+    expect(document.activeElement).toBe(selected);
+    await userEvent.keyboard('{ArrowUp}');
+    expect(document.querySelector('[data-testid="service-template-details"]')?.getAttribute('data-template-id')).toBe(first.template_id);
+  });
   for (const preset of ['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark']) for (const width of [1440, 390]) {
     const locale = width === 390 ? 'de-DE' : preset.endsWith('dark') ? 'zh-TW' : 'zh-CN';
     it(`keeps installation focused and keyboard accessible in ${preset} at ${width}px ${locale}`, async () => {
