@@ -44,12 +44,16 @@ func TestPluginAuthoringSkillUsesPublishedPlatformInModelAndBrowseContent(t *tes
 		"before bindings, Worker/UI compilation and hashing",
 		"never rewrites source or the repository index",
 		"GitHub-shaped ID does not establish repository provenance",
+		"a small runnable version of the user's actual application",
+		"one useful end-to-end interaction",
+		"leave later preview updates to Apply",
+		"Continue the requested implementation and acceptance work",
 	} {
 		if !strings.Contains(activation.Content, instruction) {
 			t.Fatalf("published plugin authoring instruction is missing: %s", instruction)
 		}
 	}
-	for _, retired := range []string{"redevplugin repository identity", "redevplugin init dev.", "binding directory after identity changes"} {
+	for _, retired := range []string{"redevplugin repository identity", "redevplugin init dev.", "binding directory after identity changes", "When the user selects Create directly"} {
 		if strings.Contains(activation.Content, retired) {
 			t.Fatalf("retired author workflow remains: %s", retired)
 		}

@@ -7385,8 +7385,6 @@
         "saved": "Enregistré",
         "saving": "Enregistrement…",
         "saveFailed": "Échec de l’enregistrement",
-        "direct": "Créer directement",
-        "directPrompt": "Commencez à implémenter le plugin selon les besoins discutés.",
         "apply": "Actualiser l’aperçu",
         "newPreview": "Une nouvelle version est prête",
         "install": "Installer dans cet environnement",

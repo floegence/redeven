@@ -143,7 +143,6 @@ import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
 import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
 import { PluginCenterDrawer } from './plugins/PluginCenterDrawer';
-import type { PluginCreationMode } from './plugins/PluginCreationWorkspace';
 import { pluginDraftForThread } from './plugins/pluginCreationApi';
 import { LocalApiError } from './services/localApi';
 import type { PluginSurfaceResolution } from './plugins/PluginSurfaceContainer';
@@ -1997,7 +1996,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const openPluginDraft = (id: string) => {
     navigatePluginCreation(id); setWorkbenchPluginCenterOpen(false); updatePluginPanel({ open: false });
   };
-  const openPluginCreation = (_mode: PluginCreationMode = 'chat', threadID?: string) => {
+  const openPluginCreation = (threadID?: string) => {
     setPluginCreationReference(undefined);
     if (!threadID) { openPluginDraft('new'); return; }
     void pluginDraftForThread(threadID).then(draft => openPluginDraft(draft.id)).catch(error => {
@@ -2023,7 +2022,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       }}
       renderFlower={options => <EnvAIPage draftCoordinator={flowerDraftCoordinator} embeddedConversation={options.embeddedConversation}
         prepareTurnRoute={options.prepareTurnRoute} presentation="full" engaged={pluginCreationOpen()} transcriptVisible={pluginCreationOpen()}
-        focusRequestScope="workbench" onOpenPluginCreation={({ threadID }) => openPluginCreation('chat', threadID)} />}
+        focusRequestScope="workbench" onOpenPluginCreation={({ threadID }) => openPluginCreation(threadID)} />}
     />
   </Show>}</Show>;
   const [pluginWidgetCounts, setPluginWidgetCounts] = createSignal<Record<string, number>>({});
@@ -5259,7 +5258,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 if (threadID) focusActivityFlowerThread(threadID);
                 openActivityFlowerCompanion();
               }}
-              onOpenPluginCreation={({ threadID }) => openPluginCreation('chat', threadID)}
+              onOpenPluginCreation={({ threadID }) => openPluginCreation(threadID)}
               companionCopy={activityFlowerCompanionCopy()}
               headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
               onPresenceChange={handleActivityFlowerPresenceChange}

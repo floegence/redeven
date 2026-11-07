@@ -7385,8 +7385,6 @@
         "saved": "Salvo",
         "saving": "Salvando…",
         "saveFailed": "Não foi possível salvar",
-        "direct": "Criar diretamente",
-        "directPrompt": "Comece a implementar o plugin conforme os requisitos discutidos.",
         "apply": "Atualizar prévia",
         "newPreview": "Uma nova versão está pronta",
         "install": "Instalar neste ambiente",

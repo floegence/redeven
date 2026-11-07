@@ -57,9 +57,11 @@ function select(host: HTMLElement) {
   });
 }
 it('uses the verified preview name when the draft has no user-assigned title', async () => {
-  mount('');
+  const { host } = mount('');
   await expect.poll(() => surface.opens).toBe(1);
   await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent('Focus Timer');
+  expect(host.querySelector('.plugin-creation-atmosphere')).toBeNull();
+  expect(host.querySelector('.plugin-creation-blueprint')).toBeNull();
 });
 it('preserves the user-assigned draft title above the generated plugin name', async () => {
   mount('Daily routine');

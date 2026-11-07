@@ -52,7 +52,7 @@ Streams/queues/cache are ephemeral, never durable cursors/lifecycle. Preserve da
 
 # Evidence
 
-- [Composer admission browser regression](../../internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx) sends terminal body-free facts before an equal-version detail update and verifies that Stop disappears and direct creation becomes available.
+- [Composer admission browser regression](../../internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx) sends terminal body-free facts before an equal-version detail update and verifies that Stop disappears and ordinary composer submission becomes available.
 - [Continuous history browser tests](../../internal/envapp/ui_src/src/ui/FlowerSurface.continuousHistory.browser.test.tsx) sample native wheel displacement from folded-only first screens through delayed cold-table completion, including root/child, multiple retry turns, reverse input and reduced motion. Checks bound total and per-frame movement, hydration drift, idle reads, focus and drafts; merely finding earlier prose does not qualify scrolling.
 - [Electron startup](../../desktop/scripts/check-flower-startup.mjs) and [localized navigation](../../desktop/scripts/check-flower-navigation.mjs): partial/final baselines, selection, drafts, one stream, no duplicate list scan, owned cleanup.
 - [Floating notice geometry](../../internal/envapp/ui_src/src/ui/FlowerSurface.floatingNotices.browser.test.tsx) and [localized recovery](../../internal/envapp/ui_src/src/ui/FlowerSurface.syncStatus.browser.test.tsx) cover new-chat loading/failure/retry, narrow layouts, keyboard recovery and unchanged transcript/composer bounds.

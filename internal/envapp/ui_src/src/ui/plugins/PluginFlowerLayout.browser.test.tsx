@@ -47,7 +47,10 @@ it.each([
   { width: 1280, theme: 'light', locale: 'zh-CN' },
   { width: 390, theme: 'dark', locale: 'zh-CN' },
   { width: 320, theme: 'light', locale: 'zh-CN' },
-])('integrates the actual Flower composer in the $width px $theme $locale workspace', async ({ width, theme, locale }) => {
+  { width: 1280, theme: 'light', started: true },
+  { width: 1280, theme: 'dark', locale: 'zh-CN', started: true },
+  { width: 390, theme: 'dark', locale: 'zh-CN', started: true },
+])('integrates the actual Flower composer in the $width px $theme $locale workspace (started: $started)', async ({ width, theme, locale, started }) => {
   localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale ?? 'en-US');
   await page.viewport(width, 800);
   document.documentElement.classList.remove('light', 'dark');
@@ -55,29 +58,37 @@ it.each([
   host = document.createElement('div');
   host.style.cssText = 'height:800px;width:100%;min-width:0';
   document.body.append(host);
+  let begin: (() => void) | undefined;
   dispose = render(() => {
     const coordinator = createFlowerComposerDraftCoordinator();
     const adapter = canvasFlowerAdapter();
     onCleanup(() => coordinator.dispose());
     return <FloeConfigProvider><LayoutProvider><I18nProvider><PluginCreationWorkspace
       draftCoordinator={coordinator} draftID="new" visible canManage onBack={() => {}} onSaved={() => {}} onInstalled={() => {}}
-      renderFlower={options => <div class="ai-readiness-boundary h-full min-h-0" data-embedded="true">
+      renderFlower={options => {
+        begin = () => { options.embeddedConversation.onSubmit?.(); };
+        return <div class="ai-readiness-boundary h-full min-h-0" data-embedded="true">
         <div class="h-full min-h-0" data-ai-readiness-content>
           <FlowerSurface adapter={adapter} draftCoordinator={coordinator} embeddedConversation={options.embeddedConversation} notify={() => {}} />
         </div>
-      </div>}
+      </div>; }}
     /></I18nProvider></LayoutProvider></FloeConfigProvider>;
   }, host);
   await expect.element(page.getByRole('textbox')).toBeVisible();
+  if (started) begin?.();
   const composer = host.querySelector<HTMLElement>('.flower-composer')!;
   const main = host.querySelector<HTMLElement>('.plugin-creation-main')!;
   const rect = composer.getBoundingClientRect();
-  expect(rect.width).toBeGreaterThan(Math.min(300, width - 40));
+  expect(rect.width).toBeGreaterThan(Math.min(started ? 260 : 300, width - 40));
   expect(rect.right).toBeLessThanOrEqual(main.getBoundingClientRect().right);
   expect(host.querySelectorAll('textarea')).toHaveLength(1);
   // The real EnvAIPage readiness boundary intentionally passes through canvas
   // input. This page must opt its complete embedded interaction region back in.
-  expect(getComputedStyle(host.querySelector('.plugin-creation-submit-intents')!).pointerEvents).toBe('auto');
+  expect(getComputedStyle(composer).pointerEvents).toBe('auto');
+  expect(host.querySelector('.plugin-creation-flower-composer')!.children).toHaveLength(1);
+  const background = host.querySelector<HTMLElement>(started ? '.plugin-creation-empty-preview .plugin-creation-atmosphere' : '.plugin-creation-main > .plugin-creation-atmosphere')!;
+  expect(background.getAttribute('aria-hidden')).toBe('true');
+  expect(getComputedStyle(background).pointerEvents).toBe('none');
   expect(host.scrollWidth).toBeLessThanOrEqual(width);
   if (locale === 'zh-CN') {
     await expect.element(page.getByRole('button', { name: '返回插件中心', exact: true })).toBeVisible();
@@ -85,6 +96,12 @@ it.each([
   }
   const toolbar = host.querySelector<HTMLElement>('.plugin-creation-toolbar')!;
   expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
-  await page.screenshot({ path: `__screenshots__/workspace-${width}-${theme}${locale ? '-'+locale : ''}.png` });
+  await page.screenshot({ path: `__screenshots__/workspace-${width}-${theme}${locale ? '-'+locale : ''}${started ? '-generating' : ''}.png` });
+  if (started && width < 720) {
+    expect(background.dataset.active).toBe('false');
+    await page.getByRole('tab', { name: locale === 'zh-CN' ? '预览' : 'Preview', exact: true }).click();
+    await expect.poll(() => host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!.dataset.active).toBe('true');
+    await page.screenshot({ path: `__screenshots__/workspace-${width}-${theme}-generating-preview.png` });
+  }
   document.documentElement.classList.remove(theme);
 });

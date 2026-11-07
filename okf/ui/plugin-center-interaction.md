@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin Center interaction
 tags: [ui, plugins, plugin-center, workbench, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-06"
 ---
 # Summary
 
@@ -39,9 +39,15 @@ Deep links wait for the authenticated environment and plugin session before moun
 the draft reader; they do not turn connection startup into a failed draft read.
 Files, Terminal, the ordinary Flower surface and Workbench retain their existing
 instances while this page is active. The dedicated embedded Flower surface owns
-one composer; requirements discussion and direct creation submit through it.
+one composer; requirements and implementation requests use its ordinary Send
+action. There is no secondary creation intent or synthesized empty-input prompt.
 A new draft has one centered creation composer on a quiet canvas, without an
-empty split preview. After submission the conversation occupies a compact
+empty split preview. The landing page and pre-preview canvas share a faint dot
+field and slow ambient drift. The placeholder gently rearranges into alternative
+application layouts without suggesting measurable build progress. Decoration uses
+theme tokens, never captures input, pauses off-screen or in a hidden document,
+and becomes static with reduced motion; forced colors omit the background.
+A live sandbox replaces the placeholder and its motion. After submission the conversation occupies a compact
 280–328px column and the application becomes the primary canvas. Fit and phone
 width controls resize the same live iframe without moving or recreating it. Compact screens select conversation or preview through
 44-pixel icon tabs within the same toolbar, with accessible names and a visible

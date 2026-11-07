@@ -74,7 +74,7 @@ export type PluginCenterViewProps = {
   onSetAutomaticUpdates?: (item: PluginInventoryItem, enabled: boolean) => Promise<unknown>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
-  onCreatePlugin?: (mode: 'chat' | 'direct') => void;
+  onCreatePlugin?: () => void;
   onOpenDrafts?: () => void;
 };
 
@@ -875,7 +875,7 @@ function PluginCenterShell(props: {
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   focusRequest?: number;
   onInstallExternal: () => void;
-  onCreatePlugin?: (mode: 'chat' | 'direct') => void;
+  onCreatePlugin?: () => void;
   onOpenDrafts?: () => void;
   onClose?: () => void;
   children: JSX.Element;
@@ -970,7 +970,7 @@ function PluginCenterShell(props: {
             onSelect={id => { if (id === 'clear') props.onClearFilters(); else { const [groupID, value] = id.split(':'); filterGroups.find(group => group.id === groupID)?.onSelect(value); } }} /></div>
           <div class="plugin-center-management ml-auto flex shrink-0 items-center gap-1.5">
             <Show when={props.canManage && props.onCreatePlugin}>
-              <Button variant="default" size="sm" data-plugin-center-create-plugin onClick={() => props.onCreatePlugin?.('chat')}><Wand class="mr-1 h-3.5 w-3.5" />{i18n.t('uiCopy.plugin.creationTitle')}</Button>
+              <Button variant="default" size="sm" data-plugin-center-create-plugin onClick={() => props.onCreatePlugin?.()}><Wand class="mr-1 h-3.5 w-3.5" />{i18n.t('uiCopy.plugin.creationTitle')}</Button>
               <Button variant="ghost" size="sm" data-plugin-center-drafts onClick={props.onOpenDrafts}>{i18n.t('uiCopy.plugin.creation.drafts')}</Button>
             </Show>
             <FeedbackIndicator label={i18n.t('uiCopy.plugin.centerTitle')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => searchRef} entries={props.feedback ?? []} />

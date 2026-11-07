@@ -862,8 +862,6 @@ export const enUS = defineDictionary({
         "saved": "Saved",
         "saving": "Saving…",
         "saveFailed": "Could not save",
-        "direct": "Create directly",
-        "directPrompt": "Start implementing the plugin from our current requirements.",
         "apply": "Update preview",
         "newPreview": "A new version is ready",
         "install": "Install in this environment",

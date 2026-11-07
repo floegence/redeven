@@ -1,7 +1,8 @@
 import '../../index.css';
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import { FloeConfigProvider } from '@floegence/floe-webapp-core';
 import { bindSessionHTTP } from '../services/sessionHTTP';
 import { I18nProvider } from '../i18n';
@@ -31,6 +32,9 @@ const baseDraft: PluginDraft = {
 let draft = baseDraft;
 let deletes = 0;
 let releaseHTTP: (() => void) | undefined;
+const media = commands as unknown as {
+  emulateMediaPreferences: (preferences: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void>;
+};
 beforeEach(() => {
   pauseComposerSave = undefined;
   deletes = 0;
@@ -59,14 +63,16 @@ beforeEach(() => {
     events: async function* () {},
   });
 });
-afterEach(() => {
+afterEach(async () => {
   dispose?.();
   releaseHTTP?.();
   dispose = undefined;
   vi.unstubAllGlobals();
   document.body.replaceChildren();
+  await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
 });
 function mount() {
+  const [visible, setVisible] = createSignal(true);
   const onBack = vi.fn();
   const submit = vi.fn();
   const host = document.createElement('div');
@@ -80,7 +86,7 @@ function mount() {
             draftCoordinator={createFlowerComposerDraftCoordinator()}
             draftID="draft-1"
             canManage
-            visible
+            visible={visible()}
             onBack={onBack}
             onSaved={vi.fn()}
             onInstalled={vi.fn()}
@@ -103,9 +109,10 @@ function mount() {
     ),
     host,
   );
-  return { host, onBack, submit };
+  return { host, onBack, submit, setVisible };
 }
-it('starts with one centered composer and no empty split preview', async () => {
+it.each([false, true])('uses only the ordinary composer in the workspace (conversation: %s)', async (conversationStarted) => {
+  if (conversationStarted) draft = { ...baseDraft, thread_id: 'thread-1' };
   await page.viewport(1200, 800);
   const { host, submit } = mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
@@ -113,12 +120,62 @@ it('starts with one centered composer and no empty split preview', async () => {
   expect(host.querySelectorAll('textarea')).toHaveLength(1);
   const conversation = host.querySelector('.plugin-creation-main')!.getBoundingClientRect();
   const preview = host.querySelector('.plugin-creation-preview')!.getBoundingClientRect();
-  expect(preview.width).toBe(0);
-  expect(conversation.width).toBe(1200);
+  expect(preview.width).toBe(conversationStarted ? 888 : 0);
+  expect(conversation.width).toBe(conversationStarted ? 312 : 1200);
   expect(preview.right).toBeLessThanOrEqual(1200);
-  await page.getByRole('button', { name: 'Create directly', exact: true }).click();
-  expect(submit).toHaveBeenCalledOnce();
-  expect(submit.mock.calls[0][0].context.context[0].content).toContain('Begin implementation');
+  await expect.element(page.getByRole('button', { name: 'Create directly', exact: true })).not.toBeInTheDocument();
+  expect(host.querySelector('.plugin-creation-flower-composer')!.children).toHaveLength(1);
+  expect(submit).not.toHaveBeenCalled();
+});
+it('animates the empty canvas and pauses it when the workspace or document is hidden', async () => {
+  draft = { ...baseDraft, thread_id: 'thread-1' };
+  await page.viewport(1200, 800);
+  const { host, setVisible } = mount();
+  await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
+  const background = host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!;
+  const grid = background.querySelector('span')!;
+  const blueprint = host.querySelector<HTMLElement>('.plugin-creation-blueprint')!;
+  const tile = blueprint.querySelector<HTMLElement>('span:nth-child(3)')!;
+  const [animation] = tile.getAnimations();
+  expect(animation.playState).toBe('running');
+  const start = Number(animation.currentTime);
+  await expect.poll(() => Number(animation.currentTime)).toBeGreaterThan(start);
+  animation.pause();
+  animation.currentTime = 0;
+  const original = getComputedStyle(tile).transform;
+  animation.currentTime = 6000;
+  expect(getComputedStyle(tile).transform).not.toBe(original);
+  const tileRect = tile.getBoundingClientRect(), bounds = blueprint.getBoundingClientRect();
+  expect(tileRect.left).toBeGreaterThanOrEqual(bounds.left);
+  expect(tileRect.right).toBeLessThanOrEqual(bounds.right);
+  animation.play();
+  setVisible(false);
+  expect(getComputedStyle(grid).animationPlayState).toBe('paused');
+  expect(getComputedStyle(tile).animationPlayState).toBe('paused');
+  setVisible(true);
+  expect(getComputedStyle(grid).animationPlayState).toBe('running');
+  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+  try {
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(background.dataset.active).toBe('false');
+    expect(getComputedStyle(tile).animationPlayState).toBe('paused');
+  } finally {
+    hidden.mockRestore();
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+});
+it('keeps the canvas static under reduced motion and omits it in forced colors', async () => {
+  draft = { ...baseDraft, thread_id: 'thread-1' };
+  await page.viewport(1200, 800);
+  const { host } = mount();
+  await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
+  await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+  const background = host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!;
+  const tiles = host.querySelectorAll<HTMLElement>('.plugin-creation-blueprint span, .plugin-creation-atmosphere > span');
+  for (const tile of tiles) expect(getComputedStyle(tile).animationName).toBe('none');
+  await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'active' });
+  expect(getComputedStyle(background).display).toBe('none');
+  expect(getComputedStyle(host.querySelector('.plugin-creation-blueprint span')!).animationName).toBe('none');
 });
 it('requires confirmation before deleting only the selected draft', async () => {
   const { onBack } = mount();

@@ -51,7 +51,8 @@ A product draft owns one dedicated canonical Flower conversation and one opaque
 platform author workspace. Ordinary conversations may be referenced explicitly;
 they are never adopted or deleted with a draft. The ordinary Flower composer,
 attachment staging, approvals, streaming and runtime dispatch remain authoritative.
-Chat and direct creation are submission intents of the same composer. `/plugin`
+Requirements discussion and implementation requests use the ordinary composer
+Send action, without a separate direct-creation intent or fallback prompt. `/plugin`
 is navigation, works before a model is configured, and does not become a model
 turn when unavailable.
 
@@ -71,6 +72,19 @@ and terminal tools use the same scope and existing effect approvals.
 the dedicated conversation. Build is a command-execution effect under Floret's
 normal approval. The actual retained stage reports distinguish passed, failed,
 interrupted and not-run work; packaging alone is not business or browser proof.
+For multi-iteration implementation, author guidance asks for a small runnable
+version of the requested application, including one useful interaction, followed
+by an early validated build. The existing workspace applies the first artifact
+automatically and retains it while further work continues; later updates remain
+explicit. This is model guidance, not a guaranteed latency or pipeline scheduler.
+An unrelated demo, untouched template capture or unlabeled fabricated data is not
+evidence of progress. Simple changes need no extra milestone build. The first
+preview never replaces completion of the requested work and acceptance.
+
+The [build visibility proposal](../ui/plugin-build-visibility.md) records the
+current reporting limitation and the upstream-first plan for real stage/output
+updates. Its proposed platform events and compact progress presentation are not
+shipped behavior.
 
 Product draft deletion first durably freezes admission, reconciles any pending
 canonical create, cancels/deletes its conversation, then closes and removes the

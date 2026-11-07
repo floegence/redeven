@@ -233,6 +233,7 @@ Repository knowledge derived from current source, generated contracts and releas
 - [Flower subagent runtime](ai/subagent-runtime.md)
 - [Flower thread fork coordination](ai/flower-thread-fork-coordination.md)
 - [Flower plugin generation](ai/flower-plugin-generation.md)
+- [Plugin build visibility proposal](ui/plugin-build-visibility.md)
 - [Redeven environment operations](ai/redeven-env-operations.md)
 - [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md)
 - [OKF tool suite](ai/okf-search-tool.md)

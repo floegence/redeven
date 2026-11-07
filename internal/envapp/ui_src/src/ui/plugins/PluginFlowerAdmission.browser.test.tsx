@@ -19,13 +19,6 @@ function embedded(base: ReturnType<typeof adapter>, threadID?: string) {
           <div style={{ height: '100%', display: 'flex', 'flex-direction': 'column' }}>
             <div style={{ flex: 1, 'min-height': 0 }}>{value.conversation}</div>
             {value.composer}
-            <button
-              data-direct
-              disabled={!value.canSubmit(threadID ? 'Begin implementing' : undefined)}
-              onClick={() => void value.submit({ fallbackPrompt: threadID ? 'Begin implementing' : undefined })}
-            >
-              Create directly
-            </button>
           </div>
         );
       },
@@ -33,34 +26,31 @@ function embedded(base: ReturnType<typeof adapter>, threadID?: string) {
   });
   return { surface, parts: () => parts };
 }
-it('submits the same current draft and existing thread through direct intent', async () => {
+it('submits the current draft in the existing thread through the ordinary send action', async () => {
   const base = adapter(true);
   const { surface, parts } = embedded(base, 'thread-1');
   await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
   await expect.poll(() => parts().threadID()).toBe('thread-1');
   await expect.element(page.getByRole('textbox')).toBeEnabled();
   await page.getByRole('textbox').fill('Create a focused timer');
-  await expect.element(page.getByRole('button', { name: 'Create directly', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Create directly', exact: true }).click();
+  await expect.element(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => vi.mocked(base.launchTurn).mock.calls.length).toBe(1);
   expect(vi.mocked(base.launchTurn).mock.calls[0][0]).toMatchObject({
     thread_id: 'thread-1',
     prompt: 'Create a focused timer',
   });
 });
-it('can continue the existing requirements with an empty composer', async () => {
+it('does not synthesize an implementation request from an empty composer', async () => {
   const base = adapter(true);
   const { surface, parts } = embedded(base, 'thread-1');
   await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
   await expect.poll(() => parts().threadID()).toBe('thread-1');
   await expect.element(page.getByRole('textbox')).toBeEnabled();
-  await expect.element(page.getByRole('button', { name: 'Create directly', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Create directly', exact: true }).click();
-  await expect.poll(() => vi.mocked(base.launchTurn).mock.calls.length).toBe(1);
-  expect(vi.mocked(base.launchTurn).mock.calls[0][0]).toMatchObject({
-    thread_id: 'thread-1',
-    prompt: 'Begin implementing',
-  });
+  await expect.element(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+  surface.querySelector('textarea')!.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(base.launchTurn).not.toHaveBeenCalled();
 });
 it('opens plugin navigation before a model is configured without dispatching a turn', async () => {
   const base = adapter(false),
@@ -75,7 +65,7 @@ it('opens plugin navigation before a model is configured without dispatching a t
   await expect.poll(() => open.mock.calls.length).toBe(1);
   expect(base.launchTurn).not.toHaveBeenCalled();
 });
-it('keeps unavailable plugin navigation and slash text from becoming a direct turn', async () => {
+it('keeps unavailable plugin navigation and slash text from becoming a model turn', async () => {
   const base = adapter(true);
   const { surface, parts } = embedded(base, 'thread-1');
   await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
@@ -85,13 +75,13 @@ it('keeps unavailable plugin navigation and slash text from becoming a direct tu
   input.value = '/plugin';
   input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '/plugin' }));
   input.focus();
-  await expect.element(page.getByRole('button', { name: 'Create directly', exact: true })).toBeDisabled();
+  expect(parts().canSubmit()).toBe(false);
   await userEvent.keyboard('{Enter}');
   expect(input.value).toBe('/plugin');
   expect(base.launchTurn).not.toHaveBeenCalled();
 });
 
-it('releases direct creation after a terminal update while its summary still names the same run', async () => {
+it('releases ordinary submission after a terminal update while its summary still names the same run', async () => {
   const fixture = streamingFixture(2, 0);
   embedded(fixture.adapter as ReturnType<typeof adapter>, fixture.thread.thread_id);
   await expect.element(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
@@ -107,7 +97,8 @@ it('releases direct creation after a terminal update while its summary still nam
     facts: { activity: 'idle', queue_count: 0, last_outcome: 'completed' }, items: [],
   } });
   await expect.element(page.getByRole('button', { name: 'Stop', exact: true })).not.toBeInTheDocument();
-  await expect.element(page.getByRole('button', { name: 'Create directly', exact: true })).toBeEnabled();
+  await page.getByRole('textbox').fill('Refine the plugin layout');
+  await expect.element(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
 });
 
 it('submits a contextual canvas comment in the same thread while preserving unsent composer text', async () => {
