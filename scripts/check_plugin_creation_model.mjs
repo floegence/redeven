@@ -158,10 +158,10 @@ try {
     .locator('textarea')
     .first()
     .fill(
-      'Create a compact focus timer plugin in this dedicated draft. Read the redeven-plugin-authoring skill and plugin_author.status, initialize a web template with plugin_id dev.redeven.qualification.productfocus and display_name Focus Timer. Implement a 25-minute timer showing 25:00 initially, with accessible buttons named Start, Pause and Reset, a live mm:ss display, and a compact 13px interface following the host light/dark theme. Compose it directly on the host canvas without an enclosing card, border, shadow or repeated page header. Use normal tools to edit the managed source and install dependencies, then plugin_author.build. Keep the original generated bindings and real tests. Do not delegate, start another preview server, install the plugin or grant permissions; I will review it in this workspace. Continue until a successful artifact is returned.',
+      'Create a compact focus timer plugin in this dedicated draft. Read the redeven-plugin-authoring skill and plugin_author.status, initialize a web template with slug focus-timer and display_name Focus Timer. Implement a 25-minute timer showing 25:00 initially, with accessible buttons named Start, Pause and Reset, a live mm:ss display, and a compact 13px interface following the host light/dark theme. Compose it directly on the host canvas without an enclosing card, border, shadow or repeated page header. Use normal tools to edit the managed source and install dependencies, then plugin_author.build. Keep the original generated bindings and real tests. Do not delegate, start another preview server, install the plugin or grant permissions; I will review it in this workspace. Continue until a successful artifact is returned.',
     );
-  const createDirectly = workspace.getByRole('button', { name: 'Create directly', exact: true });
-  report.directAction = await createDirectly.evaluate(element => {
+  const send = workspace.getByRole('button', { name: 'Send', exact: true });
+  report.sendAction = await send.evaluate(element => {
     const rect = element.getBoundingClientRect();
     const describe = node => {
       const style = getComputedStyle(node);
@@ -169,7 +169,7 @@ try {
     };
     return { button: describe(element), hits: document.elementsFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2).slice(0, 8).map(describe) };
   });
-  await createDirectly.click();
+  await send.click();
   await expect(workspace).toHaveAttribute('data-thread-id', /.+/, {
     timeout: 30000,
   });

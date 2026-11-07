@@ -19,17 +19,15 @@ A successful Open closes management and focuses the target after canvas input be
 ## Directory and responsive details
 Local filters combine source (official or community) and lifecycle without rebuilding identity. Refresh status remains outside the card grid, so a pending refresh cannot appear as a duplicate card.
 
-External installation source tabs retain three columns with the same complete accessible names when their visible selection labels need ellipsis.
-
 ## Shared design language
 
 The directory, detail actions, package-install source form and update review compose released Floe controls. Cards use the shared default plane, without visible resting contours, decorative lift, icon magnification or custom shadow stacks. Selected cards use the shared selection fill. Shared Tags carry source/lifecycle semantics without changing Host authority.
 
 Floe owns Input focus, Button pending/disabled treatment and Tabs keyboard/selection behavior. Search, source/lifecycle filters, retained selection and scroll remain product state. Menu triggers are single focusable boundaries with centered content, neutral hover and visible keyboard focus; nested trigger boxes are avoided. Details keep primary actions outside their scroll body, with secondary evidence in quiet disclosures.
 
-Source tabs retain complete accessible names and three equal columns on compact dialogs. Mobile actions remain at least 44px; install progress replaces the primary action without changing card/sibling geometry. Reduced-motion, localized long copy and light/dark themes use the same shared controls.
+Source tabs retain complete accessible names, with ellipsized labels in three equal columns on compact dialogs. Mobile actions remain at least 44px; install progress replaces the primary action without changing card/sibling geometry. Reduced-motion, localized long copy and light/dark themes use the same shared controls.
 
-Changing the external install source may increase body height and show scrolling. The published Floe Dialog keeps its body scrollbar gutter stable, so the panel and body widths remain fixed while the existing height transition settles; content stays scrollable.
+External source changes may increase body height. Published Floe Dialog keeps the scrollbar gutter and widths stable during height transitions; content remains scrollable.
 
 ## Plugin creation workspace
 

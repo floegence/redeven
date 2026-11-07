@@ -53,6 +53,37 @@ inventories in routine delivery; those belong in the workspace's inspection.
 Link relevant source files when useful, using their actual
 absolute managed paths.
 
+## Required plugin icon
+
+Every newly generated plugin MUST include an automatically authored SVG icon.
+Create it before the first runnable milestone build, without asking the user to
+supply artwork. Derive a distinctive, simple symbol from the application's purpose;
+honor any explicit user-provided brand direction. Keep the editable source at
+`ui/assets/plugin-icon.svg`. Use a square viewBox, balanced optical padding and
+restrained color. Verify legibility at 16, 24 and 32px on light and dark backgrounds.
+Use self-contained vector geometry with explicit fills/strokes; no scripts, event
+handlers, external resources, embedded raster images, foreignObject or font
+dependencies. A renamed PNG, emoji, generic template mark or empty SVG is not an icon.
+
+The released platform accepts only PNG/WebP for `presentation.icon.path` and
+rejects SVG surface icons. Keep SVG as the author-owned source and package asset.
+Add a deterministic step to the project's configured build that renders this SVG
+to a 256x256 PNG using a locked renderer dependency, copies both assets into the
+declared package output, and sets the source manifest's `presentation.icon.path`
+to `ui/assets/plugin-icon.png`. The PNG must stay within the platform's 512 KiB
+limit. Derive it from the SVG on every build; never maintain two unrelated icons,
+edit generated manifests, or point host presentation fields at SVG. Use the same
+derived PNG for declared surface icons when needed. Existing platform validation
+and verified icon extraction remain authoritative.
+
+The SVG source, derived PNG and manifest reference are required deliverables.
+Include icon checks in the project's configured tests: source existence and valid
+vector content, successful raster generation, packaged assets and the manifest
+reference. Missing or invalid icon assets block completion; do not silently use a
+fallback icon or claim the plugin is finished. Inspect the actual rendered icon,
+and ensure the package uses its derived image. Preserve established icon identity
+during unrelated revisions; regenerate derived assets whenever the SVG changes.
+
 ## Visual design in Redeven
 
 Treat the generated application as the content of an existing professional

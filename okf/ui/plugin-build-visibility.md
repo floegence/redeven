@@ -13,44 +13,11 @@ one preview authority and one compact status control. Live stage/output updates
 described here are not shipped. Early-milestone author guidance and the existing
 first-artifact auto-preview need no new platform contract.
 
-# Current evidence
+# Contract
 
-Redeven consumes published ReDevPlugin 3.24.1. `WorkspaceStore.Build` persists a
-running report before invoking `Project.Build`, then copies stages and commands
-only after that call returns. The pipeline records each stage after completion
-and exposes no progress observer. Polling faster cannot recover missing events.
-The product polls status every 2.5 seconds, automatically applies the first
-retained artifact, and keeps later artifacts pending for explicit Apply. Checks
-already exposes completed stages and bounded command output.
+The following experience is proposed, not released behavior.
 
-Before the first artifact, the canvas shows a decorative morphing layout. Its
-animation indicates waiting, not measured progress. Flower file/tool activity
-already belongs to its conversation; package compilation belongs to ReDevPlugin.
-Generating source, building a package, opening a sandbox and passing application
-acceptance are separate facts. A running build is not a live application.
-
-# Open-source comparison
-
-Primary sources inspected on 2026-11-06; these are design references, not new
-dependencies or copied implementations. Moving upstream source may change.
-
-| Project | Observed mechanism | Adopt in Redeven | Boundary |
-| --- | --- | --- | --- |
-| bolt.diy | ActionRunner records pending/running/complete/aborted/failed actions; preview store observes WebContainer server-ready and port events | Runtime-owned progress and a separate readiness signal | Do not copy its runtime, storage synchronization or arbitrary dev-server preview |
-| Dyad | Chat-adjacent preview; refresh and server restart are separate; System Messages explains long dependency setup | Quiet preview with diagnostics on demand | Do not restart or reload a user's current preview on each source edit |
-| E2B Fragments | Streams generated content; after generation finishes, executes a sandbox request and switches to its result | Distinguish streaming source from executable output; reuse a prepared template | Its streamed text is not proof of rendering incomplete code; no second remote sandbox |
-| Sandpack | Composable preview, code, tests and console with shared provider/client state | One authoritative state, small replaceable presentation components | No additional bundler, iframe bridge or permission path |
-
-Sources:
-- https://github.com/stackblitz-labs/bolt.diy/blob/main/app/lib/runtime/action-runner.ts
-- https://github.com/stackblitz-labs/bolt.diy/blob/main/app/lib/stores/previews.ts
-- https://www.dyad.sh/docs/guides/previewing
-- https://github.com/e2b-dev/fragments/blob/main/app/page.tsx
-- https://github.com/e2b-dev/fragments/blob/main/app/api/sandbox/route.ts
-- https://sandpack.codesandbox.io/docs/advanced-usage/components
-- https://sandpack.codesandbox.io/docs/advanced-usage/hooks
-
-# Proposed experience
+## Proposed experience
 
 1. **Create.** Keep the ordinary Flower stream and approvals. Before a runnable
    artifact exists, use the quiet canvas and one status line. Source-edit activity
@@ -77,7 +44,7 @@ pane, 44px action targets and focus. Announce phase changes politely, not each l
 chunk or elapsed second. Reduced motion preserves state visibility. Hidden views
 stop rendering work and reconcile when visible again.
 
-# Upstream-first implementation
+# Boundaries
 
 ## ReDevPlugin owns progress
 
@@ -121,7 +88,7 @@ Guidance requests early builds for meaningful milestones, not each token or ever
 simple edit, and never stops work at the first preview. Measure cold/warm paths
 before promising latency or adding generic preparation/cache machinery upstream.
 
-# Acceptance and delivery order
+## Acceptance and delivery order
 
 1. Ship the composer/canvas changes and early-milestone guidance on the existing
    release. Prompt tests establish instruction delivery, not model compliance.
@@ -138,7 +105,46 @@ before promising latency or adding generic preparation/cache machinery upstream.
    interactive surface separately. Compare cold/warm timings before setting
    targets. Fixture screenshots cannot prove this flow.
 
-# Local evidence
+# Evidence
+
+## Current implementation
+
+Redeven consumes published ReDevPlugin 3.24.1. `WorkspaceStore.Build` persists a
+running report before invoking `Project.Build`, then copies stages and commands
+only after that call returns. The pipeline records each stage after completion
+and exposes no progress observer. Polling faster cannot recover missing events.
+The product polls status every 2.5 seconds, automatically applies the first
+retained artifact, and keeps later artifacts pending for explicit Apply. Checks
+already exposes completed stages and bounded command output.
+
+Before the first artifact, the canvas shows a decorative morphing layout. Its
+animation indicates waiting, not measured progress. Flower file/tool activity
+already belongs to its conversation; package compilation belongs to ReDevPlugin.
+Generating source, building a package, opening a sandbox and passing application
+acceptance are separate facts. A running build is not a live application.
+
+## Open-source comparison
+
+Primary sources inspected on 2026-11-06; these are design references, not new
+dependencies or copied implementations. Moving upstream source may change.
+
+| Project | Observed mechanism | Adopt in Redeven | Boundary |
+| --- | --- | --- | --- |
+| bolt.diy | ActionRunner records pending/running/complete/aborted/failed actions; preview store observes WebContainer server-ready and port events | Runtime-owned progress and a separate readiness signal | Do not copy its runtime, storage synchronization or arbitrary dev-server preview |
+| Dyad | Chat-adjacent preview; refresh and server restart are separate; System Messages explains long dependency setup | Quiet preview with diagnostics on demand | Do not restart or reload a user's current preview on each source edit |
+| E2B Fragments | Streams generated content; after generation finishes, executes a sandbox request and switches to its result | Distinguish streaming source from executable output; reuse a prepared template | Its streamed text is not proof of rendering incomplete code; no second remote sandbox |
+| Sandpack | Composable preview, code, tests and console with shared provider/client state | One authoritative state, small replaceable presentation components | No additional bundler, iframe bridge or permission path |
+
+Sources:
+- https://github.com/stackblitz-labs/bolt.diy/blob/main/app/lib/runtime/action-runner.ts
+- https://github.com/stackblitz-labs/bolt.diy/blob/main/app/lib/stores/previews.ts
+- https://www.dyad.sh/docs/guides/previewing
+- https://github.com/e2b-dev/fragments/blob/main/app/page.tsx
+- https://github.com/e2b-dev/fragments/blob/main/app/api/sandbox/route.ts
+- https://sandpack.codesandbox.io/docs/advanced-usage/components
+- https://sandpack.codesandbox.io/docs/advanced-usage/hooks
+
+## Local sources
 
 - `redeven:internal/ai/system_skills/redeven-plugin-authoring/SKILL.md` - Early-milestone guidance.
 - `redeven:internal/ai/system_plugin_authoring_test.go` - Model-visible guidance checks.

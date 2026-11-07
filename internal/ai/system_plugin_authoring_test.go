@@ -48,6 +48,12 @@ func TestPluginAuthoringSkillUsesPublishedPlatformInModelAndBrowseContent(t *tes
 		"one useful end-to-end interaction",
 		"leave later preview updates to Apply",
 		"Continue the requested implementation and acceptance work",
+		"Every newly generated plugin MUST include an automatically authored SVG icon",
+		"before the first runnable milestone build",
+		"ui/assets/plugin-icon.svg",
+		"presentation.icon.path",
+		"The SVG source, derived PNG and manifest reference are required deliverables",
+		"Missing or invalid icon assets block completion",
 	} {
 		if !strings.Contains(activation.Content, instruction) {
 			t.Fatalf("published plugin authoring instruction is missing: %s", instruction)

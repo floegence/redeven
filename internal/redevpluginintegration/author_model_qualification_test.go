@@ -1,6 +1,7 @@
 package redevpluginintegration
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redevplugin/v3/pkg/mutation"
+	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
 )
 
 // This opt-in lane calls the configured model and executes its real author tools.
@@ -193,6 +195,27 @@ func TestPluginCreationRealModelBuildInstallAndDelete(t *testing.T) {
 	artifact := artifacts[0]
 	report["artifact"] = artifact
 	report["build"] = build
+	workspace, err := integration.author.store.Get(authorCtx, owner, draft.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svg, err := os.ReadFile(filepath.Join(workspace.SourceDirectory, generatedPluginIconSource))
+	if err != nil {
+		t.Fatal("generated SVG icon is a required deliverable:", err)
+	}
+	_, packageBytes, err := integration.author.store.ReadArtifact(authorCtx, owner, draft.WorkspaceID, artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg, err := pluginpkg.Read(authorCtx, bytes.NewReader(packageBytes), int64(len(packageBytes)), pluginpkg.DefaultReadLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	icon, err := checkGeneratedPluginIcon(svg, pkg)
+	if err != nil {
+		t.Fatal("generated icon acceptance failed:", err)
+	}
+	report["icon"] = icon
 	env, err := integration.author.environment(authorCtx, owner, draft.WorkspaceID, meta)
 	if err != nil {
 		t.Fatal(err)

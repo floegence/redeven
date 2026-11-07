@@ -107,6 +107,24 @@ a stale selector never authorizes blind execution or installation.
 
 ## Delivery and installation
 
+Newly generated plugins must include an automatically authored, purpose-specific
+SVG icon before the first runnable milestone. The editable source is
+`ui/assets/plugin-icon.svg`; the configured build deterministically renders a
+256x256 PNG, packages both, and binds `presentation.icon.path` to
+`ui/assets/plugin-icon.png`. A locked renderer and configured project tests keep
+the source, derived image and manifest reference aligned. Missing or invalid icon
+assets block authoring completion; stock placeholders and disguised raster files
+do not satisfy this requirement. Review legibility at 16/24/32px in both themes.
+The SVG is self-contained vector content, without active content or external
+resources. Existing icon identity survives unrelated revisions.
+
+This is a Flower generation/delivery requirement, not a new global package
+admission rule. The released platform still accepts only PNG/WebP presentation
+icons and rejects SVG surface icons; the product consumes its verified raster
+evidence. Model-visible instruction tests and explicit generated-artifact
+qualification cover the requirement. General SVG admission or shared conversion
+machinery would require an upstream platform contract and release first.
+
 An authoring request may run authorized local project steps through normal tools.
 Final sources and packages belong at the user's project or chosen destination.
 Installation uses the released package inspection, exact-byte review and
@@ -134,6 +152,7 @@ Development runtime evidence never substitutes for product signing or packaging.
 - `redeven:internal/ai/system_skills/redeven-plugin-authoring/SKILL.md` - Source.
 - `redeven:internal/ai/system_skills.go` - Source.
 - `redeven:internal/ai/system_plugin_authoring_test.go` - Tests.
+- `redeven:internal/redevpluginintegration/author_icon_qualification_test.go` - Required SVG/PNG artifact checks and released-package round trip; fixtures do not prove visual quality or SVG-to-PNG derivation.
 - `redeven:internal/redevpluginintegration/runtime_io_live_test.go` - Tests.
 - `redeven:okf/ai/ai-tool-runtime.md` - Source.
 - `redeven:internal/plugincreation/store_test.go` - Product ownership and durable recovery tests.
