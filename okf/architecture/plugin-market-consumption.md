@@ -17,6 +17,7 @@ Redeven consumes one complete public market representation. Official and communi
 - Ingest uses the released verifier and rechecks repository, release, tag commit, asset identity and bytes. Reject cross-repository plugin-ID takeover and same-version replacement. Failed scans retain the last valid projection. Market schema 11 retires old non-derived current listings while preserving ingest/audit history; it never renames package bytes or creates aliases.
 - Market retains one release per plugin/channel and bounded verified presentation/icons. It never proxies packages or grants lifecycle authority. Unavailable listings constrain discovery without revoking installations.
 - Inspection matches publisher/plugin/version, package/security/contract hashes and repository/release/asset identities. Both classifications share review and commit.
+- Repository selection displays the returned short slug and submits the exact generated plugin ID. It never parses labels into identity; verified package presentation becomes authoritative during review.
 - Installed presentation and permission requirements come from the installed package and Host-verified contracts. Newer market metadata cannot replace installed declarations or authorization facts.
 
 ## Network behavior

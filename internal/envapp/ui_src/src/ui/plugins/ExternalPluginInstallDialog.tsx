@@ -53,7 +53,7 @@ type ExternalPluginInstallDialogProps = {
   sourcePreset?: ExternalPluginSourcePreset;
   onOpenChange: (open: boolean) => void;
   onInspect: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
-  onListRepository?: (url: string, signal: AbortSignal) => Promise<readonly { plugin_id: string }[]>;
+  onListRepository?: (url: string, signal: AbortSignal) => Promise<readonly { slug: string; plugin_id: string }[]>;
   onCommit: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onCommitted: (result: ExternalPluginCommitResult) => Promise<unknown> | unknown;
 };
@@ -75,7 +75,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   const [url, setURL] = createSignal('');
   const [tag, setTag] = createSignal('');
   const [file, setFile] = createSignal<File | null>(null);
-  const [repositoryPlugins, setRepositoryPlugins] = createSignal<readonly { plugin_id: string }[]>([]);
+  const [repositoryPlugins, setRepositoryPlugins] = createSignal<readonly { slug: string; plugin_id: string }[]>([]);
   const [selectedPluginID, setSelectedPluginID] = createSignal('');
   const [allowSourceChange, setAllowSourceChange] = createSignal(false);
   const [inspection, setInspection] = createSignal<ExternalPluginInspection | null>(null);
@@ -378,7 +378,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
               <span>{i18n.t('uiCopy.plugin.distribution.choosePlugin')}</span>
               <select class="h-11 w-full rounded-md border bg-background px-3" value={selectedPluginID()} disabled={pending()} onChange={(event) => setSelectedPluginID(event.currentTarget.value)}>
                 <option value="">{i18n.t('uiCopy.plugin.distribution.choosePlugin')}</option>
-                <For each={repositoryPlugins()}>{(plugin) => <option value={plugin.plugin_id}>{plugin.plugin_id}</option>}</For>
+                <For each={repositoryPlugins()}>{(plugin) => <option value={plugin.plugin_id}>{plugin.slug}</option>}</For>
               </select>
             </label>
           </Show>

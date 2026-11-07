@@ -70,7 +70,7 @@ export type PluginCenterViewProps = {
   installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
-  onListRepository?: (url: string, signal: AbortSignal) => Promise<readonly { plugin_id: string }[]>;
+  onListRepository?: (url: string, signal: AbortSignal) => Promise<readonly { slug: string; plugin_id: string }[]>;
   onSetAutomaticUpdates?: (item: PluginInventoryItem, enabled: boolean) => Promise<unknown>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;

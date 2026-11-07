@@ -429,6 +429,35 @@ describe('ExternalPluginInstallDialog', () => {
     expect(button('Review package').disabled).toBe(true);
   });
 
+  it('shows repository slugs while inspecting the exact selected generated identity', async () => {
+    const onListRepository = vi.fn(async () => [
+      { slug: 'mind-map', plugin_id: 'github.repo.42.mind-map' },
+      { slug: 'weather', plugin_id: 'github.repo.42.weather' },
+    ]);
+    const props = renderDialog({ onListRepository });
+    document.querySelector<HTMLElement>('#external-plugin-source-tab-github_repository')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('external-plugin-source-tab-github_repository'));
+    typeInto(inputWithPlaceholder('https://github.com/owner/repository'), 'https://github.com/example/plugins');
+    button('Review package').click();
+    await flush();
+    const select = document.querySelector<HTMLSelectElement>('select')!;
+    expect([...select.options].slice(1).map(option => [option.textContent, option.value])).toEqual([
+      ['mind-map', 'github.repo.42.mind-map'],
+      ['weather', 'github.repo.42.weather'],
+    ]);
+    expect(props.onInspect).not.toHaveBeenCalled();
+    select.value = 'github.repo.42.weather';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    button('Review package').click();
+    await flush();
+    expect(props.onInspect).toHaveBeenCalledWith(expect.objectContaining({
+      sourceKind: 'github_repository',
+      url: 'https://github.com/example/plugins',
+      pluginID: 'github.repo.42.weather',
+    }), expect.any(AbortSignal));
+    expect(onListRepository).toHaveBeenCalledTimes(1);
+  });
+
   it('inspects a GitHub repository with an optional exact release tag', async () => {
     const props = renderDialog();
     document.querySelector<HTMLElement>('#external-plugin-source-tab-github_repository')!.click();
