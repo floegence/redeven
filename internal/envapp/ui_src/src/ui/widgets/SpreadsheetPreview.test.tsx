@@ -34,6 +34,75 @@ async function ready(host: HTMLElement) {
   await vi.waitFor(() => expect(host.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')?.disabled).toBe(false));
 }
 describe('published XLSX preview ownership', () => {
+  it('activates the first result and reports the renderer-owned current position', async () => {
+    const { viewer } = fixture();
+    const results = [0, 1, 2].map(matchIndex => ({ matchIndex, text: 'match', location: { sheet: 0, sheetName: 'First', ref: `A${matchIndex + 1}`, row: matchIndex + 1, col: 1 } }));
+    const findText = vi.fn(async () => results);
+    const findNext = vi.fn().mockResolvedValueOnce(results[0]).mockResolvedValueOnce(results[2]).mockResolvedValueOnce(results[0]);
+    const setSelection = vi.fn();
+    Object.assign(viewer, { findText, findNext, setSelection });
+    const { host } = mount(); await ready(host);
+    host.querySelector<HTMLButtonElement>('[aria-label=Find]')!.click();
+    const input = host.querySelector<HTMLInputElement>('input[type=search]')!;
+    input.value = 'match'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(findNext).toHaveBeenCalledOnce());
+    expect(findText.mock.invocationCallOrder[0]).toBeLessThan(findNext.mock.invocationCallOrder[0]);
+    expect(host.querySelector('output')?.textContent).toBe('1 / 3');
+    expect(setSelection).toHaveBeenLastCalledWith('A1');
+    host.querySelector<HTMLButtonElement>('[aria-label=Next]')!.click();
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('3 / 3'));
+    expect(setSelection).toHaveBeenLastCalledWith('A3');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('1 / 3'));
+    input.value = 'missing'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(host.querySelector('output')).toBeNull();
+    findText.mockResolvedValueOnce([]);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('0 / 0'));
+    expect(findNext).toHaveBeenCalledTimes(3);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label=Next]')!.disabled).toBe(true);
+  });
+  it.each(['collect', 'activate'] as const)('ignores an obsolete %s operation after the query changes', async phase => {
+    const { viewer } = fixture();
+    const result = { matchIndex: 0, text: 'old', location: { ref: 'A1' } };
+    let resolve!: () => void;
+    const pending = new Promise<void>(done => { resolve = done; });
+    const findText = vi.fn(async () => { if (phase === 'collect') await pending; return [result]; });
+    const findNext = vi.fn(async () => { if (phase === 'activate') await pending; return result; });
+    const setSelection = vi.fn();
+    Object.assign(viewer, { findText, findNext, setSelection });
+    const { host } = mount(); await ready(host);
+    host.querySelector<HTMLButtonElement>('[aria-label=Find]')!.click();
+    const input = host.querySelector<HTMLInputElement>('input[type=search]')!;
+    input.value = 'old'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(phase === 'collect' ? findText : findNext).toHaveBeenCalledOnce());
+    input.value = 'new'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    resolve(); await pending; await Promise.resolve(); await Promise.resolve();
+    expect(setSelection).not.toHaveBeenCalled();
+    expect(host.querySelector('output')).toBeNull();
+    if (phase === 'collect') expect(findNext).not.toHaveBeenCalled();
+  });
+  it('serializes navigation and uses the published previous-match result', async () => {
+    const { viewer } = fixture();
+    const result = { matchIndex: 0, text: 'match', location: { ref: 'A1' } };
+    let resolve!: (value: typeof result) => void;
+    const findPrev = vi.fn(() => new Promise<typeof result>(done => { resolve = done; }));
+    Object.assign(viewer, { findText: vi.fn(async () => [result, result]), findNext: vi.fn(async () => result), findPrev, setSelection: vi.fn() });
+    const { host } = mount(); await ready(host);
+    host.querySelector<HTMLButtonElement>('[aria-label=Find]')!.click();
+    const input = host.querySelector<HTMLInputElement>('input[type=search]')!;
+    input.value = 'match'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('1 / 2'));
+    for (let index = 0; index < 3; index++) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+    expect(findPrev).toHaveBeenCalledOnce();
+    expect(host.querySelector<HTMLButtonElement>('[aria-label=Next]')!.disabled).toBe(true);
+    resolve({ ...result, matchIndex: 1, location: { ref: 'A9' } });
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('2 / 2'));
+    expect(host.querySelector<HTMLButtonElement>('[aria-label=Next]')!.disabled).toBe(false);
+  });
   it('passes an owned copy of exact bytes, skips hidden sheets and releases viewer before workbook', async () => {
     const { book, viewer } = fixture();
     const bytes = new Uint8Array([80, 75, 3, 4]);

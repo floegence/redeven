@@ -44,9 +44,14 @@ await session.run(async () => {
     await page.waitForFunction(() => document.querySelectorAll('iframe').length === 1);
     await page.screenshot({path:path.join(output,'retained-html.png')});
     await open('LICENSE', new TextEncoder().encode('MIT License\nCopyright Floegence\nLicense terms'));
-    const more = page.locator('[data-floe-floating-window-titlebar]').getByRole('button', { name: 'More file actions', exact: true });
+    const more = page.locator('[data-floe-floating-window-titlebar] button[aria-label="More file actions"]:visible');
     const openFind = async () => {
       assert.equal(await page.locator('[data-floe-floating-window-titlebar] [data-redeven-preview-find]').count(), 0);
+      await page.waitForFunction(() => {
+        const header = document.querySelector('[data-floe-floating-window-titlebar]');
+        return header && !header.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')
+          && [...header.querySelectorAll('button[aria-label="More file actions"]')].filter(element => element.checkVisibility()).length === 1;
+      });
       await more.click();
       await page.getByRole('menuitem', { name: 'Find in file', exact: true }).click();
     };
@@ -72,14 +77,14 @@ await session.run(async () => {
       await page.waitForFunction(label => [...document.querySelectorAll('.monaco-hover')].some(el => el.textContent.includes(label) && el.getBoundingClientRect().width > 0), label);
       for (let sample = 0; sample < 8; sample++) {
         await page.waitForTimeout(100);
-        const geometry = await target.evaluate(element => {
+        const geometry = await target.evaluate((element, label) => {
           const rect = element.getBoundingClientRect();
-          const tooltip = [...document.querySelectorAll('.monaco-hover')].find(el => el.getBoundingClientRect().width > 0);
+          const tooltip = [...document.querySelectorAll('.monaco-hover')].find(el => el.textContent.includes(label) && el.getBoundingClientRect().width > 0);
           const bounds = tooltip?.getBoundingClientRect();
           const viewport = element.closest('[data-preview-document]').getBoundingClientRect();
           return { hit: element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
             contained: !!bounds && bounds.top >= rect.bottom - 1 && bounds.left >= viewport.left - 1 && bounds.right <= viewport.right + 1 };
-        });
+        }, label);
         assert.ok(geometry.hit && geometry.contained, label + ': ' + JSON.stringify(geometry));
       }
       await page.screenshot({ path: path.join(output, 'search-tooltip-' + label.replaceAll(' ', '-') + '.png') });
@@ -115,13 +120,73 @@ await session.run(async () => {
     assert.equal(await page.locator('[data-floe-floating-window-surface]').count(), 1);
     report.checks.push({ search: 'markdown-and-text', tooltip: 'stable-contained', retainedSearch: true, searchLayout: 'more-menu-and-compact-overlay', viewportUnchanged: true });
     const fixtures = path.join(root, 'internal/envapp/ui_src/src/ui/widgets/__fixtures__');
+    const matchStyles = owner => owner.locator('.flower-delimited-canvas').evaluate(element => [...element.querySelectorAll('div')]
+      .filter(node => node.style.borderWidth === '2px' && node.style.pointerEvents === 'none')
+      .map(node => ({ background: getComputedStyle(node).backgroundColor, border: getComputedStyle(node).borderColor })));
+    for (const format of ['csv', 'tsv']) {
+      const name = 'current-match.' + format;
+      await open(name, new TextEncoder().encode('match,match\nmatch,end'.replaceAll(',', format === 'csv' ? ',' : '\t')));
+      const owner = page.locator('[data-preview-document="/acceptance/' + name + '"]');
+      await owner.getByRole('button', { name: 'Zoom in', exact: true }).waitFor();
+      const body = owner.locator('.flower-delimited-body');
+      const before = await body.boundingBox();
+      await openFind();
+      const input = page.getByRole('searchbox');
+      await input.fill('match'); await input.press('Enter');
+      await page.getByRole('status').filter({ hasText: '1 / 3' }).waitFor();
+      const first = await matchStyles(owner);
+      assert.equal(first.length, 3);
+      assert.notDeepEqual(first[0], first[1]); assert.deepEqual(first[1], first[2]);
+      assert.equal(await owner.locator('[data-xlsx-selection-border]').count(), 1);
+      assert.ok(await input.evaluate(element => element === document.activeElement));
+      await page.screenshot({ path: path.join(output, name + '-first.png') });
+      await input.press('Enter');
+      await page.getByRole('status').filter({ hasText: '2 / 3' }).waitFor();
+      assert.deepEqual(await matchStyles(owner), [first[1], first[0], first[1]]);
+      await input.press('Shift+Enter');
+      await page.getByRole('status').filter({ hasText: '1 / 3' }).waitFor();
+      await input.press('Shift+Enter');
+      await page.getByRole('status').filter({ hasText: '3 / 3' }).waitFor();
+      await page.setViewportSize({ width: 390, height: 760 });
+      // Crossing the mobile breakpoint replaces the window with a dialog.
+      await page.getByRole('button', { name: 'More file actions', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Find in file', exact: true }).click();
+      await input.fill('match'); await input.press('Enter');
+      await page.getByRole('status').filter({ hasText: '1 / 3' }).waitFor();
+      const panel = page.locator('[data-spreadsheet-panel]');
+      assert.ok(await panel.evaluate(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && element.scrollWidth <= element.clientWidth; }));
+      await page.screenshot({ path: path.join(output, name + '-narrow.png') });
+      await input.press('Escape');
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await openFind();
+      await input.fill('match'); await input.press('Enter');
+      await page.getByRole('status').filter({ hasText: '1 / 3' }).waitFor();
+      await input.press('Shift+Enter');
+      await page.getByRole('status').filter({ hasText: '3 / 3' }).waitFor();
+      await input.press('Escape');
+      assert.deepEqual(await body.boundingBox(), before);
+      await open('current-match-notes.txt', new TextEncoder().encode('Independent document'));
+      assert.equal(await page.locator('[data-spreadsheet-panel]:visible').count(), 0);
+      await page.getByRole('tab').filter({ hasText: name }).click();
+      await page.waitForFunction(name => document.querySelector('[data-preview-document="/acceptance/' + name + '"]')?.getAttribute('aria-hidden') !== 'true', name);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await openFind();
+      await page.getByRole('status').filter({ hasText: '3 / 3' }).waitFor();
+      assert.equal(await input.inputValue(), 'match');
+      assert.deepEqual(await matchStyles(owner), [first[1], first[1], first[0]]);
+      await input.fill('missing'); await input.press('Enter');
+      await page.getByRole('status').filter({ hasText: '0 / 0' }).waitFor();
+      assert.deepEqual(await matchStyles(owner), []);
+      await input.press('Escape');
+      report.checks.push({ format, activeMatch: 'distinct-blue-fill-and-selection-border', position: 'renderer-match-index', navigation: 'forward-backward-wrap', retainedFile: true, narrowOverlay: true });
+    }
     const documents = [
       { name: 'search.docx', bytes: await readFile(path.join(fixtures, 'preview-pages.docx')), query: 'Second page', count: '1 of 1', viewport: '.docx-preview-pane' },
       { name: 'search.pptx', bytes: await readFile(path.join(fixtures, 'preview-pages.pptx')), query: 'Presentation page 30', count: '1 of 1', viewport: '.pptx-preview-pane' },
       { name: 'search.pdf', bytes: await readFile(path.join(fixtures, 'pdf/long-text.pdf')), query: 'REDEVEN-300', count: '1 of 29', viewport: '.pdf-preview-pane' },
-      { name: 'search.xlsx', bytes: await readFile(path.join(fixtures, 'preview-workbook.xlsx')), query: '00123', count: '1', viewport: '.flower-delimited-body', submit: true },
-      { name: 'search.csv', bytes: new TextEncoder().encode('name,id\nNeedle,0007'), query: 'Needle', count: '1', viewport: '.flower-delimited-body', submit: true },
-      { name: 'search.tsv', bytes: new TextEncoder().encode('name\tid\nNeedle\t0007'), query: 'Needle', count: '1', viewport: '.flower-delimited-body', submit: true },
+      { name: 'search.xlsx', bytes: await readFile(path.join(fixtures, 'preview-workbook.xlsx')), query: '00123', count: '1 / 1', viewport: '.flower-delimited-body', submit: true },
+      { name: 'search.csv', bytes: new TextEncoder().encode('name,id\nNeedle,0007'), query: 'Needle', count: '1 / 1', viewport: '.flower-delimited-body', submit: true },
+      { name: 'search.tsv', bytes: new TextEncoder().encode('name\tid\nNeedle\t0007'), query: 'Needle', count: '1 / 1', viewport: '.flower-delimited-body', submit: true },
       { name: 'search.html', bytes: new TextEncoder().encode('<h1>Hello <b>world</b></h1><p>Hello world</p>'), query: 'hello world', count: '1 of 2', viewport: '.html-preview-frame' },
     ];
     for (const document of documents) {

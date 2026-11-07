@@ -50,7 +50,8 @@ export function SpreadsheetPreview(props: {
     onCleanup(() => { window.removeEventListener('resize', positionPanel); window.removeEventListener('scroll', positionPanel, true); });
   });
   const [query, setQuery] = createSignal('');
-  const [matches, setMatches] = createSignal<number>();
+  const [matches, setMatches] = createSignal<{ total: number; current: number }>();
+  const [searching, setSearching] = createSignal(false);
   const [sheets, setSheets] = createSignal<Array<{ name: string; index: number }>>([]);
   const [sheetIndex, setSheetIndex] = createSignal(0);
   const [selection, setSelection] = createSignal('');
@@ -74,7 +75,7 @@ export function SpreadsheetPreview(props: {
   const encodingLabels = ['UTF-8', 'GB18030', 'UTF-16 LE', 'UTF-16 BE', 'Windows-1252'] as const;
   createEffect(on(() => props.bytes, () => { setSource(false); setEncoding('utf-8'); setQuery(''); closePanel(); }));
   createEffect(on(() => [props.bytes, props.format, encoding(), showSource(), revision()] as const, ([bytes, format, codec, textMode]) => {
-    setReady(false); setFailed(false); setMatches(undefined); setSelection(''); setSheets([]); setSheetIndex(0);
+    setReady(false); setFailed(false); setMatches(undefined); setSearching(false); setSelection(''); setSheets([]); setSheetIndex(0);
     if (textMode) return;
     let disposed = false;
     let active: Omit<XlsxSheetViewer, 'load'> | undefined;
@@ -94,6 +95,8 @@ export function SpreadsheetPreview(props: {
       const options = {
         useGoogleFonts: false, enableHyperlinks: false, comments: format === 'xlsx', hiddenSheetMode: 'skip' as const,
         zoomMin: 0.25, zoomMax: 3, xlsxWorksheetLimits: limits,
+        // Keep text readable and the current cell distinct from other matches.
+        findHighlightColors: { match: 'rgba(255, 179, 0, 0.12)', active: 'rgba(26, 115, 232, 0.24)' },
         onError: fail, onSheetChange: (index: number) => { if (!disposed) setSheetIndex(index); },
         onScaleChange: (value: number) => { if (!disposed) setScale(value); },
         onSelectionContextChange: (value: import('@silurus/ooxml/xlsx').XlsxSelectionContext | null) => {
@@ -137,33 +140,50 @@ export function SpreadsheetPreview(props: {
     });
   }));
   const search = async () => {
-    const active = viewer, request = ++searchRequest;
-    if (!active) return;
+    const active = viewer;
+    if (!active || searching()) return;
+    const request = ++searchRequest;
+    setSearching(true);
     try {
       if (!query()) { active.clearFind(); setMatches(undefined); return; }
       const found = await active.findText(query());
-      if (request === searchRequest && viewer === active) setMatches(found.length);
+      if (request !== searchRequest || viewer !== active) return;
+      // findText collects matches; navigation activates and reveals a result.
+      const current = found.length ? await active.findNext() : null;
+      if (request !== searchRequest || viewer !== active) return;
+      if (current) active.setSelection(current.location.ref);
+      setMatches({ total: found.length, current: current ? current.matchIndex + 1 : 0 });
     } catch { if (request === searchRequest && viewer === active) { setFailed(true); setReady(false); } }
+    finally { if (request === searchRequest && viewer === active) setSearching(false); }
   };
-  const nextMatch = async () => {
-    const active = viewer, request = ++searchRequest;
-    try { await active?.findNext(); }
+  const nextMatch = async (previous = false) => {
+    const active = viewer;
+    if (!active || searching() || !matches()?.total) return;
+    const request = ++searchRequest;
+    setSearching(true);
+    try {
+      const current = await (previous ? active.findPrev() : active.findNext());
+      if (request !== searchRequest || viewer !== active) return;
+      if (current) active.setSelection(current.location.ref);
+      setMatches(value => value && { ...value, current: current ? current.matchIndex + 1 : 0 });
+    }
     catch { if (request === searchRequest && viewer === active) { setFailed(true); setReady(false); } }
+    finally { if (request === searchRequest && viewer === active) setSearching(false); }
   };
   const selectSheet = async (index: number) => {
     const active = viewer;
     if (!active) return;
-    setReady(false); setSelection(''); setMatches(undefined); searchRequest++; active.clearFind();
+    setReady(false); setSelection(''); setMatches(undefined); setSearching(false); searchRequest++; active.clearFind();
     try { await workbook?.getWorksheet(index); if (viewer !== active) return; await active.goToSheet(index); if (viewer === active && !failed()) { setSheetIndex(active.sheetIndex); setReady(true); } }
     catch { if (viewer === active) { setFailed(true); setReady(false); } }
   };
   const searchControls = () => <div class="flower-delimited-search">
     <input ref={element => { searchInput = element; if (isWorkbook() || hostedSearch) queueMicrotask(() => { if (element.isConnected && props.active !== false && panel() === 'find') element.focus(); }); }} type="search" aria-label={props.copy.findText} placeholder={props.copy.findText} value={query()} disabled={!ready()}
-      onInput={event => { searchRequest++; setQuery(event.currentTarget.value); setMatches(undefined); viewer?.clearFind(); }}
-      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void (matches() ? nextMatch() : search()); } }} />
-    <Button size="sm" variant="ghost" aria-label={props.copy.findText} title={props.copy.findText} disabled={!ready()} onClick={() => void search()}><Search class="size-3.5" aria-hidden="true" /></Button>
-    <Button size="sm" variant="ghost" aria-label={props.copy.nextMatch} title={props.copy.nextMatch} disabled={!matches()} onClick={() => void nextMatch()}><ChevronDown class="size-3.5" aria-hidden="true" /></Button>
-    <Show when={matches() !== undefined}><output aria-live="polite">{matches()}</output></Show>
+      onInput={event => { searchRequest++; setQuery(event.currentTarget.value); setMatches(undefined); setSearching(false); viewer?.clearFind(); }}
+      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void (matches()?.total ? nextMatch(event.shiftKey) : search()); } }} />
+    <Button size="sm" variant="ghost" aria-label={props.copy.findText} title={props.copy.findText} disabled={!ready() || searching()} onClick={() => void search()}><Search class="size-3.5" aria-hidden="true" /></Button>
+    <Button size="sm" variant="ghost" aria-label={props.copy.nextMatch} title={props.copy.nextMatch} disabled={!matches()?.total || searching()} onClick={() => void nextMatch()}><ChevronDown class="size-3.5" aria-hidden="true" /></Button>
+    <Show when={matches()}>{result => <output aria-live="polite" aria-atomic="true">{result().current} / {result().total}</output>}</Show>
     <Show when={isWorkbook() || hostedSearch}><Button size="sm" variant="ghost" aria-label={props.copy.close} title={props.copy.close} onClick={closePanel}><X class="size-3.5" aria-hidden="true" /></Button></Show>
   </div>;
   return <div class="flower-delimited-preview" data-spreadsheet-format={props.format} onKeyDown={event => {

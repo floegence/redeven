@@ -50,7 +50,7 @@ await session.run(async () => {
     if (await page.getByRole('searchbox').count() === 0) await page.getByRole('button', { name: 'Find', exact: true }).click();
     await page.getByRole('searchbox').fill(value);
     await page.getByRole('searchbox').press('Enter');
-    await page.waitForFunction(() => document.querySelector('output')?.textContent === '1');
+    await page.waitForFunction(() => document.querySelector('output')?.textContent === '1 / 1');
   };
   try {
     await page.goto(pathToFileURL(path.join(dist, 'office-preview.html')).href);

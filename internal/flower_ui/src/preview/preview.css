@@ -2,6 +2,7 @@
 .flower-delimited-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; padding:6px 8px; border-bottom:1px solid var(--border); flex:none; }
 .flower-delimited-toolbar [role=group], .flower-delimited-search { display:flex; align-items:center; gap:2px; min-width:0; }
 .flower-delimited-search { flex:1 1 200px; }
+.flower-delimited-search output { flex-shrink:0; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .flower-delimited-toolbar input, .flower-delimited-toolbar select { min-width:0; height:28px; border:1px solid var(--border); border-radius:4px; background:var(--background); color:var(--foreground); font-size:12px; padding:2px 6px; }
 .flower-delimited-toolbar input { width:100%; }
 .flower-spreadsheet-encoding { min-width:0; max-width:140px; }

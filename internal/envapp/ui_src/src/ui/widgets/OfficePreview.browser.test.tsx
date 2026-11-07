@@ -43,9 +43,76 @@ async function find(host: HTMLElement, value: string) {
   if (!document.querySelector('input[type=search]')) await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Find"]')!);
   const input = document.querySelector<HTMLInputElement>('input[type=search]')!;
   await userEvent.fill(input, value); await userEvent.keyboard('{Enter}');
-  await vi.waitFor(() => expect(document.querySelector('output')?.textContent).toBe('1'));
+  await vi.waitFor(() => expect(document.querySelector('output')?.textContent).toBe('1 / 1'));
 }
 describe('Office and delimited preview acceptance', () => {
+  it.each([['csv', 'light'], ['csv', 'dark'], ['tsv', 'light'], ['tsv', 'dark']] as const)('distinguishes the current %s match in %s while focus stays in search', async (format, theme) => {
+    await page.viewport(1280, 900);
+    const data = new TextEncoder().encode(['match,match', 'match,end'].join('\n').replaceAll(',', format === 'csv' ? ',' : '\t'));
+    const host = mount(() => <FloeConfigProvider config={{ storage: { enabled: false }, theme: { defaultTheme: theme } }}><ThemeProvider><SpreadsheetPreview bytes={data} format={format} copy={taskFilesEnUS} /></ThemeProvider></FloeConfigProvider>);
+    await gridReady(host);
+    const input = host.querySelector<HTMLInputElement>('input[type=search]')!;
+    const highlights = () => [...host.querySelectorAll<HTMLDivElement>('.flower-delimited-canvas div')].filter(element => element.style.borderWidth === '2px' && element.style.pointerEvents === 'none');
+    await userEvent.fill(input, 'match'); await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => {
+      expect(highlights()).toHaveLength(3);
+      expect(new Set(highlights().map(element => getComputedStyle(element).backgroundColor)).size).toBe(2);
+    });
+    expect(document.activeElement).toBe(input);
+    expect(host.querySelector('[data-xlsx-selection-border]')).not.toBeNull();
+    expect(host.querySelector('output')?.textContent).toBe('1 / 3');
+    const colors = highlights().map(element => getComputedStyle(element).backgroundColor);
+    expect(colors[0]).not.toBe(colors[1]); expect(colors[1]).toBe(colors[2]);
+    await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('2 / 3'));
+    expect(highlights().map(element => getComputedStyle(element).backgroundColor)).toEqual([colors[1], colors[0], colors[1]]);
+    await userEvent.keyboard('{Shift>}{Enter}{/Shift}');
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('1 / 3'));
+    await userEvent.keyboard('{Shift>}{Enter}{/Shift}');
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('3 / 3'));
+    await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('1 / 3'));
+    await userEvent.fill(input, 'missing'); await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => expect(highlights()).toHaveLength(0));
+    expect(host.querySelector('output')?.textContent).toBe('0 / 0');
+  });
+  it('reveals and selects XLSX results across scrolling, zoom and sheet transitions', async () => {
+    await page.viewport(1280, 900);
+    const data = new Uint8Array(await (await fetch(xlsxURL)).arrayBuffer());
+    const host = mount(() => <SpreadsheetPreview bytes={data} format="xlsx" copy={taskFilesEnUS} />);
+    await gridReady(host);
+    const bounds = host.querySelector('.flower-delimited-body')!.getBoundingClientRect().toJSON();
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label=Find]')!);
+    const input = document.querySelector<HTMLInputElement>('input[type=search]')!;
+    await userEvent.fill(input, 'Row 30'); await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => expect(document.querySelector('output')?.textContent).toBe('1 / 2'));
+    const scroll = host.querySelector<HTMLElement>('[data-redeven-workbench-wheel-role]')!;
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+    const first = scroll.scrollTop;
+    expect(host.querySelector('[data-xlsx-selection-border]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Selected cell value"]')?.textContent).toBe('Row 30');
+    await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => expect(document.querySelector('output')?.textContent).toBe('2 / 2'));
+    expect(scroll.scrollTop).toBeGreaterThan(first);
+    await vi.waitFor(() => expect(host.querySelector('[aria-label="Selected cell value"]')?.textContent).toBe('Row 300'));
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!);
+    expect(host.querySelector('[aria-label="Selected cell value"]')?.textContent).toBe('Row 300');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label=Find]')!);
+    expect(document.querySelector('output')?.textContent).toBe('2 / 2');
+    await userEvent.keyboard('{Shift>}{Enter}{/Shift}');
+    await vi.waitFor(() => expect(document.querySelector('output')?.textContent).toBe('1 / 2'));
+    await vi.waitFor(() => expect(host.querySelector('[data-xlsx-selection-border]')).not.toBeNull());
+    expect(host.querySelector('.flower-delimited-body')!.getBoundingClientRect().toJSON()).toEqual(bounds);
+    await find(host, 'Commented cell');
+    await vi.waitFor(() => expect(host.querySelector('[aria-label="Selected cell value"]')?.textContent).toBe('Commented cell'));
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(host.querySelector<HTMLElement>('[role=combobox][aria-label=Worksheet]')!);
+    await userEvent.click(page.getByRole('option', { name: 'Identity', exact: true }));
+    await gridReady(host);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label=Find]')!);
+    expect(document.querySelector('output')).toBeNull();
+    expect(host.querySelector('.flower-delimited-body')!.getBoundingClientRect().toJSON()).toEqual(bounds);
+  });
   it('preserves literal CSV values, searches, zooms and offers source at narrow widths', async () => {
     await page.viewport(1280, 900);
     const host = mount(() => <DelimitedTextPreview bytes={bytes} format="csv" copy={taskFilesEnUS} source={<pre>{csv}</pre>} />);
