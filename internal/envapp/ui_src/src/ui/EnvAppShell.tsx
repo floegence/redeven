@@ -105,7 +105,7 @@ import { captureSessionRestartState, desktopSessionRestartBridge, restoreSession
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import type { FlowerWorkingDirectoryNavigation } from './flower/workingDirectoryNavigation';
 import { classifyFilePreviewError, getFilePreviewErrorMeta } from './widgets/filePreviewErrorUtils';
-import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
+import type { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { startPluginAutomaticUpdates } from './plugins/pluginAutomaticUpdates';
@@ -2878,12 +2878,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     return open;
   };
 
-  const {
-    openMessageFile: openFlowerMessageFile,
-    openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
-    openLinkedFilePreview: openFlowerLinkedFilePreview,
-    openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
-  } = createFlowerLinkedContextNavigation({
+  const flowerLinkedContextOptions = {
     openFilePreview: openCheckedFilePreview,
     openFileBrowserAtPath,
     checkFileReadable,
@@ -2893,7 +2888,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     notifyInvalidDirectoryPath: () => {
       notify.error(i18n.t('shell.notifications.browseFilesUnavailableTitle'), i18n.t('shell.notifications.invalidDirectoryPath'));
     },
-  });
+  };
+  const loadFlowerLinkedContextNavigation = async () => (await import('./flower/linkedContextNavigation')).createFlowerLinkedContextNavigation(flowerLinkedContextOptions);
+  type LinkedNavigation = ReturnType<typeof createFlowerLinkedContextNavigation>;
+  const openFlowerMessageFile: LinkedNavigation['openMessageFile'] = async request => (await loadFlowerLinkedContextNavigation()).openMessageFile(request);
+  const openFlowerCanonicalReferenceTarget: LinkedNavigation['openCanonicalReferenceTarget'] = async target => (await loadFlowerLinkedContextNavigation()).openCanonicalReferenceTarget(target);
+  const openFlowerLinkedFilePreview: LinkedNavigation['openLinkedFilePreview'] = async request => (await loadFlowerLinkedContextNavigation()).openLinkedFilePreview(request);
+  const openFlowerLinkedDirectoryBrowser: LinkedNavigation['openLinkedDirectoryBrowser'] = async request => (await loadFlowerLinkedContextNavigation()).openLinkedDirectoryBrowser(request);
 
   const openFlowerMessageURL: NonNullable<FlowerSurfaceAdapter['openMessageURL']> = ({ url, signal }) => openPreviewWebURL(url, signal, {
     unavailable: i18n.t('flowerSurface.chat.media.linkUnavailable'),
