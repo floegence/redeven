@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -29,7 +28,7 @@ func testPluginProxyFailure(t *testing.T, proxy string) {
 	root := t.TempDir()
 	service, err := New(t.Context(), Options{
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		StateDir: root, StateRoot: root, ConfigPath: filepath.Join(root, "config.json"),
+		StateDir: root, StateRoot: root, ConfigPath: testCodeappConfigPath(t, root),
 		PermissionPolicy: testCodeappPermissionPolicy(t), ReDevPluginRuntimePath: testReDevPluginRuntimePath(t, root),
 		AgentHomeDir: root, Shell: "/bin/sh",
 		ResolveSessionMeta:   func(string) (*session.Meta, bool) { return nil, false },

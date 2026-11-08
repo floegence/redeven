@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 if [ "${FAKE_SESSION_CASE:-}" = "" ]; then
-  for session_case in interrupt terminate normal system-proxy electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure build-interrupt; do
+  for session_case in interrupt terminate normal system-proxy electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure build-interrupt storage-blocked storage-relocate storage-no-stop storage-stop-only storage-linked; do
     FAKE_SESSION_CASE="$session_case" "$0"
   done
   exit 0
@@ -39,7 +39,7 @@ trap cleanup EXIT
 mkdir -p "$FAKE_CHECKOUT/internal/envapp/ui_src/node_modules" "$FAKE_CHECKOUT/internal/codeapp/ui_src/node_modules" "$FAKE_DESKTOP/node_modules/electron" "$FAKE_SCRIPTS" "$FAKE_BIN" "$TEST_HOME"
 cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$ROOT_DIR/scripts/source_build_identity.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$ROOT_DIR/scripts/run_parallel_builds.mjs" "$FAKE_SCRIPTS/"
-cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
+cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$ROOT_DIR/scripts/relocate_prerelease_storage.py" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
 # Model the Launch Services supervisor while preserving the fake Electron PID.
 cat > "$FAKE_SCRIPTS/dev_desktop_macos.mjs" <<'JS'
@@ -87,6 +87,7 @@ printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
   'if [ "$FAKE_SESSION_CASE" = system-proxy ]; then [ -z "${https_proxy+x}${HTTPS_PROXY+x}${no_proxy+x}${NO_PROXY+x}" ] || exit 91; fi' \
+  'if [ "$FAKE_SESSION_CASE" = storage-relocate ]; then [ -f "$FAKE_RUNTIME_STOPPED" ] && [ ! -e "$REDEVEN_STATE_ROOT/local-environment/control.sqlite" ] && [ -f "$REDEVEN_STATE_ROOT/local-environment/apps/plugins/platform/control.sqlite" ] || exit 94; fi' \
   'rm -f "$FAKE_RUNTIME_STOPPED"' \
   'printf "%s\\n" "$$" > "$FAKE_ELECTRON_STARTED"' \
   'on_signal() {' \
@@ -94,7 +95,7 @@ printf '%s\n' \
   '  exit 0' \
   '}' \
   'trap on_signal INT TERM' \
-  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = system-proxy ] || [ "$FAKE_SESSION_CASE" = electron-download ] || [ "$FAKE_SESSION_CASE" = electron-reinstall ] || [ "$FAKE_SESSION_CASE" = gateway-failure ] || [ "$FAKE_SESSION_CASE" = cache-hit ]; then sleep 0.2; exit 0; fi' \
+  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = system-proxy ] || [ "$FAKE_SESSION_CASE" = electron-download ] || [ "$FAKE_SESSION_CASE" = electron-reinstall ] || [ "$FAKE_SESSION_CASE" = gateway-failure ] || [ "$FAKE_SESSION_CASE" = cache-hit ] || [ "$FAKE_SESSION_CASE" = storage-relocate ]; then sleep 0.2; exit 0; fi' \
   'while :; do sleep 0.05; done' > "$FAKE_ELECTRON_PATH"
 chmod 700 "$FAKE_ELECTRON_PATH"
 
@@ -182,6 +183,46 @@ fi
 mkdir -p "$STATE_ROOT/local-environment"
 printf '%s\n' 'legacy-runtime-lock' > "$STATE_ROOT/local-environment/agent.lock"
 
+SESSION_ARGS=(--no-devtools)
+case "$FAKE_SESSION_CASE" in
+  storage-*)
+    printf '%s' 'retained opaque plugin state' > "$STATE_ROOT/local-environment/control.sqlite"
+    mkdir -p "$STATE_ROOT/local-environment/runtime/managed/bin"
+    cat > "$STATE_ROOT/local-environment/runtime/managed/bin/redeven" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_RUNTIME_STOPPED"
+SH
+    chmod 700 "$STATE_ROOT/local-environment/runtime/managed/bin/redeven"
+    if [ "$FAKE_SESSION_CASE" = storage-relocate ]; then
+      SESSION_ARGS+=(--relocate-storage)
+    else
+      case "$FAKE_SESSION_CASE" in
+        storage-blocked) expected='Plugin storage needs offline relocation' ;;
+        storage-no-stop) SESSION_ARGS+=(--relocate-storage --no-stop); expected='cannot be combined with --no-stop' ;;
+        storage-stop-only) SESSION_ARGS+=(--relocate-storage --stop-only); expected='cannot be combined with --stop-only' ;;
+        storage-linked)
+          SESSION_ARGS+=(--relocate-storage); expected='unsupported filesystem entry'
+          mkdir -p "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/.bin"
+          printf 'retained dependency' > "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/tool.js"
+          ln -s ../tool.js "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/.bin/tool"
+          ;;
+      esac
+      if "$FAKE_SCRIPTS/dev_desktop.sh" "${SESSION_ARGS[@]}" > "$TEST_ROOT/preflight.log" 2>&1; then
+        printf 'Invalid or unmigrated development startup unexpectedly succeeded\n' >&2
+        exit 1
+      fi
+      rg -Fq -- "$expected" "$TEST_ROOT/preflight.log"
+      [ "$(cat "$STATE_ROOT/local-environment/control.sqlite")" = 'retained opaque plugin state' ]
+      [ ! -e "$STATE_ROOT/local-environment/storage-relocation.json" ]
+      [ ! -f "$FAKE_RUNTIME_STOPPED" ]
+      [ ! -f "$FAKE_ELECTRON_STARTED" ]
+      [ ! -e "$STATE_ROOT/desktop/dev-runtime-bundle-v1" ]
+      printf 'dev Desktop preflight test passed: %s\n' "$FAKE_SESSION_CASE"
+      exit 0
+    fi
+    ;;
+esac
+
 SESSION_PID="$(node -e '
   const { spawn } = require("node:child_process");
   const fs = require("node:fs");
@@ -193,7 +234,7 @@ SESSION_PID="$(node -e '
   });
   child.unref();
   process.stdout.write(String(child.pid));
-' "$FAKE_SCRIPTS/dev_desktop.sh" "$TEST_ROOT/session.log" --no-devtools)"
+' "$FAKE_SCRIPTS/dev_desktop.sh" "$TEST_ROOT/session.log" "${SESSION_ARGS[@]}")"
 # Process startup can be delayed by concurrent builds on developer hosts.
 # Wait for the actual milestone, bounded to 20s, and stop early on failure.
 for _ in $(seq 1 400); do

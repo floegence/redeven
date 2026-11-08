@@ -93,7 +93,7 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreVersionIsUnsupported(t *testin
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
 		StateDir:               stateDir,
 		StateRoot:              stateDir,
-		ConfigPath:             filepath.Join(stateDir, "config.json"),
+		ConfigPath:             testCodeappConfigPath(t, stateDir),
 		PermissionPolicy:       testCodeappPermissionPolicy(t),
 		ReDevPluginRuntimePath: runtimePath,
 		AgentHomeDir:           stateDir,
@@ -159,7 +159,7 @@ func TestNewKeepsProductAvailableWhenFlowerReadStateIsCorrupt(t *testing.T) {
 	}
 	svc, err := New(t.Context(), Options{
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		StateDir: stateDir, StateRoot: stateDir, ConfigPath: filepath.Join(stateDir, "config.json"),
+		StateDir: stateDir, StateRoot: stateDir, ConfigPath: testCodeappConfigPath(t, stateDir),
 		PermissionPolicy: testCodeappPermissionPolicy(t), ReDevPluginRuntimePath: testReDevPluginRuntimePath(t, stateDir),
 		AgentHomeDir: stateDir, Shell: "/bin/sh", ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
@@ -202,7 +202,7 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreSchemaDrifts(t *testing.T) {
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
 		StateDir:               stateDir,
 		StateRoot:              stateDir,
-		ConfigPath:             filepath.Join(stateDir, "config.json"),
+		ConfigPath:             testCodeappConfigPath(t, stateDir),
 		PermissionPolicy:       testCodeappPermissionPolicy(t),
 		ReDevPluginRuntimePath: runtimePath,
 		AgentHomeDir:           stateDir,
@@ -282,7 +282,7 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
 		StateDir:               stateDir,
 		StateRoot:              stateDir,
-		ConfigPath:             filepath.Join(stateDir, "config.json"),
+		ConfigPath:             testCodeappConfigPath(t, stateDir),
 		PermissionPolicy:       testCodeappPermissionPolicy(t),
 		ReDevPluginRuntimePath: runtimePath,
 		AgentHomeDir:           stateDir,
@@ -311,6 +311,15 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 	if len(state.State.SessionIDs) != 0 {
 		t.Fatalf("session_ids=%#v, want stale sessions pruned", state.State.SessionIDs)
 	}
+}
+
+func testCodeappConfigPath(t *testing.T, root string) string {
+	t.Helper()
+	path := filepath.Join(root, "config.json")
+	if err := config.Save(path, &config.Config{PermissionPolicy: testCodeappPermissionPolicy(t)}); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func testCodeappPermissionPolicy(t *testing.T) *config.PermissionPolicy {

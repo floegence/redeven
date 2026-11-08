@@ -38,6 +38,10 @@ Dev gzip1/Brotli4 preserves decoded bytes; release uses maximum compression; pro
 
 macOS stages a profile-owned `Redeven Desktop Dev.app` and opens it through Launch Services. Desktop capture/input permissions belong to the separately signed `Redeven Desktop Access Dev.app`, not the Electron wrapper. Set `REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY` to an Apple Development or Developer ID Application certificate; ad-hoc signing is rejected. Its certificate and stable bundle identifier preserve designated requirements across rebuilds. The value participates in build-cache identity. Production staging uses `REDEVEN_DESKTOP_MAC_IDENTITY` and the distinct `com.floegence.redeven.desktop-access` identifier. The computer manifest includes every helper bundle file and signature seal. Outer Electron signing preserves this independently sealed helper; validation rejects missing or ambiguous application inventories. Only explicit exclusion PID and media metadata cross the relay boundary.
 
+## Retained plugin storage
+
+Before shutdown/build, the launcher checks retired plugin placement without opening platform databases. The explicit `--relocate-storage` recovery entry previews first, uses the selected profile's stop inventory, applies the existing offline journal and checks readiness before continuing. It never clears stores or bypasses unsupported links; invalid/no-stop combinations fail before shutdown. See [storage ownership](../architecture/storage-ownership.md) for the relocation contract. Native plugin qualification must use a verified published-source runtime, actual retained state and real sandbox/worker execution; admission-only fixtures cannot establish Desktop usability.
+
 ## Credentials/retention
 Unpackaged dev uses AES-256-GCM with random retained0600 profile key, protecting plaintext rather than same-user access. Other modes use system storage without constructor probes. Explicit legacy Keychain recovery never reads preferences/secrets automatically; migrate files atomically, retaining credentials/Retry/Quit on failure. Corrupt keys cannot reset accounts/Runtime/Keychain.
 

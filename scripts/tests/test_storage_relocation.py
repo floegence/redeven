@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +18,49 @@ class RelocationTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.state = self.root / 'environment'
         self.state.mkdir()
+
+    def check_plugins(self):
+        return subprocess.run([sys.executable, str(Path(m.__file__)), '--state-dir', str(self.state), '--check-plugins'], capture_output=True, text=True)
+
+    def test_startup_preflight_accepts_fresh_profile_without_writing(self):
+        self.state.rmdir()
+        result = self.check_plugins()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.state.exists())
+
+    def test_startup_preflight_rejects_retained_plugins_with_recovery_command(self):
+        (self.state / 'control.sqlite').write_bytes(b'retained opaque state')
+        result = self.check_plugins()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--relocate-storage', result.stderr)
+        self.assertEqual((self.state / 'control.sqlite').read_bytes(), b'retained opaque state')
+        self.assertFalse((self.state / m.MARKER).exists())
+
+    def test_startup_preflight_rejects_incomplete_relocation_and_accepts_completion(self):
+        (self.state / 'control.sqlite').write_bytes(b'opaque state')
+        m.save(self.state / m.MARKER, m.plan(self.state))
+        self.assertNotEqual(self.check_plugins().returncode, 0)
+        m.relocate(self.state, apply=True)
+        self.assertEqual(self.check_plugins().returncode, 0)
+
+    def test_startup_preflight_rejects_placement_alias_without_following_it(self):
+        target = self.root / 'external'; target.mkdir()
+        (self.state / 'apps').symlink_to(target)
+        self.assertNotEqual(self.check_plugins().returncode, 0)
+        self.assertEqual(list(target.iterdir()), [])
+
+    def test_startup_preflight_rejects_invalid_journal_without_traceback(self):
+        (self.state / m.MARKER).write_text('[]')
+        result = self.check_plugins()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--relocate-storage', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+        self.assertEqual((self.state / m.MARKER).read_text(), '[]')
+
+    def test_startup_preflight_rejects_orphan_sidecars_without_writing(self):
+        (self.state / 'control.sqlite-wal').write_bytes(b'opaque orphan')
+        self.assertNotEqual(self.check_plugins().returncode, 0)
+        self.assertFalse((self.state / m.MARKER).exists())
 
     def test_opaque_sqlite_and_sidecars_move_without_interpretation(self):
         for name in ['control.sqlite', 'control.sqlite-wal', 'secrets.sqlite']:

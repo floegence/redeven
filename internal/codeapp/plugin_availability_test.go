@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/storagecontract"
 )
 
 func TestPluginInitializationPanicDoesNotEscapeHostBoundary(t *testing.T) {
@@ -52,7 +53,7 @@ func TestUnavailablePluginHandlerNeverDispatchesMutations(t *testing.T) {
 }
 
 func TestPluginInitializationFailureKeepsProductAvailable(t *testing.T) {
-	for _, failure := range []string{"control.sqlite", "observability.sqlite", "secrets.sqlite", "runtime-missing", "market-origin"} {
+	for _, failure := range []string{"control.sqlite", "observability.sqlite", "secrets.sqlite", "legacy-placement", "runtime-missing", "market-origin"} {
 		t.Run(failure, func(t *testing.T) {
 			root := t.TempDir()
 			runtimePath := testReDevPluginRuntimePath(t, root)
@@ -63,15 +64,22 @@ func TestPluginInitializationFailureKeepsProductAvailable(t *testing.T) {
 				runtimePath = filepath.Join(root, "missing-plugin-runtime")
 			case "market-origin":
 				t.Setenv("REDEVEN_PLUGIN_MARKET_ORIGIN", "not a valid URL")
+			case "legacy-placement":
+				damagedPath = filepath.Join(root, "control.sqlite")
 			default:
-				damagedPath = filepath.Join(root, failure)
+				damagedPath = filepath.Join(storagecontract.PluginRoot(root), failure)
+			}
+			if damagedPath != "" {
+				if err := os.MkdirAll(filepath.Dir(damagedPath), 0700); err != nil {
+					t.Fatal(err)
+				}
 				if err := os.WriteFile(damagedPath, before, 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
 			svc, err := New(t.Context(), Options{
 				Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-				StateDir: root, StateRoot: root, ConfigPath: filepath.Join(root, "config.json"),
+				StateDir: root, StateRoot: root, ConfigPath: testCodeappConfigPath(t, root),
 				PermissionPolicy: testCodeappPermissionPolicy(t), ReDevPluginRuntimePath: runtimePath,
 				AgentHomeDir: root, Shell: "/bin/sh",
 				ResolveSessionMeta:   func(string) (*session.Meta, bool) { return nil, false },

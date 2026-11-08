@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import shlex
 import tempfile
 
 PLUGIN_NAMES = ('control.sqlite', 'secrets.sqlite', 'observability.sqlite',
@@ -109,6 +110,34 @@ def allowed_moves():
             pairs[name + suffix] = 'apps/plugins/platform/' + name + suffix
     pairs.update({'skills_state.json':'apps/skills/state.json', 'skills_sources.json':'apps/skills/sources.json'})
     return pairs
+
+
+def check_plugin_placement(state):
+    """Read-only launcher preflight; the Runtime remains the admission owner."""
+    if not state.is_absolute() or state.is_symlink():
+        raise ValueError('absolute real state directory required')
+    if not state.exists(): return
+    if not state.is_dir(): raise ValueError('state directory required')
+    marker = secure_path(state, MARKER)
+    blocked = False
+    if marker.exists():
+        record = json.loads(marker.read_text())
+        blocked = not isinstance(record, dict) or record.get('version') != 1 or record.get('status') != 'complete'
+    for source in allowed_moves():
+        if source.startswith('skills_'): continue
+        if secure_path(state, source).exists(): blocked = True
+    for relative in ('apps', 'apps/plugins', 'apps/plugins/platform'):
+        entry = secure_path(state, relative)
+        if entry.exists() and not entry.is_dir():
+            raise ValueError(f'storage ancestor must be a real directory: {entry}')
+    if blocked:
+        raise ValueError(
+            'Plugin storage needs offline relocation before development launch. '
+            'Existing data is unchanged. Run this checkout with '
+            f'REDEVEN_STATE_ROOT={shlex.quote(str(state.parent))} '
+            './scripts/dev_desktop.sh --relocate-storage, '
+            'which stops this profile, relocates its retained bytes, then starts Desktop. '
+            'For custom shared skills, use the explicit --skills-source offline command instead.')
 
 
 def skill_source_identity(source, state):
@@ -298,9 +327,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', required=True, type=Path)
     parser.add_argument('--skills-source', type=Path)
-    parser.add_argument('--apply', action='store_true', help='commit after acquiring the stopped Runtime lease')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--apply', action='store_true', help='commit after acquiring the stopped Runtime lease')
+    mode.add_argument('--check-plugins', action='store_true', help='read-only development startup preflight')
     args = parser.parse_args()
     try:
+        if args.check_plugins:
+            check_plugin_placement(args.state_dir)
+            parser.exit(0)
         result = relocate(args.state_dir, args.skills_source, args.apply)
         print(json.dumps({k: v for k, v in result.items() if k != 'metadata_sources'}, indent=2))
     except (OSError, ValueError, KeyError, TypeError) as error:

@@ -16,6 +16,7 @@ STOP_EXISTING=1
 STOP_ONLY=0
 DRY_RUN=0
 REBUILD=0
+RELOCATE_STORAGE=0
 STOP_TIMEOUT_SECONDS="${REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS:-8}"
 ELECTRON_ARGS=()
 ELECTRON_DEBUG_ARGS=()
@@ -62,6 +63,9 @@ recovery screen; only its explicit migration action requests authorization.
 Keep the encryption key with this profile.
 Unchanged source, dependencies and toolchains reuse a verified build.
 Changed or damaged inputs rebuild automatically; --rebuild forces preparation.
+Retained plugin storage is checked before stopping or building. If relocation is
+required, --relocate-storage explicitly stops this profile, runs the offline
+relocation with its normal locks and journal, and then starts Desktop.
 On macOS, dependency and bundle preparation inherit static system proxies when
 no proxy environment variable is set. Explicit environment settings take priority.
 The inferred proxies apply only to preparation, not the launched services.
@@ -70,6 +74,7 @@ bundle and any older bundles still referenced by running processes.
 
 Options:
   --rebuild                 Rebuild even when the last verified build matches.
+  --relocate-storage        Explicitly relocate this profile's pre-release storage offline.
   --no-devtools             Do not open Desktop DevTools automatically.
   --no-stop                 Skip Desktop shutdown; fails if this instance is still running.
   --stop-only               Stop this development Desktop, local Runtime, and local Gateways.
@@ -988,6 +993,10 @@ parse_args() {
         REBUILD=1
         shift 1
         ;;
+      --relocate-storage)
+        RELOCATE_STORAGE=1
+        shift 1
+        ;;
       --no-devtools)
         OPEN_DEVTOOLS=0
         shift 1
@@ -1047,12 +1056,46 @@ parse_args() {
   done
 }
 
+check_development_plugin_storage() {
+  [ "$STOP_ONLY" -eq 0 ] || return 0
+  if [ "$RELOCATE_STORAGE" -eq 1 ]; then
+    [ "$STOP_EXISTING" -eq 1 ] || die_usage "--relocate-storage cannot be combined with --no-stop"
+    # Reject an impossible recovery before interrupting an existing session.
+    # Apply revalidates these opaque bytes under the offline ownership locks.
+    if [ "$DRY_RUN" -eq 0 ] && [ -e "$DEVELOPMENT_STATE_ROOT/local-environment" ]; then
+      python3 "$SCRIPT_DIR/relocate_prerelease_storage.py" \
+        --state-dir "$DEVELOPMENT_STATE_ROOT/local-environment" >/dev/null
+    fi
+    return 0
+  fi
+  [ "$DRY_RUN" -eq 0 ] || return 0
+  python3 "$SCRIPT_DIR/relocate_prerelease_storage.py" \
+    --state-dir "$DEVELOPMENT_STATE_ROOT/local-environment" --check-plugins
+}
+
+relocate_development_storage() {
+  [ "$RELOCATE_STORAGE" -eq 1 ] || return 0
+  if [ "$DRY_RUN" -eq 1 ]; then
+    ui_pkg_log "Would stop this profile's Runtime and relocate retained storage offline: $DEVELOPMENT_STATE_ROOT/local-environment"
+    return 0
+  fi
+  [ -d "$DEVELOPMENT_STATE_ROOT/local-environment" ] || return 0
+  stop_current_instance_runtime
+  python3 "$SCRIPT_DIR/relocate_prerelease_storage.py" \
+    --state-dir "$DEVELOPMENT_STATE_ROOT/local-environment" --apply
+  python3 "$SCRIPT_DIR/relocate_prerelease_storage.py" \
+    --state-dir "$DEVELOPMENT_STATE_ROOT/local-environment" --check-plugins
+}
+
 main() {
   parse_args "$@"
   ui_pkg_require_node_26 "$ROOT_DIR"
 	resolve_development_state_root
 	validate_stop_timeout
+  [ "$RELOCATE_STORAGE" -eq 0 ] || [ "$STOP_ONLY" -eq 0 ] || die_usage "--relocate-storage cannot be combined with --stop-only"
+  check_development_plugin_storage
 	stop_existing_processes
+  relocate_development_storage
 	allocate_development_ports
 	validate_debug_port "--remote-debugging-port" "$REMOTE_DEBUGGING_PORT"
 	validate_debug_port "--inspect-port" "$INSPECT_PORT"

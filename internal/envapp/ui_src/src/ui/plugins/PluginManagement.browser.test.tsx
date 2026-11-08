@@ -977,6 +977,36 @@ describe('plugin management browser geometry and interaction', () => {
     }
   });
 
+  it('opens Activity application commands above a retained plugin window without remounting it', async () => {
+    await page.viewport(1280, 900);
+    const host = fixedHost();
+    const [trigger, setTrigger] = createSignal<HTMLButtonElement>();
+    const [open, setOpen] = createSignal(false);
+    const openCenter = vi.fn();
+    disposers.push(render(() => <>
+      <div data-floe-dialog-surface-host="true" data-floe-surface-portal-layer="true"
+        style={{ position: 'fixed', inset: '0', isolation: 'isolate', 'z-index': '0' }}>
+        <button ref={setTrigger} data-testid="retained-launcher-trigger" style={{ position: 'absolute', left: '12px', top: '300px' }} onClick={() => setOpen(true)}>Applications</button>
+        <PluginPanel id="retained-launcher" open={open()} mobile={false} trigger={trigger()} model={panelModel}
+          onClose={() => setOpen(false)} onOpenCenter={openCenter}
+          onOpenPluginSurface={() => undefined} onOpenPluginDetails={() => undefined} />
+      </div>
+      <iframe data-testid="retained-plugin-document" title="Retained plugin" srcdoc="<input value='Unsaved plugin edit'>"
+        style={{ position: 'fixed', left: '160px', top: '50px', width: '900px', height: '800px', 'z-index': ENV_APP_FLOATING_LAYER.windowBase }} />
+    </>, host));
+    const frame = host.querySelector<HTMLIFrameElement>('iframe')!;
+    await vi.waitFor(() => expect(frame.contentDocument?.querySelector('input')?.value).toBe('Unsaved plugin edit'));
+    const retainedDocument = frame.contentDocument;
+    await page.getByTestId('retained-launcher-trigger').click();
+    await settle();
+    const panel = document.querySelector<HTMLElement>('#retained-launcher')!;
+    expect(panel.closest('[data-floe-dialog-surface-host]')).toBeNull();
+    await page.getByRole('button', { name: 'Plugin Center', exact: true }).click();
+    expect(openCenter).toHaveBeenCalledOnce();
+    expect(frame.contentDocument).toBe(retainedDocument);
+    expect(frame.contentDocument?.querySelector('input')?.value).toBe('Unsaved plugin edit');
+  });
+
   it('opens the Activity launcher from its trigger and reverses the motion on close', async () => {
     await page.viewport(1440, 900);
     const mounted = mountPanel(false);
