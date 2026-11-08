@@ -159,7 +159,7 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 	for _, section := range contextSnapshot.Sections {
 		if section.Key == "plugin_authoring" {
 			guidanceCount++
-			if !strings.Contains(section.Text, "plugin_author.status") || !strings.Contains(section.Text, pluginAuthoringSkillName) {
+			if !strings.Contains(section.Text, "plugin_author_get_status") || !strings.Contains(section.Text, pluginAuthoringSkillName) {
 				t.Fatal("dedicated runtime context lost authoring guidance")
 			}
 		}
