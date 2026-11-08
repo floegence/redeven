@@ -2538,11 +2538,12 @@ func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 
 	ct := fsFileContentType(resolvedPath)
 	preview := r.URL.Query().Get("preview") == "1"
+	svgPreview := preview && strings.EqualFold(filepath.Ext(resolvedPath), ".svg")
 	htmlPreview := preview && (strings.EqualFold(filepath.Ext(resolvedPath), ".html") || strings.EqualFold(filepath.Ext(resolvedPath), ".htm"))
 	if htmlPreview {
 		ct = "text/plain; charset=utf-8"
 	}
-	if !htmlPreview && !isRenderableMime(ct) {
+	if !htmlPreview && !svgPreview && !isRenderableMime(ct) {
 		http.Error(w, "unsupported file type", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -2570,6 +2571,28 @@ func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if svgPreview {
+		// Read the authorized file once; never validate one generation then serve another.
+		content, err := io.ReadAll(io.LimitReader(f, (512<<10)+1))
+		if err != nil {
+			http.Error(w, "preview read failed", http.StatusInternalServerError)
+			return
+		}
+		if len(content) > 512<<10 {
+			http.Error(w, "preview is too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if !validFlowerIconSVG(content) {
+			http.Error(w, "unsupported SVG content", http.StatusUnsupportedMediaType)
+			return
+		}
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'none'; script-src 'none'")
+		http.ServeContent(w, r, filepath.Base(resolvedPath), st.ModTime(), bytes.NewReader(content))
+		return
+	}
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, no-store")

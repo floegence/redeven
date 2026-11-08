@@ -1,6 +1,8 @@
 import { For, Show, Suspense, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { ArrowLeft, AlertTriangle, Check, MoreHorizontal, Refresh } from '@floegence/floe-webapp-core/icons';
 import { Monitor, Smartphone, MessageSquare, CircleCheck, CircleDashed } from 'lucide-solid';
+import { ResizeHandle } from '@floegence/floe-webapp-core/layout';
+import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { Button, Dropdown, Input, Tabs } from '@floegence/floe-webapp-core/ui';
 import { Dialog, ConfirmDialog } from '../primitives/EnvAppModal';
 import type { FlowerEmbeddedConversation, FlowerConversationParts } from '../../../../../flower_ui/src';
@@ -21,6 +23,7 @@ import {
 import {
   authorStatus,
   applyAuthorArtifact,
+  checkAuthorArtifact,
   inspectAuthorArtifact,
   installAuthorArtifact,
   queryAuthorInstall,
@@ -73,6 +76,8 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   const [renameOpen, setRenameOpen] = createSignal(false);
   const [name, setName] = createSignal('');
   const [error, setError] = createSignal('');
+  const [packageConflict, setPackageConflict] = createSignal(false);
+  const [repairSending, setRepairSending] = createSignal(false);
   const [reference, setReference] = createSignal(props.referenceThreadID);
   const [snapshot, setSnapshot] = createSignal<AuthorSnapshot>();
   const [commentOpen, setCommentOpen] = createSignal(false);
@@ -157,6 +162,19 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   const [canvasSize, setCanvasSize] = createSignal<'fit' | 'phone'>('fit');
   const landing = () => !started() && !draft()?.thread_id && !snapshot()?.artifacts.length && !snapshot()?.build;
   const [narrow, setNarrow] = createSignal(false);
+  const conversationWidthKey = 'redeven.plugin-creation.conversation-width.v1';
+  const storedWidth = Number(readUIStorageItem(conversationWidthKey));
+  const [preferredWidth, setPreferredWidth] = createSignal<number | undefined>(Number.isFinite(storedWidth) && storedWidth >= 280 && storedWidth <= 720 ? storedWidth : undefined);
+  const [bodyWidth, setBodyWidth] = createSignal(0);
+  let workspaceBody: HTMLDivElement | undefined;
+  const maximumConversationWidth = () => Math.max(280, Math.min(720, bodyWidth() - 360));
+  const conversationWidth = () => Math.max(280, Math.min(maximumConversationWidth(), preferredWidth() ?? Math.min(328, bodyWidth() * .26)));
+  const resizeConversation = (delta: number) => setPreferredWidth(Math.max(280, Math.min(maximumConversationWidth(), conversationWidth() + delta)));
+  const saveConversationWidth = () => {
+    const width = preferredWidth();
+    if (width !== undefined) writeUIStorageItem(conversationWidthKey, String(Math.round(width)));
+  };
+
   const [tab, setTab] = createSignal<'conversation' | 'preview'>('conversation');
   const [accessOpen, setAccessOpen] = createSignal(false);
   const [checks, setChecks] = createSignal(false);
@@ -239,7 +257,10 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     saveTimer = setTimeout(persistComposer, 250);
   };
   const fail = (e: unknown) => {
-    if (!disposed) setError(e instanceof Error ? e.message : String(e));
+    if (disposed) return;
+    const conflict = (e as { code?: string })?.code === 'plugin_author_package_conflict';
+    setPackageConflict(conflict);
+    setError(conflict ? i18n.t('uiCopy.plugin.creation.packageConflict') : e instanceof Error ? e.message : String(e));
   };
   const title = () => draft()?.title || preview()?.target.displayName || i18n.t('uiCopy.plugin.creation.untitled');
   const ensureDraft = (): Promise<PluginDraft> => {
@@ -340,6 +361,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
       const [value, metadata] = await Promise.all([authorStatus(id), getPluginDraft(draft()!.id)]);
       if (disposed || snapshotRevision !== revision || draft()?.lifecycle !== 'active') return;
       setDraft(current => !current || metadata.revision >= current.revision ? metadata : current);
+      if (packageConflict() && value.artifacts[0]?.artifact_id !== snapshot()?.artifacts[0]?.artifact_id) {
+        setPackageConflict(false); setError('');
+      }
       setSnapshot(value);
       setPreviewClosed(false);
       if (!value.preview.artifact_id && value.artifacts[0] && !applying()) {
@@ -424,6 +448,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
       await commentSave;
       return draft()?.id;
     });
+    const widthObserver = new ResizeObserver(() => { if (workspaceBody?.clientWidth) setBodyWidth(workspaceBody.clientWidth); });
+    if (workspaceBody) { setBodyWidth(workspaceBody.clientWidth); widthObserver.observe(workspaceBody); }
+    onCleanup(() => widthObserver.disconnect());
     const media = window.matchMedia('(max-width: 720px)');
     const syncViewport = () => setNarrow(media.matches);
     syncViewport();
@@ -447,10 +474,10 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   createEffect(() => {
     if (draft()?.workspace_id && props.visible) void untrack(refresh).catch(fail);
   });
-  const apply = async () => {
+  const apply = async (expectedArtifactID?: string) => {
     const id = draft()?.workspace_id;
     const next = pendingArtifact();
-    if (!id || !next || applying() || leaving() || deleting() || installationUnsettled()) return false;
+    if (!id || !next || (expectedArtifactID && next.artifact_id !== expectedArtifactID) || applying() || leaving() || deleting() || installationUnsettled()) return false;
     snapshotRevision++;
     setApplying(true);
     setError('');
@@ -468,6 +495,15 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
       if (previewClosed()) await refresh().catch(fail);
     }
   };
+  const repairPackage = async () => {
+    const parts = conversationParts();
+    if (!parts?.submitMessage || !parts.canSubmitMessage?.() || repairSending() || !packageConflict()) return;
+    setRepairSending(true);
+    try {
+      const accepted = await parts.submitMessage({ prompt: i18n.t('uiCopy.plugin.creation.repairPackagePrompt'), context: context() });
+      if (accepted) { setError(''); setPackageConflict(false); }
+    } catch (e) { fail(e); } finally { setRepairSending(false); }
+  };
   const inspect = async () => {
     const id = draft()?.workspace_id;
     const artifact = pendingArtifact() ?? currentArtifact();
@@ -475,9 +511,11 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     setReviewing(true);
     setError('');
     try {
-      if (pendingArtifact() && !(await apply())) return;
-      if (disposed || artifact.artifact_id !== currentArtifact()?.artifact_id) return;
-      const value = await inspectAuthorArtifact(id, artifact.artifact_id);
+      const value = pendingArtifact()
+        ? await checkAuthorArtifact(id, artifact.artifact_id)
+        : await inspectAuthorArtifact(id, artifact.artifact_id);
+      if (disposed) return;
+      if (pendingArtifact() && !(await apply(artifact.artifact_id))) return;
       if (disposed || artifact.artifact_id !== currentArtifact()?.artifact_id) return;
       setReviewArtifact(artifact.artifact_id);
       setReview(value);
@@ -858,9 +896,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
       <Show when={error()}>
         <div role="alert" class="flex shrink-0 items-center gap-2 border-b px-3 py-2 text-xs text-destructive">
           <span class="min-w-0 flex-1 break-words">{error()}</span>
-          <Button size="sm" variant="ghost" onClick={() => void retry().catch(fail)}>
-            {i18n.t('uiCopy.plugin.creation.retry')}
-          </Button>
+          <Show when={packageConflict()} fallback={<Button size="sm" variant="ghost" onClick={() => void retry().catch(fail)}>{i18n.t('uiCopy.plugin.creation.retry')}</Button>}>
+            <Button size="sm" variant="ghost" disabled={repairSending() || !conversationParts()?.canSubmitMessage?.()} onClick={() => void repairPackage()}>{i18n.t('uiCopy.plugin.creation.repairPackage')}</Button>
+          </Show>
         </div>
       </Show>
       <Show when={reference()}>
@@ -871,7 +909,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
           </Button>
         </div>
       </Show>
-      <div class="plugin-creation-workspace-body" data-active-tab={tab()}>
+      <div ref={workspaceBody} class="plugin-creation-workspace-body" data-active-tab={tab()} style={{ '--plugin-conversation-width': `${conversationWidth()}px` }}>
         <section
           id="plugin-creation-panel-conversation"
           role={narrow() ? 'tabpanel' : undefined}
@@ -918,6 +956,24 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
               },
             })}
             </Suspense>
+          </Show>
+          <Show when={!landing() && !narrow()}>
+            <div role="separator" tabIndex={0} aria-orientation="vertical"
+              aria-label={i18n.t('uiCopy.plugin.creation.resizeConversation')}
+              aria-controls="plugin-creation-panel-conversation" aria-valuemin={280}
+              aria-valuemax={Math.round(maximumConversationWidth())} aria-valuenow={Math.round(conversationWidth())}
+              data-plugin-conversation-resizer
+              class="absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize focus-visible:bg-primary focus-visible:outline-none"
+              onKeyDown={event => {
+                const delta = event.key === 'ArrowLeft' ? -10 : event.key === 'ArrowRight' ? 10 : event.key === 'Home' ? 280 - conversationWidth() : event.key === 'End' ? maximumConversationWidth() - conversationWidth() : 0;
+                if (!delta) return;
+                event.preventDefault(); event.stopPropagation(); resizeConversation(delta); saveConversationWidth();
+              }}>
+              <span aria-hidden="true"><ResizeHandle direction="horizontal" class="!w-full" onResize={delta => {
+                const scale = workspaceBody?.offsetWidth ? workspaceBody.getBoundingClientRect().width / workspaceBody.offsetWidth : 1;
+                resizeConversation(delta / (scale || 1));
+              }} onResizeEnd={saveConversationWidth} /></span>
+            </div>
           </Show>
         </section>
         <section

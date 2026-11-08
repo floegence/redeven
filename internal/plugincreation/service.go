@@ -297,21 +297,24 @@ func (s *Service) ResumePreparation(ctx context.Context, meta *session.Meta, id 
 	return s.Store.Activate(ctx, owner, id, workspace)
 }
 
-// PresentDraft resolves unnamed legacy projects from verified platform artifacts.
+// PresentDraft resolves names and icons from verified platform artifacts.
 // It never changes the durable draft or replaces a user-assigned project title.
 func (s *Service) PresentDraft(ctx context.Context, meta *session.Meta, d Draft) Draft {
-	if d.Title != "" || d.Lifecycle != "active" || d.WorkspaceID == "" {
+	if d.Lifecycle != "active" || d.WorkspaceID == "" {
 		return d
 	}
 	backend, err := s.Backend()
 	if err != nil {
 		return d
 	}
-	if names, ok := backend.(interface {
-		ProjectTitle(context.Context, *session.Meta, string) (string, error)
+	if presentation, ok := backend.(interface {
+		ProjectPresentation(context.Context, *session.Meta, string) (string, string, error)
 	}); ok {
-		if title, err := names.ProjectTitle(ctx, meta, d.WorkspaceID); err == nil {
-			d.Title = title
+		if title, icon, err := presentation.ProjectPresentation(ctx, meta, d.WorkspaceID); err == nil {
+			if d.Title == "" {
+				d.Title = title
+			}
+			d.IconURL = icon
 		}
 	}
 	return d

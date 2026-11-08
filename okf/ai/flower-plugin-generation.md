@@ -83,7 +83,7 @@ and thread; source display-name edits and rebuilds remain separate from installe
 package authority. Status preserves structured project/revision and source metadata
 when long build evidence is excerpted. History projects unnamed legacy
 records through the released verified package reader without rewriting stored titles.
-Changed package bytes require a higher source SemVer; identity remains unchanged.
+Changed release bytes require a higher source SemVer; identity remains unchanged. Build/capture adds `ready_for_install` and structured `installation_check` using released Host inspection against the formal installation. These fields survive long-log truncation. Flower corrects rejected packages before handoff; preview-only same-version iteration remains supported. Readiness never installs, grants access, or changes the active frame.
 Build is a command-execution effect under Floret's
 normal approval. The actual retained stage reports distinguish passed, failed,
 interrupted and not-run work; packaging alone is not business or browser proof.

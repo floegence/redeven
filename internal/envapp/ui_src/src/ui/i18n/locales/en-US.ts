@@ -871,6 +871,10 @@ export const enUS = defineDictionary({
 
         draftsLoadFailed: "Could not load creation history. Try again.",
         accessLoadFailed: "Could not load preview permissions. Try again.",
+        resizeConversation: "Resize conversation",
+        packageConflict: "This build conflicts with the current package. Ask Flower to check the version and rebuild.",
+        repairPackage: "Ask Flower to fix",
+        repairPackagePrompt: "Check why this build conflicts with the current plugin package. Preserve plugin identity and data, read the current status, correct the source version as needed, then rebuild and verify installation readiness. Do not install it.",
         inventoryFailed: "Installed, but the plugin list could not be refreshed. Try again.",
         "rename": "Rename project",
         "passed": "Passed",
@@ -1076,6 +1080,7 @@ export const enUS = defineDictionary({
       update: 'Update',
       checkForUpdate: 'Check for update',
       uninstall: 'Uninstall',
+      installFromMarket: "Install from marketplace",
       installFromSource: 'Install from source',
       externalPlugin: 'External',
       officialSource: 'Official',

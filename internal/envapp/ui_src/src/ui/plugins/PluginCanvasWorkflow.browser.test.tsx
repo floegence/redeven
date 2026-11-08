@@ -2,9 +2,10 @@ import '../../index.css';
 import { onCleanup, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, commands, userEvent } from 'vitest/browser';
 import { FloeConfigProvider } from '@floegence/floe-webapp-core';
 import { createFlowerComposerDraftCoordinator, type FlowerConversationParts } from '../../../../../flower_ui/src';
+import { readUIStorageItem, removeUIStorageItem } from '../services/uiStorage';
 import { bindSessionHTTP } from '../services/sessionHTTP';
 import { I18nProvider } from '../i18n';
 import { writeStoredLanguagePreference } from '../i18n/storage';
@@ -24,7 +25,7 @@ vi.mock('./PluginAuthorPreview', () => ({ PluginAuthorPreview: (props: PreviewPr
 let dispose: (() => void) | undefined;
 let release: (() => void) | undefined;
 const id = 'canvas-comment-fixture';
-afterEach(async () => { dispose?.(); release?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); writeStoredLanguagePreference('en-US'); await removePluginComposer(id); surface.opens = 0; surface.closes = 0; surface.current = true; await page.viewport(1280, 800); });
+afterEach(async () => { dispose?.(); release?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); writeStoredLanguagePreference('en-US'); await removePluginComposer(id); surface.opens = 0; surface.closes = 0; surface.current = true; removeUIStorageItem('redeven.plugin-creation.conversation-width.v1'); await page.viewport(1280, 800); });
 function mount(title = 'Focus Timer', pendingUpdate = false) {
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     if (String(input).endsWith('/status')) return Response.json({ data: {
@@ -47,7 +48,7 @@ function mount(title = 'Focus Timer', pendingUpdate = false) {
       submit: vi.fn(), canSubmit: () => true, submitMessage: submit, canSubmitMessage: () => true,
       threadID: () => 'thread-1', actionLayout: () => 'chat', actions: () => [], actionOverlays: null, newConversation: vi.fn(),
     })} /></I18nProvider></FloeConfigProvider>, host);
-  return { host, submit };
+  return { host, submit, fetch };
 }
 function select(host: HTMLElement) {
   const frame = host.querySelector('iframe')!;
@@ -264,4 +265,55 @@ it('does not revive an old selection after resizing away and back', async () => 
   await page.getByRole('button', { name: 'Phone width', exact: true }).click();
   await page.getByRole('button', { name: 'Fit canvas', exact: true }).click();
   await expect.element(page.getByRole('button', { name: 'Ask Flower to change', exact: true })).toBeDisabled();
+});
+
+it('keeps the live canvas and composer on package conflict and sends one explicit repair request', async () => {
+  const fixture = mount('Focus Timer', true);
+  await expect.poll(() => surface.opens).toBe(1);
+  const original = fixture.fetch.getMockImplementation()!;
+  fixture.fetch.mockImplementation(async input => String(input).endsWith('/check')
+    ? Response.json({ error: { code: 'plugin_author_package_conflict', message: 'raw integrity error' } }, { status: 409 })
+    : original(input));
+  const frame = fixture.host.querySelector('iframe');
+  await page.getByRole('textbox', { name: 'Ordinary draft' }).fill('Keep this unsent note');
+  await page.getByRole('button', { name: 'Install in this environment', exact: true }).click();
+  await expect.element(page.getByRole('button', { name: 'Ask Flower to fix', exact: true })).toBeVisible();
+  expect(fixture.host.querySelector('iframe')).toBe(frame);
+  expect(surface.closes).toBe(0);
+  expect(fixture.fetch.mock.calls.some(([url]) => /\/(apply|install)$/.test(String(url)))).toBe(false);
+  expect(fixture.submit).not.toHaveBeenCalled();
+  expect(fixture.host.textContent).not.toContain('raw integrity error');
+  await page.getByRole('button', { name: 'Ask Flower to fix', exact: true }).click();
+  expect(fixture.submit).toHaveBeenCalledOnce();
+  expect(fixture.submit.mock.calls[0][0].prompt).toContain('Preserve plugin identity and data');
+  await expect.element(page.getByRole('textbox', { name: 'Ordinary draft' })).toHaveValue('Keep this unsent note');
+});
+
+it('resizes with the pointer and keyboard, persists locally and clamps narrow windows without losing the preference', async () => {
+  await page.viewport(1280, 800);
+  const fixture = mount();
+  await expect.poll(() => surface.opens).toBe(1);
+  const handle = fixture.host.querySelector<HTMLElement>('[data-plugin-conversation-resizer]')!;
+  const frame = fixture.host.querySelector('iframe');
+  const initial = Number(handle.getAttribute('aria-valuenow'));
+  await (commands as unknown as { resizePluginConversation: (delta: number) => Promise<void> }).resizePluginConversation(150);
+  const resized = Number(handle.getAttribute('aria-valuenow'));
+  expect(resized).toBeGreaterThan(initial + 140);
+  expect(resized).toBeLessThan(initial + 180);
+  expect(fixture.host.querySelector('iframe')).toBe(frame);
+  expect(readUIStorageItem('redeven.plugin-creation.conversation-width.v1')).toBe(String(resized));
+  handle.focus(); await userEvent.keyboard('{ArrowRight}');
+  const saved = resized + 10;
+  expect(readUIStorageItem('redeven.plugin-creation.conversation-width.v1')).toBe(String(saved));
+  await page.viewport(760, 800);
+  await expect.poll(() => handle.getAttribute('aria-valuenow')).toBe('400');
+  expect(fixture.host.scrollWidth).toBeLessThanOrEqual(760);
+  expect(readUIStorageItem('redeven.plugin-creation.conversation-width.v1')).toBe(String(saved));
+  await page.viewport(390, 800);
+  await expect.poll(() => fixture.host.querySelector('[data-plugin-conversation-resizer]')).toBeNull();
+  await page.viewport(1280, 800);
+  await expect.poll(() => fixture.host.querySelector('[data-plugin-conversation-resizer]')?.getAttribute('aria-valuenow')).toBe(String(saved));
+  dispose?.(); release?.(); fixture.host.remove();
+  const reopened = mount();
+  await expect.poll(() => reopened.host.querySelector('[data-plugin-conversation-resizer]')?.getAttribute('aria-valuenow')).toBe(String(saved));
 });

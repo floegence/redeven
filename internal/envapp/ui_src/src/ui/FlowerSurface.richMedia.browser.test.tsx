@@ -34,6 +34,20 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
+  it('renders an authorized static SVG file as a real image without a retry placeholder', async () => {
+    await page.viewport(1200, 900);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="#385a83"/></svg>';
+    const seed = thread({ thread_id: 'svg-icon', messages: [{ id: 'icon', role: 'assistant', status: 'complete', turn_id: 'turn', created_at_ms: 2, content: '![Plugin icon](/managed/source/ui/assets/plugin-icon.svg)' }] });
+    const loadMessageFile = vi.fn(async () => new Blob([svg], { type: 'image/svg+xml' }));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), loadMessageFile });
+    runtime.style.height = '850px';
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="svg-icon"] button')));
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="svg-icon"] button')!.click();
+    await waitFor(() => runtime.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 32);
+    expect(loadMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: '/managed/source/ui/assets/plugin-icon.svg' }));
+    expect(runtime.querySelector('[data-media-state=error]')).toBeNull();
+  });
+
   it('keeps embedded application HTML as source while preserving references and file opening', async () => {
     const source = '/managed/source/ui/index.html';
     const seed = thread({ thread_id: 'owned-canvas', messages: [{

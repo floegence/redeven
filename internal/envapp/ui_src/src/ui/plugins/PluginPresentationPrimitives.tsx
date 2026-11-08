@@ -12,7 +12,7 @@ import { acquireCachedPluginIcon, loadPluginIcon, type LoadedPluginIcon, type Pl
 export type PluginIconSize = 'row' | 'card' | 'detail' | 'launcher' | 'dock';
 
 export function PluginIcon(props: {
-  item: PluginInventoryItem;
+  item: Pick<PluginInventoryItem, 'iconURL'>;
   size?: PluginIconSize;
   class?: string;
 }): JSX.Element {

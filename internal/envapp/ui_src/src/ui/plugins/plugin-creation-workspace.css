@@ -6,7 +6,7 @@
 .plugin-creation-save-state, .plugin-creation-version { color: var(--muted-foreground); font-size: 10px; white-space: nowrap; }
 .plugin-creation-version { padding: 0 4px; font-variant-numeric: tabular-nums; }
 .plugin-creation-toolbar-space { flex: 1; }
-.plugin-creation-workspace-body { display: grid; grid-template-columns: clamp(280px, 26vw, 328px) minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
+.plugin-creation-workspace-body { display: grid; grid-template-columns: var(--plugin-conversation-width, clamp(280px, 26vw, 328px)) minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
 .plugin-creation-main, .plugin-creation-preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .plugin-creation-main { position: relative; isolation: isolate; padding: 8px 0 0; }
 .plugin-creation-preview { background: var(--background); }

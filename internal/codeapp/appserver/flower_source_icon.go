@@ -453,7 +453,7 @@ func validFlowerIconSVG(b []byte) bool {
 			for _, a := range t.Attr {
 				name := strings.ToLower(a.Name.Local)
 				value := strings.ToLower(strings.TrimSpace(a.Value))
-				if strings.HasPrefix(name, "on") || name == "style" || (name == "href" && !strings.HasPrefix(value, "#")) || strings.Contains(value, "url(") && (!strings.HasPrefix(value, "url(#") || !strings.HasSuffix(value, ")")) {
+				if strings.Contains(value, `\`) || strings.HasPrefix(name, "on") || name == "base" || name == "style" || (name == "href" && !strings.HasPrefix(value, "#")) || strings.Contains(value, "url(") && (!strings.HasPrefix(value, "url(#") || !strings.HasSuffix(value, ")")) {
 					return false
 				}
 			}

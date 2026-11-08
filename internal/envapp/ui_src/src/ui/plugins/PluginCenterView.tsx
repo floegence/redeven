@@ -700,7 +700,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               )}
             </For>
             <Show when={showAddCard()}>
-              <PluginAddCard onCreate={props.onCreatePlugin} onInstall={() => openExternalDialog()} />
+              <PluginAddCard onCreate={props.onCreatePlugin} onMarket={() => { clearAllFilters(); selectTab('discover'); }} onInstall={() => openExternalDialog()} />
             </Show>
             <Show when={!loading() && !errorMessage() && visibleItems().length === 0 && !showAddCard()}>
               <div class={cn('col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-[length:var(--floe-type-body)] text-muted-foreground', PLUGIN_ENTER_MOTION_CLASS)}>

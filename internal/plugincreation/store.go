@@ -40,6 +40,7 @@ func (o Owner) valid() bool {
 type Draft struct {
 	ID                  string `json:"id"`
 	Title               string `json:"title"`
+	IconURL             string `json:"icon_url,omitempty"`
 	Revision            int64  `json:"revision"`
 	Lifecycle           string `json:"lifecycle"`
 	WorkspaceID         string `json:"workspace_id,omitempty"`

@@ -25,8 +25,8 @@ func (b namingBackend) AuthorOperation(_ context.Context, _ *session.Meta, _ str
 	}
 	return map[string]any{"workspace": "workspace"}, nil
 }
-func (namingBackend) ProjectTitle(context.Context, *session.Meta, string) (string, error) {
-	return "Generated timer", nil
+func (namingBackend) ProjectPresentation(context.Context, *session.Meta, string) (string, string, error) {
+	return "Generated timer", "/verified/icon", nil
 }
 
 func TestDraftNamesFollowGenerationAndAuthorizedConversation(t *testing.T) {
@@ -74,7 +74,7 @@ func TestDraftNamesFollowGenerationAndAuthorizedConversation(t *testing.T) {
 		t.Fatalf("stale rename: %v", err)
 	}
 	d, _ = store.Get(t.Context(), owner, d.ID)
-	if svc.PresentDraft(t.Context(), meta, d).Title != "Daily focus" {
+	if shown := svc.PresentDraft(t.Context(), meta, d); shown.Title != "Daily focus" || shown.IconURL != "/verified/icon" {
 		t.Fatal("explicit title replaced")
 	}
 	if d.Title != "Daily focus" {

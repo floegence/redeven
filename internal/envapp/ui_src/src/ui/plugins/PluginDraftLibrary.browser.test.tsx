@@ -145,3 +145,27 @@ it.each([
   expect((await axe.run(fixture.host, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
   await page.screenshot({ path: `__screenshots__/creation-history-${width}-${theme}-${locale}.png` });
 });
+
+it('automatically replaces a generated icon without losing search, focus or row geometry', async () => {
+  const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32;
+  const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#385a83'; ctx.fillRect(0, 0, 32, 32);
+  const blob = await new Promise<Blob>(resolve => canvas.toBlob(value => resolve(value!), 'image/png'));
+  let generation = 1;
+  const fetch = vi.fn(async (input: RequestInfo | URL) => String(input).includes('/icon/')
+    ? new Response(blob, { headers: { 'Content-Type': 'image/png' } })
+    : Response.json({ ok: true, data: [{ ...history[0], icon_url: `/_redevplugin/api/plugins/author/workspaces/icon-fixture/icon/artifact-${generation}/${String(generation).repeat(64)}` }] }));
+  const fixture = mountHistory(fetch);
+  await expect.poll(() => fixture.host.querySelector<HTMLImageElement>('.plugin-history-mark img')?.naturalWidth).toBe(32);
+  const entry = fixture.host.querySelector<HTMLButtonElement>('[data-plugin-history-entry]')!;
+  const firstURL = entry.querySelector('img')!.src;
+  const bounds = entry.getBoundingClientRect();
+  await page.getByRole('searchbox').fill('Focus'); entry.focus();
+  generation = 2;
+  window.dispatchEvent(new Event('focus'));
+  await expect.poll(() => entry.querySelector<HTMLImageElement>('img')?.src).not.toBe(firstURL);
+  await expect.poll(() => entry.querySelector<HTMLImageElement>('img')?.naturalWidth).toBe(32);
+  expect(document.activeElement).toBe(entry);
+  expect(entry.getBoundingClientRect().height).toBe(bounds.height);
+  await expect.element(page.getByRole('searchbox')).toHaveValue('Focus');
+  expect(fetch.mock.calls.some(([path]) => String(path).includes('/icon/artifact-2/'))).toBe(true);
+});

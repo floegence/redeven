@@ -2,6 +2,7 @@ import { fetchSessionJSON } from '../services/sessionHTTP';
 export type PluginDraft = Readonly<{
   id: string;
   title: string;
+  icon_url?: string;
   revision: number;
   lifecycle: 'preparing' | 'active' | 'deleting' | 'deleted';
   launch_pending?: boolean;

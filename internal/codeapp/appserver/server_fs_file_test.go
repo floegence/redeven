@@ -604,3 +604,44 @@ func TestServerFSFileResourceRecoveryClassification(t *testing.T) {
 		t.Fatalf("denied status=%d", got.Code)
 	}
 }
+
+func TestServerFSFilePreviewServesOnlyBoundedStaticSVG(t *testing.T) {
+	home := t.TempDir()
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
+	cases := []struct {
+		name, source string
+		want         int
+	}{
+		{"icon", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="a"><stop stop-color="#123456"/></linearGradient></defs><circle cx="16" cy="16" r="12" fill="url(#a)"/></svg>`, 200},
+		{"script", `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`, 415},
+		{"event", `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>`, 415},
+		{"external", `<svg xmlns="http://www.w3.org/2000/svg"><use href="https://example.com/a.svg#x"/></svg>`, 415},
+		{"base", `<svg xmlns="http://www.w3.org/2000/svg" xml:base="https://example.com/"><use href="#x"/></svg>`, 415},
+		{"escaped URL", `<svg xmlns="http://www.w3.org/2000/svg"><path fill="u\72l(https://example.com/a)"/></svg>`, 415},
+		{"foreign", `<svg xmlns="http://www.w3.org/2000/svg"><foreignObject/></svg>`, 415},
+		{"large", `<svg>` + strings.Repeat(" ", 512<<10) + `</svg>`, 413},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(home, tc.name+".svg")
+			if err := os.WriteFile(path, []byte(tc.source), 0600); err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodGet, fsFileResourcePath(path)+"&preview=1", nil)
+			req.Header.Set("Origin", origin)
+			rr := httptest.NewRecorder()
+			srv.serveHTTP(rr, req)
+			if rr.Code != tc.want {
+				t.Fatalf("status=%d want=%d: %s", rr.Code, tc.want, rr.Body.String())
+			}
+			if tc.want == 200 {
+				if rr.Header().Get("Content-Type") != "image/svg+xml" || !strings.Contains(rr.Header().Get("Content-Security-Policy"), "sandbox") || rr.Body.String() != tc.source {
+					t.Fatalf("unsafe SVG response: %v", rr.Header())
+				}
+				if direct := performFSFileRequest(srv, http.MethodGet, path, origin, ""); direct.Code != 415 {
+					t.Fatal("SVG admitted outside preview")
+				}
+			}
+		})
+	}
+}

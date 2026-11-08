@@ -194,12 +194,12 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, err
 	}
 	payload = normalized
 	switch toolName {
-	case "plugin_author.status":
-		// Keep the current title, optimistic revision and source path usable even
-		// when retained build evidence exceeds the ordinary result budget.
+	case "plugin_author.status", "plugin_author.build", "plugin_author.capture":
+		// Preserve identity and actionable readiness even when command output or
+		// retained build evidence exceeds the ordinary result budget.
 		record, ok := payload.(map[string]any)
 		if !ok {
-			return nil, false, fmt.Errorf("invalid plugin author status result")
+			return nil, false, fmt.Errorf("invalid plugin author result")
 		}
 		truncated := false
 		for _, field := range []string{"artifacts", "build"} {

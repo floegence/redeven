@@ -696,6 +696,15 @@ export default mergeConfig(viteConfig, defineConfig({
           await page.mouse.click(x, y);
           return { isolatedDuringExit };
         },
+        resizePluginConversation: async ({ page }, delta: number) => {
+          const frame = await frameForSelector(page, '[data-plugin-conversation-resizer]');
+          const handle = frame.locator('[data-plugin-conversation-resizer]');
+          const rect = await handle.boundingBox();
+          if (!rect) throw new Error('Conversation resize handle is unavailable');
+          const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+          await page.mouse.move(x, y); await page.mouse.down();
+          await page.mouse.move(x + delta, y, { steps: 12 }); await page.mouse.up();
+        },
         dragWorkbenchPlugin: async ({ page }, delta: Readonly<{ x: number; y: number }>) => {
           const frame = await frameForSelector(page, '[data-plugin-continuity-canvas]');
           const handle = frame.locator('[data-floe-workbench-widget-id="plugin-continuity"] .workbench-widget__drag');

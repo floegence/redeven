@@ -1,14 +1,17 @@
 import { For, Show, createMemo, createSignal, onMount, onCleanup, type JSX } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
-import { ArrowLeft, ArrowRight, History, Layers, Plus, Refresh, Search } from '@floegence/floe-webapp-core/icons';
+import { ArrowLeft, ArrowRight, History, Plus, Refresh, Search } from '@floegence/floe-webapp-core/icons';
 import { useI18n } from '../i18n';
 import { listPluginDrafts, type PluginDraft } from './pluginCreationApi';
+import { PluginIcon } from './PluginPresentationPrimitives';
 import './plugin-creation-workspace.css';
 import './plugin-creation-history.css';
 
 export function PluginDraftLibrary(props: { onOpen: (id: string) => void; onBack: () => void }): JSX.Element {
   const i18n = useI18n();
-  const [drafts, setDrafts] = createSignal<readonly PluginDraft[]>([]);
+  const [history, setHistory] = createStore<{ drafts: readonly PluginDraft[] }>({ drafts: [] });
+  const drafts = () => history.drafts;
   const [loading, setLoading] = createSignal(true);
   const [failed, setFailed] = createSignal(false);
   const [query, setQuery] = createSignal('');
@@ -22,23 +25,33 @@ export function PluginDraftLibrary(props: { onOpen: (id: string) => void; onBack
   let searchRef: HTMLInputElement | undefined;
   let disposed = false;
   let reading = false;
-  const refetch = async () => {
+  const refetch = async (quiet = false) => {
     if (reading) return;
     reading = true;
-    setLoading(true);
-    setFailed(false);
+    if (!quiet) { setLoading(true); setFailed(false); }
     try {
       const values = await listPluginDrafts();
-      if (!disposed) setDrafts(values);
+      if (!disposed) { setHistory('drafts', reconcile(values, { key: 'id' })); setFailed(false); }
     } catch {
-      if (!disposed) setFailed(true);
+      if (!disposed && !quiet) setFailed(true);
     } finally {
       reading = false;
       if (!disposed) setLoading(false);
     }
   };
-  onMount(() => void refetch());
-  onCleanup(() => { disposed = true; });
+  const onFocus = () => { if (document.visibilityState === 'visible') void refetch(true); };
+  let timer: ReturnType<typeof setInterval> | undefined;
+  onMount(() => {
+    void refetch();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    timer = setInterval(onFocus, 5000);
+  });
+  onCleanup(() => {
+    disposed = true; clearInterval(timer);
+    window.removeEventListener('focus', onFocus);
+    document.removeEventListener('visibilitychange', onFocus);
+  });
   return (
     <section class="redeven-plugin-creation-page plugin-creation-history" data-plugin-draft-library>
       <header class="plugin-creation-toolbar" data-redeven-desktop-titlebar-drag-region="true">
@@ -80,7 +93,7 @@ export function PluginDraftLibrary(props: { onOpen: (id: string) => void; onBack
               <For each={visibleDrafts()}>{draft => (
                 <li>
                   <button type="button" class="plugin-history-entry" data-plugin-history-entry={draft.id} onClick={() => props.onOpen(draft.id)}>
-                    <span class="plugin-history-mark" aria-hidden="true"><Layers class="h-[18px] w-[18px]" /></span>
+                    <PluginIcon item={{ iconURL: draft.icon_url }} class="plugin-history-mark" />
                     <span class="plugin-history-identity">
                       <span class="plugin-history-title" title={title(draft)} dir="auto">{title(draft)}</span>
                       <time class="plugin-history-time" dateTime={new Date(draft.updated_at).toISOString()}>

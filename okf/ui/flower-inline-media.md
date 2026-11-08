@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower inline media
 tags: [flower, media, preview, security]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -18,7 +18,9 @@ Shared Flower renders canonical images/video/audio/screenshots/self-contained HT
 One entry per rendered thread serves Markdown/Activity images. Children without trusted working directory cannot resolve against their parent's directory. Close/Escape restores only closing-window focus to a connected trigger, preserving navigation/composer focus.
 
 ## Resource and document boundaries
-`/api/fs/file?preview=1` supplies bounded chat previews; presentation adds no durable message/lifecycle or Floret API.
+`/api/fs/file?preview=1` supplies bounded chat previews. SVG previews reuse the existing self-contained vector validator, read at most 512 KiB once, and serve those validated bytes with nosniff, no-store and restrictive sandbox CSP. Scripts, handlers, external resources, XML base, CSS escapes and foreign content remain rejected; non-preview SVG navigation stays unavailable. Released Floe renders the authenticated image blob without a new renderer.
+
+Presentation adds no durable message/lifecycle or Floret API.
 
 # Boundaries
 

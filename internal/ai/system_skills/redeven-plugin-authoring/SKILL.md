@@ -34,7 +34,11 @@ The workspace owns the real preview. Keep the dedicated conversation and source
 through iterations. Before building changed package contents, increment source
 `plugin.version` to a higher SemVer than the retained builds and installed release;
 never reuse a version for different bytes or change plugin identity to evade an
-update. Preserve application data and test its upgrade behavior. Apply newer artifacts through the workspace, and inspect and
+update. Build/capture returns `ready_for_install` and, on rejection, a structured
+`installation_check`. A passed build with `ready_for_install: false` is not ready for
+handoff: inspect the reported facts, correct source version/content conflicts and
+rebuild, or report an authorization or runtime blocker accurately. Never ask the user to retry the same rejected artifact. Keep the
+existing preview available while correcting the next build. Preserve application data and test its upgrade behavior. Apply newer artifacts through the workspace, and inspect and
 install the exact current preview there. Do not start a parallel dev server,
 install through a shell, grant permissions, or declare a fixture a real test.
 Follow the user's submitted request in the ordinary composer: discuss requirements
@@ -60,6 +64,7 @@ anything needing review. The workspace already displays the runnable application
 do not duplicate its document in an inline HTML preview or paste the full source
 into the conversation. Do not repeat artifact IDs, package hashes or long stage
 inventories in routine delivery; those belong in the workspace's inspection.
+Use the derived PNG for inline icon previews; link the editable SVG as a source file.
 Link relevant source files when useful, using their actual
 absolute managed paths.
 

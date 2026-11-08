@@ -66,6 +66,8 @@ export const authorStatus = async (id: string): Promise<AuthorSnapshot> => {
   const state = await request<Omit<AuthorSnapshot, 'plugins'>>(id, 'status');
   return { ...state, plugins: state.preview.plugin_instance_id ? await loadCatalog(id) : [] };
 };
+export const checkAuthorArtifact = (id: string, artifactID: string) =>
+  request<ExternalPluginInspection>(id, 'check', { artifact_id: artifactID });
 export const applyAuthorArtifact = async (id: string, artifactID: string): Promise<AuthorSnapshot> => ({
   ...(await request<Omit<AuthorSnapshot, 'plugins'>>(id, 'apply', { artifact_id: artifactID })),
   plugins: await loadCatalog(id),

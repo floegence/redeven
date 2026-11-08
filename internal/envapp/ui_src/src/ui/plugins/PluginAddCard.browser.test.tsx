@@ -128,3 +128,15 @@ it('keeps the drawer open across add-menu dismissal and nested installation', as
   expect(open()).toBe(true);
   await expect.poll(() => document.activeElement?.classList.contains('plugin-center-add-trigger')).toBe(true);
 });
+
+it('offers all three add paths and opens the marketplace in the existing center', async () => {
+  const fixture = mount();
+  await page.getByRole('button', { name: 'Add plugin', exact: true }).click();
+  for (const name of ['Create a plugin', 'Install from marketplace', 'Install from source']) {
+    await expect.element(page.getByRole('menuitem', { name, exact: true })).toBeVisible();
+  }
+  await page.getByRole('menuitem', { name: 'Install from marketplace', exact: true }).click();
+  await expect.element(page.getByRole('tab', { name: /Discover/ })).toHaveAttribute('aria-selected', 'true');
+  expect(fixture.onCreate).not.toHaveBeenCalled();
+  expect(document.querySelector('[data-floe-dialog-panel]')).toBeNull();
+});

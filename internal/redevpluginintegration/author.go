@@ -32,17 +32,20 @@ type authorEnvironment struct {
 	sessions    *sessionAdapter
 	owner       authoring.Owner
 }
+type authorPresentation struct{ artifactID, title, iconURL string }
+
 type authorBackend struct {
-	privateRoot  string
-	mu           sync.Mutex
-	store        *authoring.WorkspaceStore
-	router       *authoring.SurfaceRouter
-	environments map[string]authorEnvironment
-	sessions     *sessionAdapter
-	options      Options
-	host         *host.Host
-	platform     http.Handler
-	drafts       *plugincreation.Service
+	presentations map[string]authorPresentation
+	privateRoot   string
+	mu            sync.Mutex
+	store         *authoring.WorkspaceStore
+	router        *authoring.SurfaceRouter
+	environments  map[string]authorEnvironment
+	sessions      *sessionAdapter
+	options       Options
+	host          *host.Host
+	platform      http.Handler
+	drafts        *plugincreation.Service
 }
 
 func newAuthorBackend(ctx context.Context, root string, opts Options, sessions *sessionAdapter, h *host.Host, platform, web http.Handler) (*authorBackend, error) {
@@ -147,6 +150,7 @@ func (a *authorBackend) RemoveWorkspace(ctx context.Context, meta *session.Meta,
 		}
 		delete(a.environments, id)
 	}
+	delete(a.presentations, id)
 	return a.store.Remove(ctx, o, id)
 }
 func (a *authorBackend) AuthorOperation(ctx context.Context, meta *session.Meta, id, operation string, args map[string]any) (any, error) {
@@ -193,9 +197,19 @@ func (a *authorBackend) AuthorOperation(ctx context.Context, meta *session.Meta,
 		if report == nil {
 			return nil, failure
 		}
-		return map[string]any{"artifact": artifact, "build": report}, nil
+		result := map[string]any{"artifact": artifact, "build": report}
+		if failure == nil {
+			a.authorReadiness(ctx, meta, o, id, artifact.ID, result)
+		}
+		return result, nil
 	case "capture":
-		return a.store.Capture(ctx, o, id)
+		artifact, err := a.store.Capture(ctx, o, id)
+		if err != nil {
+			return nil, err
+		}
+		result := map[string]any{"artifact": artifact}
+		a.authorReadiness(ctx, meta, o, id, artifact.ID, result)
+		return result, nil
 	default:
 		return nil, plugincreation.ErrInvalid
 	}
@@ -278,6 +292,8 @@ func authorErrorCode(err error) string {
 		return "execution_not_found"
 	}
 	switch {
+	case errors.Is(err, host.ErrExternalPackageConfirmation):
+		return "plugin_author_package_conflict"
 	case errors.Is(err, errAuthorPermission), errors.Is(err, sessionctx.ErrSessionRequired):
 		return "plugin_author_permission_denied"
 	case errors.Is(err, plugincreation.ErrConflict), errors.Is(err, authoring.ErrWorkspaceConflict):
@@ -405,6 +421,33 @@ func (a *authorBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		env.Handler().ServeHTTP(w, clone)
 		return
 	}
+	if strings.HasPrefix(operation, "icon/") && r.Method == http.MethodGet {
+		parts := strings.Split(operation, "/")
+		if len(parts) != 3 {
+			authorJSON(w, nil, plugincreation.ErrInvalid)
+			return
+		}
+		_, raw, err := a.store.ReadArtifact(ctx, o, id, parts[1])
+		if err != nil {
+			authorJSON(w, nil, err)
+			return
+		}
+		pkg, err := pluginpkg.Read(ctx, bytes.NewReader(raw), int64(len(raw)), pluginpkg.DefaultReadLimits())
+		if err != nil {
+			authorJSON(w, nil, err)
+			return
+		}
+		icon, content, err := pluginpkg.ReadPresentationIcon(pkg)
+		if err != nil || icon.SHA256 != parts[2] {
+			authorJSON(w, nil, plugincreation.ErrNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", icon.MediaType)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "private, no-store")
+		_, _ = w.Write(content)
+		return
+	}
 	if operation == "status" && r.Method == http.MethodGet {
 		if d.Lifecycle != "active" {
 			authorJSON(w, nil, plugincreation.ErrDeleting)
@@ -437,17 +480,22 @@ func (a *authorBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if err = a.requireMutation(ctx, operation == "inspect" || operation == "install"); err != nil {
+	if err = a.requireMutation(ctx, operation == "check" || operation == "inspect" || operation == "install"); err != nil {
 		authorJSON(w, nil, err)
 		return
 	}
 	switch operation {
-	case "apply", "inspect":
+	case "check", "apply", "inspect":
 		var request struct {
 			ArtifactID string `json:"artifact_id"`
 		}
 		if err = decodeAuthorRequest(r, &request); err != nil {
 			authorJSON(w, nil, err)
+			return
+		}
+		if operation == "check" {
+			inspection, err := a.checkAuthorArtifact(ctx, o, id, request.ArtifactID, d)
+			authorJSON(w, inspection, err)
 			return
 		}
 		env, err := a.environment(ctx, o, id, meta)
@@ -474,41 +522,7 @@ func (a *authorBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			authorJSON(w, nil, plugincreation.ErrConflict)
 			return
 		}
-		intent := host.ExternalPackageIntent{Action: "install"}
-		if d.InstallRequestID != "" {
-			previous, failure := a.host.GetInspectedInstall(ctx, d.InstallRequestID)
-			if failure != nil && !errors.Is(failure, host.ErrInspectedInstallNotFound) {
-				authorJSON(w, nil, failure)
-				return
-			}
-			if failure == nil {
-				if previous.MutationOutcome == mutation.OutcomeUnknown {
-					authorJSON(w, nil, plugincreation.ErrConflict)
-					return
-				}
-				if previous.MutationOutcome == mutation.OutcomeCommitted {
-					d, failure = a.drafts.Store.RecordInstalled(ctx, owner, d.ID, previous.RequestID, previous.Execution.PluginInstanceID)
-					if failure != nil {
-						authorJSON(w, nil, failure)
-						return
-					}
-				}
-			}
-		}
-		if d.InstalledPluginID != "" {
-			records, failure := a.host.ListPlugins(ctx)
-			if failure != nil {
-				authorJSON(w, nil, failure)
-				return
-			}
-			for _, record := range records {
-				if record.PluginInstanceID == d.InstalledPluginID {
-					intent = host.ExternalPackageIntent{Action: "update", PluginInstanceID: record.PluginInstanceID, ExpectedManagementRevision: record.ManagementRevision}
-					break
-				}
-			}
-		}
-		result, err := a.store.InspectArtifact(ctx, o, id, request.ArtifactID, a.host, intent)
+		result, err := a.checkAuthorArtifact(ctx, o, id, request.ArtifactID, d)
 		authorJSON(w, result, err)
 	case "install":
 		var request struct {
@@ -595,23 +609,93 @@ func (p authorPreviewPolicy) LocalGeneratedPluginsEnabled(ctx context.Context, s
 	return p.DeveloperModeEnabled(ctx, s)
 }
 
-// ProjectTitle consumes the released package reader, never a product manifest parser.
-func (a *authorBackend) ProjectTitle(ctx context.Context, meta *session.Meta, id string) (string, error) {
+// ProjectPresentation projects the latest verified build without installation or
+// source-path guessing. Its URL binds immutable artifact identity and icon bytes.
+func (a *authorBackend) ProjectPresentation(ctx context.Context, meta *session.Meta, id string) (string, string, error) {
 	ctx, owner, err := a.context(ctx, meta)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	artifacts, err := a.store.ListArtifacts(ctx, owner, id)
 	if err != nil || len(artifacts) == 0 {
-		return "", err
+		return "", "", err
 	}
-	_, raw, err := a.store.ReadArtifact(ctx, owner, id, artifacts[0].ID)
+	artifact := artifacts[0]
+	a.mu.Lock()
+	cached, found := a.presentations[id]
+	a.mu.Unlock()
+	if found && cached.artifactID == artifact.ID {
+		return cached.title, cached.iconURL, nil
+	}
+	_, raw, err := a.store.ReadArtifact(ctx, owner, id, artifact.ID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	pkg, err := pluginpkg.Read(ctx, bytes.NewReader(raw), int64(len(raw)), pluginpkg.DefaultReadLimits())
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return pkg.Manifest.Plugin.DisplayName, nil
+	icon, _, err := pluginpkg.ReadPresentationIcon(pkg)
+	if err != nil && !errors.Is(err, pluginpkg.ErrPresentationIconUnavailable) {
+		return "", "", err
+	}
+	url := ""
+	if err == nil {
+		url = authorPrefix + id + "/icon/" + artifact.ID + "/" + icon.SHA256
+	}
+	a.mu.Lock()
+	if a.presentations == nil {
+		a.presentations = map[string]authorPresentation{}
+	}
+	a.presentations[id] = authorPresentation{artifact.ID, pkg.Manifest.Plugin.DisplayName, url}
+	a.mu.Unlock()
+	return pkg.Manifest.Plugin.DisplayName, url, nil
+}
+
+// Formal installation readiness delegates to the released platform inspection.
+// Local previews may iterate at the same version; installed releases may not.
+// This check never changes installed state, provenance, grants or the live frame.
+func (a *authorBackend) checkAuthorArtifact(ctx context.Context, owner authoring.Owner, id, artifactID string, d plugincreation.Draft) (host.ExternalPackageInspection, error) {
+	intent := host.ExternalPackageIntent{Action: "install"}
+	if d.InstallRequestID != "" {
+		prior, err := a.host.GetInspectedInstall(ctx, d.InstallRequestID)
+		if err != nil && !errors.Is(err, host.ErrInspectedInstallNotFound) {
+			return host.ExternalPackageInspection{}, err
+		}
+		if err == nil {
+			if prior.MutationOutcome == mutation.OutcomeUnknown {
+				return host.ExternalPackageInspection{}, plugincreation.ErrConflict
+			}
+			if prior.MutationOutcome == mutation.OutcomeCommitted {
+				d.InstalledPluginID = prior.Execution.PluginInstanceID
+			}
+		}
+	}
+	if d.InstalledPluginID != "" {
+		records, err := a.host.ListPlugins(ctx)
+		if err != nil {
+			return host.ExternalPackageInspection{}, err
+		}
+		for _, record := range records {
+			if record.PluginInstanceID == d.InstalledPluginID {
+				intent = host.ExternalPackageIntent{Action: "update", PluginInstanceID: record.PluginInstanceID, ExpectedManagementRevision: record.ManagementRevision}
+				break
+			}
+		}
+	}
+	return a.store.InspectArtifact(ctx, owner, id, artifactID, a.host, intent)
+}
+func (a *authorBackend) authorReadiness(ctx context.Context, meta *session.Meta, owner authoring.Owner, id, artifactID string, result map[string]any) {
+	productOwner, err := plugincreation.OwnerFromSession(meta)
+	if err == nil {
+		var d plugincreation.Draft
+		d, err = a.drafts.Store.ForWorkspace(ctx, productOwner, id)
+		if err == nil {
+			_, err = a.checkAuthorArtifact(ctx, owner, id, artifactID, d)
+		}
+	}
+	result["ready_for_install"] = err == nil
+	if err != nil {
+		result["installation_check"] = map[string]string{"code": authorErrorCode(err), "message": err.Error()}
+	}
 }
