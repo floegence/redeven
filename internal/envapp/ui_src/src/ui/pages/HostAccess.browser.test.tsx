@@ -132,6 +132,7 @@ it.each(['zh-CN', 'de-DE', 'zh-TW'] as const)('shows direct feature controls and
  expect(dialog.querySelector('.host-access-permissions')).toBeNull();
  expect(dialog.querySelector('.remote-desktop-connect')).toBeNull();
  expect(dialog.querySelector<HTMLDetailsElement>('.host-access-system')?.open).toBe(false);
+ expect([...dialog.querySelectorAll('.host-access-system-row span')].map(node => node.textContent)).toEqual([dictionary.hostAccess.allowed, dictionary.hostAccess.allowed]);
  expect((await axe.run(dialog, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
  await page.screenshot({ element: dialog, path: `__screenshots__/host-access-direct-settings-${locale}.png` });
  await page.viewport(320, 850);

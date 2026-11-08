@@ -61,7 +61,7 @@ export function HostAccessSystemPermissions(props: {
     return <details class="host-access-system"><summary>{i18n.t('hostAccess.systemSettings')}</summary>
       <p>{i18n.t('hostAccess.sharedPermissions')}</p>
       <For each={['screen_recording', 'accessibility'] as const}>{permission => <div class="host-access-system-row">
-        <div><strong>{i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission')}</strong><span>{i18n.t('hostAccess.required')}</span></div>
+        <div><strong>{i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission')}</strong><span>{i18n.t((permission === 'screen_recording' ? props.screen : props.input) ? 'hostAccess.allowed' : 'hostAccess.required')}</span></div>
         <Button size="sm" variant="outline" disabled={!props.allowed || props.busy} onClick={() => props.onPermission(permission, true)}>{i18n.t('hostAccess.openSystemSettings')}</Button>
       </div>}</For>
     </details>;

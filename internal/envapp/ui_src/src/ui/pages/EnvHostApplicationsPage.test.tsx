@@ -112,10 +112,10 @@ describe('goal-based host access',()=>{
   expect(access.save).toHaveBeenCalledWith('applications','enabled');expect(state.launch).not.toHaveBeenCalled();await vi.waitFor(()=>expect(document.querySelector('[role=dialog]')).toBeNull());expect(host.querySelector('.host-apps-library')).not.toBeNull();
  });
  it('keeps paused access paused until explicitly enabled and keeps system management reachable',async()=>{
-  state.catalog.mockResolvedValue(mac(true,true,'paused'));access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
+  state.catalog.mockResolvedValue(mac(true,false,'paused'));access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
   dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();expect(host.querySelector('.host-access-welcome')).toBeNull();expect(access.save).not.toHaveBeenCalled();
   textButton('Access settings').click();await settle();
-  const system=document.querySelector<HTMLDetailsElement>('.host-access-system')!;system.open=true;expect(textButton('Open system settings',system)).toBeTruthy();textButton('Open system settings',system).click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording_settings');expect(access.save).not.toHaveBeenCalled();
+  const system=document.querySelector<HTMLDetailsElement>('.host-access-system')!;system.open=true;expect([...system.querySelectorAll('.host-access-system-row span')].map(node=>node.textContent)).toEqual(['Allowed','Required']);expect(textButton('Open system settings',system)).toBeTruthy();textButton('Open system settings',system).click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording_settings');expect(access.save).not.toHaveBeenCalled();
  });
  it('reserves a selected browser application before awaiting explicit activation',async()=>{
   state.desktop=false;state.catalog.mockResolvedValue(mac(true,true));
