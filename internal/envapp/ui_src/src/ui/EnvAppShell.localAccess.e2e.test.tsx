@@ -1432,7 +1432,15 @@ vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: (props: any) => <div data-testid="flower-launcher" data-open={String(props.open)} data-intent={JSON.stringify(props.intent)} /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
-vi.mock('./widgets/FilePreviewStandalone', () => ({ FilePreviewStandalone: () => <div data-testid="standalone-preview" /> }));
+vi.mock('./widgets/FilePreviewStandalone', async () => {
+  const { EnvContext } = await import('./pages/EnvContext');
+  return { FilePreviewStandalone: () => {
+    const env = useContext(EnvContext);
+    return <div data-testid="standalone-preview"><button data-testid="preview-ask" onClick={() => env?.openFlowerTurnLauncher({
+      id: 'preview-intent', source_surface: 'file_preview', context_items: [{ kind: 'file_path', path: '/a.html', is_directory: false }],
+    })}>Ask Flower</button><button data-testid="preview-conversation" onClick={() => env?.openFlowerConversation('preview-thread')}>Conversation</button><button data-testid="preview-settings" onClick={() => env?.openSettings('ai')}>Settings</button><span data-testid="preview-settings-seq">{env?.settingsFocusSeq()}</span></div>;
+  } };
+});
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
 vi.mock('./utils/askFlowerPath', () => ({
   basenameFromAbsolutePath: (value: string) => {
@@ -4061,40 +4069,19 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
       expect(host.querySelector('[data-testid="tessiven-page"]')).toBeNull();
       expect(commandState.commands.map(command => command.id)).toEqual(['redeven.askFlower']);
-    } finally { dispose(); window.history.replaceState({}, '', '/'); }
-  }, 10000);
-
-  it('consumes a browser file handoff once after authorization in the complete shell', async () => {
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    window.history.replaceState({}, '', '/?ask_file=%2Fdocs%2Freport%20%23%25.md');
-    const host = document.createElement('div'); document.body.append(host);
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-    try {
+      (host.querySelector('[data-testid="preview-ask"]') as HTMLButtonElement).click();
       await flushUntil(() => host.querySelector('[data-testid="flower-launcher"]')?.getAttribute('data-open') === 'true');
-      const intent = JSON.parse(host.querySelector('[data-testid="flower-launcher"]')!.getAttribute('data-intent')!);
-      expect(intent.source_surface).toBe('file_preview');
-      expect(intent.context_items).toEqual([{ kind: 'file_path', path: '/docs/report #%.md', is_directory: false }]);
-      expect(window.location.search).toBe('');
-    } finally { dispose(); window.history.replaceState({}, '', '/'); }
-  }, 10000);
-
-  it('waits for file handoff permissions before consuming the browser request', async () => {
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    let resolve!: (value: any) => void;
-    getEnvironmentMock.mockReturnValue(new Promise(done => { resolve = done; }));
-    window.history.replaceState({}, '', '/?ask_file=%2Fdocs%2Freport.md');
-    const host = document.createElement('div'); document.body.append(host);
-    const { EnvAppShell } = await import('./EnvAppShell'); const dispose = render(() => <EnvAppShell />, host);
-    try {
-      await flushUntil(() => getEnvironmentMock.mock.calls.length > 0); await new Promise(resolve => setTimeout(resolve, 100));
-      expect(host.querySelector('[data-testid="flower-launcher"]')?.getAttribute('data-open')).not.toBe('true');
-      expect(window.location.search).toContain('ask_file');
-      resolve({ public_id: 'env_local', name: 'Local', permissions: { can_read: true, can_write: true, can_execute: true } });
-      await flushUntil(() => host.querySelector('[data-testid="flower-launcher"]')?.getAttribute('data-open') === 'true');
-      expect(window.location.search).toBe('');
+      expect(JSON.parse(host.querySelector('[data-testid="flower-launcher"]')!.getAttribute('data-intent')!).context_items)
+        .toEqual([{ kind: 'file_path', path: '/a.html', is_directory: false }]);
+      expect(host.querySelector('[data-testid="standalone-preview"]')).not.toBeNull();
+      (host.querySelector('[data-testid="preview-conversation"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="ai-page"]')));
+      expect(host.querySelectorAll('[data-testid="ai-page"]')).toHaveLength(1);
+      expect(host.querySelector('[data-testid="shell-sidebar"]')).toBeNull();
+      const settingsBefore = host.querySelector('[data-testid="preview-settings-seq"]')!.textContent;
+      (host.querySelector('[data-testid="preview-settings"]') as HTMLButtonElement).click();
+      expect(host.querySelector('[data-testid="preview-settings-seq"]')!.textContent).not.toBe(settingsBefore);
+      expect(window.location.search).toBe('?window=file-preview&path=%2Fa.html');
     } finally { dispose(); window.history.replaceState({}, '', '/'); }
   }, 10000);
 

@@ -21,7 +21,7 @@ describe('Env App Flower ownership', () => {
     expect(shell).toContain('data-plugin-creation-content-host="activity"');
     expect(shell).toContain('data-plugin-creation-content-host="workbench"');
     expect(shell.match(/\{renderFlowerProduct\(\)\}/g)).toHaveLength(1);
-    expect(shell.indexOf('{renderFlowerProduct()}')).toBeGreaterThan(shell.indexOf('const renderMainShell'));
+    expect(shell.indexOf('{renderFlowerProduct()}')).toBeGreaterThan(shell.indexOf('{standalone ? renderStandalone() : renderMainShell()}'));
     expect(shell).toContain("flowerProductPlacement() === 'workbench'");
     expect(shell).toContain('setFlowerWorkbenchHost,');
     expect(widgets).not.toContain("import('../pages/EnvAIPage')");

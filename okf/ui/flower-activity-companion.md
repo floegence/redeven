@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-One retained Flower surface moves between authorized Activity/Workbench hosts. Selection/paste/drop update the same editable intent immediately. Model discovery starts after paint without delaying caret focus. No generated opening question/reply hint/placeholder; only actual intent notes guide.
+One retained Flower surface moves between authorized Activity/Workbench hosts; independent file previews own one local companion after first use. Selection/paste/drop update the same editable intent immediately. Model discovery starts after paint without delaying caret focus. No generated opening question/reply hint/placeholder; only actual intent notes guide.
 
 # Contract
 
@@ -27,7 +27,7 @@ Opening Ask Flower suppresses only the floating Activity companion. Full-page
 Flower (including mobile) and Workbench remain visible and retain the same
 conversation, editor and transcript while the card owns focus. Dismissal or
 failed admission leaves the source conversation intact; successful admission
-hands off once to the new task in the captured host.
+hands off once to the new task in the captured host. Separate file previews keep the prompt and completed conversation in their own window/tab, including narrow layouts; they never activate a parent shell to ask a question.
 
 ### Presence and summary
 [Presence](flower-companion-presence.md#presence) owns collapsed priority, live tails, completion, composer precedence and workspace observation.

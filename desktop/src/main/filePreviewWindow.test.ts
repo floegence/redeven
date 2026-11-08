@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { askFilePreviewFlower, openFilePreviewWindow, type FilePreviewWindowOwner } from './filePreviewWindow';
+import { isSessionFilePreviewURL, openFilePreviewWindow, type FilePreviewWindowOwner } from './filePreviewWindow';
 const owner = (): FilePreviewWindowOwner => ({ mainFrame: true, allowed: true, sourceURL: 'https://env.example/_redeven_proxy/env/', entryURL: 'https://env.example/_redeven_proxy/env/?ticket=secret', open: vi.fn(() => true) });
 describe('authorized file preview windows', () => {
+  it('identifies only a valid preview on the owning session entry', () => {
+    const entry = 'https://env.example/_redeven_proxy/env/';
+    expect(isSessionFilePreviewURL(entry + '?window=file-preview&path=%2Ftmp%2Fa.html', entry)).toBe(true);
+    for (const source of [entry, entry + '?window=file-preview&path=/a&path=/b', entry + '?window=file-preview&path=relative',
+      'https://other.example/_redeven_proxy/env/?window=file-preview&path=/a', 'https://env.example/other?window=file-preview&path=/a', 'invalid']) {
+      expect(isSessionFilePreviewURL(source, entry)).toBe(false);
+    }
+  });
   it('opens only within the sender session with a file-specific reuse identity', () => {
     const source = owner();
     expect(openFilePreviewWindow({ path: '/tmp/a.html' }, source)).toEqual({ ok: true });
@@ -15,26 +23,5 @@ describe('authorized file preview windows', () => {
     const source = owner(); expect(openFilePreviewWindow({ path: '/tmp/a', url: 'https://other' }, source)).toEqual({ ok: false }); expect(source.open).not.toHaveBeenCalled();
     expect(openFilePreviewWindow({ path: '/tmp/a' }, { ...source, open: () => false })).toEqual({ ok: false });
     expect(openFilePreviewWindow({ path: '/tmp/a' }, { ...source, open: () => { throw new Error('creation failed'); } })).toEqual({ ok: false });
-  });
-});
-
-describe('preview Flower handoff authority', () => {
-  const previewOwner = () => ({ ...owner(), sourceURL: 'https://env.example/_redeven_proxy/env/?window=file-preview&path=%2Ftmp%2Fa.html' });
-  it('hands only the displayed file to its existing session owner', () => {
-    const source = previewOwner();
-    expect(askFilePreviewFlower({ path: '/tmp/a.html' }, source)).toEqual({ ok: true });
-    expect(source.open).toHaveBeenCalledWith(source.sourceURL, '/tmp/a.html');
-  });
-  it.each([{ mainFrame: false }, { allowed: false }, { sourceURL: 'https://other.example/_redeven_proxy/env/?window=file-preview&path=%2Ftmp%2Fa.html' },
-    { sourceURL: 'https://env.example/_redeven_proxy/env/' }, { sourceURL: 'https://env.example/_redeven_proxy/env/?window=file-preview&path=/tmp/a.html&path=/other' }])('rejects an unauthorized handoff %j', override => {
-    const source = { ...previewOwner(), ...override };
-    expect(askFilePreviewFlower({ path: '/tmp/a.html' }, source)).toEqual({ ok: false }); expect(source.open).not.toHaveBeenCalled();
-  });
-  it('rejects other paths, extra fields, and retired receivers', () => {
-    const source = previewOwner();
-    expect(askFilePreviewFlower({ path: '/tmp/other' }, source)).toEqual({ ok: false });
-    expect(askFilePreviewFlower({ path: '/tmp/a.html', url: 'https://other' }, source)).toEqual({ ok: false });
-    expect(askFilePreviewFlower({ path: '/tmp/a.html' }, null)).toEqual({ ok: false });
-    expect(source.open).not.toHaveBeenCalled();
   });
 });

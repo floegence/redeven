@@ -1,4 +1,3 @@
-import { FILE_PREVIEW_FLOWER_QUERY } from '../../../../../desktop/src/shared/filePreviewWindowRoute';
 import type { DesktopAskFlowerSource } from '../../../../../desktop/src/shared/manualScreenshotIPC';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
@@ -1128,7 +1127,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const canUseFlower = createMemo(() => !accessGateVisible());
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>(initialTessivenSurface ? 'activity' : (readPersistedDesktopViewMode() ?? 'workbench'));
-  const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
+  const viewMode = createMemo<EnvViewMode>(() => (standaloneFilePreview || layout.isMobile() ? 'activity' : desktopViewMode()));
   const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(initialRegularSurface);
   const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(initialRegularSurface);
   const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
@@ -1183,7 +1182,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const activityFlowerAnchor = () => activityFlowerUsesTerminalFooter()
     ? activityTerminalFlowerAnchor() : activityFlowerViewportAnchor();
   createEffect(() => {
-    if (canUseFlower()) setFlowerProductMountRequested(true);
+    if (canUseFlower() && !standaloneFilePreview) setFlowerProductMountRequested(true);
   });
   let flowerProductPanelRef: HTMLDivElement | undefined;
   const setFlowerWorkbenchHost = (host: HTMLElement | null, foreground: boolean) => {
@@ -2567,7 +2566,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const activityFlowerPlacement = createMemo<'collapsed' | 'expanded' | 'full_page'>(() => (
-    viewMode() === 'activity' && layout.sidebarActiveTab() === 'ai'
+    !standaloneFilePreview && viewMode() === 'activity' && layout.sidebarActiveTab() === 'ai'
       ? 'full_page'
       : activityFlowerPresentation()
   ));
@@ -2581,7 +2580,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       ? flowerWorkbenchHost()
       : flowerProductPlacement() === 'full_page'
         ? activityFlowerFullPageHost()
-        : layout.isMobile() ? activityFlowerOverlayHost() : activityFlowerCompanionContentHost()
+        : layout.isMobile() && !standaloneFilePreview ? activityFlowerOverlayHost() : activityFlowerCompanionContentHost()
   ));
   createEffect(() => {
     const requestedHost = requestedFlowerProductHost();
@@ -2591,7 +2590,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const openActivityFlowerCompanion = (options: Readonly<{ focusComposer?: boolean }> = {}) => {
     if (!canUseFlower()) return;
     activityFlowerCompletionController.clear();
-    if (layout.isMobile()) openSurface('ai', { reason: 'direct_navigation', focus: false, ensureVisible: true });
+    if (layout.isMobile() && !standaloneFilePreview) openSurface('ai', { reason: 'direct_navigation', focus: false, ensureVisible: true });
     else if (activityFlowerPlacement() !== 'full_page') setActivityFlowerPresentation('expanded');
     if (options.focusComposer) {
       setActivityFlowerComposerFocusRequest((request) => request + 1);
@@ -2649,7 +2648,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
-    if (standaloneFilePreview) { askPreviewFlower?.(); return; }
     bindScreenshotSource(captureFlowerSource());
     const capturedAnchor = anchor ?? capturePromptCardAnchor();
     const capturedMode = viewMode();
@@ -2711,10 +2709,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
 
-  const receiveFlowerWindowHandoff = async (source?: DesktopAskFlowerSource) => {
+  const receiveFlowerWindowHandoff = async (source: DesktopAskFlowerSource) => {
+    if (standaloneFilePreview) { askPreviewFlower?.(); return; }
     try {
       const receiver = await import('./services/desktopFlowerSource');
-      receiver.deliverFlowerWindowHandoff(source, envId(), environmentName(), i18n.t('shell.notifications.invalidFilePath'), openFlowerTurnLauncher, screenshot => {
+      receiver.deliverFlowerWindowHandoff(source, envId(), environmentName(), openFlowerTurnLauncher, screenshot => {
         bindScreenshotSource(undefined); externalScreenshot = screenshot;
       });
     } catch (error) {
@@ -2722,12 +2721,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       notify.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), getErrorMessage(error));
     }
   };
-  let pendingPreviewFlower = new URLSearchParams(window.location.search).has(FILE_PREVIEW_FLOWER_QUERY);
-  createEffect(() => {
-    if (!pendingPreviewFlower || standalone || !runtimeConnectionEstablished() || accessGateVisible() || env.state !== 'ready') return;
-    pendingPreviewFlower = false;
-    void receiveFlowerWindowHandoff();
-  });
   onMount(() => {
     const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(receiveFlowerWindowHandoff);
     onCleanup(() => stopAsk?.());
@@ -2922,11 +2915,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       throw new Error(i18n.t('flowerChat.router.missingThreadID'));
     }
     const target = context;
-
-    if (target.mode === 'activity' || layout.isMobile()) {
-      setViewMode('activity', { surfaceId: target.activeSurface, focusSurface: false });
+    if (standaloneFilePreview || target.mode === 'activity' || layout.isMobile()) {
+      if (standaloneFilePreview) setFlowerProductMountRequested(true);
+      else setViewMode('activity', { surfaceId: target.activeSurface, focusSurface: false });
       focusActivityFlowerThread(tid);
-      if (target.activeSurface !== 'ai') openActivityFlowerCompanion();
+      if (standaloneFilePreview || target.activeSurface !== 'ai') openActivityFlowerCompanion();
       return;
     }
 
@@ -3056,6 +3049,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const openFlowerConversation = (threadID: string) => {
+    if (standaloneFilePreview) { handoffFlowerTurn({ mode: 'activity', activeSurface: 'files' }, threadID); return; }
     if (viewMode() === 'activity' || layout.isMobile()) focusActivityFlowerThread(threadID);
     else focusAIThread(threadID);
     openSurface('ai', { focus: true, openStrategy: 'focus_latest_or_create' });
@@ -3568,9 +3562,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const activityFlowerExpanded = createMemo(() => activityFlowerPlacement() !== 'collapsed');
   const activityFlowerCompanionVisible = createMemo(() => (
     !pluginCreationOpen() && viewMode() === 'activity'
-    && !layout.isMobile()
+    && (standaloneFilePreview ? flowerProductMountRequested() : !layout.isMobile())
     && activityFlowerPlacement() !== 'full_page'
-    && layout.sidebarActiveTab() !== ENV_TESSIVEN_ACTIVITY_ID
+    && (standaloneFilePreview || layout.sidebarActiveTab() !== ENV_TESSIVEN_ACTIVITY_ID)
     // Only the floating companion yields to Ask Flower; page hosts stay visible.
     && !activityFlowerLauncherVisible()
     && activityContentAvailable()
@@ -5244,7 +5238,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 if (threadID) focusActivityFlowerThread(threadID);
                 openActivityFlowerCompanion();
               }}
-              onOpenPluginCreation={({ threadID }) => openPluginCreation(threadID)}
+              onOpenPluginCreation={standaloneFilePreview ? undefined : ({ threadID }) => openPluginCreation(threadID)}
               companionCopy={activityFlowerCompanionCopy()}
               headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
               onPresenceChange={handleActivityFlowerPresenceChange}
@@ -5419,9 +5413,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       <Show when={auditOpen()}>
         <AuditLogDialog open envId={envId()} onClose={() => setAuditOpen(false)} />
       </Show>
-      <Show when={fileBrowserSurfaceHostRequested()}>
-        <FileBrowserSurfaceHost />
-      </Show>
       <Show when={debugConsoleMountRequested()}>
         <DebugConsoleWindow controller={debugConsole} />
       </Show>
@@ -5492,7 +5483,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const renderStandalone = () => (
     <div
       ref={bindFlowerShell}
-      class="h-full min-h-0"
+      class="relative h-full min-h-0"
       data-env-service-canvas-window={standaloneTessiven ? true : undefined}
       data-env-file-preview-window={standaloneFilePreview ? true : undefined}
       data-env-service-canvas-ready={standaloneTessiven ? String(standaloneReady()) : undefined}
@@ -5518,6 +5509,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             </div>
           </Suspense>
         </ErrorBoundary>
+      </Show>
+      <Show when={standaloneFilePreview}>
+        {renderActivityFlowerAnchor()}
       </Show>
     </div>
   );
@@ -5579,20 +5573,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         </div>
         <Show when={canUseFlower()}>{renderActivityFlowerAnchor()}</Show>
       </AppViewport>
-      <div
-        ref={setActivityFlowerOverlayHost}
-        class="flower-activity-overlay-host"
-        style={{
-          'z-index': ENV_APP_FLOATING_LAYER.flowerCompanion,
-          '--redeven-terminal-background': activityTerminalFlowerRegistration()?.palette().background,
-          '--redeven-terminal-foreground': activityTerminalFlowerRegistration()?.palette().foreground,
-        }}
-        data-activity-flower-overlay-host
-        inert={mobilePluginModalOpen()}
-        aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
-      />
-      {renderActivityFlowerCompanion()}
-      {renderFlowerProduct()}
       {renderNotesOverlay()}
       </div>
       <For each={activityPluginWindows()}>
@@ -5679,7 +5659,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         openFlowerTurnLauncher,
         sendFlowerTurn: (input, threadID) => sendFlowerTurn({ ...input, intent: withFlowerTurnExecutionContext(input.intent) }, threadID),
         openFlowerConversation,
-        revealHostApplication,
+        revealHostApplication: standaloneFilePreview ? undefined : revealHostApplication,
         revealHostApplicationRequest,
         consumeRevealHostApplicationRequest,
         openTerminalInDirectoryRequestSeq,
@@ -5687,7 +5667,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         openTerminalInDirectory,
         openFileBrowserAtPath,
         openFilePreview,
-        flowerWorkingDirectoryActions,
+        flowerWorkingDirectoryActions: standaloneFilePreview ? { ...flowerWorkingDirectoryActions, openWorkingDirectoryInTerminal: undefined } : flowerWorkingDirectoryActions,
         openFlowerMessageFile,
         openFlowerMessageURL,
         openFlowerCanonicalReferenceTarget,
@@ -5750,6 +5730,23 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 )}>
                   <div class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
                     {standalone ? renderStandalone() : renderMainShell()}
+                    <Show when={!standaloneTessiven}>
+                      <div
+                        ref={setActivityFlowerOverlayHost}
+                        class="flower-activity-overlay-host"
+                        style={{
+                          'z-index': ENV_APP_FLOATING_LAYER.flowerCompanion,
+                          '--redeven-terminal-background': activityTerminalFlowerRegistration()?.palette().background,
+                          '--redeven-terminal-foreground': activityTerminalFlowerRegistration()?.palette().foreground,
+                        }}
+                        data-activity-flower-overlay-host
+                        inert={mobilePluginModalOpen()}
+                        aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
+                      />
+                      {renderActivityFlowerCompanion()}
+                    </Show>
+                    <Show when={fileBrowserSurfaceHostRequested()}><FileBrowserSurfaceHost /></Show>
+                    {renderFlowerProduct()}
                   </div>
                 </Show>
                 <Show when={restartPreparing()}>

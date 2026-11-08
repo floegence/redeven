@@ -19,15 +19,6 @@ vi.mock('electron', () => ({
 }));
 
 describe('bootstrapDesktopShellBridge', () => {
-  it('requires a native acknowledgement for preview Flower handoff', async () => {
-    const { bootstrapDesktopShellBridge } = await import('./desktopShell'); bootstrapDesktopShellBridge();
-    const [, bridge] = exposeInMainWorld.mock.calls[0];
-    ipcRendererInvoke.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: 'true' });
-    await expect(bridge.askFilePreviewFlower({ path: '/a' })).resolves.toEqual({ ok: true });
-    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:ask-file-preview-flower', { path: '/a' });
-    await expect(bridge.askFilePreviewFlower({ path: '/a' })).resolves.toEqual({ ok: false });
-  });
-
   it('requires native acknowledgement for file preview windows', async () => {
     const { bootstrapDesktopShellBridge } = await import('./desktopShell'); bootstrapDesktopShellBridge();
     const [, bridge] = exposeInMainWorld.mock.calls[0];

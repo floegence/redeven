@@ -1,7 +1,5 @@
-import { ASK_FILE_PREVIEW_FLOWER_CHANNEL } from '../shared/filePreviewWindowRoute';
-import { readFilePreviewWindowRequest } from '../shared/filePreviewWindow';
 import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
-import { askFilePreviewFlower, openFilePreviewWindow } from './filePreviewWindow';
+import { isSessionFilePreviewURL, openFilePreviewWindow } from './filePreviewWindow';
 import { resolveRunningSettingsTarget } from './runtimeSettingsTarget';
 import { captureAuthorizedPage } from './manualScreenshot';
 import { RELEASE_FLOWER_SOURCE_CHANNEL, type DesktopAskFlowerSource, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
@@ -18935,6 +18933,12 @@ function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRec
   const record = owner ?? sessionRecordForWebContentsID(source.id);
   const root = record && !record.closing ? liveTrackedBrowserWindow(record.root_window) : null;
   if (!root || !record || root.webContents === source || source.isDestroyed()) return;
+  const preview = sessionRecordForWebContentsID(source.id) === record && isAllowedSessionNavigation(record.session_key, source.getURL())
+    && isSessionFilePreviewURL(source.getURL(), record.entry_url);
+  if (preview) {
+    source.send(ASK_FLOWER_SOURCE_CHANNEL, { id: crypto.randomUUID(), title: source.getTitle(), url: '', captured_at_ms: Date.now() });
+    return;
+  }
   // Repeated invocations focus the existing draft without replacing its source.
   const current = flowerWindowOrigins.get(root.webContents.id);
   if (current?.record === record) {
@@ -18950,11 +18954,7 @@ function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRec
   root.webContents.once('destroyed', clearFlowerWindowOrigin);
   root.webContents.removeListener('did-navigate', clearFlowerWindowOrigin);
   root.webContents.once('did-navigate', clearFlowerWindowOrigin);
-  const sourceURL = new URL(url);
-  const preview = sessionRecordForWebContentsID(source.id) === record && isAllowedSessionNavigation(record.session_key, url)
-    && sourceURL.origin === new URL(record.entry_url).origin && sourceURL.pathname === LOCAL_UI_ENV_APP_ENTRY_PATH
-    ? readFilePreviewWindowRequest(sourceURL.search) : null;
-  const metadata = { ...(preview ? { file_path: preview.path } : {}), id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now(), ...(selection ? { selection } : {}) };
+  const metadata = { id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now(), ...(selection ? { selection } : {}) };
   flowerWindowOrigins.set(root.webContents.id, { id, source, url, record, metadata });
   root.webContents.send(ASK_FLOWER_SOURCE_CHANNEL, metadata);
   root.show(); root.focus();
@@ -19966,8 +19966,9 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.handle(MANUAL_SCREENSHOT_CHANNEL, async (event, request) => {
     const record = sessionRecordForWebContentsID(event.sender.id);
-    const trusted = record ? !record.closing && record.root_window.webContentsID === event.sender.id
-      && event.sender.getURL() === record.entry_url : utilityWindowKindByWebContentsID.has(event.sender.id);
+    const trusted = record ? !record.closing && ((record.root_window.webContentsID === event.sender.id
+      && event.sender.getURL() === record.entry_url) || (isAllowedSessionNavigation(record.session_key, event.sender.getURL())
+      && isSessionFilePreviewURL(event.sender.getURL(), record.entry_url))) : utilityWindowKindByWebContentsID.has(event.sender.id);
     if (!trusted || event.senderFrame !== event.sender.mainFrame) throw new Error('Screenshot source is unavailable.');
     const input = parseManualScreenshotRequest(request);
     if (input.url !== event.sender.getURL()) throw new Error('Screenshot source changed.');
@@ -20047,16 +20048,6 @@ if (!app.requestSingleInstanceLock()) {
     const record = sessionRecordForWebContentsID(event.sender.id);
     if (normalized.preparation_id && (!record || event.senderFrame !== event.sender.mainFrame)) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
     return openWebServiceWindowFromShell(record, normalized, record ? `${record.session_key}:${event.sender.id}` : undefined);
-  });
-  ipcMain.handle(ASK_FILE_PREVIEW_FLOWER_CHANNEL, (event, request) => {
-    const record = sessionRecordForWebContentsID(event.sender.id);
-    const root = record && !record.closing ? liveTrackedBrowserWindow(record.root_window) : null;
-    return askFilePreviewFlower(request, record && root ? {
-      mainFrame: event.senderFrame === event.sender.mainFrame,
-      allowed: isAllowedSessionNavigation(record.session_key, event.sender.getURL()),
-      sourceURL: event.sender.getURL(), entryURL: record.entry_url,
-      open: () => { askFlowerFromOwnedWindow(event.sender, record); return true; },
-    } : null);
   });
   ipcMain.handle(OPEN_FILE_PREVIEW_WINDOW_CHANNEL, (event, request) => {
     const record = sessionRecordForWebContentsID(event.sender.id);
