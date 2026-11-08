@@ -1,3 +1,5 @@
+import { useNotification } from '@floegence/floe-webapp-core';
+import { askFilePreviewFlower } from '../services/filePreviewFlower';
 import { DownloadTaskButton } from '../downloads/DownloadTaskButton';
 import { useDownloadManager } from '../downloads/DownloadContext';
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
@@ -29,12 +31,19 @@ function StandaloneSurface(props: FilePreviewSurfaceProps) {
   </FilePreviewSearchScope>;
 }
 
-export function FilePreviewStandalone() {
+export function FilePreviewStandalone(props: { onAskFlowerReady: (action: (() => void) | undefined) => void }) {
+  const notification = useNotification();
   const context = useFilePreviewContext();
   const i18n = useI18n();
   const request = readFilePreviewWindowRequest(window.location.search);
   onMount(() => {
     if (!request) return;
+    props.onAskFlowerReady(() => {
+      void askFilePreviewFlower(request.path, {
+        unavailable: i18n.t('shell.notifications.askFlowerUnavailableTitle'), popupBlocked: i18n.t('webServices.errors.popupBlocked'),
+      }).catch(error => notification.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), error instanceof Error ? error.message : String(error)));
+    });
+    onCleanup(() => props.onAskFlowerReady(undefined));
     const name = request.path.slice(request.path.lastIndexOf('/') + 1);
     void context.workspace?.openPreview({ id: request.path, path: request.path, name, type: 'file' });
   });

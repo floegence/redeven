@@ -1,5 +1,4 @@
 import { FILE_PREVIEW_FLOWER_QUERY } from '../../../../../desktop/src/shared/filePreviewWindowRoute';
-import { askFilePreviewFlower } from './services/filePreviewFlower';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
@@ -2619,14 +2618,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       && current()?.id === source.id && current()?.value.resourceKey === source.value.resourceKey } : undefined;
   };
   const reportPreviewFlowerError = (error: unknown) => notify.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), getErrorMessage(error));
-  const handoffPreviewToFlower = () => {
-    const path = filePreviewWorkspace.activeController().item()?.path;
-    if (!path) return;
-    void askFilePreviewFlower(path, { unavailable: i18n.t('shell.notifications.askFlowerUnavailableTitle'),
-      popupBlocked: i18n.t('webServices.errors.popupBlocked') }).catch(reportPreviewFlowerError);
-  };
+  let askPreviewFlower: (() => void) | undefined;
   const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
-    if (standaloneFilePreview) return handoffPreviewToFlower;
+    if (standaloneFilePreview) return () => askPreviewFlower?.();
     const source = captureFlowerSource(false, request?.target, request?.selection ?? '');
     const snapshot = source ? flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
       pageID: source.value.pageID, pageName: source.value.pageName, capturedAtMs: Date.now(),
@@ -2651,7 +2645,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
-    if (standaloneFilePreview) { handoffPreviewToFlower(); return; }
+    if (standaloneFilePreview) { askPreviewFlower?.(); return; }
     bindScreenshotSource(captureFlowerSource());
     const capturedAnchor = anchor ?? capturePromptCardAnchor();
     const capturedMode = viewMode();
@@ -2712,41 +2706,29 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
 
-  const openFileFlowerLauncher = async (path: string) => {
-    const { filePreviewFlowerIntent } = await import('./services/filePreviewFlowerIntent');
-    const intent = filePreviewFlowerIntent(path);
-    if (intent) { openFlowerTurnLauncher(intent); bindScreenshotSource(undefined); }
-    else notify.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
+  const openFileFlowerLauncher = async (path?: string) => {
+    const receiver = await import('./services/filePreviewFlowerIntent');
+    openFlowerTurnLauncher(receiver.receiveFilePreviewFlowerIntent(path, i18n.t('shell.notifications.invalidFilePath')));
+    bindScreenshotSource(undefined);
   };
-  let pendingPreviewFlower = new URLSearchParams(window.location.search).get(FILE_PREVIEW_FLOWER_QUERY);
+  let pendingPreviewFlower = new URLSearchParams(window.location.search).has(FILE_PREVIEW_FLOWER_QUERY);
   createEffect(() => {
     if (!pendingPreviewFlower || standalone || !runtimeConnectionEstablished() || accessGateVisible()) return;
-    const path = pendingPreviewFlower; pendingPreviewFlower = null;
-    const url = new URL(window.location.href); url.searchParams.delete(FILE_PREVIEW_FLOWER_QUERY);
-    window.history.replaceState(window.history.state, '', url);
-    void openFileFlowerLauncher(path).catch(reportPreviewFlowerError);
+    pendingPreviewFlower = false;
+    void openFileFlowerLauncher().catch(reportPreviewFlowerError);
   });
   onMount(() => {
     const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(async source => {
       if (flowerTurnLauncherLocked()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
-      if (source.file_path) {
-        try { await openFileFlowerLauncher(source.file_path); }
-        catch (error) { reportPreviewFlowerError(error); }
-      } else {
-      const snapshot = flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
-        pageID: '', pageName: source.title || environmentName(), capturedAtMs: source.captured_at_ms,
-        state: { url: source.url, ...(source.selection ? { selection: source.selection } : {}) } });
-      const context = { kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content };
-      openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
-        context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source.id }) }, { x: 32, y: 80 });
-      }
-      if (!flowerTurnLauncherOpen()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
-      externalScreenshot = async signal => {
-        signal.throwIfAborted();
-        const result = await window.redevenDesktopShell?.captureSourceScreenshot?.(source.id);
-        signal.throwIfAborted(); if (!result) throw new Error('source_unavailable');
-        return new File([new Uint8Array(result.png)], `Screenshot-${Date.now()}.png`, { type: 'image/png' });
-      };
+      try {
+        const receiver = await import('./services/desktopFlowerSource');
+        if (flowerTurnLauncherLocked()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
+        openFlowerTurnLauncher(receiver.desktopFlowerSourceIntent(source, envId(), environmentName(), i18n.t('shell.notifications.invalidFilePath')), { x: 32, y: 80 });
+        if (flowerTurnLauncherOpen()) {
+          bindScreenshotSource(undefined);
+          externalScreenshot = receiver.desktopFlowerSourceScreenshot(source.id);
+        } else window.redevenDesktopShell?.releaseAskFlowerSource?.();
+      } catch (error) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); reportPreviewFlowerError(error); }
     });
     onCleanup(() => stopAsk?.());
     const stop = window.redevenDesktopShell?.onRemoteDesktopFiles?.(() => openSurface('files'));
@@ -5577,7 +5559,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
           <Suspense fallback={<ActivityPageLoading />}>
             <div class="h-full min-h-0 flex flex-col">
-              <div class="min-h-0 flex-1"><Show when={standaloneFilePreview} fallback={<EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone />}><FilePreviewStandalone /></Show></div>
+              <div class="min-h-0 flex-1"><Show when={standaloneFilePreview} fallback={<EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone />}><FilePreviewStandalone onAskFlowerReady={action => { askPreviewFlower = action; }} /></Show></div>
             </div>
           </Suspense>
         </ErrorBoundary>
