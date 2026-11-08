@@ -15,8 +15,8 @@ import (
 
 type draftRouteAuthor struct{ creates int }
 
-func (*draftRouteAuthor) ProjectTitle(context.Context, *session.Meta, string) (string, error) {
-	return "Generated timer", nil
+func (*draftRouteAuthor) ProjectPresentation(context.Context, *session.Meta, string) (string, string, error) {
+	return "Generated timer", "/verified/icon", nil
 }
 
 func (b *draftRouteAuthor) CreateWorkspace(_ context.Context, _ *session.Meta, request string) (string, error) {
@@ -88,7 +88,7 @@ func TestPluginDraftRoutesBindOwnerAndRecoverRequests(t *testing.T) {
 	if draft.ID == "" || draft.WorkspaceID == "" || retried != draft || backend.creates != 1 {
 		t.Fatalf("retry created a second workspace: %+v %+v calls=%d", draft, retried, backend.creates)
 	}
-	if shown := decode(call(http.MethodGet, "/drafts/"+draft.ID, "")); shown.Title != "Generated timer" || shown.Revision != draft.Revision {
+	if shown := decode(call(http.MethodGet, "/drafts/"+draft.ID, "")); shown.Title != "Generated timer" || shown.IconURL != "/verified/icon" || shown.Revision != draft.Revision {
 		t.Fatalf("project projection: %+v", shown)
 	}
 	if list := call(http.MethodGet, "/drafts", ""); !strings.Contains(list.Body.String(), "Generated timer") {
