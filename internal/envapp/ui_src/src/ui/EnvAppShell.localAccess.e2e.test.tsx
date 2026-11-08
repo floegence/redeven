@@ -4081,7 +4081,10 @@ describe('EnvAppShell environment entry affordances', () => {
       const settingsBefore = host.querySelector('[data-testid="preview-settings-seq"]')!.textContent;
       (host.querySelector('[data-testid="preview-settings"]') as HTMLButtonElement).click();
       expect(host.querySelector('[data-testid="preview-settings-seq"]')!.textContent).not.toBe(settingsBefore);
-      expect(window.location.search).toBe('?window=file-preview&path=%2Fa.html');
+      await flushUntil(() => Boolean(host.querySelector('.redeven-unified-settings-dialog')));
+      expect(host.querySelectorAll('.redeven-unified-settings-dialog')).toHaveLength(1);
+      expect(window.location.search).toBe('?window=file-preview&path=%2Fa.html&settings=ai');
+      expect(host.querySelector('[data-testid="standalone-preview"]')).not.toBeNull();
     } finally { dispose(); window.history.replaceState({}, '', '/'); }
   }, 10000);
 

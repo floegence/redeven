@@ -152,11 +152,13 @@ await session.run(async () => {
     assert.equal(await initialFrame.getByRole('textbox', { name: 'Retained input' }).inputValue(), 'retained through Flower');
     assert.equal(await initialFrame.evaluate(() => scrollY), 400);
     await child.getByRole('button', { name: 'Flower settings', exact: true }).filter({ visible: true }).click();
-    await child.locator('.flower-settings-dialog').waitFor();
-    await child.locator('.flower-settings-dialog').getByRole('region', { name: 'Current model', exact: true }).getByText('Preview qualification', { exact: true }).waitFor();
-    assert.equal(await parent.locator('.flower-settings-dialog').count(), 0);
+    const settingsDialog = child.locator('.redeven-unified-settings-dialog');
+    await settingsDialog.waitFor();
+    await settingsDialog.getByRole('region', { name: 'Current model', exact: true }).getByText('Preview qualification', { exact: true }).waitFor();
+    assert.equal(await settingsDialog.count(), 1);
+    assert.equal(await parent.locator('.redeven-unified-settings-dialog').count(), 0);
     await child.screenshot({ path: path.join(output, 'native-local-settings.png') });
-    await child.keyboard.press('Escape'); await child.locator('.flower-settings-dialog').waitFor({ state: 'hidden' });
+    await child.keyboard.press('Escape'); await settingsDialog.waitFor({ state: 'hidden' });
     await child.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
     await child.locator('#redeven-activity-flower-product[data-presentation="collapsed"]').waitFor();
     await initialFrame.getByRole('textbox', { name: 'Retained input' }).fill('editable after Flower');
