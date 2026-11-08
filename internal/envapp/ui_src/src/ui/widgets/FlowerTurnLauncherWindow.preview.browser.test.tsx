@@ -45,6 +45,15 @@ async function mount(width: number, theme: string) {
   return { file, submitted };
 }
 
+it('keeps the editor focused through screenshot capture so Escape dismisses the prompt', async () => {
+  await mount(1100, 'dark');
+  await page.getByRole('button', { name: 'Capture view', exact: true }).click();
+  await expect.poll(() => document.querySelector('[data-floe-prompt-card]')?.textContent).toContain('Screenshot.png');
+  await expect.poll(() => document.activeElement).toBe(document.querySelector('textarea'));
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelector('[data-floe-prompt-card]')).toBeNull();
+});
+
 it.each([{ width: 1440, theme: 'light' }, { width: 390, theme: 'dark' }, { width: 430, theme: 'light' }, { width: 768, theme: 'dark' }])('shows the complete frozen context without file chrome at $width', async ({ width, theme }) => {
   await mount(width, theme);
   await page.getByRole('button', { name: 'File Browser', exact: true }).click();

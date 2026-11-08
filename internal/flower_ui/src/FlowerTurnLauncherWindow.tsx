@@ -255,6 +255,7 @@ export function createFlowerTurnLauncherPanelController(
 
   const captureScreenshot = async () => {
     if (!props.screenshot || capturing() || sending() || admissionUnknown()) return;
+    textareaEl?.focus({ preventScroll: true });
     const operation = new AbortController(); captureController = operation;
     setCapturing(true); setCaptureError('');
     try {

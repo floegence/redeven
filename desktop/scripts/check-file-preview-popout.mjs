@@ -146,15 +146,42 @@ await session.run(async () => {
     await child.screenshot({ path: path.join(output, 'native-local-reply.png') });
     assert.equal(await initialFrame.getByRole('textbox', { name: 'Retained input' }).inputValue(), 'retained through Flower');
     assert.equal(await initialFrame.evaluate(() => scrollY), 400);
+    await child.getByRole('button', { name: 'Flower settings', exact: true }).filter({ visible: true }).click();
+    await child.locator('.flower-settings-dialog').waitFor();
+    await child.locator('.flower-settings-dialog').getByRole('region', { name: 'Current model', exact: true }).getByText('Preview qualification', { exact: true }).waitFor();
+    assert.equal(await parent.locator('.flower-settings-dialog').count(), 0);
+    await child.screenshot({ path: path.join(output, 'native-local-settings.png') });
+    await child.keyboard.press('Escape'); await child.locator('.flower-settings-dialog').waitFor({ state: 'hidden' });
     await child.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
     await child.locator('#redeven-activity-flower-product[data-presentation="collapsed"]').waitFor();
     await initialFrame.getByRole('textbox', { name: 'Retained input' }).fill('editable after Flower');
     assert.equal(await initialFrame.getByRole('textbox', { name: 'Retained input' }).inputValue(), 'editable after Flower');
     await initialFrame.evaluate(() => scrollTo(0, 400));
     await child.bringToFront();
-    await child.keyboard.press('ControlOrMeta+Shift+J');
+    // Exercise Electron's native input route even while the sandboxed iframe owns focus.
+    await app.evaluate(({ BrowserWindow }, url) => {
+      const win = BrowserWindow.getAllWindows().find(win => win.webContents.getURL() === url);
+      win.focus();
+      const modifiers = [process.platform === 'darwin' ? 'meta' : 'control', 'shift'];
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'J', modifiers });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'J', modifiers });
+    }, child.url());
     await child.locator('[data-floe-prompt-card]').waitFor();
     assert.ok((await child.locator('[data-floe-prompt-card]').innerText()).includes(path.basename(htmlFile)));
+    assert.equal(await parent.locator('[data-floe-prompt-card]').count(), 0);
+    await child.keyboard.press('Escape'); await child.locator('[data-floe-prompt-card]').waitFor({ state: 'hidden' });
+    // Select the real native menu callback without relying on OS menu coordinates.
+    await app.evaluate(({ Menu }) => {
+      const popup = Menu.prototype.popup;
+      Menu.prototype.popup = function (options) {
+        Menu.prototype.popup = popup;
+        const action = this.getMenuItemById('assistant.ask.flower');
+        if (!action) throw new Error('Native preview menu must expose Ask Flower');
+        action.click(); options?.callback?.();
+      };
+    });
+    await initialFrame.locator('body').click({ button: 'right', position: { x: 200, y: 600 } });
+    await child.locator('[data-floe-prompt-card]').waitFor();
     assert.equal(await parent.locator('[data-floe-prompt-card]').count(), 0);
     await child.keyboard.press('Escape'); await child.locator('[data-floe-prompt-card]').waitFor({ state: 'hidden' });
     await child.getByRole('button', { name: 'Ask Flower', exact: true }).click();
@@ -298,7 +325,7 @@ await session.run(async () => {
     await writeFile(missing, '# Recovered preview'); await errorTab.getByRole('button', { name: 'Retry', exact: true }).click();
     await errorTab.getByRole('heading', { name: 'Recovered preview', exact: true }).waitFor(); await errorTab.close();
     report.scenarios.push('browser-download-and-file-link-history', 'browser-menu-opens-new-tab', 'browser-exact-special-character-path', 'browser-isolated-opener-and-reload', 'browser-narrow-layout', 'real-missing-file-retry');
-    report.scenarios.push('native-local-flower-submit-visible-reply-and-retained-document', 'native-local-flower-shortcut-and-copy-path', 'browser-local-flower-submit-without-new-tab', 'browser-local-flower-context-menu', 'browser-narrow-local-flower-visible-reply');
+    report.scenarios.push('native-local-flower-submit-visible-reply-and-retained-document', 'native-local-flower-shortcut-and-copy-path', 'native-local-flower-context-menu', 'native-local-flower-settings-and-collapse', 'browser-local-flower-submit-without-new-tab', 'browser-local-flower-context-menu', 'browser-narrow-local-flower-visible-reply');
     assert.deepEqual(providerFailures, []); assert.deepEqual(report.errors, []); report.status = 'passed';
   } catch (error) {
     report.status = 'failed'; report.error = error.stack ?? String(error);

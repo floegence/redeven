@@ -20237,7 +20237,7 @@
         "title": "File preview actions and dismissal",
         "type": "UI Contract"
       },
-      "body_length": 8622,
+      "body_length": 8845,
       "summary": "Redeven owns file actions, drafts and immediate cancellation; Floe owns titlebar, tabs and exit presence. Sorting retains opaque face/quiet shadow under pointer,shifts neighbors/settles without insertion bar/external border. Commit order on release,cancel restores; reduced motion skips settling.",
       "sections": [
         {
@@ -20258,8 +20258,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewWorkspace.browser.test.tsx` - Multi-document state, actions, keyboard, narrow header and CSV-mode acceptance.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerAttachmentPreviewTabs.browser.test.tsx` - Attachment identity, retry, cancellation and resource release.\n- `redeven:desktop/scripts/check-office-preview.mjs` - Real Electron `file://` acceptance verifies header tabs, retained CSV canvas/zoom/source state, close-to-single and Escape.\n\n- `redeven:desktop/scripts/check-file-preview-continuity.mjs` - Production-built file:// Electron workspace with real product controllers/panels, deterministic byte transport, optional external HTML evidence and verified cleanup; no installer claim.\n- 2026-11-06: published Floe 0.96.0, Electron 45.1.0; synthetic and two supplied dark reports each passed 16 tab switches with zero light samples, preserved scroll420, no repeated read and verified disposal. Reintroducing display:none failed the same retained-viewport assertion. External documents/screenshots stay outside tracked source.\n\n- `redeven:desktop/scripts/check-file-preview-popout.mjs` - Built Runtime and real Desktop/Chromium acceptance for menu routing, authorization, special-character paths, repeat focus, reload, read-only presentation, unsaved drafts, themes, narrow viewports, close/reopen, missing-file Retry, exact Flower context reaching an isolated model provider, visible completed replies, native shortcut/copy/capture, browser context menu and narrow same-tab replies; supervisor verifies owned cleanup. Not installer or all-platform qualification.",
-          "char_count": 1628
+          "body": "- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewWorkspace.browser.test.tsx` - Multi-document state, actions, keyboard, narrow header and CSV-mode acceptance.\n- `redeven:internal/envapp/ui_src/src/ui/FlowerAttachmentPreviewTabs.browser.test.tsx` - Attachment identity, retry, cancellation and resource release.\n- `redeven:desktop/scripts/check-office-preview.mjs` - Real Electron `file://` acceptance verifies header tabs, retained CSV canvas/zoom/source state, close-to-single and Escape.\n\n- `redeven:desktop/scripts/check-file-preview-continuity.mjs` - Production-built file:// Electron workspace with real product controllers/panels, deterministic byte transport, optional external HTML evidence and verified cleanup; no installer claim.\n- 2026-11-06: published Floe 0.96.0, Electron 45.1.0; synthetic and two supplied dark reports each passed 16 tab switches with zero light samples, preserved scroll420, no repeated read and verified disposal. Reintroducing display:none failed the same retained-viewport assertion. External documents/screenshots stay outside tracked source.\n\n- `redeven:desktop/scripts/check-file-preview-popout.mjs` - Built Runtime and real Desktop/Chromium acceptance for menu routing, authorization, special-character paths, repeat focus, reload, read-only presentation, unsaved drafts, themes, narrow viewports, close/reopen, missing-file Retry, exact Flower context reaching an isolated model provider, visible completed replies, native shortcut/context menu/copy/capture, local model settings, collapse and narrow same-tab replies; supervisor verifies owned cleanup. Not installer or all-platform qualification.\n- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.preview.browser.test.tsx` - Screenshot capture retains editor focus so the prompt's local Escape dismissal remains available.",
+          "char_count": 1851
         }
       ],
       "evidence": [
@@ -20284,9 +20284,14 @@
           "description": "Production-built file:// Electron workspace with real product controllers/panels, deterministic byte transport, optional external HTML evidence and verified cleanup; no installer claim."
         },
         {
-          "id": "redeven:desktop/scripts/check-file-preview-popout.mjs:0:built runtime and real desktop/chromium acceptance for menu routing, authorization, special-character paths, repeat focus, reload, read-only presentation, unsaved drafts, themes, narrow viewports, close/reopen, missing-file retry, exact flower context reaching an isolated model provider, visible completed replies, native shortcut/copy/capture, browser context menu and narrow same-tab replies; supervisor verifies owned cleanup. not installer or all-platform qualification.",
+          "id": "redeven:desktop/scripts/check-file-preview-popout.mjs:0:built runtime and real desktop/chromium acceptance for menu routing, authorization, special-character paths, repeat focus, reload, read-only presentation, unsaved drafts, themes, narrow viewports, close/reopen, missing-file retry, exact flower context reaching an isolated model provider, visible completed replies, native shortcut/context menu/copy/capture, local model settings, collapse and narrow same-tab replies; supervisor verifies owned cleanup. not installer or all-platform qualification.",
           "source": "redeven:desktop/scripts/check-file-preview-popout.mjs",
-          "description": "Built Runtime and real Desktop/Chromium acceptance for menu routing, authorization, special-character paths, repeat focus, reload, read-only presentation, unsaved drafts, themes, narrow viewports, close/reopen, missing-file Retry, exact Flower context reaching an isolated model provider, visible completed replies, native shortcut/copy/capture, browser context menu and narrow same-tab replies; supervisor verifies owned cleanup. Not installer or all-platform qualification."
+          "description": "Built Runtime and real Desktop/Chromium acceptance for menu routing, authorization, special-character paths, repeat focus, reload, read-only presentation, unsaved drafts, themes, narrow viewports, close/reopen, missing-file Retry, exact Flower context reaching an isolated model provider, visible completed replies, native shortcut/context menu/copy/capture, local model settings, collapse and narrow same-tab replies; supervisor verifies owned cleanup. Not installer or all-platform qualification."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.preview.browser.test.tsx:0:screenshot capture retains editor focus so the prompt's local escape dismissal remains available.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.preview.browser.test.tsx",
+          "description": "Screenshot capture retains editor focus so the prompt's local Escape dismissal remains available."
         }
       ],
       "snippet": "Redeven owns file actions, drafts and immediate cancellation; Floe owns titlebar, tabs and exit presence. Sorting retains opaque face/quiet shadow under pointer,shifts neighbors/settles without insertion bar/external border. Commit order on",
@@ -24815,5 +24820,5 @@
       ]
     }
   ],
-  "source_sha256": "f4683a0540cec40cd7a423b3b90cdb262b2c0b367034d4eb663bbfc7f83b55d4"
+  "source_sha256": "22cfe6cbd3da872bf7c120d5f8536a54ffbde2a8e5b4b409c125811dd85e1122"
 }
