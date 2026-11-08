@@ -59,6 +59,11 @@ func (s *Service) PromoteQueuedInput(ctx context.Context, meta *session.Meta, th
 	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
+	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)
+	if err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	defer unlockCanvas()
 	result, err := s.threadRuntime.PromoteQueued(ctxOrBackground(ctx), flruntime.PromoteQueuedInput{
 		ThreadID: identity.ThreadID(threadID), QueueItemID: queueID,
 		RequestKey: flruntime.RequestKey("promote-queue:" + queueID),
@@ -82,6 +87,11 @@ func (s *Service) SendQueuedInputNow(ctx context.Context, meta *session.Meta, th
 	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
+	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)
+	if err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	defer unlockCanvas()
 	controller, ok := s.threadRuntime.(flruntime.ThreadQueueController)
 	if !ok {
 		return flruntime.ThreadView{}, errors.New("queue sending is unavailable")

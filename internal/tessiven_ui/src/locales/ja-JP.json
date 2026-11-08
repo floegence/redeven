@@ -1,4 +1,8 @@
 {
+  "conversationBusy": "切り替える前に、アクティブな会話を停止し、保留中の作業を完了してください。",
+  "conversationInactive": "実行する前に、この会話をアクティブにしてください。",
+  "newConversation": "新しい会話",
+  "activeConversation": "アクティブ · {title}",
   "groupMemberships": "所属グループ",
   "sharedHost": "{count} 個のグループに所属",
   "sharedHostBadge": "{count} グループ",

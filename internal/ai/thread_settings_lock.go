@@ -3,6 +3,7 @@ package ai
 import "context"
 
 type threadSettingsLockKey struct {
+	canvasID   string
 	endpointID string
 	threadID   string
 }
@@ -15,7 +16,10 @@ type threadSettingsLock struct {
 // lockThreadSettings keeps same-thread admission and setting changes ordered
 // without making unrelated threads wait for preparation or provider work.
 func (s *Service) lockThreadSettings(ctx context.Context, endpointID, threadID string) (func(), error) {
-	key := threadSettingsLockKey{endpointID: endpointID, threadID: threadID}
+	return s.lockThreadAdmission(ctx, threadSettingsLockKey{endpointID: endpointID, threadID: threadID})
+}
+
+func (s *Service) lockThreadAdmission(ctx context.Context, key threadSettingsLockKey) (func(), error) {
 	s.threadSettingsLocksMu.Lock()
 	if s.threadSettingsLocks == nil {
 		s.threadSettingsLocks = make(map[threadSettingsLockKey]*threadSettingsLock)

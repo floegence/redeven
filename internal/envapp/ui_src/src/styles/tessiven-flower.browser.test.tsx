@@ -21,7 +21,7 @@ beforeEach(async () => { await new Promise<void>((resolve, reject) => { const re
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.removeAttribute('style'); document.documentElement.classList.remove('dark', 'light'); });
-function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {}, graph = false, initialComposer = false, initialRequest?: CanvasFlowerRequest) {
+function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {}, graph = false, initialComposer = false, initialRequest?: CanvasFlowerRequest, selectionFailure?: Error) {
   host = document.createElement('div');
   host.className = 'tessiven';
   host.style.cssText = `position:absolute;left:30px;top:30px;width:1100px;height:700px;${transformed ? 'transform:scale(.8);transform-origin:top left;' : ''}`;
@@ -43,7 +43,8 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
       await new Promise<void>(resolve => { wake = resolve; signal.addEventListener('abort', () => resolve(), { once: true }); });
     }
   } };
-  const accepted = vi.fn();
+  const accepted = vi.fn((submitted: CanvasFlowerRequest, threadID: string) => setRequest(previous => previous.selection.canvas_id === submitted.selection.canvas_id ? { ...previous, flower_thread_id: threadID } : previous));
+  const selected = vi.fn(async (threadID: string) => { if (selectionFailure) throw selectionFailure; setRequest(previous => ({ ...previous, flower_thread_id: threadID })); });
   dispose = render(() => <FloeConfigProvider><LayoutProvider>
     {graph && <TessivenGraph t={tessivenText('en-US')} historical={false} onAsk={() => {}} onInspect={() => {}}
       version={toRenderVersion({ canvas_id: 'commerce', number: 2, created_at: 1, digest: 'fixture', document_yaml: '', source: 'flower', summary: '',
@@ -60,12 +61,14 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
     <TessivenFlowerPanel
     request={request()} visible initialComposer={initialComposer} t={tessivenText('en-US')}
     onAccepted={accepted}
+    conversations={[{ thread_id: 'earlier-canvas-thread', title: 'Earlier canvas conversation' }, { thread_id: request().flower_thread_id ?? 'canvas-thread', title: 'Current canvas conversation' }]}
+    onSelectConversation={selected}
     onRemoveReference={id => setRequest(previous => ({ ...previous, selection: {
       ...previous.selection, object_refs: previous.selection.object_refs.filter(ref => ref !== id),
     } }))}
     renderSurface={surface => <CanvasFlowerTestSurface {...surface} adapter={adapter} />}
   /></LayoutProvider></FloeConfigProvider>, host);
-  return { setRequest, sent, connections, accepted, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
+  return { setRequest, sent, connections, accepted, selected, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
 }
 const editor = () => page.getByRole('textbox');
 const replyMenu = () => page.getByRole('button', { name: 'Reply actions', exact: true });
@@ -319,7 +322,7 @@ it('keeps a quiet reply titlebar with secondary actions in an accessible menu', 
   expect(document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().width).toBe(356);
   await expect.element(page.getByRole('button', { name: 'Reply actions', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
-  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
   await expect.element(page.getByRole('menuitem', { name: 'Flower settings', exact: true })).toBeVisible();
   expect(document.querySelector('[role="menu"]')?.closest('[data-floe-surface="floating"]')).not.toBeNull();
   await expect.poll(() => document.activeElement?.getAttribute('role')).toBe('menuitem');
@@ -331,8 +334,8 @@ it('keeps a quiet reply titlebar with secondary actions in an accessible menu', 
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('canvas-thread');
   await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
-  await expect.element(page.getByRole('menuitem', { name: 'Earlier canvas conversation', exact: true })).not.toBeInTheDocument();
-  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('menuitem', { name: 'Earlier canvas conversation', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
   await userEvent.keyboard('{Escape}');
   await editor().fill('Continue this canvas conversation');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -341,7 +344,7 @@ it('keeps a quiet reply titlebar with secondary actions in an accessible menu', 
   expect(runtime.sent.mock.calls[0][0].tessiven_canvas_id).toBe('commerce');
   expect(runtime.sent.mock.calls[1][0].tessiven_canvas_id).toBeUndefined();
 });
-it('keeps the bound transcript readable without offering a fork', async () => {
+it('keeps canvas history readable with explicit conversation and fork actions', async () => {
   await page.viewport(1200, 800);
   const content = 'The canvas stays in this conversation.';
   const bound = interactionThread({ thread_id: 'saved-canvas-thread', tessiven_canvas_id: 'commerce',
@@ -354,12 +357,15 @@ it('keeps the bound transcript readable without offering a fork', async () => {
     flower_thread_id: 'saved-canvas-thread',
   });
   await expect.element(page.getByText('The canvas stays in this conversation.')).toBeVisible();
-  await expect.element(page.getByRole('button', { name: 'Fork from this answer', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('button', { name: 'Fork from this answer', exact: true })).toBeVisible();
   await expect.element(page.getByRole('button', { name: 'Export HTML', exact: true })).toBeVisible();
   await replyMenu().click();
-  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
   await expect.element(page.getByRole('menuitem', { name: 'Flower settings', exact: true })).toBeVisible();
-  await page.screenshot({ element: host, path: '__screenshots__/tessiven-fixed-conversation-menu.png' });
+  const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+  await Promise.all(menu.getAnimations().map(animation => animation.finished));
+  await expect.poll(() => getComputedStyle(menu).opacity).toBe('1');
+  await page.screenshot({ element: host, path: '__screenshots__/tessiven-active-conversation-menu.png' });
   expect(forkThread).not.toHaveBeenCalled();
 });
 
@@ -627,7 +633,7 @@ it('keeps touch controls usable and the reading surface legible in forced colors
       expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     }
     await replyMenu().click();
-    await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
     await expect.poll(() => document.activeElement?.getAttribute('role')).toBe('menuitem');
     await userEvent.keyboard('{Escape}');
     await page.screenshot({ element: host, path: '__screenshots__/tessiven-reply-touch.png' });
@@ -689,7 +695,7 @@ it('keeps the bound conversation and newer draft when acceptance arrives after h
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   await expect.element(page.getByRole('button', { name: 'Hide replies', exact: true })).toBeVisible();
   await replyMenu().click();
-  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
   await userEvent.keyboard('{Escape}');
   await editor().fill('A follow-up question');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
@@ -926,4 +932,49 @@ it('shows reasoning as it arrives before any assistant reply or tool result', as
     await expect.poll(() => document.querySelector('.flower-thinking-content')?.textContent).toContain(`Inspecting canvas layer ${index}.`);
     expect(document.querySelector('.flower-thinking-content')!.clientHeight).toBeGreaterThan(0);
   }
+});
+
+it('starts a fresh draft and explicitly activates a selected canvas conversation', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount(false, {}, false, false, { selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 0, flower_thread_id: 'saved-canvas-thread' });
+  await expect.poll(() => host.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('saved-canvas-thread');
+  await editor().fill('Keep the previous draft');
+  await replyMenu().click();
+  await expect.element(page.getByRole('menuitem', { name: 'Active · Current canvas conversation', exact: true })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'New conversation', exact: true }).click();
+  await expect.element(editor()).toHaveValue('');
+  await expect.poll(() => host.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId ?? '').toBe('');
+  await editor().fill('Start a separate discussion');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  expect(runtime.sent.mock.calls[0][0].thread_id).toBeUndefined();
+  expect(runtime.sent.mock.calls[0][0].tessiven_canvas_id).toBe('commerce');
+  await expect.poll(() => runtime.accepted.mock.calls.length).toBe(1);
+  await replyMenu().click();
+  await page.getByRole('menuitem', { name: 'Earlier canvas conversation', exact: true }).click();
+  await expect.poll(() => runtime.selected.mock.calls.length).toBe(1);
+  await expect.poll(() => host.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('earlier-canvas-thread');
+});
+
+it('keeps the current canvas and draft when activation is rejected', async () => {
+  await page.viewport(1200, 800);
+  const runtime = mount(false, {}, false, false, { selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 0, flower_thread_id: 'saved-canvas-thread' }, new Error('The active conversation still has pending work.'));
+  await expect.poll(() => host.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('saved-canvas-thread');
+  await editor().fill('Keep this unsent draft');
+  await replyMenu().click();
+  await page.getByRole('menuitem', { name: 'Earlier canvas conversation', exact: true }).click();
+  await expect.element(page.getByRole('alert')).toHaveTextContent('The active conversation still has pending work.');
+  expect(runtime.selected).toHaveBeenCalledTimes(1);
+  expect(host.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('saved-canvas-thread');
+  await expect.element(editor()).toHaveValue('Keep this unsent draft');
+});
+
+it('disables new conversations and activation while the current turn is running', async () => {
+  await page.viewport(1200, 800);
+  const running = interactionThread({ thread_id: 'saved-canvas-thread', tessiven_canvas_id: 'commerce', status: 'running', active_run_id: 'run' });
+  mount(false, { loadThread: async () => interactionBootstrap(running, 2) }, false, false, { selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 0, flower_thread_id: 'saved-canvas-thread' });
+  await expect.poll(() => host.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('saved-canvas-thread');
+  await replyMenu().click();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeDisabled();
+  await expect.element(page.getByRole('menuitem', { name: 'Earlier canvas conversation', exact: true })).toBeDisabled();
 });

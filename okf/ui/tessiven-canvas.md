@@ -46,13 +46,23 @@ The window uses the theme's main reading surface continuously across its titleba
 End padding keeps the final choice fully readable when scrolled to the bottom; the action controls remain outside the fade.
 
 ### Actions and continuity
-Each canvas has one fixed Flower conversation. The More menu contains settings,
-subagents, available Computer actions and conversation files; it never offers a
-new conversation or a conversation switcher. Answer actions retain copy and export
-without offering a fork. Both Desktop and Env App use this same embedding contract.
-The first message or Goal establishes the binding; later requests continue it.
-Canvas changes, reply visibility and late receipts preserve that identity and the
-user's pending draft. Ordinary navigation cannot render a canvas transcript,
+Each canvas keeps multiple Flower conversations and marks exactly one active.
+The More menu offers a new conversation and history with an explicit active
+indicator alongside settings, subagents, available Computer actions and files.
+Selecting a history item activates it before opening its composer. Creating a
+draft does not replace the active conversation until canonical admission; users
+can return to the current conversation without losing its draft. Answers retain
+copy, export and explicit fork actions. Desktop and Env App share the contract.
+Known ongoing execution disables switching/new-conversation controls; the server
+also rejects stale requests while active root or child work remains. Busy failures
+stay visible without changing the selection. Stop/settle the current work before
+activating another conversation; selection never implicitly cancels work.
+
+Canvas live metadata owns the active identity across windows. Late acceptance
+receipts refresh that metadata instead of posting another selection, so an older
+receipt cannot steal activation. Canvas changes, reply visibility and late
+receipts preserve pending drafts.
+Ordinary navigation cannot render a canvas transcript,
 including a stale direct ThreadID navigation request or live receipt.
 Existing-thread runtime content waits for product metadata; a new conversation's
 provisional receipt retains its submitted canvas ownership.

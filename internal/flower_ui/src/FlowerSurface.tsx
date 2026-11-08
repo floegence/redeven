@@ -642,6 +642,9 @@ export type FlowerConversationParts = Readonly<{
   actionOverlays: JSX.Element;
   trailingActions?: JSX.Element;
   threadID: Accessor<string>;
+  newConversation?: () => void;
+  selectConversation?: (threadID: string) => void;
+  conversationBusy?: Accessor<boolean>;
   submit: (intent?: Readonly<{ fallbackPrompt?: string; context?: ContextActionEnvelope }>) => Promise<void>;
   canSubmit: (fallbackPrompt?: string) => boolean;
   /** Queue an independent message with only its explicit context, preserving the composer. */
@@ -4914,7 +4917,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         case 'fork':
-          if (!props.adapter.forkThread || props.embeddedConversation?.tessivenCanvasID) return;
+          if (!props.adapter.forkThread) return;
           setThreadActionBusy({ threadID: item.thread_id, action });
           {
             const requestKey = JSON.stringify([item.thread_id, sourceItemID ?? '']);
@@ -4924,13 +4927,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               ...(sourceItemID ? { source_item_id: sourceItemID } : {}),
             };
             forkRequests.set(requestKey, request);
+            const notifyForkAccepted = props.embeddedConversation?.onAccepted;
+            const forkCanvasID = props.embeddedConversation?.tessivenCanvasID;
             const forked = await props.adapter.forkThread(item.thread_id, request);
             forkRequests.delete(requestKey);
             setThreadCache((cache) => cache.replaceSummary(forked));
             setCreatedForkThreadID(forked.thread_id);
             shouldRestoreFocus = false;
             notifySuccess(copy().threadList.forkCreated);
-            await loadAndSelectThread(forked.thread_id);
+            notifyForkAccepted?.({ client_request_id: request.client_request_id, thread_id: forked.thread_id });
+            if (forkCanvasID === props.embeddedConversation?.tessivenCanvasID) await loadAndSelectThread(forked.thread_id);
           }
           return;
         default:
@@ -6986,7 +6992,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const startCompose = () => {
-    if (props.embeddedConversation?.tessivenCanvasID) return;
     resetCompose();
     capturePageContext(currentComposerSessionKey(), 'refresh');
   };
@@ -7132,7 +7137,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     untrack(() => {
       if (embeddedSessionKey && selectedThreadID()) embeddedThreads.set(embeddedSessionKey, selectedThreadID());
       embeddedSessionKey = sessionKey;
-      const threadID = embeddedThreads.get(sessionKey) ?? trimString(props.embeddedConversation?.threadID);
+      const threadID = embeddedThreads.get(sessionKey) ?? (embeddedDraftKeys()[props.embeddedConversation!.scope] ? '' : trimString(props.embeddedConversation?.threadID));
       if (threadID) selectThread(threadID);
       else {
         cancelDeferredThreadSelection();
@@ -7148,6 +7153,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     });
   });
+  createEffect(on(() => props.embeddedConversation?.threadID, (id, previous) => {
+    if (!id || id === previous || id === selectedThreadID()) return;
+    untrack(() => selectThread(id));
+  }, { defer: true }));
   createEffect(on(() => props.embeddedConversation?.request?.nonce, (nonce, previousNonce) => {
     const request = props.embeddedConversation?.request;
     if (!nonce || nonce === previousNonce || !request) return;
@@ -12179,7 +12188,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             return true;
           } catch (error) { notifyThreadActionError(getErrorMessage(error)); return false; }
         }}
-        onFork={props.adapter.forkThread && !props.embeddedConversation?.tessivenCanvasID && thread() && thread()?.status !== 'read_only' ? () => {
+        onFork={props.adapter.forkThread && thread() && thread()?.status !== 'read_only' ? () => {
           const current = thread();
           const item = current ? projectFlowerThreadListItem(current, copy().threadList.untitled) : undefined;
           if (item) void handleThreadMenuAction('fork', item, undefined, message().id);
@@ -15551,7 +15560,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <Show when={props.embeddedConversation} fallback={conversationPanel()}>
         {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), submit: submitChat, canSubmit: canSubmitConversation, submitMessage, canSubmitMessage, actionLayout: bottomActionMode, actions: conversationHeaderActions,
           actionOverlays: subagentDropdown(), get trailingActions() { return props.headerTrailingActions; },
-          threadID: selectedThreadID })}
+          threadID: selectedThreadID, newConversation: startCompose, selectConversation: selectThread,
+          conversationBusy: () => selectedThreadHasActiveTurnEvidence() || selectedActiveSubagentItems().length > 0 || Boolean(selectedThread()?.queued_turn_count || selectedThread()?.input_request || selectedThread()?.approval_pending) || visibleTransportOutbox().some(entry => entry.delivery !== 'failed' && !entry.terminalError) })}
       </Show>
       <FlowerWorkingDirPickerDialog
         open={workingDirectoryPickerOpen() && canPickWorkingDirectory()}

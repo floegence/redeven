@@ -271,11 +271,11 @@ func TestV2ConversationOwnershipMigrationPreservesAndReopens(t *testing.T) {
 		if err != nil || owner != original.Canvas.ID {
 			t.Fatalf("attempt=%d owner=%q %v", attempt, owner, err)
 		}
-		if err := s.BindFlowerThread(t.Context(), owner, "new-thread"); !errors.Is(err, ErrFlowerThreadBound) {
-			t.Fatalf("migrated conversation replaced: %v", err)
+		if err := s.BindFlowerThread(t.Context(), owner, "new-thread"); err != nil {
+			t.Fatal(err)
 		}
 		ids, err := s.FlowerThreadIDs(t.Context(), owner)
-		if err != nil || len(ids) != 1 || ids[0] != "historical-thread" {
+		if err != nil || len(ids) != 2 {
 			t.Fatalf("history=%v %v", ids, err)
 		}
 		version, err := s.Version(t.Context(), owner, 2)

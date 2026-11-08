@@ -26,7 +26,8 @@ var (
 	ErrArchived               = errors.New("tessiven canvas is archived")
 	ErrInvalidRequest         = errors.New("invalid Tessiven request")
 	ErrFlowerThreadReferenced = errors.New("Flower thread is referenced by a Tessiven canvas")
-	ErrFlowerThreadBound      = errors.New("Tessiven canvas has a fixed Flower conversation")
+	ErrFlowerThreadInactive   = errors.New("activate this Tessiven conversation before running it")
+	ErrFlowerThreadBusy       = errors.New("stop the active Tessiven conversation and its pending work before switching")
 )
 
 type Canvas struct {
@@ -441,8 +442,8 @@ func (s *Service) Archive(ctx context.Context, id string, expected int64, archiv
 	return nil
 }
 
-// BindFlowerThread fixes the canvas conversation before its settings are published.
-// Repeating the same binding is safe; another conversation cannot replace it.
+// BindFlowerThread records ownership and atomically selects the sole active conversation.
+// The AI service serializes activation against canonical execution admission.
 func (s *Service) BindFlowerThread(ctx context.Context, canvasID, threadID string) error {
 	canvasID, threadID = strings.TrimSpace(canvasID), strings.TrimSpace(threadID)
 	if canvasID == "" || threadID == "" {
@@ -458,9 +459,6 @@ func (s *Service) BindFlowerThread(ctx context.Context, canvasID, threadID strin
 		return ErrNotFound
 	} else if err != nil {
 		return err
-	}
-	if bound != "" && bound != threadID {
-		return ErrFlowerThreadBound
 	}
 	var existing string
 	err = tx.QueryRowContext(ctx, `SELECT canvas_id FROM flower_threads WHERE thread_id=?`, threadID).Scan(&existing)

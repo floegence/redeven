@@ -13,30 +13,29 @@ import (
 	"time"
 )
 
-func TestCanvasFlowerThreadBindingIsImmutable(t *testing.T) {
+func TestCanvasFlowerThreadActivationPreservesHistoryAndRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "canvases.sqlite")
-	for attempt := range 2 {
+	for range 2 {
 		s, err := Open(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		canvas, err := s.Create(t.Context(), "fixed-canvas", "Fixed conversation")
+		canvas, err := s.Create(t.Context(), "active-canvas", "Active conversation")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := s.BindFlowerThread(t.Context(), canvas.Canvas.ID, "original-thread"); err != nil {
-			t.Fatal(err)
+		for _, id := range []string{"first", "second", "first"} {
+			if err := s.BindFlowerThread(t.Context(), canvas.Canvas.ID, id); err != nil {
+				t.Fatal(err)
+			}
+			current, err := s.Canvas(t.Context(), canvas.Canvas.ID)
+			if err != nil || current.FlowerThreadID != id {
+				t.Fatalf("active=%+v error=%v", current, err)
+			}
 		}
-		if err := s.BindFlowerThread(t.Context(), canvas.Canvas.ID, "replacement-thread"); !errors.Is(err, ErrFlowerThreadBound) {
-			t.Fatalf("attempt=%d replacement accepted: %v", attempt, err)
-		}
-		bound, err := s.Canvas(t.Context(), canvas.Canvas.ID)
-		if err != nil || bound.FlowerThreadID != "original-thread" {
-			t.Fatalf("binding changed: %+v %v", bound, err)
-		}
-		owner, err := s.FlowerThreadCanvas(t.Context(), "replacement-thread")
-		if err != nil || owner != "" {
-			t.Fatalf("rejected thread gained ownership: %q %v", owner, err)
+		ids, err := s.FlowerThreadIDs(t.Context(), canvas.Canvas.ID)
+		if err != nil || len(ids) != 2 {
+			t.Fatalf("history=%v error=%v", ids, err)
 		}
 		if err := s.Close(); err != nil {
 			t.Fatal(err)
@@ -44,76 +43,34 @@ func TestCanvasFlowerThreadBindingIsImmutable(t *testing.T) {
 	}
 }
 
-func TestCanvasFlowerThreadConcurrentBindingKeepsOneOwner(t *testing.T) {
+func TestCanvasFlowerThreadConcurrentActivationKeepsOneActive(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	canvas, err := s.Create(t.Context(), "canvas", "Fixed conversation")
+	canvas, err := s.Create(t.Context(), "canvas", "Active conversation")
 	if err != nil {
 		t.Fatal(err)
 	}
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	for _, id := range []string{"first", "second"} {
-		go func() {
-			<-start
-			results <- s.BindFlowerThread(t.Context(), canvas.Canvas.ID, id)
-		}()
+		go func() { <-start; results <- s.BindFlowerThread(t.Context(), canvas.Canvas.ID, id) }()
 	}
 	close(start)
-	accepted, rejected := 0, 0
 	for range 2 {
-		if err := <-results; err == nil {
-			accepted++
-		} else if errors.Is(err, ErrFlowerThreadBound) {
-			rejected++
-		} else {
+		if err := <-results; err != nil {
 			t.Fatal(err)
 		}
 	}
 	ids, err := s.FlowerThreadIDs(t.Context(), canvas.Canvas.ID)
-	if err != nil || accepted != 1 || rejected != 1 || len(ids) != 1 {
-		t.Fatalf("admission=%d rejection=%d owners=%v %v", accepted, rejected, ids, err)
-	}
-}
-
-func TestCanvasFlowerThreadRetainsPreviouslyRecordedOwnership(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "canvases.sqlite")
-	s, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	canvas, err := s.Create(t.Context(), "canvas", "Existing conversation")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.BindFlowerThread(t.Context(), canvas.Canvas.ID, "selected"); err != nil {
-		t.Fatal(err)
-	}
-	// Reproduce the previous v3 writer without changing canonical conversation data.
-	if _, err := s.db.Exec(`INSERT INTO flower_threads(thread_id,canvas_id,created_at) VALUES(?,?,?)`, "earlier", canvas.Canvas.ID, 1); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Close(); err != nil {
-		t.Fatal(err)
-	}
-	s, err = Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	if err := s.BindFlowerThread(t.Context(), canvas.Canvas.ID, "earlier"); !errors.Is(err, ErrFlowerThreadBound) {
-		t.Fatalf("existing binding switched: %v", err)
-	}
-	ids, err := s.FlowerThreadIDs(t.Context(), canvas.Canvas.ID)
 	if err != nil || len(ids) != 2 {
-		t.Fatalf("recorded ownership lost: %v %v", ids, err)
+		t.Fatalf("owners=%v %v", ids, err)
 	}
-	bound, err := s.Canvas(t.Context(), canvas.Canvas.ID)
-	if err != nil || bound.FlowerThreadID != "selected" {
-		t.Fatalf("bound conversation changed: %+v %v", bound, err)
+	active, err := s.Canvas(t.Context(), canvas.Canvas.ID)
+	if err != nil || (active.FlowerThreadID != "first" && active.FlowerThreadID != "second") {
+		t.Fatalf("active=%+v %v", active, err)
 	}
 }
 

@@ -259,6 +259,11 @@ func (service *Service) sendFloretSubagentInput(ctx context.Context, threads flr
 	if service == nil || threads == nil || service.floretEffects == nil {
 		return flruntime.ThreadView{}, errors.New("subagent input runtime is unavailable")
 	}
+	unlockCanvas, err := service.lockTessivenExecution(ctx, threadID.String())
+	if err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	defer unlockCanvas()
 	if err := service.persistExecutionAuthority(ctx, &request.meta, threadID.String(), requestKey, "", request.req.Options.PermissionType); err != nil {
 		return flruntime.ThreadView{}, err
 	}

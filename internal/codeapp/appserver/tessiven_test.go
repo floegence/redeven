@@ -153,7 +153,7 @@ func TestTessivenBusinessRejectsSelfDeclaredAuthorityAndRemoteTarget(t *testing.
 	}
 }
 
-func TestTessivenConversationRoutesAuthorizeAndPreserveFixedBinding(t *testing.T) {
+func TestTessivenConversationRoutesAuthorizeAndActivateOneThread(t *testing.T) {
 	library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -207,13 +207,18 @@ func TestTessivenConversationRoutesAuthorizeAndPreserveFixedBinding(t *testing.T
 		req.Header.Set("Origin", envOriginWithChannel(channel))
 		rr := httptest.NewRecorder()
 		srv.serveHTTP(rr, req)
-		if rr.Code != http.StatusConflict {
+		if rr.Code != http.StatusOK {
 			t.Fatalf("%s: %d %s", action.path, rr.Code, rr.Body.String())
 		}
 	}
 	bound, err := library.Canvas(t.Context(), canvas.Canvas.ID)
-	if err != nil || bound.FlowerThreadID != dedicated.ThreadID {
-		t.Fatalf("binding changed: %+v %v", bound, err)
+	if err != nil || bound.FlowerThreadID == dedicated.ThreadID || bound.FlowerThreadID == "" {
+		t.Fatalf("activation missing: %+v %v", bound, err)
+	}
+	request(http.MethodPost, "/flower-thread", `{"thread_id":"`+dedicated.ThreadID+`"}`, 200)
+	bound, _ = library.Canvas(t.Context(), canvas.Canvas.ID)
+	if bound.FlowerThreadID != dedicated.ThreadID {
+		t.Fatal("selection did not activate thread")
 	}
 	meta.EndpointID = "foreign"
 	response = request(http.MethodGet, "/flower-threads", "", 200)

@@ -46,6 +46,11 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	if err := s.requireEndpointThreadAuthority(context.Background(), meta.EndpointID, threadID); err != nil {
 		return SubmitFlowerApprovalResponse{}, err
 	}
+	unlockCanvas, err := s.lockTessivenExecution(context.Background(), threadID)
+	if err != nil {
+		return SubmitFlowerApprovalResponse{}, err
+	}
+	defer unlockCanvas()
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return SubmitFlowerApprovalResponse{}, err

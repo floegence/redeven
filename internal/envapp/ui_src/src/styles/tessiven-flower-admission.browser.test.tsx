@@ -67,7 +67,14 @@ function mount(overrides: Partial<FlowerSurfaceAdapter> = {}, savedThread = '') 
   const transport = { request, subscribe: () => () => {} } as TessivenTransport;
   const [openRequest, setOpenRequest] = createSignal({ canvasID: 'commerce', version: 2, nonce: 0 });
   const base = { ...canvasFlowerAdapter(), ...overrides };
-  const sent = vi.fn(base.launchTurn);
+  const sent = vi.fn(async (input: Parameters<FlowerSurfaceAdapter['launchTurn']>[0]) => {
+    const receipt = await base.launchTurn(input);
+    if (input.tessiven_canvas_id) {
+      const canvas = canvases.get(input.tessiven_canvas_id)!;
+      canvases.set(canvas.id, { ...canvas, flower_thread_id: receipt.thread_id });
+    }
+    return receipt;
+  });
   const queued: FlowerLiveStreamEnvelope[] = [];
   let wake = () => {};
   const adapter: FlowerSurfaceAdapter = {
@@ -140,17 +147,19 @@ it.each(['current-first', 'receipt-first'])('settles selection and canvas bindin
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   const receipt = await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]);
   const pushCurrent = () => runtime.push({ schema_version: 3, kind: 'thread.batch', thread_id: receipt.thread_id, current: receipt.current! });
+  runtime.canvases.set('commerce', { ...runtime.canvases.get('commerce')!, flower_thread_id: receipt.thread_id });
   if (order === 'current-first') pushCurrent();
   else accept({ client_request_id: receipt.client_request_id, thread_id: receipt.thread_id });
   await expect.poll(referenceText).toBeUndefined();
-  await expect.poll(() => runtime.bindings().length).toBe(1);
+  await expect.poll(() => runtime.canvases.get('commerce')?.flower_thread_id).toBe('canvas-thread');
+  expect(runtime.bindings()).toHaveLength(0);
   if (order === 'current-first') accept(receipt);
   else pushCurrent();
   await expect.element(editor()).toHaveValue('');
   // A second selection must survive the duplicate admission evidence.
   await select('worker');
   expect(referenceText()).toContain('Background worker');
-  expect(runtime.bindings()).toHaveLength(1);
+  expect(runtime.bindings()).toHaveLength(0);
 });
 
 it('consumes references when the canonical queue accepts a send before its turn starts', async () => {
@@ -211,7 +220,8 @@ it('retains references while admission is unknown and consumes them after the fr
   expect(runtime.sent.mock.calls[1][0]).toEqual(runtime.sent.mock.calls[0][0]);
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[1][0]));
   await expect.poll(referenceText).toBeUndefined();
-  await expect.poll(() => runtime.bindings().length).toBe(1);
+  await expect.poll(() => runtime.canvases.get('commerce')?.flower_thread_id).toBe('canvas-thread');
+  expect(runtime.bindings()).toHaveLength(0);
 });
 
 it.each(['objects', 'same-objects', 'version', 'canvas'])('preserves a newer %s selection during admission and binds the submitted canvas', async change => {
@@ -231,8 +241,9 @@ it.each(['objects', 'same-objects', 'version', 'canvas'])('preserves a newer %s 
   const retained = referenceText();
   expect(retained).toContain(change === 'objects' || change === 'canvas' ? 'Background worker' : 'Orders API');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
-  await expect.poll(() => runtime.bindings().length).toBe(1);
-  expect(runtime.bindings()[0]).toEqual(['POST', '/canvases/commerce/flower-thread', { thread_id: 'canvas-thread' }]);
+  await expect.poll(() => runtime.canvases.get('commerce')?.flower_thread_id).toBe('canvas-thread');
+  expect(runtime.bindings()).toHaveLength(0);
+
   expect(referenceText()).toBe(retained);
   if (change === 'canvas') {
     expect(runtime.canvases.get('analytics')?.flower_thread_id).toBeUndefined();
@@ -256,4 +267,19 @@ it('keeps a saved canvas binding when acceptance arrives after switching canvase
   await expect.poll(() => host.querySelector('.tessiven-toolbar')?.textContent).toContain('commerce');
   await expect.poll(referenceText).toBeUndefined();
   expect(runtime.bindings()).toHaveLength(0);
+});
+
+it('reads the latest active conversation instead of reactivating a late receipt', async () => {
+  let accept!: (receipt: Awaited<ReturnType<FlowerSurfaceAdapter['launchTurn']>>) => void;
+  const runtime = mount({ launchTurn: () => new Promise(resolve => { accept = resolve; }) }, 'canvas-thread');
+  await select();
+  await send('Finish the prior turn');
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  // The server admitted and completed this send, then another window activated
+  // a different conversation before the HTTP receipt arrived here.
+  runtime.canvases.set('commerce', { ...runtime.canvases.get('commerce')!, flower_thread_id: 'new-active-thread' });
+  accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
+  await expect.poll(() => host.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('new-active-thread');
+  expect(runtime.bindings()).toHaveLength(0);
+  expect(runtime.canvases.get('commerce')?.flower_thread_id).toBe('new-active-thread');
 });

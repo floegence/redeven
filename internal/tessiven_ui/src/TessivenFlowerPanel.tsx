@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
-import { Layers, MoreHorizontal } from '@floegence/floe-webapp-core/icons';
+import { Check, Clock, Layers, MoreHorizontal, Plus } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../flower_ui/src/FlowerSurface';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
@@ -28,6 +28,8 @@ export function TessivenFlowerPanel(props: {
   initialComposer?: boolean;
   t: TessivenText;
   renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
+  conversations?: readonly { thread_id: string; title: string }[];
+  onSelectConversation?: (threadID: string) => Promise<void>;
   onRemoveReference: (objectRef: string) => void;
   onAccepted?: (request: CanvasFlowerRequest, threadID: string) => void;
 }) {
@@ -51,7 +53,21 @@ export function TessivenFlowerPanel(props: {
   const contextAction = createMemo(() => tessivenFlowerIntent(props.request.selection, props.t).context_action);
   const renderConversation = (parts: FlowerConversationParts) => {
     let menuAnchor: HTMLSpanElement | undefined;
-    const menuItems = () => parts.actions().map(({ id, label, icon, disabled }) => ({ id, label, icon, disabled }));
+    const [switching, setSwitching] = createSignal(false);
+    const [switchError, setSwitchError] = createSignal('');
+    const menuItems = () => [
+      { id: 'canvas-new', label: props.t('newConversation'), icon: () => <Plus />, disabled: switching() || parts.conversationBusy?.() },
+      ...parts.actions().map(({ id, label, icon, disabled }) => ({ id, label, icon, disabled })),
+      ...((props.conversations?.length ?? 0) > 0 ? [
+        { id: 'canvas-history-separator', label: '', separator: true },
+        ...(props.conversations ?? []).map(thread => {
+          const active = thread.thread_id === props.request.flower_thread_id;
+          const title = thread.title || props.t('flowerConversation');
+          return { id: `conversation:${thread.thread_id}`, label: active ? props.t('activeConversation', { title }) : title,
+            icon: () => active ? <Check /> : <Clock />, disabled: switching() || (active && thread.thread_id === parts.threadID()) || (!active && parts.conversationBusy?.()) };
+        }),
+      ] : []),
+    ];
     return (
       <>
         <div class="tessiven-flower-output-boundary" ref={setBoundary} />
@@ -73,12 +89,26 @@ export function TessivenFlowerPanel(props: {
                 trigger={<span ref={menuAnchor} class="tessiven-flower-menu-trigger"><MoreHorizontal /></span>}
                 items={menuItems}
                 onSelect={id => {
-                  const source = menuAnchor?.closest<HTMLElement>('button, [role="button"]');
-                  if (source) parts.actions().find(action => action.id === id)?.run(source);
+                  setSwitchError('');
+                  if (id === 'canvas-new') parts.newConversation?.();
+                  else if (id.startsWith('conversation:') && props.onSelectConversation) {
+                    const selected = id.slice('conversation:'.length);
+                    const sourceCanvas = canvasID();
+                    setSwitching(true);
+                    void props.onSelectConversation(selected).then(() => {
+                      if (canvasID() === sourceCanvas && props.request.flower_thread_id) parts.selectConversation?.(props.request.flower_thread_id);
+                    }).catch(error => {
+                      if (canvasID() === sourceCanvas) setSwitchError(error instanceof Error ? error.message : String(error));
+                    }).finally(() => setSwitching(false));
+                  } else {
+                    const source = menuAnchor?.closest<HTMLElement>('button, [role="button"]');
+                    if (source) parts.actions().find(action => action.id === id)?.run(source);
+                  }
                 }} />
               {parts.actionOverlays}
               {parts.trailingActions}
             </>}>
+            <Show when={switchError()}><p role="alert" class="tessiven-error">{switchError()}</p></Show>
             <div class="tessiven-flower-chat flower-surface flower-surface-companion">
               <div class="flower-chat-main" data-flower-action-layout={parts.actionLayout()}>
                 <div class="tessiven-flower-conversation">{parts.conversation}</div>

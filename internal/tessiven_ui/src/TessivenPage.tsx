@@ -6,6 +6,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
   onMount,
   untrack,
@@ -70,6 +71,7 @@ export function TessivenPage(props: {
   const [archived, setArchived] = createSignal(false);
   const [canvas, setCanvas] = createSignal<Canvas>();
   const [version, setVersion] = createSignal<Version>();
+  const [conversations, setConversations] = createSignal<readonly { thread_id: string; title: string }[]>([]);
   const [browseHistory, setBrowseHistory] = createSignal(false);
   const [history, setHistory] = createSignal<VersionSummary[]>([]);
   const [historyOpen, setHistoryOpen] = createSignal(false);
@@ -164,14 +166,30 @@ export function TessivenPage(props: {
     }
 
   }
+  async function loadConversations(canvasID: string) {
+    const result = await request<{ threads: { thread_id: string; title: string }[] }>('GET', `/canvases/${encodeURIComponent(canvasID)}/flower-threads`);
+    if (!disposed && canvas()?.id === canvasID) setConversations(result.threads);
+  }
+  createEffect(on(() => canvas()?.id, id => {
+    setConversations([]);
+    if (id) void loadConversations(id).catch(cause => { if (!disposed && canvas()?.id === id) setError(message(cause)); });
+  }));
+  createEffect(on(() => [canvas()?.id, canvas()?.flower_thread_id] as const, ([id, threadID]) => {
+    const session = flowerSessions().find(item => item.id === id);
+    if (session && session.request().flower_thread_id !== threadID) session.update({ ...session.request(), flower_thread_id: threadID });
+  }));
   async function bindFlowerThread(canvasID: string, threadID: string) {
     const session = flowerSessions().find(item => item.id === canvasID);
     if (session?.request().flower_thread_id === threadID) return;
-    await request('POST', `/canvases/${encodeURIComponent(canvasID)}/flower-thread`, { thread_id: threadID });
-    setCanvas(previous => previous?.id === canvasID ? { ...previous, flower_thread_id: threadID } : previous);
-    if (session) session.update({ ...session.request(), flower_thread_id: threadID });
+    try { await request('POST', `/canvases/${encodeURIComponent(canvasID)}/flower-thread`, { thread_id: threadID }); }
+    catch (cause) { throw new Error(message(cause)); }
+    const current = await request<Canvas>('GET', `/canvases/${encodeURIComponent(canvasID)}`);
+    if (disposed) return;
+    setCanvas(previous => previous?.id === canvasID ? current : previous);
+    if (session) session.update({ ...session.request(), flower_thread_id: current.flower_thread_id });
+    await loadConversations(canvasID);
   }
-  const acceptFlowerRequest = (submitted: CanvasFlowerRequest, threadID: string) => {
+  const acceptFlowerRequest = (submitted: CanvasFlowerRequest, _threadID: string) => {
     const session = flowerSessions().find(item => item.id === submitted.selection.canvas_id);
     if (!session) return;
     const current = session.request();
@@ -181,9 +199,14 @@ export function TessivenPage(props: {
       && current.selection.object_refs.every((id, index) => id === submitted.selection.object_refs[index])) {
       session.update({ ...current, selection: { ...current.selection, object_refs: [] }, labels: {}, prompt: undefined });
     }
-    void bindFlowerThread(submitted.selection.canvas_id, threadID).catch(cause => {
-      if (!disposed) setError(message(cause));
-    });
+    // Admission already selects the conversation. A delayed receipt must only
+    // read current authority; posting it back could reactivate an older thread.
+    void request<Canvas>('GET', `/canvases/${encodeURIComponent(submitted.selection.canvas_id)}`).then(next => {
+      if (disposed) return;
+      setCanvas(previous => previous?.id === next.id ? next : previous);
+      if (session.request().flower_thread_id !== next.flower_thread_id) session.update({ ...session.request(), flower_thread_id: next.flower_thread_id });
+      return loadConversations(next.id);
+    }).catch(cause => { if (!disposed) setError(message(cause)); });
   };
   const ask = (prompt?: string) => {
     const value = selection();
@@ -225,8 +248,12 @@ export function TessivenPage(props: {
   function currentCanvasFlowerThread(canvasID: string) {
     return canvas()?.id === canvasID ? canvas()?.flower_thread_id : undefined;
   }
-  const message = (cause: unknown) =>
-    cause instanceof Error ? cause.message : String(cause);
+  const message = (cause: unknown) => {
+    const code = cause && typeof cause === 'object' ? ((cause as { code?: string }).code ?? (cause as { error_code?: string }).error_code) : undefined;
+    if (code === 'TESSIVEN_CONVERSATION_BUSY') return props.t('conversationBusy');
+    if (code === 'TESSIVEN_CONVERSATION_INACTIVE') return props.t('conversationInactive');
+    return cause instanceof Error ? cause.message : String(cause);
+  };
   const request = props.transport.request;
   async function action<T>(fn: () => Promise<T>): Promise<T | undefined> {
     if (busy()) return;
@@ -301,6 +328,7 @@ export function TessivenPage(props: {
       if (disposed || view !== viewGeneration || refresh !== refreshGeneration)
         return;
       setCanvas(next);
+      void loadConversations(next.id).catch(cause => { if (!disposed && canvas()?.id === next.id) setError(message(cause)); });
       // Follow Flower saves in the current view. Explicit history stays pinned.
       if (
         !browseHistory() &&
@@ -720,6 +748,8 @@ export function TessivenPage(props: {
             visible={props.visible !== false && !!canvas()}
             t={props.t}
             renderSurface={props.renderFlower}
+            conversations={conversations()}
+            onSelectConversation={threadID => bindFlowerThread(flowerRequest()!.selection.canvas_id, threadID)}
             onAccepted={acceptFlowerRequest}
           />
         </Show>

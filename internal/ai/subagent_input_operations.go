@@ -30,6 +30,11 @@ func (s *Service) OperateFlowerSubagentInput(ctx context.Context, meta *session.
 	if err != nil {
 		return nil, err
 	}
+	unlockCanvas, err := s.lockTessivenExecution(ctx, childID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockCanvas()
 	controller, ok := s.threadRuntime.(flruntime.ThreadSteeringController)
 	if !ok {
 		return nil, errors.New("subagent steering is unavailable")

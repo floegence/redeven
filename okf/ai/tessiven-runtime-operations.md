@@ -23,10 +23,21 @@ API, dependency replacement, or canonical journal migration is required.
 New turns and new Goals carry `create.tessiven_canvas_id` (or the Goal's
 `new_thread` field). Redeven validates the canvas and records ownership before
 publishing root settings or starting a provider request. Create retries retain
-ownership; an existing ordinary root cannot be adopted. Each canvas admits one
-fixed conversation. Replacement creates and new Goals cannot change an existing
-binding; canvas forks are rejected before canonical fork execution. Existing-thread
-Goals continue normally, and child threads inherit their parent's tool scope.
+ownership; an existing ordinary root cannot be adopted. Each canvas retains many
+conversations and one active root in `flower_thread_id`. New creates, new Goals
+and explicit forks activate their resulting conversation only while the previous
+root and its descendants are idle, without pending input, approval, queue or
+noninherited bound host work. Explicit selection uses the same check. Clients
+cannot activate a child as another root.
+
+A canvas-scoped, cancellation-aware in-process gate orders activation with send,
+retry, Goal submission, compaction, interaction responses and queued/child input
+admission. The execution factory checks the same root identity for automatic
+continuation and restart, including prebuilt child agents. Inactive attempts fail
+before provider dispatch. Lifecycle facts remain exclusively in Floret; no
+parallel run ledger or domain migration is introduced. Busy activation and
+inactive execution are explicit HTTP 409 conflicts. Save-only Goal edits do not
+execute, and child threads inherit the active parent's scope.
 Ordinary lists, live summary
 membership, conversation queries and cross-conversation references exclude these
 threads; direct authorized content reads remain available to the canvas UI.
@@ -102,6 +113,6 @@ Flower and the UI call the same Tessiven service; neither writes its database di
 - `internal/managedwebservice/open_session_test.go` — Running entrance preparation and stopped-service refusal without lifecycle dispatch.
 - `internal/tessiven/broker_test.go` — Unattributed/device-generation denial, permission recheck and unknown effects.
 
-- `internal/ai/tessiven_threads_test.go` — Admission, pagination, query scope, children, fixed binding, fork rejection and restart.
+- `internal/ai/tessiven_threads_test.go` — Admission, pagination, query scope, children, single-active selection, inactive execution rejection, busy/child guards and restart.
 - `internal/ai/tool_definition_budget_test.go` — Final OpenAI/DeepSeek request inventories and JSON-byte budgets.
 - `internal/codeapp/appserver/tessiven_test.go` — Authorized canvas conversation routes.

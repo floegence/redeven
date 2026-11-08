@@ -35,6 +35,11 @@ func (s *Service) CompactThreadContext(ctx context.Context, meta *session.Meta, 
 	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
+	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)
+	if err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	defer unlockCanvas()
 	_, settings, unlock, err := s.lockCanonicalThreadSettingsMutation(ctx, meta.EndpointID, threadID)
 	if err != nil {
 		return flruntime.ThreadView{}, err

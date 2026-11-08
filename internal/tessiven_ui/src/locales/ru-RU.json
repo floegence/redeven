@@ -1,4 +1,8 @@
 {
+  "conversationBusy": "Остановите активный разговор и завершите ожидающие задачи перед переключением.",
+  "conversationInactive": "Активируйте этот разговор перед запуском.",
+  "newConversation": "Новый разговор",
+  "activeConversation": "Активный · {title}",
   "groupMemberships": "Группы",
   "sharedHost": "Состоит в нескольких группах: {count}",
   "sharedHostBadge": "Общий · {count}",

@@ -199,6 +199,11 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	if s.threadRuntime == nil || s.floretEffects == nil {
 		return SendUserTurnResponse{}, false, nil
 	}
+	unlockCanvas, err := s.lockTessivenExecution(ctx, req.ThreadID)
+	if err != nil {
+		return SendUserTurnResponse{}, true, err
+	}
+	defer unlockCanvas()
 	executionKey := strings.TrimSpace(req.ClientRequestID)
 	opKey := runThreadKey(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID)) + "\x00" + executionKey
 	operation := &typedSendOperation{done: make(chan struct{})}
@@ -508,6 +513,11 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
+	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)
+	if err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
+	}
+	defer unlockCanvas()
 	_, settings, unlockSettings, err := s.lockCanonicalThreadSettingsMutation(ctx, endpointID, threadID)
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err

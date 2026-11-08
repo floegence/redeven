@@ -33,6 +33,11 @@ func (s *Service) RetryThreadContinuation(ctx context.Context, meta *session.Met
 	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}
+	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)
+	if err != nil {
+		return RetryThreadContinuationResponse{}, err
+	}
+	defer unlockCanvas()
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return RetryThreadContinuationResponse{}, err

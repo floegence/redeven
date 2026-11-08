@@ -1,4 +1,8 @@
 {
+  "conversationBusy": "Arrêtez la conversation active et terminez ses tâches en attente avant de changer.",
+  "conversationInactive": "Activez cette conversation avant de la lancer.",
+  "newConversation": "Nouvelle conversation",
+  "activeConversation": "Active · {title}",
   "groupMemberships": "Groupes",
   "sharedHost": "Appartient à {count} groupes",
   "sharedHostBadge": "Partagé · {count}",

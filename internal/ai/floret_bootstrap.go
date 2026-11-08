@@ -83,6 +83,11 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 	if service == nil {
 		return nil, errors.New("flower thread effect request is unavailable")
 	}
+	unlockCanvas, err := service.lockTessivenExecution(ctx, request.ThreadID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer unlockCanvas()
 	if !ok {
 		var err error
 		pending, err = service.restoreFloretEffectRequest(ctx, request)
@@ -99,7 +104,6 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 		return pending.agent, nil
 	}
 	effect := pending.effect
-	var err error
 	if effect == nil {
 		effect, err = service.prepareThreadEffect(&pending.meta, request.RequestKey, RunStartRequest{
 			ThreadID: request.ThreadID.String(), Model: pending.req.Model, Input: pending.req.Input,

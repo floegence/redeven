@@ -799,6 +799,11 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	if err != nil {
 		return nil, err
 	}
+	unlockCanvas, err := s.lockTessivenCanvas(ctx, req.TessivenCanvasID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockCanvas()
 	current, err := runtime.Create(ctxOrBackground(ctx), flruntime.CreateThreadInput{RequestKey: flruntime.RequestKey(clientRequestID)})
 	if err != nil {
 		return nil, fmt.Errorf("create thread: %w", err)
@@ -1096,8 +1101,13 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, err
 	}
-	if canvasID != "" {
-		return nil, tessiven.ErrFlowerThreadBound
+	unlockCanvas, err := s.lockTessivenCanvas(ctx, canvasID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockCanvas()
+	if err := s.requireTessivenActivationIdle(ctx, canvasID, ""); err != nil {
+		return nil, err
 	}
 	runtime, err := s.typedFloretRuntime()
 	if err != nil {
@@ -1159,6 +1169,9 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	forked.SettingsUpdatedAtUnixMs = now
 	uploadIDs, err := s.canonicalUploadIDs(ctxOrBackground(ctx), endpointID, current.ThreadID.String(), canonicalViewAttachments(current))
 	if err != nil {
+		return nil, err
+	}
+	if err := s.admitTessivenThread(ctxOrBackground(ctx), forked.ThreadID, canvasID); err != nil {
 		return nil, err
 	}
 	if err := db.AdoptCanonicalRootWithUploads(ctxOrBackground(ctx), forked, uploadIDs); err != nil {

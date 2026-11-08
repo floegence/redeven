@@ -21,11 +21,15 @@ Canvas identities, archive state, immutable YAML versions, and idempotent reques
 The v1 → v2 → v3 library lineage preserves immutable versions and request
 receipts. v3 records canvas conversation ownership in `flower_threads`, backfills
 exact v2 `flower_thread_id` bindings, and retains that existing column as the
-fixed conversation pointer. A thread has one canvas owner; ambiguous historical
-bindings fail transactionally without mutating source state. The first binding is
-immutable: identical retries succeed, while another thread cannot replace it,
-including under concurrent admission. Previously recorded v3 ownership rows remain
-intact and scoped, but do not enable switching or replacement of the saved binding.
+sole active conversation pointer. A thread has one canvas owner; ambiguous
+historical bindings fail transactionally without mutating source state. New
+conversations and forks retain every ownership row and select one active root.
+Selection updates that single pointer atomically; it never deletes old journals.
+Redeven serializes selection and run admission by canvas, reads canonical Floret
+activity, queued work, interactions, host work and descendants before switching,
+and rejects switching until the active conversation's work has settled. An idle
+conversation can be reactivated without losing its history. Replayed creation
+receipts never reactivate an older conversation.
 Fresh, upgraded and reopened stores use the same verified schema. Floret journals
 remain opaque and unchanged.
 

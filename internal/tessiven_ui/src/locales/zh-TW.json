@@ -1,4 +1,8 @@
 {
+  "conversationBusy": "請先停止目前對話並處理完待完成的工作，再切換對話。",
+  "conversationInactive": "請先啟用此對話，再執行。",
+  "newConversation": "新對話",
+  "activeConversation": "目前 · {title}",
   "groupMemberships": "所屬分組",
   "sharedHost": "隸屬於 {count} 個分組",
   "sharedHostBadge": "{count} 組共用",

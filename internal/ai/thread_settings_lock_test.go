@@ -12,7 +12,7 @@ func TestThreadSettingsLockIsScopedAndCancellationDoesNotLeak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []threadSettingsLockKey{{"local", "two"}, {"remote", "one"}} {
+	for _, key := range []threadSettingsLockKey{{endpointID: "local", threadID: "two"}, {endpointID: "remote", threadID: "one"}} {
 		otherUnlock, err := service.lockThreadSettings(t.Context(), key.endpointID, key.threadID)
 		if err != nil {
 			t.Fatal(err)

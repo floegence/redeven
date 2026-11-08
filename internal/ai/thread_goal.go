@@ -57,7 +57,7 @@ func (s *Service) ManageThreadGoal(ctx context.Context, meta *session.Meta, req 
 		create.ClientRequestID = "goal-thread:" + hex.EncodeToString(digest[:])
 		thread, err := s.CreateThreadWithOptions(ctx, meta, create)
 		if err != nil {
-			if !errors.Is(err, flruntime.ErrRequestConflict) && !errors.Is(err, tessiven.ErrFlowerThreadBound) {
+			if !errors.Is(err, flruntime.ErrRequestConflict) && !errors.Is(err, tessiven.ErrFlowerThreadBusy) {
 				err = fmt.Errorf("%w: %w", ErrThreadGoalOutcomeUnknown, err)
 			}
 			return flruntime.GoalMutationResult{}, flruntime.ThreadView{}, err
@@ -66,6 +66,13 @@ func (s *Service) ManageThreadGoal(ctx context.Context, meta *session.Meta, req 
 	}
 	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, req.ThreadID); err != nil {
 		return flruntime.GoalMutationResult{}, flruntime.ThreadView{}, err
+	}
+	if req.Operation == "submit" {
+		unlockCanvas, err := s.lockTessivenExecution(ctx, req.ThreadID)
+		if err != nil {
+			return flruntime.GoalMutationResult{}, flruntime.ThreadView{}, err
+		}
+		defer unlockCanvas()
 	}
 	controller, ok := s.threadRuntime.(flruntime.ThreadGoalController)
 	if !ok {
