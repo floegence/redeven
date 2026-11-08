@@ -16,12 +16,14 @@ func TestRunCallsControlDisabledCallback(t *testing.T) {
 		t.Fatalf("ParsePermissionPolicyPreset() error = %v", err)
 	}
 	called := make(chan struct{}, 1)
+	cfg := &config.Config{AgentHomeDir: t.TempDir(), PermissionPolicy: policy}
+	cfgPath := t.TempDir() + "/config.json"
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
 	a, err := New(Options{
-		Config: &config.Config{
-			AgentHomeDir:     t.TempDir(),
-			PermissionPolicy: policy,
-		},
-		ConfigPath:            t.TempDir() + "/config.json",
+		Config:                cfg,
+		ConfigPath:            cfgPath,
 		LocalUIEnabled:        true,
 		ControlChannelEnabled: false,
 		Version:               "test",

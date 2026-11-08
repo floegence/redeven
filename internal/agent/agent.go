@@ -1641,7 +1641,7 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 		if err != nil {
 			return err
 		}
-		cleanupProxy, err := a.registerEnvSessionProxy(handlers, meta, origin)
+		cleanupProxy, err := a.registerEnvSessionProxy(handlers, meta, origin, nil)
 		if err != nil {
 			return err
 		}
@@ -1654,7 +1654,7 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 // Flowersec Acceptor. Flowersec owns admission, session establishment, RPC
 // framing, stream dispatch, and session lifetime; the returned cleanup only
 // releases Redeven service state captured by the handlers.
-func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin string, windowReady <-chan struct{}) (*flowersec.SessionHandlers, func(), error) {
+func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin string, sessionReady, windowReady <-chan struct{}) (*flowersec.SessionHandlers, func(), error) {
 	if a == nil || meta == nil {
 		return nil, nil, errors.New("invalid args")
 	}
@@ -1715,7 +1715,7 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin strin
 			return nil, nil, err
 		}
 	}
-	cleanupProxy, err := a.registerEnvSessionProxy(handlers, meta, externalOrigin)
+	cleanupProxy, err := a.registerEnvSessionProxy(handlers, meta, externalOrigin, sessionReady)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -1727,7 +1727,7 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin strin
 
 // Both local and remote Env sessions bind one proxy to the same authenticated
 // channel and access gate. The peer cannot select an upstream or identity.
-func (a *Agent) registerEnvSessionProxy(handlers flowersec.StreamHandlerRegistrar, meta *session.Meta, origin string) (func(), error) {
+func (a *Agent) registerEnvSessionProxy(handlers flowersec.StreamHandlerRegistrar, meta *session.Meta, origin string, ready <-chan struct{}) (func(), error) {
 	if a == nil || a.code == nil || meta == nil || meta.CodeSpaceID != "env-ui" || meta.FloeApp != FloeAppRedevenAgent || strings.TrimSpace(origin) == "" {
 		return nil, errors.New("invalid Env session proxy authority")
 	}
@@ -1735,7 +1735,7 @@ func (a *Agent) registerEnvSessionProxy(handlers flowersec.StreamHandlerRegistra
 	if upstream == "" {
 		return nil, errors.New("code app server not ready")
 	}
-	upstream, closeUpstream, err := a.prepareAccessProxyUpstream(context.Background(), meta, upstream, origin, nil)
+	upstream, closeUpstream, err := a.prepareAccessProxyUpstream(context.Background(), meta, upstream, origin, ready)
 	if err != nil {
 		return nil, err
 	}

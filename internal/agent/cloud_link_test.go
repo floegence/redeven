@@ -12,9 +12,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -232,6 +232,9 @@ func newCloudLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Ag
 		}
 		cfg.PermissionPolicy = policy
 	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
 	a, err := New(Options{
 		Config:           cfg,
 		ConfigPath:       cfgPath,
@@ -387,6 +390,10 @@ func writeCloudRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.
 func TestConnectCloudPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	a := newCloudLinkTestAgent(t, cfgPath, nil)
+	before, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -394,7 +401,7 @@ func TestConnectCloudPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *testi
 	})
 	defer server.Close()
 
-	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
+	_, err = a.ConnectCloud(context.Background(), CloudLinkRequest{
 		CloudOrigin:           server.URL,
 		CloudID:               "example_control_plane",
 		EnvPublicID:           "env_demo",
@@ -411,8 +418,9 @@ func TestConnectCloudPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *testi
 	if binding := a.CloudLinkBinding(); binding.State != runtimeservice.CloudLinkStateUnbound {
 		t.Fatalf("CloudLinkBinding() = %#v, want unbound", binding)
 	}
-	if _, loadErr := config.Load(cfgPath); loadErr == nil || !strings.Contains(loadErr.Error(), "no such file") {
-		t.Fatalf("config.Load() error = %v, want no saved config", loadErr)
+	after, err := os.ReadFile(cfgPath)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("failed exchange changed retained configuration: %v", err)
 	}
 }
 

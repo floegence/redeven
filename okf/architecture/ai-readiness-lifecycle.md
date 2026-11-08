@@ -3,7 +3,7 @@ type: Architecture Contract
 title: AI readiness and service generation lifecycle
 tags: [architecture, ai, readiness, lifecycle, floret]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -11,6 +11,7 @@ One process-local Redeven controller owns AI construction/retry/publication/leas
 
 # Contract
 
+- Local Env management HTTP waits for Redeven to register the authenticated session identity and access gate, even when the secure carrier is already connected. This host activation barrier is independent of plugin admission; failed plugins cannot withhold ordinary management. Closing, rejecting or expiring a binding releases its waiters, and downstream identity/permission checks remain authoritative.
 - After activation, recovery pages settings by 200, retains complete media inventories and resumes eligible admitted queues. Per-thread failure cannot starve later pages; ownership review follows. Incomplete recovery gates destructive maintenance and retries next maintenance pass. Waiters retain their own attempt's result.
 - Background phases cannot regress a published generation or unmount Flower. Orphan discovery updates degraded/retry state; successful reconciliation or explicit repair clears issues. Shutdown cancels/joins generation workers before storage close.
 - Explicit asynchronous retry admits one startup owner. Replacement cancels long-lived generation work, waits for idempotent lease releases, closes once, then publishes the next monotonic generation.

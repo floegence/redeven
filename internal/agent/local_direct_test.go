@@ -101,8 +101,18 @@ func TestLocalDirectSessionSurvivesPluginBindingFailure(t *testing.T) {
 	meta := &session.Meta{ChannelID: "plugin-failed-host-live", CanRead: true, CanWrite: true, CanExecute: true, FloeApp: FloeAppRedevenAgent, SessionKind: "envapp_rpc"}
 	done := make(chan error, 1)
 	ready := make(chan struct{}, 1)
+	hostReady := make(chan bool, 1)
 	go func() {
-		done <- a.ServeLocalDirectSession(t.Context(), sess, meta, LocalDirectSessionOptions{AccessSessionID: "direct:plugin-failed-host-live", OnPluginSessionReady: func() { ready <- struct{}{} }})
+		done <- a.ServeLocalDirectSession(t.Context(), sess, meta, LocalDirectSessionOptions{
+			AccessSessionID: "direct:plugin-failed-host-live",
+			OnSessionReady: func() {
+				a.mu.Lock()
+				active := a.sessions[meta.ChannelID]
+				a.mu.Unlock()
+				hostReady <- active != nil && active.meta.ChannelID == meta.ChannelID && a.accessGate.IsChannelUnlocked(meta.ChannelID)
+			},
+			OnPluginSessionReady: func() { ready <- struct{}{} },
+		})
 	}()
 	select {
 	case <-sess.started:
@@ -122,6 +132,14 @@ func TestLocalDirectSessionSurvivesPluginBindingFailure(t *testing.T) {
 			t.Error("host session did not finish")
 		}
 	}()
+	select {
+	case registered := <-hostReady:
+		if !registered {
+			t.Fatal("host readiness preceded identity or access registration")
+		}
+	default:
+		t.Fatal("plugin failure withheld ordinary host readiness")
+	}
 	select {
 	case <-ready:
 		t.Fatal("failed plugin binding advertised readiness")

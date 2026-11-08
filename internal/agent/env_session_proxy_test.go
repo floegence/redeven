@@ -9,16 +9,109 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
+	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/testutil/redevpluginruntime"
 )
+
+func TestLocalEnvSessionProxyWaitsForHostIdentityBeforeFirstRead(t *testing.T) {
+	root := t.TempDir()
+	policy := defaultPermissionPolicyForAgentTest(t)
+	configPath := filepath.Join(root, "config.json")
+	if err := config.Save(configPath, &config.Config{AgentHomeDir: root, Shell: "/bin/sh", PermissionPolicy: policy}); err != nil {
+		t.Fatal(err)
+	}
+	meta := &session.Meta{ChannelID: "local-activation", EndpointID: "env_local", FloeApp: FloeAppRedevenAgent, CodeSpaceID: "env-ui", UserPublicID: "user_local", CanRead: true}
+	var registered atomic.Bool
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := codeapp.New(t.Context(), codeapp.Options{
+		Logger: logger, StateDir: root, StateRoot: root, AgentHomeDir: root, ConfigPath: configPath, Shell: "/bin/sh",
+		PermissionPolicy: policy, ReDevPluginRuntimePath: filepath.Join(root, "unavailable-runtime"),
+		ResolveSessionMeta: func(id string) (*session.Meta, bool) { return meta, registered.Load() && id == meta.ChannelID },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	scope, err := filesystemscope.NewDefaultRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &Agent{code: svc, log: logger, accessGate: accessgate.New(accessgate.Options{}), filesystemScope: scope, gitRuntime: gitruntime.New()}
+	ready, pluginReady := make(chan struct{}), make(chan struct{})
+	const origin = "http://127.0.0.1:49152"
+	handlers, cleanup, err := a.NewLocalSessionHandlers(meta, origin, ready, pluginReady)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	_ = client.SetDeadline(time.Now().Add(5 * time.Second))
+	sess := &envProxySession{incoming: make(chan flowersec.IncomingStream, 1)}
+	sess.incoming <- flowersec.IncomingStream{Kind: "flowersec-proxy/http1", Metadata: flowersec.EmptyStreamMetadata(), Stream: &envProxyStream{server}}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- handlers.Serve(ctx, sess) }()
+	defer func() { _ = client.Close(); cancel(); <-done }()
+	metadata, _ := json.Marshal(map[string]any{
+		"v": 1, "request_id": "first-read", "method": "GET", "path": "/_redeven_proxy/api/ai/readiness", "external_origin": origin, "headers": []any{},
+	})
+	for _, chunk := range [][]byte{metadata, nil} {
+		if err := binary.Write(client, binary.BigEndian, uint32(len(chunk))); err != nil {
+			t.Fatal(err)
+		}
+		if len(chunk) > 0 {
+			if _, err := client.Write(chunk); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	status := make(chan int, 1)
+	go func() {
+		var size uint32
+		if binary.Read(client, binary.BigEndian, &size) != nil || size > 1<<20 {
+			status <- 0
+			return
+		}
+		data := make([]byte, size)
+		if _, err := io.ReadFull(client, data); err != nil {
+			status <- 0
+			return
+		}
+		var response struct {
+			Status int `json:"status"`
+		}
+		_ = json.Unmarshal(data, &response)
+		status <- response.Status
+	}()
+	select {
+	case got := <-status:
+		t.Fatalf("first request escaped pending activation: status=%d", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+	registered.Store(true)
+	close(ready)
+	select {
+	case got := <-status:
+		if got != http.StatusOK {
+			t.Fatalf("first readiness request status=%d, want 200", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("host request waited for independent plugin admission")
+	}
+}
 
 func TestRemoteEnvSessionProxyUsesBrowserOriginAndTrustedChannel(t *testing.T) {
 	root := t.TempDir()
@@ -38,6 +131,9 @@ func TestRemoteEnvSessionProxyUsesBrowserOriginAndTrustedChannel(t *testing.T) {
 	}
 	resolve := func(id string) (*session.Meta, bool) { return meta, id == meta.ChannelID }
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := config.Save(filepath.Join(root, "config.json"), &config.Config{AgentHomeDir: root, Shell: "/bin/sh", PermissionPolicy: defaultPermissionPolicyForAgentTest(t)}); err != nil {
+		t.Fatal(err)
+	}
 	svc, err := codeapp.New(t.Context(), codeapp.Options{
 		Logger: logger, StateDir: filepath.Join(root, "state"), StateRoot: root, AgentHomeDir: root,
 		ConfigPath: filepath.Join(root, "config.json"), Shell: "/bin/sh",

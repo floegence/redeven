@@ -186,7 +186,22 @@ type pendingDirect struct {
 	connectArtifactIssuedAtMs int64
 	// settled is shared with the eventual active binding so readiness requests
 	// can wait while Flowersec is still promoting this pending channel.
-	settled chan struct{}
+	settled    chan struct{}
+	activation *localSessionActivation
+}
+
+// Host identity registration and plugin admission have separate lifetimes.
+// A settled activation only releases waiting requests; normal access and
+// AppServer identity checks still authorize every request.
+type localSessionActivation struct {
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (a *localSessionActivation) settle() {
+	if a != nil {
+		a.once.Do(func() { close(a.ready) })
+	}
 }
 
 type pluginAccessState uint8
@@ -209,6 +224,7 @@ type activePluginSessionBinding struct {
 	credentialHash  [sha256.Size]byte
 	state           pluginSessionBindingState
 	settled         chan struct{}
+	activation      *localSessionActivation
 }
 
 type pluginSessionBindingState uint8
@@ -572,10 +588,10 @@ func (s *Server) configureAcceptor() error {
 			// an ephemeral attribution from this exact fresh acquisition only.
 			pending.meta.DesktopSource = livePending.meta.DesktopSource
 			pending.meta.LocalHostAccess = livePending.meta.LocalHostAccess
-			if ready == nil {
+			if ready == nil || livePending.activation == nil {
 				return nil, errors.New("local session lifecycle is unavailable")
 			}
-			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta, pending.externalOrigin, ready)
+			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta, pending.externalOrigin, livePending.activation.ready, ready)
 			if err != nil {
 				if cleanupErr := s.authStore.burnLeased(lookupKey); cleanupErr != nil && s.log != nil {
 					s.log.Error("terminate local authorization after handler failure", "error", cleanupErr)
@@ -616,6 +632,7 @@ func (s *Server) configureAcceptor() error {
 				return errors.New("local session metadata is unavailable")
 			}
 			metaCopy := pending.meta
+			defer pending.activation.settle()
 			accessGateSessionID := pending.accessSessionID
 			if strings.HasPrefix(pending.accessSessionID, "native:") {
 				var active bool
@@ -633,6 +650,7 @@ func (s *Server) configureAcceptor() error {
 				AccessSessionID:           pending.accessSessionID,
 				AccessGateSessionID:       accessGateSessionID,
 				TrustedManagement:         pending.accessSessionID == "trusted-desktop",
+				OnSessionReady:            pending.activation.settle,
 				OnPluginSessionReady: func() {
 					s.markAcceptedPluginSessionReady(channelID, pending.accessSessionID, pending.pluginCredentialHash)
 				},
@@ -1505,6 +1523,7 @@ func (s *Server) closeActivePluginSessionBindingLocked(channelID string) (active
 	if !ok {
 		return activePluginSessionBinding{}, false
 	}
+	binding.activation.settle()
 	if binding.state == pluginSessionBindingInitializing && binding.settled != nil {
 		binding.state = pluginSessionBindingClosed
 		close(binding.settled)
@@ -2120,6 +2139,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 		traceID:                   strings.TrimSpace(traceID),
 		connectArtifactIssuedAtMs: now.UnixMilli(),
 		settled:                   make(chan struct{}),
+		activation:                &localSessionActivation{ready: make(chan struct{})},
 	}
 
 	// Admission state is checked before issuance, then checked again before the
@@ -2702,6 +2722,7 @@ func (s *Server) releaseAcceptedSession(channelID string) {
 	s.directMu.Lock()
 	if pending, ok := s.pending[id]; ok {
 		delete(s.pending, id)
+		pending.activation.settle()
 		if pending.settled != nil {
 			close(pending.settled)
 		}
@@ -2742,6 +2763,7 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 	if pending.initExpireAtUnixS <= 0 || now.Unix() > pending.initExpireAtUnixS || s.directClosing ||
 		access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !now.Before(access.expiresAt)) {
 		delete(s.pending, id)
+		pending.activation.settle()
 		if pending.settled != nil {
 			close(pending.settled)
 		}
@@ -2753,6 +2775,7 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 	}
 	if _, exists := s.activePluginSession[id]; exists {
 		delete(s.pending, id)
+		pending.activation.settle()
 		delete(access.pending, id)
 		if pending.settled != nil {
 			close(pending.settled)
@@ -2767,6 +2790,7 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 		credentialHash:  pending.pluginCredentialHash,
 		state:           pluginSessionBindingInitializing,
 		settled:         pending.settled,
+		activation:      pending.activation,
 	}
 	return pending, true
 }
@@ -2798,6 +2822,7 @@ func (s *Server) beginDirectShutdown() []flowersec.Session {
 
 	s.pendingMu.Lock()
 	for _, pending := range s.pending {
+		pending.activation.settle()
 		if pending.settled != nil {
 			close(pending.settled)
 		}
@@ -2947,6 +2972,7 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 	for _, channelID := range pending {
 		if current, ok := s.pending[channelID]; ok && current.accessSessionID == accessSessionID {
 			delete(s.pending, channelID)
+			current.activation.settle()
 			if current.settled != nil {
 				close(current.settled)
 			}
@@ -3010,6 +3036,7 @@ func (s *Server) sweepExpiredAt(now time.Time) {
 	for k, v := range s.pending {
 		if v.initExpireAtUnixS > 0 && nowUnix > v.initExpireAtUnixS {
 			delete(s.pending, k)
+			v.activation.settle()
 			if v.settled != nil {
 				close(v.settled)
 			}

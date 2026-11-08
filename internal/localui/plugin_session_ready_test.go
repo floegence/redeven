@@ -57,6 +57,37 @@ func newPluginSessionReadyHTTPRequest(credential string) *http.Request {
 	return request
 }
 
+func TestHostActivationWaitersReleaseWhenBindingsEnd(t *testing.T) {
+	for _, outcome := range []string{"pending_release", "active_release", "shutdown", "expired"} {
+		t.Run(outcome, func(t *testing.T) {
+			server := newPendingPluginSessionReadyTestServer("credential", time.Second)
+			activation := &localSessionActivation{ready: make(chan struct{})}
+			pending := server.pending["channel"]
+			pending.activation = activation
+			pending.initExpireAtUnixS = time.Now().Add(-time.Minute).Unix()
+			server.pending["channel"] = pending
+			switch outcome {
+			case "pending_release":
+				server.releaseAcceptedSession("channel")
+			case "active_release":
+				delete(server.pending, "channel")
+				server.activePluginSession["channel"] = activePluginSessionBinding{accessSessionID: "access", activation: activation}
+				server.releaseAcceptedSession("channel")
+			case "shutdown":
+				server.beginDirectShutdown()
+			case "expired":
+				server.sweepExpiredAt(time.Now())
+			}
+			select {
+			case <-activation.ready:
+			default:
+				t.Fatal("closed binding retained a host activation waiter")
+			}
+			activation.settle() // A late successful callback cannot close it twice.
+		})
+	}
+}
+
 func TestPluginSessionReadyWaitsForExactBinding(t *testing.T) {
 	server := newPluginSessionReadyTestServer("credential", time.Second)
 	done := make(chan *httptest.ResponseRecorder, 1)

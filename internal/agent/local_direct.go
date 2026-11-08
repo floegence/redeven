@@ -42,6 +42,7 @@ type LocalDirectSessionOptions struct {
 	// Native bridge sessions keep their own product identity while the access
 	// gate continues to enforce the authenticated owner's expiry and revocation.
 	AccessGateSessionID  string
+	OnSessionReady       func()
 	OnPluginSessionReady func()
 }
 
@@ -134,6 +135,12 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	if err := sessCtx.Err(); err != nil {
 		a.removeActiveSession(channelID)
 		return err
+	}
+	// HTTP handlers may run as soon as Flowersec establishes the carrier.
+	// Publish product readiness only after identity and access are registered;
+	// plugin admission is independent and must not block ordinary management.
+	if opts.OnSessionReady != nil {
+		opts.OnSessionReady()
 	}
 	generation, err := a.activatePluginSession(metaCopy, opts.PluginCredentialHash, opts.HasPluginCredential, opts.AccessSessionID)
 	if err != nil {

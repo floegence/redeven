@@ -3055,11 +3055,8 @@ SOFTWARE.
 | @exodus/bytes | 1.15.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.0 |  |
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @exodus/bytes | 1.16.0 | MIT | Env App UI | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.16.0 |  |
-| @floegence/floe-webapp-boot | 0.100.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.100.0 |  |
-| @floegence/floe-webapp-boot | 0.101.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.101.1 |  |
-| @floegence/floe-webapp-core | 0.100.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.100.0 |  |
+| @floegence/floe-webapp-boot | 0.101.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.101.1 |  |
 | @floegence/floe-webapp-core | 0.101.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.101.1 |  |
-| @floegence/floe-webapp-protocol | 0.100.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.100.0 |  |
 | @floegence/floe-webapp-protocol | 0.101.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.101.1 |  |
 | @floegence/floebrowser | 0.1.28 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.28 |  |
 | @floegence/floeterm-terminal-web | 0.20.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.20.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.20.0 package. |

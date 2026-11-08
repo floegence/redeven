@@ -10026,7 +10026,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "ai",
           "architecture",
@@ -10037,15 +10037,15 @@
         "title": "AI readiness and service generation lifecycle",
         "type": "Architecture Contract"
       },
-      "body_length": 1734,
+      "body_length": 2139,
       "summary": "One process-local Redeven controller owns AI construction/retry/publication/leases/drain/close; Floret owns durable facts. Non-AI surfaces stay usable. Startup recovers unfinished replacements, opens the Floret owner with bounded waiting, migrates product data, activates and publishes. Floret's worker prepares historical threads.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- After activation, recovery pages settings by 200, retains complete media inventories and resumes eligible admitted queues. Per-thread failure cannot starve later pages; ownership review follows. Incomplete recovery gates destructive maintenance and retries next maintenance pass. Waiters retain their own attempt's result.\n- Background phases cannot regress a published generation or unmount Flower. Orphan discovery updates degraded/retry state; successful reconciliation or explicit repair clears issues. Shutdown cancels/joins generation workers before storage close.\n- Explicit asynchronous retry admits one startup owner. Replacement cancels long-lived generation work, waits for idempotent lease releases, closes once, then publishes the next monotonic generation.\n- Unleasable AI routes return HTTP 503 `AI_SERVICE_UNAVAILABLE` with sanitized state. Readiness/retry/stop and admin snapshot/restore bypass service acquisition. Incomplete provider leases release supplied resources and cannot report ready.",
-          "char_count": 1013
+          "body": "- Local Env management HTTP waits for Redeven to register the authenticated session identity and access gate, even when the secure carrier is already connected. This host activation barrier is independent of plugin admission; failed plugins cannot withhold ordinary management. Closing, rejecting or expiring a binding releases its waiters, and downstream identity/permission checks remain authoritative.\n- After activation, recovery pages settings by 200, retains complete media inventories and resumes eligible admitted queues. Per-thread failure cannot starve later pages; ownership review follows. Incomplete recovery gates destructive maintenance and retries next maintenance pass. Waiters retain their own attempt's result.\n- Background phases cannot regress a published generation or unmount Flower. Orphan discovery updates degraded/retry state; successful reconciliation or explicit repair clears issues. Shutdown cancels/joins generation workers before storage close.\n- Explicit asynchronous retry admits one startup owner. Replacement cancels long-lived generation work, waits for idempotent lease releases, closes once, then publishes the next monotonic generation.\n- Unleasable AI routes return HTTP 503 `AI_SERVICE_UNAVAILABLE` with sanitized state. Readiness/retry/stop and admin snapshot/restore bypass service acquisition. Incomplete provider leases release supplied resources and cannot report ready.",
+          "char_count": 1418
         },
         {
           "id": "boundaries",
@@ -18747,15 +18747,15 @@
         "title": "Plugin integration gate",
         "type": "Release Contract"
       },
-      "body_length": 3215,
+      "body_length": 5419,
       "summary": "Plugin gate checks released ReDevPlugin Host/market against Redeven authority, placement, renderer and Desktop lifecycle. Use published packages/isolated profiles; copied platform paths, implicit grants, second bridges and stale projections fail instead of fabricating integration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The focused plugin gate covers:\n\n- Host construction, authenticated owner/session mapping, direct authorization,   explicit origin/CSRF/action policy, and stable observability; - market release install/update and exact publisher/plugin/instance identity,   market preview digests, stable progress, and no duplicate package parser; - public HTTPS URL, GitHub Release, and local `.redevplugin`   inspect-confirm-install admission, process-local TTL inspection identity,   strict source provenance, exact owner/session/bytes/hash revalidation,   enabled install state with no implicit grants, permission-attention handling   for missing access, and no durable receipt/query lifecycle; - runtime path/target/hash, ProcessManager health, persistent lease replay, and   Host storage/network/Event services; - canonical AppServer route reservation/delegation and Local UI access checks; - generated UI lifecycle DTOs, management revisions, production Plugin entry,   generic permission requirements, exact inventory-key selection, full external   security and source-provenance review, exact generic permission ids, FIFO   confirmation, and close-before-placement lifecycle; - Shell-root multi-window Activity chrome, standard `redeven.plugin` Workbench   persistence, released interaction ownership, exact-surface close   reconciliation, and cross-placement serialization; - static absence of legacy proxy/bootstrap/base64 package and copied platform   paths.\n\nMock containers do not satisfy this check.\n\n## Native retained-state qualification\n\n`desktop/scripts/check-plugin-storage-recovery.mjs` requires an explicit verified Desktop bundle. Published owner APIs seed an isolated legacy installation and author workspace. The native lane reproduces unavailable admission, stops the isolated Runtime, relocates opaque bytes, verifies exact package/instance retention, executes a real WASM worker through the dedicated-origin sandbox, commits an inspected update and repeats execution after restart. Creation history remains reachable over the live plugin window. Its report records bundle identity, assertions and owned-process cleanup. A passed synthetic seed does not certify an arbitrary user profile: inspect its actual relocation inputs, including dependency links and conflicting targets. Never report that profile recovered without applying and verifying its supported transaction.\n\nThe existing author-restart lane separately verifies composer/draft continuity and retained terminal state. Both lanes are explicit acceptance, not additions to the pre-push gate.",
-          "char_count": 2563
+          "body": "The focused plugin gate covers:\n\n- Host construction, authenticated owner/session mapping, direct authorization,   explicit origin/CSRF/action policy, and stable observability; - market release install/update and exact publisher/plugin/instance identity,   market preview digests, stable progress, and no duplicate package parser; - public HTTPS URL, GitHub Release, and local `.redevplugin`   inspect-confirm-install admission, process-local TTL inspection identity,   strict source provenance, exact owner/session/bytes/hash revalidation,   enabled install state with no implicit grants, permission-attention handling   for missing access, and no durable receipt/query lifecycle; - runtime path/target/hash, ProcessManager health, persistent lease replay, and   Host storage/network/Event services; - canonical AppServer route reservation/delegation and Local UI access checks; - generated UI lifecycle DTOs, management revisions, production Plugin entry,   generic permission requirements, exact inventory-key selection, full external   security and source-provenance review, exact generic permission ids, FIFO   confirmation, and close-before-placement lifecycle; - Shell-root multi-window Activity chrome, standard `redeven.plugin` Workbench   persistence, released interaction ownership, exact-surface close   reconciliation, and cross-placement serialization; - static absence of legacy proxy/bootstrap/base64 package and copied platform   paths.\n\nMock containers do not satisfy this check.\n\n## Native retained-state qualification\n\n`desktop/scripts/check-plugin-storage-recovery.mjs` requires an explicit verified Desktop bundle. Published owner APIs seed an isolated legacy installation and author workspace. The native lane reproduces unavailable admission, stops the isolated Runtime, relocates opaque bytes, verifies exact package/instance retention, executes a real WASM worker through the dedicated-origin sandbox, commits an inspected update and repeats execution after restart. Creation history remains reachable over the live plugin window. Its report records bundle identity, assertions and owned-process cleanup. A passed synthetic seed does not certify an arbitrary user profile: inspect its actual relocation inputs, including dependency links and conflicting targets. Never report that profile recovered without applying and verifying its supported transaction.\n\nThe existing author-restart lane separately verifies composer/draft continuity and retained terminal state. On failure it preserves the visible readiness diagnostics and isolated Runtime stderr before owned cleanup, so a hidden composer cannot be mistaken for lost draft data. Both lanes are explicit acceptance, not additions to the pre-push gate.",
+          "char_count": 2732
         },
         {
           "id": "boundaries",
@@ -18768,8 +18768,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:scripts/check_plugin_integration.sh:1` - Tests.",
-          "char_count": 58
+          "body": "- November 8, 2026: the macOS ARM64 development bundle built from `3620d5f1ab84` plus synchronized npm locks/notices consumed ReDevPlugin 3.24.1 and Floe 0.101.1. Native retained-state qualification passed four runs, including three concurrent with author-restart qualification: exact installed identity, real sandbox/WASM execution, inspected update, restart, UI re-enable, author-history access, uninstall and owned cleanup. Reports are `/tmp/plugin-readiness-desktop-final/report.json` and `/tmp/plugin-readiness-parallel-storage-{1,2,3}/report.json`.\n- Author-restart qualification exposed intermittent first-read HTTP 404 responses while Flower was ready and the IndexedDB draft remained intact. Native debugger evidence (`/tmp/plugin-readiness-cdp-9.log`) located the failure in readiness HTTP; the deterministic local-router regression reproduced the same 404 before product session registration. The host activation barrier now delays management requests until identity/access registration, independently of plugin admission. Earlier passing repetitions do not certify this correction; use rebuilt native evidence. No live model generation was exercised.\n- The rebuilt activation-fix bundle has runtime-files digest `sha256:0c686369cb687274e3d034e15142fb25d4551c2bd04035a6f13aac54775c1529`. Retained-state lifecycle and author-restart both passed, followed by five additional author-restart runs; every report confirms zero remaining owned processes. Evidence: `/tmp/plugin-activation-fixed-{storage,author}/report.json` and `/tmp/plugin-activation-fixed-repeat-{1,2,3,4,5}/report.json`. The actual local router regression fails with HTTP 404 when the barrier is removed and passes with it. Full Agent, Local UI and access-proxy package tests also passed.\n- The inspected user development profile still contains legacy plugin placement and dependency-tree symlinks rejected by the offline relocation invariant. Its data and running session were left untouched; isolated qualification does not certify recovery of this profile.\n- `redeven:scripts/check_plugin_integration.sh:1` - Tests.",
+          "char_count": 2093
         }
       ],
       "evidence": [
@@ -24832,5 +24832,5 @@
       ]
     }
   ],
-  "source_sha256": "f2298a10984142155304b2d7361e16d4b8e330238e7ab28ee09030c3080c764f"
+  "source_sha256": "ebf0f941909719d0811bc1254897e3785b69067b5b870801d8b28f633bc852cc"
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
@@ -155,6 +155,18 @@ await session.run(async () => {
   } catch (error) {
     report.status = 'failed';
     report.error = String(error);
+    report.pageText = await page?.locator('body').innerText().catch(() => null);
+    const diagnostics = page?.getByRole('button', { name: 'View diagnostics', exact: true });
+    if (await diagnostics?.isVisible().catch(() => false)) {
+      await diagnostics.click();
+      report.readinessDiagnostics = await page.locator('body').innerText();
+    }
+    report.runtimeLogs = [];
+    for (const entry of await readdir(path.join(directory, 'temp'), { withFileTypes: true }).catch(() => [])) {
+      if (!entry.isDirectory() || !entry.name.startsWith('redeven-desktop-')) continue;
+      const stderr = await readFile(path.join(directory, 'temp', entry.name, 'stderr.log'), 'utf8').catch(() => null);
+      if (stderr !== null) report.runtimeLogs.push({ runtime: entry.name, stderr });
+    }
     await page?.screenshot({ path: path.join(evidence, 'failure.png') }).catch(() => {});
     throw error;
   } finally {
