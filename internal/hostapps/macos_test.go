@@ -68,6 +68,32 @@ func TestAccessPauseReleasesSharesAndPreservesNativeLaunch(t *testing.T) {
 		t.Fatal("explicit resume did not restore admission")
 	}
 }
+func TestMacPermissionActionsStayExplicit(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native macOS adapter")
+	}
+	m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"permissions"'*) printf '%s\n' '{"type":"result"}' ;;
+ esac
+done
+`)
+	for _, permission := range []string{"screen_recording", "accessibility", "screen_recording_settings", "accessibility_settings"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := m.Permissions(ctx, permission)
+		cancel()
+		if err != nil {
+			t.Fatalf("%s: %v", permission, err)
+		}
+	}
+	for _, permission := range []string{"", "camera_settings", "x-apple.systempreferences:untrusted"} {
+		if err := m.Permissions(context.Background(), permission); err != ErrInvalid {
+			t.Fatalf("unexpected permission accepted: %q: %v", permission, err)
+		}
+	}
+}
+
 func macFixtureScript(t *testing.T, script string) *Manager {
 	t.Helper()
 	// Fixtures model the multiplexed native protocol while keeping each test's
