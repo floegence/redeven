@@ -948,6 +948,9 @@ vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
+vi.mock('./pages/settings/EnvSettingsDialog', () => ({ EnvSettingsDialog: (props: any) => <Show when={props.session.target()}>
+  <section role="dialog" data-testid="settings-overlay" style={{ position: 'fixed', top: '80px', left: '80px', 'z-index': 1000 }}><button onClick={() => props.session.close()}>Close settings</button></section>
+</Show> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div data-testid="file-preview-host" /> }));
@@ -1309,7 +1312,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const rail = fixture.host.querySelector('[data-floe-shell-slot="activity-bar"]')!;
     const glyph = (identity: string) => rail.querySelector<SVGSVGElement>('[data-floe-rail-icon="' + identity + '"]')!;
     const button = (identity: string) => glyph(identity).closest('button')!;
-    const identities = ['flower', 'files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'containers', 'connections', 'settings'];
+    const identities = ['flower', 'files', 'terminal', 'monitor', 'code', 'globe', 'applications', 'containers', 'connections'];
     for (const identity of identities) {
       const svg = glyph(identity);
       expect(svg, identity).toBeTruthy();
@@ -1329,6 +1332,11 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       expect(glyph(identity).getBoundingClientRect().width).toBe(20);
       expect(rail.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
     }
+    await userEvent.click(button('settings'));
+    await vi.waitFor(() => expect(fixture.host.querySelector('[data-testid="settings-overlay"]')).not.toBeNull());
+    expect(button('settings').getAttribute('aria-pressed')).toBe('false');
+    expect(button('connections').getAttribute('aria-pressed')).toBe('true');
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
     const plugins = button('launchpad');
     await userEvent.click(plugins);
     await vi.waitFor(() => expect(plugins.getAttribute('aria-expanded')).toBe('true'));
@@ -1339,7 +1347,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(glyph('launchpad').getAttribute('data-floe-rail-active')).toBe('false');
     await userEvent.click(button('switch'));
     await vi.waitFor(async () => expect((await import('./services/desktopShellBridge')).openConnectionCenter).toHaveBeenCalledOnce());
-    expect(button('settings').getAttribute('aria-pressed')).toBe('true');
+    expect(button('connections').getAttribute('aria-pressed')).toBe('true');
     expect(glyph('switch').getAttribute('data-floe-rail-active')).toBe('false');
     await userEvent.click(button('files'));
     await vi.waitFor(() => expect(button('files').getAttribute('aria-pressed')).toBe('true'));
