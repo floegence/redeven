@@ -3554,6 +3554,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     && !layout.isMobile()
     && activityFlowerPlacement() !== 'full_page'
     && layout.sidebarActiveTab() !== ENV_TESSIVEN_ACTIVITY_ID
+    // Only the floating companion yields to Ask Flower; page hosts stay visible.
     && !activityFlowerLauncherVisible()
     && activityContentAvailable()
     && !recoveryBlocking()
@@ -3598,7 +3599,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         && (activityFlowerPlacement() === 'full_page'
           ? activityFlowerResidentInFullPageHost()
           : activityFlowerCompanionVisible() && activityFlowerResidentInCompanionHost()))
-    && !activityFlowerLauncherVisible()
     && activityContentAvailable()
     && !recoveryBlocking()
     && !pluginCreationOpen()

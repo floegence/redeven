@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower Activity companion and contextual Ask Flower placement
 tags: [ui, flower, activity, companion, read-state, floret]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -23,6 +23,11 @@ After first access readiness, retain one EnvAIPage/FlowerSurface across explicit
 
 ### Contextual Ask Flower
 Explicit new companion conversations may capture Activity origin through its read-only reader. [Turn launcher](flower-turn-launcher.md#submission) owns sending/actions.
+Opening Ask Flower suppresses only the floating Activity companion. Full-page
+Flower (including mobile) and Workbench remain visible and retain the same
+conversation, editor and transcript while the card owns focus. Dismissal or
+failed admission leaves the source conversation intact; successful admission
+hands off once to the new task in the captured host.
 
 ### Presence and summary
 [Presence](flower-companion-presence.md#presence) owns collapsed priority, live tails, completion, composer precedence and workspace observation.
@@ -50,5 +55,7 @@ Workbench contributes placement only, retaining canvas/window/focus contracts. C
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Full-page continuity through real card opening, dismissal, failed admission and handoff at desktop/mobile widths.
+- `redeven:desktop/scripts/check-ask-flower-previews.mjs` - Built Env App and real Runtime qualification of source visibility, canonical/provider references, tool execution, new-task answers and retained source drafts.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx` - Browser continuity and viewport acceptance.
 - `redeven:desktop/scripts/check-flower-ask-card.mjs` - Real Desktop entries across locales, themes and widths.

@@ -1485,6 +1485,9 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       expect(document.querySelector('.flower-turn-launcher-window textarea')).toBe(editor);
       expect(editor.value).toBe('Keep my context while switching display modes');
       expect(document.querySelector('.floe-prompt-card-close')).toBeTruthy();
+      const product = document.querySelector<HTMLElement>('#redeven-activity-flower-product')!;
+      expect(product.hidden).toBe(mode === 'Activity');
+      if (mode === 'Workbench') expect(product.dataset.presentation).toBe('workbench');
     }
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
     const retained = editor.closest<HTMLElement>('[data-floe-prompt-card]')!;
@@ -1547,6 +1550,65 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(context.context[0].kind).toBe('text_snapshot');
     expect(context.context[0].content.length).toBeGreaterThan(0);
     expect(context.context[0].content).toContain('kind: navigation');
+  });
+
+  it.each([1280, 390])('keeps the full Flower page visible behind Ask Flower through dismissal and submission at %i pixels', async width => {
+    testRealFlowerLauncher = true;
+    testRealFlowerPreview = true;
+    await page.viewport(width, 844);
+    const fixture = width < 768 ? await mountProductionMobileShell() : await mountShell();
+    await userEvent.click(width < 768
+      ? page.getByRole('tab', { name: 'Flower', exact: true })
+      : page.getByRole('button', { name: 'Flower', exact: true }));
+    await vi.waitFor(() => expect(fixture.product.dataset.presentation).toBe('full_page'));
+    await userEvent.fill(fixture.input, 'Keep the original conversation draft');
+    const surface = document.querySelector<HTMLElement>('[data-testid="env-ai-page"]')!;
+    const bounds = fixture.product.getBoundingClientRect().toJSON();
+    const assertRetainedPage = () => {
+      expect(fixture.product.hidden).toBe(false);
+      expect(fixture.product.hasAttribute('inert')).toBe(false);
+      expect(fixture.product.getAttribute('aria-hidden')).toBeNull();
+      expect(fixture.product.getBoundingClientRect().toJSON()).toEqual(bounds);
+      expect(surface.dataset.engaged).toBe('true');
+      expect(surface.dataset.transcriptVisible).toBe('true');
+      expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(surface);
+      expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.input);
+      expect(fixture.input.value).toBe('Keep the original conversation draft');
+      expect(envAIPageMountSequence).toBe(1);
+    };
+    const openCard = async () => {
+      await userEvent.click(fixture.input, { button: 'right' });
+      await userEvent.click(page.getByRole('menuitem', { name: 'Ask Flower', exact: true }));
+      await vi.waitFor(() => expect(document.querySelector('[data-floe-prompt-card] textarea')).toBeTruthy());
+      const card = document.querySelector<HTMLElement>('[data-floe-prompt-card]')!;
+      await vi.waitFor(() => expect(document.activeElement).toBe(card.querySelector('textarea')));
+      assertRetainedPage();
+      return card;
+    };
+
+    for (const dismissal of ['close', 'escape'] as const) {
+      const card = await openCard();
+      if (dismissal === 'close') await userEvent.click(card.querySelector<HTMLButtonElement>('[aria-label="Close"]')!);
+      else await userEvent.keyboard('{Escape}');
+      await vi.waitFor(() => expect(document.querySelector('[data-floe-prompt-card]')).toBeNull());
+      assertRetainedPage();
+    }
+
+    const card = await openCard();
+    await userEvent.fill(card.querySelector<HTMLTextAreaElement>('textarea')!, 'Inspect the referenced Flower page');
+    flowerLaunchTurnMock.mockRejectedValueOnce(Object.assign(new Error('Admission rejected for the test'), { admission_kind: 'rejected' }));
+    await userEvent.click(card.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await vi.waitFor(() => expect(card.textContent).toContain('Admission rejected for the test'));
+    assertRetainedPage();
+    expect(card.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Inspect the referenced Flower page');
+    await userEvent.click(card.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
+    await vi.waitFor(() => expect(document.querySelector('[data-floe-prompt-card]')).toBeNull());
+    expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(2);
+    const sent = flowerLaunchTurnMock.mock.calls[1]![0];
+    expect(sent.thread_id).toBeUndefined();
+    expect(JSON.stringify(sent.context_action)).toContain('Flower (ai)');
+    expect(document.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
+    assertRetainedPage();
   });
 
   it('keeps header context within the shell while Containers is active', async () => {

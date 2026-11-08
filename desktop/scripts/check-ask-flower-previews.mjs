@@ -48,7 +48,7 @@ await session.run(async () => {
       };
       if (!input.tools?.length) { reply('Ask Flower acceptance'); return; }
       const texts = strings(input.input);
-      const marker = [...expected.keys()].find(key => texts.some(text => text.includes(key)));
+      const marker = [...expected.keys()].reverse().find(key => texts.some(text => text.includes(key)));
       assert.ok(marker, 'The actual user prompt reaches the provider');
       const facts = expected.get(marker);
       assert.ok(texts.some(text => text.includes(facts) || text.includes(JSON.stringify(facts).slice(1, -1))), 'Exact preview facts reach the provider');
@@ -269,6 +269,72 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
     }
     await sendAndVerify('QUALIFY_ASK_NAVIGATION', report.targets.at(-1).context);
+
+    // Exercise the real conversation menu and renderer, not just the launcher.
+    await navigation('flower').click();
+    const product = page.locator('#redeven-activity-flower-product');
+    const surface = product.locator('[data-flower-selected-thread-id]');
+    const originalThreadID = report.sends.at(-1).threadID;
+    await page.waitForFunction(id => document.querySelector('#redeven-activity-flower-product [data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === id, originalThreadID);
+    const originalEditor = product.locator('.flower-composer textarea');
+    const draft = 'Retain this unsent source conversation draft';
+    await originalEditor.fill(draft);
+    await page.waitForFunction(() => document.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page');
+    await page.evaluate(async () => {
+      await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+        .map(animation => animation.finished.catch(() => {})));
+    });
+    await product.evaluate(element => {
+      const surface = element.querySelector('[data-flower-selected-thread-id]');
+      const editor = element.querySelector('.flower-composer textarea');
+      window.askFlowerContinuity = { product: element, surface, editor, bounds: element.getBoundingClientRect().toJSON() };
+    });
+    const assertOriginalPage = async () => {
+      assert.equal(await surface.getAttribute('data-flower-selected-thread-id'), originalThreadID);
+      assert.equal(await originalEditor.inputValue(), draft);
+      const retained = await product.evaluate(element => {
+        const source = window.askFlowerContinuity;
+        return { visible: !element.hidden && !element.inert && element.getAttribute('aria-hidden') !== 'true' && element.checkVisibility(),
+          sameProduct: element === source.product, sameSurface: element.querySelector('[data-flower-selected-thread-id]') === source.surface,
+          sameEditor: element.querySelector('.flower-composer textarea') === source.editor,
+          sameBounds: ['x', 'y', 'width', 'height'].every(key => Math.abs(element.getBoundingClientRect()[key] - source.bounds[key]) < 1),
+          transcriptVisible: source.surface.getAttribute('data-flower-transcript-visible') === 'true' };
+      });
+      for (const [name, passed] of Object.entries(retained)) assert.equal(passed, true, `Flower page continuity: ${name}`);
+      await product.locator('[data-flower-message-role="assistant"]').filter({ hasText: 'ASK_FLOWER_COMPLETE_QUALIFY_ASK_NAVIGATION' }).waitFor();
+    };
+    const openFromMessage = async () => {
+      await product.locator('[data-flower-message-role="user"]').last().click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+      await card.waitFor();
+      await assertOriginalPage();
+    };
+    for (const dismissal of ['close', 'escape']) {
+      await openFromMessage();
+      if (dismissal === 'close') await card.locator('.floe-prompt-card-close').click();
+      else await card.locator('textarea').press('Escape');
+      await card.waitFor({ state: 'hidden' });
+      await assertOriginalPage();
+    }
+    await openFromMessage();
+    await card.locator('.flower-composer-context-source').first().click();
+    await text.waitFor();
+    const flowerContext = await text.innerText();
+    assert.ok(flowerContext.includes('Flower (ai)'), 'The reference identifies the Flower surface');
+    assert.ok(flowerContext.includes(`thread_id: ${originalThreadID}`), 'The reference identifies the original conversation');
+    await assertOriginalPage();
+    await page.screenshot({ path: path.join(output, 'flower-page-reference.png') });
+    await preview.locator('[data-floe-floating-window-control="close"]').click();
+    await preview.waitFor({ state: 'hidden' });
+    await page.screenshot({ path: path.join(output, 'flower-page-card.png') });
+    await sendAndVerify('QUALIFY_ASK_FLOWER_PAGE', flowerContext);
+    assert.equal(await surface.getAttribute('data-flower-selected-thread-id'), report.sends.at(-1).threadID);
+    assert.equal(await product.getAttribute('data-presentation'), 'full_page');
+    assert.equal(await product.evaluate(element => element.hidden), false);
+    await product.locator(`[data-thread-id="${originalThreadID}"] button`).first().click();
+    await page.waitForFunction(id => document.querySelector('#redeven-activity-flower-product [data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === id, originalThreadID);
+    await assertOriginalPage();
+    report.flowerPage = { originalThreadID, newThreadID: report.sends.at(-1).threadID, pageRetained: true, draftRetained: true, contextPreviewed: true, dismissals: ['close', 'escape'], newTaskAnswerVisible: true };
     assert.equal(await app.evaluate(() => global.captures), 1);
     report.passed = true; report.captureCount = 1; report.draftRetained = true;
   } catch (error) {
