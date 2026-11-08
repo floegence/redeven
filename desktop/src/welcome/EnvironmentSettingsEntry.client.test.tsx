@@ -562,11 +562,11 @@ describe('settings entry asynchronous isolation', () => {
   it('blocks a connection identity edit only while access changes remain, then rebinds the committed ID', async () => {
     const h = await mount(async request => success.ok ? { ...success, snapshot: { ...success.snapshot, environment_id: request.environment_id } } : success);
     button('Settings for Fixture SSH').click(); await settle();
-    button('Access & security').click(); await settle(); input('local-ui-port', '25000');
+    button('Access & security').click(); await waitForAccessEditor(); input('local-ui-port', '25000');
     button('Connection').click(); await settle(); input('ssh-settings-ssh_destination', 'new-host');
     expect((button('Save changes') as HTMLButtonElement).disabled).toBe(true);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Save or discard');
-    button('Access & security').click(); await settle(); input('local-ui-port', '23998');
+    button('Access & security').click(); await waitForAccessEditor(); input('local-ui-port', '23998');
     button('Connection').click(); await settle();
     expect((button('Save changes') as HTMLButtonElement).disabled).toBe(false);
     const target = h.snapshot.environments.find(entry => entry.id === id)!;
