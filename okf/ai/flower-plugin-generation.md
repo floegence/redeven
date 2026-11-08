@@ -66,7 +66,8 @@ authenticated environment HTTP carrier, like draft creation and platform operati
 A synthetic Local UI session cannot authorize the managed author workspace or
 replace a continuation's execution authority. The owner is the authenticated user and environment. Initial admission freezes the
 exact canonical create request before creating the thread, then binds ownership
-before publishing root settings. Reopening or deletion recovers an interrupted
+before publishing root settings. Reused creation identities cannot adopt unrelated
+conversations or overwrite project ownership. Reopening or deletion recovers an interrupted
 settings admission through that same request, never replaying the user turn.
 The product resolves the managed source directory through the platform adapter.
 Only that authenticated source is added to the conversation filesystem scope;
@@ -167,7 +168,7 @@ Development runtime evidence never substitutes for product signing or packaging.
 - `redeven:internal/ai/system_plugin_authoring_test.go` - Tests.
 - `redeven:internal/redevpluginintegration/author_icon_qualification_test.go` - Required SVG/PNG artifact checks and released-package round trip; fixtures do not prove visual quality or SVG-to-PNG derivation.
 - `redeven:internal/ai/plugin_creation_scope_test.go` - Managed source admission, recovery and private scope tests.
-- `redeven:internal/ai/plugin_creation_threads_test.go` - Ordinary pagination/live exclusion and ownership-before-settings admission.
+- `redeven:internal/ai/plugin_creation_threads_test.go` - Pagination/live exclusion and creation ownership conflicts.
 - `redeven:internal/ai/tool_definition_budget_test.go` - Ordinary/dedicated definitions and skill catalog at mock provider boundaries.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx` - Shared composer and navigation tests with a fixture adapter.
 

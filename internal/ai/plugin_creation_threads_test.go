@@ -129,7 +129,7 @@ func TestPluginDraftThreadInventoryPaginationAndLiveSummaries(t *testing.T) {
 	}
 }
 
-func TestPluginDraftOwnershipIsBoundBeforeSettingsPublication(t *testing.T) {
+func TestPluginDraftCannotAdoptAnExistingOrdinaryRoot(t *testing.T) {
 	svc := newWorkingDirTestService(t, t.TempDir())
 	store, err := plugincreation.Open(filepath.Join(t.TempDir(), "drafts.sqlite"))
 	if err != nil {
@@ -158,8 +158,8 @@ func TestPluginDraftOwnershipIsBoundBeforeSettingsPublication(t *testing.T) {
 	if _, err := store.FreezeLaunch(t.Context(), owner, draft.ID, req.ClientRequestID, string(raw)); err != nil {
 		t.Fatal(err)
 	}
-	// Force adoption failure after canonical create and project binding. Retry
-	// must use the same canonical request, not publish an unrelated conversation.
+	// Reusing an ordinary create identity must not attach project ownership,
+	// hide the existing conversation or authorize deleting it with this project.
 	canonical, err := svc.threadRuntime.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: flruntime.RequestKey(req.ClientRequestID)})
 	if err != nil {
 		t.Fatal(err)
@@ -177,7 +177,56 @@ func TestPluginDraftOwnershipIsBoundBeforeSettingsPublication(t *testing.T) {
 		t.Fatalf("adoption failure: %v", err)
 	}
 	bound, err := store.Get(t.Context(), owner, draft.ID)
-	if err != nil || bound.ThreadID != canonical.ThreadID.String() {
-		t.Fatalf("ownership not bound before adoption: %+v %v", bound, err)
+	if err != nil || bound.ThreadID != "" {
+		t.Fatalf("ordinary root acquired project ownership: %+v %v", bound, err)
+	}
+	if _, err := svc.DeletePluginDraft(t.Context(), meta, draft.ID, bound.Revision); err != threadstore.ErrCanonicalThreadSettingsConflict {
+		t.Fatalf("conflicting create authorized cleanup: %v", err)
+	}
+	if _, err := svc.threadRuntime.View(t.Context(), canonical.ThreadID); err != nil {
+		t.Fatalf("ordinary conversation was deleted: %v", err)
+	}
+}
+
+func TestPluginDraftCreateIdentityCannotBecomeAnOrdinaryRoot(t *testing.T) {
+	svc := newWorkingDirTestService(t, t.TempDir())
+	store, err := plugincreation.Open(filepath.Join(t.TempDir(), "drafts.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	product := plugincreation.New(store)
+	product.SetBackend(pluginScopeBackend{root})
+	svc.pluginCreation = product
+	meta := workingDirTestMeta()
+	owner, _ := plugincreation.OwnerFromSession(meta)
+	draft, err := product.Create(t.Context(), meta, "owned-create")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := product.SourceScope(t.Context(), meta, draft.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := CreateThreadRequest{ClientRequestID: "owned-launch", WorkingDir: source.Directory, managedSource: &source, pluginDraftID: draft.ID}
+	raw, _ := json.Marshal(req)
+	if _, err := store.FreezeLaunch(t.Context(), owner, draft.ID, req.ClientRequestID, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	first, err := svc.CreateThreadWithOptions(t.Context(), meta, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeated, err := svc.CreateThreadWithOptions(t.Context(), meta, req)
+	if err != nil || repeated.ThreadID != first.ThreadID {
+		t.Fatalf("owned retry: %+v %v", repeated, err)
+	}
+	req.pluginDraftID = ""
+	if _, err := svc.CreateThreadWithOptions(t.Context(), meta, req); err != threadstore.ErrCanonicalThreadSettingsConflict {
+		t.Fatalf("ordinary create reused project identity: %v", err)
 	}
 }

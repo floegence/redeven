@@ -796,6 +796,33 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, fmt.Errorf("create thread: %w", err)
 	}
 	t.ThreadID = current.ThreadID.String()
+	// Canonical create identities are process-wide. The empty endpoint key
+	// serializes their initial ownership admission across product endpoints.
+	unlockCreate, err := s.lockThreadSettings(ctxOrBackground(ctx), "", t.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockCreate()
+	if s.pluginCreation != nil {
+		draft, owner, lookupErr := s.pluginCreation.Store.ForAnyThread(ctxOrBackground(ctx), t.ThreadID)
+		if lookupErr != nil && !errors.Is(lookupErr, plugincreation.ErrNotFound) {
+			return nil, lookupErr
+		}
+		if lookupErr == nil {
+			expected, ownerErr := plugincreation.OwnerFromSession(meta)
+			if ownerErr != nil || owner != expected || draft.ID != req.pluginDraftID || draft.LaunchRequestID != clientRequestID {
+				return nil, threadstore.ErrCanonicalThreadSettingsConflict
+			}
+		} else if req.pluginDraftID != "" {
+			existing, lookupErr := db.GetThreadSettingsByCanonicalThreadID(ctxOrBackground(ctx), t.ThreadID)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			if existing != nil {
+				return nil, threadstore.ErrCanonicalThreadSettingsConflict
+			}
+		}
+	}
 	// Persist project ownership before publishing a root settings row. A list
 	// or runtime summary racing first creation can never see a temporary chat.
 	if req.pluginDraftID != "" {
