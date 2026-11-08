@@ -103,8 +103,9 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
   await page.getByRole('button', { name: 'Expand replies', exact: true }).click();
   await expect.poll(() => document.querySelector('button.flower-model-reasoning-model-trigger')).not.toBeNull();
   const trigger = document.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!;
-  trigger.click();
+  await page.getByRole('button', { name: 'Model: DeepSeek / deepseek-flash', exact: true }).click();
   await expect.poll(() => document.querySelector('.flower-model-menu input')).not.toBeNull();
+  await expect.poll(() => document.activeElement).toBe(document.querySelector('.flower-model-menu input'));
   expect(document.querySelector('.flower-model-menu')?.closest('[data-floe-surface-floating-layer="true"]')).not.toBeNull();
   await userEvent.keyboard('{Escape}');
   await expect.poll(() => document.querySelector('.flower-model-menu')).toBeNull();
