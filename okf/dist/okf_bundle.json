@@ -3020,7 +3020,7 @@
               "flower",
               "plugins"
             ],
-            "summary": "Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Plugin Center owns generation conversations and their authoring guidance; ordinary Flower conversations keep their existing tools and navigation.",
+            "summary": "Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Plugin Center owns generation conversations and their authoring guidance; ordinary Flower conversations keep their existing tools and navigation. Canonical streaming and approvals remain shared.",
             "section_count": 3
           },
           {
@@ -7750,8 +7750,8 @@
         "title": "Flower plugin generation",
         "type": "AI Product Contract"
       },
-      "body_length": 11478,
-      "summary": "Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Plugin Center owns generation conversations and their authoring guidance; ordinary Flower conversations keep their existing tools and navigation.",
+      "body_length": 11527,
+      "summary": "Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Plugin Center owns generation conversations and their authoring guidance; ordinary Flower conversations keep their existing tools and navigation. Canonical streaming and approvals remain shared.",
       "sections": [
         {
           "id": "contract",
@@ -24618,5 +24618,5 @@
       ]
     }
   ],
-  "source_sha256": "561a0f8a46e655a978c18764a67dd49c3c7d07e5354ee63fcc11f35a8f76f31c"
+  "source_sha256": "206b9db13714b2f7e96168d975d169520d81b39cb9e55212fc109fecf722ddb7"
 }

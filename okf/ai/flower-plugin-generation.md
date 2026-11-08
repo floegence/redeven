@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Plugin Center owns generation conversations and their authoring guidance; ordinary Flower conversations keep their existing tools and navigation.
+Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Plugin Center owns generation conversations and their authoring guidance; ordinary Flower conversations keep their existing tools and navigation. Canonical streaming and approvals remain shared.
 
 # Contract
 
