@@ -396,6 +396,19 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	subscription := &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}
 	if s.threadsDB != nil {
 		ids, err := s.threadsDB.ListRootThreadIDs(observerContext, endpointID, flowerLiveEnvelopeByteLimit)
+		if err == nil && s.pluginCreation != nil {
+			managed, lookupErr := s.pluginCreation.Store.ManagedThreadIDs(observerContext, endpointID, ids)
+			err = lookupErr
+			if err == nil {
+				ordinary := make([]string, 0, len(ids)-len(managed))
+				for _, id := range ids {
+					if !managed[id] {
+						ordinary = append(ordinary, id)
+					}
+				}
+				ids = ordinary
+			}
+		}
 		if err != nil {
 			closeFlowerLiveSubscription(s, subscriber)
 			return nil, err

@@ -227,3 +227,27 @@ it('retries a lost canvas comment receipt with the original request and storage 
   expect(resolveStorageGeneration).toHaveBeenCalledTimes(1);
   await expect.element(page.getByRole('textbox')).toHaveValue('Keep the independent draft');
 });
+
+it('retains the dedicated conversation when ordinary sidebar inventory excludes it', async () => {
+  const fixture = streamingFixture(2, 0);
+  const dedicatedAdapter = { ...fixture.adapter, listThreads: async () => [],
+    connectLiveStream: async function* (input: Parameters<NonNullable<typeof fixture.adapter.connectLiveStream>>[0]) {
+      for await (const envelope of fixture.adapter.connectLiveStream!(input)) {
+        yield envelope.kind === 'ready' || envelope.kind === 'summary.batch' ? { ...envelope, summaries: [] } : envelope;
+      }
+    },
+  };
+  const { parts } = embedded(dedicatedAdapter as ReturnType<typeof adapter>, fixture.thread.thread_id);
+  await expect.poll(() => parts().threadID()).toBe(fixture.thread.thread_id);
+  await expect.element(page.getByRole('textbox')).toBeVisible();
+  await page.getByRole('textbox').fill('Keep this plugin revision');
+  for (let index = 0; index < 2; index++) {
+    fixture.emit({ schema_version: 3, kind: 'ready', summaries: [], baseline_complete: false });
+    fixture.emit({ schema_version: 3, kind: 'summary.batch', summaries: [], baseline_complete: true });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(parts().threadID()).toBe(fixture.thread.thread_id);
+    await expect.element(page.getByRole('textbox')).toHaveValue('Keep this plugin revision');
+  }
+  fixture.append('The dedicated preview conversation remains connected.');
+  await expect.element(page.getByText('The dedicated preview conversation remains connected.', { exact: false })).toBeVisible();
+});

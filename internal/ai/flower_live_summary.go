@@ -7,6 +7,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/logsafe"
 )
 
@@ -36,6 +37,13 @@ func (s *Service) publishCanonicalThreadSummary(ctx context.Context, endpointID,
 			return listErr
 		}
 		s.broadcastFlowerSubagentsPatch(endpointID, parentThreadID, items)
+		return nil
+	}
+	ordinary, err := s.ordinaryThreadSettings(ctx, []threadstore.ThreadSettings{*settings})
+	if err != nil {
+		return err
+	}
+	if len(ordinary) == 0 {
 		return nil
 	}
 	summary, err := threadSummaryFromRuntime(ctx, s.threadRuntime, identity.ThreadID(threadID))

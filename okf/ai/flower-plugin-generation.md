@@ -3,21 +3,22 @@ type: AI Product Contract
 title: Flower plugin generation
 tags: [ai, flower, plugins, floret]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. The embedded `redeven-plugin-authoring` system skill appears in the ordinary skill catalog. Its description distinguishes application plugin authoring from Flower Agent Plugins and MCP configuration.
+Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Plugin Center owns generation conversations and their authoring guidance; ordinary Flower conversations keep their existing tools and navigation.
 
 # Contract
 
 ## Discoverable author guidance
 
-It is loaded through normal skill
-activation, remains user-disableable, and does not expand the global system
-prompt. Its installation coordinate is projected from the imported ReDevPlugin
-platform version before catalog, browse or model content is exposed; it carries
-no independent version pin.
+The embedded `redeven-plugin-authoring` skill is discoverable and activatable by
+models only in an authenticated active plugin creation conversation. Ordinary
+model requests omit its catalog entry and all `plugin_author.*` definitions.
+Settings can still browse and disable it. Skill activation and tool dispatch keep
+normal permission checks. Its installation coordinate follows the imported
+ReDevPlugin version, without an independent pin.
 
 The guidance starts from the user's project and preserves its identity and data
 contracts. New projects select the smallest released template that satisfies the
@@ -46,7 +47,13 @@ which boundaries were verified.
 ## Dedicated plugin drafts
 
 A product draft owns one dedicated canonical Flower conversation and one opaque
-platform author workspace. Ordinary conversations may be referenced explicitly;
+platform author workspace. Plugin Center exclusively manages these conversations;
+ordinary paginated lists and live sidebar inventories exclude them by durable
+ownership, including retained deleting/deleted records. Filtering does not depend
+on titles, directories or backend availability. Pagination crosses hidden pages.
+The embedded conversation retains its selected detail through empty reconnect
+baselines, preserving composer state and canonical live updates.
+Ordinary conversations may be referenced explicitly;
 they are never adopted or deleted with a draft. The ordinary Flower composer,
 attachment staging, approvals, streaming and runtime dispatch remain authoritative.
 Requirements discussion and implementation requests use the ordinary composer
@@ -58,8 +65,9 @@ Draft turns and their input, approval, compaction and goal continuations use the
 authenticated environment HTTP carrier, like draft creation and platform operations.
 A synthetic Local UI session cannot authorize the managed author workspace or
 replace a continuation's execution authority. The owner is the authenticated user and environment. Initial admission freezes the
-exact canonical create request before creating the thread. Restart reconciles that
-same request and binds its original thread; it does not replay the user turn.
+exact canonical create request before creating the thread, then binds ownership
+before publishing root settings. Reopening or deletion recovers an interrupted
+settings admission through that same request, never replaying the user turn.
 The product resolves the managed source directory through the platform adapter.
 Only that authenticated source is added to the conversation filesystem scope;
 other projects, platform state and other task directories remain excluded. Adding
@@ -96,8 +104,8 @@ Product draft deletion first durably freezes admission, reconciles any pending
 canonical create, cancels/deletes its conversation, then closes and removes the
 platform workspace. Interrupted cleanup resumes its durable stage. Unknown formal
 installation outcomes must be reconciled before author resources are removed.
-Already installed instances are retained. Thread-list deletion uses the same
-product review and cleanup path, with explicit copy describing the extra scope.
+Already installed instances are retained. Legacy direct deletion requests still
+require the same product review and cleanup path.
 
 ## Visual revision requests
 Canvas comments submit explicit text and the reviewed artifact's bounded visual
@@ -158,6 +166,9 @@ Development runtime evidence never substitutes for product signing or packaging.
 - `redeven:internal/ai/system_skills/redeven-plugin-authoring/SKILL.md` - Source.
 - `redeven:internal/ai/system_plugin_authoring_test.go` - Tests.
 - `redeven:internal/redevpluginintegration/author_icon_qualification_test.go` - Required SVG/PNG artifact checks and released-package round trip; fixtures do not prove visual quality or SVG-to-PNG derivation.
+- `redeven:internal/ai/plugin_creation_scope_test.go` - Managed source admission, recovery and private scope tests.
+- `redeven:internal/ai/plugin_creation_threads_test.go` - Ordinary pagination/live exclusion and ownership-before-settings admission.
+- `redeven:internal/ai/tool_definition_budget_test.go` - Ordinary/dedicated definitions and skill catalog at mock provider boundaries.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx` - Shared composer and navigation tests with a fixture adapter.
 
 The host authoring skill supplies Redeven visual guidance: content-first layouts,

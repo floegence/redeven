@@ -556,11 +556,35 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	}
 
 	endpointID := strings.TrimSpace(meta.EndpointID)
-	list, next, err := db.ListThreadSettings(ctx, endpointID, limit, c)
-	if err != nil {
-		return nil, err
+	if limit <= 0 {
+		limit = 50
 	}
-	return s.threadListFromSettings(ctx, list, strings.TrimSpace(next))
+	limit = min(limit, 200)
+	// Fill pages from visible roots; a page of managed projects must not hide
+	// older ordinary conversations or consume their pagination capacity.
+	visible := make([]threadstore.ThreadSettings, 0, limit+1)
+	for len(visible) <= limit {
+		list, next, err := db.ListThreadSettings(ctx, endpointID, 200, c)
+		if err != nil {
+			return nil, err
+		}
+		list, err = s.ordinaryThreadSettings(ctx, list)
+		if err != nil {
+			return nil, err
+		}
+		visible = append(visible, list...)
+		if next == "" {
+			break
+		}
+		c, _ = threadstore.DecodeCursor(next)
+	}
+	next := ""
+	if len(visible) > limit {
+		visible = visible[:limit]
+		last := visible[len(visible)-1]
+		next = threadstore.EncodeCursor(threadstore.ThreadsCursor{PinnedAtUnixMs: last.PinnedAtUnixMs, SettingsCreatedAtUnixMs: last.SettingsCreatedAtUnixMs, ThreadID: last.ThreadID})
+	}
+	return s.threadListFromSettings(ctx, visible, next)
 }
 
 // A settings-only placeholder never invents canonical facts. The explicit
@@ -577,6 +601,10 @@ func (s *Service) unavailableThreadSummary(ctx context.Context, settings *thread
 
 func (s *Service) threadListFromSettings(ctx context.Context, list []threadstore.ThreadSettings, next string) (*ListThreadsResponse, error) {
 	typed, err := s.typedFloretRuntime()
+	if err != nil {
+		return nil, err
+	}
+	list, err = s.ordinaryThreadSettings(ctx, list)
 	if err != nil {
 		return nil, err
 	}
@@ -768,6 +796,20 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, fmt.Errorf("create thread: %w", err)
 	}
 	t.ThreadID = current.ThreadID.String()
+	// Persist project ownership before publishing a root settings row. A list
+	// or runtime summary racing first creation can never see a temporary chat.
+	if req.pluginDraftID != "" {
+		if s.pluginCreation == nil || req.managedSource == nil {
+			return nil, plugincreation.ErrNotFound
+		}
+		owner, err := plugincreation.OwnerFromSession(meta)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := s.pluginCreation.Store.BindThread(ctx, owner, req.pluginDraftID, clientRequestID, t.ThreadID); err != nil {
+			return nil, err
+		}
+	}
 	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), t); err != nil {
 		return nil, err
 	}
@@ -1377,23 +1419,47 @@ func (s *Service) ResumePluginDraft(ctx context.Context, meta *session.Meta, id 
 	if d.Lifecycle != "active" {
 		return d, plugincreation.ErrDeleting
 	}
-	if !d.LaunchPending {
+	return s.resumePluginDraftThread(ctx, meta, owner, d)
+}
+
+// Recover the narrow ownership-before-settings crash boundary through the same
+// canonical request. Existing settings (including later model changes) win.
+func (s *Service) resumePluginDraftThread(ctx context.Context, meta *session.Meta, owner plugincreation.Owner, d plugincreation.Draft) (plugincreation.Draft, error) {
+	if d.LaunchRequestID == "" || d.Lifecycle == "deleted" || d.Lifecycle == "deleting" && d.CleanupStage != "thread" {
 		return d, nil
+	}
+	if d.ThreadID != "" {
+		settings, err := s.threadsDB.GetThreadSettings(ctx, meta.EndpointID, d.ThreadID)
+		if err != nil {
+			return d, err
+		}
+		if settings != nil {
+			return d, nil
+		}
+		if d.Lifecycle == "deleting" {
+			_, err := s.readCanonicalThreadState(ctx, d.ThreadID)
+			if errors.Is(err, flruntime.ErrThreadDeleted) || errors.Is(err, flruntime.ErrThreadNotFound) {
+				return d, nil
+			}
+			if err != nil {
+				return d, err
+			}
+		}
 	}
 	var creation CreateThreadRequest
 	if d.LaunchSnapshot == "" || json.Unmarshal([]byte(d.LaunchSnapshot), &creation) != nil {
 		return d, plugincreation.ErrConflict
 	}
-	source, err := s.pluginCreation.SourceScope(ctx, meta, id)
+	source, err := s.pluginCreation.SourceScope(ctx, meta, d.ID)
 	if err != nil {
 		return d, err
 	}
 	creation.managedSource = &source
-	thread, err := s.CreateThreadWithOptions(ctx, meta, creation)
-	if err != nil {
+	creation.pluginDraftID = d.ID
+	if _, err := s.CreateThreadWithOptions(ctx, meta, creation); err != nil {
 		return d, err
 	}
-	return s.pluginCreation.Store.BindThread(ctx, owner, id, d.LaunchRequestID, thread.ThreadID)
+	return s.pluginCreation.Store.Get(ctx, owner, d.ID)
 }
 
 func (s *Service) DeletePluginDraft(ctx context.Context, meta *session.Meta, id string, revision int64) (plugincreation.Draft, error) {
@@ -1416,24 +1482,8 @@ func (s *Service) DeletePluginDraft(ctx context.Context, meta *session.Meta, id 
 	if err != nil {
 		return d, err
 	}
-	if d.LaunchRequestID != "" && d.ThreadID == "" {
-		var creation CreateThreadRequest
-		if d.LaunchSnapshot == "" || json.Unmarshal([]byte(d.LaunchSnapshot), &creation) != nil {
-			return d, plugincreation.ErrConflict
-		}
-		source, e := s.pluginCreation.SourceScope(ctx, meta, id)
-		if e != nil {
-			return d, e
-		}
-		creation.managedSource = &source
-		thread, e := s.CreateThreadWithOptions(ctx, meta, creation)
-		if e != nil {
-			return d, e
-		}
-		d, e = s.pluginCreation.Store.BindThread(ctx, owner, id, d.LaunchRequestID, thread.ThreadID)
-		if e != nil {
-			return d, e
-		}
+	if _, err := s.resumePluginDraftThread(ctx, meta, owner, d); err != nil {
+		return d, err
 	}
 	return s.pluginCreation.ResumeDelete(ctx, meta, id, func(ctx context.Context, thread string) error { return s.deleteThread(ctx, meta, thread, true, true) })
 }

@@ -6,8 +6,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
@@ -85,11 +89,72 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 	if err != nil || resumed.ThreadID == "" || resumed.ThreadID != again.ThreadID {
 		t.Fatalf("resume identity: %+v %v", again, err)
 	}
+	// Dedicated conversations remain readable by their canvas, but never enter
+	// the ordinary paginated list or live sidebar baseline.
+	ordinary, err := svc.CreateThread(t.Context(), meta, "Ordinary conversation", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.threadsDB.SetThreadPinned(t.Context(), meta.EndpointID, resumed.ThreadID, true); err != nil {
+		t.Fatal(err)
+	}
+	page, err := svc.ListThreads(t.Context(), meta, 1, "")
+	if err != nil || len(page.Threads) != 1 || page.Threads[0].ThreadID != ordinary.ThreadID || page.NextCursor != "" {
+		t.Fatalf("ordinary list leaked or skipped a thread: %+v %v", page, err)
+	}
+	if _, err := svc.GetThread(t.Context(), meta, resumed.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := svc.listFlowerLiveBaseline(t.Context(), meta)
+	if err != nil || len(baseline) != 1 || baseline[0].ThreadID != ordinary.ThreadID {
+		t.Fatalf("baseline: %+v %v", baseline, err)
+	}
 	host, err := svc.bindRunHostCapabilities(meta.EndpointID, resumed.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := newRun(runOptions{StateDir: svc.stateDir, TaskFiles: &svc.taskFiles, AgentHomeDir: svc.agentHomeDir, WorkingDir: source.Directory, FilesystemScope: svc.scope, HostCapabilities: host, ThreadID: resumed.ThreadID, SessionMeta: meta, EndpointID: meta.EndpointID})
+	ordinaryRun := newRun(runOptions{AgentHomeDir: svc.agentHomeDir, WorkingDir: svc.agentHomeDir, SessionMeta: meta})
+	ordinaryRun.ensureSkillManager().userHome = t.TempDir()
+	contextSnapshot, err := ordinaryRun.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, section := range contextSnapshot.Sections {
+		if section.Key == "skills" && strings.Contains(section.Text, "redeven-plugin-authoring") {
+			t.Fatal("ordinary model context advertises plugin authoring")
+		}
+	}
+	activationContext := contextWithToolAuthorizationSnapshot(t.Context(), PermissionSnapshot{SnapshotID: "authoring", PermissionType: FlowerPermissionFullAccess})
+	if _, _, err := ordinaryRun.activateSkill(activationContext, "redeven-plugin-authoring"); err == nil {
+		t.Fatal("ordinary run activated dedicated authoring skill")
+	}
+	assertAuthorTools := func(run *run, want int) {
+		t.Helper()
+		registry := NewInMemoryToolRegistry()
+		if err := registerBuiltInTools(registry, run); err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for _, def := range registry.Snapshot() {
+			if strings.HasPrefix(def.Name, "plugin_author.") {
+				count++
+			}
+		}
+		if count != want {
+			t.Fatalf("author tools=%d want=%d", count, want)
+		}
+	}
+	assertAuthorTools(ordinaryRun, 0)
+	assertAuthorTools(r, 5)
+	r.ensureSkillManager().userHome = t.TempDir()
+	contextSnapshot, err = r.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, time.Now)
+	if err != nil || !strings.Contains(modelContextSnapshotText(contextSnapshot), pluginAuthoringSkillName) {
+		t.Fatalf("dedicated catalog: %v", err)
+	}
+	if _, _, err := r.activateSkill(activationContext, "redeven-plugin-authoring"); err != nil {
+		t.Fatal(err)
+	}
 	scope, err := r.runPathScope()
 	if err != nil {
 		t.Fatal(err)
@@ -116,6 +181,10 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 	foreign := *meta
 	foreign.UserPublicID = "another-user"
 	r.sessionMeta = &foreign
+	assertAuthorTools(r, 0)
+	if _, _, err := r.activateSkill(activationContext, pluginAuthoringSkillName); err == nil {
+		t.Fatal("foreign owner loaded authoring skill")
+	}
 	if _, err = r.runPathScope(); !errors.Is(err, plugincreation.ErrNotFound) {
 		t.Fatalf("foreign owner: %v", err)
 	}
@@ -123,6 +192,10 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 	deleting, err := store.BeginDelete(t.Context(), owner, draft.ID, again.Revision)
 	if err != nil {
 		t.Fatal(err)
+	}
+	assertAuthorTools(r, 0)
+	if _, _, err := r.activateSkill(activationContext, pluginAuthoringSkillName); err == nil {
+		t.Fatal("deleting project loaded authoring skill")
 	}
 	if _, err = r.runPathScope(); !errors.Is(err, plugincreation.ErrDeleting) {
 		t.Fatalf("deleted authority: %v", err)
@@ -158,4 +231,66 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 		t.Fatalf("pending launch cleanup: %+v %v", removed, err)
 	}
 
+}
+
+func TestPluginDraftRecoversOwnershipBeforeSettingsAdmission(t *testing.T) {
+	svc := newWorkingDirTestService(t, t.TempDir())
+	store, err := plugincreation.Open(filepath.Join(t.TempDir(), "drafts.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	product := plugincreation.New(store)
+	product.SetBackend(pluginScopeBackend{root})
+	svc.pluginCreation = product
+	meta := workingDirTestMeta()
+	owner, _ := plugincreation.OwnerFromSession(meta)
+	draft, err := product.Create(t.Context(), meta, "crash-project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := product.SourceScope(t.Context(), meta, draft.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := CreateThreadRequest{ClientRequestID: "crash-launch", WorkingDir: source.Directory}
+	raw, _ := json.Marshal(request)
+	draft, err = store.FreezeLaunch(t.Context(), owner, draft.ID, request.ClientRequestID, string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := svc.threadRuntime.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: flruntime.RequestKey(request.ClientRequestID)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err = store.BindThread(t.Context(), owner, draft.ID, request.ClientRequestID, canonical.ThreadID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate interruption after durable ownership and before settings adoption.
+	recovered, err := svc.ResumePluginDraft(t.Context(), meta, draft.ID)
+	if err != nil || recovered.ThreadID != canonical.ThreadID.String() {
+		t.Fatalf("recovery: %+v %v", recovered, err)
+	}
+	if _, err := svc.GetThread(t.Context(), meta, recovered.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	page, err := svc.ListThreads(t.Context(), meta, 25, "")
+	if err != nil || len(page.Threads) != 0 {
+		t.Fatalf("recovered project leaked: %+v %v", page, err)
+	}
+	deleted, err := svc.DeletePluginDraft(t.Context(), meta, draft.ID, recovered.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.DeletePluginDraft(t.Context(), meta, draft.ID, deleted.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(recovered.ThreadID)); !errors.Is(err, flruntime.ErrThreadDeleted) && !errors.Is(err, flruntime.ErrThreadNotFound) {
+		t.Fatalf("deleted thread returned: %v", err)
+	}
 }

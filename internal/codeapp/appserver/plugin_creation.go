@@ -115,7 +115,7 @@ func (g *Server) handlePluginCreationAPI(w http.ResponseWriter, r *http.Request)
 				var req struct{}
 				if e = decodePluginDraftJSON(r, &req); e == nil {
 					d, e = g.pluginCreation.ResumePreparation(r.Context(), meta, id)
-					if e == nil && d.LaunchPending {
+					if e == nil && d.LaunchRequestID != "" {
 						if g.aiProvider == nil {
 							e = errors.New("Flower unavailable")
 						} else {

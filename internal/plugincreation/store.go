@@ -214,6 +214,42 @@ func (s *Store) ForThread(ctx context.Context, o Owner, thread string) (Draft, e
 	}
 	return scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM drafts WHERE owner_user=? AND owner_env=? AND thread_id=?`, o.User, o.Environment, thread))
 }
+
+// ManagedThreadIDs projects navigation ownership, including deleting and retained
+// deleted drafts. It does not grant read or execution authority. Bound batches
+// keep list/observer admission independent of the size of the project library.
+func (s *Store) ManagedThreadIDs(ctx context.Context, environment string, ids []string) (map[string]bool, error) {
+	out := make(map[string]bool)
+	if environment == "" {
+		return nil, ErrInvalid
+	}
+	for start := 0; start < len(ids); start += 200 {
+		batch := ids[start:min(start+200, len(ids))]
+		args := []any{environment}
+		for _, id := range batch {
+			args = append(args, id)
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT thread_id FROM drafts WHERE owner_env=? AND thread_id<>'' AND thread_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")+`)`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[id] = true
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func (s *Store) Rename(ctx context.Context, o Owner, id string, revision int64, title string) (Draft, error) {
 	title = strings.TrimSpace(title)
 	if len([]rune(title)) > 120 {

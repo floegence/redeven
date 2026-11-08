@@ -71,7 +71,7 @@ afterEach(async () => {
   document.body.replaceChildren();
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
 });
-function mount() {
+function mount(canManage = true) {
   const [visible, setVisible] = createSignal(true);
   const onBack = vi.fn();
   const submit = vi.fn();
@@ -85,7 +85,7 @@ function mount() {
           <PluginCreationWorkspace
             draftCoordinator={createFlowerComposerDraftCoordinator()}
             draftID="draft-1"
-            canManage
+            canManage={canManage}
             visible={visible()}
             onBack={onBack}
             onSaved={vi.fn()}
@@ -111,6 +111,13 @@ function mount() {
   );
   return { host, onBack, submit, setVisible };
 }
+it.each([false, true])('reconciles a bound project before opening only for managers (manager: %s)', async canManage => {
+  draft = { ...baseDraft, thread_id: 'thread-1' };
+  mount(canManage);
+  await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
+  const resumes = vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith('/resume'));
+  expect(resumes).toHaveLength(canManage ? 1 : 0);
+});
 it.each([false, true])('uses only the ordinary composer in the workspace (conversation: %s)', async (conversationStarted) => {
   if (conversationStarted) draft = { ...baseDraft, thread_id: 'thread-1' };
   await page.viewport(1200, 800);

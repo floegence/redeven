@@ -66,3 +66,18 @@ func (r *run) hasPluginDraft() bool {
 	draft, err := r.host.pluginCreation.Store.ForThread(context.Background(), owner, r.host.authorityThreadID)
 	return err == nil && draft.Lifecycle == "active"
 }
+
+const pluginAuthoringSkillName = "redeven-plugin-authoring"
+
+func (r *run) scopedSkills(catalog []SkillMeta) []SkillMeta {
+	if r.hasPluginDraft() {
+		return catalog
+	}
+	out := make([]SkillMeta, 0, len(catalog))
+	for _, skill := range catalog {
+		if skill.Name != pluginAuthoringSkillName {
+			out = append(out, skill)
+		}
+	}
+	return out
+}

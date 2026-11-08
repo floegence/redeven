@@ -9,6 +9,63 @@ import (
 	"testing"
 )
 
+func TestManagedThreadIDsRetainsOwnershipAcrossCleanup(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "drafts.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ids := []string{"ordinary"}
+	want := map[string]bool{}
+	for _, owner := range []Owner{{"alice", "env"}, {"bob", "env"}, {"alice", "foreign"}} {
+		for _, lifecycle := range []string{"active", "deleting", "deleted"} {
+			id := owner.User + "-" + owner.Environment + "-" + lifecycle
+			d, err := s.Create(t.Context(), owner, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, err = s.Activate(t.Context(), owner, d.ID, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, err = s.FreezeLaunch(t.Context(), owner, d.ID, id, `{}`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, err = s.BindThread(t.Context(), owner, d.ID, id, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if lifecycle != "active" {
+				if _, err := s.BeginDelete(t.Context(), owner, d.ID, d.Revision); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if lifecycle == "deleted" {
+				for _, stage := range []string{"thread", "workspace"} {
+					if _, err := s.AdvanceDelete(t.Context(), owner, d.ID, stage); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			ids = append(ids, id)
+			want[id] = owner.Environment == "env"
+		}
+	}
+	managed, err := s.ManagedThreadIDs(t.Context(), "env", ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		if managed[id] != want[id] {
+			t.Fatalf("membership for %q: got %v, want %v", id, managed[id], want[id])
+		}
+	}
+	if _, err := s.ManagedThreadIDs(t.Context(), "", ids); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("missing environment: %v", err)
+	}
+}
+
 func TestConcurrentDraftRenameAndDeleteRequireCurrentRevision(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "drafts.sqlite"))
 	if err != nil {

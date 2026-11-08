@@ -1176,7 +1176,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailOpen = createMemo(() => activeSubagentDetail() !== null);
   const activeSubagentID = createMemo(() => activeSubagentDetail()?.childThreadID ?? '');
   const retainedAttentionChildID = createMemo(() => attentionNavigation()?.childThreadID === selectedThreadID() ? selectedThreadID() : '');
-  createComputed(on([activeSubagentID, retainedAttentionChildID], (ids) => {
+  createComputed(on([activeSubagentID, retainedAttentionChildID, () => props.embeddedConversation ? selectedThreadID() : ''], (ids) => {
     setThreadCache(cache => cache.retainDetails(ids));
   }));
   const subagentDetailSummary = () => activeSubagentDetail()?.summary ?? null;

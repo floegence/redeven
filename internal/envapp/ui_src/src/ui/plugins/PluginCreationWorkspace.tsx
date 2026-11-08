@@ -373,7 +373,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     try {
       const found = await getPluginDraft(initialID);
       if (disposed) return;
-      const value = found.lifecycle === 'preparing' || found.launch_pending ? await resumePluginDraft(found.id) : found;
+      const needsResume = found.lifecycle === 'preparing' || found.launch_pending
+        || (props.canManage && found.lifecycle === 'active' && Boolean(found.thread_id));
+      const value = needsResume ? await resumePluginDraft(found.id) : found;
       if (disposed) return;
       setDraft(value);
       if (value.lifecycle === 'deleting') {

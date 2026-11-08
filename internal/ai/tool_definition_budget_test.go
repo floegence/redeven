@@ -6,28 +6,31 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/plugincreation"
 )
 
 // Measure the final HTTP tools array of a fresh root Service turn, including
 // Floret controls, attachments and goal. Registry inventory is not the default
-// surface. No search, MCP server or plugin authoring context is configured here.
+// surface. Search and MCP are unconfigured; plugin authoring is tested explicitly.
 // Budgets include about 3-4% growth room and fail visibly without truncating
 // runtime descriptions. They are UTF-8 JSON bytes, not tokens or quality claims.
 func TestFlowerToolDefinitionBudget(t *testing.T) {
 	for _, fixture := range []struct {
 		name, permission              string
-		computer                      bool
+		computer, authoring           bool
 		nonstrictBudget, strictBudget int
 	}{
-		{"full", config.AIPermissionFullAccess, true, 36500, 42000},
-		{"readonly", config.AIPermissionReadonly, true, 23000, 28500},
-		{"computer_disabled", config.AIPermissionFullAccess, false, 33000, 38500},
+		{"full", config.AIPermissionFullAccess, true, false, 36500, 42000},
+		{"readonly", config.AIPermissionReadonly, true, false, 23000, 28500},
+		{"computer_disabled", config.AIPermissionFullAccess, false, false, 33000, 38500},
+		{"plugin_creation", config.AIPermissionFullAccess, true, true, 41000, 47000},
 	} {
 		for _, provider := range []string{"deepseek", "openai"} {
 			t.Run(fixture.name+"/"+provider, func(t *testing.T) {
@@ -46,6 +49,13 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 					var tools []map[string]any
 					if err := json.Unmarshal(body["tools"], &tools); err == nil && len(tools) > 0 {
 						requests.Add(1)
+						hasAuthorSkill := bytes.Contains(body["input"], []byte(pluginAuthoringSkillName)) || bytes.Contains(body["messages"], []byte(pluginAuthoringSkillName))
+						if hasAuthorSkill != fixture.authoring {
+							t.Errorf("provider authoring guidance=%v want=%v", hasAuthorSkill, fixture.authoring)
+						}
+						if bytes.Contains(body["tools"], []byte("plugin_author")) != fixture.authoring {
+							t.Error("provider authoring tools do not match project scope")
+						}
 						var compact bytes.Buffer
 						if err := json.Compact(&compact, body["tools"]); err != nil {
 							t.Error(err)
@@ -77,6 +87,9 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 						wantComputer := []string{}
 						if fixture.computer && fixture.permission == config.AIPermissionFullAccess {
 							wantComputer = []string{"computer_exec", "computer_select_target", "computer_targets"}
+						}
+						if fixture.authoring {
+							required = append(required, "plugin_author_status", "plugin_author_initialize", "plugin_author_rename", "plugin_author_build", "plugin_author_capture")
 						}
 						expected := append(slices.Clone(required), wantComputer...)
 						slices.Sort(expected)
@@ -112,21 +125,52 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 				defer server.Close()
 				opts := encodingIntegrationOptions(t, server.URL, nil)
 				opts.Config = &config.AIConfig{CurrentModelID: "openai/" + model, ComputerUseEnabled: &fixture.computer, Providers: []config.AIProvider{{ID: "openai", Type: provider, StrictToolSchema: &strict, BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: model}}, WebSearch: &config.AIProviderWebSearch{Enabled: false, Source: "native"}}}}
+				// Ordinary turns must stay scoped even when the environment has a
+				// live author service, not only when plugin support is unavailable.
+				store, err := plugincreation.Open(filepath.Join(t.TempDir(), "drafts.sqlite"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer store.Close()
+				root, err := filepath.EvalSymlinks(t.TempDir())
+				if err != nil {
+					t.Fatal(err)
+				}
+				opts.PluginCreation = plugincreation.New(store)
+				opts.PluginCreation.SetBackend(pluginScopeBackend{root})
+				var projectID string
+				if fixture.authoring {
+					project, err := opts.PluginCreation.Create(t.Context(), testSendTurnMeta(), "tool-budget-project")
+					if err != nil {
+						t.Fatal(err)
+					}
+					projectID = project.ID
+				}
 				svc, err := NewService(opts)
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer func() { _ = svc.Close() }()
 				meta := testSendTurnMeta()
-				thread, err := svc.CreateThread(t.Context(), meta, "Tool budget", "openai/"+model, fixture.permission, opts.AgentHomeDir)
+				var threadID string
+				request := SendUserTurnRequest{ClientRequestID: "tool-budget", Input: RunInput{Text: "Inspect the available tool descriptions."}}
+				if fixture.authoring {
+					request.ClientRequestID = ""
+					request.PluginDraftID = projectID
+					request.Create = &CreateThreadRequest{ClientRequestID: "tool-budget", Title: "Tool budget", ModelID: "openai/" + model, PermissionType: fixture.permission}
+				} else {
+					thread, err := svc.CreateThread(t.Context(), meta, "Tool budget", "openai/"+model, fixture.permission, opts.AgentHomeDir)
+					if err != nil {
+						t.Fatal(err)
+					}
+					request.ThreadID = thread.ThreadID
+				}
+				response, err := svc.SendUserTurn(t.Context(), meta, request)
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "tool-budget", Input: RunInput{Text: "Inspect the available tool descriptions."}})
-				if err != nil {
-					t.Fatal(err)
-				}
-				final := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" || v.RunStatus == "failed" })
+				threadID = response.ThreadID
+				final := waitForAskUserIntegrationThread(t, svc, meta, threadID, func(v *ThreadView) bool { return v.RunStatus == "success" || v.RunStatus == "failed" })
 				if final.RunStatus != "success" || requests.Load() != 1 {
 					t.Fatalf("runtime acceptance: status=%s requests=%d", final.RunStatus, requests.Load())
 				}

@@ -247,7 +247,7 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 		}
 		return nil, fmt.Errorf("%w: %v", flruntime.ErrModelContextUnavailable, err)
 	}
-	skills := buildSkillCatalogPrompt(catalog)
+	skills := buildSkillCatalogPrompt(r.scopedSkills(catalog))
 	if skills == "" {
 		skills = "No skills are available for the current permission policy."
 	}

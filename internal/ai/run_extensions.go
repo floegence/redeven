@@ -26,7 +26,7 @@ func (r *run) listSkills() []SkillMeta {
 	if mgr == nil {
 		return nil
 	}
-	return mgr.List(r.skillPermissionType())
+	return r.scopedSkills(mgr.List(r.skillPermissionType()))
 }
 
 func (r *run) activateSkill(ctx context.Context, name string) (SkillActivation, bool, error) {
@@ -40,6 +40,9 @@ func (r *run) activateSkill(ctx context.Context, name string) (SkillActivation, 
 	snapshot, ok := toolAuthorizationSnapshotFromContext(ctx)
 	if !ok || snapshot.PermissionType == "" {
 		return SkillActivation{}, false, errors.New("skill activation authorization snapshot is unavailable")
+	}
+	if strings.TrimSpace(name) == pluginAuthoringSkillName && !r.hasPluginDraft() {
+		return SkillActivation{}, false, errors.New("plugin authoring skill is available only in a plugin creation conversation")
 	}
 	activation, alreadyActive, err := mgr.Activate(ctx, name, permissionTypeString(snapshot.PermissionType), false)
 	if err != nil {

@@ -735,8 +735,9 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run, webBindings ...map[
 	if reg == nil {
 		return fmt.Errorf("nil tool registry")
 	}
+	pluginAuthoring := r.hasPluginDraft()
 	for _, def := range builtInToolDefinitions() {
-		if strings.HasPrefix(def.Name, "plugin_author.") && !r.hasPluginDraft() {
+		if strings.HasPrefix(def.Name, "plugin_author.") && !pluginAuthoring {
 			continue
 		}
 		if def.Name == "report_to_parent" && (r == nil || r.subagentDepth == 0) {

@@ -45,6 +45,7 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		}
 		create.WorkingDir = source.Directory
 		create.managedSource = &source
+		create.pluginDraftID = req.PluginDraftID
 	}
 	settings, err := s.buildThreadCreateSettings(ctxOrBackground(ctx), meta, create)
 	if err != nil {
@@ -92,15 +93,7 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	if thread == nil || strings.TrimSpace(thread.ThreadID) == "" {
 		return fail(initialTurnPhaseResumeCanonicalCreate, errors.New("created thread identity is missing"))
 	}
-	if req.PluginDraftID != "" {
-		owner, e := plugincreation.OwnerFromSession(meta)
-		if e != nil {
-			return fail(initialTurnPhaseResumeCanonicalCreate, e)
-		}
-		if _, e = s.pluginCreation.Store.BindThread(ctx, owner, req.PluginDraftID, clientRequestID, thread.ThreadID); e != nil {
-			return fail(initialTurnPhaseResumeCanonicalCreate, e)
-		}
-	}
+
 	req.ClientRequestID = clientRequestID
 	req.ThreadID = thread.ThreadID
 	req.Create = nil
