@@ -21,6 +21,7 @@ type runHostCapabilities struct {
 	queryThreads         func(context.Context, *session.Meta, string, map[string]any) (any, error)
 	pluginCreation       *plugincreation.Service
 	tessiven             *tessiven.Service
+	tessivenCanvasID     string
 	tessivenResources    *tessiven.ResourceBackend
 	authorityThreadID    string
 	requestThreadSummary func()
@@ -84,7 +85,12 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 	if err != nil {
 		return runHostCapabilities{}, err
 	}
+	canvasID, err := s.tessivenThreadCanvas(context.Background(), effectAuthorityThreadID)
+	if err != nil {
+		return runHostCapabilities{}, err
+	}
 	return runHostCapabilities{
+		tessivenCanvasID:   canvasID,
 		openAIConnections:  s.openAIConnectionPool(),
 		deepSeekImageFiles: s.deepSeekFiles(),
 		webProvider: func(id string) (config.AIProvider, bool) {
@@ -104,7 +110,7 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 			if meta == nil || strings.TrimSpace(meta.EndpointID) != endpointID {
 				return nil, errReadPermissionDenied
 			}
-			return s.execThreadQueryTool(ctx, meta, name, args)
+			return s.execThreadQueryTool(ctx, meta, name, args, canvasID)
 		},
 		pluginCreation: s.pluginCreation,
 		tessiven:       s.tessiven, tessivenResources: s.tessivenResources,

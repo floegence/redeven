@@ -162,6 +162,7 @@ type ThreadSummaryUnavailable struct {
 }
 
 type ThreadView struct {
+	TessivenCanvasID     string                        `json:"tessiven_canvas_id,omitempty"`
 	SummaryUnavailable   *ThreadSummaryUnavailable     `json:"summary_unavailable,omitempty"`
 	Cancellation         *flruntime.ThreadCancellation `json:"cancellation,omitempty"`
 	ThreadID             string                        `json:"thread_id"`
@@ -250,6 +251,7 @@ type FlowerSubagentDetailResponse struct {
 }
 
 type CreateThreadRequest struct {
+	TessivenCanvasID string `json:"tessiven_canvas_id,omitempty"`
 	// managedSource is assigned only after authenticated draft resolution.
 	managedSource      *plugincreation.SourceScope
 	pluginDraftID      string

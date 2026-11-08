@@ -14,6 +14,7 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/plugincreation"
+	"github.com/floegence/redeven/internal/tessiven"
 )
 
 // Measure the final HTTP tools array of a fresh root Service turn, including
@@ -24,13 +25,15 @@ import (
 func TestFlowerToolDefinitionBudget(t *testing.T) {
 	for _, fixture := range []struct {
 		name, permission              string
-		computer, authoring           bool
+		computer, authoring, canvas   bool
 		nonstrictBudget, strictBudget int
 	}{
-		{"full", config.AIPermissionFullAccess, true, false, 36500, 42000},
-		{"readonly", config.AIPermissionReadonly, true, false, 23000, 28500},
-		{"computer_disabled", config.AIPermissionFullAccess, false, false, 33000, 38500},
-		{"plugin_creation", config.AIPermissionFullAccess, true, true, 41000, 47000},
+		{"full", config.AIPermissionFullAccess, true, false, false, 25500, 29500},
+		{"readonly", config.AIPermissionReadonly, true, false, false, 16700, 21000},
+		{"computer_disabled", config.AIPermissionFullAccess, false, false, false, 22100, 25800},
+		{"plugin_creation", config.AIPermissionFullAccess, true, true, false, 28300, 32200},
+		{"tessiven", config.AIPermissionFullAccess, true, false, true, 36500, 42000},
+		{"tessiven_readonly", config.AIPermissionReadonly, true, false, true, 23000, 28500},
 	} {
 		for _, provider := range []string{"deepseek", "openai"} {
 			t.Run(fixture.name+"/"+provider, func(t *testing.T) {
@@ -49,6 +52,11 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 					var tools []map[string]any
 					if err := json.Unmarshal(body["tools"], &tools); err == nil && len(tools) > 0 {
 						requests.Add(1)
+						hasCanvasTools := bytes.Contains(body["tools"], []byte("tessiven"))
+						hasCanvasSkill := bytes.Contains(body["input"], []byte("redeven-tessiven")) || bytes.Contains(body["messages"], []byte("redeven-tessiven"))
+						if hasCanvasTools != fixture.canvas || hasCanvasSkill != fixture.canvas {
+							t.Errorf("Tessiven context: tools=%v skill=%v want=%v", hasCanvasTools, hasCanvasSkill, fixture.canvas)
+						}
 						hasAuthorSkill := bytes.Contains(body["input"], []byte(pluginAuthoringSkillName)) || bytes.Contains(body["messages"], []byte(pluginAuthoringSkillName))
 						if hasAuthorSkill != fixture.authoring {
 							t.Errorf("provider authoring guidance=%v want=%v", hasAuthorSkill, fixture.authoring)
@@ -74,9 +82,15 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 						slices.Sort(names)
 						slices.Sort(sizes)
 						slices.Sort(computerNames)
-						required := []string{"goal", "subagents", "ask_user", "attachment_read", "file_present", "image_read", "okf_index", "okf_open", "okf_search", "subagent_events", "tessiven_inspect", "tessiven_list", "tessiven_read", "tessiven_runtime_inspect", "tessiven_runtimes", "tessiven_schema", "tessiven_search", "tessiven_validate", "tessiven_versions", "threads_query", "threads_read", "web_fetch"}
+						required := []string{"goal", "subagents", "ask_user", "attachment_read", "file_present", "image_read", "okf_index", "okf_open", "okf_search", "subagent_events", "threads_query", "threads_read", "web_fetch"}
 						if fixture.permission == config.AIPermissionFullAccess {
-							required = append(required, "use_skill", "attachment_materialize", "terminal_exec", "terminal_read", "terminal_write", "terminal_terminate", "file_write", "apply_patch", "tessiven_action", "tessiven_edit", "tessiven_runtime_action", "tessiven_save")
+							required = append(required, "use_skill", "attachment_materialize", "terminal_exec", "terminal_read", "terminal_write", "terminal_terminate", "file_write", "apply_patch")
+						}
+						if fixture.canvas {
+							required = append(required, "tessiven_inspect", "tessiven_list", "tessiven_read", "tessiven_runtime_inspect", "tessiven_runtimes", "tessiven_schema", "tessiven_search", "tessiven_validate", "tessiven_versions")
+							if fixture.permission == config.AIPermissionFullAccess {
+								required = append(required, "tessiven_action", "tessiven_edit", "tessiven_runtime_action", "tessiven_save")
+							}
 						}
 						if fixture.permission == config.AIPermissionReadonly {
 							required = append(required, "read_file", "read_files", "find", "rgrep")
@@ -100,7 +114,7 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 							t.Errorf("computer tools=%v want=%v", computerNames, wantComputer)
 						}
 						if fixture.permission == config.AIPermissionReadonly {
-							for _, name := range []string{"file_write", "apply_patch", "terminal_exec", "tessiven_action"} {
+							for _, name := range []string{"file_write", "apply_patch", "terminal_exec"} {
 								if slices.Contains(names, name) {
 									t.Errorf("readonly surface gained %s", name)
 								}
@@ -124,6 +138,12 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 				}))
 				defer server.Close()
 				opts := encodingIntegrationOptions(t, server.URL, nil)
+				library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer library.Close()
+				opts.Tessiven = library
 				opts.Config = &config.AIConfig{CurrentModelID: "openai/" + model, ComputerUseEnabled: &fixture.computer, Providers: []config.AIProvider{{ID: "openai", Type: provider, StrictToolSchema: &strict, BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: model}}, WebSearch: &config.AIProviderWebSearch{Enabled: false, Source: "native"}}}}
 				// Ordinary turns must stay scoped even when the environment has a
 				// live author service, not only when plugin support is unavailable.
@@ -154,7 +174,14 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 				meta := testSendTurnMeta()
 				var threadID string
 				request := SendUserTurnRequest{ClientRequestID: "tool-budget", Input: RunInput{Text: "Inspect the available tool descriptions."}}
-				if fixture.authoring {
+				if fixture.canvas {
+					canvas, err := library.Create(t.Context(), "tool-budget-canvas", "Scope")
+					if err != nil {
+						t.Fatal(err)
+					}
+					request.ClientRequestID = ""
+					request.Create = &CreateThreadRequest{ClientRequestID: "tool-budget", Title: "Tool budget", ModelID: "openai/" + model, PermissionType: fixture.permission, TessivenCanvasID: canvas.Canvas.ID}
+				} else if fixture.authoring {
 					request.ClientRequestID = ""
 					request.PluginDraftID = projectID
 					request.Create = &CreateThreadRequest{ClientRequestID: "tool-budget", Title: "Tool budget", ModelID: "openai/" + model, PermissionType: fixture.permission}

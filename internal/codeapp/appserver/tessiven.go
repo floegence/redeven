@@ -147,8 +147,25 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 		}
 		if len(parts) == 3 {
 			switch parts[2] {
-			case "flower-thread":
-				if r.Method == http.MethodPost {
+			case "flower-threads", "flower-thread":
+				if (parts[2] == "flower-threads" && r.Method == http.MethodGet) || (parts[2] == "flower-thread" && r.Method == http.MethodPost) {
+					if g.aiProvider == nil {
+						writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+						return true
+					}
+					svc, leaseCtx, _, release, err := g.aiProvider.AcquireAIService(r.Context())
+					if release != nil {
+						defer release()
+					}
+					if err != nil || leaseCtx == nil || svc == nil {
+						writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+						return true
+					}
+					if parts[2] == "flower-threads" {
+						threads, err := svc.ListTessivenThreads(leaseCtx, meta, id)
+						writeTessivenResult(w, map[string]any{"threads": threads}, err)
+						return true
+					}
 					var req struct {
 						ThreadID string `json:"thread_id"`
 					}
@@ -156,7 +173,7 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 						writeTessivenError(w, err)
 						return true
 					}
-					err := g.tessiven.BindFlowerThread(r.Context(), id, req.ThreadID)
+					err = svc.SelectTessivenThread(leaseCtx, meta, id, req.ThreadID)
 					writeTessivenResult(w, map[string]string{"thread_id": strings.TrimSpace(req.ThreadID)}, err)
 					return true
 				}

@@ -260,6 +260,13 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if r.hasTessivenThread() {
+		body, err := systemSkillFS.ReadFile("system_skills/redeven-tessiven/SKILL.md")
+		if err != nil {
+			return nil, err
+		}
+		snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{Key: "tessiven", Title: "Tessiven canvas guidance", Text: string(body)})
+	}
 	if err := snapshot.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: runtime snapshot cannot be admitted: %v", flruntime.ErrModelContextUnavailable, err)
 	}

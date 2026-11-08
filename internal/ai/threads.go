@@ -77,7 +77,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	return view, nil
 }
 
-func (s *Service) threadSettingsView(_ context.Context, th *threadstore.ThreadSettings) (ThreadView, error) {
+func (s *Service) threadSettingsView(ctx context.Context, th *threadstore.ThreadSettings) (ThreadView, error) {
 	if th == nil {
 		return ThreadView{}, errors.New("thread settings are missing")
 	}
@@ -93,7 +93,12 @@ func (s *Service) threadSettingsView(_ context.Context, th *threadstore.ThreadSe
 	if err != nil {
 		return ThreadView{}, err
 	}
+	canvasID, err := s.tessivenThreadCanvas(ctx, th.ThreadID)
+	if err != nil {
+		return ThreadView{}, err
+	}
 	return ThreadView{
+		TessivenCanvasID:   canvasID,
 		ThreadID:           strings.TrimSpace(th.ThreadID),
 		ModelID:            strings.TrimSpace(th.ModelID),
 		PermissionType:     permissionTypeString(permissionType),
@@ -657,6 +662,9 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 }
 
 func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.Meta, req CreateThreadRequest) (threadstore.ThreadSettings, error) {
+	if err := s.validateTessivenCreate(ctx, req); err != nil {
+		return threadstore.ThreadSettings{}, err
+	}
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
@@ -836,6 +844,9 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		if _, err := s.pluginCreation.Store.BindThread(ctx, owner, req.pluginDraftID, clientRequestID, t.ThreadID); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.admitTessivenThread(ctxOrBackground(ctx), t.ThreadID, req.TessivenCanvasID); err != nil {
+		return nil, err
 	}
 	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), t); err != nil {
 		return nil, err
@@ -1141,6 +1152,13 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	forked.SettingsUpdatedAtUnixMs = now
 	uploadIDs, err := s.canonicalUploadIDs(ctxOrBackground(ctx), endpointID, current.ThreadID.String(), canonicalViewAttachments(current))
 	if err != nil {
+		return nil, err
+	}
+	canvasID, err := s.tessivenThreadCanvas(ctxOrBackground(ctx), sourceThreadID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.admitTessivenThread(ctxOrBackground(ctx), forked.ThreadID, canvasID); err != nil {
 		return nil, err
 	}
 	if err := db.AdoptCanonicalRootWithUploads(ctxOrBackground(ctx), forked, uploadIDs); err != nil {

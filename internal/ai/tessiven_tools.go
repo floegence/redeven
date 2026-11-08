@@ -67,7 +67,7 @@ func decodeTessivenToolArgs(args map[string]any, out any) error {
 	return decoder.Decode(out)
 }
 func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name string, args map[string]any) (any, error) {
-	if meta == nil || !meta.CanRead {
+	if !r.hasTessivenThread() || meta == nil || !meta.CanRead {
 		return nil, tessiven.ErrPermissionDenied
 	}
 	library := r.host.tessiven

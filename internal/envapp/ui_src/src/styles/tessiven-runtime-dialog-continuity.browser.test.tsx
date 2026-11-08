@@ -54,6 +54,7 @@ it.each(['activity', 'standalone'] as const)(
         resolveRead = resolve;
         rejectRead = reject;
       });
+      if (path.endsWith('/flower-threads')) return { threads: [] };
       if (path.startsWith('/canvases?')) return { canvases: [canvas] };
       if (path === `/canvases/${canvas.id}`) return canvas;
       if (path === `/canvases/${canvas.id}/versions/latest`) return version;
@@ -70,7 +71,6 @@ it.each(['activity', 'standalone'] as const)(
       standalone={surface === 'standalone'}
       openRequest={{ canvasID: canvas.id, nonce: 1 }}
       renderFlower={() => <input aria-label="Flower draft fixture" />}
-      onOpenFlower={() => {}}
       onOpenService={() => {}}
     />;
     const loading = () => <div data-page-loading>Loading page</div>;
@@ -126,12 +126,13 @@ it('retains library cards and focus while opening a slow canvas', async () => {
   host = document.createElement('div'); host.style.height = '800px'; document.body.append(host);
   let reject!: (error: Error) => void;
   const request = vi.fn(async (_method: string, path: string) => {
-    if (path.startsWith('/canvases?')) return { canvases: [canvas] };
+    if (path.endsWith('/flower-threads')) return { threads: [] };
+      if (path.startsWith('/canvases?')) return { canvases: [canvas] };
     if (path.endsWith('/versions/latest')) return version;
     if (path === '/canvases/' + canvas.id) return new Promise((_, fail) => { reject = fail; });
     throw new Error('Unexpected request: ' + path);
   });
-  dispose = render(() => <TessivenPage t={tessivenText('en-US')} transport={{ request: request as TessivenTransport['request'], subscribe: () => () => {} }} canWrite renderFlower={() => null} onOpenFlower={() => {}} onOpenService={() => {}} />, host);
+  dispose = render(() => <TessivenPage t={tessivenText('en-US')} transport={{ request: request as TessivenTransport['request'], subscribe: () => () => {} }} canWrite renderFlower={() => null} onOpenService={() => {}} />, host);
   await expect.poll(() => host.querySelector('.tessiven-library-card')).not.toBeNull();
   const card = host.querySelector<HTMLElement>('.tessiven-library-card')!;
   const button = card.querySelector<HTMLButtonElement>('button')!;

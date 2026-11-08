@@ -801,6 +801,7 @@ export type FlowerQueuedTurnAttachment = Readonly<{
 export type FlowerThreadSummary = Omit<FlowerThreadSnapshot, 'read_status'> & { readonly read_status?: FlowerThreadReadStatus };
 
 export type FlowerThreadSnapshot = Readonly<{
+  tessiven_canvas_id?: string;
   /** Settings-only placeholder; zero timestamps mean unavailable, never epoch time. */
   summary_unavailable?: Readonly<{ code: 'authority_corrupt' }>;
   // Browser-only presentation sample; not part of the runtime wire contract.
@@ -949,7 +950,7 @@ export type FlowerGoalChange = Readonly<{ goal: FlowerGoal; operation: 'set' | '
 export type FlowerGoalInput = Readonly<{
   storage_generation: string; client_request_id: string; thread_id?: string;
   operation: 'set' | 'submit' | 'delete'; expected_version: number; text?: string;
-  new_thread?: Readonly<{ model_id?: string; working_dir?: string; permission_type?: FlowerPermissionType; reasoning_selection?: FlowerReasoningSelection }>;
+  new_thread?: Readonly<{ tessiven_canvas_id?: string; model_id?: string; working_dir?: string; permission_type?: FlowerPermissionType; reasoning_selection?: FlowerReasoningSelection }>;
 }>;
 export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: string; current: FlowerRuntimeCurrentView; goal: FlowerGoal; conflict: boolean; replayed?: boolean }>;
 
@@ -1362,6 +1363,7 @@ export type FlowerResolveHandlerInput = Readonly<{
 }>;
 
 export type FlowerTurnLaunchInput = Readonly<{
+  tessiven_canvas_id?: string;
   storage_generation?: string;
   client_request_id: string;
   thread_id?: string;

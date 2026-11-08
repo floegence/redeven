@@ -18,7 +18,7 @@ describe('Flower turn admission', () => {
   });
   it('places a new-thread identity only in the create snapshot', () => {
     const body = buildFlowerTurnHTTPBody({
-      launch: { client_request_id: 'client-new', prompt: 'hello' },
+      launch: { client_request_id: 'client-new', prompt: 'hello', tessiven_canvas_id: 'commerce' },
       modelID: 'deepseek/deepseek-v4-flash',
       permissionType: 'approval_required',
       attachmentIDs: [],
@@ -29,6 +29,7 @@ describe('Flower turn admission', () => {
     expect(body).toMatchObject({
       create: {
         client_request_id: 'client-new',
+        tessiven_canvas_id: 'commerce',
         model_id: 'deepseek/deepseek-v4-flash',
       },
     });

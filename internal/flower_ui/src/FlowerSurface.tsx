@@ -603,6 +603,7 @@ export type FlowerSurfaceNotification = Readonly<{
 /** Two placements over the same Flower conversation, drafts and live runtime. */
 export type FlowerEmbeddedConversation = Readonly<{
   scope: string;
+  tessivenCanvasID?: string;
   /** Durable conversation identity supplied by an embedding surface. */
   threadID?: string;
   /** Implicit surface context for the first turn of a new conversation only. */
@@ -642,6 +643,7 @@ export type FlowerConversationParts = Readonly<{
   trailingActions?: JSX.Element;
   threadID: Accessor<string>;
   newConversation: () => void;
+  selectConversation: (threadID: string) => void;
   submit: (intent?: Readonly<{ fallbackPrompt?: string; context?: ContextActionEnvelope }>) => Promise<void>;
   canSubmit: (fallbackPrompt?: string) => boolean;
   /** Submit an explicit host-authored message to this thread without consuming its composer draft. */
@@ -937,7 +939,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     outboxOperations.clear();
 		transportOutbox().dispose();
 	});
-	const threads = createMemo<readonly FlowerThreadSnapshot[]>((previous) => retainEqualValue(previous, [...threadCache().summaries.values()]));
+	const threads = createMemo<readonly FlowerThreadSnapshot[]>((previous) => retainEqualValue(previous, [...threadCache().summaries.values()].filter(thread => !thread.tessiven_canvas_id)));
 	const selectedThreadID = createMemo(() => threadCache().selectedId ?? '');
   // The rail may acknowledge navigation before committing the expensive conversation projection.
   const [pendingThreadSelection, setPendingThreadSelection] = createSignal('');
@@ -3975,6 +3977,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestEpoch: number,
     readingBaseline = false,
   ): ThreadDetailReceiveResult => {
+    if (live.thread.tessiven_canvas_id && live.thread.tessiven_canvas_id !== props.embeddedConversation?.tessivenCanvasID) {
+      throw new Error(copy().chat.threadReference.unavailable);
+    }
     if (requestEpoch !== liveTransport.connectionEpoch()) return {
       state: 'stale', runtimeState: 'stale', activityState: 'stale', settingsState: 'stale',
       thread: threadCache().views.get(live.thread.thread_id)?.thread ?? live.thread,
@@ -4917,13 +4922,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               ...(sourceItemID ? { source_item_id: sourceItemID } : {}),
             };
             forkRequests.set(requestKey, request);
+            const notifyForkAccepted = props.embeddedConversation?.onAccepted;
+            const forkCanvasID = props.embeddedConversation?.tessivenCanvasID;
             const forked = await props.adapter.forkThread(item.thread_id, request);
             forkRequests.delete(requestKey);
             setThreadCache((cache) => cache.replaceSummary(forked));
             setCreatedForkThreadID(forked.thread_id);
             shouldRestoreFocus = false;
             notifySuccess(copy().threadList.forkCreated);
-            await loadAndSelectThread(forked.thread_id);
+            notifyForkAccepted?.({ client_request_id: request.client_request_id, thread_id: forked.thread_id });
+            if (forkCanvasID === props.embeddedConversation?.tessivenCanvasID) await loadAndSelectThread(forked.thread_id);
           }
           return;
         default:
@@ -6419,6 +6427,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? { ...embeddedContext, context: [...embeddedContext.context, ...intentContext.context] }
       : intentContext ?? embeddedContext;
     const notifyEmbeddedAccepted = props.embeddedConversation?.onAccepted;
+    const launchCanvasID = props.embeddedConversation?.tessivenCanvasID;
     const launchAdapter = props.adapter;
     const capturedDecision = currentHandlerDecision();
     const presentation: 'composer' | 'queue' = selectedThreadHasActiveTurnEvidence()
@@ -6654,6 +6663,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         const launchInput: FlowerTurnLaunchInput = {
           client_request_id: clientRequestID,
           thread_id: admittedThreadID || undefined,
+          ...(!admittedThreadID && launchCanvasID ? { tessiven_canvas_id: launchCanvasID } : {}),
           ...(launchStagingScope ? { staging_scope: launchStagingScope } : {}),
           prompt,
           ...(attachmentIDs.length > 0 ? { attachment_ids: attachmentIDs } : {}),
@@ -7864,7 +7874,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (expectedVersion === undefined) return;
     const popupAttempt = !fromCommand ? goalPopupAttempt : undefined;
     const reasoning = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
-    const newSettings = { model_id: selectedComposerModelID(), working_dir: displayedWorkingDirectory(),
+    const notifyGoalAccepted = props.embeddedConversation?.onAccepted;
+    const newSettings = { ...(props.embeddedConversation?.tessivenCanvasID ? { tessiven_canvas_id: props.embeddedConversation.tessivenCanvasID } : {}), model_id: selectedComposerModelID(), working_dir: displayedWorkingDirectory(),
       permission_type: composerPermissionType() || defaultComposerPermissionType(),
       ...(reasoning ? { reasoning_selection: reasoning } : {}) };
     setGoalPreparingScopes(scopes => [...scopes, sessionKey]);
@@ -7876,6 +7887,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         operation: operation === 'set' && fromCommand ? 'submit' : operation, expected_version: expectedVersion, ...(operation === 'set' ? { text } : {}) };
       outboxOperations.set(requestID, { adapter });
       pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence, goalEdit: editor, goalPopupAttempt: popupAttempt, goalFromCommand: fromCommand, settle: (canonicalThreadID) => {
+        notifyGoalAccepted?.({ client_request_id: requestID, thread_id: canonicalThreadID });
         if (fromCommand && frozen.value.goal_command && session.snapshot().value.goal_command === frozen.value.goal_command) session.mutate(value => ({ ...value, goal_command: undefined }));
         else if (fromCommand && !frozen.value.goal_command && session.snapshot().text_revision === frozen.text_revision) updateComposerSessionText(sessionKey, '');
         if (!fromCommand && operation === 'set' && session.snapshot().value.goal_edit === frozen.value.goal_edit) session.mutate(value => ({ ...value, goal_edit: undefined }));
@@ -15529,7 +15541,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <Show when={props.embeddedConversation} fallback={conversationPanel()}>
         {embedded => embedded().render({ conversation: conversationPanel(), composer: composerPanel(), submit: submitChat, canSubmit: canSubmitConversation, submitMessage, canSubmitMessage, actionLayout: bottomActionMode, actions: conversationHeaderActions,
           actionOverlays: subagentDropdown(), get trailingActions() { return props.headerTrailingActions; },
-          threadID: selectedThreadID, newConversation: startCompose })}
+          threadID: selectedThreadID, newConversation: startCompose, selectConversation: selectThread })}
       </Show>
       <FlowerWorkingDirPickerDialog
         open={workingDirectoryPickerOpen() && canPickWorkingDirectory()}

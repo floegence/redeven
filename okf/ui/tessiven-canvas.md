@@ -3,7 +3,7 @@ type: UI Contract
 title: Tessiven canvas navigation, relationships and Flower reading
 tags: [ui, tessiven, graph]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -46,7 +46,13 @@ The window uses the theme's main reading surface continuously across its titleba
 End padding keeps the final choice fully readable when scrolled to the bottom; the action controls remain outside the fade.
 
 ### Actions and continuity
-Less frequent actions live in the More menu: new conversation, settings, subagents, available Computer actions and opening the full conversation.
+Less frequent actions live in the More menu: new conversation, settings,
+subagents, available Computer actions and this canvas's conversation history.
+Selecting history keeps the transcript, composer and draft within Tessiven;
+there is no exit into the ordinary Flower conversation surface. Both Desktop
+and Env App use the same embedding contract. New conversations, Goals and forks
+retain canvas ownership before first execution. Ordinary navigation cannot render
+a canvas transcript, including a stale direct ThreadID navigation request.
 
 Messages, tool disclosures, questions, approvals and errors remain canonical.
 

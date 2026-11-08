@@ -41,7 +41,7 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 	}
 }
 
-func (s *Service) threadQueryScope(ctx context.Context, meta *session.Meta) (threadquery.Scope, error) {
+func (s *Service) threadQueryScope(ctx context.Context, meta *session.Meta, canvasScope ...string) (threadquery.Scope, error) {
 	if err := requireRead(meta); err != nil {
 		return threadquery.Scope{}, err
 	}
@@ -58,19 +58,30 @@ func (s *Service) threadQueryScope(ctx context.Context, meta *session.Meta) (thr
 	if err != nil {
 		return threadquery.Scope{}, err
 	}
-	authority, err := json.Marshal([]string{meta.UserPublicID, meta.EndpointID, meta.NamespacePublicID})
+	canvas := ""
+	if len(canvasScope) > 0 {
+		canvas = canvasScope[0]
+	}
+	authority, err := json.Marshal([]string{meta.UserPublicID, meta.EndpointID, meta.NamespacePublicID, canvas})
 	if err != nil {
 		return threadquery.Scope{}, err
 	}
 	scope := threadquery.Scope{Authority: string(authority)}
 	for _, id := range ids {
+		canvasID, err := s.tessivenThreadCanvas(ctx, id)
+		if err != nil {
+			return threadquery.Scope{}, err
+		}
+		if canvasID != canvas {
+			continue
+		}
 		scope.ThreadIDs = append(scope.ThreadIDs, identity.ThreadID(id))
 	}
 	return scope, nil
 }
 
-func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, name string, args map[string]any) (any, error) {
-	scope, err := s.threadQueryScope(ctx, meta)
+func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, name string, args map[string]any, canvasScope ...string) (any, error) {
+	scope, err := s.threadQueryScope(ctx, meta, canvasScope...)
 	if err != nil {
 		return nil, err
 	}

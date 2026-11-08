@@ -52,6 +52,7 @@ function mount(overrides: Partial<FlowerSurfaceAdapter> = {}, savedThread = '') 
     const [, canvasID, suffix] = match;
     const canvas = canvases.get(canvasID)!;
     if (!suffix && method === 'GET') return canvas;
+    if (suffix === 'flower-threads' && method === 'GET') return { threads: canvas.flower_thread_id ? [{ thread_id: canvas.flower_thread_id, title: canvas.title }] : [] };
     if (suffix === 'flower-thread' && method === 'POST') {
       const next = { ...canvas, flower_thread_id: (body as { thread_id: string }).thread_id };
       canvases.set(canvasID, next);
@@ -85,8 +86,7 @@ function mount(overrides: Partial<FlowerSurfaceAdapter> = {}, savedThread = '') 
   };
   dispose = render(() => <FloeConfigProvider><LayoutProvider>
     <TessivenPage t={tessivenText('en-US')} canWrite transport={transport} openRequest={openRequest()}
-      renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={adapter} />}
-      onOpenFlower={() => {}} onOpenService={() => {}} />
+      renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={adapter} />} onOpenService={() => {}} />
   </LayoutProvider></FloeConfigProvider>, host);
   return {
     sent, request, canvases,

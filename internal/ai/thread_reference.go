@@ -86,6 +86,13 @@ func (s *Service) authorizeThreadReferences(ctx context.Context, meta *session.M
 		if settings == nil {
 			return sql.ErrNoRows
 		}
+		canvasID, err := s.tessivenThreadCanvas(ctx, settings.ThreadID)
+		if err != nil {
+			return err
+		}
+		if canvasID != "" {
+			return errReadPermissionDenied
+		}
 	}
 	return nil
 }

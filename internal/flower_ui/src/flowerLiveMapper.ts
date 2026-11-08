@@ -1464,6 +1464,7 @@ export function mapFlowerThreadSummary(raw: unknown, messages: readonly FlowerCh
     pin_rank: nonNegativeInteger(record.pin_rank ?? 0, 'thread.pin_rank'),
     model_id: trim(record.model_id),
     working_dir: trim(record.working_dir),
+    ...(trim(record.tessiven_canvas_id) ? { tessiven_canvas_id: trim(record.tessiven_canvas_id) } : {}),
     ...(Number(record.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(record.pinned_at_unix_ms)) } : {}),
     settings_revision: nonNegativeInteger(record.settings_revision ?? 0, 'thread.settings_revision'),
     home_runtime_id: options.runtimeID,

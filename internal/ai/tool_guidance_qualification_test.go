@@ -58,7 +58,7 @@ func toolGuidanceQualificationCases() []promptQualificationCase {
 			}
 			return nil
 		}},
-		{name: "tool_guidance_direct_service", runtimeSurface: true, input: "Inspect this referenced Web Service now: runtime_ref=local:local, owner=managed_service, service_id=service-metrics, display name Metrics, port 8080. The service reference has no canvas. Its exact binding is already provided; retrieve the service description and workspace.", wantTools: []string{"tessiven.inspect"}, check: func(result ModelGatewayResult) error {
+		{name: "tool_guidance_direct_service", runtimeSurface: true, tessivenSurface: true, input: "Inspect this referenced Web Service now: runtime_ref=local:local, owner=managed_service, service_id=service-metrics, display name Metrics, port 8080. The service reference has no canvas. Its exact binding is already provided; retrieve the service description and workspace.", wantTools: []string{"tessiven.inspect"}, check: func(result ModelGatewayResult) error {
 			if len(result.ToolCalls) != 1 {
 				return fmt.Errorf("expected one resource inspection")
 			}

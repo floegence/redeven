@@ -20,7 +20,7 @@ func TestTessivenBoundedReadAndExactEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &run{host: runHostCapabilities{tessiven: library}}
+	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
 	read, err := r.execTessivenTool(t.Context(), meta, "tessiven.read", map[string]any{"canvas_id": saved.Canvas.ID, "start_line": 1, "line_count": 2})
 	if err != nil {

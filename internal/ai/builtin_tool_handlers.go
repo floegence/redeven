@@ -736,7 +736,11 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run, webBindings ...map[
 		return fmt.Errorf("nil tool registry")
 	}
 	pluginAuthoring := r.hasPluginDraft()
+	tessivenThread := r.hasTessivenThread()
 	for _, def := range builtInToolDefinitions() {
+		if strings.HasPrefix(def.Name, "tessiven.") && !tessivenThread {
+			continue
+		}
 		if strings.HasPrefix(def.Name, "plugin_author.") && !pluginAuthoring {
 			continue
 		}

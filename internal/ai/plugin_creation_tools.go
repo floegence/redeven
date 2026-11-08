@@ -70,12 +70,10 @@ func (r *run) hasPluginDraft() bool {
 const pluginAuthoringSkillName = "redeven-plugin-authoring"
 
 func (r *run) scopedSkills(catalog []SkillMeta) []SkillMeta {
-	if r.hasPluginDraft() {
-		return catalog
-	}
+	pluginAuthoring, tessivenThread := r.hasPluginDraft(), r.hasTessivenThread()
 	out := make([]SkillMeta, 0, len(catalog))
 	for _, skill := range catalog {
-		if skill.Name != pluginAuthoringSkillName {
+		if (skill.Name != pluginAuthoringSkillName || pluginAuthoring) && (skill.Name != tessivenSkillName || tessivenThread) {
 			out = append(out, skill)
 		}
 	}

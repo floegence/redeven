@@ -94,7 +94,7 @@ func TestV1LibraryMigratesBeforeOpeningAndPreservesRecords(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT db_kind,last_migrated_from_version,last_migrated_to_version FROM __redeven_db_meta`).Scan(&kind, &from, &to); err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 || kind != schemaKind || from != 1 || to != 2 {
+	if version != 3 || kind != schemaKind || from != 1 || to != 3 {
 		t.Fatalf("migration metadata: version=%d kind=%q edge=%d->%d", version, kind, from, to)
 	}
 	canvas, err := s.Canvas(t.Context(), original.Canvas.ID)
@@ -235,6 +235,108 @@ func TestV1LibraryMigrationRollsBackOnFailure(t *testing.T) {
 			canvas, err := s.Canvas(t.Context(), original.Canvas.ID)
 			if err != nil || canvas != original.Canvas {
 				t.Fatalf("rollback changed user data: %+v, %v", canvas, err)
+			}
+		})
+	}
+}
+
+func createV2BoundLibrary(t *testing.T) (string, SaveResult) {
+	t.Helper()
+	path, _, original := createV1Library(t)
+	spec := schemaSpec()
+	spec.CurrentVersion = 2
+	spec.Migrations = spec.Migrations[:1]
+	spec.Verify = func(tx *sql.Tx) error { return verifySchemaVersion(tx, 2) }
+	db, err := sqliteutil.Open(path, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE canvases SET flower_thread_id='historical-thread' WHERE id=?`, original.Canvas.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return path, original
+}
+
+func TestV2ConversationOwnershipMigrationPreservesAndReopens(t *testing.T) {
+	path, original := createV2BoundLibrary(t)
+	for attempt := range 2 {
+		s, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner, err := s.FlowerThreadCanvas(t.Context(), "historical-thread")
+		if err != nil || owner != original.Canvas.ID {
+			t.Fatalf("attempt=%d owner=%q %v", attempt, owner, err)
+		}
+		if err := s.BindFlowerThread(t.Context(), owner, "new-thread"); err != nil {
+			t.Fatal(err)
+		}
+		ids, err := s.FlowerThreadIDs(t.Context(), owner)
+		if err != nil || len(ids) != 2 {
+			t.Fatalf("history=%v %v", ids, err)
+		}
+		version, err := s.Version(t.Context(), owner, 2)
+		if err != nil || version.DocumentYAML != original.Version.DocumentYAML || version.Digest != original.Version.Digest {
+			t.Fatal("canonical version changed")
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestV2ConversationOwnershipMigrationRollback(t *testing.T) {
+	for _, stage := range []string{"write", "verify", "ambiguous"} {
+		t.Run(stage, func(t *testing.T) {
+			path, _ := createV2BoundLibrary(t)
+			spec := schemaSpec()
+			failure := errors.New("injected ownership failure")
+			switch stage {
+			case "write":
+				spec.Migrations[1].Apply = func(tx *sql.Tx) error {
+					if err := migrateToV3(tx); err != nil {
+						return err
+					}
+					return failure
+				}
+			case "verify":
+				spec.Verify = func(tx *sql.Tx) error {
+					if err := verifySchema(tx); err != nil {
+						return err
+					}
+					return failure
+				}
+			case "ambiguous":
+				db, err := sql.Open("sqlite", path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = db.Exec(`UPDATE canvases SET flower_thread_id='historical-thread'`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				db.Close()
+			}
+			db, err := sqliteutil.Open(path, spec)
+			if err == nil {
+				db.Close()
+				t.Fatal("invalid migration succeeded")
+			}
+			inspection, err := sqliteutil.Inspect(path, schemaSpec())
+			if err != nil || inspection.Version != 2 {
+				t.Fatalf("rollback: %+v %v", inspection, err)
+			}
+			raw, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer raw.Close()
+			var count int
+			if err := raw.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name='flower_threads'`).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("private table escaped rollback: %d %v", count, err)
 			}
 		})
 	}

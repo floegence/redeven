@@ -6795,7 +6795,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 })()}
               </DesktopFlowerRuntimeBoundary>}</Show>;
             }}
-            onOpenFlower={openFlowerConversation}
             onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>
           </FlowerContextSource>
         </div></Show>

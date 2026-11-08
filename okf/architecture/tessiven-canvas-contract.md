@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Tessiven immutable canvases, DSL and display compatibility
 tags: [architecture, tessiven, persistence]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -18,7 +18,13 @@ Runtime owns immutable canvas YAML and contiguous version migration; clients ren
 
 Canvas identities, archive state, immutable YAML versions, and idempotent request results remain intact.
 
-A fresh v2 library and an upgraded v1 library must both reopen successfully.
+The v1 → v2 → v3 library lineage preserves immutable versions and request
+receipts. v3 records canvas conversation ownership in `flower_threads`, backfills
+exact v2 `flower_thread_id` bindings, and retains that existing column as the
+selected conversation pointer. A thread has one canvas owner; ambiguous historical
+bindings fail transactionally without mutating source state. Selecting or creating
+a conversation preserves every previous binding. Fresh, upgraded and reopened
+stores use the same verified schema. Floret journals remain opaque and unchanged.
 
 ## DSL versions
 The contiguous v1→v1.0.0→v1.1.0 chain changes version only and retains legacy layout. New canvases use v1.1.0; invalid/unknown/failed migration remains unchanged for explicit repair. Reads preserve YAML/digest/revision; writes create current snapshots.

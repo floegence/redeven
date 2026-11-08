@@ -63,7 +63,6 @@ export default function EnvTessivenPage(props: {
       renderFlower={surface => <EnvAIPage draftCoordinator={drafts} presentation="companion"
         engaged={surface.engaged} transcriptVisible={surface.transcriptVisible} embeddedConversation={surface.embeddedConversation}
         />}
-      onOpenFlower={env.openFlowerConversation}
       onOpenService={async (opening, runtime) => {
         if (runtime !== 'local:local') throw new Error(t()('openUnavailable'));
         const forward = opening.forward as {

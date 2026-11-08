@@ -975,7 +975,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');
     expect(appSrc).toContain('current?.request_id === requestID ? null : current');
     expect(appSrc).toMatch(/closeFlowerTurnLauncher\(\);\s*openFlowerConversation\(threadID\);/u);
-    expect(appSrc).toContain('onOpenFlower={openFlowerConversation}');
+    expect(appSrc).not.toContain('onOpenFlower={openFlowerConversation}');
     expect(appSrc).not.toContain("showActionToast(i18n().t('toast.flowerPromptQueued')");
     expect(appSrc).toContain(
       'context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel, {',

@@ -9,7 +9,7 @@ import (
 // Sidebar membership is product policy, derived only from durable project
 // ownership. It never changes canonical conversation or runtime authority.
 func (s *Service) ordinaryThreadSettings(ctx context.Context, list []threadstore.ThreadSettings) ([]threadstore.ThreadSettings, error) {
-	if s.pluginCreation == nil || len(list) == 0 {
+	if len(list) == 0 {
 		return list, nil
 	}
 	byEndpoint := make(map[string][]string)
@@ -18,6 +18,9 @@ func (s *Service) ordinaryThreadSettings(ctx context.Context, list []threadstore
 	}
 	managed := make(map[string]bool)
 	for endpoint, ids := range byEndpoint {
+		if s.pluginCreation == nil {
+			break
+		}
 		owned, err := s.pluginCreation.Store.ManagedThreadIDs(ctx, endpoint, ids)
 		if err != nil {
 			return nil, err
@@ -28,7 +31,11 @@ func (s *Service) ordinaryThreadSettings(ctx context.Context, list []threadstore
 	}
 	out := make([]threadstore.ThreadSettings, 0, len(list))
 	for _, item := range list {
-		if !managed[item.ThreadID] {
+		canvasID, err := s.tessivenThreadCanvas(ctx, item.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		if !managed[item.ThreadID] && canvasID == "" {
 			out = append(out, item)
 		}
 	}

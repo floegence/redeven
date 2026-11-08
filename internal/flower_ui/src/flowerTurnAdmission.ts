@@ -80,6 +80,7 @@ export function buildFlowerTurnHTTPBody(input: Readonly<{
     : {
       client_request_id: clientRequestID,
       title: '',
+      ...(input.launch.tessiven_canvas_id ? { tessiven_canvas_id: input.launch.tessiven_canvas_id } : {}),
       model_id: modelID,
       ...(permissionType ? { permission_type: permissionType } : {}),
       ...(input.reasoningSelection ? { reasoning_selection: input.reasoningSelection } : {}),

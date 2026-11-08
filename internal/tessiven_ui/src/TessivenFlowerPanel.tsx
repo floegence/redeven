@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
-import { ExternalLink, Layers, MoreHorizontal, Plus } from '@floegence/floe-webapp-core/icons';
+import { Clock, Layers, MoreHorizontal, Plus } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../flower_ui/src/FlowerSurface';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
@@ -28,7 +28,8 @@ export function TessivenFlowerPanel(props: {
   initialComposer?: boolean;
   t: TessivenText;
   renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
-  onOpenConversation: (threadID: string) => void;
+  conversations: readonly { thread_id: string; title: string }[];
+  onSelectConversation: (threadID: string) => Promise<void>;
   onRemoveReference: (objectRef: string) => void;
   onAccepted?: (request: CanvasFlowerRequest, threadID: string) => void;
 }) {
@@ -55,9 +56,9 @@ export function TessivenFlowerPanel(props: {
     const menuItems = () => [
       { id: 'canvas-new', label: props.t('newConversation'), icon: () => <Plus /> },
       ...parts.actions().map(({ id, label, icon, disabled }) => ({ id, label, icon, disabled })),
-      ...(parts.threadID() ? [
-        { id: 'canvas-open-separator', label: '', separator: true },
-        { id: 'canvas-open', label: props.t('flowerConversation'), icon: () => <ExternalLink /> },
+      ...(props.conversations.length ? [
+        { id: 'canvas-history-separator', label: '', separator: true },
+        ...props.conversations.map(thread => ({ id: `conversation:${thread.thread_id}`, label: thread.title || props.t('flowerConversation'), icon: () => <Clock />, disabled: thread.thread_id === parts.threadID() })),
       ] : []),
     ];
     return (
@@ -82,7 +83,13 @@ export function TessivenFlowerPanel(props: {
                 items={menuItems}
                 onSelect={id => {
                   if (id === 'canvas-new') parts.newConversation();
-                  else if (id === 'canvas-open') props.onOpenConversation(parts.threadID());
+                  else if (id.startsWith('conversation:')) {
+                    const threadID = id.slice('conversation:'.length);
+                    const sourceCanvas = canvasID();
+                    void props.onSelectConversation(threadID).then(() => {
+                      if (canvasID() === sourceCanvas) parts.selectConversation(threadID);
+                    }).catch(() => {});
+                  }
                   else {
                     const source = menuAnchor?.closest<HTMLElement>('button, [role="button"]');
                     if (source) parts.actions().find(action => action.id === id)?.run(source);
@@ -106,6 +113,7 @@ export function TessivenFlowerPanel(props: {
     );
   };
   const embedded: FlowerEmbeddedConversation = {
+    get tessivenCanvasID() { return props.request.selection.canvas_id; },
     get scope() { return `tessiven:${props.request.selection.canvas_id}`; },
     get threadID() { return props.request.flower_thread_id; },
     get initialContextAction() { return contextAction(); },

@@ -58,7 +58,7 @@ function mount(embedded: boolean) {
   });
   dispose = render(() => <FloeConfigProvider><LayoutProvider>
     {embedded ? <TessivenFlowerPanel request={request()} visible t={tessivenText('en-US')}
-      onRemoveReference={() => {}} onOpenConversation={() => {}}
+      onRemoveReference={() => {}} conversations={[]} onSelectConversation={async () => {}}
       renderSurface={props => <Surface {...props} presentation="companion" />} /> : <Surface />}
   </LayoutProvider></FloeConfigProvider>, host);
   let version = 0;

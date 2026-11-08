@@ -69,7 +69,6 @@ it('marks the standalone canvas toolbar as the native titlebar drag surface', as
         standalone
         transport={transport}
         renderFlower={() => <div />}
-        onOpenFlower={() => {}}
         onOpenService={() => {}}
       />
     ),
@@ -91,7 +90,8 @@ it('creates immediately, delegates edits to Flower, and follows current versions
   let current = { ...canvas };
   let changed: () => void = () => {};
   const request = vi.fn(async (method: string, path: string) => {
-    if (path.startsWith('/canvases?')) return { canvases: [current] };
+    if (path.endsWith('/flower-threads')) return { threads: [] };
+      if (path.startsWith('/canvases?')) return { canvases: [current] };
     if (path === '/canvases' && method === 'POST')
       return {
         canvas: { ...canvas, title: 'Untitled canvas', latest_version: 1 },
@@ -150,7 +150,6 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         transport={transport}
         renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
         registerPageContext={read => { readPage = read; }}
-        onOpenFlower={() => {}}
         onOpenService={() => {}}
       />
     ),
@@ -236,7 +235,6 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         canWrite
         transport={transport}
         renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
-        onOpenFlower={() => {}}
         onOpenService={() => {}}
         openRequest={{ canvasID: 'commerce', version: 1, nonce: 1 }}
       />
@@ -381,7 +379,6 @@ it('keeps global navigation and library text visible in every published theme', 
           canWrite
           transport={transport}
           renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={canvasFlowerAdapter()} />}
-          onOpenFlower={() => {}}
           onOpenService={() => {}}
         />
       </>
@@ -446,6 +443,7 @@ it('keeps graph panning from creating a browser text selection', async () => {
   current.document.instances = [{ id: 'orders', nodeRef: 'host', serviceRef: 'api', role: 'standalone' }];
   const transport = {
     request: vi.fn(async (_method: string, path: string) => {
+      if (path.endsWith('/flower-threads')) return { threads: [] };
       if (path.startsWith('/canvases?')) return { canvases: [canvas] };
       if (path === '/canvases/commerce') return canvas;
       return current;
@@ -460,7 +458,6 @@ it('keeps graph panning from creating a browser text selection', async () => {
         transport={transport}
         openRequest={{ canvasID: 'commerce', nonce: 1 }}
         renderFlower={() => <div />}
-        onOpenFlower={() => {}}
         onOpenService={() => {}}
       />
     ),
@@ -485,6 +482,7 @@ it('removes an object reference through the canvas session owner and sends the i
   current.document.instances = [{ id: 'orders', nodeRef: 'host', serviceRef: 'api', role: 'standalone' }];
   const transport = {
     request: async (_method: string, path: string) => {
+      if (path.endsWith('/flower-threads')) return { threads: [] };
       if (path.startsWith('/canvases?')) return { canvases: [canvas] };
       if (path === '/canvases/commerce') return canvas;
       return current;
@@ -495,8 +493,7 @@ it('removes an object reference through the canvas session owner and sends the i
   const flowerAdapter = { ...canvasFlowerAdapter(), launchTurn: ask };
   dispose = render(() => <TessivenPage t={tessivenText('en-US')} canWrite transport={transport}
     openRequest={{ canvasID: 'commerce', nonce: 1 }}
-    renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
-    onOpenFlower={() => {}} onOpenService={() => {}} />, host);
+    renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />} onOpenService={() => {}} />, host);
   await expect.element(page.getByRole('textbox')).toBeVisible();
   expect(host.querySelector('.flower-composer-context-references')).toBeNull();
   await page.getByRole('textbox').fill('Keep this question');

@@ -440,14 +440,31 @@ func (s *Service) Archive(ctx context.Context, id string, expected int64, archiv
 	return nil
 }
 
-// BindFlowerThread establishes the one durable Flower conversation for a canvas.
-// A second conversation cannot silently replace the existing binding.
+// BindFlowerThread records canvas ownership before the thread is published and
+// selects it for the next visit. Previously owned conversations remain reachable.
 func (s *Service) BindFlowerThread(ctx context.Context, canvasID, threadID string) error {
 	canvasID, threadID = strings.TrimSpace(canvasID), strings.TrimSpace(threadID)
 	if canvasID == "" || threadID == "" {
 		return ErrInvalidRequest
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE canvases SET flower_thread_id=?,updated_at=? WHERE id=? AND flower_thread_id IN ('',?)`, threadID, time.Now().UnixMilli(), canvasID, threadID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var existing string
+	err = tx.QueryRowContext(ctx, `SELECT canvas_id FROM flower_threads WHERE thread_id=?`, threadID).Scan(&existing)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && existing != canvasID {
+		return ErrConflict
+	}
+	now := time.Now().UnixMilli()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO flower_threads(thread_id,canvas_id,created_at) VALUES(?,?,?) ON CONFLICT(thread_id) DO NOTHING`, threadID, canvasID, now); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE canvases SET flower_thread_id=?,updated_at=? WHERE id=?`, threadID, now, canvasID)
 	if err != nil {
 		return err
 	}
@@ -456,14 +473,42 @@ func (s *Service) BindFlowerThread(ctx context.Context, canvasID, threadID strin
 		return err
 	}
 	if n != 1 {
-		return ErrConflict
+		return ErrNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	s.publish()
 	return nil
 }
 
+func (s *Service) FlowerThreadCanvas(ctx context.Context, threadID string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT canvas_id FROM flower_threads WHERE thread_id=?`, strings.TrimSpace(threadID)).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+func (s *Service) FlowerThreadIDs(ctx context.Context, canvasID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT thread_id FROM flower_threads WHERE canvas_id=? ORDER BY created_at DESC,thread_id`, canvasID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (s *Service) FlowerThreadReferenced(ctx context.Context, threadID string) (bool, error) {
-	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM canvases WHERE flower_thread_id=?`, strings.TrimSpace(threadID)).Scan(&count)
-	return count > 0, err
+	id, err := s.FlowerThreadCanvas(ctx, threadID)
+	return id != "", err
 }

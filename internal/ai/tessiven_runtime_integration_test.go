@@ -97,6 +97,10 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 					writeAskUserIntegrationTextResponse(w, flush, "title", "Commerce canvas")
 					return
 				}
+				rawContext, _ := json.Marshal(body["input"])
+				if !strings.Contains(string(rawContext), "Tessiven canvas guidance") {
+					t.Error("dedicated provider request omitted Tessiven skill")
+				}
 				if providerCalls.Add(1) == 1 {
 					raw, _ := json.Marshal(args)
 					item := map[string]any{"type": "function_call", "id": "canvas-tool", "call_id": "canvas-tool", "name": name, "arguments": string(raw)}
@@ -146,7 +150,11 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 			if directory {
 				meta.DesktopSource = "fresh-private-source"
 			}
-			thread, err := svc.CreateThread(t.Context(), meta, "Commerce", "openai/gpt-5-mini", "", "")
+			canvas, err := library.Create(t.Context(), "scope-canvas", "Conversation owner")
+			if err != nil {
+				t.Fatal(err)
+			}
+			thread, err := svc.CreateThreadWithOptions(t.Context(), meta, CreateThreadRequest{ClientRequestID: "scope-thread", Title: "Commerce", ModelID: "openai/gpt-5-mini", TessivenCanvasID: canvas.Canvas.ID})
 			if err != nil {
 				t.Fatal(err)
 			}

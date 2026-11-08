@@ -29,17 +29,18 @@ import (
 // This lane calls the configured provider but never executes model-proposed tools.
 // Tool receipts are synthetic, so unsafe recovery can be tested without effects.
 type promptQualificationCase struct {
-	name           string
-	preferDirect   bool
-	runtimeSurface bool
-	input          string
-	permission     FlowerPermissionType
-	profile        string
-	history        []Message
-	wantTools      []string
-	noTools        bool
-	contains       []string
-	check          func(ModelGatewayResult) error
+	name            string
+	preferDirect    bool
+	runtimeSurface  bool
+	tessivenSurface bool
+	input           string
+	permission      FlowerPermissionType
+	profile         string
+	history         []Message
+	wantTools       []string
+	noTools         bool
+	contains        []string
+	check           func(ModelGatewayResult) error
 }
 
 func promptQualificationMessage(role, text string) Message {
@@ -226,6 +227,9 @@ func promptQualificationSurface(t *testing.T, tc promptQualificationCase) (strin
 	}
 	if tc.runtimeSurface {
 		r := newRun(runOptions{AgentHomeDir: t.TempDir()})
+		if tc.tessivenSurface {
+			r.host.tessivenCanvasID = "qualification"
+		}
 		surface, err := r.buildRunToolSurface(runToolSurfaceConfig{}, permission)
 		if err != nil {
 			t.Fatal(err)

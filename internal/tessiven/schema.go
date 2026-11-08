@@ -9,9 +9,11 @@ import (
 )
 
 const schemaKind = "tessiven_canvas_library"
-const schemaVersion = 2
+const schemaVersion = 3
 
 const canvasSchemaV1 = `CREATE TABLE canvases (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, latest_version INTEGER NOT NULL CHECK(latest_version > 0), archived INTEGER NOT NULL CHECK(archived IN (0,1)), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`
+
+const flowerThreadsSchema = `CREATE TABLE flower_threads (thread_id TEXT PRIMARY KEY, canvas_id TEXT NOT NULL REFERENCES canvases(id), created_at INTEGER NOT NULL)`
 
 var schemaStatements = []string{
 	`CREATE TABLE canvases (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, latest_version INTEGER NOT NULL CHECK(latest_version > 0), archived INTEGER NOT NULL CHECK(archived IN (0,1)), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, flower_thread_id TEXT NOT NULL DEFAULT '')`,
@@ -19,10 +21,11 @@ var schemaStatements = []string{
 	`CREATE TABLE requests (request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result_json TEXT NOT NULL)`,
 	`CREATE TRIGGER versions_immutable_update BEFORE UPDATE ON versions BEGIN SELECT RAISE(ABORT, 'Tessiven versions are immutable'); END`,
 	`CREATE TRIGGER versions_immutable_delete BEFORE DELETE ON versions BEGIN SELECT RAISE(ABORT, 'Tessiven versions are immutable'); END`,
+	flowerThreadsSchema,
 }
 
 func schemaSpec() sqliteutil.Spec {
-	return sqliteutil.Spec{Kind: schemaKind, CurrentVersion: schemaVersion, MinimumVersion: 1, Pragmas: []string{"PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON", "PRAGMA busy_timeout=3000"}, ValidateExisting: validateExistingSchema, Initialize: initializeSchema, Migrations: []sqliteutil.Migration{{FromVersion: 1, ToVersion: 2, Apply: migrateToV2}}, Verify: verifySchema}
+	return sqliteutil.Spec{Kind: schemaKind, CurrentVersion: schemaVersion, MinimumVersion: 1, Pragmas: []string{"PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON", "PRAGMA busy_timeout=3000"}, ValidateExisting: validateExistingSchema, Initialize: initializeSchema, Migrations: []sqliteutil.Migration{{FromVersion: 1, ToVersion: 2, Apply: migrateToV2}, {FromVersion: 2, ToVersion: 3, Apply: migrateToV3}}, Verify: verifySchema}
 }
 func migrateToV2(tx *sql.Tx) error {
 	if err := verifySchemaVersion(tx, 1); err != nil {
@@ -32,6 +35,18 @@ func migrateToV2(tx *sql.Tx) error {
 		return err
 	}
 	return verifySchemaVersion(tx, 2)
+}
+func migrateToV3(tx *sql.Tx) error {
+	if err := verifySchemaVersion(tx, 2); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(flowerThreadsSchema); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO flower_threads(thread_id,canvas_id,created_at) SELECT flower_thread_id,id,created_at FROM canvases WHERE flower_thread_id<>''`); err != nil {
+		return err
+	}
+	return verifySchemaVersion(tx, 3)
 }
 func initializeSchema(tx *sql.Tx) error {
 	for _, statement := range schemaStatements {
@@ -67,6 +82,9 @@ func verifySchema(tx *sql.Tx) error {
 func verifySchemaVersion(tx *sql.Tx, version int) error {
 	expected := map[string]bool{}
 	for index, statement := range schemaStatements {
+		if statement == flowerThreadsSchema && version < 3 {
+			continue
+		}
 		if index == 0 && version == 1 {
 			statement = canvasSchemaV1
 		}
@@ -117,6 +135,20 @@ func verifySchemaVersion(tx *sql.Tx, version int) error {
 	}
 	if invalid != 0 {
 		return fmt.Errorf("tessiven version owner is missing")
+	}
+	if version >= 3 {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM canvases c LEFT JOIN flower_threads f ON f.thread_id=c.flower_thread_id AND f.canvas_id=c.id WHERE c.flower_thread_id<>'' AND f.thread_id IS NULL`).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid != 0 {
+			return fmt.Errorf("tessiven conversation ownership is inconsistent")
+		}
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM flower_threads f LEFT JOIN canvases c ON c.id=f.canvas_id WHERE c.id IS NULL OR trim(f.thread_id)=''`).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid != 0 {
+			return fmt.Errorf("tessiven conversation owner is missing")
+		}
 	}
 	return nil
 }

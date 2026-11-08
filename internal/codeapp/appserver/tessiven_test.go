@@ -3,10 +3,14 @@ package appserver
 import (
 	"context"
 	"encoding/json"
+	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/session"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/tessiven"
@@ -147,4 +151,59 @@ func TestTessivenBusinessRejectsSelfDeclaredAuthorityAndRemoteTarget(t *testing.
 	if response.Code != 200 {
 		t.Fatal(response.Body.String())
 	}
+}
+
+func TestTessivenConversationRoutesAuthorizeAndKeepHistoryOnCanvas(t *testing.T) {
+	library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	svc, err := ai.NewService(ai.Options{StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/sh", Tessiven: library, Config: appserverTestAIConfig()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	const channel = "ch_tessiven_scope"
+	meta := session.Meta{NamespacePublicID: "ns", EndpointID: "env", UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true}
+	srv, err := New(Options{ConfigPath: writeTestConfigWithAI(t), Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("env")}, "inject.js": {Data: []byte("inject")}}, ListenAddr: "127.0.0.1:0", Tessiven: library, AIServiceProvider: newStaticAIServiceProvider(svc), ResolveSessionMeta: func(id string) (*session.Meta, bool) { copy := meta; copy.ChannelID = id; return &copy, id == channel }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canvas, err := library.Create(t.Context(), "canvas", "Business")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dedicated, err := svc.CreateThreadWithOptions(t.Context(), &meta, ai.CreateThreadRequest{ClientRequestID: "canvas-thread", TessivenCanvasID: canvas.Canvas.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ordinary, err := svc.CreateThreadWithOptions(t.Context(), &meta, ai.CreateThreadRequest{ClientRequestID: "ordinary"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func(method, path, body string, status int) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, tessivenAPIBase+"/canvases/"+canvas.Canvas.ID+path, strings.NewReader(body))
+		req.Header.Set("Origin", envOriginWithChannel(channel))
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		if rr.Code != status {
+			t.Fatalf("%s %s: %d %s", method, path, rr.Code, rr.Body.String())
+		}
+		return rr
+	}
+	response := request(http.MethodGet, "/flower-threads", "", 200)
+	if !strings.Contains(response.Body.String(), dedicated.ThreadID) || strings.Contains(response.Body.String(), ordinary.ThreadID) {
+		t.Fatal("incorrect canvas history")
+	}
+	request(http.MethodPost, "/flower-thread", `{"thread_id":"`+dedicated.ThreadID+`"}`, 200)
+	request(http.MethodPost, "/flower-thread", `{"thread_id":"`+ordinary.ThreadID+`"}`, 409)
+	meta.EndpointID = "foreign"
+	response = request(http.MethodGet, "/flower-threads", "", 200)
+	if strings.Contains(response.Body.String(), dedicated.ThreadID) {
+		t.Fatal("foreign history exposed")
+	}
+	meta.CanRead = false
+	request(http.MethodGet, "/flower-threads", "", 403)
 }

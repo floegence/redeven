@@ -46,7 +46,7 @@ function mount(title = 'Focus Timer', pendingUpdate = false) {
     onBack={vi.fn()} onSaved={vi.fn()} onInstalled={vi.fn()}
     renderFlower={options => options.embeddedConversation.render({ conversation: <div>Conversation</div>, composer: <textarea aria-label="Ordinary draft" />,
       submit: vi.fn(), canSubmit: () => true, submitMessage: submit, canSubmitMessage: () => true,
-      threadID: () => 'thread-1', actionLayout: () => 'chat', actions: () => [], actionOverlays: null, newConversation: vi.fn(),
+      threadID: () => 'thread-1', actionLayout: () => 'chat', actions: () => [], actionOverlays: null, newConversation: vi.fn(), selectConversation: vi.fn(),
     })} /></I18nProvider></FloeConfigProvider>, host);
   return { host, submit, fetch };
 }

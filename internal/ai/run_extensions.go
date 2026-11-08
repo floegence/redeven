@@ -44,6 +44,9 @@ func (r *run) activateSkill(ctx context.Context, name string) (SkillActivation, 
 	if strings.TrimSpace(name) == pluginAuthoringSkillName && !r.hasPluginDraft() {
 		return SkillActivation{}, false, errors.New("plugin authoring skill is available only in a plugin creation conversation")
 	}
+	if strings.TrimSpace(name) == tessivenSkillName && !r.hasTessivenThread() {
+		return SkillActivation{}, false, errors.New("Tessiven skill is available only in a Tessiven conversation")
+	}
 	activation, alreadyActive, err := mgr.Activate(ctx, name, permissionTypeString(snapshot.PermissionType), false)
 	if err != nil {
 		r.recordRunDiagnostic("skill.activate.error", RealtimeStreamKindLifecycle, map[string]any{"name": strings.TrimSpace(name), "error": err.Error()})

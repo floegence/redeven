@@ -3,13 +3,31 @@ type: AI Product Contract
 title: Tessiven Flower tools and scoped Runtime operations
 tags: [tessiven, runtime, desktop, gateway, security]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
 Flower maps authorized code, configuration and Runtime facts into canvas versions. For tessiven.action, open prepares and returns entrance information for the running bound service and may run its preparation hook. It does not launch a browser or start a stopped service.
 
 # Contract
+
+## Conversation scope
+
+Tessiven tools and `redeven-tessiven` guidance are available only to canvas-owned
+conversations and their child executions. Ordinary and plugin-creation turns do
+not advertise or activate them, even while the Tessiven service is running.
+A canvas reference alone never enables this tool surface. The product supplies
+the scoped registry and managed context through published Floret APIs; no engine
+API, dependency replacement, or canonical journal migration is required.
+
+New turns and new Goals carry `create.tessiven_canvas_id` (or the Goal's
+`new_thread` field). Redeven validates the canvas and records ownership before
+publishing root settings or starting a provider request. Create retries retain
+ownership; an existing ordinary root cannot be adopted. Forks retain the canvas,
+and child threads inherit their parent's scope. Ordinary lists, live summary
+membership, conversation queries and cross-conversation references exclude these
+threads; direct authorized content reads remain available to the canvas UI.
+Canonical runtime facts and tool execution stay owned by Floret.
 
 ## Runtime operations
 Discovery starts no process/business session and path refs grant no authority. Identity/generation changes or revocation stop input.
@@ -81,5 +99,6 @@ Flower and the UI call the same Tessiven service; neither writes its database di
 - `internal/managedwebservice/open_session_test.go` — Running entrance preparation and stopped-service refusal without lifecycle dispatch.
 - `internal/tessiven/broker_test.go` — Unattributed/device-generation denial, permission recheck and unknown effects.
 
-- Tests.
-- Source.
+- `internal/ai/tessiven_threads_test.go` — Admission, pagination, query scope, children, forks and restart.
+- `internal/ai/tool_definition_budget_test.go` — Final OpenAI/DeepSeek request inventories and JSON-byte budgets.
+- `internal/codeapp/appserver/tessiven_test.go` — Authorized canvas conversation routes.
