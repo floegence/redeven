@@ -46,4 +46,5 @@ Read access cannot edit administrator fields. Runtime maintenance requires expli
 
 - `internal/settings_ui/src`: product navigation and retained host adapters.
 - `EnvSettingsDialog.browser.test.tsx`, `UnifiedSettings.browser.test.tsx`: real-host targets, drafts, portals, history, Escape, responsive geometry and live authority.
+- `HostAccess.browser.test.tsx`: real-host application/desktop access controls, scoped nested setup, focus return, explicit helper recovery, localization, narrow layouts and accessibility.
 - `scripts/check_unified_settings.mjs`: bounded source ownership gate; `scripts/check_unified_settings_acceptance.sh`: explicit behavioral qualification.

@@ -1,5 +1,6 @@
 import { createServer } from 'vite';
 import solid from 'vite-plugin-solid';
+import { pdfAssetsPlugin } from '@floegence/floe-webapp-core/pdf-assets';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
@@ -21,9 +22,15 @@ export async function createSSHSettingsPreviewServer(port, entries) {
     cacheDir,
     configFile: false,
     root: fileURLToPath(new URL('./fixtures/', import.meta.url)),
-    plugins: [solid(), tailwindcss()],
+    plugins: [solid(), tailwindcss(), pdfAssetsPlugin()],
     resolve: welcomeConfig.resolve,
-    optimizeDeps: entries ? { entries, rolldownOptions: { transform: { jsx: 'preserve' } } } : undefined,
+    // IMPORTANT: Use the published worker/assets contract even on a cold cache.
+    // Dependency prebundling must not treat Monaco ?worker imports as files.
+    optimizeDeps: {
+      ...(entries ? { entries } : {}),
+      exclude: ['@floegence/floe-webapp-core', '@floegence/floe-webapp-core/editor', 'monaco-editor'],
+      rolldownOptions: { transform: { jsx: 'preserve' } },
+    },
     server: {
       host: '127.0.0.1',
       port,

@@ -57,7 +57,7 @@ export function EnvironmentSettingsDialog(props: {
     title={dialogTitle()}
     closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble"
     class={`redeven-environment-settings-dialog${hasTabs() ? ' environment-settings-with-tabs' : ''}`} contentClass="environment-settings-content">
-{body}</Dialog>)}><div class="redeven-environment-settings-content environment-settings-content h-full flex min-h-0 flex-col">
+{body}</Dialog>)}><div class="redeven-environment-settings-content environment-settings-content h-full flex min-h-0 flex-col" classList={{ 'environment-settings-with-tabs': hasTabs() }}>
     <h2 class="px-5 py-3 text-sm font-semibold">{dialogTitle()}</h2>
     <Show when={props.unavailable}><p role="alert" class="px-5 py-3 text-sm text-warning">{props.i18n.t('interactionContinuity.unavailable')}</p><Button class="mx-5 mb-3" variant="outline" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
     <Show when={hasTabs()}>

@@ -24131,7 +24131,7 @@
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 5740,
+      "body_length": 5929,
       "summary": "Env App owns settings destinations/drafts/API adapters; Floe reusable layout/navigation. Narrow/revisited panels retain usability, drafts and scroll. A ready editor has a compact version/source row with the update action. Installed versions and installation paths use keyboard-accessible disclosures; selection, removal confirmation and copying stay available.",
       "sections": [
         {
@@ -24152,8 +24152,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/config/config_update.go` and   `redeven:internal/config/config_update_test.go` own coordinated configuration   transactions, settings preservation, account removal, and failed writes.\n\n- `redeven:internal/agent/gateway_membership_lifecycle_test.go`,   `redeven:internal/agent/control_artifact_source_test.go`, and   `redeven:internal/agent/cloud_link_test.go`\n\n- `internal/settings_ui/src`: product navigation and retained host adapters.\n- `EnvSettingsDialog.browser.test.tsx`, `UnifiedSettings.browser.test.tsx`: real-host targets, drafts, portals, history, Escape, responsive geometry and live authority.\n- `scripts/check_unified_settings.mjs`: bounded source ownership gate; `scripts/check_unified_settings_acceptance.sh`: explicit behavioral qualification.",
-          "char_count": 780
+          "body": "- `redeven:internal/config/config_update.go` and   `redeven:internal/config/config_update_test.go` own coordinated configuration   transactions, settings preservation, account removal, and failed writes.\n\n- `redeven:internal/agent/gateway_membership_lifecycle_test.go`,   `redeven:internal/agent/control_artifact_source_test.go`, and   `redeven:internal/agent/cloud_link_test.go`\n\n- `internal/settings_ui/src`: product navigation and retained host adapters.\n- `EnvSettingsDialog.browser.test.tsx`, `UnifiedSettings.browser.test.tsx`: real-host targets, drafts, portals, history, Escape, responsive geometry and live authority.\n- `HostAccess.browser.test.tsx`: real-host application/desktop access controls, scoped nested setup, focus return, explicit helper recovery, localization, narrow layouts and accessibility.\n- `scripts/check_unified_settings.mjs`: bounded source ownership gate; `scripts/check_unified_settings_acceptance.sh`: explicit behavioral qualification.",
+          "char_count": 969
         }
       ],
       "snippet": "Env App owns settings destinations/drafts/API adapters; Floe reusable layout/navigation. Narrow/revisited panels retain usability, drafts and scroll. A ready editor has a compact version/source row with the update action. Installed versions",
@@ -24815,5 +24815,5 @@
       ]
     }
   ],
-  "source_sha256": "f90c57923cd7c392aac0fc4f4d410fa83c1b4d42aa2631830f349bd885c43e62"
+  "source_sha256": "5968568067073ca65d54049e55e0769b693921bd92873d3be0cb2779873ac12e"
 }
