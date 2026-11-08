@@ -100,7 +100,7 @@ await session.run(async () => {
     assert.ok((await card.innerText()).includes(path.basename(htmlFile)), 'Visible file context accompanies the question');
     await card.locator('textarea').fill(marker + ': inspect the referenced file.');
     await card.locator('.floe-prompt-card-submit').click();
-    await page.getByText(marker + '_COMPLETE', { exact: true }).filter({ visible: true }).waitFor({ timeout: 60000 });
+    await page.locator('[data-flower-message-role="assistant"]').getByText(marker + '_COMPLETE', { exact: true }).filter({ visible: true }).waitFor({ timeout: 60000 });
     await card.waitFor({ state: 'hidden' });
     assert.deepEqual(providerFailures, []); assert.ok(providerRequests.some(request => request.marker === marker));
     report.flower.push({ marker, visibleReply: true, exactFileReference: true });
