@@ -35,7 +35,7 @@ func TestToolFileRead_RespectsLineWindowAndScope(t *testing.T) {
 	if strings.TrimSpace(out.Content) != "line-2" {
 		t.Fatalf("content=%q, want %q", out.Content, "line-2")
 	}
-	if out.LineOffset != 2 || out.LineCount != 1 || out.TotalLines != 3 || !out.Truncated {
+	if out.LineOffset != 2 || out.LineCount != 1 || out.TotalLines != 0 || !out.Truncated || out.NextOffset != 3 || out.EOF {
 		t.Fatalf("unexpected window=%+v", out)
 	}
 
@@ -46,7 +46,7 @@ func TestToolFileRead_RespectsLineWindowAndScope(t *testing.T) {
 	}
 }
 
-func TestToolFileRead_RejectsNonRegularBinaryAndLargeFiles(t *testing.T) {
+func TestToolFileRead_RejectsNonRegularBinaryAndOversizedLines(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -60,7 +60,7 @@ func TestToolFileRead_RejectsNonRegularBinaryAndLargeFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create large: %v", err)
 	}
-	if err := large.Truncate(maxFileReadBytes + 1); err != nil {
+	if err := large.Truncate(maxFileReadContentBytes + 1); err != nil {
 		_ = large.Close()
 		t.Fatalf("truncate large: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestToolFileRead_RejectsNonRegularBinaryAndLargeFiles(t *testing.T) {
 	}{
 		{name: "directory", path: "dir", wantText: "regular file"},
 		{name: "binary", path: "binary.dat", wantText: "UTF-8"},
-		{name: "large", path: "large.txt", wantText: "too large"},
+		{name: "large", path: "large.txt", wantText: "page limit"},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {

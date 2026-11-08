@@ -28,12 +28,12 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 		computer, authoring, canvas   bool
 		nonstrictBudget, strictBudget int
 	}{
-		{"full", config.AIPermissionFullAccess, true, false, false, 25500, 29500},
-		{"readonly", config.AIPermissionReadonly, true, false, false, 16700, 21000},
-		{"computer_disabled", config.AIPermissionFullAccess, false, false, false, 22100, 25800},
-		{"plugin_creation", config.AIPermissionFullAccess, true, true, false, 28300, 32200},
-		{"tessiven", config.AIPermissionFullAccess, true, false, true, 36500, 42000},
-		{"tessiven_readonly", config.AIPermissionReadonly, true, false, true, 23000, 28500},
+		{"full", config.AIPermissionFullAccess, true, false, false, 27800, 32200},
+		{"readonly", config.AIPermissionReadonly, true, false, false, 17700, 21800},
+		{"computer_disabled", config.AIPermissionFullAccess, false, false, false, 24300, 28500},
+		{"plugin_creation", config.AIPermissionFullAccess, true, true, false, 30600, 35000},
+		{"tessiven", config.AIPermissionFullAccess, true, false, true, 38700, 44700},
+		{"tessiven_readonly", config.AIPermissionReadonly, true, false, true, 24000, 29500},
 	} {
 		for _, provider := range []string{"deepseek", "openai"} {
 			t.Run(fixture.name+"/"+provider, func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 						slices.Sort(names)
 						slices.Sort(sizes)
 						slices.Sort(computerNames)
-						required := []string{"goal", "subagents", "ask_user", "attachment_read", "file_present", "image_read", "okf_index", "okf_open", "okf_search", "subagent_events", "threads_query", "threads_read", "web_fetch"}
+						required := []string{"read_file", "read_files", "find", "goal", "subagents", "ask_user", "attachment_read", "file_present", "image_read", "okf_index", "okf_open", "okf_search", "subagent_events", "threads_query", "threads_read", "web_fetch"}
 						if fixture.permission == config.AIPermissionFullAccess {
 							required = append(required, "use_skill", "attachment_materialize", "terminal_exec", "terminal_read", "terminal_write", "terminal_terminate", "file_write", "apply_patch")
 						}
@@ -93,7 +93,7 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 							}
 						}
 						if fixture.permission == config.AIPermissionReadonly {
-							required = append(required, "read_file", "read_files", "find", "rgrep")
+							required = append(required, "rgrep")
 						}
 						if slices.Contains(names, "web_search_tool") {
 							t.Error("unconfigured search advertised")

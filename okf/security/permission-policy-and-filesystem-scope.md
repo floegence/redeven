@@ -3,11 +3,11 @@ type: Security Contract
 title: Permission policy and filesystem scope
 tags: [security, permissions, filesystem, runtime]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components through pinned os.Root handles, rejects substituted symlinks and compares opened identities before returning a descriptor.
+Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery, structured file reads and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components through pinned os.Root handles, rejects substituted symlinks and compares opened identities before returning a descriptor.
 
 # Contract
 

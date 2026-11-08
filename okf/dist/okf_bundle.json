@@ -891,7 +891,7 @@
               "runtime",
               "security"
             ],
-            "summary": "Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components through pinned os.Root handles, rejects substituted symlinks and compares opened identities before returning a descriptor.",
+            "summary": "Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery, structured file reads and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components through pinned os.Root handles, rejects substituted symlinks and compares opened identities before returning a descriptor.",
             "section_count": 3
           },
           {
@@ -2484,7 +2484,7 @@
               "permissions",
               "tools"
             ],
-            "summary": "Redeven owns product visibility, policy, prompt and approval UI; Floret owns invocation and neutral tools. Default tools omit write_todos; historical Todo remains readable. [Goals](flower-goals.md) retains independent ownership. Registry includes read/search/file/patch/terminal/web/OKF/interaction/skills/subagents/MCP/Floret tools.",
+            "summary": "Redeven owns product visibility, policy, prompts and approval UI; Floret owns invocation and neutral tools. Default tools omit write_todos; historical Todo stays readable. [Goals](flower-goals.md) retains independent ownership. File inspection is shared across modes within current scope.",
             "section_count": 3
           },
           {
@@ -9759,7 +9759,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-05",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "ai",
           "runtime",
@@ -9769,36 +9769,29 @@
         "title": "AI terminal tool runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 5160,
+      "body_length": 4371,
       "summary": "Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, interactions, effect attempts, results and Activity. [Task-file placement](flower-task-files.md) supplies thread scratch/staging through child-only environment variables while preserving project cwd and OS temporary path conventions.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Cleanup waits for owned terminal processes to be reaped.\n\nPTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.\nIts model-facing description discloses the 30-minute command lifetime, explicit\ntermination and Service shutdown. Cancelling the initial exec wait stops its\ncommand; cancelling a later read preserves it. It identifies shell reads/searches as the file\nand discovered-rule reading path, and discover/select/exec as the browser preview\npath. These descriptions do not change process ownership or permission.\n\n`cwd` is the preferred working-directory field; `workdir` has the same semantics. When both fields are empty, the run working directory is used; relative paths resolve from it. Two nonempty fields must resolve to the same authorized directory, including equivalent symlink paths. Neither takes precedence. A conflict retains `INVALID_PATH`, with `reason=conflicting_working_directories` and `process_started=false`; rejection precedes host-work admission and process creation.\n\nOn macOS/Linux, one exit worker observes command exit without reaping, kills its process group, retires numeric signaling, verifies no live members within 2 seconds, then reaps and drains output. The unreaped root pins its PID through cleanup. Child cleanup preserves shell exit codes; only confirmed Stop termination means cancellation. Stop, input failure, the 30-minute limit and Service shutdown share this worker. Unconfirmed cleanup reports a runtime error and retains workload admission. Settlement stops the watchdog.\n\nLong-lived commands stay foreground under the yielded process ID. Backgrounding and `nohup` cannot transfer ownership; escaping the PTY group/session is unsupported. Independent services need a managed lifecycle; previews use the managed browser. Names, CPU use and age never establish ownership.\n\n`terminal.read` observes output after the caller's sequence for up to 60 seconds, returning early on output/exit. An expired observation retains process ID and cursor and reports `wait_expired`/`wait_ms`; `timed_out` means command timeout. Continue with the same ID and returned `last_seq`, without sleeps or command restarts.\n\nNormal expiry uses Floret `BoundedWait`; Floret measures handler time and owns repeat protection. Immediate, failed, canceled and early reads gain no exemption, nor do neighboring repeated effects. No extra retry counter, clock, wake or durable ledger exists.\n\nReads are read-only effects: cancellation preserves process and cursor, then confirms the canceled result after observation returns. Execution/input retain shell-effect uncertainty rules. `terminal.write` bounds stdin; `terminal.terminate` kills the owned group and waits for reap/output drain. Thread Stop policy governs cleanup.\n\nRead results contain incremental output, status, cursor, wait and exit facts. Command, cwd and timing remain in canonical Activity without repeated model echoes.\n\nBrowser payloads exclude local working paths, stdin, authorization proofs, and effect internals.\n\nCompletion Activity uses a separate preview selected from whole UTF-8 output chunks\nwithin the 8,000-byte presentation budget. The full retained chunk sequence is\nsealed independently. Preview truncation and sequence watermarks describe exactly\nthe bytes shown; completion omits command/cwd already owned by the invocation.\nA persistence failure is logged immediately with bounded execution identities\nand remains an error at shutdown; it never triggers effect replay.",
-          "char_count": 3630
+          "body": "Cleanup waits for owned processes to be reaped. PTYs use Floret execution/effect\nidentities. `terminal.exec` defaults to a 5-second initial wait (omitted/zero\n`yield_ms`); positive waits cap at 30 seconds. Yield returns a live process ID,\nnot termination. Commands have a disclosed 30-minute lifetime. Terminate/Service\nshutdown stop owned processes; cancellation during initial exec wait stops the\ncommand, while later read cancellation preserves it.\n\nSimple text/rule reads and discovery use shared [file tools](tool-permission-runtime.md#file-inspection).\nShell remains available for pipelines/specialized formats; browser previews use\nmanaged discover/select/exec. Guidance never changes ownership or permission.\n\n`cwd` is preferred; `workdir` is equivalent. Both empty use run cwd; relative paths\nresolve there. Two nonempty fields must resolve to the same authorized directory,\nincluding symlinks. Neither wins. Conflict returns `INVALID_PATH`,\n`reason=conflicting_working_directories`, `process_started=false` before admission\nor process creation.\n\nOn macOS/Linux, one exit worker observes without reaping, kills the process group,\nretires numeric signaling, verifies no members within 2 seconds, then reaps/drains.\nThe unreaped root pins PID through cleanup. Child cleanup preserves shell exit\ncodes; only confirmed Stop means cancellation. Stop/input failure/30-minute limit/\nshutdown share this worker. Unconfirmed cleanup reports runtime error and retains\nworkload admission; settlement stops the watchdog. Foreground processes use their\nreturned ID. Backgrounding/nohup cannot transfer ownership; escaping PTY group or\nsession is unsupported. Independent services need managed lifecycle. Names, CPU\nand age never prove ownership.\n\n`terminal.read` returns bounded incremental output after `after_seq`, up to 60\nseconds or earlier on output/exit. Normal expiry reports `wait_expired`/`wait_ms`\nand retains ID/cursor; `timed_out` means command timeout. Continue with returned\n`last_seq`, without sleeps/restarts. Published Floret BoundedWait measures handler\ntime and owns repeat protection; immediate/failed/canceled/early reads and nearby\neffects get no exemption. No extra retry counters, clocks, wakes or durable ledger.\n\nRead cancellation preserves process/cursor and confirms cancellation after\nobservation returns. Execution/input retain uncertain-effect rules. `terminal.write`\nbounds stdin; terminate kills the group and waits for reap/drain. Thread Stop owns\ncleanup policy. Model output carries output/status/cursor/wait/exit facts, without\nrepeating command/cwd/timing from canonical Activity. Browser payloads exclude\nlocal paths, stdin, authorization proofs and effect internals.\n\nCompletion Activity previews whole UTF-8 chunks within 8,000 bytes. Full retained\nchunks seal independently; preview truncation/watermarks describe only shown bytes.\nCompletion omits invocation-owned command/cwd. Persistence failures log bounded\nidentities immediately and remain shutdown errors, never trigger replay.",
+          "char_count": 3022
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "No authority barriers, admission receipts, recovery handles or projection-cursor waits exist. Reads never retry settlement. Open-detail polling refreshes bytes, never canonical status or provider dispatch.",
-          "char_count": 205
+          "body": "No authority barriers, admission receipts, recovery handles or projection-cursor\nwaits. Reads never retry settlement. Detail polling refreshes bytes, never canonical\nstatus or provider dispatch.",
+          "char_count": 194
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- [Local tool feedback](../../internal/ai/local_tool_feedback_test.go) covers default, single-field, equivalent, symlink and conflicting directories through dispatch. [Service acceptance](../../internal/ai/local_tool_feedback_integration_test.go) verifies rejection before effects, explicit correction with a real PTY, HTTP tool output, canonical Activity and restart without replay, using published Floret and isolated synthetic providers.\n\n- `redeven:internal/ai/floret_effect_authorization.go` - Source.\n\n- [Terminal wait integration](../../internal/ai/terminal_wait_floret_integration_test.go) - Exercises quiet repeated reads and mixed-effect repeat protection against published Floret.\n\n- [Terminal cleanup tests](../../internal/ai/terminal_process_cleanup_unix_test.go) - Exercise ignored-HUP children, preserved exit codes, Stop/Close/cancellation/timeouts/input failures, pinned root identity, cleanup failure admission, and unrelated-process isolation.",
-          "char_count": 962
-        }
-      ],
-      "evidence": [
-        {
-          "id": "redeven:internal/ai/floret_effect_authorization.go:0:source.",
-          "source": "redeven:internal/ai/floret_effect_authorization.go",
-          "description": "Source."
+          "body": "- [Local feedback](../../internal/ai/local_tool_feedback_test.go): default/single/\n  equivalent/symlink/conflicting cwd. [Service acceptance](../../internal/ai/local_tool_feedback_integration_test.go):\n  pre-effect rejection, explicit correction with real PTY, HTTP, Activity and\n  restart without replay on published Floret and synthetic providers.\n- `redeven:internal/ai/floret_effect_authorization.go`: authorization owner.\n- [Wait integration](../../internal/ai/terminal_wait_floret_integration_test.go):\n  quiet repeated reads and mixed-effect repeat protection.\n- [Cleanup](../../internal/ai/terminal_process_cleanup_unix_test.go): ignored-HUP\n  children, exit codes, Stop/Close/cancellation/timeouts/input failures, pinned\n  identity, failure admission and unrelated-process isolation.",
+          "char_count": 792
         }
       ],
       "snippet": "Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, interactions, effect attempts, results and Activity. [Task-file placement](flower-task-files.md) supplies thread scratch/staging through child-only environment varia",
@@ -9808,6 +9801,12 @@
           "path": "ai/flower-task-files.md",
           "concept_id": "ai.flower-task-files",
           "title": "Flower working files and deliverables"
+        },
+        {
+          "label": "file tools",
+          "path": "ai/tool-permission-runtime.md",
+          "concept_id": "ai.tool-permission-runtime",
+          "title": "AI tool permissions and dispatch"
         }
       ],
       "backlinks": [
@@ -9926,32 +9925,32 @@
         "title": "AI tool permissions and dispatch",
         "type": "AI Tool Contract"
       },
-      "body_length": 7553,
-      "summary": "Redeven owns product visibility, policy, prompt and approval UI; Floret owns invocation and neutral tools. Default tools omit write_todos; historical Todo remains readable. [Goals](flower-goals.md) retains independent ownership. Registry includes read/search/file/patch/terminal/web/OKF/interaction/skills/subagents/MCP/Floret tools.",
+      "body_length": 8349,
+      "summary": "Redeven owns product visibility, policy, prompts and approval UI; Floret owns invocation and neutral tools. Default tools omit write_todos; historical Todo stays readable. [Goals](flower-goals.md) retains independent ownership. File inspection is shared across modes within current scope.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Bounded typed details exclude raw/status/name-only affordances. Target media validates MIME/size/digest; never persist image bytes in tool state.\n\nPure conditional-input validation belongs in typed tool decoders, before resource\nresolution and effect authorization. Published Floret owns bounded correction and\npaired model feedback; Redeven reuses its existing [child action validator](subagent-runtime.md).\nProjector failures remain contract failures. Stateful permission, storage and\nbusiness failures retain their owner classifications and never imply safe replay.\n\n## Model-visible guidance\nRedeven owns canonical-to-provider name mapping and strict-schema omission\nrendering. Keep one short mapping per renamed tool; do not rewrite prompt/history\nliterals. Null-to-omit guidance belongs only to adapter-added nullable fields;\nnative nullable values remain values. Frozen transport retries replay identical\nrendered bytes. Product resource identity and action contracts remain local to\nthe tool or owning parameter, without repeating them at both levels.\n\nMeasure the final permission-filtered HTTP tools array, not the complete registry\nor source lines. [Budget tests](../../internal/ai/tool_definition_budget_test.go)\ncover full-access, readonly and Computer-disabled Service turns, including input\ncontrol, attachments and Goal. They pin tool membership and allow about 3-4%\ngrowth; they never truncate descriptions at runtime. These fixtures exclude\nconfigured search, MCP and plugin authoring surfaces. Computer defaults remain\nthree tools; explicit/historical primitives retain their separate contract.\n\n## Diagnostic ownership\nClassify owner-typed/cancel/deadline/filesystem errors; unknown wording stays UNKNOWN/source text. Keywords cannot infer resource, authority, retry or replacement args. Owners resolve authorized relative/home paths. Keep patch diagnostics; removing unused suggested-fix inference proves no model-quality gain.\n\n## File editing\nRedeven patch cwd resolves relative paths only; registry owns canonical/logical write policy, including authorized external/current scratch roots. Deny readonly/sibling/ancestor/symlink escapes. Target tools retain target policy.\n\nResolve symlinks/new-file ancestors before authorization. Ordered canonical resource sequence rejects swapped/changed targets. Preserve submitted paths and resolve at full preflight, each commit and Move source deletion; source/destination snapshots must match. This is not an OS sandbox or elimination of all TOCTOU races.\n\nFile mutation exposes only `file.write` for complete contents and `apply_patch` for contextual single/multi-file changes, creation, deletion and moves. There is no separate literal-replacement tool or execution alias. Strict JSON/routing has no input_format/patch aliases; model name implies no freeform support. Search original source forward with anchors/EOF/ranges. Only order failures may reorder uniquely exact/nonoverlapping chunks without anchors/ranges/EOF/pure additions, using the same matcher/plan. Preserve original arguments/classifications; ambiguous chunk requests unique context, provider still requests source order.\n\nHistorical calls/results stay immutable and readable. File/patch presentations retain canonical target navigation through typed presentation facts, without restoring a removed tool's registration, routing or execution.\n\nPure additions append. Untouched endings remain; insertions use first ending (empty=LF); nonempty updates retain final newline. Match exact, then trailing/surrounding whitespace, then selected Unicode normalization, first permitted match. Context copies source; insertions literal, no reindent. Add/Move may replace regular files; one operation/canonical path.\n\nDiagnostics name order/overlap/anchor/EOF/context/duplicate path with chunk/body-line/search boundary/exact source line/remedy; never choose writes. Floret validates JSON. Validate all before writing and snapshot-check each commit. Validation failure confirms no writes; commit failures preserve completed operations/unknown effects without replay permission. completed_files means whole operation. Activity retains confirmed paths/counts/full actual diff; model omits full diff and may inspect content. A Move whose destination succeeds but deletion fails reports destination create/update against its prior bytes, not completed rename. Atomicity is per-file, not patch/Move. Published ordered-resource/EffectOutcome/PatchActivity owns authorization/settlement/persistence.",
-          "char_count": 4513
+          "body": "Typed details exclude raw/status/name-only affordances. Media validates MIME/size/digest; never persist image bytes in tool state.\n\nPure conditional-input validation belongs in typed tool decoders, before resource\nresolution and effect authorization. Published Floret owns bounded correction and\npaired model feedback; Redeven reuses its existing [child action validator](subagent-runtime.md).\nProjector failures remain contract failures; permission/storage/business failures\nretain owner classifications and never imply safe replay.\n\n## Model-visible guidance\nRedeven owns provider-name mapping and strict-schema omission. Keep one short\nmapping per renamed tool; never rewrite prompt/history literals. Null-to-omit\napplies only to adapter-added nullable fields; native nulls remain values. Frozen\ntransport retries replay identical bytes. Document identity/action contracts once,\nin the owning tool or parameter.\n\n[Budget tests](../../internal/ai/tool_definition_budget_test.go) measure final\npermission-filtered HTTP tools, pin membership and allow about 3-4% growth without\nruntime description truncation. Fixtures cover full-access, readonly, Computer\ndisabled and plugin creation, including controls, attachments and Goal. Search/MCP\nare unconfigured. Computer defaults to three tools; historical primitives remain\nseparate.\n\n## Diagnostic ownership\nOwner-typed, cancellation, deadline and filesystem errors retain classifications;\nunknown wording stays UNKNOWN. Keywords cannot infer resources, authority, retry\nsafety or replacement arguments. Missing result data on an error is not encoding\nloss. Authorized relative/home paths resolve at the owner. Removing heuristic diagnostics alone proves no quality gain.\n\n## File inspection\n`read_file`, `read_files` and `find` are shared read-only tools in every Flower mode.\nSession read permission and current filesystem scope remain mandatory; thread\nadmission retains its separate session requirements. Published Floret APIs suffice.\n`rgrep` stays readonly-only; no read/glob/list-directory alias is added.\n\n`read_file` streams complete UTF-8 lines through `Registry.OpenRead`. Offset is\n1-based (omitted/0=1), default 200/max 400 lines, capped at 8,000 content bytes and\n24 KiB JSON-escaped content. Returned `line_offset`/`line_count` are exact;\n`next_offset` continues when `truncated`. `eof` is observed; `total_lines` is unknown\nuntil EOF (empty=0). No whole-file rejection or tail scan. Prefix scans\nstop at 64 MiB and honor cancellation. Oversized lines, invalid UTF-8 and NUL data\nfail explicitly without partial-line cursors or automatic fallback. Calls read current bytes, not snapshots.\n\n`read_files` accepts 50 paths, defaults to 120 lines/file and bounds encoded items\nto 32 KiB. Errors stay per-file. `next_index` is the submitted paths' next 0-based\nindex; individual files continue through read_file. Model projection preserves\nexecutor-bounded content/coordinates; Activity remains a separate presentation.\n\n`find.name` matches basenames with `*`, `?`, character classes, never relative-path\nglobs. Malformed patterns fail. Hidden entries default off; no symlink following\nor gitignore. Scope, default 200/max 1000 results, default 8/max 32 depth (0=default),\n10,000 visited entries, 5 seconds and 32 KiB encoded items bound discovery.\nTruncation/scan facts mean incomplete results; narrow the query before concluding\nabsence.\n\n## File editing\nRedeven resolves patch cwd; registry owns logical/canonical write policy, including\nauthorized external/scratch roots. Deny readonly/sibling/ancestor/symlink escapes;\ntarget policy stays separate. Resolve symlinks/new-file ancestors before approval.\nPreserve submitted paths; ordered canonical resources and snapshots reject swaps\nat preflight, each commit and Move source deletion. This is not an OS sandbox or\nelimination of all TOCTOU races.\n\nOnly `file.write` (complete contents) and `apply_patch` (contextual single/multiple\nfile changes, creation, deletion, moves) execute. No literal-replacement tool,\ninput_format/patch alias or implied freeform protocol. Historical calls/results\nand typed target navigation remain readable without restoring execution.\n\nSearch forward with anchors/EOF/ranges. Only order failures may reorder uniquely\nexact nonoverlapping chunks without anchors/ranges/EOF/pure additions, using the\nsame matcher/plan. Preserve arguments/classifications; ambiguous chunks require\nunique context, and providers still request source order. Pure additions append.\nUntouched endings survive; insertions use first ending (empty=LF), nonempty updates\nretain final newline. Match exact, trailing/surrounding whitespace, then selected\nUnicode normalization at the first permitted match. Copy context; literal\ninsertions never reindent. Add/Move may replace regular files; one operation/path.\n\nDiagnostics include order/overlap/anchor/EOF/context/duplicate path, chunk/body-line,\nsearch boundary/source line and remedy; never select writes. Floret validates JSON.\nValidate all before writing and snapshot-check every commit. Validation confirms\nno writes; commit failure retains completed operations/unknown effects without\nreplay permission. completed_files means whole operations. Activity retains paths,\ncounts and actual full diff; model omits diff and may inspect content. Destination\nsuccess/source deletion failure reports create/update against prior destination,\nnot rename. Atomicity is per file, not patch/Move. Published ordered-resource,\nEffectOutcome and PatchActivity own authorization, settlement and history.",
+          "char_count": 5555
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Tool names are not aliases for deleted knowledge-era tools. OKF is an embedded project corpus and does not access the internet; external, current, recent, news, third-party, market, pricing, and general web facts must use direct authoritative URLs or web search discovery instead.\nSearch and fetch are independently configured. Published Floret fetch guidance\ndescribes reading a known URL without assuming search is available.\n\nFlower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.",
-          "char_count": 624
+          "body": "No aliases restore deleted knowledge tools. OKF is an embedded project corpus, not internet access; external/current/news/third-party/market/pricing/web facts require authoritative URLs or web search.\nSearch and fetch are independently configured. Published Floret fetch guidance\ndescribes reading a known URL without assuming search is available.\n\nRemote/target execution claims require explicit provenance from a tool result or product command, never thread context alone.",
+          "char_count": 474
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- [Local feedback tests](../../internal/ai/local_tool_feedback_test.go) verify retired invocations cannot modify files and owner diagnostics reach model text, structured results and Activity. [Service acceptance](../../internal/ai/local_tool_feedback_integration_test.go) verifies final HTTP output, explicit contextual patch correction, persistence and restart using published Floret. [Provider boundary tests](../../internal/ai/model_gateway_tool_names_test.go) preserve file/terminal schemas and callable-name guidance across adapters and frozen transport retries.\n\n- [Tool registry](../../internal/ai/tools/registry.go) - Source.\n\n- Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.\n- internal/ai/patch_prompt_qualification_test.go uses the isolated live-model lane for multi-chunk, order and duplicate-header recovery. Patches run only in memory; proposed tools never execute. Small samples do not establish production failure rates.\n\n- 2026-11-08 evidence: against `16f0a9854`, compact default tool JSON decreased\n  from 37,465 to 35,293 bytes (DeepSeek) and 45,063 to 40,515 (strict Responses),\n  with all 37 tools retained. Bytes are not tokens, latency or success rates.\n  never execute proposals. Three repeats per case on configured DeepSeek Flash:\n  baseline 9/9; final candidate 8/9, with one cancellation-count misinterpretation.\n  Child inspection and direct service identity each passed 3/3. A proposed\n  subagents description compression was withdrawn after inconsistent cancellation\n  interpretation; its original definition remains intact. No model-quality gain\n  is established. Strict behavior is covered by deterministic provider tests,\n  not a live OpenAI qualification. `REDEVEN_FLOWER_PROMPT_PROVIDER_ID` selects an\n  explicit qualification profile without changing the product selection.",
-          "char_count": 2028
+          "body": "- [File windows](../../internal/ai/file_read_window_test.go): exact bounded provider\n  JSON, escaping, large files/lines, UTF-8/EOF, batch continuation, discovery,\n  cancellation, scope and authorization. [Service acceptance](../../internal/ai/file_read_service_test.go):\n  all modes, HTTP definitions/results, no read approval, Activity and restart on\n  published Floret. Read-only dispatch caps do not widen thread admission.\n- [Local diagnostics](../../internal/ai/local_tool_feedback_test.go) and\n  [Service tests](../../internal/ai/local_tool_feedback_integration_test.go): retired\n  calls, no-effect validation, explicit correction, HTTP, Activity and restart.\n  [Provider tests](../../internal/ai/model_gateway_tool_names_test.go): name/schema\n  guidance and frozen retries. [Registry](../../internal/ai/tools/registry.go): presentation.\n- `internal/ai/patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go`:\n  ordering/endings/authorization/partial failures/restart/Fork. Live proposals in\n  `patch_prompt_qualification_test.go` run in memory, never execute tools; small\n  samples do not establish production failure rates.\n- 2026-11-08 description baseline `16f0a9854`: 37 tools retained; JSON shrank\n  37,465→35,293 bytes (DeepSeek), 45,063→40,515 (strict Responses). DeepSeek Flash\n  three repeats/case: baseline 9/9, candidate 8/9 (one cancellation-count error);\n  child inspection/service identity each 3/3. Proposed subagents compression was\n  withdrawn for inconsistent cancellation interpretation. No model-quality gain;\n  strict tests used fake providers.\n  `REDEVEN_FLOWER_PROMPT_PROVIDER_ID` selects only qualification profiles.\n- After integrating Tessiven scope isolation at `95a8b4b68`, shared inspection adds\n  three ordinary full-access tools (24→27): DeepSeek 24,663→26,747 bytes; strict\n  Responses 28,354→30,963. Canvas-specific surfaces retain their own inventory.\n  System prompt unchanged. Bytes are not tokens, latency or task success.",
+          "char_count": 1977
         }
       ],
-      "snippet": "Redeven owns product visibility, policy, prompt and approval UI; Floret owns invocation and neutral tools. Default tools omit write_todos; historical Todo remains readable. [Goals](flower-goals.md) retains independent ownership. Registry in",
+      "snippet": "Redeven owns product visibility, policy, prompts and approval UI; Floret owns invocation and neutral tools. Default tools omit write_todos; historical Todo stays readable. [Goals](flower-goals.md) retains independent ownership. File inspect",
       "links": [
         {
           "label": "Goals",
@@ -9972,6 +9971,12 @@
           "path": "ai/flower-task-files.md",
           "concept_id": "ai.flower-task-files",
           "title": "Flower working files and deliverables"
+        },
+        {
+          "label": "AI terminal tool runtime",
+          "path": "ai/terminal-tool-runtime.md",
+          "concept_id": "ai.terminal-tool-runtime",
+          "title": "AI terminal tool runtime"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -18985,7 +18990,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-28",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "filesystem",
           "permissions",
@@ -18995,8 +19000,8 @@
         "title": "Permission policy and filesystem scope",
         "type": "Security Contract"
       },
-      "body_length": 1494,
-      "summary": "Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components through pinned os.Root handles, rejects substituted symlinks and compares opened identities before returning a descriptor.",
+      "body_length": 1517,
+      "summary": "Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery, structured file reads and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components through pinned os.Root handles, rejects substituted symlinks and compares opened identities before returning a descriptor.",
       "sections": [
         {
           "id": "contract",
@@ -19028,7 +19033,7 @@
           "description": "Source."
         }
       ],
-      "snippet": "Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components thr",
+      "snippet": "Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery, structured file reads and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks c",
       "links": [
         {
           "label": "absolute filesystem navigation contract",
@@ -24630,5 +24635,5 @@
       ]
     }
   ],
-  "source_sha256": "dd9302741bd2718afda6532d62f0a78d6da8b8014d07e6b1598b7bc65082f2d3"
+  "source_sha256": "ca2c573c0141fddba6972c5446a4df001fe3818dd11865000c45c0be6268c3ed"
 }

@@ -261,7 +261,7 @@ func TestFileModelOutputRetainsExistingBounds(t *testing.T) {
 	paths := []string{}
 	for i := 0; i < 20; i++ {
 		path := filepath.Join(root, fmt.Sprintf("file-%d.txt", i))
-		if err := os.WriteFile(path, []byte(strings.Repeat("x", 2<<20)), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(strings.Repeat(strings.Repeat("x", 99)+"\n", 21000)), 0600); err != nil {
 			t.Fatal(err)
 		}
 		paths = append(paths, path)
@@ -280,9 +280,9 @@ func TestFileModelOutputRetainsExistingBounds(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		limit := 9000
+		limit := 11000
 		if name == "read_files" {
-			limit = 170000
+			limit = 40000
 		}
 		if len(result.Text) > limit || result.OutputPolicy != nil {
 			t.Fatalf("%s expanded to %d", name, len(result.Text))

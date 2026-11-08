@@ -41,7 +41,7 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				p.chatGPT = true
 				p.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 			}
-			wanted := map[string]bool{"terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.inspect": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true, "subagent_events": true}
+			wanted := map[string]bool{"read_file": true, "read_files": true, "find": true, "terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.inspect": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true, "subagent_events": true}
 			var defs []ToolDef
 			for _, def := range builtInModelCapabilityDefinitions() {
 				if wanted[def.Name] {
@@ -77,7 +77,10 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				t.Error("standalone fetch implies an absent search capability")
 			}
 			for name, phrases := range map[string][]string{
-				"terminal_exec":    {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal.terminate", "Service shutdown", "read/search files", "computer.targets"},
+				"read_file":        {"1-based", "next_offset", "EOF", "default 200"},
+				"read_files":       {"next_index", "0-based", "default 120"},
+				"find":             {"basenames", "symlinks", "gitignore", "Default 8"},
+				"terminal_exec":    {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal.terminate", "Service shutdown", "read_file/read_files", "find for file discovery", "computer.targets"},
 				"computer_exec":    {"SCRIPT_OPERATION_LIMIT", "completed effects", "thread/turn/target", "without clearing"},
 				"image_read":       {"width", "height", "10 MiB", "32 megapixels"},
 				"web_fetch":        {"known URL"},

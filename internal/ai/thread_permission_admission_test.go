@@ -319,7 +319,7 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 			names[anyToString(tool["name"])] = true
 		}
 	}
-	if names["terminal_exec"] != (mode != "readonly") || names["read_file"] != (mode == "readonly") {
+	if names["terminal_exec"] != (mode != "readonly") || !names["read_file"] {
 		t.Errorf("provider tool surface does not match %s: %v", mode, names)
 	}
 	prompt, _ := request["instructions"].(string)

@@ -460,7 +460,7 @@ func TestModelContextNecessaryFactsAndToolSurfaceStillRefresh(t *testing.T) {
 		for _, tool := range request.Tools {
 			tools[tool.Name] = true
 		}
-		if tools["terminal.exec"] != (i == 0) || tools["read_file"] != (i > 0) {
+		if tools["terminal.exec"] != (i == 0) || !tools["read_file"] {
 			t.Errorf("request %d stale tool surface: %v", i, tools)
 		}
 		if i == 2 && !reflect.DeepEqual(prior, updates) {

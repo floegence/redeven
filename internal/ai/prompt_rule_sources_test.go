@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -144,14 +143,14 @@ func TestFlowerReadFilePreservesCompleteRulePages(t *testing.T) {
 			t.Fatal(err)
 		}
 		record, ok := data.(map[string]any)
-		if truncated || !ok || record["content"] != page.Content || record["total_lines"] != json.Number("901") {
+		if truncated || !ok || record["content"] != page.Content {
 			t.Fatalf("bounded rule page lost its content or continuation: %#v", data)
 		}
 		complete.WriteString(record["content"].(string))
 		if !page.Truncated {
 			break
 		}
-		offset = page.LineOffset + page.LineCount
+		offset = page.NextOffset
 	}
 	if complete.String() != body {
 		t.Fatal("complete reading lost rule content")

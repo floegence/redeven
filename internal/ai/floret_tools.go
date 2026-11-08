@@ -436,6 +436,11 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 			delete(modelPayload, "details")
 		}
 	}
+	// File readers own complete-line pagination and the aggregate batch budget.
+	// Presentation clipping must not invalidate model continuation coordinates.
+	if result.ToolName == "read_file" || result.ToolName == "read_files" || result.ToolName == "find" {
+		return modelPayload, nil
+	}
 	payload, bounded := boundedJSONMap(modelPayload, 0)
 	payload["truncated"] = result.Truncated || bounded
 	return payload, nil

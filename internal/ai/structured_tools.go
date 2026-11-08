@@ -1,7 +1,10 @@
 package ai
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,10 +18,12 @@ import (
 )
 
 const (
-	defaultFileReadLimit  = 200
-	maxFileReadLimit      = 400
-	maxFileReadBytes      = 2 << 20
-	maxMutationPatchRunes = 8000
+	defaultFileReadLimit    = 200
+	maxFileReadLimit        = 400
+	maxFileReadContentBytes = 8000
+	maxFileReadJSONBytes    = 24 << 10
+	maxFileReadScanBytes    = 64 << 20
+	maxMutationPatchRunes   = 8000
 )
 
 type FileReadArgs struct {
@@ -31,10 +36,12 @@ type FileReadResult struct {
 	FilePath    string `json:"file_path"`
 	DisplayName string `json:"display_name"`
 	Content     string `json:"content"`
-	LineOffset  int    `json:"line_offset,omitempty"`
-	LineCount   int    `json:"line_count,omitempty"`
+	LineOffset  int    `json:"line_offset"`
+	LineCount   int    `json:"line_count"`
 	TotalLines  int    `json:"total_lines,omitempty"`
-	Truncated   bool   `json:"truncated,omitempty"`
+	Truncated   bool   `json:"truncated"`
+	NextOffset  int    `json:"next_offset,omitempty"`
+	EOF         bool   `json:"eof"`
 }
 
 type FileWriteArgs struct {
@@ -388,11 +395,11 @@ func (r *run) toolFileRead(ctx context.Context, args FileReadArgs) (FileReadResu
 	if err := ctx.Err(); err != nil {
 		return FileReadResult{}, err
 	}
-	path, err := r.resolveStructuredToolPath(args.FilePath, true)
+	scope, err := r.runPathScope()
 	if err != nil {
-		return FileReadResult{}, mapToolFilePathError(err)
+		return FileReadResult{}, mapToolCwdError(err)
 	}
-	file, err := os.Open(path)
+	file, err := scope.Registry.OpenRead(scope.resolveInput(args.FilePath))
 	if err != nil {
 		return FileReadResult{}, mapToolFilePathError(err)
 	}
@@ -404,54 +411,81 @@ func (r *run) toolFileRead(ctx context.Context, args FileReadArgs) (FileReadResu
 	if !info.Mode().IsRegular() {
 		return FileReadResult{}, errors.New("file_path must be a regular file")
 	}
-	if info.Size() > maxFileReadBytes {
-		return FileReadResult{}, fmt.Errorf("file is too large to read safely (%d bytes max)", maxFileReadBytes)
+	start, limit := normalizeFileReadWindow(args.Offset, args.Limit)
+	out := FileReadResult{FilePath: file.Name(), DisplayName: displayNameForFilePath(file.Name()), LineOffset: start}
+	reader := bufio.NewReaderSize(io.LimitReader(file, maxFileReadScanBytes+1), 64<<10)
+	var content strings.Builder
+	scanned, lineNumber, encodedBytes := 0, 0, 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return FileReadResult{}, err
+		}
+		_, peekErr := reader.Peek(1)
+		if errors.Is(peekErr, io.EOF) {
+			out.EOF, out.TotalLines = true, lineNumber
+			out.LineOffset = min(start, lineNumber+1)
+			break
+		}
+		if peekErr != nil {
+			return FileReadResult{}, peekErr
+		}
+		if out.LineCount == limit {
+			break
+		}
+		lineNumber++
+		var line []byte
+		for {
+			if err := ctx.Err(); err != nil {
+				return FileReadResult{}, err
+			}
+			part, readErr := reader.ReadSlice('\n')
+			scanned += len(part)
+			if scanned > maxFileReadScanBytes {
+				return FileReadResult{}, fmt.Errorf("read scan exceeds %d bytes; use a targeted search or a specialized reader", maxFileReadScanBytes)
+			}
+			if lineNumber >= start {
+				if len(line)+len(part) > maxFileReadContentBytes {
+					if out.LineCount == 0 {
+						return FileReadResult{}, fmt.Errorf("line %d exceeds the %d-byte page limit; use a specialized reader for this line", lineNumber, maxFileReadContentBytes)
+					}
+					out.Content, out.Truncated, out.NextOffset = content.String(), true, start+out.LineCount
+					return out, nil
+				}
+				line = append(line, part...)
+			}
+			if errors.Is(readErr, bufio.ErrBufferFull) {
+				continue
+			}
+			if readErr != nil && !errors.Is(readErr, io.EOF) {
+				return FileReadResult{}, readErr
+			}
+			break
+		}
+		if lineNumber < start {
+			continue
+		}
+		if !utf8.Valid(line) || bytes.IndexByte(line, 0) >= 0 {
+			return FileReadResult{}, fmt.Errorf("line %d is not UTF-8 text (binary data)", lineNumber)
+		}
+		encoded, err := json.Marshal(string(line))
+		if err != nil {
+			return FileReadResult{}, err
+		}
+		if content.Len()+len(line) > maxFileReadContentBytes || encodedBytes+len(encoded)-2 > maxFileReadJSONBytes {
+			if out.LineCount == 0 {
+				return FileReadResult{}, fmt.Errorf("line %d exceeds the encoded page limit; use a specialized reader for this line", lineNumber)
+			}
+			break
+		}
+		content.Write(line)
+		encodedBytes += len(encoded) - 2
+		out.LineCount++
 	}
-	content, err := io.ReadAll(io.LimitReader(file, maxFileReadBytes+1))
-	if err != nil {
-		return FileReadResult{}, mapToolFilePathError(err)
+	out.Content, out.Truncated = content.String(), !out.EOF
+	if out.Truncated {
+		out.NextOffset = start + out.LineCount
 	}
-	if int64(len(content)) > maxFileReadBytes {
-		return FileReadResult{}, fmt.Errorf("file is too large to read safely (%d bytes max)", maxFileReadBytes)
-	}
-	if !utf8.Valid(content) {
-		return FileReadResult{}, errors.New("file is not valid UTF-8 text")
-	}
-	lines := splitFileReadLines(string(content))
-	totalLines := len(lines)
-	startLine, lineLimit := normalizeFileReadWindow(args.Offset, args.Limit)
-	if totalLines == 0 {
-		return FileReadResult{
-			FilePath:    path,
-			DisplayName: displayNameForFilePath(path),
-			Content:     "",
-			LineOffset:  1,
-			LineCount:   0,
-			TotalLines:  0,
-			Truncated:   false,
-		}, nil
-	}
-	if startLine > totalLines {
-		startLine = totalLines + 1
-	}
-	startIdx := startLine - 1
-	if startIdx > totalLines {
-		startIdx = totalLines
-	}
-	endIdx := startIdx + lineLimit
-	if endIdx > totalLines {
-		endIdx = totalLines
-	}
-	window := strings.Join(lines[startIdx:endIdx], "")
-	return FileReadResult{
-		FilePath:    path,
-		DisplayName: displayNameForFilePath(path),
-		Content:     window,
-		LineOffset:  startLine,
-		LineCount:   endIdx - startIdx,
-		TotalLines:  totalLines,
-		Truncated:   endIdx < totalLines,
-	}, nil
+	return out, nil
 }
 
 func (r *run) toolFileWrite(ctx context.Context, args FileWriteArgs) (FileMutationResult, error) {

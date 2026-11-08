@@ -12,10 +12,10 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 
 	filter := newPermissionToolFilter(true)
 	all := []ToolDef{
-		{Name: "read_file", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "read_files", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "read_file", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "read_files", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "rgrep", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "find", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "find", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "web_fetch", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "web.search", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "okf.index", Visibility: ToolVisibilitySharedReadonly},
@@ -60,9 +60,12 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 				"apply_patch",
 				"ask_user",
 				"file.write",
+				"find",
 				"okf.index",
 				"okf.open",
 				"okf.search",
+				"read_file",
+				"read_files",
 				"subagents",
 				"terminal.exec",
 				"use_skill",
@@ -78,9 +81,12 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 				"apply_patch",
 				"ask_user",
 				"file.write",
+				"find",
 				"okf.index",
 				"okf.open",
 				"okf.search",
+				"read_file",
+				"read_files",
 				"subagents",
 				"terminal.exec",
 				"use_skill",
@@ -156,9 +162,14 @@ func TestPermissionSnapshotConsistencyForBuiltinMatrix(t *testing.T) {
 				}
 				return
 			}
-			for _, blocked := range []string{"read_file", "read_files", "rgrep", "find"} {
+			for _, blocked := range []string{"rgrep"} {
 				if containsString(names, blocked) {
 					t.Fatalf("%s tool set includes readonly-exclusive %q: %v", permissionType, blocked, names)
+				}
+			}
+			for _, required := range []string{"read_file", "read_files", "find"} {
+				if !containsString(names, required) {
+					t.Fatalf("%s missing shared file tool %s", permissionType, required)
 				}
 			}
 			if !containsString(names, "terminal.exec") || !containsString(names, "subagents") || !containsString(names, "web_fetch") {

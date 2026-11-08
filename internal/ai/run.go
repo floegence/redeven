@@ -1899,9 +1899,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolAttachmentRead(ctx, meta, p)
 
 	case "read_file":
-		if !r.canExecuteReadonlyExclusiveTool(ctx) {
-			return nil, errors.New("readonly tool unavailable for current permission type")
-		}
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -1917,9 +1914,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolFileRead(ctx, FileReadArgs{FilePath: p.Path, Offset: p.Offset, Limit: p.Limit})
 
 	case "read_files":
-		if !r.canExecuteReadonlyExclusiveTool(ctx) {
-			return nil, errors.New("readonly tool unavailable for current permission type")
-		}
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -1934,9 +1928,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolReadFiles(ctx, p.Paths, p.Limit)
 
 	case "find":
-		if !r.canExecuteReadonlyExclusiveTool(ctx) {
-			return nil, errors.New("readonly tool unavailable for current permission type")
-		}
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -2254,9 +2245,10 @@ func stringSliceContains(values []string, target string) bool {
 
 const (
 	readonlyReadFilesDefaultLimit   = 120
-	readonlyReadFilesMaxFiles       = 20
+	readonlyReadFilesMaxFiles       = 50
 	readonlyFindDefaultMaxResults   = 200
 	readonlyFindMaxResults          = 1000
+	maxFileDiscoveryJSONBytes       = 32 << 10
 	readonlyFindDefaultMaxDepth     = 8
 	readonlyFindMaxDepth            = 32
 	readonlyFindMaxVisitedEntries   = 10000
@@ -2366,6 +2358,7 @@ func (b *readonlyScanBudget) stats() map[string]interface{} {
 type readonlyReadFilesResult struct {
 	Files     []readonlyReadFileResult `json:"files"`
 	Truncated bool                     `json:"truncated,omitempty"`
+	NextIndex int                      `json:"next_index,omitempty"`
 }
 
 type readonlyReadFileResult struct {
@@ -2393,6 +2386,7 @@ func (r *run) toolReadFiles(ctx context.Context, paths []string, limit int) (rea
 		Files:     make([]readonlyReadFileResult, 0, len(paths)),
 		Truncated: truncated,
 	}
+	remainingBytes := maxFileDiscoveryJSONBytes
 	for _, path := range paths {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -2400,12 +2394,30 @@ func (r *run) toolReadFiles(ctx context.Context, paths []string, limit int) (rea
 		path = strings.TrimSpace(path)
 		item := readonlyReadFileResult{Path: path}
 		result, err := r.toolFileRead(ctx, FileReadArgs{FilePath: path, Limit: limit})
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
 		if err != nil {
 			item.Error = err.Error()
 		} else {
 			item.Result = &result
 		}
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			return out, err
+		}
+		if len(encoded) > remainingBytes {
+			if len(out.Files) == 0 {
+				return out, errors.New("file result exceeds batch output budget; use read_file for this path")
+			}
+			out.Truncated = true
+			break
+		}
+		remainingBytes -= len(encoded)
 		out.Files = append(out.Files, item)
+	}
+	if out.Truncated {
+		out.NextIndex = len(out.Files)
 	}
 	return out, nil
 }
@@ -2471,8 +2483,11 @@ func (r *run) toolReadonlyFind(ctx context.Context, root string, namePattern str
 	}
 	budget := newReadonlyScanBudget(readonlyFindMaxVisitedEntries, 0, 0, readonlyFindMaxElapsed)
 	out := readonlyFindResult{Root: resolvedRoot, Results: make([]readonlyFindItem, 0, min(maxResults, 64))}
+	remainingBytes := maxFileDiscoveryJSONBytes
 	walkErr := filepath.WalkDir(resolvedRoot, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
+			out.Truncated = true
+			budget.limitReason = "unreadable_entry"
 			return nil
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -2500,13 +2515,6 @@ func (r *run) toolReadonlyFind(ctx context.Context, root string, namePattern str
 		if path == resolvedRoot {
 			return nil
 		}
-		if len(out.Results) >= maxResults {
-			out.Truncated = true
-			if entry.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
 		resolved, err := scope.Registry.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true})
 		if err != nil || filepath.Clean(resolved.RealAbs) != filepath.Clean(path) {
 			if entry.IsDir() {
@@ -2518,12 +2526,21 @@ func (r *run) toolReadonlyFind(ctx context.Context, root string, namePattern str
 		if !readonlyFindTypeMatches(typeFilter, itemType) || !matcher(entry.Name()) {
 			return nil
 		}
-		out.Results = append(out.Results, readonlyFindItem{
-			Path:        path,
-			DisplayName: displayNameForFilePath(path),
-			Type:        itemType,
-			Size:        size,
-		})
+		item := readonlyFindItem{Path: path, DisplayName: displayNameForFilePath(path), Type: itemType, Size: size}
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			return err
+		}
+		if len(out.Results) >= maxResults || len(encoded) > remainingBytes {
+			out.Truncated = true
+			budget.limitReason = "max_results"
+			if len(encoded) > remainingBytes {
+				budget.limitReason = "max_output_bytes"
+			}
+			return filepath.SkipAll
+		}
+		remainingBytes -= len(encoded)
+		out.Results = append(out.Results, item)
 		return nil
 	})
 	if walkErr != nil {
@@ -2780,6 +2797,9 @@ func newReadonlyNameMatcher(pattern string) (func(string) bool, error) {
 	}
 	if strings.ContainsRune(pattern, 0) {
 		return nil, errInvalidToolPath
+	}
+	if _, err := filepath.Match(pattern, ""); err != nil {
+		return nil, fmt.Errorf("invalid name pattern: %w", err)
 	}
 	return func(name string) bool {
 		ok, err := filepath.Match(pattern, name)

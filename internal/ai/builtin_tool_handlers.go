@@ -185,6 +185,10 @@ func extractStringSlice(v any) []string {
 
 func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, error) {
 	toolName = strings.TrimSpace(toolName)
+	// A failed invocation may have no result data; absence is not encoding loss.
+	if payload == nil {
+		return nil, false, nil
+	}
 	if isComputerUseTool(toolName) {
 		return payload, false, nil
 	}
@@ -502,11 +506,11 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "read_file",
-			Description:      "Read a regular text file.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "offset": map[string]any{"type": "integer", "minimum": 0}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit}}, "required": []string{"path"}, "additionalProperties": false}),
+			Description:      "Read a scoped UTF-8 text file without a shell. Returns complete lines within an 8,000-byte page; continue at next_offset when truncated. total_lines is known only at EOF; oversized lines fail explicitly. Prefer this for simple text reads.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Starting line, 1-based; omitted or 0 starts at 1."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Maximum lines; default 200. Byte limits may return fewer."}}, "required": []string{"path"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
-			Visibility:       ToolVisibilityReadonlyExclusive,
+			Visibility:       ToolVisibilitySharedReadonly,
 			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
 			Source:           "builtin",
 			Namespace:        "builtin.readonly",
@@ -514,11 +518,11 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "read_files",
-			Description:      "Read multiple text files with per-file status.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"paths": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "string"}}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit}}, "required": []string{"paths"}, "additionalProperties": false}),
+			Description:      "Read initial text pages with per-file status. If the batch is truncated, resume paths at next_index (0-based); continue individual files with read_file at next_offset.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"paths": map[string]any{"type": "array", "minItems": 1, "maxItems": readonlyReadFilesMaxFiles, "items": map[string]any{"type": "string"}}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Maximum lines per file; default 120."}}, "required": []string{"paths"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
-			Visibility:       ToolVisibilityReadonlyExclusive,
+			Visibility:       ToolVisibilitySharedReadonly,
 			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
 			Source:           "builtin",
 			Namespace:        "builtin.readonly",
@@ -538,11 +542,11 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "find",
-			Description:      "Find files and directories without a shell.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"root": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "type": map[string]any{"type": "string", "enum": []string{"file", "dir", "directory", "symlink", "any"}}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "max_depth": map[string]any{"type": "integer", "minimum": 0, "maximum": 32}, "include_hidden": map[string]any{"type": "boolean"}}, "additionalProperties": false}),
+			Description:      "Find scoped files and directories without a shell. Matches basenames recursively, not relative-path glob patterns; does not follow symlinks or apply gitignore. Hidden entries are excluded by default. Truncated results are incomplete; narrow root or name.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"root": map[string]any{"type": "string"}, "name": map[string]any{"type": "string", "description": "Basename pattern: *, ? and character classes; omitted matches all."}, "type": map[string]any{"type": "string", "enum": []string{"file", "dir", "directory", "symlink", "any"}}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000, "description": "Default 200."}, "max_depth": map[string]any{"type": "integer", "minimum": 0, "maximum": 32, "description": "Default 8; 0 also uses the default."}, "include_hidden": map[string]any{"type": "boolean"}}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
-			Visibility:       ToolVisibilityReadonlyExclusive,
+			Visibility:       ToolVisibilitySharedReadonly,
 			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
 			Source:           "builtin",
 			Namespace:        "builtin.readonly",
@@ -580,7 +584,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Run a PTY shell locally; defaults to the run working directory. Use shell commands to read/search files and load discovered rule files. Waits 5 seconds by default; yield_ms changes only the initial wait, not the command's runtime. A completed command returns exit_code; if waiting ends first, the command keeps running with status=running and returns process_id for terminal.read/write/terminate. Later completion is delivered automatically; read can inspect progress or remaining pages. Commands have a 30-minute runtime limit. terminal.terminate and Service shutdown stop owned processes. Cancellation during the initial exec wait stops the command; cancelling a later read does not. Keep long-lived commands in the foreground and use that process_id; do not use nohup, disown, setsid, or shell backgrounding to leave a service running. On macOS/Linux, command exit cleans up its PTY process group; escaping that group is unsupported. For browser previews, discover a managed browser with computer.targets, select its candidate with computer.select_target, then use computer.exec.",
+			Description:      "Run a PTY shell locally; defaults to the run working directory. Use read_file/read_files for simple text reads and find for file discovery; shell remains available for pipelines and specialized formats. Waits 5 seconds by default; yield_ms changes only the initial wait, not the command's runtime. A completed command returns exit_code; if waiting ends first, the command keeps running with status=running and returns process_id for terminal.read/write/terminate. Later completion is delivered automatically; read can inspect progress or remaining pages. Commands have a 30-minute runtime limit. terminal.terminate and Service shutdown stop owned processes. Cancellation during the initial exec wait stops the command; cancelling a later read does not. Keep long-lived commands in the foreground and use that process_id; do not use nohup, disown, setsid, or shell backgrounding to leave a service running. On macOS/Linux, command exit cleans up its PTY process group; escaping that group is unsupported. For browser previews, discover a managed browser with computer.targets, select its candidate with computer.select_target, then use computer.exec.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000, "description": "Interactive PTY input; does not close stdin or send EOF. Echo alone is not command completion."}, "cwd": map[string]any{"type": "string", "description": "Preferred working-directory field. Relative paths resolve from the run working directory; when cwd and workdir are both omitted or empty, that directory is used. If both are nonempty, they must resolve to the same directory; otherwise no process starts."}, "workdir": map[string]any{"type": "string", "description": "Equivalent working-directory field; prefer cwd. If both are nonempty, they must resolve to the same directory; neither takes precedence."}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Initial wait in milliseconds; omitted or 0 uses 5000. This does not set a command runtime timeout."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,

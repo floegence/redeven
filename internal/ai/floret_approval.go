@@ -8,9 +8,9 @@ func visibilityForToolName(toolName string) ToolVisibilityClass {
 	switch strings.TrimSpace(toolName) {
 	case "computer.screenshot":
 		return ToolVisibilitySharedReadonly
-	case "read_file", "read_files", "rgrep", "find":
+	case "rgrep":
 		return ToolVisibilityReadonlyExclusive
-	case "web_fetch", "web.search", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
+	case "read_file", "read_files", "find", "web_fetch", "web.search", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
 		return ToolVisibilitySharedReadonly
 	case "write_todos":
 		return ToolVisibilityInteraction
