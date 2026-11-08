@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openFilePreviewWindow } from './filePreviewWindow';
+import { navigateFilePreviewWindow, openFilePreviewWindow } from './filePreviewWindow';
 const copy = { unavailable: 'Unavailable', popupBlocked: 'Blocked' };
 afterEach(() => { vi.restoreAllMocks(); delete window.redevenDesktopShell; window.history.replaceState({}, '', '/'); });
 describe('file preview popout routing', () => {
+  it('routes explicit native file links to the same session bridge', async () => {
+    const native = vi.fn(async () => ({ ok: true })); window.redevenDesktopShell = { openFilePreviewWindow: native };
+    await navigateFilePreviewWindow('/docs/linked.md', copy);
+    expect(native).toHaveBeenCalledWith({ path: '/docs/linked.md' });
+  });
   it('opens synchronously in a browser tab and severs the opener', async () => {
     window.history.replaceState({}, '', '/?surface=files&ticket=secret');
     const popup = { opener: window }; const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);

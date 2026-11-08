@@ -15,3 +15,9 @@ export async function openFilePreviewWindow(path: string, copy: { unavailable: s
   if (!popup) throw new Error(copy.popupBlocked);
   popup.opener = null;
 }
+
+/** File links keep browser history; Desktop retains the source in its own window. */
+export async function navigateFilePreviewWindow(path: string, copy: { unavailable: string; popupBlocked: string }): Promise<void> {
+  if (desktopShellBridgeAvailable()) return openFilePreviewWindow(path, copy);
+  window.location.assign(filePreviewWindowURL(window.location.href, { path }));
+}

@@ -1,3 +1,4 @@
+import { navigateFilePreviewWindow } from './services/filePreviewWindow';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
@@ -2787,6 +2788,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       return;
     }
 
+    if (standaloneFilePreview) {
+      await navigateFilePreviewWindow(normalizedPath, {
+        unavailable: i18n.t('filePreview.popoutFailed'), popupBlocked: i18n.t('webServices.errors.popupBlocked'),
+      });
+      return;
+    }
     setFilePreviewHostRequested(true);
     const normalizedItem: FileItem = {
       ...item,
@@ -5503,7 +5510,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     >
       <Show when={standaloneReady()} fallback={(
         <Show when={accessGatePhase() === 'checking' || accessGatePhase() === 'ready'} fallback={accessGatePanel()}>
-          <Show when={recoveryVisible()} fallback={renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}>
+          <Show when={recoveryVisible()} fallback={standaloneFilePreview ? <ActivityPageLoading /> : renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}>
             <ConnectionRecoveryView
               retainWorkspace={runtimeConnectionEstablished()}
               snapshot={recoverySnapshot()}

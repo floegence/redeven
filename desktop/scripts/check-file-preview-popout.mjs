@@ -24,7 +24,7 @@ await session.run(async () => {
   const files = path.join(state, 'files'); await mkdir(files);
   const htmlFile = path.join(files, '报告 # 100%.html');
   const markdownFile = path.join(files, 'notes.md');
-  await writeFile(htmlFile, '<!doctype html><meta charset="UTF-8"><style>body{font:20px system-ui;margin:32px}main{height:2200px}</style><main><h1>Independent preview</h1><input aria-label="Retained input" value="initial"><p>Searchable preview content</p></main>');
+  await writeFile(htmlFile, '<!doctype html><meta charset="UTF-8"><style>body{font:20px system-ui;margin:32px}main{height:2200px}</style><main><h1>Independent preview</h1><input aria-label="Retained input" value="initial"><p>Searchable preview content</p><a href="notes.md">Read notes</a></main>');
   await writeFile(markdownFile, '# Independent document\n\nSaved original content.\n');
   const until = async (read, label) => {
     const deadline = Date.now() + 60000;
@@ -46,7 +46,10 @@ await session.run(async () => {
     await more(page).click();
     await page.getByRole('menuitem', { name: desktop ? 'Open in separate window' : 'Open in new tab', exact: true }).click();
   };
-  const frameFor = async page => until(() => page.frames().find(frame => frame.url().startsWith('blob:') || frame.url() === 'about:srcdoc'), 'sandbox frame');
+  const frameFor = async page => until(async () => {
+    for (const frame of page.frames()) if (frame !== page.mainFrame() && await frame.getByRole('heading', { name: 'Independent preview', exact: true }).count()) return frame;
+    return null;
+  }, 'sandbox frame');
   const verifyStandalone = async (page, file) => {
     observe(page);
     await page.locator('[data-file-preview-standalone]').waitFor();
@@ -81,10 +84,25 @@ await session.run(async () => {
     await openFile(parent, htmlFile);
     await (await frameFor(parent)).getByRole('heading', { name: 'Independent preview' }).waitFor();
     const children = () => app.context().pages().filter(page => new URL(page.url()).searchParams.get('window') === 'file-preview');
+    console.log('Desktop floating HTML preview is ready');
     await popout(parent, true);
     const child = await until(() => children()[0], 'native preview'); await verifyStandalone(child, htmlFile);
+    console.log('Native standalone page is ready');
     const frame = await frameFor(child); await frame.getByRole('heading', { name: 'Independent preview' }).waitFor();
     assert.equal(await frame.evaluate(() => typeof window.redevenDesktopShell), 'undefined', 'Untrusted HTML has no native bridge');
+    await more(child).click(); await child.getByRole('menuitem', { name: 'Find in file', exact: true }).click();
+    await child.getByRole('searchbox').fill('Searchable preview');
+    await child.getByRole('status').filter({ hasText: '1 of 1' }).waitFor(); await child.getByRole('searchbox').press('Escape');
+    const destination = path.join(state, 'native-download.html');
+    await app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, destination);
+    await more(child).click(); await child.getByRole('menuitem', { name: 'Download file', exact: true }).click();
+    await until(async () => { try { return (await readFile(destination, 'utf8')) === (await readFile(htmlFile, 'utf8')); } catch { return false; } }, 'native downloaded bytes');
+    await child.getByRole('button', { name: 'Downloads', exact: true }).click();
+    await child.getByText('Completed', { exact: true }).waitFor(); await child.keyboard.press('Escape');
+    await frame.getByRole('link', { name: 'Read notes', exact: true }).click();
+    const linked = await until(() => children().find(page => new URL(page.url()).searchParams.get('path') === markdownFile), 'linked native preview');
+    await verifyStandalone(linked, markdownFile); await linked.getByRole('heading', { name: 'Independent document', exact: true }).waitFor(); await linked.close(); await child.bringToFront();
+
     await frame.getByRole('textbox', { name: 'Retained input' }).fill('retained across focus');
     await frame.evaluate(() => scrollTo(0, 400));
     const native = await app.evaluate(({ BrowserWindow }, url) => {
@@ -113,10 +131,16 @@ await session.run(async () => {
     await parent.bringToFront();
     await parent.getByRole('button', { name: 'Close', exact: true }).filter({ visible: true }).last().click();
     await openFile(parent, markdownFile); await more(parent).click(); await parent.getByRole('menuitem', { name: 'Edit file', exact: true }).click();
-    await parent.locator('.monaco-editor textarea').first().focus(); await parent.keyboard.press('ControlOrMeta+End'); await parent.keyboard.type(' Unsaved acceptance draft.');
+    await parent.locator('.monaco-editor .view-lines').click(); await parent.keyboard.press('ControlOrMeta+End'); await parent.keyboard.insertText(' Unsaved acceptance draft.');
+    await parent.locator('.monaco-editor .view-lines').getByText('Unsaved acceptance draft.', { exact: false }).waitFor();
     await popout(parent, true); await parent.getByText('Save your changes before opening a separate preview.', { exact: true }).waitFor();
     assert.equal(children().length, 0); assert.equal(await readFile(markdownFile, 'utf8'), '# Independent document\n\nSaved original content.\n');
-    report.scenarios.push('native-menu-opens-real-independent-window', 'native-same-file-focus-retains-iframe-and-scroll', 'native-reload-authentication', 'native-theme-sync-and-narrow-layout', 'native-unowned-invalid-requests-rejected', 'native-close-reopen-preserves-parent', 'unsaved-draft-preserved');
+    await more(parent).click(); await parent.getByRole('menuitem', { name: 'Save file', exact: true }).click();
+    await until(async () => (await readFile(markdownFile, 'utf8')).includes('Unsaved acceptance draft.'), 'saved draft');
+    await popout(parent, true); const saved = await until(() => children()[0], 'saved document preview');
+    await verifyStandalone(saved, markdownFile); await saved.getByText('Unsaved acceptance draft.', { exact: false }).waitFor(); await saved.close();
+    report.scenarios.push('native-search-download-and-file-link', 'saved-markdown-opens-with-current-bytes', 'native-menu-opens-real-independent-window', 'native-same-file-focus-retains-iframe-and-scroll', 'native-reload-authentication', 'native-theme-sync-and-narrow-layout', 'native-unowned-invalid-requests-rejected', 'native-close-reopen-preserves-parent', 'unsaved-draft-preserved');
+    console.log('Native scenarios complete');
     await session.closeElectron(app); app = null;
 
     const browserRoot = path.join(state, 'browser'); await mkdir(browserRoot);
@@ -140,8 +164,18 @@ await session.run(async () => {
     await verifyStandalone(tab, htmlFile); await (await frameFor(tab)).getByRole('heading', { name: 'Independent preview' }).waitFor();
     assert.equal(await tab.evaluate(() => window.opener === null), true);
     assert.equal(new URL(tab.url()).searchParams.get('path'), htmlFile); assert.equal(page.isClosed(), false);
+    console.log('Browser tab is ready');
     await tab.reload(); await verifyStandalone(tab, htmlFile); await (await frameFor(tab)).getByRole('heading', { name: 'Independent preview' }).waitFor();
     await tab.screenshot({ path: path.join(output, 'browser-tab.png') });
+    await tab.evaluate(() => { Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true }); });
+    const downloadEvent = tab.waitForEvent('download'); await more(tab).click(); await tab.getByRole('menuitem', { name: 'Download file', exact: true }).click();
+    const download = await downloadEvent; assert.equal(download.suggestedFilename(), path.basename(htmlFile));
+    assert.equal(await readFile(await download.path(), 'utf8'), await readFile(htmlFile, 'utf8'));
+    await (await frameFor(tab)).getByRole('link', { name: 'Read notes', exact: true }).click();
+    await tab.waitForURL(url => url.searchParams.get('path') === markdownFile); await verifyStandalone(tab, markdownFile);
+    await tab.getByRole('heading', { name: 'Independent document', exact: true }).waitFor();
+    await tab.goBack(); await verifyStandalone(tab, htmlFile); await (await frameFor(tab)).getByRole('heading', { name: 'Independent preview' }).waitFor();
+
     await tab.setViewportSize({ width: 390, height: 740 }); await tab.screenshot({ path: path.join(output, 'browser-narrow.png') });
     await tab.close();
     // Error and recovery use the same real controller and filesystem transport.
@@ -151,7 +185,7 @@ await session.run(async () => {
     await errorTab.getByRole('button', { name: 'Retry', exact: true }).waitFor();
     await writeFile(missing, '# Recovered preview'); await errorTab.getByRole('button', { name: 'Retry', exact: true }).click();
     await errorTab.getByRole('heading', { name: 'Recovered preview', exact: true }).waitFor(); await errorTab.close();
-    report.scenarios.push('browser-menu-opens-new-tab', 'browser-exact-special-character-path', 'browser-isolated-opener-and-reload', 'browser-narrow-layout', 'real-missing-file-retry');
+    report.scenarios.push('browser-download-and-file-link-history', 'browser-menu-opens-new-tab', 'browser-exact-special-character-path', 'browser-isolated-opener-and-reload', 'browser-narrow-layout', 'real-missing-file-retry');
     assert.deepEqual(report.errors, []); report.status = 'passed';
   } catch (error) {
     report.status = 'failed'; report.error = error.stack ?? String(error);
