@@ -7,14 +7,14 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-ComputerUseRuntime normalizes browser, macOS AX and Linux AT-SPI facts into bounded schema v2. Unsupported facts stay absent and relationships stay within the tree. Invalid observations are discarded while confirmed effects/output survive. Metadata grants no input authority and uncertain effects never replay.
+ComputerUseRuntime normalizes browser, macOS AX and Linux AT-SPI facts into bounded schema v2. Browser role resolution scans the complete authorized AX scope independently of the bounded model observation. A unique control after node 1000 remains resolvable; a duplicate beyond the presentation boundary remains ambiguous.
 
 # Contract
 
 ## Snapshot and node identity
 Observations include `semantic_schema_version: 2`, `document_id`, `roots`, `nodes`, `truncated`, optional `focus_ref`, `total` and `execution_mode`.
 
-Browser role resolution scans the complete authorized AX scope independently of the bounded model observation. A unique control after node 1000 remains resolvable; a duplicate beyond the presentation boundary remains ambiguous. References still require document revision and fresh DOM/AX identity validation.
+References still require document revision and fresh DOM/AX identity validation.
 
 `children_truncated` marks exported nodes with omitted descendants, including Runtime byte pruning. It is not evidence of empty rows or virtualization. Agents can read a row or table subtree through `root_ref`; completeness claims require checking the returned truncation facts.
 
@@ -75,8 +75,6 @@ Confirmed actions survive an observation failure; failed content never enters mo
 
 - `redeven:internal/ai/computer_semantic.go` - Source.
 - `redeven:internal/ai/computer_semantic_test.go` - Tests.
-- `redeven:internal/ai/computer_field_integrity_test.go` - Tests.
-- `redeven:internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs` - Tests.
 
 Browser identity-read failures and explicit recovery also have real Chromium and
 connected-extension regressions in computerScrollReference.node-test.mjs and

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns confirmed usage, pressure, bounded compaction and canonical installation; Redeven maps independent token, byte and image evidence. Full input and frozen attempt identity constrain measurement. Manual compaction is explicit intent, while unavailable historical evidence remains unknown.
+Floret owns confirmed usage, pressure, bounded compaction and canonical installation; Redeven maps independent token, byte and image evidence. Aggregate image evidence carries exact image counts or decoded bytes, with preparation/response stage; counts never occupy byte or token fields.
 
 # Contract
 
@@ -24,8 +24,7 @@ the divider explains the independent capacity cause and message-text estimate.
 Cause-only events, reloads and Desktop RPC retain this distinction. Historical
 records without this evidence remain unknown; no error-text inference is used.
 
-Aggregate image evidence carries exact image counts or decoded bytes, with
-preparation/response stage; counts never occupy byte or token fields. Desktop
+Desktop
 RPC reconstructs the typed upstream cause before Engine recovery; incompatible peers
 are rejected at the version handshake. During recovery
 the inline divider says “Organizing image history…” in every shipped locale and
@@ -89,9 +88,4 @@ Floret exclusively owns canonical compaction and Goal execution. [Usage and pres
 - `redeven:internal/ai/floret_thread_context.go` - Source.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Tests.
 
-- redeven:internal/ai/model_gateway_measurement.go
-- redeven:internal/ai/model_gateway_measurement_test.go
 - HTTP proof isolation, WebSocket lifetime changes, hidden execution rejection and explicit zero output.
-
-- `redeven:internal/ai/compact_thread_context.go` - Source.
-- `redeven:internal/ai/compact_thread_context_test.go` - Tests.

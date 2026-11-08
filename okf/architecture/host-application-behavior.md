@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Viewing, sharing, closing windows and ending processes remain distinct across platforms. Ordinary controls preserve save/cancel; only confirmed Force quit bypasses saving. Linux instances survive clients and Runtime only while verified user, kernel generation and private display identity remain intact.
+Viewing, sharing, closing windows and ending processes remain distinct across platforms. The first Force quit action only enters that state; only its final confirmation sends the destructive host request. Instance records bind opaque ID, authorized owner, metadata, boot/PID/start, component identity and private backend endpoint. Reusable window IDs never grant authority.
 
 # Contract
 
@@ -28,10 +28,7 @@ Viewing, sharing, closing windows and ending processes remain distinct across pl
 ### Accepted operations and visible state
 Quit and force-quit requests are asynchronous. The Host Applications surface must close the confirmation dialog after acceptance and show a per-application pending state until the authoritative running snapshot confirms the target instance is gone.
 
-The first Force quit action only enters that state; only its final confirmation sends the destructive host request.
-
 ## Linux recovery
-- Instance records bind opaque ID, authorized owner, metadata, boot/PID/start, component identity and private backend endpoint. Reusable window IDs never grant authority.
 - Upstream supervises GIO/descendant/sandbox lifetime. Preparation, launcher failure, app exit, windows and first pixels are separate facts. Xpra retains published readiness/final-window/audio-disable behavior.
 - Browser profiles are stable private directories per owner/catalog app. Observed process-tree exit before first window fails launch even with zero status; live processes may keep waiting.
 - Linux ordinary control is Close all windows, respecting save/cancel. Explicit force quit never follows close, disconnect, cancellation or uncertain response automatically. Acceptance is not exit proof; remove running rows only after kernel confirmation.
@@ -46,7 +43,3 @@ Reconnect cannot restore destroyed display/OS processes or change ownership poli
 
 - [Linux instance lifecycle](#linux-recovery): surviving private backends, connection revocation and exact-instance controls.
 - [Lifecycle acceptance](../operations/host-application-validation.md#input-cursor-and-lifecycle-acceptance): focused native and renderer scenarios.
-
-- `internal/hostapps/linux.go`: records, kernel/endpoint validation, admission, readiness and explicit controls.
-- `internal/hostapps/application_proxy.go`: connection revocation including WebSocket hijacks.
-- `internal/hostapps/desktop_transport.go` and `desktop_transport_linux_test.go`: authenticated native attachment, bounded correlation and takeover.

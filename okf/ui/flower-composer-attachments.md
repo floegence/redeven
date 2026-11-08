@@ -7,11 +7,11 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-One Flower controller owns attachment select/paste/drop/retry/remove/preview/send. Hosts authenticate staging; Redeven owns bytes/unadmitted commands, Floret admitted history. Large text converts only after successful staging, retaining IME and source on failure.
+One Flower controller owns attachment select/paste/drop/retry/remove/preview/send. The chat toolbar always retains its leftmost Plus attachment button. Thread-detail loads, model-capability refreshes and temporary editing restrictions disable it without removing its DOM node or shifting the toolbar.
 
 # Contract
 
-The chat toolbar always retains its leftmost Plus attachment button. Thread-detail loads, model-capability refreshes and temporary editing restrictions disable it without removing its DOM node or shifting the toolbar. Every editable conversation can select attachments once its transport and capability are ready; read-only and unavailable states keep the same visible, disabled entry. Drafts and staged files remain scoped to their conversation.
+Every editable conversation can select attachments once its transport and capability are ready; read-only and unavailable states keep the same visible, disabled entry. Drafts and staged files remain scoped to their conversation.
 
 Text above 50,000 Unicode code points converts only after successful staging.
 
@@ -37,5 +37,4 @@ Canonical timeline projection does not fall back to a staged client snapshot whe
 # Evidence
 
 - `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Source.
-- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerStability.browser.test.tsx` - Delayed thread/model navigation, persistent button identity, upload and draft isolation across desktop, mobile and companion layouts.

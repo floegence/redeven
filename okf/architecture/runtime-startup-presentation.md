@@ -23,5 +23,3 @@ Desktop readiness must come from the machine presentation and startup-report con
 # Evidence
 
 - `redeven:cmd/redeven/main.go:222` - Source.
-- `redeven:cmd/redeven/desktop_startup_coordination.go:20` - Source.
-- `redeven:internal/runtimepresentation/events.go:1` - Source.

@@ -7,24 +7,19 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Floret owns retry admission, physical-request deadlines and attempt identity. Redeven supplies protocol facts through one adapter and displays the authoritative current view. Frozen input, confirmed tool exchanges and user cancellation retain their existing authority across transport recovery.
+Floret owns retry admission, physical-request deadlines and attempt identity. Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapter-owned response checks use typed diagnostic codes and reviewed constant messages for output conflicts or gaps, tool namespace/argument conflicts, invalid usage and native history preparation/commit failures.
 
 # Contract
 
-Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.
+Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.
 
 Redeven neither repairs old cancellation records nor owns a second retry loop.
 
-Adapter-owned response checks use typed diagnostic codes and reviewed constant
-messages for output conflicts or gaps, tool namespace/argument conflicts, invalid
-usage and native history preparation/commit failures. Classification does not
+Classification does not
 change retry advice, cancellation, response validation or tool dispatch. Original error messages and wrapped causes are retained separately from the
-sanitized summary. Published Floret v7.101.0 owns the FailureDetails contract.
-The authorized original field preserves complete HTTP/SSE bytes, messages,
-status and native identifiers without truncation, normalization or redaction.
-Bytes remain base64 in JSON; valid UTF-8 also has a readable original_body_text
-view. Partial reads retain received bytes and explicitly mark incompleteness.
-Request headers, keys and prompts are not collected. Returned evidence may
+sanitized summary. Published Floret v7.101.0 owns the FailureDetails contract. The authorized original field preserves complete HTTP/SSE bytes, messages,
+status and native identifiers without truncation, normalization or redaction. Bytes remain base64 in JSON; valid UTF-8 also has a readable original_body_text
+view. Partial reads retain received bytes and explicitly mark incompleteness. Request headers, keys and prompts are not collected. Returned evidence may
 contain private provider content and must be rendered as literal text.
 
 The Responses attempt collector normalizes failures before attaching transport
@@ -52,6 +47,3 @@ sent. Localized copy preserves saved-result and explicit-retry guidance.
 
 - `redeven:internal/ai/floret_request_timeout_integration_test.go` - Tests.
 - `redeven:internal/ai/provider_failure.go` - Source.
-- `redeven:internal/ai/provider_failure_details_test.go` - Tests.
-- `redeven:internal/ai/model_gateway_chatgpt_floret_test.go` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx` - Tests.

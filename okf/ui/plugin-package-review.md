@@ -7,13 +7,13 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-All plugin sources share released package inspection, exact review and durable installation. Official/community classification changes display only. Permissions remain independent explicit decisions; unknown effects reconcile from durable receipts without replay.
+All plugin sources share released package inspection, exact review and durable installation. Market installs automatically inspect the selected repository/release/asset and expected package/security/contract hashes. Direct installation accepts HTTPS, GitHub repository or uploaded `.redevplugin` bytes.
 
 # Contract
 
 ## Package review
 
-Market installs automatically inspect the selected repository/release/asset and expected package/security/contract hashes. Direct installation accepts HTTPS, GitHub repository or uploaded `.redevplugin` bytes. Multi-plugin repositories expose one selection step. No plugin signature, publisher trust badge, official-only wizard or separate client protocol exists.
+Multi-plugin repositories expose one selection step. No plugin signature, publisher trust badge, official-only wizard or separate client protocol exists.
 
 Updates inspect the installed original source before presenting a candidate. Changing source requires explicit consent. Same-version changed contents and downgrades are blocked in update review. Changed revision/identity or expired inspection invalidates consent. Missing or changed security evidence requires explicit review; no market preview substitutes for current Host inspection.
 
@@ -39,5 +39,3 @@ Both update paths close affected slots, retire authority, preserve layout and re
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx` - Unified installation review.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx` - Update review.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts` - Durable receipt presentation.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Responsive and accessible review acceptance.

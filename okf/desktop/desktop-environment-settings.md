@@ -7,12 +7,11 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-One target-bound settings session owns connection/access drafts and immediate opening. Verified registrations govern management, never card layout or URL text. Health refresh preserves forms and geometry; saves fence older reads. Public addresses stay independent from private lifecycle credentials and current process state.
+One target-bound settings session owns connection/access drafts and immediate opening. Local opens Access & security without a connection editor. Access management uses existing WSL authority only after exact-distribution discovery confirms it is running; opening/loading never starts stopped distros. Distinguish current password constraints from saved next-start configuration.
 
 # Contract
 
 ## Settings session
-- Local opens Access & security without a connection editor. Access management uses existing WSL authority only after exact-distribution discovery confirms it is running; opening/loading never starts stopped distros. Distinguish current password constraints from saved next-start configuration.
 - Each opening owns committed connection baseline/draft and lazy access baseline/draft. Health refresh preserves running summary, connection nodes, expanded listeners, address filters, selection, scroll and QR panels; never reload access/certificate/security configuration.
 - Save invalidates older reads. Late failure from a closed opening becomes a notification, never an error in the next editor. Access opens current-connection/browser/sign-in/HTTPS tasks; recovery-pending protection must be restored before changing it.
 
@@ -39,11 +38,3 @@ Observations preserve host/container namespaces; failures prove no exit. Explici
 - `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Tests.
 
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Source.
-- `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.css` - Source.
-- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Source.
-- `redeven:desktop/src/welcome/SSHDestinationCombobox.tsx` - Source.
-- `redeven:desktop/scripts/check-welcome-form-alignment.mjs` - Tests.
-
-- `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Tests.
-- `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - Source.
-- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Tests.

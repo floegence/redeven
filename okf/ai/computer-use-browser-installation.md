@@ -34,4 +34,3 @@ Discovery, settings and agent execution cannot initiate installation. Verificati
 # Evidence
 
 - `redeven:desktop/src/main/runtimePackageCache.ts` - Source.
-- `redeven:internal/browserinstall/manager.go` - Source.

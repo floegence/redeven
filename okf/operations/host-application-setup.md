@@ -25,4 +25,3 @@ These administrator commands apply to the optional system Xpra path, not automat
 
 - `internal/hostapps/dependencies.go`: executable, Python, server and client checks.
 - `internal/hostapps/manager_test.go`: opt-in installed-stack checks.
-- `scripts/build_runtime_binary.sh`: portable Linux native Runtime build.

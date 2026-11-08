@@ -7,14 +7,14 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Retain successful same-resource content through refresh while initial loads occupy final geometry. Source replacement and permission loss fence retained state. Published placeholders, stable controls and asset monitoring preserve work; only explicit user reload replaces an outdated document.
+Retain successful same-resource content through refresh while initial loads occupy final geometry. Refresh preserves successful same-resource content, including empty results. Equal items retain DOM identity, focus, expansion and scroll; pagination progress stays at the end.
 
 # Contract
 
 ## Page continuity
 Without a successful result, retain initial presentation until authoritative data/actionable error. Keep mutation, attachment, maintenance and plugin execution progress separate from inventory loading.
 
-Refresh preserves successful same-resource content, including empty results. Equal items retain DOM identity, focus, expansion and scroll; pagination progress stays at the end. Use existing header/action indicators, accessible out-of-flow status or geometry-neutral local overlays, never temporary rows above content.
+Use existing header/action indicators, accessible out-of-flow status or geometry-neutral local overlays, never temporary rows above content.
 
 Initial reads use structural placeholders in final geometry. Editors/previews/settings retain bounded responsive body viewports with reachable headers/close/footer. Use published Floe components/theme tokens without arbitrary delays/height animations.
 
@@ -50,18 +50,6 @@ Remembered geometry conveys no resource data/authority; unavailable storage cann
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerTaskFiles.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceSettingsDesign.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserQuickAccess.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx` - Fixed preview region and failed different-file retry.
 - `redeven:internal/envapp/ui_src/src/styles/tessiven-runtime-dialog-continuity.browser.test.tsx` - Library card/focus retention through delayed or failed opening.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPageLoading.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Source.
-
-- `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - Tests.
-
-- `redeven:internal/envapp/ui_src/index.html` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/services/envReloadPresentation.ts` - Source.
-
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/createEnvAppAssetRecovery.ts` - Source.

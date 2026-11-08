@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Desktop/Env App group consecutive tools and adjacent thinking. Active groups open; following prose or canonical turn end folds eligible work, never temporary gaps. Inspection survives and answered input separates settled work. Presentation stays ephemeral over Floret facts without summaries or migrations.
+Desktop/Env App group consecutive tools and adjacent thinking. Break on prose/users/interactions/compaction/approvals/non-tool errors/Goal updates; Goal/Web Search calls remain tools. Scoped SubAgent call/report/completion/running-attention/waits join; unknown parent/other waits break.
 
 # Contract
 
 ## Membership and counts
 Group>=2 same-thread/turn/run nodes including a tool; thinking qualifies. Preserve canonical row/call/error/preview/output order. New singleton may settle prior work without overriding inspection. Thinking moves in place; first canonical node owns DOM, loaded anchor preserves disclosure through paging/navigation. Summary and accessible names omit thinking counts; thinking stays readable inside the group. Tool failures use concise localized counts (for example, `2 failed`).
 
-Break on prose/users/interactions/compaction/approvals/non-tool errors/Goal updates; Goal/Web Search calls remain tools. Scoped SubAgent call/report/completion/running-attention/waits join; unknown parent/other waits break. Exact uncertain tool errors join with complete-coverage unconfirmed counts; invalid success-with-uncertainty or uncertain parent lifecycle breaks. Empty placeholders transparent, unknown text proves no continuity. Answered input splits even newest settled group.
+Exact uncertain tool errors join with complete-coverage unconfirmed counts; invalid success-with-uncertainty or uncertain parent lifecycle breaks. Empty placeholders transparent, unknown text proves no continuity. Answered input splits even newest settled group.
 
 [Typed observation interruptions](flower-activity-interaction.md#observation-interruptions) retain status/grouping without visible failure counts; unknown effects keep unconfirmed counts. Exact boundaries/item/events permit counts even in partial windows. Otherwise show only localized Consecutive tool calls/accessibility name, no partial total/latest/loading. Keep known failures; counts acquire no history/body. Paging preserves disclosure/focus/selection.
 
@@ -52,4 +52,3 @@ Sequences never authorize tools, summarize context, infer effects or persist lif
 - `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Tests.
 - `redeven:internal/flower_ui/src/FlowerToolSequenceNode.tsx` - Shared Desktop/Env App presentation owner; no upstream engine or platform change.
 - `redeven:internal/flower_ui/src/flowerToolSequenceLayout.ts` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Tests.

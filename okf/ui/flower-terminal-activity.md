@@ -7,7 +7,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Flower renders canonical Floret Activity with host task labels and safe details for every terminal operation, including writes/empty reads. Disclosure/scroll are ephemeral; no stdin/private paths/effect internals or invented lifecycle. Approval controls remain composer-owned.
+Flower renders canonical Floret Activity with host task labels and safe details for every terminal operation, including writes/empty reads. Disclosure/scroll are ephemeral; no stdin/private paths/effect internals or invented lifecycle. An omitted output field is pending content, never an empty canonical frame with a nonzero first sequence.
 
 # Contract
 
@@ -16,7 +16,7 @@ Floret owns the nested `ActivityItem.presentation` contract and merges results w
 
 The five-line independently scrolling output viewport retains its existing owner.
 
-An omitted output field is pending content, never an empty canonical frame with a nonzero first sequence. Wait for small-field hydration before polling or installing its sequence; large fields use source-bound ranges, then acknowledge their watermark before adding process deltas. Existing output and selection survive handoff.
+Wait for small-field hydration before polling or installing its sequence; large fields use source-bound ranges, then acknowledge their watermark before adding process deltas. Existing output and selection survive handoff.
 
 Published Floret v7.95.0 atomic activity reads own the bytes, sequence range, process identity and deferred source together. Flower never stamps a newer summary's range onto previously accepted bytes. Canonical activity status remains current independently. Check execution identity and range before publishing optional details; retain accepted output on failure. One in-flight read coalesces revisions; failure latches until explicit Retry, visibility reentry or connection change. Collapsed/offscreen rows do not read. No additional backend scan, transcript snapshot or transport contract is introduced.
 

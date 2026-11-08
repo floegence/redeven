@@ -7,7 +7,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Immutable fixtures come from locked released Redeven writers; current tests copy and verify them. Supported history must remain readable and continue after upgrade. Preserve source/module digests and public write paths. Fixture drift or upgrade failure blocks integration; database open alone is insufficient.
+Immutable fixtures come from locked released Redeven writers; current tests copy and verify them. The released Floret v7.102.0 host-work fixture also qualifies unknown-outcome history through the public runtime and Redeven DTO. Browser acceptance exercises the same serialized Activity contract.
 
 # Contract
 
@@ -17,14 +17,10 @@ The manifest binds the archive, every stored file and producer by SHA-256 and re
 
 Qualification uses fake providers and copied synthetic data; production startup never resumes a user's task automatically.
 
-The released Floret v7.102.0 host-work fixture also qualifies unknown-outcome
-history through the public runtime and Redeven DTO. Browser acceptance exercises
-the same serialized Activity contract. Compatibility checks must cover legal
+Compatibility checks must cover legal
 status values, attention/counts, bounded final presentation, and rendered history;
-API symbol compatibility and database-open success alone are insufficient.
-The immutable [v7.106.2 completed fixture](../../internal/ai/testdata/host-work-completed-v7.106.2/manifest.json)
-retains its exact published writer, frozen module files and checksums.
-`TestFlowerReleasedCompletedHostWorkHistory` qualifies completed history, forks,
+API symbol compatibility and database-open success alone are insufficient. The immutable [v7.106.2 completed fixture](../../internal/ai/testdata/host-work-completed-v7.106.2/manifest.json)
+retains its exact published writer, frozen module files and checksums. `TestFlowerReleasedCompletedHostWorkHistory` qualifies completed history, forks,
 nested forks, explicit continuation, rejected completed-turn Retry and restart
 through public product APIs without startup replay.
 

@@ -7,11 +7,11 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-ComputerUseRuntime owns connection, authorization and control for managed Chromium, explicit CDP and Chrome extension through one restricted executor. Selected-tab authority excludes siblings/devices. Disconnect, revocation, closure and uncertain effects stop work without automatic replacement.
+ComputerUseRuntime owns connection, authorization and control for managed Chromium, explicit CDP and Chrome extension through one restricted executor. Explicit Browser and desktop connection/tab creation selects the conversation target. Approval Required binds current target/URL; temporary URL authority never becomes saved origin permission.
 
 # Contract
 
-Explicit Browser and desktop connection/tab creation selects the conversation target. Approval Required binds current target/URL; temporary URL authority never becomes saved origin permission. This is neither a model tool nor another opening path.
+This is neither a model tool nor another opening path.
 
 ## Managed profiles
 Both carriers use /_redeven_proxy/api/browser/installation. Default profiles lazily create their first page; later selected-page loss fails explicitly.

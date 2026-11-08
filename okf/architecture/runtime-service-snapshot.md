@@ -7,11 +7,11 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Typed Runtime snapshots expose protocol/version, compatibility epoch, capabilities, readiness and workload identity to Desktop/Local UI. Gateway attachment is optional routing, never a prerequisite for independent access or authenticated host lifecycle management.
+Typed Runtime snapshots expose protocol/version, compatibility epoch, capabilities, readiness and workload identity to Desktop/Local UI. Runtime publishes its own service protocol and independent component version. Desktop manages Runtime lifecycle through its verified target-host connection, placement bridge and lifecycle coordinator.
 
 # Contract
 
-Runtime publishes its own service protocol and independent component version. Desktop manages Runtime lifecycle through its verified target-host connection, placement bridge and lifecycle coordinator. Gateway manages neither Runtime processes nor their lifecycle admission.
+Gateway manages neither Runtime processes nor their lifecycle admission.
 
 Runtime snapshot fields and generated wire schemas change together; an unknown response key must not turn a healthy Runtime into a reconnect loop.
 
@@ -32,4 +32,3 @@ Portal control-channel fences protect Provider authorization. Gateway attachment
 # Evidence
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Source.
-- `redeven:internal/runtimeservice/workload.go:1` - Source.

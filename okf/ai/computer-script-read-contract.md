@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Browser/native reads deliver the promised shape or explicit failure; absent observation never becomes empty data. Later read failure preserves confirmed input without replay. Typed document/candidate preflight invalidation with no input/preparation yields `dispatch_status:not_dispatched` and seals the call; it never enters `completed_actions`. [Scripts](computer-use-scripts.md) owns namespace/failure barriers; every read retains permission, privacy and publication checks.
+Browser/native reads deliver the promised shape or explicit failure; absent observation never becomes empty data. Typed document/candidate preflight invalidation with no input/preparation yields `dispatch_status:not_dispatched` and seals the call; it never enters `completed_actions`. [Scripts](computer-use-scripts.md) owns namespace/failure barriers; every read retains permission, privacy and publication checks.
 
 # Contract
 

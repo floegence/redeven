@@ -7,14 +7,14 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Redeven opens installed macOS bundles as the Runtime user and binds remote capture to actual windows/process generations. One helper owns independent sharing channels; decoded current pixels precede input. OS/app facts govern quit and closure, preserving unsaved work through viewing failures.
+Redeven opens installed macOS bundles as the Runtime user and binds remote capture to actual windows/process generations. Remote input shares the real foreground session: activate/raise the bound window, verify foreground/focused AX window/pointer hit ownership before injection.
 
 # Contract
 
 ## Discovery and input
 AppKit discovers standard directories, running bundle paths and explicit absolute .app paths. Canonical path defines identity; localized metadata/system icons provide presentation. Launch locally through trusted Desktop Local or capture remote selected windows with host-application protocol2, separate from Computer Use. Verify returned bundle path/process and reuse single-instance windows.
 
-Remote input shares the real foreground session: activate/raise the bound window, verify foreground/focused AX window/pointer hit ownership before injection. Local focus during recapture grants no remote authority; pre-frame composition never becomes authorized by waiting.
+Local focus during recapture grants no remote authority; pre-frame composition never becomes authorized by waiting.
 
 ## Helper
 One lazy Manager-owned Swift process serves Runtime catalog/app/desktop channels, not one persistent helper per app. Empty inventory leaves it idle until Runtime closes, retaining ScreenCaptureKit identity. Released FloeNativeDesktop owns capture/native desktop input; separate binary media pipe and bounded per-channel queues avoid control serialization. Each response queue holds128 messages for supported result bursts. Authorization, input and frame credit stay independent; suspending one capture cannot affect another. Helper failure ends sharing, never apps; later explicit open may recover under native validation. Shutdown preserves unsaved applications.
@@ -43,5 +43,3 @@ Requires actual graphical login, macOS13+ helper and explicit capture/input perm
 
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplications.swift`, `HostApplicationWindows.swift`, `Accessibility.swift`, `HostApplicationMenu.swift`, `HostApplicationCapture.swift` and `HostApplicationHost.swift`: native identity/authority/lifetime owners; adjacent HostApplication tests cover admission, windows, channels and profiles.
 - `internal/hostapps/macos.go`, `macos_test.go`, `macos_host.go`, `macos_host_test.go`: helper routing/reaping/backpressure, permissions, streams, launch/detach/cleanup and generation fencing.
-- `internal/codeapp/appserver/host_applications.go`, `host_applications_test.go`, `host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: authenticated actions, decode/controls/stale callbacks.
-- `scripts/check_macos_host_application_concurrency.py`: real suspend/open, alternating reconnect, independent credit/detach. `scripts/check_macos_host_application_waiting.py --scenario menu_scope` and nativeHostApplication.swift: real Apple filtering, windowless creation, handle/container mutations and harmless sentinels.

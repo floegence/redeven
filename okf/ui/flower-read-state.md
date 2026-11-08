@@ -46,4 +46,3 @@ Read confirmation belongs to Redeven product state, not Floret execution or shar
   visible unread indicators and bounded read/acknowledgement counts.
 
 - `redeven:internal/flower_ui/src/threadCache.ts` - Source.
-- `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Tests.

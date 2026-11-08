@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Floret owns turn outcome and timing. Terminal turns fold eligible process rows once; pending controls, uncertain effects and inspected work remain visible. Explicit choices persist, user messages/finals stay mounted, and settled question/answer receipts reopen with complete content.
+Floret owns turn outcome and timing. Validated facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Typed structure determines eligibility; summaries, prompts and time heuristics cannot trigger folds.
 
 # Contract
 
 ## Facts and eligibility
 Turn kind uses the [published-module consumer contract](../ai/flower-upgrade-compatibility.md#turn-kind-consumer-contract). Host-work completion is a distinct canonical turn with no new user message; preserve its final answer, identity and timing through loading, paging and observation. Detail and live failures record safe field/reason diagnostics without rejected values or content.
 
-Validated facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Typed structure determines eligibility; summaries, prompts and time heuristics cannot trigger folds. Unknown prose stays visible.
+Unknown prose stays visible.
 
 Headers show lifecycle and total elapsed time including waits; terminal descriptions retain processing/wait durations. Show <=two nonzero units and subsecond copy. Thinking-only work keeps its own disclosure without a whole-turn toggle. Interleaved answers default open; settled question/answer receipts fold with process rows, retaining nested choices and viewport-contained decoration without folded rail/gap. Counts require complete boundaries/membership/events; otherwise omit. [Sequences](flower-tool-sequences.md) fold independently on either side.
 
@@ -48,9 +48,5 @@ Disclosure is ephemeral. User/final rows retain order and mounts. Settled answer
 
 - `redeven:go.mod` - Source.
 - `redeven:internal/ai/flower_current_projection_test.go` - Tests.
-- `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Source.
-- `redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts` - Tests.
 - [Surface regressions](../../internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx): pre-output headers, waits/reconnect/offscreen clock bounds without extra reads; minute/hour transitions at 320/390/1280px; real-tail/answer visibility, repeated folds, reduced motion, growth/navigation/paging, focus/selection/nested choices, continuation Goals/prose and prepended header identity. Historical-copy qualification retains one opening read, no idle traversal and complete statistics after explicit expansion/paging.
 - [Header](../../internal/flower_ui/src/FlowerTurnHeader.tsx), [clock tests](../../internal/flower_ui/src/flowerTurnClock.test.ts), [browser tests](../../internal/envapp/ui_src/src/ui/FlowerTurnHeader.browser.test.tsx): bounded subscriptions/geometry; reproduce prior text-node blank restart, retain readable single-node fast completion at all three widths, prevent timer/disclosure replay, clean animations and keep restored history static. Surface tests retain subsecond answers/focus/scroll/disclosure.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Tests.

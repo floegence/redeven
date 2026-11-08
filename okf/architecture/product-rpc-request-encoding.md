@@ -24,4 +24,3 @@ The request object itself must contain only JSON values before entering the publ
 
 - `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.ts` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.test.ts` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts` - Tests.

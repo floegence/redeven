@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Published input/playback and session contracts own current-frame authority. Separate cursors permit immediate movement; embedded cursors hide local pointer. Recovery keeps controls usable; disconnect stops media/input with confirmed removal or Retry. Frozen pixels never imply connection.
+Published input/playback and session contracts own current-frame authority. Recovery keeps controls usable; disconnect stops media/input with confirmed removal or Retry. Frozen pixels never imply connection. This desktop-only policy does not apply to host application windows, which use their own upstream cursor contract.
 
 # Contract
 
@@ -23,8 +23,6 @@ owner and physical-input checks remain mandatory for every unlock event.
 
 ## Input and clipboard
 The published Floe input and pointer controllers own client composition, physical keys, pointer gestures and release. Mouse and drag movement retains only the latest pending position, bounded to 120 submissions per second.
-
-This desktop-only policy does not apply to host application windows, which use their own upstream cursor contract.
 
 ## Toolbar and window
 Desktop opens an isolated owned window; browsers open a separate viewer. Ended sessions explain how to start a new connection from the launcher and never expose an ineffective Reconnect action.
@@ -42,5 +40,3 @@ The [connection launcher](remote-desktop-launcher.md) owns target identity, read
 - `internal/codeapp/appserver/remote_desktop_viewer/viewer.js` and `internal/codeapp/appserver/remote_desktop_viewer/viewer.html`: control state, input mapping, modal focus and disconnect lifecycle.
 
 - `internal/codeapp/appserver/remote_desktop_viewer/viewer.css`: responsive grouped toolbar, visible action states, hidden retired pictures and native chrome insets.
-
-- `internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs`: published Floe icons and input controllers, explicit locale catalogs.

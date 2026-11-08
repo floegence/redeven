@@ -7,16 +7,13 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-ComputerUseRuntime owns desktop execution: explicit macOS app window or private Linux Xvfb/D-Bus. Semantic actions prefer native accessibility. Foreground work requires task authorization and honors Stop/takeover; OS permissions alone cannot certify unobtrusive background operation.
+ComputerUseRuntime owns desktop execution: explicit macOS app window or private Linux Xvfb/D-Bus. Application discovery reuses HostApplicationCatalog; exact candidate selection uses NSWorkspace with current app/foreground permission. Launch completion is synchronized, cancellation stops further actions, and window readiness is bounded.
 
 # Contract
 
 ## macOS windows
 The Swift helper inventories regular and accessory application windows, reads AX roles, labels, non-sensitive values, supported actions and bounds, and exposes bounded subtree queries.
 
-Application discovery reuses HostApplicationCatalog; exact candidate selection
-uses NSWorkspace with current app/foreground permission. Launch completion is
-synchronized, cancellation stops further actions, and window readiness is bounded.
 Minimized windows are restored once and allowed to settle; zero/multiple windows
 return explicit selection facts. No path-supplied shell launcher or independent
 application lifecycle is exposed to guest scripts.
@@ -76,7 +73,6 @@ Swift unit tests and real GTK/AT-SPI/Xvfb fixtures provide separate adapter proo
 - `redeven:internal/ai/computer_desktop_setup_integration_test.go` proves separate repair admission, a real terminal fixture installation and model-visible verification, request idempotency and preservation of the original canonical wait. Browser tests cover direct and diagnostic actions, failure/retry, read-only mode, source references, retained drafts and delayed admission. The Ubuntu qualification script separately installs and repairs real packages in an isolated private Xvfb/AT-SPI fixture; fixture evidence does not certify installation on a user's host.
 
 - `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/Accessibility.swift` - Source.
-- `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/ScreenCapture.swift` - Source.
 
 - 2026-11-03 acceptance: 42 Swift tests and the real AppKit fixture pass, including copy/cut/paste effects, source reads, Unicode range checks, hover/input, scroll, privacy pause and conditional focus/pointer restoration. Repeated fixture runs may stop at unavailable input monitoring; qualification never bypasses that boundary.
 - Browser acceptance: 259 focused tests pass, plus the five real Chromium interaction/source scenarios, relocated packaged helpers, 16 Desktop bundle tests, the HTTP provider output assertion and Flower UI restart/Stop/unknown-effect checks.

@@ -63,6 +63,4 @@ filters without exposing those filters to Flower's model tools.
 - [Tool contract and adapter](../../internal/ai/thread_query_tools.go).
 - [Browsing validation](../../internal/ai/thread_query_tools_test.go) and
   [scope/cursor tests](../../internal/ai/thread_reference_query_test.go).
-- [Immutable saved-result previews](../../internal/ai/thread_tool_preview.go).
-- [Released dependency pin](../../go.mod) and
   [dependency boundary gate](../../scripts/check_floret_dependency_boundary.sh).

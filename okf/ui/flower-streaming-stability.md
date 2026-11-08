@@ -7,14 +7,14 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Indexed ThreadCache and published incremental Markdown apply actor-native changes only to affected text/DOM. Preserve history, code color, copy, focus, selection and disclosure. Semantic changes stay visible; malformed updates recover through the single live-state owner without suppressing output or adding lifecycle.
+Indexed ThreadCache and published incremental Markdown apply actor-native changes only to affected text/DOM. Structural scans use immutable identity without opening retained proxies;rows keep reactive owners,not plain-snapshot getters. Prompt history observes user content/status only;Activity counts follow replaced blocks.
 
 # Contract
 
 ## Incremental owners
 Indexed records initialize from snapshots. Text/extent updates preserve window/turn/decoration identity;structural changes alone recompute membership. Argument previews touch one block,never completed tools. Validate counters/retire withdrawn attempts. Real removal restores adjacent action/composer focus unless navigation moved it.20appends over100/10000archived items must read zero historical ordinals.
 
-Structural scans use immutable identity without opening retained proxies;rows keep reactive owners,not plain-snapshot getters. Prompt history observes user content/status only;Activity counts follow replaced blocks. Placement touches changed membership/registration,retaining borrowed DOM/focus/selection/prepend anchors. Tail inspection checks blockers without old-row geometry;immediate disclosure avoids unused measurements.
+Placement touches changed membership/registration,retaining borrowed DOM/focus/selection/prepend anchors. Tail inspection checks blockers without old-row geometry;immediate disclosure avoids unused measurements.
 
 Reuse block classification while final/intermediate/live/outcome stays current;Computer candidates subscribe to relevant targets only. Observed wire window is distinct from retained reading document:wire-only changes cannot rebuild archive/rescan ordinals. Actual ownership/order/coverage/lifecycle publish atomically. Canonical order needs linear check;out-of-order receipts/decorations stable-sort with uncommitted tail intact. Compare unchanged source ranges before copying groups/partitions. Sparse keyed facts visit fewer source keys rather than broadcast absence;updates/removals synchronous. Regressions:2400rows/100partitions,reversed input/decorations,600sparse subscribers,600groups+append.
 
@@ -49,4 +49,3 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 - [Indexed records](../../internal/flower_ui/src/runtimeThreadRecord.test.ts)
 - [Streaming CSS optimizer regression](../../scripts/flower_streaming_css.test.mjs)
 - FlowerSurface.contextErrors shared/browser and i18n tests cover completed-response feedback.
-- [Streaming browser qualification](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx) and [current acceptance](../operations/flower-long-thread-gate.md).

@@ -7,134 +7,55 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Connection-local chips carry authorized discovery and frozen page/thread context into explicit Send. Floret alone owns admitted ordered references. Labels and paths grant no authority; source failures retain drafts and outbox reconciliation never overwrites newer input or creates duplicate canonical records.
+Connection-local chips carry authorized discovery/frozen context into explicit Send. Ordered file/directory/page/thread chips retain IDs/labels in connection memory only. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission.
 
 # Contract
 
 ## Reference drafts
-Launcher/Tessiven linked chips wrap/scroll in bounded input;editable @ requires whitespace boundary/collapsed caret. Focus changes color without changing1px geometry/shadow;retain candidate/action focus. Discover under immutable thread cwd or new-thread directory draft;slashless token uses bounded global matching. Root failures Retry,inaccessible descendants skip within bound.
+Launcher/Tessiven chips wrap/scroll within bounded input; editable @ requires a whitespace boundary/collapsed caret. Focus changes color without 1px geometry/shadow changes and retains candidate/action focus. Discover under immutable thread cwd or new-thread directory draft; slashless queries are bounded global matches. Root failures Retry; inaccessible descendants skip within bounds.
 
-Ordered file/directory/page/thread chips hold connection-memory local IDs/labels,never another connection/persistence. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Queue preview binds exact ThreadID/QueueID/ReferenceID;resubmit reauthorizes. Only outbox retains original ordinary launch until canonical confirmation/terminal cleanup;after admission read canonical references through current authorization,no second queryable mapping.
+Queue previews bind ThreadID/QueueID/ReferenceID; resubmission reauthorizes. Outbox retains original launch only until confirmation/terminal cleanup; afterward read authorized canonical references, never another mapping.
 
 ## Origin page
-Capture requires no resource read or editor replacement; submission uses exact visible text, terminal current screen only, excluding unloaded/unauthorized facts.
-
-Desktop Activity companion in both hosts captures origin immediately on explicit New or explicit open with no selected thread,including close reversal. Page switches/existing-thread opens never add context. Automatic reference alone cannot enable empty Send. Reuse context-preview/text component for draft/admitted snapshots without draft-authority transfer.
+Capture reads no resources/replaces no editor. Submit exact visible text (terminal current screen), excluding unloaded/unauthorized facts. Activity companion captures origin only on explicit New/open without selection, including close reversal; page changes/existing-thread opens do not add context. Automatic references cannot enable empty Send. Draft/canonical previews share presentation, not authority.
 
 ## Global Ask Flower
+Floe owns local target resolution and compact menu icon slots. Right-click/keyboard chooses nearest declared owner; unavailable/unregistered targets cannot borrow active-page identity. Navigation publishes itself; blank shell areas publish region only. Rows/cards, thread/directory groups, plugin details/settings expose their facts on existing nodes; parents supply identity only. Workbench owns whole widget/title; dialogs fence their portal from background. Page reads exclude stale selection. Files, terminal/processes keep specialized paths; terminal sidebar exposes identity without hidden-buffer reads.
 
-Floe owns connection-local target resolution and compact contributed menu icon slots. An explicit right-click or keyboard menu resolves only the nearest declared owner; unavailable owners and unregistered targets never borrow the active page. Navigation buttons publish their own identity and do not replace the active reading source. Shell blank areas publish only their region. Domain rows/cards, thread/directory groups, plugin details and settings sections register their own facts on existing nodes; parent context contributes identity only. Workbench sources own the whole widget frame, including its title. Product dialogs register their own portal boundary and block the background page. Page readers exclude stale object selections. Files, terminal output and processes retain their specialized reference paths; terminal sidebar entries publish session identity without reading a hidden buffer.
+Palette and Mod+Shift+J use valid active source or no automatic reference; no extra header icon. Repetition focuses draft. Secondary menus retain it; explicit retargeting preserves text/model/manual files, replaces automatic references and cancels pending screenshots. Sending/unknown admission lock target. Local/global menus share canonical action ID; changed editable targets get new request IDs. Opening creates nothing; fresh Send creates a task.
 
-The command palette and `Mod+Shift+J` use the valid active reading source, or open without an automatic reference. There is no additional global Ask Flower header icon. Repeating a global command focuses the existing draft. Secondary-pointer context menus retain the draft; an explicit new target replaces automatic references, preserves typed text, selected model and manual attachments, and cancels an unfinished screenshot. Sending and unknown admission lock the target; local/global menu composition retains one canonical action ID. A changed editable target receives a fresh request identity. Each fresh submission creates a task; opening creates nothing.
+Shared FlowerContextSource registers both hosts. flowerPageContext supplies identical bounded plain text to preview/Send without state wrappers/DOM metadata. Freeze facts/binding before menu focus; navigation cannot rewrite them. Resource-key subject changes invalidate screenshots; measurement changes alone do not. Send/uncertain Retry retain immutable request/staging. No source watcher or automatic/model capture runs during answers.
 
-`internal/flower_ui/src/FlowerContextSource.tsx` owns product source registration for both hosts. `flowerPageContext.ts` produces the same bounded plain-text body used by preview and submission, without serialized page/state wrappers or DOM-instance metadata. Right-click capture freezes facts and execution binding before menu focus changes. Subsequent navigation does not rewrite them. Explicit resource keys invalidate a screenshot when the subject changes; live measurements alone do not invalidate a stable subject. Send and unknown-admission Retry retain the existing immutable request/staging path. No source watcher, automatic screenshot or model-driven capture continues during the answer.
-
-Desktop CodeSpace, Web Service and hosted application child windows forward title/credential-free URL through their session owner; they never gain shell IPC authority. User-opened external browsers and other OS applications remain outside this scope. Embedded content without an explicit semantic contract supplies host-known identity only.
+Owned Desktop child windows forward title/credential-free URL through their session owner, gaining no shell IPC. External apps/browsers are excluded; embeds without semantic contracts expose host-known identity only.
 
 ### Web Service identity
-
-Managed rows freeze a `managed_web_service` resource with its current-Runtime
-`runtime_ref`, `binding.owner=managed_service`, and exact `binding.resourceId`.
-The allowlisted snapshot includes description, deployment, release identity,
-status, configured working directory and port. A workspace is not necessarily
-an installation/source directory. Manual forwards publish a separate
-`port_forward` identity and credential/query/fragment-free target; they never
-inherit a managed sibling's binding. Same-name rows remain distinct.
-Snapshots describe facts only; authorization and execution routing retain their
-existing owners. Inspect the known binding directly rather than enumerating
-canvases or substituting a service ID for a canvas instance ID. Existing facts
-can answer explanatory questions without reading private Runtime state.
+Managed rows freeze managed_web_service, current runtime_ref, binding.owner=managed_service and exact resourceId, with allowlisted description/deployment/release/status/cwd/port. Workspace need not be installation/source directory. Manual forwards use distinct port_forward and credential/query/fragment-free target, never same-name sibling binding. Facts grant no execution authority. Inspect known binding directly, never canvas enumeration or service-ID substitution; explanation may use existing facts without private reads.
 
 ### Explicit screenshots
-
-The camera tool is the only screenshot trigger. It adds a previewable/removable image through ordinary attachment staging. Capture errors retain draft text and references; closing/reopening cancels the operation and discards late results. Source navigation or ownership changes reject the result, without silently choosing another window.
-
-Desktop captures only the main-process-bound WebContents and visible region, with pre/post checks, visible privacy-marker rejection and bounded PNG size. Browser capture requires the native picker, a matching current-tab capture handle and native Region Capture. A bounded frame reader drains pre-crop frames and accepts the first new cropped frame; an explicit minimum frame rate keeps static sources responsive. Browsers without these verified capabilities report unavailable. Frames close and acquired tracks always stop. Prompt chrome remains mounted/focused but is omitted for the capture frame; it is restored before image encoding. Cross-origin embedded content is captured as pixels only, not inspected as host DOM; the image is a user-reviewed attachment, not a promise of automatic secret redaction.
+Only camera triggers previewable/removable ordinary attachment capture. Errors preserve draft/references; close/reopen cancels and fences late results. Changed source/owner rejects, never substitutes windows. Desktop binds main-process WebContents/visible region with pre/post checks, privacy-marker rejection and PNG bounds. Browser requires picker, matching tab handle and Region Capture; drain pre-crop frames and accept first fresh cropped frame with minimum frame rate. Missing capability is unavailable; always close frames/stop tracks. Prompt stays mounted/focused but disappears for capture and returns before encoding. Cross-origin content is pixels only; reviewed attachment promises no automatic secret redaction.
 
 ## Reference previews
-
-Preview the frozen reference body or queued attachment itself. Text snapshots are
-selectable, scrollable plain text; they are not synthetic file paths or live
-editor documents. Screenshot previews decode an object URL of the same File
-that submission stages. Closing, replacing, or disposing the launcher releases
-preview URLs and invalidates pending reads without changing the draft. Other
-supported attachment formats use the existing bounded file renderers.
-
-Keep identity and close controls in the header. Omit synthetic path/download
-bars, queued-message descriptions, format-placeholder notices, and a duplicate
-footer close action. Source navigation remains an explicit header action where
-available. Actual truncation and failures remain visible. Context registration
-wrappers preserve the full constrained flex viewport on desktop and mobile.
-
-`desktop/scripts/check-ask-flower-previews.mjs --binary <runtime> --output <dir>`
-qualifies the built Env App against an isolated real local Runtime: right-click
-Files, inspect the exact frozen context, explicitly capture and open an image,
-compare preview bytes and source pixels, reopen, and retain the draft. It then right-clicks navigation over Containers, checks target isolation and compact icons, and clicks Send twice. A local scripted provider verifies exact frozen text and the screenshot's prescribed model representation, invokes the real read-only file tool, and returns an answer that must appear in Flower. The original PNG remains the preview and staged attachment; the model receives the existing JPEG-85, longest-side-2560 preparation. Qualification derives the expected representation through the published Floret image API and checks its source hash, MIME type and prepared byte hash. Both tasks must complete with distinct thread IDs. The global Desktop acceptance also verifies new-task submission and immutable unknown-admission retry.
-
-`desktop/scripts/check-ask-flower-resources.mjs --binary <runtime> --output <dir>
---provider-source <configured-runtime-dir>` uses isolated host/container/manual
-fixtures and the configured real DeepSeek model. It opens each row's context,
-clicks Send, compares preview/canonical/provider references, reads complete final
-bodies, and verifies rendered answers and exact tool bindings. Manual addresses
-must not be substituted with same-name services. A separate status question must
-inspect the original binding. Credentials stay in memory; source configuration
-hashes remain unchanged. The supervised session reclaims only its own resources.
+Show frozen selectable/scrollable plain text, never synthetic file/editor paths. Screenshot preview decodes an object URL of the same staged File; close/replace/dispose releases URLs and fences reads without changing draft. Other formats use bounded renderers. Header retains identity/close and explicit source navigation; omit synthetic path/download bars, queued-message boilerplate, placeholders and duplicate footer Close. Actual truncation/failure remains; wrappers preserve constrained flex viewport on all sizes.
 
 ## Thread references
-Right-click/More/keyboard menu appends current-draft reference without selecting source/sending. Shared type dispatch owns identity/serialization/description;thread never becomes filesystem path. [Thread tools](../ai/flower-thread-queries.md) authorize further reads. Existing draft owner handles dedupe/preview/remove/recovery.
+Menus append to current draft without selecting/sending source. Shared type dispatch owns identity/serialization/descriptions; threads never become paths. [Thread tools](../ai/flower-thread-queries.md) authorize later reads; draft owner dedupes/previews/removes/recovers.
 
 ## Context actions
-One authorized privacy-checked mapper emits ordered MessageReference and UserInput.Context snapshots. Malformed/forged/unknown input or failed projection rejects admission and preserves editable drafts.
-Builders emit only fields admitted for the declared source before serialization. Composer snapshots omit presentation-only `detail`; composer and Tessiven file references omit `root_label`. Optional unsupported keys remain absent, including when their values would be undefined. Integration tests run the real builder through the strict parser and launch adapter rather than only observing a submit callback.
+One privacy-checked mapper emits ordered MessageReference and UserInput.Context. Malformed/forged/unknown input or projection failure rejects while preserving drafts. Builders admit source fields before serialization: omit composer detail and file root_label; unsupported optional fields stay absent even if undefined. Test actual builders through strict parser/launch.
 
-One assistant.ask.flower action carries target/source/presentation/typed items. Runtime enforces privacy matrix:file_path for files,terminal_selection for terminal,process_snapshot for monitoring,bounded text_snapshot for Git/environment. Never reconstruct references from product action copies. Product routing commands independently resolve/authorize environment target. Missing thread/reference means absence;other Floret failures remain unavailable,no product fallback.
+One assistant.ask.flower carries target/source/presentation/items. Runtime matrix: file_path, terminal_selection, process_snapshot, bounded text_snapshot for Git/environment. Never reconstruct from product copies. Routing independently authorizes environment. Missing thread/reference means absent; other Floret faults remain unavailable without fallback.
+
+## Context-menu discovery
+Floe freezes target/anchor/selection before focus. Unhandled backgrounds get compact menus; rich Workbench/file/terminal/Git/preview/Flower menus keep ownership, editing and one Ask action. Viewport portal keeps menus above retained cards; unrelated transcript scrolling cannot dismiss shell-anchored menus. Desktop cards use clicked owner; native child forwarding uses validated boundary. Remote pixels/third-party iframe input stays independent; host chrome/explicit commands remain entry points. Menu selection captures no image and never attaches automatically to existing tasks. Lazy attachment staging begins only for submissions with files, preserving startup budget.
 
 # Boundaries
 
-Labels,paths/search/context are information,never filesystem/target/execution authority. They cannot change cwd,tool routing,permissions or attachment ownership. Floret owns admitted history;companion owns retained placement/dismissal/stream. Outbox cannot become canonical lifecycle or reference authority.
+Context/search/labels/paths cannot change cwd, routing, permissions or attachment ownership. Floret owns canonical history; companion owns placement/stream; outbox is not another lifecycle/reference authority.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Source.
-- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Tests.
+`desktop/scripts/check-ask-flower-previews.mjs --binary <runtime> --output <dir>` qualifies isolated built Env App: frozen Files context, explicit capture/preview bytes/source pixels, reopening/draft retention, navigation-over-Containers isolation, compact icons and two distinct completed tasks. Scripted provider verifies frozen text, real read-only tool and final answer; original PNG remains staged/previewed while model receives published Floret JPEG-85/2560-long-side preparation with source/MIME/prepared hashes. Global Desktop runner covers new-task and immutable uncertain retry.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Source.
+`check-ask-flower-resources.mjs` additionally uses --provider-source and real configured DeepSeek with isolated host/container/manual fixtures: compare preview/canonical/provider bodies, rendered answers and exact tool bindings; same-name services cannot replace manual targets. Status reads original binding; credentials remain memory-only/config hashes unchanged; clean owned resources. These are qualification procedures, not new run claims.
 
-- [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).
-- [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).
-
-- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.
-- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.
-
-- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerContextSource.tsx` - Source ownership adapter.
-- `redeven:internal/flower_ui/src/manualScreenshot.ts` - Explicit gesture and cancellation.
-- `redeven:desktop/src/main/manualScreenshot.ts` - Authorized native capture.
-- `redeven:desktop/scripts/check-global-ask-flower.mjs` - Built Desktop/new-task/image/retry acceptance.
-
-## Context-menu discovery
-
-Shared Floe context actions capture a specific target, anchor and selection before
-menu focus. Env App and Desktop prepare a frozen semantic source at that boundary.
-Unhandled page/background requests show a compact menu; Workbench, file, terminal,
-Git, preview and Flower menus retain their owner and richer object actions without
-duplicate Ask Flower entries. Editing actions remain available.
-Global fallback menus use Floe's viewport portal so a retained Ask card cannot cover
-them; unrelated transcript scrolling must not dismiss a menu anchored in shell chrome.
-Desktop environment cards use the clicked owner. Native owned windows forward through the existing
-validated main-process source boundary. Remote pointer pixels and third-party
-iframe documents retain their input ownership; host chrome and explicit commands
-remain the supported entry points there. A context-menu selection does not capture
-an image and never attaches to an existing task automatically.
-Attachment staging loads its upload controller only when a submission contains
-files; menu discovery must retain the existing initial-render asset budget.
-
-Behavior coverage includes the actual canvas menu, nested preview selection,
-object-action deduplication, background-to-new-task submission, and native
-content-view menu ownership. Built Desktop acceptance also verifies the clicked
-environment, explicit screenshots, attachments and unknown-admission retry.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Real shell navigation targets, preview/submission equality and exclusion of unrelated page state.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Actual container row target and reference preview.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - Composite Flower icon in the real custom menu row.
-- `redeven:internal/ai/flower_file_context_integration_test.go` - Canonical reference, actual fake-provider request and restart equality.
+Shared composer/runtime adapters, native screenshot boundary, shell/container/context-menu browser suites and `internal/ai/flower_file_context_integration_test.go` cover source registration, native/canvas ownership, nested selections, deduplication, canonical/provider/restart equality and background submission.

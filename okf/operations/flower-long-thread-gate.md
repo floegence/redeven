@@ -7,14 +7,14 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Complete conversations and responsive interaction are required. Run fixed-budget long-thread checks explicitly for acceptance/investigation, outside commit/integration/CI gates. Preserve failures and exact source/cleanup evidence; neither a reduced workload nor prior-tip timing qualifies changed product code.
+Complete conversations and responsive interaction are required. Record source/tree cleanliness, tools, dependencies, metrics and supervised cleanup. Product/dependency changes invalidate timing. Policy-only changes may cite unchanged-product evidence with its original source identity.
 
 # Contract
 
 ## Execution and evidence
 Run `node scripts/check_flower_long_thread.mjs --fast` for focused regressions; omit the flag for sustained/browser qualification. Use frozen published Desktop/Env dependencies and visible composited Electron with production background-throttling policy. This explicit acceptance suite stays outside commit, integration and CI gates.
 
-Record source/tree cleanliness, tools, dependencies, metrics and supervised cleanup. Product/dependency changes invalidate timing. Policy-only changes may cite unchanged-product evidence with its original source identity. Nonzero/interrupted runs, missing tests/tools/metrics or cleanup failure fail qualification. Preserve the 110 ms/21 commits/s negative regression and profile-exclusion test; no threshold/workload override or waiver.
+Nonzero/interrupted runs, missing tests/tools/metrics or cleanup failure fail qualification. Preserve the 110 ms/21 commits/s negative regression and profile-exclusion test; no threshold/workload override or waiver.
 
 ## Correctness
 Fast checks cover indexed records, bounded queues/windows, turn/disclosure identity, keyed disposal, local thinking, structural versus mutable dependencies, sealed bodies and incremental Markdown in Desktop's browser-conditioned Solid/jsdom configuration. Each sequence entry has one mounted owner: classify once, update live fields/first-prose boundaries and dispose removed owners. Read one token snapshot; retained entries must not grow dependencies. Reuse immutable partition/row identities, restored titles and admission-only visibility. Regressions include 2,400-row subscription/identity bounds, 600 retained rows, real browser arrival/DOM placement, plain/reactive cache ownership and user-only prompt history.
@@ -53,5 +53,3 @@ Floe owns floating mechanics; Redeven owns projection. During shared drag/resize
 
 - [Runner/regressions](../../scripts/check_flower_long_thread.mjs)
 - [Sustained runner](../../scripts/qualify_flower_long_thread.mjs)
-- [Budgets/evaluator](../../scripts/flower_long_thread_contract.mjs)
-- [Policy/negative tests](../../scripts/flower_long_thread_contract.test.mjs)

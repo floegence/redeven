@@ -7,14 +7,14 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Verified host admin atomically saves share endpoints/listeners/Host restrictions. Listener changes require explicit restart; live sockets persist. Empty hostname restrictions never weaken TLS/invitations/membership/Desktop policy. Invalid or failed writes preserve saved/live state.
+Verified host admin atomically saves share endpoints/listeners/Host restrictions. Desktop Settings shows the saved listener bindings separately from active addresses. A pending restart exposes an explicit review action using the same Gateway lifecycle confirmation and progress as card maintenance.
 
 # Contract
 
 ## Configuration ownership
 `POST /gateway/v6/network-settings` requires current verified host management proof and saves one bounded settings object.
 
-Desktop Settings shows the saved listener bindings separately from active addresses. A pending restart exposes an explicit review action using the same Gateway lifecycle confirmation and progress as card maintenance. Saving never restarts the service.
+Saving never restarts the service.
 
 A runtime-selected ephemeral port is reported as an active address rather than replacing the configured `:0` binding.
 

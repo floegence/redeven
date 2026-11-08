@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published templates own definitions, formats and passive resources; Redeven validates offline bundles and authorizes imported original directories. Historical syntax adapts in memory to one executor without rewriting stored bytes. Failed acquisition or review preserves active source and grants no lifecycle effects.
+Published templates own definitions, formats and passive resources; Redeven validates offline bundles and authorizes imported original directories. Strict decode,consecutive in-memory transformations,current validation/passive-resource checks feed one executor.
 
 # Contract
 
@@ -27,7 +27,7 @@ Authors use redeven-service-template.json,kind:redeven.service-template,schema_v
 - template.json v2→TemplateSpec4/5/6→7.
 - branded v3→TemplateSpec6→7;v4→7→7.
 
-Strict decode,consecutive in-memory transformations,current validation/passive-resource checks feed one executor. Old syntax grants no privilege. SDK publishes types/schemas/acquisition,never execution/migration. Reading old directories/upgrading cannot rename files,rewrite scripts/locales,change modes/digest/commit or add normalized rows.
+Old syntax grants no privilege. SDK publishes types/schemas/acquisition,never execution/migration. Reading old directories/upgrading cannot rename files,rewrite scripts/locales,change modes/digest/commit or add normalized rows.
 
 # Boundaries
 
@@ -36,7 +36,5 @@ Templates/catalogs never own Registry lifecycle,select user releases or bypass p
 # Evidence
 
 - `redeven:go.mod` - Source.
-- `redeven:internal/managedwebservice/types.go` - Source.
 
-- `redeven:internal/managedwebservice/template_sources.go` - Source.
 - `redeven:internal/portforward/registry/template_sources_test.go` - v4→v5 migration, rollback/stale rejection, no executable projection.

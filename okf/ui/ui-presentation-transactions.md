@@ -29,4 +29,3 @@ Explicit environment replacement, permission-root replacement, connection recove
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:3246` - Source.

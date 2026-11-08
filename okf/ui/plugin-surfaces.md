@@ -7,7 +7,7 @@ reviewed_at: "2026-11-07"
 ---
 # Summary
 
-Redeven owns navigation, pins and persisted geometry; released ReDevPlugin owns surface slots and authority. Activity and Workbench placements remain independent, lazy opening captures current context and hidden opened surfaces retain edits. Layout continuity never revives revoked authority or replays unknown writes.
+Redeven owns navigation, pins and persisted geometry; released ReDevPlugin owns surface slots and authority. Tiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/Shift+F10 offers information/current-mode Activity Bar or Workbench Dock pins; pinning keeps Launcher open, dismiss restores tile focus.
 
 # Contract
 
@@ -15,7 +15,7 @@ Redeven owns navigation, pins and persisted geometry; released ReDevPlugin owns 
 ### Discovery and pinning
 Activity Bar Plugins opens a Shell-root Launcher without navigation. Search intersects category with NFKC/locale-folded names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay without grid reflow and restore row focus.
 
-Tiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/Shift+F10 offers information/current-mode Activity Bar or Workbench Dock pins; pinning keeps Launcher open, dismiss restores tile focus. Plugin Center has explicit 44px touch pins; cards/details and pinned Activity context menus also offer Activity pins. Floating plugin windows show only their identity and window controls; they do not duplicate shortcut pin actions.
+Plugin Center has explicit 44px touch pins; cards/details and pinned Activity context menus also offer Activity pins. Floating plugin windows show only their identity and window controls; they do not duplicate shortcut pin actions.
 
 Use environment-scoped Shell preferences with independent Activity/Workbench pins and synchronized selected/accessibility state. Pins grant no launch/enable/authority. Activity unpin first completes exact retirement; failed close retains pin/error. Other windows/siblings retain lifetimes.
 
@@ -48,13 +48,4 @@ Manifest kinds remain view|command|background with semantic roles; product place
 - `redeven:scripts/smoke_desktop_plugin_first_presentation.mjs`: isolated Desktop acceptance of dark/light cold opens, delayed modules, input retention, fresh reopening and titlebar controls.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceOpening.browser.test.tsx`: first-visible geometry and zero content padding.
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginQuickPin.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinButton.test.tsx`: reject duplicate pending clicks; failed updates preserve authoritative selection/Retry.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx`: actual published SDK WebGL1/2 pixels, visibility and close/reopen.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Source.
-
-- `redeven:internal/workbenchlayout/plugin_widgets.go:1` - Source.
-- `redeven:internal/workbenchlayout/plugin_widgets_test.go:1` - Tests.

@@ -7,17 +7,14 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower acknowledges navigation before transcript work. One coordinator serves
-navigation, command confirmation and reference preflight. ThreadCache owns
-selection and detail; the loader owns bounded ephemeral demand.
-Readiness controls reveal; elapsed time controls feedback only.
+Flower acknowledges navigation before transcript work. One loader owns selection/reselect/reconnect/retry. Position transcript and active sequence after placement before reveal. Restored titles/groups/turns are static; folded turns cannot block readiness, and manual folds retain labels.
 
 # Contract
 
 ## Selection and navigation
 Rail feedback precedes commit by two animation callbacks and a task; hidden documents skip frames. Latest intent supersedes prior work; summaries cannot bypass coordination. Reveal after required baseline/handoff, measurable layout and visible historical text settle. Cached windows renew bounded interest if needed; ready caches prepare immediately. Never await runtime quiet. Canceled reads cannot release newer selections.
 
-One loader owns selection/reselect/reconnect/retry. Position transcript and active sequence after placement before reveal. Restored titles/groups/turns are static; folded turns cannot block readiness, and manual folds retain labels. No smooth initial positioning or timer fallback. One cancellable 200 ms feedback deadline spans detail/body/layout without delaying ready/error state. New chat/navigation/disposal cancels old feedback; frame/composer stay stable and body failures retry locally.
+No smooth initial positioning or timer fallback. One cancellable 200 ms feedback deadline spans detail/body/layout without delaying ready/error state. New chat/navigation/disposal cancels old feedback; frame/composer stay stable and body failures retry locally.
 
 Cached destinations flush effects and use checkVisibility({contentVisibilityAuto:true}). ResizeObserver corrects above-viewport growth before paint; rAF/visibility handles reveal/body work. No polls/per-row observers. Explicit wheel/touch/scrollbar/keyboard pauses following through late reads; scroll events alone do not. Two slots prioritize visible/margin text and cancel obsolete demand; ThreadCache retains immutable bodies. Growth/refresh/completion preserves accepted prose/selection. [Live delivery](flower-live-timeline.md) owns validation/retry. Open Latest; reading restoration is separate. Sort by creation descending then ThreadID ascending.
 
@@ -51,6 +48,5 @@ The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title e
 # Evidence
 
 - `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - Tests.
 
 A `summary_unavailable` thread preserves any previously known history and becomes read-only. Cold selection settles without a detail request or invented timestamp/title; late unavailable summaries cancel outstanding detail preparation. Healthy summary replacement restores ordinary selection. Transient read failures keep the selection demand and retry with capped backoff; elapsed time alone never turns a connected slow read into failure.

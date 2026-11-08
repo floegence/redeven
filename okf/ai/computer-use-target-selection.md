@@ -7,18 +7,16 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-ComputerUseRuntime owns discovery/selection through Flower's computer tools. Users describe work; Flower locates the page/window. Product settings expose no manual target picker or endpoint-to-picker route. Selection is working position, not authority. Stale/disconnected/occupied targets fail explicitly while retaining previous selection.
+ComputerUseRuntime owns discovery/selection through Flower's computer tools. Stale/disconnected/occupied targets fail explicitly while retaining previous selection. Set application to a name or bundle ID for bounded installed-app discovery, including apps not running.
 
 # Contract
 
 ## Discovery and selection
 `computer.targets` lists browser profiles/pages and application windows without a preselected target. Explicit system/personal-browser tasks use `system`, which excludes managed and native window candidates and never starts a managed profile.
 
-Set application to a name or bundle ID for bounded installed-app discovery,
-including apps not running. Discovery never launches. Selecting an application
+Discovery never launches. Selecting an application
 candidate opens/restores that exact catalog entry; one accessible window is
-selected, while zero or multiple windows return launch facts and window candidates.
-App and foreground grants, current target ownership and private pause boundaries
+selected, while zero or multiple windows return launch facts and window candidates. App and foreground grants, current target ownership and private pause boundaries
 are checked before launch. Launch uncertainty never authorizes automatic replay.
 
 A changed title/URL requires fresh discovery rather than a silent substitute.
@@ -70,4 +68,3 @@ Persisted preference or grants alone cannot prove readiness, foreground safety o
 - `redeven:internal/ai/computer_target_binding_test.go` - Thread isolation, persistence and fork boundaries.
 - `redeven:internal/ai/computer_script_test.go` - Reset retains selection and isolates later namespaces.
 - `redeven:internal/ai/computer_runtime.go` - Source.
-- `redeven:internal/ai/target_registry.go` - Source.

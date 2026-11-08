@@ -7,19 +7,19 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Flower keeps intermediates in Runtime state and finals at the user's destination. Redeven owns bytes, filesystem policy and UI; Floret owns canonical results and identities. Files, Fork and cleanup preserve this boundary without another artifact index, transcript, upstream API or domain migration.
+Flower keeps intermediates in Runtime state and finals at the user's destination. Private roots grant no sibling authority. Registry [filesystem policy](tool-permission-runtime.md) applies to every file/patch operation; cwd only resolves paths. Transactionally publish settings/validated canonical upload claims while retaining the source-deletion gate.
 
 # Contract
 
 ## Placement and authority
 Runtime owns `<StateDir>/task-files/<ThreadID>/{scratch,staging}`; finals belong at the requested destination or selected project/worktree, independent of temporary cwd. Admission/provider context publish identical absolute roots. System placement overrides skills without filename heuristics or new permissions; source/tests/builds retain normal locations. Children get FLOWER_SCRATCH_DIR/FLOWER_STAGING_DIR, never FLOWER_OUTPUT_DIR; cwd/HOME/cache/TMPDIR keep normal semantics.
 
-Private roots grant no sibling authority. Registry [filesystem policy](tool-permission-runtime.md) applies to every file/patch operation; cwd only resolves paths. Reject escaping symlinks/siblings without adding whitelists for authorized external/detached roots.
+Reject escaping symlinks/siblings without adding whitelists for authorized external/detached roots.
 
 ## Fork and recovery
 Fork copies current scratch/staging even at historical cuts, not historical file snapshots; projects/finals remain shared. Block source admissions/cleanup, cancellably drain admitted work and reject unreaped processes. Rooted bounded copying preserves executable bits, checks identity/size/time/final tree, rejects unsupported types/external/hard links and renames complete private staging only.
 
-Transactionally publish settings/validated canonical upload claims while retaining the source-deletion gate. Unadmitted copies stay invisible; canonical replay finishes preparation without recopying admitted edits/cleanup. Source markers support interrupted publication/context, survive cleanup and disappear on deletion. Recheck ownership before failed-copy removal.
+Unadmitted copies stay invisible; canonical replay finishes preparation without recopying admitted edits/cleanup. Source markers support interrupted publication/context, survive cleanup and disappear on deletion. Recheck ownership before failed-copy removal.
 
 Startup/periodic recovery scans 50 names/batch, skips in-flight gates and removes private stages/marked forks lacking settings. Explicit orphan operations share the target gate. Retry keeps canonical identity but copies afresh. Context maps ancestor suffixes, including nested forks; request inspection/repair of hardcoded paths without rewriting history. Ancestor cleanup cannot delete descendants.
 

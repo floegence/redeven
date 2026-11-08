@@ -7,7 +7,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Shared Flower retains Skills/MCP/Plugins management through typed authenticated carrier adapters. The rail entry below New chat preserves drafts and tab filters; Runtime has no duplicate Skills destination. Readers inspect, admins configure, failures retain input/Retry, and all locales supply copy.
+Shared Flower retains Skills/MCP/Plugins management through typed authenticated carrier adapters. MCP edits HTTP endpoints or local executable/one-argument-per-line. Never prefill secrets: omission preserves, explicit empty object clears. Retain search/enabled filter/tools/checks/confirmed removal.
 
 # Contract
 
@@ -17,7 +17,7 @@ One title/return header and separate icon tab bar serve Skills/MCP/Plugins. Pers
 ## Skills and MCP
 Usable connections load source/catalog metadata. Serialize reads/mutations against stale refresh; read-only browsing never installs bundled files.
 
-MCP edits HTTP endpoints or local executable/one-argument-per-line. Never prefill secrets: omission preserves, explicit empty object clears. Retain search/enabled filter/tools/checks/confirmed removal. Default form shows connection type and endpoint or executable/arguments. Advanced holds optional name/ID with Automatic; existing IDs are read-only/selectable. Runtime allocates names/IDs, never client slugs. Add server creates; Save edits. Remote needs no introductory prose; enabled local saves explain execution once. Failure keeps drafts; reopening resets disclosure.
+Default form shows connection type and endpoint or executable/arguments. Advanced holds optional name/ID with Automatic; existing IDs are read-only/selectable. Runtime allocates names/IDs, never client slugs. Add server creates; Save edits. Remote needs no introductory prose; enabled local saves explain execution once. Failure keeps drafts; reopening resets disclosure.
 
 ## Agent Plugins
 Without sources show installed management directly: no Installed/Discover, official placeholders or discovery requests. With sources show distinct high-contrast view control and responsive cards. Keep separate searches/selected source; entering Discover loads it, switching/leaving fences late replies. Primary/local tabs differ visually. Omit raw environment IDs/repeated headings/introductory copy.
@@ -38,5 +38,3 @@ Visibility grants no mutation. [MCP runtime](../ai/mcp-runtime.md) owns persiste
 
 - `internal/flower_ui/src/FlowerSurface.tsx`
 - `internal/flower_ui/src/extensions/FlowerExtensionsSurface.tsx`
-- `internal/flower_ui/src/extensions/extensions.css`
-- `internal/flower_ui/host/extensionsAdapter.ts`

@@ -7,11 +7,10 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-One process-local Redeven controller owns AI construction/retry/publication/leases/drain/close; Floret owns durable facts. Non-AI surfaces stay usable. Requests bind one generation; failed readiness returns typed sanitized state without partial publication or Store repair.
+One process-local Redeven controller owns AI construction/retry/publication/leases/drain/close; Floret owns durable facts. Non-AI surfaces stay usable. Startup recovers unfinished replacements, opens the Floret owner with bounded waiting, migrates product data, activates and publishes. Floret's worker prepares historical threads.
 
 # Contract
 
-- Startup recovers unfinished replacements, opens the Floret owner with bounded waiting, migrates product data, activates and publishes. Floret's worker prepares historical threads.
 - After activation, recovery pages settings by 200, retains complete media inventories and resumes eligible admitted queues. Per-thread failure cannot starve later pages; ownership review follows. Incomplete recovery gates destructive maintenance and retries next maintenance pass. Waiters retain their own attempt's result.
 - Background phases cannot regress a published generation or unmount Flower. Orphan discovery updates degraded/retry state; successful reconciliation or explicit repair clears issues. Shutdown cancels/joins generation workers before storage close.
 - Explicit asynchronous retry admits one startup owner. Replacement cancels long-lived generation work, waits for idempotent lease releases, closes once, then publishes the next monotonic generation.
@@ -24,4 +23,3 @@ The controller imports no Floret/SQLite/threadstore packages, holds no Host/Back
 # Evidence
 
 - `redeven:internal/codeapp/ai_readiness.go:1` - Source.
-- `redeven:internal/codeapp/appserver/server.go:2277` - Source.

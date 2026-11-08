@@ -27,5 +27,3 @@ Prior desktop acceptance results are not substituted for this transport build.
 - `internal/localui/window_transport_e2e_test.go` and `internal/codeapp/ui_src/scripts/checkWindowTransport.mjs`: direct browser and Electron resource-scoped acquisition.
 
 - `internal/runtimeproxy/window_tunnel_browser_test.go` and `internal/codeapp/ui_src/scripts/checkWindowTunnel.mjs`: real relay, duplex integrity and the upstream frame-count assertion.
-
-- `internal/hostapps/desktop_transport_linux_test.go`: bounded reply delivery, shutdown, ownership and takeover regression.

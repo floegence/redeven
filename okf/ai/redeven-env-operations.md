@@ -25,4 +25,3 @@ It can be used to invoke Redeven product commands, but it must not be described 
 # Evidence
 
 - `redeven:cmd/redeven/env.go:13` - Source.
-- `redeven:internal/agentprotocol/targets.go:37` - Source.

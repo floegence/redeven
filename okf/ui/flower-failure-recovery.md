@@ -7,12 +7,11 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns outcomes/checkpoints/migration. Flower retains readable content and one recovery surface while drafts, queue edits, Stop/navigation remain usable. Transport uncertainty permits no replay. Readiness timeout offers refresh; deterministic migration failure remains administrative.
+Floret owns outcomes/checkpoints/migration. Transport uncertainty permits no replay. Readiness timeout offers refresh; deterministic migration failure remains administrative. Malformed model arguments use Floret's existing bounded correction before a question or Activity can appear.
 
 # Contract
 
-Malformed model arguments use Floret's existing bounded correction before a
-question or Activity can appear. Correction stays in the running turn. Typed
+Correction stays in the running turn. Typed
 exhaustion uses the existing localized Retry/Configure model surface, explains
 that rejected calls did not execute and retains confirmed results. Internal
 validation feedback never becomes user-facing transcript content.
@@ -31,4 +30,3 @@ Floret validates retry checkpoints and confirmed tool results. The host never pa
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.providerRecovery.browser.test.tsx`: shared recovery controls and typed argument-correction exhaustion.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
-- `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - Source.

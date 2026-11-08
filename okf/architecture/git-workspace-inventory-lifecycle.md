@@ -23,4 +23,3 @@ Git remains authoritative; snapshots are read models. Hostile external writers a
 # Evidence
 
 - `redeven:internal/gitrepo/workspace.go` - Source.
-- `redeven:internal/gitrepo/service.go` - Source.

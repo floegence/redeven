@@ -14,8 +14,6 @@ SSH creation/editing share one form and registration API. Common controls preced
 ## SSH fields and validation
 The form presents name, connection and authentication, automatic status detection, and advanced configuration in that order. Creation and editing use the same canonical SSH normalizers.
 
-New registrations use the same fields inside the existing creation dialog.
-
 # Boundaries
 
 Password retention, replacement and removal continue through the existing secret draft and registration APIs. These fields do not add another Runtime deployment or persistence owner.

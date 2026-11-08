@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Env App assigns global bands for windows, Flower, plugins, modals and commands; interaction reorders only its band. Floe owns viewport constraints/drag geometry. Redeven saves settled bounds while preserving reachable controls, local scroll and destination interaction.
+Env App assigns global bands for windows, Flower, plugins, modals and commands; interaction reorders only its band. Upstream elastic dragging resists boundary overflow, retains a reachable header and returns the window inside safe bounds on release/interruption.
 
 # Contract
 
@@ -23,7 +23,7 @@ Mobile plugin/tools navigation belongs to Shell content, not a global Launcher. 
 ## Visible viewport boundaries
 Published Floe owns visible viewport/safe areas, Safari fixed-origin conversion and projected-surface intersection. Do not bypass it with fixed positions, uncapped viewport heights or transforms. Temporary constraints preserve preferred size.
 
-Upstream elastic dragging resists boundary overflow, retains a reachable header and returns the window inside safe bounds on release/interruption. Dragging a maximized header restores preferred size at the grab point and continues the gesture; controls, double-click and mounted body remain independent. Redeven supplies safe-area insets and persists only settled geometry.
+Dragging a maximized header restores preferred size at the grab point and continues the gesture; controls, double-click and mounted body remain independent. Redeven supplies safe-area insets and persists only settled geometry.
 
 ## Movable window order
 A Shell-lifetime provider registers stable IDs, retains multiply registered IDs until all owners unregister, and assigns bounded MRU order within each window band. Minimized Debug Console is a base-band launcher, not an open window.

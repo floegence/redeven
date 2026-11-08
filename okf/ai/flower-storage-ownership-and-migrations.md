@@ -7,14 +7,14 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Floret owns canonical Agent formats; Redeven owns product facts and uploads. Supported state upgrades through stable kinds, contiguous atomic migrations and public APIs while preserving history. Unknown, future, drifted or invalid state blocks Flower without resetting data or disabling the core Runtime.
+Floret owns canonical Agent formats; Redeven owns product facts and uploads. Unknown, future, drifted or invalid state blocks Flower without resetting data or disabling the core Runtime. Floret owns bounded startup recognition and background per-thread migration.
 
 # Contract
 
 ## Storage owners
 Redeven consumes the exact published Floret version in go.mod with `GOWORK=off`.
 
-Floret owns bounded startup recognition and background per-thread migration. Each validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.
+Each validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.
 
 Published Floret v7.87.0 removes hidden Activity field preparation from ordinary startup, retains summary metadata on large activity admission, batches explicit locator writes and skips same-value SQLite upserts. Its recent manifest cache is bounded, memory-only and owned upstream. No new host indexes, full-text indexes or duplicate conversation storage are introduced. First disclosure may still prepare the selected complete activity once; this is not a claim of field-granular cold preparation.
 
@@ -55,4 +55,3 @@ Floret is the sole authority for canonical history, execution and queue semantic
 # Evidence
 
 - `redeven:internal/ai/threadstore/schema.go` - Source.
-- `redeven:internal/persistence/sqliteutil/preflight.go` - Source.

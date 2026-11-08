@@ -7,10 +7,8 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-image.read inspects authorized files/snapshots. Redeven owns bytes/authorization;
-Floret owns history/membership. File references stay references; results use native
-images, not browsers, temporary servers or Base64 result JSON. Original snapshots
-remain available after model preparation.
+image.read inspects authorized files/snapshots. File references stay references; results use native
+images, not browsers, temporary servers or Base64 result JSON. One in-process media gate protects writes and the complete canonical inventory through deletion, following Floret's published retention contract.
 
 # Contract
 
@@ -40,8 +38,7 @@ remain available after model preparation.
 
 ## Maintenance and interactive writes
 
-One in-process media gate protects writes and the complete canonical inventory
-through deletion, following Floret's published retention contract. Maintenance
+Maintenance
 skips a held gate or queued writers. An interactive write cancels a running
 maintenance scan and waits for that scan to settle; its own wait honors caller
 cancellation. Partial or failed inventory never authorizes deletion. No second

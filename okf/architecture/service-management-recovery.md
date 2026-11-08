@@ -7,17 +7,13 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Registry owns transactions, allocations and identities; fresh backend facts govern recovery and deletion. Names, cached reachability and uncertain legacy resources grant no destructive authority. Retain data by default, preserve unavailable facts and require reviewed ownership/consent before execution.
+Registry owns transactions, allocations and identities; fresh backend facts govern recovery and deletion. Unknown ownership is shown honestly. Frontend code never substitutes Retry or Restart for unavailable Start. A failed Host maintenance hook may be bypassed only through an administrator's reviewed plan, and only for verified resources.
 
 # Contract
 
 ## Management recovery
 ### Facts and actions
 `ServiceFacts` separates presence, ownership, runtime state, inspection completeness, resource references, and check time.
-
-Frontend code never substitutes Retry or Restart for unavailable Start.
-
-A failed Host maintenance hook may be bypassed only through an administrator's reviewed plan, and only for verified resources.
 
 ### Review and execution
 `GET /managed-web-services/{id}/inspection` requires read permission, is non-cacheable, and uses the same factual backend projection as the list.
@@ -49,7 +45,7 @@ Template permissions remain unchanged: unsupported external Compose capabilities
 ### Observation and deletion
 Container ownership uses exact native ID, standard managed name, and service label.
 
-Unknown ownership is shown honestly. Reference metadata exposes selected container identity, state, ports, and owning service identifiers; arbitrary engine labels and injected secrets never become public inventory fields.
+Reference metadata exposes selected container identity, state, ports, and owning service identifiers; arbitrary engine labels and injected secrets never become public inventory fields.
 
 # Boundaries
 
@@ -60,7 +56,3 @@ Existing volume names and directories are not renamed, moved, or recreated durin
 # Evidence
 
 - `redeven:internal/managedwebservice/management_facts.go` - Source.
-- `redeven:internal/managedwebservice/management_uninstall.go` - Source.
-
-- `redeven:internal/managedwebservice/runtime_binding.go` - Source.
-- `redeven:internal/managedwebservice/runtime_resource.go` - Source.

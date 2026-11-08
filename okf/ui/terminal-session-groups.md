@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Runtime catalogs own groups, assignments and named views; Activity/Workbench share environment projection with local expansion/active view. Default is immutable and every session has one known group_id. Membership is independent of placement, cwd, controller and recovery.
+Runtime catalogs own groups, assignments and named views; Activity/Workbench share environment projection with local expansion/active view. View thumbnail opens layout picker, name activates; footer targets active view, row picker may change inactive view.2–32 slot choices preserve members/vacancies/selection.
 
 # Contract
 
 ## Stores and authority
 Open versioned apps/terminal/groups.sqlite and views.sqlite before readiness; future/wrong-kind/drifted state stays unchanged. Atomically reorder full non-Default list; Default stays zero.
 
-View thumbnail opens layout picker, name activates; footer targets active view, row picker may change inactive view.2–32 slot choices preserve members/vacancies/selection. Thumbnails omit visible labels but keep accessible names/keyboard.
+Thumbnails omit visible labels but keep accessible names/keyboard.
 
 Views: terminal_view_catalog v3; RPC2024–2027 list/put/delete/notify,2028 atomic batch, process-launch/access-gate protected. Store ID/name/published SplitWorkspace geometry/occupancy/revision/timestamps. Pane empty:true means vacancy, no session claim. Limits64 views/32 panes/depth16/64KiB layout/128-byte IDs/64-character names. Validate shape/unique nodes/axis/ratio. Check touched views/catalog revision atomically; reject duplicate ownership/stale transfer. Cross-view transfer writes both and emits one snapshot; view deletion preserves PTYs.
 
@@ -39,4 +39,3 @@ No duplicate membership maps, path-inferred groups or unknown→Default assignme
 
 - redeven:internal/terminal/group_catalog.go
 - redeven:internal/terminal/view_catalog.go
-- redeven:internal/terminal/view_catalog_test.go

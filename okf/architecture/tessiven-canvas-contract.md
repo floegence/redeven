@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Runtime owns immutable canvas YAML and contiguous version migration; clients render a frozen data-only display contract. Reads preserve historical bytes, digests and revisions while writes create current validated snapshots. Display projection never grants resource authority or rewrites topology.
+Runtime owns immutable canvas YAML and contiguous version migration; clients render a frozen data-only display contract. The `tessiven_canvas_library` SQLite lineage starts at schema v1. Paths must be unique, acyclic and complete, with source validation, target validation and semantic checks.
 
 # Contract
 
@@ -16,7 +16,7 @@ Runtime owns immutable canvas YAML and contiguous version migration; clients ren
 - Every service has at least one instance on an existing node. A missing placement fails validate/save at the service ID with a source location.
 - A service kind describes its primary responsibility independently of its product name, instance role or deployment format. The [DSL versioning contract](#dsl-versions) owns version selection, read projections and write upgrades.
 
-The `tessiven_canvas_library` SQLite lineage starts at schema v1. Canvas identities, archive state, immutable YAML versions, and idempotent request results remain intact.
+Canvas identities, archive state, immutable YAML versions, and idempotent request results remain intact.
 
 A fresh v2 library and an upgraded v1 library must both reopen successfully.
 
@@ -26,7 +26,7 @@ The contiguous v1→v1.0.0→v1.1.0 chain changes version only and retains legac
 ### Version Identities And Releases
 DSL identities use stable `vMAJOR.MINOR.PATCH` strings, for example `v1.2.3`.
 
-Paths must be unique, acyclic and complete, with source validation, target validation and semantic checks. Do not introduce a schema-only registry entry without its executable migration and fixtures.
+Do not introduce a schema-only registry entry without its executable migration and fixtures.
 
 ### Read Compatibility
 Validation selects the exact source schema, applies the explicit upgrade chain, and validates the current shape and cross-object contracts. Returned `document` is canonical current data.
@@ -67,19 +67,12 @@ Removing a supported display format requires an explicit client compatibility-wi
 
 - `spec/tessiven/v1.1.0.schema.json`
 - `internal/tessiven/document.go`
-- `internal/tessiven/document_test.go`
 - Tests.
 
-- `spec/tessiven/schema.go`
 - Exact formats, current identity and forward edges.
-- `spec/tessiven/v1.schema.json`
 - Frozen legacy schema.
-- `spec/tessiven/v1.0.0.schema.json`
 - Frozen semantic baseline schema.
 
-- `spec/tessiven-presentation/v1.schema.json`
 - Frozen data-only display shape.
-- `internal/tessiven/presentation.go`
 - Source.
-- `internal/tessiven/dsl_version_test.go`
 - Tests.

@@ -28,5 +28,3 @@ The tools return scoped Redeven repository knowledge and do not mutate OKF sourc
 # Evidence
 
 - `redeven:internal/okf/search.go:17` - Source.
-- `redeven:internal/ai/tools/registry.go:249` - Source.
-- `redeven:internal/ai/builtin_tool_handlers.go:662` - Source.

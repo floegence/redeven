@@ -24,4 +24,3 @@ The upstream design studies are regression fixtures, not public demo pages or pr
 # Evidence
 
 - `redeven:internal/envapp/ui_src/package.json` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSidebarTree.tsx` - Source.

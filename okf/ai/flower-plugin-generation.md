@@ -7,15 +7,13 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Redeven owns intent, guidance, review and placement; platform owns templates/build/preview/package/execution. Floret owns tool dispatch/approvals; no copied authoring implementation.
+Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. The embedded `redeven-plugin-authoring` system skill appears in the ordinary skill catalog. Its description distinguishes application plugin authoring from Flower Agent Plugins and MCP configuration.
 
 # Contract
 
 ## Discoverable author guidance
 
-The embedded `redeven-plugin-authoring` system skill appears in the ordinary
-skill catalog. Its description distinguishes application plugin authoring from
-Flower Agent Plugins and MCP configuration. It is loaded through normal skill
+It is loaded through normal skill
 activation, remains user-disableable, and does not expand the global system
 prompt. Its installation coordinate is projected from the imported ReDevPlugin
 platform version before catalog, browse or model content is exposed; it carries
@@ -158,17 +156,9 @@ Development runtime evidence never substitutes for product signing or packaging.
 # Evidence
 
 - `redeven:internal/ai/system_skills/redeven-plugin-authoring/SKILL.md` - Source.
-- `redeven:internal/ai/system_skills.go` - Source.
 - `redeven:internal/ai/system_plugin_authoring_test.go` - Tests.
 - `redeven:internal/redevpluginintegration/author_icon_qualification_test.go` - Required SVG/PNG artifact checks and released-package round trip; fixtures do not prove visual quality or SVG-to-PNG derivation.
-- `redeven:internal/redevpluginintegration/runtime_io_live_test.go` - Tests.
-- `redeven:okf/ai/ai-tool-runtime.md` - Source.
-- `redeven:internal/plugincreation/store_test.go` - Product ownership and durable recovery tests.
-- `redeven:internal/ai/plugin_creation_scope_test.go` - Managed source admission, recovery and private scope tests.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx` - Shared composer and navigation tests with a fixture adapter.
-
-- `redeven:internal/redevpluginintegration/author_model_qualification_test.go` - Opt-in model, real Host, browser surface, restart and cleanup qualification.
-- `redeven:scripts/check_plugin_creation_model.mjs` - Opt-in complete product generation and installation path with isolated model configuration.
 
 The host authoring skill supplies Redeven visual guidance: content-first layouts,
 compact shell typography, theme-aware surfaces and no duplicate workspace chrome.

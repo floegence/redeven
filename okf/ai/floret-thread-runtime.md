@@ -8,7 +8,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Floret v7 ThreadService alone owns active/canonical lifecycle. Redeven authorizes endpoints/resources/provider-tool effects. Send/Respond/Cancel/Retry/CompactContext return typed state before continuation. Canonical records deduplicate; drafts and execution tokens stay transient.
+Floret v7 ThreadService alone owns active/canonical lifecycle. Redeven authorizes endpoints/resources/provider-tool effects. Send/Respond/Cancel/Retry/CompactContext return typed state before continuation. Floret owns one-time historical source preparation during upgrade.
 
 # Contract
 
@@ -19,8 +19,7 @@ Redeven-specific authorization, DTO mapping, live projection, and adapter owners
 
 ## Automatic display preparation
 
-Floret owns one-time historical source preparation during upgrade. Redeven publishes service readiness without a global display-preparation sweep and observes public per-thread readiness; it never scans or migrates Floret-owned records. Prepared restarts reuse canonical readiness anchors. Hidden Activity field indexes are prepared only on explicit detail reads.
-New threads and independently ready conversations remain available while other
+Redeven publishes service readiness without a global display-preparation sweep and observes public per-thread readiness; it never scans or migrates Floret-owned records. Prepared restarts reuse canonical readiness anchors. Hidden Activity field indexes are prepared only on explicit detail reads. New threads and independently ready conversations remain available while other
 threads prepare; a failed preparation is reported without rewriting history.
 
 ## Identical consecutive tool calls
@@ -49,7 +48,5 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 - `redeven:go.mod` - Source.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
-- `redeven:internal/ai/terminal_wait_floret_integration_test.go` - Tests.
-- `redeven:internal/ai/strict_repetition_integration_test.go` - Tests.
 
 Published Floret v7.107.5 owns the schema-36 activity-membership preparation fence. Pending membership applies only to tool records, even when thinking and tools share a source identifier. Released schema-35 manifests rebuild from canonical source without rewriting conversation records. Cold bounded reads, full View, Send, Retry, Fork and restart are qualified using an immutable synthetic released-writer fixture. Redeven never repairs upstream domain records; residual authority corruption is an explicit per-thread unavailable summary, not a fabricated healthy view or global transport failure.

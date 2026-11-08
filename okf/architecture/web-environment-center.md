@@ -7,14 +7,14 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop combines an environment center with its existing local Runtime lifecycle. Web Center deploys independently; Runtime never requires Center or Desktop to start. Both hosts share Contracts/Core/Controller/UI. Web Center has one administrator, with no registration, users, roles, organizations or user ACL service.
+Desktop combines an environment center with its existing local Runtime lifecycle. Web Center has one administrator, with no registration, users, roles, organizations or user ACL service. Labels/hostnames grant no trust. Revisions/sequences fence observations; late completion cannot navigate canceled pending tabs or cancel open route owners.
 
 # Contract
 
 ## Shared behavior and host ownership
 Shared desktop/src/envcenter owns routes/search/filter/recovery/order/cancellation/Gateway lists. Desktop adapter calls existing lifecycle/windows; Web calls Center HTTP/browser tabs. Shared code imports neither Electron/Node filesystem nor Web auth. Desktop never contacts Center or changes Welcome/navigation/preparation/shutdown. Config/secrets do not sync. cmd/center-contracts generates exact DTO/TS/schema bounds.
 
-Labels/hostnames grant no trust. Revisions/sequences fence observations; late completion cannot navigate canceled pending tabs or cancel open route owners. Refresh reads authority, not new intent.
+Refresh reads authority, not new intent.
 
 ## Server entry
 Portal, Env and each child use distinct HTTPS origins under one registrable domain/port with matching TLS. Bookmarks are direct. Clipboard denial/absence retains descriptor/manual localized selection; announce success only after actual write.
@@ -44,4 +44,3 @@ Web v1 does not implement Desktop SSH/WSL/local preparation, Cloud aggregation o
 - `desktop/tests/envCenterContract.test.ts`: host contracts, ordering, cancellation and dependency boundaries.
 - `internal/localui/web_entry_transport_test.go`: actual Gateway, no target TCP listener and scoped Runtime admission.
 - `internal/localui/center_browser_test.go` and `scripts/check_center_browser.mjs`: actual browser and optional physical/capacity qualification.
-- [Center security](../security/web-center-access.md) and [deployment](../operations/web-center-deployment.md) own detailed policies.

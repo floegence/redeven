@@ -7,14 +7,12 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Templates parse entrances; Runtime verifies/persists preparation; Desktop navigates and Env App presents. Open verified Host/Container/Compose entrances through Forward without lifecycle/data changes. HTTP401 proves availability only; failures offer recovery and never stop healthy apps.
+Templates parse entrances; Runtime verifies/persists preparation; Desktop navigates and Env App presents. HTTP401 proves availability only; failures offer recovery and never stop healthy apps. Missing or rotated output and an absent verified record require an explicitly chosen restart to produce a new entrance.
 
 # Contract
 
 ## Sources and launch identity
 TemplateSpec 7 accepts exactly one entrance source: a fixed endpoint path, the supported Host opening hook, or `startup_url.line_prefix`. Container and Compose never acquire permission to run Host scripts.
-
-Missing or rotated output and an absent verified record require an explicitly chosen restart to produce a new entrance.
 
 ## One preparation owner
 `open-session` observes the applied instance, prepares its entrance through one common owner, checks endpoint availability, and revalidates generation, applied identity, Forward and management state before handoff.
@@ -40,4 +38,3 @@ Entrance preparation operates within the existing [Managed Web Service contract]
 # Evidence
 
 - `redeven:internal/managedwebservice/opening_prepare.go` - Source.
-- `redeven:internal/managedwebservice/opening_launch.go` - Source.

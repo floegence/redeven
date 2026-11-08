@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Redeven consumes coordinated released ReDevPlugin Go/npm/Rust/machine artifacts. Product owns sessions, source review, placement, runtime builds and business adapters. Missing or unverifiable platform contracts fail without copied mechanics, sibling imports or compatibility fallback.
+Redeven consumes coordinated released ReDevPlugin Go/npm/Rust/machine artifacts. Channel auth is separate: failed/panicked binding grants nothing and cannot close host channel. Request panic releases admission; HTTP contains failure. Granted HTTPS hostname connectors without private-prefix binding use released transport factory.
 
 # Contract
 
@@ -17,12 +17,12 @@ Upstream owns validation/hash/source identity, inspection/registry, permission/c
 ## Availability
 Plugin readiness cannot block Runtime/ordinary sessions. Market/package/runtime/storage/init failure stays local; retain files/terminal/Notes/Workbench. PLUGIN_RUNTIME_UNAVAILABLE executes nothing; rejected writes report not_committed. Localize faults; unreadable inventory is not empty, auto-failure never global interruption. Init budget10s; cancel fences results/closes integration. Error/panic unwinds construction without hiding host cancellation.
 
-Channel auth is separate: failed/panicked binding grants nothing and cannot close host channel. Request panic releases admission; HTTP contains failure. Incompatible opaque state stays unchanged, never reauthorized.
+Incompatible opaque state stays unchanged, never reauthorized.
 
 ## Network/history
 ReDevPlugin3.12.0 separates routing/package verification/execution. Single-hop host transports honor explicit proxy,current macOS proxy/PAC,OS DNS/VPN for market/package/release. Synthetic/private addresses alone are not denial. Upstream validates URL/redirect/origin/size/cancel/hash; downloads grant nothing.
 
-Granted HTTPS hostname connectors without private-prefix binding use released transport factory. Platform checks target/method/grant/revision,pools/quotas/revocation. Private prefixes,literal addresses/other protocols keep address-bound policy. Resolve configuration at request time; faults local.
+Platform checks target/method/grant/revision,pools/quotas/revocation. Private prefixes,literal addresses/other protocols keep address-bound policy. Resolve configuration at request time; faults local.
 
 Current admission requires Web v9. Existing retained records and data remain upstream-owned; no host compatibility parser, VNode renderer, invented declaration or package rewrite is introduced. Unknown or corrupt state stays unchanged and locally unavailable.
 

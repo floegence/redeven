@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/package integrity/execution/state. Adapter faults stop at product boundary without implicit grants, copied platform state or substitute lifecycle.
+Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Market owns default transport;integration closes caller-owned package transport on failure/shutdown. Connector transports independently follow upstream pool lifecycle.
 
 # Contract
 
@@ -17,7 +17,7 @@ Construct the released Host with Core, Runtime, IO, Web, Connectivity, Secrets, 
 ## Network
 hostnetwork constructs without I/O. Explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY either case,including empty/direct,plus standard NO_PROXY hostname/IP/CIDR. Otherwise macOS uses CFNetwork/bounded cancellable PAC,Linux normal OS routing;remote Runtime its own environment. Preserve configured route order. Only bodyless GET/HEAD may advance after pre-connection dial failure;no invented direct fallback,TLS/protocol/unknown retry or write replay even with idempotency header. Writes use freshHTTP1;transport cap8requests/read pool2idle per origin/30s.
 
-Market owns default transport;integration closes caller-owned package transport on failure/shutdown. Connector transports independently follow upstream pool lifecycle. Keep TLS/system roots;proxy credentials stay proxy-hop only.
+Keep TLS/system roots;proxy credentials stay proxy-hop only.
 
 ## Reviewed connections
 Inventory requires effective Read;review/approve/cancel/revoke authenticated admin+RWX. Exact cached session/nonempty private prefixes pass published destination classifier;deny metadata/unspecified/blanket prefixes. Upstream binds address/destination/revision/expiry/lease/revoke;install grants no connection.
@@ -36,4 +36,3 @@ Derive origins only from trusted product entry and released origin key. Local UI
 # Evidence
 
 - `redeven:internal/redevpluginintegration/integration.go:240` - Source.
-- `redeven:internal/redevpluginintegration/session_adapter.go` - Source.

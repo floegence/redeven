@@ -7,7 +7,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Qualify Computer through built renderer, Runtime, decoder and target adapter. Exact fixture effects, decoded pixels, source/artifact hashes and cleanup prove only the named target/provider scope. HTTP, metadata or model prose is insufficient; uncertain input is never replayed to produce a pass.
+Qualify Computer through built renderer, Runtime, decoder and target adapter. Use default tools except explicit legacy-wait. Cover bounded text/budgets,confirmed prefixes,pre-focus validation,paging/image identity,delays/titles/staleness/options,scroll/conditions/natural work,timeout/below-fold,exact async text,landmarks/reset,scripts/downloads/app entry.
 
 # Contract
 
@@ -17,7 +17,7 @@ Retain canonical results,fixture events,frames,hashes,cleanup and original asser
 ## DeepSeek
 TestComputerReliabilityDeepSeek uses production Service/Floret,configured deepseek-flash (local V4.1 Flash1017),catalog Chromium,no substitute. Require REDEVEN_COMPUTER_RELIABILITY_E2E=1,absolute REDEVEN_COMPUTER_CONFIG_ROOT/EVIDENCE_DIR,REDEVEN_BROWSER_TEST_INSTALLATION. Run GOWORK=off go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m. Repeat1..5(default1);browser-only may -parallel3. Native:REDEVEN_COMPUTER_NATIVE_E2E=1,released Swift helper,serialized desktop;absolute REDEVEN_COMPUTER_NATIVE_TEST_HOST may select baseline. Preserve config/secret hashes/user threads.
 
-Use default tools except explicit legacy-wait. Cover bounded text/budgets,confirmed prefixes,pre-focus validation,paging/image identity,delays/titles/staleness/options,scroll/conditions/natural work,timeout/below-fold,exact async text,landmarks/reset,scripts/downloads/app entry. Decode Floret ERROR/host envelope via ThreadToolResultReader. Script diagnostics require data.script_error; pre-dispatch rejection distinct. Prose/logs never replace execution; completed waits survive guest faults.
+Decode Floret ERROR/host envelope via ThreadToolResultReader. Script diagnostics require data.script_error; pre-dispatch rejection distinct. Prose/logs never replace execution; completed waits survive guest faults.
 
 | Case | Required independent facts |
 | --- | --- |

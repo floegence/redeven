@@ -7,11 +7,11 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime discovers installs/registers Native Messaging; Host Applications owns graphical lifecycle. Linux guide prepares persistent Chrome profiles without launch/target authority. Clients pass opaque IDs. Personal profiles remain; missing/unsafe/unsupported sources fail before launch.
+Runtime discovers installs/registers Native Messaging; Host Applications owns graphical lifecycle. Clients pass opaque IDs. Personal profiles remain; missing/unsafe/unsupported sources fail before launch. The authenticated `POST /_redeven_proxy/api/browser/extension/remote` action requires read, write and execute authority.
 
 # Contract
 
-The authenticated `POST /_redeven_proxy/api/browser/extension/remote` action requires read, write and execute authority. Linked or cross-user-readable profile directories are rejected.
+Linked or cross-user-readable profile directories are rejected.
 
 # Boundaries
 

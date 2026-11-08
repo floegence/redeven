@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floeterm owns PTY/Ghostty VT, geometry/controller epoch, input encoding, history/reset and atomic Presentation. Redeven maps permission/session metadata/placement. Browser consumes bounded semantic streams without parsing bytes or introducing a second terminal state machine.
+Floeterm owns PTY/Ghostty VT, geometry/controller epoch, input encoding, history/reset and atomic Presentation. `/_redeven_proxy/api/terminal/history-retention` is the product settings adapter: GET reads defaults or an authorized session; admin-only PUT persists and activates defaults; POST applies explicit limits to a session using its connection ID and transport generation.
 
 # Contract
 
@@ -26,7 +26,7 @@ The product adapter classifies explicit protocol disconnect/cancellation and pub
 ## Native history budgets
 Runtime persists `terminal_history_retention` with nullable `max_lines`/`max_bytes` safe nonnegative integers and applies those defaults before terminal readiness. Published terminal-go owns validation, native limit application, pruning, snapshot invalidation and atomic Presentation. Defaults affect only subsequently created sessions; existing sessions are never silently reconfigured.
 
-`/_redeven_proxy/api/terminal/history-retention` is the product settings adapter: GET reads defaults or an authorized session; admin-only PUT persists and activates defaults; POST applies explicit limits to a session using its connection ID and transport generation. Session application reuses shell/container permission and ownership checks, is principal-bound, does not transfer controller ownership, and rejects stale attachments. Limits preserve process, live screen, geometry and content epoch, while invalidating historical snapshots through the upstream history epoch. No local implementation of terminal retention or RPC retry is introduced.
+Session application reuses shell/container permission and ownership checks, is principal-bound, does not transfer controller ownership, and rejects stale attachments. Limits preserve process, live screen, geometry and content epoch, while invalidating historical snapshots through the upstream history epoch. No local implementation of terminal retention or RPC retry is introduced.
 
 # Boundaries
 

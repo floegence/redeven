@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Canonical Floret input and approval requests determine decision visibility and settlement. Shared row-local guards retain explicit choice/custom drafts, volatile secrets and safe operation facts. Read-only or unavailable controls remain visible with reasons; local rendering never creates permission or lifecycle.
+Canonical Floret input and approval requests determine decision visibility and settlement. Result content loss and child attention do not themselves create parent confirmation controls. The UI shows canonical tool Activity and actual input/approval requests; only real model-requested observation produces verification activity.
 
 # Contract
 
@@ -18,7 +18,7 @@ Single/multiple approvals share one flat list. Rows pair safe operation labels w
 ### Canonical decisions and drafts
 Primary requested approvals remain visible when `can_approve=false`, adapters cannot mutate, thread is read-only or detail is pending. Disable every decision with canonical/read-only reason. Local handoff, consumed sets, generations or busy reducers cannot own visibility.
 
-Result content loss and child attention do not themselves create parent confirmation controls. The UI shows canonical tool Activity and actual input/approval requests; only real model-requested observation produces verification activity. Previously saved requests remain visible and answerable.
+Previously saved requests remain visible and answerable.
 
 ### Safe presentation
 One pure presenter owns trusted operation/title/description/command/target/risk fields. Localized fallbacks are independent strings, never parsed from translated sentences; internal names/encoding prefixes remain hidden.
@@ -44,6 +44,5 @@ The decision surface owns drafts, disabled reasons, focus, and row-local command
 # Evidence
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
-- `redeven:internal/flower_ui/src/flowerApprovalPresentation.ts` - Source.
 
 - `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Tests.

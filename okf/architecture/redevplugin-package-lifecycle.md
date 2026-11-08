@@ -7,13 +7,13 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-ReDevPlugin owns package inspection, installation, source identity, durable receipts, runtime readiness and retained data. Redeven supplies authenticated product policy and a single review experience for market, GitHub, HTTPS, uploaded and generated packages. Installation does not grant permissions.
+ReDevPlugin owns package inspection, installation, source identity, durable receipts, runtime readiness and retained data. The Host validates ordinary package structure, hashes, manifest, capability contracts and source policy. Plugin signatures, publisher trust, signed release references, and official-only admission do not participate.
 
 # Contract
 
 ## Inspection and installation
 
-The Host validates ordinary package structure, hashes, manifest, capability contracts and source policy. Plugin signatures, publisher trust, signed release references, and official-only admission do not participate. GitHub repositories may expose several plugins through `.redevplugin/index.json`; the user selects a plugin before inspection. A package URL or upload uses the same inspection contract.
+GitHub repositories may expose several plugins through `.redevplugin/index.json`; the user selects a plugin before inspection. A package URL or upload uses the same inspection contract.
 
 Review binds exact inspected bytes, intended instance/revision, owner and session. Submission uses one request ID and the released durable `StartInspectedInstall` API. A lost response queries that same request; it never invents a replacement operation. The Shell restores owner-scoped receipts, including first-install failures with no inventory row. Closing Plugin Center does not stop observation; changing the authenticated owner cancels and clears it.
 
@@ -43,5 +43,3 @@ ReDevPlugin owns durable lifecycle and execution; Redeven owns presentation and 
 
 - `redeven:internal/redevpluginintegration/integration.go` - Host construction.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Exact inspection and durable request recovery.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts` - Receipt observation.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginAutomaticUpdates.ts` - Authenticated update scheduling.

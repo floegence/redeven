@@ -7,11 +7,11 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Floret owns reuse decisions/canonical state; Redeven runs one prepared request/Responses consumer. In-memory transport reuse requires matching next canonical state and complete input. Failure follows ordinary turn recovery; supplemental context never enables reuse.
+Floret owns reuse decisions/canonical state; Redeven runs one prepared request/Responses consumer. Failure follows ordinary turn recovery; supplemental context never enables reuse. Runtime/Desktop epoch 68 and model-source RPC v4 preserve Floret's effective request reuse policy.
 
 # Contract
 
-Runtime/Desktop epoch 68 and model-source RPC v4 preserve Floret's effective request reuse policy. Adapters cannot broaden it.
+Adapters cannot broaden it.
 
 Full input always owns estimates and fingerprints.
 
@@ -45,4 +45,3 @@ rotation separately invalidates the live connection before another request.
 
 - `redeven:internal/ai/model_gateway_openai_connections.go` - Source.
 - `redeven:internal/ai/model_gateway_openai_cache_integration_test.go` - Floret thread acceptance.
-- `redeven:internal/ai/openai_continuation_test.go` - Tests.

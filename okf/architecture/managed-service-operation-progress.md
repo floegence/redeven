@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Manager Reporter owns live output; Registry owns history. One operation ID retains disclosure/completion through refresh. Redact command templates before storage; output grants no identity. Capture/storage/transport failures must not expose secrets, queries, private paths or control bytes.
+Manager Reporter owns live output; Registry owns history. Capture/storage/transport failures must not expose secrets, queries, private paths or control bytes. Explicit rejection offers fresh review with non-secret inputs; secrets clear with the drawer. Ambiguous transport outcomes offer read-only request-ID receipt lookup, never blind POST replay.
 
 # Contract
 
@@ -20,7 +20,7 @@ Page state keys disclosure by operation_id, never component/service-object ident
 ## Install admission and handoff
 Final install immediately closes the template drawer, clears collection filters and shows a request-owned row at the service's append position. This row is presentation only, never a fabricated ServiceView or persistent cache entry. A raw CreateResult binds its reviewed service ID to the real operation; slow collection refresh cannot hide operation details, cancellation or terminal outcome. Full ServiceView handoff preserves expansion and transfers focus only when the replaced row owned it. No management drawer or service window opens automatically.
 
-Explicit rejection offers fresh review with non-secret inputs; secrets clear with the drawer. Ambiguous transport outcomes offer read-only request-ID receipt lookup, never blind POST replay. A missing receipt proves no rejection. Accepted work uses existing lifecycle retry, not new creation. Identity/permission generations fence late results; reopening a drawer cannot cancel work or let an earlier review overwrite it.
+A missing receipt proves no rejection. Accepted work uses existing lifecycle retry, not new creation. Identity/permission generations fence late results; reopening a drawer cannot cancel work or let an earlier review overwrite it.
 
 ## Execution panel
 Published Floe planes, ink, LinearProgress, StableText and presence compose a connected rail and fixed-height panel. Narrow rail reveals its current step without scrolling the page. Open details show commands/output immediately in one scrolling transcript; no secondary disclosure. Logs/transfer/stage changes preserve neighboring geometry and existing output nodes. Preserve canonical interleaved output order; follow only while already at the end.

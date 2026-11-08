@@ -7,11 +7,11 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Redeven owns product visibility, policy, prompt and approval UI; Floret owns invocation and neutral tools. Current thread permission applies at the next boundary, while each admitted call retains its snapshot. Ordinary independent calls may authorize together; invalid authority rejects and dependent work waits.
+Redeven owns product visibility, policy, prompt and approval UI; Floret owns invocation and neutral tools. Default tools omit write_todos; historical Todo remains readable. [Goals](flower-goals.md) retains independent ownership. Registry includes read/search/file/patch/terminal/web/OKF/interaction/skills/subagents/MCP/Floret tools.
 
 # Contract
 
-Default tools omit write_todos; historical Todo remains readable. [Goals](flower-goals.md) retains independent ownership. Registry includes read/search/file/patch/terminal/web/OKF/interaction/skills/subagents/MCP/Floret tools. Bounded typed details exclude raw/status/name-only affordances. Target media validates MIME/size/digest; never persist image bytes in tool state.
+Bounded typed details exclude raw/status/name-only affordances. Target media validates MIME/size/digest; never persist image bytes in tool state.
 
 Pure conditional-input validation belongs in typed tool decoders, before resource
 resolution and effect authorization. Published Floret owns bounded correction and
@@ -64,7 +64,6 @@ Flower must not infer remote execution from thread context alone; it can only cl
 - [Local feedback tests](../../internal/ai/local_tool_feedback_test.go) verify retired invocations cannot modify files and owner diagnostics reach model text, structured results and Activity. [Service acceptance](../../internal/ai/local_tool_feedback_integration_test.go) verifies final HTTP output, explicit contextual patch correction, persistence and restart using published Floret. [Provider boundary tests](../../internal/ai/model_gateway_tool_names_test.go) preserve file/terminal schemas and callable-name guidance across adapters and frozen transport retries.
 
 - [Tool registry](../../internal/ai/tools/registry.go) - Source.
-- `redeven:internal/ai/floret_native_tools.go` - Source.
 
 - Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.
 - internal/ai/patch_prompt_qualification_test.go uses the isolated live-model lane for multi-chunk, order and duplicate-header recovery. Patches run only in memory; proposed tools never execute. Small samples do not establish production failure rates.
@@ -72,7 +71,6 @@ Flower must not infer remote execution from thread context alone; it can only cl
 - 2026-11-08 evidence: against `16f0a9854`, compact default tool JSON decreased
   from 37,465 to 35,293 bytes (DeepSeek) and 45,063 to 40,515 (strict Responses),
   with all 37 tools retained. Bytes are not tokens, latency or success rates.
-- [Synthetic live probes](../../internal/ai/tool_guidance_qualification_test.go)
   never execute proposals. Three repeats per case on configured DeepSeek Flash:
   baseline 9/9; final candidate 8/9, with one cancellation-count misinterpretation.
   Child inspection and direct service identity each passed 3/3. A proposed

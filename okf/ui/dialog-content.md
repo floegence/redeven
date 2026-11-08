@@ -7,18 +7,17 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published Floe owns Dialog structure; Redeven supplies localized content/actions. Headers hold identity/controls; guidance and consequences belong in bodies, including drawers and confirmations. Missing descriptions require content fixes, not hidden text or header subtitles.
+Published Floe owns Dialog structure; Redeven supplies localized content/actions. Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and `ConfirmDialog`. Global dialogs and drawers reserve the visible application header before allocating their body height.
 
 # Contract
 
-Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and `ConfirmDialog`. Custom headers and title JSX must not recreate the removed explanatory subtitle.
+Custom headers and title JSX must not recreate the removed explanatory subtitle.
 
 This contract changes no application connection, process, or window lifecycle.
 
 ## Header-safe bounds
 
-Global dialogs and drawers reserve the visible application header before allocating
-their body height. The shared Redeven stylesheet applies the larger of the native
+The shared Redeven stylesheet applies the larger of the native
 Desktop titlebar and Floe's visible shell top bar plus its top safe inset, followed
 by the published presentation gap. Floe owns the visible viewport, keyboard
 response, remaining safe edges, panel maximum height, focus and dismissal. The
@@ -50,8 +49,4 @@ Headers contain identity and controls only. Missing guidance must be repaired in
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Source-switch width stability, smooth resizing, scroll access and reduced-motion tests.

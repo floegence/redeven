@@ -8,14 +8,12 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven persists model/reasoning preferences, credentials and source selection. Floret owns provider context and opaque continuation. Desktop/environment sources stay distinct; typed observations drive usage/compaction. Token input/output limits remain separate and configuration merges preserve unrelated settings.
+Redeven persists model/reasoning preferences, credentials and source selection. Token input/output limits remain separate and configuration merges preserve unrelated settings. The comparison logs are /tmp/redeven-budget-desktop-failures-focused.log and /tmp/redeven-budget-desktop-main-baseline.log.
 
 # Contract
 
 ## Request output budgets
 Redeven passes model output capability as Floret ModelMaxOutputTokens, and only an explicit per-request limit as MaxOutputTokens. It never maps capability to a fixed output reservation.
-
-The comparison logs are /tmp/redeven-budget-desktop-failures-focused.log and /tmp/redeven-budget-desktop-main-baseline.log.
 
 ## Mechanism
 Model reasoning capability, stream fields, history replay, and immutable thread settings are governed by [model reasoning capabilities and transport](model-reasoning-runtime.md#runtime-capability).

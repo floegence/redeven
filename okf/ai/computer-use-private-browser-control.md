@@ -27,8 +27,6 @@ inside the invocation budget. Explicit condition waits own their original deadli
 through final publication and resample only typed identity invalidation. Failed
 wait samples retain elapsed time and sample count without claiming a condition result.
 
-See [guided connection](computer-use-browser-connection.md).
-
 # Boundaries
 
 Browser observation is a bounded protection, not proof of atomic safety across all dynamic content. Full product and native IME acceptance remain governed by [Computer use qualification](computer-use-qualification.md).

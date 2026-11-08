@@ -7,11 +7,11 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published Floe owns material and motion. Env App/Welcome select soft-neumorphic roles while business content stays flat. Preserve input, portals, widget identity and hot interaction ownership. Resolve conflicts at the product override source without copying shadow logic or introducing another theme/dependency owner.
+Published Floe owns material and motion. Both first-party renderers set `theme.defaultSurfaceStyle: soft-neumorphic`; [published dependencies](../architecture/env-app-upstream-web-dependencies.md) own versions/registry requirements. Use released Button/Card/selection/progress/Dialog/FloatingWindow treatments; hover preserves selected fill/text.
 
 # Contract
 
-Both first-party renderers set `theme.defaultSurfaceStyle: soft-neumorphic`; [published dependencies](../architecture/env-app-upstream-web-dependencies.md) own versions/registry requirements. Use released Button/Card/selection/progress/Dialog/FloatingWindow treatments; hover preserves selected fill/text. Business content stays flat.
+Business content stays flat.
 
 ## Checkbox states
 Unchecked faces remain hollow with a visible 1px control edge; checked/mixed faces use primary fill and a check/minus. Disabled faces retain the distinction. Published Floe owns this recipe and 24px/44px pointer targets. Single-line faces center within those targets; description controls retain first-line alignment. Model names and choices share the published small-control row scale and native labels with stable inputs; metadata and edit/reset actions remain independent. Acceptance checks state shape/contrast, repeated selection, focus/scroll continuity and saved intent.
@@ -41,9 +41,5 @@ Use restrained static depth and short functional control motion. The progress di
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.polish.browser.test.tsx` - Hidden-page geometry, shared material, focus, responsive layouts, reversal and reduced-motion acceptance.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.permissionStability.browser.test.tsx` - First-painted popup geometry, repeated focus transfers, captured page pixels, distinct mode icons, compact bottom inset and retained thread drafts.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Published checkbox faces, 44px touch targets, centered model names, stable focus/scroll, independent actions and DeepSeek search save intent.

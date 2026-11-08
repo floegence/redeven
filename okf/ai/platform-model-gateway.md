@@ -7,14 +7,12 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven discovers authorized models via trusted control-channel lease/origin; Runtime never receives platform Provider keys. Floret owns execution/tools/history/recovery; platform Edge admission/binding/reservations/accounting. Routing does not transfer these ownership boundaries.
+Redeven discovers authorized models via trusted control-channel lease/origin; Runtime never receives platform Provider keys. Floret owns execution/tools/history/recovery; platform Edge admission/binding/reservations/accounting. A removed model stays unavailable instead of silently switching an existing thread.
 
 # Contract
 
 ## Catalog and model selection
 The Runtime renews the platform lease and loads the current authorized catalog for the session. The catalog is projected into request-local configuration, never persisted into the environment's editable provider profile.
-
-A removed model stays unavailable instead of silently switching an existing thread.
 
 ## Execution and trust
 Only authoritative session metadata supplies the gateway origin and lease.

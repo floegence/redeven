@@ -7,11 +7,11 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Desktop owns protected target views, toolbar, navigation and cleanup over Runtime-authorized Web Service routes. Reopen reuses the same live forward; content gets no Desktop bridge. Invalid navigation rejects, while marked upstream failure offers local retry without reauthorizing or restarting the app.
+Desktop owns protected target views, toolbar, navigation and cleanup over Runtime-authorized Web Service routes. Invalid navigation rejects, while marked upstream failure offers local retry without reauthorizing or restarting the app. When the trusted Desktop Shell bridge is present, Env App requests a semantic Web Service window instead of creating a renderer popup.
 
 # Contract
 
-When the trusted Desktop Shell bridge is present, Env App requests a semantic Web Service window instead of creating a renderer popup. The address field always projects the protected route back onto the user's original service origin and current application path; it must not expose Runtime listener ports, private hostnames, `/pf/<id>` prefixes, forward identities, boot routes, entry tickets, or other transport details.
+The address field always projects the protected route back onto the user's original service origin and current application path; it must not expose Runtime listener ports, private hostnames, `/pf/<id>` prefixes, forward identities, boot routes, entry tickets, or other transport details.
 
 [Managed opening](../architecture/managed-web-service-opening.md) owns the response and first-navigation boundary.
 
@@ -51,5 +51,4 @@ System-browser authorization and the persisted access-mode decision remain owned
 # Evidence
 
 - `redeven:desktop/src/shared/desktopShellWebServiceWindowIPC.ts:1` - Source.
-- `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - Source.
 - `redeven:desktop/scripts/check-web-service-reserved-path.mjs` - Collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address copying, redirect handling and ordinary application 404 preservation.

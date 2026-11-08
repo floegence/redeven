@@ -7,7 +7,7 @@ reviewed_at: "2026-10-28"
 ---
 # Summary
 
-Runtime policy is authoritative even after control-plane session authorization. Clamp grants by local permission policy and scope every file-facing feature to explicit directory roots. Product controls present that decision; they never widen permissions or infer access from paths.
+Runtime policy is authoritative even after control-plane session authorization. Repository-rule discovery and delivered-file reads use Registry.OpenRead. It resolves current policy, rechecks the selected root, walks canonical components through pinned os.Root handles, rejects substituted symlinks and compares opened identities before returning a descriptor.
 
 # Contract
 
@@ -20,11 +20,7 @@ Redeven persists only product authorization audit and does not maintain an appro
 
 ## Descriptor-based reads
 
-Repository-rule discovery and delivered-file reads use Registry.OpenRead. It
-resolves current policy, rechecks the selected root, walks canonical components
-through pinned os.Root handles, rejects substituted symlinks and compares opened
-identities before returning a descriptor. Metadata comes from that descriptor.
-A previously authorized pathname is not a reusable read capability.
+Metadata comes from that descriptor. A previously authorized pathname is not a reusable read capability.
 
 # Boundaries
 

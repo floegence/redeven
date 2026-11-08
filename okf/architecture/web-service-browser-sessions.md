@@ -7,12 +7,11 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Registry access mode selects protected unified proxy or Desktop loopback; current Environment/forward authority governs every handoff. Browser cookies, Electron credentials and service authentication stay separate. Reject stale routes without direct-target fallback or durable substitute sessions.
+Registry access mode selects protected unified proxy or Desktop loopback; current Environment/forward authority governs every handoff. Backend normalization accepts `3000`, `:3000` and absolute/scheme-less HTTP(S) with exact `localhost`, numeric `127.0.0.0/8` or `::1`. Renderer checks are feedback only.
 
 # Contract
 
 ## Browser sessions
-- Backend normalization accepts `3000`, `:3000` and absolute/scheme-less HTTP(S) with exact `localhost`, numeric `127.0.0.0/8` or `::1`. Renderer checks are feedback only.
 - Browser Local UI unified access uses `/pf/<forward_id>/...`; remote sessions use authorized `pf-<forward_id>` origin and one-time entry. [Loopback access](#desktop-loopback) and [Desktop windows](../desktop/web-service-browser-window.md) own Desktop presentation.
 - [Operation progress](managed-service-operation-progress.md) owns per-service feedback. Managed services open through their verified `open-session` result.
 
@@ -40,10 +39,3 @@ Compatibility origin is not direct access, RBI, public listening, Local UI login
 # Evidence
 
 - `redeven:internal/portforward/service.go` - Source.
-- `redeven:internal/managedwebservice/open_session.go` - Source.
-
-- `redeven:internal/localui/desktop_browser_handoff.go:1` - Source.
-- `redeven:internal/codeapp/appserver/server.go:301` - Source.
-
-- `redeven:internal/portforward/registry/schema.go` - Source.
-- `redeven:desktop/src/main/navigation.ts:256` - Source.

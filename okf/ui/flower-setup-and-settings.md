@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Shared setup/settings serve both Flower carriers. Unconfigured profiles offer setup; configured new chats offer editable starters without launching. Retained modal preserves saves/errors and makes covered chat inert without read acknowledgement; existing model/permission/recovery owns policy.
+Shared setup/settings serve both Flower carriers. The unconfigured surface is one open, canvas-level composition using published Floe ink and Button interaction, with no card, icon tile, heavy heading or filled call-to-action. It contains the Flower mark, setup title, one short explanation and the available settings destinations.
 
 # Contract
 
 ## First-time setup
 Welcome setup requires no selected thread, configured provider or usable model, and absent/`not_configured`/`empty` Desktop source. Desktop `local_host` opens the current surface's settings, never another Welcome window or a remote destination. Artwork has no glow or continuous animation.
 
-The unconfigured surface is one open, canvas-level composition using published Floe ink and Button interaction, with no card, icon tile, heavy heading or filled call-to-action. It contains the Flower mark, setup title, one short explanation and the available settings destinations. Local setup has one text action; remote Desktop setup keeps distinct Desktop and environment text actions with concise localized labels. No model-sync control or starter-task previews appear before configuration. Existing settings updates restore the retained composer and draft when a model becomes usable; configured-model recovery remains in its existing settings/menu owner.
+Local setup has one text action; remote Desktop setup keeps distinct Desktop and environment text actions with concise localized labels. No model-sync control or starter-task previews appear before configuration. Existing settings updates restore the retained composer and draft when a model becomes usable; configured-model recovery remains in its existing settings/menu owner.
 
 ## Starter tasks
 Four editable drafts cover current-folder understanding, connected computer, installed applications and folder organization. Names/dates alone never justify deletion. The [companion](flower-activity-companion.md#companion) omits the grid.
@@ -41,6 +41,4 @@ Permission descriptions sit outside the single-line selection buttons and are li
 
 - `redeven:internal/flower_ui/src/i18n/flowerSurfaceMessages.ts` - Source.
 - `redeven:internal/flower_ui/src/chat/FlowerSetupWelcome.tsx` - Shared setup composition.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSetupWelcome.presentation.browser.test.tsx` - Published-control, theme, localization, keyboard and accessibility acceptance.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.setupGuide.browser.test.tsx` - Settings routing and retained draft transition.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.starterTasks.browser.test.tsx` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Authenticated local capability and verified account facts govern ChatGPT registration, renewal and requests. One local owner manages bounded sign-in and logout, independently of provider connection saves. No remote credential transfer, implicit OAuth or fallback billing changes account authority.
+Authenticated local capability and verified account facts govern ChatGPT registration, renewal and requests. Interrupted logout is completed at startup; normal maintenance scans never clear a live logout. Account updates use model_directory.changed and merge independently of drafts.
 
 # Contract
 
@@ -15,12 +15,8 @@ Authenticated local capability and verified account facts govern ChatGPT registr
 ### Sign-in and registration
 One `chatgpt.Client` owns bounded, five-minute in-memory attempts.
 
-Interrupted logout is completed at startup; normal maintenance scans never clear a live logout.
-
 ### Renewal and credential coordination
 [Account maintenance](../../internal/chatgpt/lifecycle.go) starts with the Runtime service, independently of AI readiness, connection bindings and open windows. Runtime shutdown cancels maintenance without signing out and never schedules OS background work.
-
-Account updates use model_directory.changed and merge independently of drafts.
 
 ### Logout and connection changes
 Sign-out first records intent and stops related tasks through Floret's existing immediate Cancel with descendants. The private Desktop model source observes current account facts once per second and passes confirmed account stop reasons to its owning Runtime; it never owns another task lifecycle.
@@ -53,6 +49,3 @@ Old API-key-only saves remain supported.
 
 - `redeven:internal/chatgpt/client.go` - Source.
 - `redeven:internal/chatgpt/account_lifecycle_contract_test.go` - Tests.
-
-- `redeven:internal/codeapp/appserver/chatgpt_auth.go` - Source.
-- `redeven:internal/localui/local_runtime_browser_test.go` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The template repository publishes immutable recommendations. Redeven daily/manual adoption pins public Go checksums, regenerates notices/OKF and passes normal integration checks. Failure retains published main and uncertain push requires ref inspection. Adoption never upgrades installed service instances.
+The template repository publishes immutable recommendations. Redeven daily/manual adoption pins public Go checksums, regenerates notices/OKF and passes normal integration checks. Failure retains published main and uncertain push requires ref inspection.
 
 # Contract
 
@@ -35,4 +35,3 @@ The [Managed Service release contract](../architecture/managed-service-release-d
 # Evidence
 
 - `redeven:.github/workflows/update-service-template-dependency.yml` - Source.
-- `redeven:scripts/update_service_template_dependency.mjs` - Source.

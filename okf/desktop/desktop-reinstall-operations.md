@@ -7,11 +7,10 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Wipe reinstall confirms exact target/root, verifies package, attempts stop, replaces root, verifies startup and cleans old data. Unknown process or broken state cannot block filesystem recovery. Preserve-data reinstall changes managed files and rolls back failed verification.
+Wipe reinstall confirms exact target/root, verifies package, attempts stop, replaces root, verifies startup and cleans old data. Unknown process or broken state cannot block filesystem recovery. Both modes are named Reinstall. [Interaction continuity](desktop-interaction-continuity.md) owns confirmation sessions; timeout/cancellation preserve journal and diagnostics.
 
 # Contract
 
-- Both modes are named Reinstall. [Interaction continuity](desktop-interaction-continuity.md) owns confirmation sessions; timeout/cancellation preserve journal and diagnostics.
 - The sequence is confirmation, direct channel, target resolution, verified package, stop attempt, old-root isolation, install, start, Runtime verification, catalog/Local UI verification and old-data cleanup. See the exact phase constants below. Only Runtime is prepared, installed, started and verified.
 - One minimal journal lives outside the target root. It stores no package identity: current package-cache validation is authoritative on incomplete recovery. Preserve the actual failing phase rather than rewriting later failures as filesystem failures.
 
@@ -22,5 +21,3 @@ Never scan a home directory, follow an unconfirmed symlink, prune containers glo
 # Evidence
 
 - `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - Source.
-- `redeven:desktop/src/shared/desktopReinstallProgress.ts:1` - Source.
-- `redeven:desktop/src/main/reinstallTargetProcess.ts:1` - Source.

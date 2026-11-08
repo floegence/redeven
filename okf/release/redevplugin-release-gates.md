@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Consume the coordinated published ReDevPlugin release with artifacts bound to tag, source, target, digest, signer and receipt. Registry readbacks, native evidence and closed inventories establish provenance. Partial, mutable, Windows or target-mismatched inputs fail before admission.
+Consume the coordinated published ReDevPlugin release with artifacts bound to tag, source, target, digest, signer and receipt. Exactly one platform-release-manifest.json binds tag/source/workflow/attestation. Independently verify Go proxy/SumDB h1/go.mod, two npm SHA512/provenance, runtime/worker crates checksums/Cargo VCS, manifest version/closed coordinate order/contract-set hash.
 
 # Contract
 
 ## Publication
 Use go.mod/Env lock coordinated version. Boundary scan rejects sibling/Go workspace/replace/npm links/copied runtimes-contracts/Rust paths/duplicate platform-core, excluding generated/dependency output and failing on scan errors. No committed plugin package/parallel catalog. Validated latest-only market chooses immutable transport; platform verifies, metadata grants no trust.
 
-Exactly one platform-release-manifest.json binds tag/source/workflow/attestation. Independently verify Go proxy/SumDB h1/go.mod, two npm SHA512/provenance, runtime/worker crates checksums/Cargo VCS, manifest version/closed coordinate order/contract-set hash. Extra/partial/local/mutable/mismatched publication fails before construction.
+Extra/partial/local/mutable/mismatched publication fails before construction.
 
 Manifest uses verified HTTPS/redirects: initial+three network retries including handshake;15s connect/60s transfer/120s retry-start (last transfer may finish later). Exhaustion deletes partials and stops before Rust with release-specific error. Validation never retries. --manifest-file validates identically offline. Node CLI emits validation evidence on canonical/symlink paths; empty success invalid.
 

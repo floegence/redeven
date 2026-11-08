@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Floret request facts drive output indicators; frozen tool schemas drive bounded provisional names/counts. Stable geometry keeps metrics readable without repeated announcements. Confirmed results replace previews, and failed edits retain only actual mutations without giving provisional paths filesystem authority.
+Floret request facts drive output indicators; frozen tool schemas drive bounded provisional names/counts. Actual result names and counts replace previews on settlement. A failed patch shows only confirmed mutation diffs before its error, retaining the error status and stable disclosure row.
 
 # Contract
 
@@ -33,11 +33,7 @@ The frozen tool definition supplies one optional argument preview parser per cal
 ## Edit preparation
 Tool schemas are the single declaration-order authority. For `apply_patch`, Redeven observes complete canonical Add/Update/Delete headers and optional Move headers before the body finishes.
 
-Actual result names and counts replace previews on settlement. A failed patch
-shows only confirmed mutation diffs before its error, retaining the error status
-and stable disclosure row. Validation failure shows no completed-edit preview.
-A partial Move presents the confirmed destination create/update, not a rename.
-Confirmed local mutation targets support the existing authorized file navigation;
+Validation failure shows no completed-edit preview. A partial Move presents the confirmed destination create/update, not a rename. Confirmed local mutation targets support the existing authorized file navigation;
 preview paths and unconfirmed operations never acquire file actions.
 
 ## Confirmed file activity
@@ -62,11 +58,4 @@ Activity presentation is not a filesystem authority or a second mutation record.
 - `redeven:internal/flower_ui/src/icons/FlowerIcon.tsx`
 - `redeven:internal/flower_ui/src/styles/flower.css`
 
-- `redeven:internal/ai/flower_argument_preview.go` - Source.
-- `redeven:internal/ai/flower_argument_preview_test.go` - Tests.
-- [Browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.toolFailures.browser.test.tsx)
 - No-edit validation and confirmed destination diffs remain readable with one error notice at desktop English/light and narrow Chinese/dark sizes.
-
-- `redeven:internal/ai/floret_tools.go` - Source.
-- `redeven:internal/ai/activity_file_actions.go` - Source.
-- `redeven:internal/ai/activity_file_targets.go` - Source.

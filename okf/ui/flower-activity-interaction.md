@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Desktop and Env App render canonical Floret facts with one transcript viewport owner. Live updates cannot move pressed triggers or insert hit targets before click completion. Canceled gestures activate nothing; disposal releases gesture ownership while retained content stays inspectable.
+Desktop and Env App render canonical Floret facts with one transcript viewport owner. Canceled gestures activate nothing; disposal releases gesture ownership while retained content stays inspectable. Identity=thread/run/turn/canonical item. [Sequences](flower-tool-sequences.md) groups tools/thinking; individual details stay accessible.
 
 # Contract
 
 ## Content and identity
 Permanent folding gutter aligns prose/activity/progress/Goal before grouping. Details align with summary; tool/thinking metadata follows text with compact gap/full-row activation. Chevrons derive right/down solely from aria-expanded, including initially open screenshots.
 
-Identity=thread/run/turn/canonical item. [Sequences](flower-tool-sequences.md) groups tools/thinking; individual details stay accessible. Collapsed fields preserve intent/result shape without hidden payload. Disclosure reads selected values:16KiB chunks/128KiB windows with selection pins. Close/hide/navigation cancels. Markdown keeps exact UTF-8/whitespace, yields between batches, and retains complete selected working set rather than fixed preview.
+Collapsed fields preserve intent/result shape without hidden payload. Disclosure reads selected values:16KiB chunks/128KiB windows with selection pins. Close/hide/navigation cancels. Markdown keeps exact UTF-8/whitespace, yields between batches, and retains complete selected working set rather than fixed preview.
 
 Thread Query:/Thread Read: remain technical labels with model intent in user language; [queries](../ai/flower-thread-queries.md) owns privacy/limits/failures. Web search uses one localized visible/accessibility title; details show actual per-call results/errors, including URL-only sources, without repeated query/URL/pattern/status.
 
@@ -49,7 +49,4 @@ Presentation creates no Floret API/lifecycle, reconstructed input or file/proces
 
 - [Viewport](../../internal/flower_ui/src/flowerScrollTail.ts), deterministic frame/input tests and [streaming](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx): bounded layout, burst retargeting, displacement, text identity/selection, reduced motion/cancel.
 - `redeven:internal/ai/tool_activity_details.go` - Source.
-- `redeven:internal/ai/computer_activity.go` - Source.
-- `redeven:internal/flower_ui/src/FlowerActivityRows.tsx` - Source.
 - [Title owner](../../internal/flower_ui/src/flowerActivityTitleReveal.ts)/[browser](../../internal/envapp/ui_src/src/ui/FlowerSurface.activityTyping.browser.test.tsx): arrival,geometry,history,navigation,preferences,cleanup.
-- [Thinking](../../internal/flower_ui/src/FlowerThinkingDisclosure.tsx)/[petal browser](../../internal/envapp/ui_src/src/ui/flower/FlowerThinkingIcon.browser.test.tsx): order/timing/all themes/reduced motion/forced colors.

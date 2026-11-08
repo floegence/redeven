@@ -7,11 +7,11 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Flowersec owns encrypted multiplexed transport/backpressure; Redeven resources/authorization/routes. Graphical state, tickets, input, clipboard/audio/pixels/disconnect use native proxy; static acquisition stays authenticated browser traffic. No missing-authority or raw HTTP/WS bypass.
+Flowersec owns encrypted multiplexed transport/backpressure; Redeven resources/authorization/routes. Env App resource-management requests, including the forward touch immediately before opening a graphical window, use its active Flowersec session HTTP carrier.
 
 # Contract
 
-Env App resource-management requests, including the forward touch immediately before opening a graphical window, use its active Flowersec session HTTP carrier. Window creation must not reintroduce a raw HTTP step between session admission and the resource-scoped viewer connection. Missing session transport fails closed.
+Window creation must not reintroduce a raw HTTP step between session admission and the resource-scoped viewer connection. Missing session transport fails closed.
 
 ## One session boundary for every backend
 The viewer's `WindowTransport` maps product paths into the published `flowersec-proxy/http1` and `flowersec-proxy/ws` stream APIs.
@@ -39,5 +39,3 @@ HTTPS or a trustworthy local origin is still required where the browser restrict
 - `internal/codeapp/ui_src/src/windowTransport.ts` and `windowTransport.test.ts`: published transport composition, route and spend validation, iframe ownership and disposal.
 
 - `internal/localui/window_transport.go`, `window_transport_test.go` and `window_transport_e2e_test.go`: resource acquisition and actual direct session authority.
-
-- `internal/agent/window_transport.go` and `internal/accessproxy/session_ready_test.go`: scoped handler registration and activation/cancellation ordering.

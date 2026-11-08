@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published artifactcache owns verification, locking and eviction. Desktop supplies its private directory, seven-day idle retention and 2 GB budget plus document-local transfers/UI. Devices reuse verified archives; cancellation retains completed cache. Unknown catalogs fail and cleanup cannot negate successful preparation.
+Published artifactcache owns verification, locking and eviction. Desktop supplies its private directory, seven-day idle retention and 2 GB budget plus document-local transfers/UI. Unknown catalogs fail and cleanup cannot negate successful preparation.
 
 # Contract
 

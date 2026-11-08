@@ -28,8 +28,6 @@ One derived entry owns rendering/target, in this order:
 3. Eligible running, queued, unread-failure or ephemeral-completion target button.
 4. Ordinary editor or read-only/unavailable inspection.
 
-[Activity companion](flower-activity-companion.md#companion) owns question activation and one-shot focus handoffs.
-
 ## Composer
 Settings recovery stays inside the collapsed row, with a reachable Retry and unchanged height. It replaces compact summary copy until recovery; active Stop remains available. The published shell cannot clip recovery outside its bounds. Expanded recovery uses the existing floating notice stack.
 
@@ -51,9 +49,4 @@ This concept owns content presentation only. [Flower companion presence](#presen
 # Evidence
 
 - `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Source.
-- `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/activityFlowerSummary.ts` - Collapsed versus expanded summary projection.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Collapsed running status and companion interaction coverage.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Tests.

@@ -7,14 +7,12 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Env App owns document-local terminal fonts. New preferences use bundled JetBrains Mono at size 12; existing IDs/sizes remain unchanged and each client resolves availability. Floeterm retains canonical cells, cursor and session grid. Font presentation cannot replace terminal authority or erase stored preferences.
+Env App owns document-local terminal fonts. New preferences use bundled JetBrains Mono at size 12; existing IDs/sizes remain unchanged and each client resolves availability. The menu separates bundled fonts from available local fonts and exposes the saved selection through accessible pressed state; an unavailable saved selection remains visible but cannot be newly selected.
 
 # Contract
 
 ## One font resolver for every terminal surface
 Activity, Workbench, container exec, and settings previews consume the same font catalog and resolution result.
-
-The menu separates bundled fonts from available local fonts and exposes the saved selection through accessible pressed state; an unavailable saved selection remains visible but cannot be newly selected.
 
 No fallback changes a persisted preference.
 

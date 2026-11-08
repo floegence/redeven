@@ -7,14 +7,14 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Desktop enrolls Local, SSH, WSL and container Runtimes through one app session. Management, invitation verification and consent are separate authorities; only confirmed membership completes enrollment. Observations retain drafts, failures require explicit recovery, and no Runtime URL enrollment form exists.
+Desktop enrolls Local, SSH, WSL and container Runtimes through one app session. Padded Dropdown selector/trailing Cancel opens fixed wizard;empty inventory offers recovery and wrapped/touch content retains height. Creation offers Not now/Add Gateway access.
 
 # Contract
 
 ## Identity/enrollment
 connection_id/connectionID identifies saved registrations across IPC/progress/session/Center;Web Center source_id maps to it. gateway_id/gatewayID identifies signed trust/attachments;DesktopRuntimeTargetID/placement owns lifecycle. Addresses/Cloud routes replace neither. Reject retired/ambiguous IPC fields and update peers together,preserving stored IDs/credentials/keys/schema5. One runtime_connection_target projects management/derived Cloud facts;Gateway access and Cloud capability/route/mutations/errors remain independently coordinated.
 
-Padded Dropdown selector/trailing Cancel opens fixed wizard;empty inventory offers recovery and wrapped/touch content retains height. Creation offers Not now/Add Gateway access. Each opening leases exact sender/target bridge and connects before fresh verification/consent. Env close retains lease;cancel/navigation/destruction/authority change retires it. Admitted writes keep transport to settlement;reject late submissions.
+Each opening leases exact sender/target bridge and connects before fresh verification/consent. Env close retains lease;cancel/navigation/destruction/authority change retires it. Admitted writes keep transport to settlement;reject late submissions.
 
 Try saved management/SSH/OpenSSH credentials first. Passive auth_required/missing credentials cannot preempt;only typed current auth failure reveals focused temporary credentials/Enter and ends credential-free retry. Unknown auth/Gateway/engine faults are not denial. Never save passwords/infer consent;retain credentials through admitted action/access verification,clear on completion/failure/close without observation races. Confirmed stopped offers Start;start/restart/update/reinstall share lifecycle owner. Loss stops submissions/polls,retains drafts. Explicit recovery/authority change/Settings suspension revokes verification/consent;resume fresh lease/connection with step/code drafts. Observation cannot cancel admitted work.
 

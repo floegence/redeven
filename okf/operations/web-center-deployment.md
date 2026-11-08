@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Center binary/UI deploy independently of Runtime/Desktop. Qualification records source/artifacts, host/browser, real duration, cleanup and limits using isolated names/ports/state. Preserve existing Runtime; smoke checks certify neither eight-hour soak nor a different native browser.
+Center binary/UI deploy independently of Runtime/Desktop. Package:binary/UI,two units,env examples,Docker/Compose/.env,licenses,DEPLOYMENT.md,manifest. --version reads source/time without state. Reject dirty source,extra/missing/link/mismatched files/target/tag/digest; both targets share commit.
 
 # Contract
 
 ## Release/install
 Same tag, independent install/upgrade; protocol/capability decides compatibility. Formal Linux amd64/arm64 archives require manifests,signed SHA256SUMS,remote readback and native execution on both targets. Either failure blocks; macOS source is development only, no Windows/macOS service/registry image.
 
-Package:binary/UI,two units,env examples,Docker/Compose/.env,licenses,DEPLOYMENT.md,manifest. --version reads source/time without state. Reject dirty source,extra/missing/link/mismatched files/target/tag/digest; both targets share commit. Extract verified signed bytes into new version directory. Target needs no compiler/Electron/Runtime. Compose uses package/exact.env and retains state/settings. Runtime installer excludes Center.
+Extract verified signed bytes into new version directory. Target needs no compiler/Electron/Runtime. Compose uses package/exact.env and retains state/settings. Runtime installer excludes Center.
 
 Pinned Node/Desktop package manager/Go/public deps build via build_center.sh <new-directory> [version]; default dev,production requires tag. Cross-build is insufficient without target execution.
 

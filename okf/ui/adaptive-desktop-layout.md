@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Desktop and mobile remain distinct interaction modes; narrow desktop regions use temporary drawers without rewriting saved placement. Mobile panels and Flower navigation preserve business-page/editor identity and explicit focus choices. Published geometry controls safe areas without product drag or snap lifecycles.
+Desktop and mobile remain distinct interaction modes; narrow desktop regions use temporary drawers without rewriting saved placement. Files/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The switch uses the published field height, including its border and padding, so the sidebar and single-row file toolbar dividers align at every interface scale.
 
 # Contract
 
@@ -22,7 +22,7 @@ A hidden toolbar action must retain an explicit reachable entry.
 ### Temporary desktop navigation
 Shell, Flower conversations, Files/Git navigation, and Terminal sessions measure their own shared navigation/content region. When that region cannot fit the current sidebar width plus 480 CSS pixels of main content, the sidebar becomes a transient left side drawer.
 
-Files/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The switch uses the published field height, including its border and padding, so the sidebar and single-row file toolbar dividers align at every interface scale. The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.
+The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.
 
 File filtering and entering or leaving idle path editing never add header feedback or change toolbar height. The shared bottom status bar owns the filtered item count and view indicator. Path editing keeps Enter submission, Escape cancellation, and blur cancellation without an instruction row; pending navigation and errors retain their accessible header feedback.
 
@@ -63,9 +63,3 @@ The [Activity companion](flower-activity-companion.md#companion) owns product pl
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Tests.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx` - Source.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Tests.

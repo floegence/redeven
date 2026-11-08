@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Flower maps authorized code, configuration and Runtime facts into canvas versions. Resource discovery and explicit actions reuse original registries and executors with exact bindings. Missing authority never substitutes a local route, and unknown mutations require original-operation inspection before any new attempt.
+Flower maps authorized code, configuration and Runtime facts into canvas versions. For tessiven.action, open prepares and returns entrance information for the running bound service and may run its preparation hook. It does not launch a browser or start a stopped service.
 
 # Contract
 
@@ -20,9 +20,7 @@ Discovery starts no process/business session and path refs grant no authority. I
 - `tessiven.runtime.action` / `POST .../runtimes/actions` requests connection or one supported `start`, `stop`, `restart`, or `update` process operation.
 - `tessiven.inspect/action` retain the canonical canvas version, bound instance, and resource identity checks for Managed Services and containers.
 
-For tessiven.action, open prepares and returns entrance information for the
-running bound service and may run its preparation hook. It does not launch a
-browser or start a stopped service. A returned operation_id can be queried through
+A returned operation_id can be queried through
 the corresponding inspect action=operation; absence of an ID is not retry authority.
 
 No sibling module, replacement SDK, or product lifecycle queue is introduced.
@@ -81,13 +79,7 @@ Flower and the UI call the same Tessiven service; neither writes its database di
 - `internal/ai/tessiven_tools_test.go` — Direct resources without a canvas library, with read permission enforcement.
 
 - `internal/managedwebservice/open_session_test.go` — Running entrance preparation and stopped-service refusal without lifecycle dispatch.
-- `internal/ai/tool_contract_clarity_test.go` — Final provider-visible descriptions across four routes.
-- `internal/tessiven/runtimes.go`
 - `internal/tessiven/broker_test.go` — Unattributed/device-generation denial, permission recheck and unknown effects.
-- `internal/codeapp/appserver/tessiven_source_test.go` — Public-header rejection and post-confirmation source revocation.
 
-- `internal/tessiven/context_test.go`
 - Tests.
-- `internal/ai/system_skills/redeven-tessiven/SKILL.md`
 - Source.
-- `internal/ai/tessiven_tools.go`

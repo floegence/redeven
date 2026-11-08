@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published Floe controllers own keyboard, composition and pointer gestures; product adapters bind them to painted window generations. Clients own IME and hosts deliver confirmed keys/Unicode. Cancellation releases held input without replay, while qualification distinguishes generated events from real applications/devices.
+Published Floe controllers own keyboard, composition and pointer gestures; product adapters bind them to painted window generations. Both motion paths use the same target authority, microtask coalescing, explicit flush and cancellation; platform bindings must not install another raw-event listener.
 
 # Contract
 
@@ -20,8 +20,6 @@ Published Floe controllers own keyboard, composition and pointer gestures; produ
 ## Pointer gestures
 ### Gestures and event ownership
 A touch begins pending, without a remote button press.
-
-Both motion paths use the same target authority, microtask coalescing, explicit flush and cancellation; platform bindings must not install another raw-event listener.
 
 Leaving the document does cancel.
 
@@ -45,8 +43,3 @@ A gesture cannot cross painted-window or connection generations. Reopening a vie
 
 - `go.mod` and `internal/envapp/ui_src/package-lock.json`: released upstream versions.
 - `internal/hostapps/setup.go` and `linux.go`: capability, launch preparation and surviving-process boundaries.
-- `internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs`: published controller and CSS embedding.
-
-- `internal/codeapp/appserver/host_application_viewer/viewer.js` and `macos.js`: thin platform binding, target and toolbar lifecycle.
-- `internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs`: published controller embedding.
-- `desktop/native/computer-host/Sources/RedevenComputerHost/Actions.swift`: native wheel encoding.

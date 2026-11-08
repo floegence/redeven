@@ -7,14 +7,14 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Desktop uses saved SSH connection/placement for host/container Runtime. One local coordinator, operation, transport lease and temporary helper own lifecycle/recovery. Gateway/Cloud credentials grant no SSH authority; targets persist no Desktop supervisor or lifecycle lock.
+Desktop uses saved SSH connection/placement for host/container Runtime. Omitted passwords reuse exact private scope; explicit changes reject during leases and never cross scopes. Without password, explicit connections try configured keys/agent in batch mode even for password registrations; passive status may defer.
 
 # Contract
 
 ## Authentication and transport
 Keys bind normalized destination/port, authentication, SSH executable and credential scope. Preserve failure without substitution/replay. macOS/Linux use ControlMaster; Windows bounded native OpenSSH plus one child/private Bridge, never WSL/ControlMaster. Cancel only owned children.
 
-Omitted passwords reuse exact private scope; explicit changes reject during leases and never cross scopes. Without password, explicit connections try configured keys/agent in batch mode even for password registrations; passive status may defer. Never send empty retries. Start/Restart/Update carry transient credentials through access/certificate checks, preparation and verification without saving; observations reject passwords.
+Never send empty retries. Start/Restart/Update carry transient credentials through access/certificate checks, preparation and verification without saving; observations reject passwords.
 
 Connect Timeout bounds probe/inventory/readiness; startup/packages have distinct deadlines. Windows x64 askpass accepts password/passphrase, rejects host-key prompts, writes only private stdout and preserves OpenSSH trust. Missing helper fails; no secrets in args/files/logs. Bounded includes exclude wildcard/negated picker aliases, not explicit destinations. Save exact root/container engine+ID separately from label.
 
@@ -44,5 +44,4 @@ SSH registrations retain direct lifecycle menus. Gateway/Provider-only entries c
 # Evidence
 
 - `redeven:desktop/src/main/sshTransportManager.ts:1` - Source.
-- `redeven:desktop/native/windows-ssh/main.go:1` - Source.
 - `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Tests.

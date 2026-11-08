@@ -31,5 +31,4 @@ Market owns discovery; Redeven owns presentation and authenticated scheduling. [
 # Evidence
 
 - `redeven:internal/pluginmarket/service.go` - Source.
-- `redeven:internal/pluginmarket/contracts.go` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Unified lifecycle client.

@@ -23,4 +23,3 @@ No change to template topology/endpoint, ReDevPlugin or public IPC; no raw engin
 # Evidence
 
 - `redeven:internal/managedwebservice/configuration.go` - Source.
-- `redeven:internal/managedwebservice/settings.go` - Source.

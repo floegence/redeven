@@ -7,14 +7,14 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Cloud is optional Runtime functionality. Gateway has no Cloud binding or credentials. A Runtime can explicitly select an attached Gateway as a restricted network exit; that selection changes transport, never Cloud ownership or independent access authority.
+Cloud is optional Runtime functionality. Route operations retain an operation ID, expected revisions, target fingerprint, confirmation and queryable result. Changing an attachment, certificate, route or Cloud identity invalidates previous consent. An unknown result queries the original operation.
 
 # Contract
 
 ## Independent enrollment
 Runtime owns one Cloud association, owner-issued setup authorization and its existing Flowersec connection controller. Gateway attachment consent cannot authorize Cloud registration. Attachment lookup uses an explicit Gateway identity, or the sole attachment when unambiguous; a selected Cloud route never supplies a default attachment for general lookup or removal. Runtime may select a Gateway route before initial Cloud enrollment, using route/association revision zero; enrollment verifies the actual Cloud target when it becomes known.
 
-Route operations retain an operation ID, expected revisions, target fingerprint, confirmation and queryable result. Changing an attachment, certificate, route or Cloud identity invalidates previous consent. An unknown result queries the original operation. A canceled committed operation remains committed.
+A canceled committed operation remains committed.
 
 ## Local egress
 New Gateways deny egress with an empty destination list. Host administrators configure exact canonical host:port destinations and per-attachment inherit/allow/deny overrides. Wildcards, URLs, paths, duplicate or malformed authorities are rejected. Executable policy uses attachment.admit, access.open and egress.open; no Cloud approval is consulted.
@@ -39,6 +39,3 @@ Cloud owns users, roles and resource bindings. Runtime owns Cloud enrollment and
 
 - redeven:internal/gatewayegress/controller_test.go — Egress-only revocation and stale-timer isolation.
 - redeven:internal/gatewayegress/isolation_test.go — Isolated Runtime reaches a fixture only through authenticated Gateway proxy.
-- redeven:internal/agent/cloud_route_test.go
-
-- redeven:internal/agent/runtime_cloud.go

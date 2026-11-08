@@ -7,14 +7,12 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns the compact host toolbar; macOS capture/Xpra own commands and sessions, Desktop supplies native geometry. Window selection, picture settings and close share one titlebar. Disconnect disables unavailable actions while preserving window and recovery.
+Redeven owns the compact host toolbar; macOS capture/Xpra own commands and sessions, Desktop supplies native geometry. It never sends server shutdown or force-kills the application. macOS quit retains its existing application-wide confirmation. The control is unavailable until its selected target has decoded pixels.
 
 # Contract
 
 ## Layout
 The first-party host-application bootstrap places its controls in one 40-pixel Desktop titlebar, alongside platform-owned traffic lights or caption buttons. Empty header space drags the window when no toolbar popover is open; buttons and popovers explicitly reject dragging.
-
-The control is unavailable until its selected target has decoded pixels.
 
 ## Appearance and language
 The bootstrap consumes published Floe `standalone.css`: primitive sizing and fonts, all 26 shell presets, shared floating material and input focus rules. Local CSS owns only viewer layout and maps control states to upstream semantic tokens; it must not maintain a second light/dark palette.
@@ -24,7 +22,7 @@ The inline assets add no request or connection wait.
 ## Backend commands
 The shared toolbar and picture-preset presentation do not own backend state. macOS retains native menu, window-generation, frame credit and capture-quality semantics.
 
-It never sends server shutdown or force-kills the application. macOS quit retains its existing application-wide confirmation. These distinct actions must not be collapsed into one destructive command.
+These distinct actions must not be collapsed into one destructive command.
 
 # Boundaries
 

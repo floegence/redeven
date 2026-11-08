@@ -7,17 +7,14 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns canonical child threads, reports and parent-scoped lifecycle events. Redeven projects bounded status and complete authorized handoffs without another store or scheduler. Child input and approvals remain blocked at their own boundary; labels and historical references never transfer ownership.
+Floret owns canonical child threads, reports and parent-scoped lifecycle events. Its flat provider schema describes conditional fields: spawn requires task_name, task_description and message; send_input requires target and message; close requires target; status/inspect accept the deduplicated union of target then ids; wait requires ids.
 
 # Contract
 
 ## Child runtime
 The `subagents` tool supports spawn, send input, wait, list, status, inspect, close, and close all.
 
-Its flat provider schema describes conditional fields: spawn requires task_name,
-task_description and message; send_input requires target and message; close
-requires target; status/inspect accept the deduplicated union of target then ids;
-wait requires ids. Non-null fields belonging to another action are rejected before
+Non-null fields belonging to another action are rejected before
 authorization, including empty filters. Strict-provider nulls mean omission. The
 existing action validator also runs as a pure Floret decoder before resources
 and effect authorization. Published Floret v7.107.9 owns bounded model correction
@@ -82,10 +79,6 @@ Events are observations and context inputs, not a second result store or a backg
 
 - `redeven:internal/ai/subagents_cancellation_test.go` - Published cancellation, retained threads/continuation, race outcomes, partial model results and public Activity reload.
 - `redeven:internal/ai/subagents_model_payload.go` - Source.
-- `redeven:internal/ai/floret_tools.go` - Source.
 - `redeven:internal/ai/subagents_arguments_test.go` - Conditional validation before effect authority and unchanged accepted inputs.
 - `redeven:internal/ai/subagents_arguments_integration_test.go` - Actual provider feedback, valid execution, user-visible Activity, restart and subsequent-turn history.
 - `redeven:internal/ai/tool_contract_clarity_test.go` - Sent schemas across provider adapters.
-
-- `redeven:internal/ai/parent_events_test.go` - Tests.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.

@@ -7,14 +7,12 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Local UI supports independent concurrent Desktop/browser sessions. Public HTTP(S)/WS(S) shares a port; Desktop private uses numeric loopback protocol. Versioned SQLite owns one-shot authorization/spend; network policy owns exposure/password/certificates/migrations.
+Local UI supports independent concurrent Desktop/browser sessions. Versioned SQLite owns one-shot authorization/spend; network policy owns exposure/password/certificates/migrations. Local UI bind parsing accepts `localhost`, canonical loopback IP literals, concrete non-loopback unicast IPv4 and IPv6 literals, and the `0.0.0.0` and `::` wildcards.
 
 # Contract
 
 ## Mechanism
 `localui.Server` is built with an agent, Code App app server, bind spec, runtime-control socket path, Local Environment identity, diagnostics store, and optional access gate.
-
-Local UI bind parsing accepts `localhost`, canonical loopback IP literals, concrete non-loopback unicast IPv4 and IPv6 literals, and the `0.0.0.0` and `::` wildcards.
 
 In-process maps retain only active-session cleanup projections and never authorize a request.
 
@@ -35,4 +33,3 @@ Saved next-start settings never replace the running URL list.
 # Evidence
 
 - `redeven:internal/localui/localui.go:50` - Source.
-- `redeven:internal/localui/http_security.go:24` - Source.

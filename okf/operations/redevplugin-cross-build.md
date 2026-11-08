@@ -7,11 +7,11 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Redeven prepares target C compilation and archiving alongside Rust before building the exact published ReDevPlugin source crate. macOS builds Linux static PIE with pinned Zig and the existing Rust LLD wrapper. This is product packaging ownership; it introduces no alternate plugin executor or upstream source dependency.
+Redeven prepares target C compilation and archiving alongside Rust before building the exact published ReDevPlugin source crate. macOS builds Linux static PIE with pinned Zig and the existing Rust LLD wrapper. `scripts/redevplugin_build_toolchain.json` pins Rust 1.98.0, Zig 0.16.0, official archive checksums and build-input files.
 
 # Contract
 
-`scripts/redevplugin_build_toolchain.json` pins Rust 1.98.0, Zig 0.16.0, official archive checksums and build-input files. The unified preparer selects the actual builder and requested target, prepares Rust, downloads Zig only when missing with HTTPS/checksum/bounded retries, then compiles C, archives it, links it into a Rust program and validates the resulting executable. Darwin native uses Apple tools; Linux native uses its C compiler and static libraries. A failed probe prevents costly package compilation.
+The unified preparer selects the actual builder and requested target, prepares Rust, downloads Zig only when missing with HTTPS/checksum/bounded retries, then compiles C, archives it, links it into a Rust program and validates the resulting executable. Darwin native uses Apple tools; Linux native uses its C compiler and static libraries. A failed probe prevents costly package compilation.
 
 macOS maps Linux amd64/arm64 to x86_64/aarch64 musl. Target-specific cc-rs CC/AR settings use private wrappers; the CC wrapper removes only the exact Rust triple injected by cc-rs, supplies Zig's target, PIC and disables Zig's implicit undefined-behavior instrumentation. Rust LLD remains responsible for static PIE; existing ELF architecture, interpreter and dynamic dependency rejection stay authoritative. No ambient target GCC or installed PATH Zig is assumed.
 

@@ -7,16 +7,16 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Source identity, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.
+ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. Resolve only stored channel metadata with exact nonempty channel/user/environment identities. Cache by owner-session hash; all four hashes must match. Canonical HTTP route: /_redevplugin/api/plugins.
 
 # Contract
 
 ## Sessions and permissions
 process.local is an explicit high-risk grant, rechecked by method on every Worker Process Broker call. Hosts inherit neither the complete Redeven environment nor session cookies/plugin tokens/credentials. [Process sessions](../architecture/plugin-process-sessions.md) owns lifecycle.
 
-Resolve only stored channel metadata with exact nonempty channel/user/environment identities. Cache by owner-session hash; all four hashes must match. No guessed owner sweeps or local teardown registries.
+No guessed owner sweeps or local teardown registries.
 
-Canonical HTTP route: /_redevplugin/api/plugins. Resolve method effects before local policy clamps; shared runtime management stays admin-only. Plugin Center reads grants and explicit policies via released APIs, never registry writes/default catalog grants. Catalog identity is not permission. Official/community classifies repository origin for display only.
+Resolve method effects before local policy clamps; shared runtime management stays admin-only. Plugin Center reads grants and explicit policies via released APIs, never registry writes/default catalog grants. Catalog identity is not permission. Official/community classifies repository origin for display only.
 
 ## Package and network admission
 Install/update validates source policy, publisher/plugin/version, exact package hashes and Host capability contracts. Plugin signatures, trusted-publisher admission and release references are absent. Reject malformed content, fabricated provenance, owner/scope mismatch, unapproved source changes and same-version content replacement. Explicit consent and durable request receipts bind installation; permissions and runtime revocation remain independent.
@@ -45,6 +45,4 @@ Desktop control tokens, direct sessions, Gateway/RCPP credentials and Flower gra
 
 - `redeven:internal/redevpluginintegration/session_adapter.go:1` - Source.
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Tests.
-- `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Tests.
-- `redeven:desktop/scripts/check-tessiven-workers.mjs` - Tests.
 - `redeven:desktop/scripts/fixtures/codespace-bridge-session.ts`: real Electron main fetch/native routes use production policy; native qualification checks allowed and denied requests.

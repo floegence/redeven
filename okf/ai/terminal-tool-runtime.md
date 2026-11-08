@@ -7,13 +7,11 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, interactions, effect attempts, results and Activity. One adapter authorizes execution once and publishes current views. Product SQL stores no parallel terminal lifecycle or effect recovery.
+Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, interactions, effect attempts, results and Activity. [Task-file placement](flower-task-files.md) supplies thread scratch/staging through child-only environment variables while preserving project cwd and OS temporary path conventions.
 
 # Contract
 
-[Task-file placement](flower-task-files.md) supplies thread scratch/staging through
-child-only environment variables while preserving project cwd and OS temporary
-path conventions. Cleanup waits for owned terminal processes to be reaped.
+Cleanup waits for owned terminal processes to be reaped.
 
 PTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.
 Its model-facing description discloses the 30-minute command lifetime, explicit

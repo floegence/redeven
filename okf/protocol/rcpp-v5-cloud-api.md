@@ -22,7 +22,3 @@ Gateway owns Runtime attachments, invitations, local access, egress admission an
 # Evidence
 
 - `internal/runtimecloud/client.go:1` - Source.
-
-- `internal/config/cloud_association.go:1` - Source.
-
-- `internal/agent/runtime_cloud.go:1` - Source.

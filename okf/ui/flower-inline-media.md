@@ -7,14 +7,12 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Shared Flower renders canonical images/video/audio/screenshots/self-contained HTML through released Floe media/isolation. Redeven authorizes resources. Forbidden, missing, oversized or mismatched media yields local retryable errors without interrupting conversation.
+Shared Flower renders canonical images/video/audio/screenshots/self-contained HTML through released Floe media/isolation. Ready HTML exposes direct authorized file/floating expansion plus source/more in a compact top row. Until ready, expansion is disabled; controls/insets cannot cover content.
 
 # Contract
 
 ## Authoring and interaction
 `![Title](source)` displays image/video/audio; preview references are inert placeholders. Ordinary updates/health/labels do not reload ready media; real context changes cancel stale work. An `html preview` fence renders fragments/documents; plain `html` renders only a complete document beginning with doctype and html, leaving snippets as source.
-
-Ready HTML exposes direct authorized file/floating expansion plus source/more in a compact top row. Until ready, expansion is disabled; controls/insets cannot cover content.
 
 ## Request lifecycle and thread ownership
 One entry per rendered thread serves Markdown/Activity images. Children without trusted working directory cannot resolve against their parent's directory. Close/Escape restores only closing-window focus to a connected trigger, preserving navigation/composer focus.

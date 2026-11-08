@@ -35,6 +35,5 @@ live model. Deterministic delegation/permission tests remain separate evidence.
 
 - `redeven:scripts/check_flower_tasks_ollama.sh`: explicit published-dependency runner.
 - `redeven:internal/ai/run_e2e_ollama_tasks_test.go`: model-driven effects, faults and product commands.
-- `redeven:internal/ai/run_e2e_ollama_interleavings_test.go`: races, stale responses, restart and compaction.
 - Deterministic cases cover role-free schema, exact delegation text, all three inherited
   permission modes, historical readonly and canonical steering/spawn replay.

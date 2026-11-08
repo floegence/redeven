@@ -7,14 +7,14 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Gateway independently owns Runtime attachment/device admission/relay, working without Cloud account, cached authority or public Internet. Cloud alone owns membership/organizations/roles. Gateway device trust and Runtime environment authentication create no local user directory.
+Gateway independently owns Runtime attachment/device admission/relay, working without Cloud account, cached authority or public Internet. Cloud alone owns membership/organizations/roles. Gateway has no Cloud machine registration, Namespace assignment, management renewal, delegated Runtime publication or Cloud command receiver.
 
 # Contract
 
 ## Authority ownership
 Gateway owns its stable identity, paired client keys, Runtime attachments, local network policy and active transports. Runtime explicitly consents to each attachment and owns its application TLS identity, environment password/MFA, sessions and host execution restrictions. Gateway administration grants no Runtime lifecycle or application authority. Desktop and Web Center provide the environment directory and opening experience; Gateway catalogs only describe attached Runtimes. The authorized platform model gateway is a separate Cloud AI endpoint, not this service. Device access, host administration and Runtime application authorization are independently verified. Desktop and Web Center hold their own client identities; saved host coordinates and client observations confer no management authority.
 
-Gateway has no Cloud machine registration, Namespace assignment, management renewal, delegated Runtime publication or Cloud command receiver. Runtime may independently enroll with Cloud. Gateway failure affects only traffic using that Gateway.
+Runtime may independently enroll with Cloud. Gateway failure affects only traffic using that Gateway.
 
 ## Public and private endpoints
 One advertised HTTPS origin serves client pairing/identity/catalog/application admission, Runtime invitation exchange/enrollment/mTLS attachment, and optional restricted egress. All advertised origins prove one stable Gateway identity. Host restrictions apply before protocol admission. The public handler never mounts management or operation-query routes.
@@ -39,8 +39,5 @@ Published Flowersec supplies invitation exchange, connection controllers, ByteSt
 
 - redeven:internal/gatewayservice/public_endpoint_test.go — One public endpoint admits pairing and rejects host routes.
 - redeven:internal/gatewayservice/host_admin_test.go — Private socket context plus credential; loopback/header spoof rejection.
-- redeven:internal/gatewayservice/server_test.go
 
 - redeven:cmd/redeven-gateway/configuration_reset_test.go — Explicit recovery, lock/path rejection, retained trust and recovered host catalog.
-- redeven:desktop/src/main/gatewayServiceHost.test.ts — Package replacement and reset/start ordering; ordinary update preserves rejected state.
-- redeven:desktop/src/main/gatewayStore.test.ts

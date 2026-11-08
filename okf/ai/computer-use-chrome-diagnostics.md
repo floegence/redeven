@@ -7,14 +7,12 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime owns readiness/handshakes; both carriers provide host-specific recovery. Installed Chrome/accepted launch proves neither control nor continuation. Distinguish resource/session/launch/status failures; only compatible live profiles enter Floret Respond, without browser substitution.
+Runtime owns readiness/handshakes; both carriers provide host-specific recovery. Installed Chrome/accepted launch proves neither control nor continuation. Browser target selection belongs to Flower; no separate browser source preference or product database is read during startup.
 
 # Contract
 
 ## Readiness and diagnostics
 `extension/status` reports the environment hostname, platform, Runtime build version when available, discovered installations, their live profiles, prior preparation and bounded per-installation diagnostics.
-
-Browser target selection belongs to Flower; no separate browser source preference or product database is read during startup.
 
 ## Recovery on the environment host
 The Chrome overview and connection guide share one compact readiness surface. Both consume the existing Runtime snapshot, including diagnostics embedded in `environment.chrome`; the overview must not reduce an explicit blocker to a generic disconnected state.
@@ -28,7 +26,6 @@ A launch or installation acknowledgement cannot resume a task. Unreadable status
 # Evidence
 
 - `redeven:internal/ai/computer_extension_diagnostics.go` - Source.
-- `redeven:internal/ai/computer_extension_onboarding.go` - Source.
 - `redeven:internal/ai/computer_extension_diagnostics_test.go` - Tests.
 
 Connection failure carries stage, known reason or unknown, elapsed time and binding when available; extension tab lookup/restoration/debugger attachment/validation facts survive transport. Source closure reports explicit removal, owner close, browser disconnect or host shutdown, without treating a read failure as closure. Published Floret PreparationError exposes execution.started:false and the typed error in model text before handler/authorization; retired registry targets classify TARGET_UNAVAILABLE. None authorizes replay.

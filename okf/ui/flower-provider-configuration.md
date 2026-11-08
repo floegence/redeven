@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Provider dialogs keep explicit access methods, keys, accounts and model selection independent. Background discovery preserves drafts and known-account UI; user selection alone starts neither OAuth nor persistence. Backend policy determines capability and errors never silently switch service or billing.
+Provider dialogs keep explicit access methods, keys, accounts and model selection independent. Use short names and access labels. Explain keys, quotas and saved methods in the access tooltip; model limits in the model tooltip. Icon links open official guidance.
 
 # Contract
 
@@ -18,7 +18,7 @@ OpenAI offers API keys or verified local ChatGPT accounts. Registration and mode
 ### Kimi
 One Kimi choice offers API or Kimi Code. Drafts isolate keys, endpoints and models; close clears them. Switching rejects stale discovery. Saved methods stay fixed; add another connection to change service. Cards label methods; IDs, aliases, selections and history stay unchanged.
 
-Use short names and access labels. Explain keys, quotas and saved methods in the access tooltip; model limits in the model tooltip. Icon links open official guidance. Code keeps regional endpoints and reviewed IDs; billing never falls back.
+Code keeps regional endpoints and reviewed IDs; billing never falls back.
 
 ### Search and secrets
 Provider and model search switches must both be on; preferences remain editable when provider search is off. Backend policies own availability. See [failure recovery](flower-failure-recovery.md). Stored keys use fixed dot placeholders. Null removes a key; omitted/blank patches preserve it. Catalog refresh never selects new models.
@@ -50,6 +50,3 @@ Account removal does not delete an OpenAI account or provider configuration. The
 
 - redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx
 - redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx
-
-- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Tests.

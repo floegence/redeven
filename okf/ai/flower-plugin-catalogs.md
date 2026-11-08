@@ -7,14 +7,14 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower can consume an explicitly configured plugin directory without shipping or maintaining a default index. Runtime sources and user-managed sources use the same catalog reader and GitHub installation workflow. Catalog availability never owns installed plugin authority.
+Flower can consume an explicitly configured plugin directory without shipping or maintaining a default index. Limits:16sources,1 MiB, IDs plugin-name syntax≤128characters, names nonempty single-line≤128Unicode, unique IDs/URLs. HTTPS host required; reject userinfo/query/fragment/unknown fields/malformed config explicitly.
 
 # Contract
 
 ## Optional runtime configuration
 REDEVEN_AGENT_AI_PLUGIN_CATALOGS is a runtime-process JSON array of {id, name, url}; unset/whitespace/[] means none. Example:team/Team extensions/https://catalog.example.com/plugins.json, never a default. Restart applies config. No official URL, startup fetch/search/remote switch/automatic enrollment.
 
-Limits:16sources,1 MiB, IDs plugin-name syntax≤128characters, names nonempty single-line≤128Unicode, unique IDs/URLs. HTTPS host required; reject userinfo/query/fragment/unknown fields/malformed config explicitly. Network checks occur only when browsing through bounded public distribution.
+Network checks occur only when browsing through bounded public distribution.
 
 Configured sources use configured:<id>/managed:true and memory only. User UUID/CAS sources retain independent 16 limit. Configured URLs take display precedence without deleting user records; removal reveals retained source. User APIs cannot delete configured sources. Config changes do not revise installation registry or alter snapshots/credentials/data. Desktop/Web use authenticated runtime routes; renderer-only environment has no effect.
 
@@ -39,4 +39,3 @@ No hosting, content index, scheduled crawler, publication portal, rankings, auth
 - `internal/ai/agent_plugin_catalog_test.go`
 
 - `internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` covers default absence, configured browsing, failure/retry, source management, actual preview metadata, responsive layouts and retained state.
-- `desktop/src/main/runtimeFlowerRoutes.test.ts` covers configured-source IDs through the shared read-only route.

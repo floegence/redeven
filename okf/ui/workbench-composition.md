@@ -7,14 +7,14 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published Floe owns canvas composition and generic input mechanics; Redeven supplies permission, persistence and selected-widget adapters. Explicit wheel and text-selection contracts stay separate. Lazy module delivery preserves the mounted canvas and never creates another lifecycle or eagerly initializes inactive features.
+Published Floe owns canvas composition and generic input mechanics; Redeven supplies permission, persistence and selected-widget adapters. Pristine runtimes receive one English welcome canvas: two editable notes beside Files, Terminal and Monitoring in three unnamed regions.
 
 # Contract
 
 ## Composition
 Published matte palettes own canvas/widget/header/selection colors. Product adapters add no palette, preview or drag engine; adjacent-node changes retain responsive actions. Dark canvas has a 0.21 OKLCH lightness floor: Porcelain Dark uses #181819 around #0C0C0D body, including overview zoom; headers/borders/shadows/grid/light canvases retain palette/geometry.
 
-Pristine runtimes receive one English welcome canvas: two editable notes beside Files, Terminal and Monitoring in three unnamed regions. Existing layouts, including intentionally empty advanced revisions, never reseed. Published controls own placeholders; locale changes update copy.
+Existing layouts, including intentionally empty advanced revisions, never reseed. Published controls own placeholders; locale changes update copy.
 
 `workbench_layout_runtime` schema v6 appends sticky-note title via contiguous 5→6 migration. Handlers use current schema and persist material changes.
 
@@ -39,10 +39,3 @@ Lazy loading cannot weaken permissions, restoration, input or recovery. Only she
 
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx` - Published 35%/100% canvas colors, themes, localization/accessibility.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Source.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51` - Tests.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241` - Source.

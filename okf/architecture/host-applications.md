@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Redeven authorizes catalog, instances and independent shares; published native libraries own platform execution and preparation. Applications survive viewer release and compatible Runtime restart. Capability probes govern readiness, explicit controls govern termination and uncertainty never launches replacements.
+Redeven authorizes catalog, instances and independent shares; published native libraries own platform execution and preparation. Host Applications is available in Activity navigation and the Workbench launcher. Full-permission `PUT /_redeven_proxy/api/{host-applications,remote-desktop}/access` requires an explicit state.
 
 # Contract
 
@@ -16,14 +16,14 @@ Catalog and session listing require read permission. Ownership comes from author
 
 Terminal sharing records remain bounded to forty-eight per Runtime lifetime.
 
-Host Applications is available in Activity navigation and the Workbench launcher. A separate Force quit confirmation explicitly warns that unsaved work is lost; it never follows cancellation automatically.
+A separate Force quit confirmation explicitly warns that unsaved work is lost; it never follows cancellation automatically.
 
 Application inventory loading uses matching horizontal skeleton cards and respects reduced motion.
 
 ## Feature access
 Persisted `host_access.applications` and `host_access.desktop` independently record `unconfigured`, `enabled`, or `paused`. First catalog/status read initializes missing legacy states from passive capability/session evidence; later grants cannot change intent. Startup restores both gates.
 
-Full-permission `PUT /_redeven_proxy/api/{host-applications,remote-desktop}/access` requires an explicit state. Pause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.
+Pause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.
 
 When both features are unconfigured, goal-based choices precede authorization; browsing remains available. Setup explains capability purpose and offers one next action. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws pending opening but retains grants. Access settings keeps reconfiguration, pause, removal and separate OS-permission management reachable.
 
@@ -67,4 +67,3 @@ Preparation never installs user applications. Closing a pending viewer withdraws
 - `internal/hostapps/manager.go`, `linux.go`, `desktop.py` and adjacent tests: discovery, isolated lifecycle, sharing, installed-stack qualification, icons and literal arguments.
 - `internal/hostapps/linux_desktop.go`, `launch_failure.go`, `dependencies.go`, `setup.go` and tests: published plan, capability checks, toolset selection, state placement and failure mapping.
 - `internal/codeapp/appserver/host_applications.go`, `host_application_setup.go`, viewer and tests: authenticated API, events, owner gates and escaped bootstrap.
-- `internal/codeapp/appserver/host_access_test.go`, `HostAccess.browser.test.tsx` and page tests: independent intent, restart, scoped removal, interrupted setup and ten-locale narrow layouts.

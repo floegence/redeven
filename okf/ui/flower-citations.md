@@ -7,11 +7,11 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Floret stores assistant sources with end-exclusive Unicode code-point ranges. Flower renders titled links and removes provider markers on Copy. Only safe credential-free HTTP(S) URLs link; marker IDs imply no URL. Historical gaps stay explicit and authored bibliographies remain content.
+Floret stores assistant sources with end-exclusive Unicode code-point ranges. Only safe credential-free HTTP(S) URLs link; marker IDs imply no URL. Provider/gateway annotations preserve title, URL and optional positions. Floret validates and binds them to canonical assistant fragments for current/historical projections.
 
 # Contract
 
-Provider/gateway annotations preserve title, URL and optional positions. Floret validates and binds them to canonical assistant fragments for current/historical projections. Invalid URLs never link; metadata invalidates Markdown HTML without remounting stable code controls. Unmatched sources follow completed messages; markers without stored sources show localized unavailable text.
+Invalid URLs never link; metadata invalidates Markdown HTML without remounting stable code controls. Unmatched sources follow completed messages; markers without stored sources show localized unavailable text.
 
 # Boundaries
 

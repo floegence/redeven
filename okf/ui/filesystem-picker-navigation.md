@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floe owns picker navigation/validity/request lifetime; Redeven supplies authoritative path context/connection/locales/form. Absolute paths and root shortcuts grant no access. Failed navigation retains intent, disables confirmation and offers Retry; execution rechecks policy.
+Floe owns picker navigation/validity/request lifetime; Redeven supplies authoritative path context/connection/locales/form. Existing browse/cache owner shows only visited target's snapshot while verifying. Uncached targets preserve readable listing with separate pending intent.
 
 # Contract
 
@@ -23,7 +23,7 @@ Translate Home/Root in place without replacing drafts/selection or reloading aut
 ## Product presentations
 A failed Files navigation retains its last readable listing and one dismissible notice:selectable full path, copy, recovery actions. Without a readable listing use a bounded recovery card. Paths wrap/controls reflow inside scaled/narrow views. Link input to this notice by ID; syntax/cancellation retain own explanation. Editing clears stale invalid-input state, not unresolved navigation. Retry keeps focus/geometry through pending/repeated failure.
 
-Existing browse/cache owner shows only visited target's snapshot while verifying. Uncached targets preserve readable listing with separate pending intent. Current clicks do not reload; pending duplicates share a request. Unverified cached destinations still verify/commit. Superseded reads release queue immediately and cannot alter content/persistence/recovery. Manual/hidden-path changes verify first.
+Current clicks do not reload; pending duplicates share a request. Unverified cached destinations still verify/commit. Superseded reads release queue immediately and cannot alter content/persistence/recovery. Manual/hidden-path changes verify first.
 
 Reveal each changed tree destination once per visible container; revalidation cannot repeat scrollIntoView or undo user scroll. Pointer navigation keeps row anchor; selection typography/geometry never transitions.
 
@@ -43,8 +43,5 @@ The published picker owns navigation and request lifetime. A validated selection
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Tests.
 
-- redeven:internal/codeapp/appserver/server_fs_mkdir_test.go — actual creation, duplicate preservation, strict requests, outside-scope and session write rejection.
 - redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryPicker.test.shared.tsx — creation, explicit confirmation, failed-name retention and canceled draft preservation.
-- redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx

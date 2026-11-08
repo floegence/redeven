@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Visited pages retain state; readiness gates Flower requests, not navigation. Explicit Environment tab changes may animate cards, while refresh/return preserves headers and skips entrance replay.
+Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Welcome consumes published Floe presence and menu/tooltip CSS. Each surface has one presence owner; closing immediately revokes pointer/keyboard input and accessibility exposure, freezes its measured placement, and retains the DOM through the CSS exit.
 
 # Contract
 
@@ -19,7 +19,7 @@ Welcome page selection is immediate and independent of Launcher IPC or Runtime p
 
 ## Popup and dropdown ownership
 
-Welcome consumes published Floe presence and menu/tooltip CSS. Each surface has one presence owner; closing immediately revokes pointer/keyboard input and accessibility exposure, freezes its measured placement, and retains the DOM through the CSS exit. Reopening reverses the same panel and preserves drafts/selection. Only the inner surface transforms; placement reads untransformed layout dimensions. Resolved collision direction and the anchor point determine motion origin. Reduced motion uses Floe's immediate recipe.
+Reopening reverses the same panel and preserves drafts/selection. Only the inner surface transforms; placement reads untransformed layout dimensions. Resolved collision direction and the anchor point determine motion origin. Reduced motion uses Floe's immediate recipe.
 
 | Welcome entry points | Owner |
 | --- | --- |
@@ -53,8 +53,6 @@ Navigation grants no Runtime authority. [Ask Flower cards](../ui/flower-activity
 # Evidence
 
 - `redeven:desktop/src/welcome/App.tsx` - Source.
-- `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.
 - `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.
-- `redeven:desktop/scripts/check-welcome-workflow-motion.mjs` - Real split-action identity, inverse-color samples, growing/shrinking Runtime plans, rapid updates, anchor continuity, single rounded material and cancel/exit access in light/dark, narrow/desktop and reduced motion.
 - `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.
 - `redeven:desktop/scripts/check-office-preview.mjs` - Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.

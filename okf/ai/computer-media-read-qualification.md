@@ -49,4 +49,3 @@ qualification does not claim remote CI or exact-main push certification.
 
 - [Qualification contract](computer-use-qualification.md)
 - [Earlier qualification evidence](computer-use-qualification-evidence.md)
-- [Script execution contract](computer-use-scripts.md)

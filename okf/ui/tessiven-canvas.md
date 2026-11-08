@@ -7,14 +7,12 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published Floe owns graph layout, routing and viewport paint; Tessiven supplies canonical topology and selectable details. Folding, summaries and filters change only the visible scene. Flower remains the editing/operations interface, with compact replies retaining canonical actions and conversation state.
+Published Floe owns graph layout, routing and viewport paint; Tessiven supplies canonical topology and selectable details. Browsers retain popup-blocking feedback, and native refusal or failure remains visible through localized command feedback without starting another opening path.
 
 # Contract
 
 ## Canvas surfaces
 The Connected environments panel and Runtime node details follow the [scoped Runtime operations contract](../ai/tessiven-runtime-operations.md#runtime-operations).
-
-Browsers retain popup-blocking feedback, and native refusal or failure remains visible through localized command feedback without starting another opening path.
 
 Separate responsibilities include cloud controllers, node agents, container runtimes, network plugins, service meshes, ingress, operators, registries, observability, identity, secret and certificate services, streaming, and metadata; repeated instances of the same responsibility keep the same icon.
 
@@ -84,23 +82,12 @@ It never attaches to an existing user browser or Runtime.
 - Identity-only native request/ACK.
 - `desktop/src/main/main.ts`
 - Source.
-- `desktop/scripts/check-service-canvas-window.mjs`
 - Real Desktop Open/repeat/close/reopen and invalid rejection.
-- `desktop/scripts/check-service-canvas-window.mjs`
 - Tests.
 
-- `internal/tessiven_ui/src/TessivenGraph.tsx`
 - Source.
-- `internal/tessiven_ui/src/connections.ts`
 - Source.
-- `internal/tessiven_ui/src/projection.ts`
 - Source.
 
-- `internal/tessiven_ui/src/relations.ts`
 - Source.
-- `internal/tessiven_ui/src/TessivenServiceRelations.tsx`
 - Source.
-
-- `internal/tessiven_ui/src/TessivenFlowerPanel.tsx`: placement, More menu and restore behavior.
-- `internal/tessiven_ui/src/tessiven.css`: scoped reading material and touch sizing.
-- `internal/flower_ui/src/FlowerSurface.tsx`: canonical header action definitions and live conversation.

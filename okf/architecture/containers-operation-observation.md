@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Every container operation binds exact engine, endpoint and resource identity. The service owns admission through execution and read-only reconciliation; UI streams observe it. Cancellation is explicit, terminal uncertainty never replays commands and transfer counters report only measured download facts.
+Every container operation binds exact engine, endpoint and resource identity. Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline.
 
 # Contract
 
@@ -20,7 +20,7 @@ Reusing a request ID with different hashes produces an idempotency conflict inst
 ### Execution, cancellation, and events
 The service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.
 
-Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline. Unknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that host work may still be in progress. Desktop service cards direct users to its native application for setup/startup recovery and expose status revalidation. Service history shows state transitions without generic execution stages or a synthetic percentage bar.
+Unknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that host work may still be in progress. Desktop service cards direct users to its native application for setup/startup recovery and expose status revalidation. Service history shows state transitions without generic execution stages or a synthetic percentage bar.
 
 ### Authoritative terminal observation
 After engine execution returns, the service reloads the exact endpoint-bound resource or relevant bounded inventory.
@@ -57,9 +57,7 @@ Endpoint identifiers remain internal, and current endpoint resolution precedes e
 # Evidence
 
 - `redeven:internal/containerresource/service.go` - Source.
-- `redeven:internal/containerengine/cli_client.go` - Source.
 
-- `redeven:internal/containerengine/adapter.go` - Source.
 - `redeven:internal/containerengine/runtime_detection_test.go` - Tests.
 - `redeven:internal/containerengine/image_pull_stream_unix_test.go` - Terminal output, cancellation, and late failure evidence.
 - `redeven:internal/containerengine/cli_client_test.go` - Mixed unknown/cached layers and download/extraction accounting.

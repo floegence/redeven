@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime validates session metadata and supported app/channel pairs before intersecting control-plane and local policy. Code App and Port Forward add their own gates. Read permits existing monitor/process observations; process termination independently requires execute and cannot inherit authority from visibility.
+Runtime validates session metadata and supported app/channel pairs before intersecting control-plane and local policy. Read permits existing monitor/process observations; process termination independently requires execute and cannot inherit authority from visibility.
 
 # Contract
 
@@ -23,4 +23,3 @@ Browser or UI-side permission claims remain non-authoritative. This concept only
 # Evidence
 
 - `redeven:internal/config/permission_policy.go:13` - Source.
-- `redeven:internal/session/types.go:29` - Source.

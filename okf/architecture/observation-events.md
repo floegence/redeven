@@ -7,11 +7,11 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Target actions are ordinary Flower tool observations. The workspace stream remains the only lifecycle and replay channel; screenshot descriptors are canonical keyframes, while short-lived live frames are target-scoped media and may be dropped without changing thread state.
+Target actions are ordinary Flower tool observations. An action publishes running, result, and error observations with tool ID, target ID, execution location, approval state, action summary, and attachment descriptor. The UI reads these events through the existing stream and resolves screenshots through the canonical attachment preview path.
 
 # Contract
 
-An action publishes running, result, and error observations with tool ID, target ID, execution location, approval state, action summary, and attachment descriptor. The UI reads these events through the existing stream and resolves screenshots through the canonical attachment preview path. It must not open a second lifecycle SSE connection, poll for action state, or infer a target from a browser window.
+It must not open a second lifecycle SSE connection, poll for action state, or infer a target from a browser window.
 
 # Boundaries
 
@@ -20,4 +20,3 @@ Redeven runtime owns action execution and provenance; Flower owns rendering and 
 # Evidence
 
 - `redeven:internal/ai/run.go` - Source.
-- `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Source.

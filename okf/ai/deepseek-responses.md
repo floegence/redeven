@@ -7,14 +7,12 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.66.1 Responses gateway.
-Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
-function-call validation, and opaque provider history. Redeven only maps its
-model DTOs and canonical dotted tool names to provider-safe aliases.
+Flower routes the DeepSeek provider to the published Floret v7.66.1 Responses gateway. Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
+function-call validation, and opaque provider history. Each request sends full input history.
 
 # Contract
 
-Each request sends full input history. The route never sends `messages`, `enable_search`, `previous_response_id`, `store`, or `include`.
+The route never sends `messages`, `enable_search`, `previous_response_id`, `store`, or `include`.
 
 Floret owns public-URL checks, cancellation, redirect restrictions, response limits, sanitization and tool Activity.
 
@@ -30,4 +28,3 @@ Floret owns raw response items, including reasoning and historical opaque search
 # Evidence
 
 - `redeven:internal/ai/model_gateway_deepseek.go` - Source.
-- `redeven:internal/ai/floret_runtime.go` - Source.

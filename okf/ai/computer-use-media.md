@@ -7,9 +7,8 @@ reviewed_at: "2026-10-29"
 ---
 # Summary
 
-Redeven owns authorized screenshots; Floret owns history/preparation. Flower
-shows frames inline/in Stage. Durable frames and ephemeral samples have separate
-lifetimes; tool success does not prove delivery. Model encodings never replace original assets.
+Redeven owns authorized screenshots; Floret owns history/preparation. Durable frames and ephemeral samples have separate
+lifetimes; tool success does not prove delivery. Each controller holds one model anchor. Viewer sampling cannot replace it. Changed target, document, viewport, bounds or observed native accessibility state rejects stale input.
 
 # Contract
 
@@ -48,9 +47,7 @@ Default browser CSS and native window coordinates keep their existing units.
 Native window screenshots support model_pixels with a transient window anchor.
 Full-page/cropped arbitrary images do not establish an input mapping.
 
-Each controller holds one model anchor. Viewer sampling cannot replace it.
-Changed target, document, viewport, bounds or observed native accessibility state
-rejects stale input. Input and takeover invalidate the anchor. Known-change
+Input and takeover invalidate the anchor. Known-change
 checks cannot eliminate arbitrary dynamic layout races; semantic locators remain
 preferable for moving controls. The final attachment supplies after_frame when
 several screenshots were taken.
@@ -64,5 +61,3 @@ share paths, not authentication. Fixtures do not establish product qualification
 
 - [Preparation](../../internal/ai/model_image_preparation.go)
 - [Image ingress and RPC tests](../../internal/ai/model_image_coverage_test.go)
-- [Count-boundary Files transport](../../internal/ai/model_gateway_deepseek_files_test.go)
-- [Viewer paths](../../internal/flower_ui/host/computerFramePath.ts)

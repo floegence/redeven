@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Explicit model, directory and model-owned reasoning choices are remembered per authenticated namespace, endpoint and user. Loading/switching threads never writes defaults. New roots prefer explicit launch/draft choices, then personal memory, then configuration; existing threads and immutable turns retain confirmed settings.
+Explicit model, directory and model-owned reasoning choices are remembered per authenticated namespace, endpoint and user. The originating surface consumes its authoritative response/settings revision without reloading shared model resources; other surfaces refresh persisted preferences.
 
 # Contract
 
@@ -23,7 +23,7 @@ Draft overrides remain distinct from effective model/directory admission values;
 ## Concurrency and failure
 Adapters serialize captured patches and load latest revision; the store atomically merges with compare-and-set. Stale writes return 409 without auto-retry. Captured target/model identity fences late responses against navigation or retargeting.
 
-The originating surface consumes its authoritative response/settings revision without reloading shared model resources; other surfaces refresh persisted preferences. Catalog refresh is reserved for configuration changes, preventing model/reasoning selection from replacing the composer with loading UI.
+Catalog refresh is reserved for configuration changes, preventing model/reasoning selection from replacing the composer with loading UI.
 
 # Boundaries
 
@@ -32,4 +32,3 @@ This is Redeven product preference policy using already published Floret capabil
 # Evidence
 
 - `redeven:internal/ai/conversation_preferences.go` - Source.
-- `redeven:internal/ai/threads.go` - Source.

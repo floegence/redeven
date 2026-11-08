@@ -24,4 +24,3 @@ Opening or managing Browser Editor is not just a static file route. The session-
 # Evidence
 
 - `redeven:internal/codeapp/appserver/server.go:80` - Source.
-- `redeven:internal/localui/localui.go:132` - Source.

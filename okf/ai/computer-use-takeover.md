@@ -7,15 +7,14 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns questions, answers and continuation; Redeven owns authorized computer effects and private media. Failures remain factual and blocked capture is not a screenshot. Answers pass unchanged without granting authority or replay. Fresh safe observation precedes further input; no second recovery lifecycle exists.
+Floret owns questions, answers and continuation; Redeven owns authorized computer effects and private media. Answers pass unchanged without granting authority or replay. Password controls establish secret_input, not login intent. Existing explicit login consumers remain supported.
 
 # Contract
 
 ## Operation facts and independent questions
 Structurally confirmed password/one-time-code controls, secure native fields, missing permissions and explicit user control return structured assistance facts. Flower can make another read within its execution budget; persistent failure requires an accurate explanation, never invented instructions to inspect.
 
-Password controls establish secret_input, not login intent. Existing explicit
-login consumers remain supported. NativeWindow retains one set of pause reasons:
+NativeWindow retains one set of pause reasons:
 changed foreground/window identity reports target_focus_changed, disabled input
 monitoring reports input_monitor_unavailable, and explicit private control reports
 user_control. These reasons reuse the existing paused assistance and canonical

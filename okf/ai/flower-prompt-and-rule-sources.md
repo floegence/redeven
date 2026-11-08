@@ -7,15 +7,13 @@ reviewed_at: "2026-10-28"
 ---
 # Summary
 
-Every Flower run profile shares one host English base prompt defining Redeven assistant identity, visual output and local delivery. Runtime facts, tool definitions and native Floret guidance retain separate ownership and availability; product identity never replaces them.
+Every Flower run profile shares one host English base prompt defining Redeven assistant identity, visual output and local delivery. Visual output uses the existing [inline HTML preview](../ui/flower-inline-media.md) contract when it communicates better than text; ordinary nonvisual answers remain text.
 
 # Contract
 
 `internal/ai/prompt_builder.go` is the sole source of the base system prompt.
 
-Visual output uses the existing [inline HTML preview](../ui/flower-inline-media.md)
-contract when it communicates better than text; ordinary nonvisual answers remain
-text. Existing direct WebGL guidance remains unchanged.
+Existing direct WebGL guidance remains unchanged.
 
 Delivering a created or confirmed local file requires a clickable Markdown link
 with a clear file name or title and the full absolute path. Plain text or inline

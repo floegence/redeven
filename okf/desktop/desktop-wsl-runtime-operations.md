@@ -7,14 +7,12 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Windows11x64 runs Electron, not native Local/container Runtime. Register initialized Linux x64 WSL2 targets; manage only exact distro/user Runtime. Windows owns distro lifecycle. Missing/old/uninitialized targets or broken commands/packages/Bridge need visible explicit recovery.
+Windows11x64 runs Electron, not native Local/container Runtime. Register initialized Linux x64 WSL2 targets; manage only exact distro/user Runtime. Missing/old/uninitialized targets or broken commands/packages/Bridge need visible explicit recovery. UI recovery copy may show Microsoft WSL commands for the user to run.
 
 # Contract
 
 ## Discovery and registration
 The main process publishes one immutable platform-capability snapshot. Renderer surfaces consume it and never infer the host operating system.
-
-UI recovery copy may show Microsoft WSL commands for the user to run.
 
 ## Linux Runtime lifecycle
 WSL and SSH host operations consume the same managed-Linux probe, uploaded install, atomic activation, startup report, inventory, exact stop, and verification scripts.
@@ -40,4 +38,3 @@ Windows and WSL 2 remain separate authorities. No boundary may be hidden by a na
 # Evidence
 
 - `redeven:desktop/src/shared/desktopPlatformCapabilities.ts:1` - Source.
-- `redeven:desktop/src/main/runtimeHostAccess.ts:1` - Source.

@@ -7,16 +7,16 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Center has one administrator and multiple devices. Center, Gateway and Runtime authorize independently: directory/open access never bypasses Runtime login or grants host management. Device revocation cancels all derived admissions while retaining unrelated devices and routes.
+Center has one administrator and multiple devices. Unix socket checks service UID/root, never SSH/tunnel/loopback/header claims. recover fences business and authorizes setup; recover --offline --origin needs stopped exclusive state. Exclusive lock protects AES-GCM SQLite. center.key pins instance/origin/initialization; missing/corrupt committed state fails.
 
 # Contract
 
 ## Setup/storage
 Owner redeven-center setup --state-root issues a mandatory15-minute credential. Password/verified TOTP/recovery-code confirmation commit atomically; partial setup grants nothing. Passwords:12–72 UTF-8 bytes; recovery codes replace only factor.
 
-Unix socket checks service UID/root, never SSH/tunnel/loopback/header claims. recover fences business and authorizes setup; recover --offline --origin needs stopped exclusive state. Unsupported peer checks fail.
+Unsupported peer checks fail.
 
-Exclusive lock protects AES-GCM SQLite. center.key pins instance/origin/initialization; missing/corrupt committed state fails. Back up key/database together. DTOs omit secrets/private keys; only owner commands print temporary credentials. Audit keeps closed sensitive-action categories, never payload/credential-derived digest. Expiring challenges/grants alone bind exact actions; bcrypt verifies passwords. Schema2 atomically redacts v1 audit refs before readiness, preserving events/unrelated state; damaged/future stores stay unchanged.
+Back up key/database together. DTOs omit secrets/private keys; only owner commands print temporary credentials. Audit keeps closed sensitive-action categories, never payload/credential-derived digest. Expiring challenges/grants alone bind exact actions; bcrypt verifies passwords. Schema2 atomically redacts v1 audit refs before readiness, preserving events/unrelated state; damaged/future stores stay unchanged.
 
 ## Authentication
 Password creates a five-minute browser/action/session/revision challenge, <=five factor failures; password alone grants nothing. Atomic TOTP-step/recovery consumption survives restart. Login rotates device/browser sessions; security changes revoke sessions/challenges/grants/connections.
@@ -42,7 +42,3 @@ Host administrator controls entry-server plaintext. No SSH webpage login/remote 
 
 - `internal/environmentcenter/auth_test.go`, `setup_retry_test.go`, `server_test.go`
 - `internal/environmentcenter/audit_security_test.go`: payload exclusion/v1 redaction/stable reopen/credential retention/migration rollback.
-- `internal/webbinding/store_test.go`
-- `internal/accessgate/scope_test.go`, `internal/localui/web_application_test.go`
-- `internal/environmentcenter/applications_test.go`
-- `scripts/check_center_browser.mjs`: real setup/MFA/logout/stale cookies/key-binding-Gateway revocation. Tests certify only named scenarios.

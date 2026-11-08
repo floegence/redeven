@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-One immutable transport outbox captures ordinary submitted text and resources before asynchronous admission. Request identity survives receipt/live ordering and explicit recovery, while newer composer edits remain independent. Canonical confirmation retires transport state; recalling history never submits or restores attachments.
+One immutable transport outbox captures ordinary submitted text and resources before asynchronous admission. Product admission uses published SendAck and narrow canonical summaries. HTTP and RPC return admission identity without a post-commit history read; authorized window observation supplies presentation separately.
 
 # Contract
 
@@ -24,12 +24,9 @@ the same thumbnail geometry and use the authorized staged preview until admitted
 Failed and unknown outcomes retain the frozen request for explicit recovery;
 server 5xx responses never prove rejection or authorize a fresh request identity.
 
-Product admission uses published SendAck and narrow canonical summaries. HTTP
-and RPC return admission identity without a post-commit history read; authorized
-window observation supplies presentation separately. Agent preparation binds the
+Agent preparation binds the
 already persisted execution authority to the admitted turn. No duplicate
-post-admission authority write or second conversation lifecycle is introduced.
-Full model history remains an engine execution requirement, not a prerequisite
+post-admission authority write or second conversation lifecycle is introduced. Full model history remains an engine execution requirement, not a prerequisite
 for painting the submitted message.
 
 ### Restored data and preserved inputs
@@ -57,7 +54,5 @@ Recall never submits, changes canonical messages, restores attachments or overwr
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.
-- `redeven:internal/flower_ui/src/transportOutbox.ts` - Source.
 
-- `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Source.
 - `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Tests.

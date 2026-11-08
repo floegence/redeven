@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Redeven owns accessible names/state/relationships while preserving layout, handlers, focus and inert exclusion. Floe owns reusable controls/layers. Shared defects require evidence and published fixes. Scope claims accurately: accessibility edits alone certify neither WCAG nor model performance.
+Redeven owns accessible names/state/relationships while preserving layout, handlers, focus and inert exclusion. Scope claims accurately: accessibility edits alone certify neither WCAG nor model performance. Select uses combobox/listbox/option semantics; Dropdown remains an action menu.
 
 # Contract
 
@@ -19,7 +19,7 @@ Adding roles must not claim keyboard behavior that a surface does not implement.
 ## Shared business-control localization
 Env App, Desktop and Code App consume the coordinated Floe 0.87.0 release set. Env App I18nProvider supplies the published Floe LocaleProvider from its atomically activated locale dictionary. DesktopWelcomeShell uses DesktopFloeLocaleProvider over the existing launcher language snapshot and explicit Desktop catalogs. Desktop core remains a build-only dependency; both renderers pin the same published release and declare its optional Pele/KaTeX peers to preserve diagram rendering. Every shipped locale explicitly defines the full floeControls catalog; keys and placeholders match the upstream public vocabulary. Count labels use neutral labels plus a number so one template does not imply incorrect plural inflection. Language switches update mounted controls without a second locale owner. The product keeps document language/direction and existing domain-specific string adapters.
 
-Select uses combobox/listbox/option semantics; Dropdown remains an action menu. Form identity, validation relationships, popup keyboard ownership, native submission/reset, and civil-date mechanics belong upstream. Product adapters must consume released APIs rather than clone controls. TerminalLayoutPicker spreads the published Popover trigger binding onto its real button so the panel relationship follows upstream identity. Generic Calendar and Breadcrumb come from /ui; legacy umbrella meanings remain unchanged.
+Form identity, validation relationships, popup keyboard ownership, native submission/reset, and civil-date mechanics belong upstream. Product adapters must consume released APIs rather than clone controls. TerminalLayoutPicker spreads the published Popover trigger binding onto its real button so the panel relationship follows upstream identity. Generic Calendar and Breadcrumb come from /ui; legacy umbrella meanings remain unchanged.
 
 # Boundaries
 
@@ -31,7 +31,4 @@ Tests that deliberately filter cases qualify only the cases executed, never the 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Source.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/i18n/floeControls.test.ts` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/i18n/FloeControls.browser.test.tsx` - Tests.
-- `redeven:desktop/src/welcome/DesktopFloeLocaleProvider.client.test.tsx` - Tests.

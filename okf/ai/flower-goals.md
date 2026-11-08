@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Floret owns canonical Goal, model tool, reflection and completion; Redeven authorizes and presents facts. One current Goal/thread states intent without text limits or Todo dependency. Stop/navigation/recovery remain usable; unresolved requests never imply successful mutation.
+Floret owns canonical Goal, model tool, reflection and completion; Redeven authorizes and presents facts. Stop/navigation/recovery remain usable; unresolved requests never imply successful mutation. Stop cancels execution and reflection; deletion only cancels future Goal checks.
 
 # Contract
 
@@ -16,8 +16,6 @@ Floret owns canonical Goal, model tool, reflection and completion; Redeven autho
 
 ## Goal ownership and execution
 User and model updates enter Floret's shared journal writer with request identity and expected version. An existing unfinished Goal remains authoritative across continuation and context restoration.
-
-Stop cancels execution and reflection; deletion only cancels future Goal checks.
 
 ## Interaction and recovery
 Selecting or entering /goal opens an in-composer command chip.
@@ -40,6 +38,3 @@ Default Flower tools, capability lists and prompts omit write_todos and current 
 
 - redeven:internal/ai/activity_goal_test.go
 - redeven:internal/ai/thread_goal.go
-
-- [Goal entry browser regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.goalLayout.browser.test.tsx)
-- [Native Desktop Goal acceptance](../../desktop/scripts/check-flower-goal.mjs)

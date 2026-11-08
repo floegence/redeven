@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Env App owns one authenticated plugin client, shared scope and installation observer. ReDevPlugin owns inventory, Executions, Events, permissions, revocation and recovery. Panel closure/reconnect retains exact request identity and outcome; refresh never becomes another mutation or lifecycle.
+Env App owns one authenticated plugin client, shared scope and installation observer. Panel closure/reconnect retains exact request identity and outcome; refresh never becomes another mutation or lifecycle. First terminal surface error refreshes owner inventory once,never execution/same-revision auto-retry.
 
 # Contract
 
 ## Inventory and revisions
 One authenticated adapter/client/scope/placement coordinator. Mutations carry current management/policy/revoke revision. Committed/unknown uses Host revoke then SDK scope teardown/refresh,no second close/blind retry. Confirmation names exact permissionIDs.
 
-First terminal surface error refreshes owner inventory once,never execution/same-revision auto-retry. User Retry retires failed slot,awaits authoritative inventory and reopens only current original owner/component. Changed revisions/generations replace keyed lease;retired owners cannot duplicate. Enable refreshes first and writes only if still disabled;already-enabled restores without mutation. Failed reads preserve healthy leases,never authorize failed-slot reopening.
+User Retry retires failed slot,awaits authoritative inventory and reopens only current original owner/component. Changed revisions/generations replace keyed lease;retired owners cannot duplicate. Enable refreshes first and writes only if still disabled;already-enabled restores without mutation. Failed reads preserve healthy leases,never authorize failed-slot reopening.
 
 Activity/Workbench/Center share refresh preserving layout/effects/siblings and mounted DOM;iframe detach reloads consumed tickets. Retirement/navigation delivery faults use exact-slot first-error path,never Workbench boundary/sibling close.
 

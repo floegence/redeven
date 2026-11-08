@@ -8,7 +8,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Redeven authorizes ownership/resources and maps typed Floret views, updates, failures and safe Activity. Floret alone owns lifecycle, persistence, migration, cancellation and provider state. The adapter neither waits on provider work nor mirrors execution or receipts.
+Redeven authorizes ownership/resources and maps typed Floret views, updates, failures and safe Activity. Root/child/command receipts share bounded windows containing canonical Summary in the same baseline. No separately sampled preparation/watermark. Authorized history POST installs interest on the ordered observer; item POST expands only published frozen-live/manifest/hash-verified locators.
 
 # Contract
 
@@ -17,7 +17,7 @@ Redeven authorizes ownership/resources and maps typed Floret views, updates, fai
 ## Observation
 Floret supplies ThreadFactsSource, ThreadWindowSource and canonical body readers. v7.87.4 includes bounded text, lazy fields, startup reuse and single-mutation title summaries from <=16 KiB canonical prefix, without detail/index writes. Blank-module adoption verifies released historical continuation/restart. Floret alone owns cadence, versions, buffers, Activity reduction and reads.
 
-Root/child/command receipts share bounded windows containing canonical Summary in the same baseline. No separately sampled preparation/watermark. Authorized history POST installs interest on the ordered observer; item POST expands only published frozen-live/manifest/hash-verified locators. Recheck endpoint/user/namespace each read. Client locators grant no authority. Only Floret synthesizes historical zero-byte Activity defaults on explicit expansion.
+Recheck endpoint/user/namespace each read. Client locators grant no authority. Only Floret synthesizes historical zero-byte Activity defaults on explicit expansion.
 
 Published Floret v7.106.2 retires old-interest resident and deferred detail
 consistently, preserving ordered semantic components and accepted explicit
@@ -50,4 +50,3 @@ The obsolete logged max_tool_calls declaration is removed because it never enfor
 
 - [Output-source integration fixture](../../internal/ai/flower_output_sources_integration_test.go) checks every intermediate HTTP-provider publication and canonical reopen; shared mapper and isolated browser tests consume its sanitized checkpoints.
 - `redeven:internal/ai/floret_runtime.go` - Source.
-- `redeven:internal/ai/threads.go` - Source.

@@ -33,4 +33,3 @@ The bundle remains auditable only while OKF Markdown concepts are the sole autho
 # Evidence
 
 - `redeven:scripts/build_assets.sh:53` - Source.
-- `redeven:internal/okf/quality.go:1` - Source.

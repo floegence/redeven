@@ -7,14 +7,14 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Published Floe owns focus presentation; Redeven supplies layout, semantic state and explicit compound-input boundaries. Ordinary fields change border color only, preserving geometry/shadows; the persistent Flower chat composer keeps its border unchanged. Fix conflicting styles at their owner with source/browser checks; no fallback stylesheet.
+Published Floe owns focus presentation; Redeven supplies layout, semantic state and explicit compound-input boundaries. Buttons, links, checkboxes, and switches retain their distinct keyboard focus indicators; buttons inside an input boundary follow the upstream compound-control treatment.
 
 # Contract
 
 ## One visible boundary
 Ordinary inputs, textareas, and native selects consume Floe's default rule. Focus never changes border width, padding, or dimensions.
 
-Buttons, links, checkboxes, and switches retain their distinct keyboard focus indicators; buttons inside an input boundary follow the upstream compound-control treatment. Flower's lightweight permission trigger deliberately stays transparent and marks keyboard focus with a label underline instead of a filled capsule.
+Flower's lightweight permission trigger deliberately stays transparent and marks keyboard focus with a label underline instead of a filled capsule.
 
 Flower's transcript viewport retains keyboard focus for scrolling and its context menu, but paints no outer focus outline or shadow: the clipped scroll boundary must not turn Floe's generic focus ring into a horizontal line above the composer. This exemption belongs only to the transcript viewport; its interactive descendants retain their keyboard indicators.
 
@@ -29,4 +29,3 @@ Third-party frames, separate application views, and editor-internal input carrie
 
 - `redeven:internal/envapp/ui_src/package.json` - Source.
 - `redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerStability.browser.test.tsx` - Transcript focus paint, keyboard scrolling and context-menu return.

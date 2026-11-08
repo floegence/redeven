@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Floret owns canonical Fork and deletion; Redeven authorizes endpoint scope and coordinates product settings, read state and file claims. Stable explicit requests preserve exact destinations and cleanup order. Convergence uses typed canonical outcomes without a saga, compensating deletion or cross-database atomicity claim.
+Floret owns canonical Fork and deletion; Redeven authorizes endpoint scope and coordinates product settings, read state and file claims. Convergence uses typed canonical outcomes without a saga, compensating deletion or cross-database atomicity claim.
 
 # Contract
 
@@ -35,6 +35,3 @@ Redeven never opens or edits Floret tables, never restores a deleted canonical t
 
 - `redeven:internal/ai/threads.go` - Source.
 - `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Tests.
-
-- `redeven:internal/ai/threadstore/catalog_mutation.go` - Source.
-- `redeven:internal/ai/thread_delete_test.go` - Tests.

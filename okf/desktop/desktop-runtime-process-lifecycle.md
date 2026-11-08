@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-One target-bound coordinator admits managed Local, WSL, SSH and container lifecycle work. Verified direct channels and current compatible Presence govern actions; Gateway/Cloud access stays separate. Conflicts retain the first operation and failed observations never prove stopped state or authorize alternate routing.
+One target-bound coordinator admits managed Local, WSL, SSH and container lifecycle work. The current binary supplies temporary exact inventory and best-effort stop. Builds, downloads, archive preparation, upload and extraction belong to package progress, never process discovery.
 
 # Contract
 
@@ -21,7 +21,7 @@ Keys combine host authority, exact container engine/id and normalized Runtime ro
 - Update prepares/verifies its package before modification, starts even a previously stopped Runtime and verifies it.
 - Refresh observes directly without mutation. Reinstall follows [its recovery contract](desktop-reinstall-operations.md).
 
-The current binary supplies temporary exact inventory and best-effort stop. Builds, downloads, archive preparation, upload and extraction belong to package progress, never process discovery. Desktop exit/update retires WSL Bridges without stopping WSL Runtime.
+Desktop exit/update retires WSL Bridges without stopping WSL Runtime.
 
 ### Actions
 Direct targets retain lifecycle and Provider Connect/Disconnect actions in every diagnosis. Conflicting actions stay visible but disabled, naming the active operation. Access-only targets offer Open/Connect/refresh-access without lifecycle or management fallback.
@@ -57,10 +57,3 @@ Runtime control is Desktop coordination, not a general network API or plugin gra
 # Evidence
 
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - Source.
-- `redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1` - Source.
-
-- `redeven:desktop/src/main/desktopBundle.ts:1` - Source.
-- `redeven:desktop/src/main/runtimeProcess.ts:1` - Source.
-
-- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts` - Source.
-- `redeven:desktop/src/main/codespaceNativeSession.ts` - Source.

@@ -7,11 +7,11 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Flower and file Markdown preserve authored Mermaid while consuming published Floe/Pele. External Pele renders syntax; Floe owns sanitization/scheduling/controls. Redeven binds document identity, semantic palette, locales and context without copying an alternate renderer.
+Flower and file Markdown preserve authored Mermaid while consuming published Floe/Pele. Only complete Mermaid fences become diagrams in streaming Flower Markdown. Incomplete fences remain readable and copyable code. Closing a fence creates one diagram owner; subsequent prose, terminal completion and identical snapshot regions preserve its SVG, focus and selection.
 
 # Contract
 
-Only complete Mermaid fences become diagrams in streaming Flower Markdown. Incomplete fences remain readable and copyable code. Closing a fence creates one diagram owner; subsequent prose, terminal completion and identical snapshot regions preserve its SVG, focus and selection. Changed/removed regions dispose their owners and cancel stale results. Nested mounts inherit host Dialog placement. File previews retain their reserved viewport and release diagrams before document replacement.
+Changed/removed regions dispose their owners and cancel stale results. Nested mounts inherit host Dialog placement. File previews retain their reserved viewport and release diagrams before document replacement.
 
 Theme changes use CSS variables without reparsing or replacing SVG. Product palette maps eight published series variables to semantic graph roles. Original source stays available with explicit copy feedback, local errors and retry. Expand uses the shared accessible Dialog with zoom/fit and Escape; inline diagrams do not capture wheel input. All shipped locales explicitly supply every control label.
 

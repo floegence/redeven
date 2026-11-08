@@ -7,14 +7,14 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Authorized parent inventory controls child navigation; canonical thread identity chooses portraits and task labels. The detail window reads bounded current state without selecting the parent or creating another stream. Stable capsules, dropdowns and footer preserve reading geometry through updates and failures.
+Authorized parent inventory controls child navigation; canonical thread identity chooses portraits and task labels. Single-target operations place the compact portrait/name capsule beside the action title. A deferred target field reserves the same line from its summary, before action or identity reads finish.
 
 # Contract
 
 ## Task presentation
 The parent header replaces the numeric robot badge with at most three circular canonical portraits and a separate `+N` remainder.
 
-Single-target operations place the compact portrait/name capsule beside the action title. A deferred target field reserves the same line from its summary, before action or identity reads finish. Loading and read failures stay in that slot; long names truncate without wrapping. Touch targets and enlarged fonts retain stable row geometry. Creation failures retain their error details.
+Loading and read failures stay in that slot; long names truncate without wrapping. Touch targets and enlarged fonts retain stable row geometry. Creation failures retain their error details.
 
 The existing field reader remains the sole read owner. Header rendering adds no request, polling, measurement loop, or child-detail prefetch. Portraits use bundled SVG selected by canonical `thread_id`. An identity without authorized parent membership remains informational; only the existing parent inventory enables child navigation. Name-only targets use the same compact capsule without inventing a portrait or navigation identity, including deferred fields and creation failures. Creation titles contain only the action; the capsule owns the task name and its full tooltip.
 
@@ -46,9 +46,3 @@ The detail window must not infer membership from activity, poll for updates, swi
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx` - Tests.
 - `redeven:internal/flower_ui/src/SubagentAvatarStack.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentHeader.browser.test.tsx` - Tests.
-- `redeven:internal/ai/types.go:172` - Source.
-
-- `redeven:internal/ai/flower_current_projection.go` - Source.
-- `redeven:internal/flower_ui/src/threadCache.ts` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/flower/SubagentDetailWindow.progressDock.browser.test.tsx` - Centered footer below transcript; stable pill/inset as tokens grow 11 to 1234567.

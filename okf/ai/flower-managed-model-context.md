@@ -7,13 +7,11 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floret v7.47.1 owns chronological admission, semantic updates, context messages, compaction and recovery. Flower only collects/presents authorized complete facts in four partitions: execution environment, date/timezone, repository rule sources and available skills.
+Floret v7.47.1 owns chronological admission, semantic updates, context messages, compaction and recovery. Skill rediscovery uses one authoritative catalog and deterministic text; disabled or newly restricted skills cannot reuse an activation cache. [Goal changes](flower-goals.md) use Floret-owned typed context facts, separate from the four product-collected partitions.
 
 # Contract
 
-[Goal changes](flower-goals.md) use Floret-owned typed context facts, separate from the four product-collected partitions.
-
-Skill rediscovery uses one authoritative catalog and deterministic text; disabled or newly restricted skills cannot reuse an activation cache. Loaded skill instructions remain historical model facts.
+Loaded skill instructions remain historical model facts.
 
 ## Skill catalog and explicit reads
 The automatic skill catalog contains current available names and descriptions in stable priority/name order.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-One capability catalog and canonicalizer define reasoning controls for saved threads and immutable turns. UI exposes only supported intent and writes preferences only on explicit successful edits. Provider fragments remain reasoning, automatic title policy stays independent and loading never changes choices.
+One capability catalog and canonicalizer define reasoning controls for saved threads and immutable turns. [Preferences](../ui/flower-conversation-preferences.md) own explicit full-model-identity choices and budgets. Sending/automatic normalization cannot save them; preference failure reports separately without rolling back confirmed thread settings or changing retry snapshots.
 
 # Contract
 
@@ -38,7 +38,7 @@ The [live timeline contract](../ui/flower-live-timeline.md) owns canonical title
 ## Selection controls
 Loading, reconnecting and rendering never write reasoning preferences. Explicit new-thread Off survives shared remounts/attachment preparation; a confirmed non-reasoning model clears unsupported draft intent.
 
-[Preferences](../ui/flower-conversation-preferences.md) own explicit full-model-identity choices and budgets. Sending/automatic normalization cannot save them; preference failure reports separately without rolling back confirmed thread settings or changing retry snapshots. One localized ordered option list serves all controls; explicit Default remains distinct.
+One localized ordered option list serves all controls; explicit Default remains distinct.
 
 | Capability | Control |
 | --- | --- |
@@ -58,8 +58,6 @@ This is shared Redeven UI policy, not a Floret API or a second preference store.
 # Evidence
 
 - `redeven:internal/config/ai_reasoning_catalog.go` - Source.
-- `redeven:internal/ai/model_catalog.go` - Source.
 - `redeven:internal/ai/initial_turn_reasoning_test.go` - Tests.
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Cold load, explicit intent, failed save/remount and ownership.

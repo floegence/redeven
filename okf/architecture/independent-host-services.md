@@ -7,14 +7,12 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Apps own execution; Redeven owns authorized lifecycle/native identity/launch records/opening. Restart preserves PID/generation. No supervisor or PID-only authority. Distinguish absent/mismatched/uninspectable: only absence permits launch; opening failure never stops app.
+Apps own execution; Redeven owns authorized lifecycle/native identity/launch records/opening. Restart preserves PID/generation. Distinguish absent/mismatched/uninspectable: only absence permits launch; opening failure never stops app. This is not a resident service supervisor or another binary.
 
 # Contract
 
 ## Independent execution
 Host launches in its own session and process group. The foreground start contract remains: templates must not double-fork, background the application, or retain a permanent wrapper.
-
-This is not a resident service supervisor or another binary.
 
 ## Native identity and recovery
 The `host:v3` identity binds service ID, launch nonce, PID, and a digest of native facts:
@@ -35,4 +33,3 @@ Imported Host templates receive `REDEVEN_TEMPLATE_DIR` pointing to the active or
 # Evidence
 
 - `redeven:internal/managedwebservice/custom_host.go` - Source.
-- `redeven:internal/managedwebservice/process_identity_linux.go` - Source.

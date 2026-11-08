@@ -30,4 +30,3 @@ Only conversation-owned databases and uploaded resources participate in a restor
 # Evidence
 
 - `redeven:internal/ai/storage_snapshot.go` - Source.
-- `redeven:internal/ai/storage_files.go` - Source.

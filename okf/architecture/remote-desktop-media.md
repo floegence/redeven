@@ -7,11 +7,10 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published native packages own capture/encode/playback; session contract owns authority/generations. Bound media work and align cursors to painted pixels. Input admission proves no delivery; capture/input failures retire authority and late work cannot replace successors.
+Published native packages own capture/encode/playback; session contract owns authority/generations. Physical-seat capture uses one latest-sample mailbox and separate 60Hz cursor stream. An authenticated inherited descriptor attaches media; bounded backpressure retires attachment instead of blocking input release. Encoder reset begins a new keyframe chain without discarding transported references.
 
 # Contract
 
-- Physical-seat capture uses one latest-sample mailbox and separate 60Hz cursor stream. An authenticated inherited descriptor attaches media; bounded backpressure retires attachment instead of blocking input release. Encoder reset begins a new keyframe chain without discarding transported references.
 - Intel AV1 uses publisher-verified pinned amd64 musl media-driver/GMM in the private closure, never the root DRM exporter. Copies are intentional, not zero-copy claims.
 - Wayland cursor-free pixels/shapes come from one authorized PipeWire stream. Cursor-only buffers cannot restore a lost baseline. [Wayland evidence](../operations/remote-desktop-wayland-results.md#cursor-and-scheduling) distinguishes native/browser from physical latency results.
 - The privileged service owns login identity, input generation, painted-frame authority and uinput. Unprivileged media workers encode/cursor-report only. Disconnect, VT/session transition, stop or replacement release held input before new ownership.

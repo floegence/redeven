@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-One computer.exec is one Floret effect attempt. QuickJS exposes controlled ui/browser/log under ComputerUseRuntime. Same-target loops/navigation compose, but target/permission/private-input changes stop at existing interaction boundaries, preserving confirmed progress without uncertain replay.
+One computer.exec is one Floret effect attempt. One computer.exec is one Floret effect attempt. Recheck target/grant/cancel/control each operation;canonical turn keeps target while live sampling interleaves. Changed target/permission stops confirmed prefix;private/approval consent binds target/URL/lease.
 
 # Contract
 
@@ -15,7 +15,7 @@ One computer.exec is one Floret effect attempt. QuickJS exposes controlled ui/br
 JavaScript state belongs to a healthy thread/turn/target namespace. Script
 context_reset does not clear the thread's persisted selected target.
 
-One computer.exec is one Floret effect attempt. Recheck target/grant/cancel/control each operation;canonical turn keeps target while live sampling interleaves. Changed target/permission stops confirmed prefix;private/approval consent binds target/URL/lease. Unrestricted surface offers discover/select_target/exec;explicit/saved/read-only primitives retain discovery. Retry uses source-Turn names/current grants and canonical metadata preparation/requery. BatchExclusiveGroup rejects conflicting prepared targets before authority/input,retains cross-batch gates;inventory/unrelated tools may coexist. No alias/rebind/replay.
+Unrestricted surface offers discover/select_target/exec;explicit/saved/read-only primitives retain discovery. Retry uses source-Turn names/current grants and canonical metadata preparation/requery. BatchExclusiveGroup rejects conflicting prepared targets before authority/input,retains cross-batch gates;inventory/unrelated tools may coexist. No alias/rebind/replay.
 
 Require a selected target, code and readable description. Omit the target argument to use the saved current binding; a candidate_ref is never a target ID. Limits30s/50operations/eight namespaces,ui.budget/results show remainder. SCRIPT_OPERATION_LIMIT stops before operation 51, retains completed_actions, and reports budget_exhausted=operations and context_reset=true without rolling back or replaying effects. Await/loops/same-target navigation compose;new visual judgment returns to model. No timers;const/let call-local,globalThis healthy turn/target only. SCRIPT_NO_PROGRESS=no supported pending work,STALE_REFERENCE=invalid observed identity;neither permits replay/retarget. Unique lookup missing/ambiguous fails;query/count0 and waitFor timeout are data.
 
@@ -79,5 +79,3 @@ await ui.screenshot();
 TestComputerScriptExamplesQualification runs this exact batch and an explicit download fixture through QuickJS/Runtime/installed Chromium: 1.4MB exact download, one export/identity, three scores, retained state and actual screenshot. Image metadata is not a path/PNG buffer.
 
 - `redeven:internal/ai/computer_script.go` - Source.
-- `redeven:internal/ai/computer_observation_text_test.go` - Tests.
-- `redeven:internal/envapp/ui_src/scripts/redevenComputerScript.mjs` - Source.

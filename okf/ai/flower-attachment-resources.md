@@ -7,14 +7,14 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Redeven owns authenticated bytes/metadata/quotas/retention; Floret turn membership. Upload once, submit opaque attachment_id, render attachment://v1 and revalidate provider resources. Paths remain private; invalid identity/claims/digest/bytes reject only the affected reference.
+Redeven owns authenticated bytes/metadata/quotas/retention; Floret turn membership. Upload once, submit opaque attachment_id, render attachment://v1 and revalidate provider resources. Admit files independently of model modalities/tools. Preserve recognized text/image/PDF types; other files, including Office and non-UTF-8 documents, keep original bytes/name as application/octet-stream.
 
 # Contract
 
 ## Identity and provider preparation
 Redeven product threadstore v1 owns generated attachment ID, authenticated user hash, private relative storage name, detected/sanitized media metadata, exact size/SHA-256, optional strict UTF-8 code-point/line counts, source/state/idempotency and retention claims. Floret ResourceRef is content-addressed; display locator is attachment://v1/<attachment-id>/<encoded-name>. Retention never authorizes canonical reads.
 
-Admit files independently of model modalities/tools. Preserve recognized text/image/PDF types; other files, including Office and non-UTF-8 documents, keep original bytes/name as application/octet-stream. Active UTF-8 uses text/plain; pasted long text requires strict UTF-8. Queue/admission enforce owner, staging, count and byte bounds, not a model MIME allowlist.
+Active UTF-8 uses text/plain; pasted long text requires strict UTF-8. Queue/admission enforce owner, staging, count and byte bounds, not a model MIME allowlist.
 
 Capabilities affect presentation only. Supported modalities receive native content; otherwise the owning user message/tool result receives a factual manifest: name, media_type, size_bytes, locator, content_included:false, content_trust:untrusted. It adds no system message, tool-selection instruction or generic failure advice. Tool definitions own access guidance; manifest implies neither extraction, tool availability nor parser installation. The model chooses tools or explains its limitation. Switching models never rejects retained attachments/images; verify canonical descriptors/digest before the same manifest fallback, preserving native rendering for capable models.
 
@@ -45,8 +45,4 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 
 - `redeven:internal/ai/threadstore/uploads.go` - Source.
 
-- [Materialization and integrity tests](../../internal/ai/attachment_materialize_test.go).
 - [No-native/no-tools provider preparation and historical manifest tests](../../internal/ai/attachment_manifest_test.go).
-- [Opaque upload, provider-visible manifest, tool execution and restart tests](../../internal/ai/attachment_binary_test.go).
-- [Fork cuts, cleanup and last-reference tests](../../internal/ai/task_materials_test.go).
-- [Image compaction/restart qualification](../../internal/ai/tool_image_compaction_test.go).

@@ -7,11 +7,11 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns canonical child reports/events and admission; UI owns pages/bodies/disclosure only. Reports appear in the selected parent with canonical child avatars, without receipt/admission/preservation notices. Reading wakes neither task. Every full read rechecks recipient authority and canonical fixed-range paging.
+Floret owns canonical child reports/events and admission; UI owns pages/bodies/disclosure only. Reading wakes neither task. Every full read rechecks recipient authority and canonical fixed-range paging. The parent transcript merges messages, anchored decorations and events by published canonical_ordinal on the queried Path; received time is display-only.
 
 # Contract
 
-The parent transcript merges messages, anchored decorations and events by published canonical_ordinal on the queried Path; received time is display-only. Published Floret v7.61.0 supplies optional parent_turn_id from canonical receipt order.
+Published Floret v7.61.0 supplies optional parent_turn_id from canonical receipt order.
 
 Event headers keep the received time directly after the source/status in one compact row. Long source names truncate within the available width, including narrow companion surfaces. Below 16rem of available inline space, headers reflow to preserve readable status and time with enlarged text. The source-name button is the only child-navigation action; report expansion stays independent. Preserve the default header row height for disclosure anchoring. Layout uses CSS without measurement listeners, polling or extra reads.
 
@@ -27,4 +27,3 @@ An isolated Service/SQLite/scripted-provider browser qualification exercises act
 
 - The parent-event browser suite covers inline timestamp geometry at 292/420/960 px, long names, unavailable sources, mouse/keyboard name navigation, report expansion/scroll anchoring, themes and localized disclosure controls. The prior layout fails all three new geometry cases. Existing ResizeObserver delivery diagnostics also reproduce on the unmodified baseline.
 - `redeven:internal/flower_ui/src/parentEvents.tsx` - Source.
-- `redeven:internal/ai/parent_events.go` - Source.

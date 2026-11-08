@@ -7,7 +7,7 @@ reviewed_at: "2026-10-29"
 ---
 # Summary
 
-Redeven configures MCP over official Go SDK stdio/Streamable HTTP sessions; Floret owns invocation/approval/effects/history/recovery. Add no competing execution or retry owner. Unknown outcomes are terminal without replay; invalid saved configuration remains unchanged.
+Redeven configures MCP over official Go SDK stdio/Streamable HTTP sessions; Floret owns invocation/approval/effects/history/recovery. Package-owned connections project from the [Agent Plugins registry](flower-agent-plugins.md). They use the same SDK/session and Floret invocation paths, with separate credentials and explicit discovery.
 
 # Contract
 
@@ -16,7 +16,7 @@ Standalone configuration lives at `<stateDir>/ai/mcp.json`, with schema version 
 
 Catalog limits are 32 servers, 128 tools per server, 32 KiB per schema, and 4 MiB total persisted configuration.
 
-Package-owned connections project from the [Agent Plugins registry](flower-agent-plugins.md). They use the same SDK/session and Floret invocation paths, with separate credentials and explicit discovery. They cannot be edited through standalone MCP writes.
+They cannot be edited through standalone MCP writes.
 
 ## Standalone identity
 Creation accepts an omitted local ID and display name. The runtime generates a cryptographically random lowercase ID with an mcp_ prefix, independently of the name or connection address; duplicate explicit IDs are conflicts, never replacements. Edits require the saved ID and revision. Missing IDs with a nonzero revision fail without creating another connection. Existing IDs and exact-ID Skill dependency matching remain unchanged.
@@ -60,5 +60,3 @@ Server tool errors and known connection failures remain distinct from an unknown
 - `internal/ai/mcp_manager.go`
 
 - `internal/codeapp/appserver/server_ai_mcp.go`
-
-- `internal/ai/run_tool_surface.go`, `internal/ai/floret_tools.go`, and   `internal/ai/run.go` join MCP to existing authorization and effect execution.

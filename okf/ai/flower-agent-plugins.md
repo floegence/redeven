@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Flower loads environment-scoped Agent Plugins1.0.0 Skills/MCP, separate from native .redevplugin SDK/packages/market. Redeven owns admission/distribution/configuration and Floret invocation/history. A manifest identifies a package, never grants execution or registers a market listing.
+Flower loads environment-scoped Agent Plugins1.0.0 Skills/MCP, separate from native .redevplugin SDK/packages/market. Root plugin.json uses https://agent-plugins.org/schemas/1.0.0/plugin.schema.json, validated locally; diagnose unknown top-level fields,ignore foreign namespaces.
 
 # Contract
 
 ## Format/ownership
 Redeven owns distribution/admission/state/credentials/UI; Floret dispatch/approval/effects/history/recovery; official MCP Go SDK wire/sessions. No copied dependencies or second lifecycle.
 
-Root plugin.json uses https://agent-plugins.org/schemas/1.0.0/plugin.schema.json, validated locally; diagnose unknown top-level fields,ignore foreign namespaces. Immediate skills/<name>/SKILL.md children define Skills; mcp.json uses canonical matching schema. Isolate invalid entries; malformed MCP disables component type. stdio/Streamable HTTP supported; legacy SSE diagnosed/skipped. No hooks/commands/postinstall/private format interpretation.
+Immediate skills/<name>/SKILL.md children define Skills; mcp.json uses canonical matching schema. Isolate invalid entries; malformed MCP disables component type. stdio/Streamable HTTP supported; legacy SSE diagnosed/skipped. No hooks/commands/postinstall/private format interpretation.
 
 stdio executable token or ./ package path,never shell expression. Expand PLUGIN_ROOT snapshot/PLUGIN_DATA persistent path once in args/env/cwd; keep cwd contained,no ambient secrets. HTTP headers literal,generated auth/protocol wins,no redirects.
 
@@ -47,6 +47,4 @@ Snapshots/containment are not OS sandbox: enabled commands run as Runtime user. 
 
 - `internal/ai/agentplugins/`
 - `internal/ai/agent_plugin_integration_test.go`
-- `internal/codeapp/appserver/server_ai_agent_plugins_test.go`
-- [Extensions UI](../ui/flower-extensions.md)
 - `https://agent-plugins.org/specification`,canonical1.0.0 schemas reviewed October28,2026.

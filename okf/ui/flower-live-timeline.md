@@ -7,14 +7,14 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Floret owns canonical history/versions; Redeven authorizes one workspace stream into ThreadCache. UTF-8 growth changes only its item. Transport/window recovery preserves execution, prose and drafts; retained DOM and scoped reads keep navigation/disclosure stable without rescanning history.
+Floret owns canonical history/versions; Redeven authorizes one workspace stream into ThreadCache. UTF-8 growth changes only its item. Merge pages immediately,prune after completion,preserving creation/selection. [Startup](../architecture/flower-startup-presentation.md) accepts first page,confirmed empty or selected detail,never partial Ready.
 
 # Contract
 
 ## Baseline and windows
 ThreadFactsSource publishes body-free workspace/account/Computer facts. Independent root/child windows use one worker coalescing<=64 dirty parents without blocking facts. The [adapter](../ai/floret-redeven-adapter-and-projection.md) authorizes. Register before freezing navigation-ordered roots;publish Ready,<=25-summary pages,baseline_complete,private states. Facts wait;accepted reads bypass sidebar preparation. Cancel drains queues/budgets without Next;broken observation invalidates rather than skipping pinned roots.
 
-Merge pages immediately,prune after completion,preserving creation/selection. [Startup](../architecture/flower-startup-presentation.md) accepts first page,confirmed empty or selected detail,never partial Ready. HTTP:25rows/page,retain partial success; cancellation owns pending pages. Desktop cancels history/item POSTs. Baseline precedes shared loading;coalesce except command confirmation. Navigation/disposal/transport cancel waiters,reconnect retains content/draft/scroll.
+HTTP:25rows/page,retain partial success; cancellation owns pending pages. Desktop cancels history/item POSTs. Baseline precedes shared loading;coalesce except command confirmation. Navigation/disposal/transport cancel waiters,reconnect retains content/draft/scroll.
 
 Root/child revisions fence replacement;baseline/delta share subscription. Initial50items/1KiB previews/Activity summaries/existing byte cap. Paging150items/512KiB;POST64KiB/150IDs;locator8KiB;exact membership448KiB previews excluding hydrated bodies. Viewer/current-only events prove no coverage. Equal versions compare membership/coverage,not bounds. Duplicate receipts reuse records;same-leaf handoff uses bounded observations/indexed owners,archived bodies,order/file-target enrichment.
 

@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Paired devices receive independent Gateway access, never accounts, roles or host-management grants. Scoped TLS bootstrap supports fresh private networks. Runtime password/MFA and Web Center administrator protection remain independent; revocation affects only the device's derived channels.
+Paired devices receive independent Gateway access, never accounts, roles or host-management grants. Verify HTTPS using only that CA, then signed Gateway identity before persisting device trust. Never disable TLS or install global CAs. Packages expire after ten minutes; consumption admits no second device.
 
 # Contract
 
 ## Invitations
 Host-issued Runtime invitations require Runtime authentication and explicit consent. Client packages are rdgc1/purpose redeven-gateway-client/version1: one-use secret, exact Gateway ID/key, scoped CA and expiry. Parsers reject cross-purpose use, unknown fields, malformed trust and expiry.
 
-Verify HTTPS using only that CA, then signed Gateway identity before persisting device trust. Never disable TLS or install global CAs. Packages expire after ten minutes; consumption admits no second device. Identical original completion may recover response loss. Desktop/Center retain CA in independent records; display names authenticate nothing. Revocation closes that device's channels without affecting another client/Cloud user.
+Identical original completion may recover response loss. Desktop/Center retain CA in independent records; display names authenticate nothing. Revocation closes that device's channels without affecting another client/Cloud user.
 
 ## Private management
 Local/SSH/container adapters verify credentials over the private host socket; public URLs expose device access only. Gateway derives capabilities, never caller-selected/persisted device roles. manage_attachments covers invitations/removal; manage_network covers endpoints/listeners/Host restrictions/egress/reevaluation. Issuance/listing/revocation/receipts require current host proof. Both management capabilities exist together only on that verified request. Removing a Desktop registration preserves remote service/data.
@@ -36,7 +36,3 @@ Gateway owns transport trust; Runtime owns environment authentication/execution.
 
 - redeven:internal/environmentcenter/offline_gateway_test.go
 - redeven:internal/runtimegateway/protocol/client_access_test.go
-- redeven:desktop/src/main/gatewayClientAccess.test.ts
-- redeven:internal/runtimegateway/trust/revocation_migration_test.go
-- redeven:internal/gatewayservice/client_authority_test.go
-- redeven:internal/gatewayservice/operations_test.go

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Welcome owns interaction sessions; Launcher/Runtime own business operations. Observations retain open panels, draft, focus, selection, steps and scroll. Only explicit user transitions or current completion alter visibility. Invalid authority blocks submission with recovery; closing progress never cancels work.
+Welcome owns interaction sessions; Launcher/Runtime own business operations. Before the first asynchronous submission, one synchronous transition records the attempt, closes its menu and opens its operation surface. The interaction-continuity package command runs required state and real component suites, including the production snapshot subscription and observer.
 
 # Contract
 
@@ -16,11 +16,11 @@ Each interaction field has one owner: the existing library overlay, guidance, li
 
 Addresses no longer shareable still lose QR disclosure under the connection-security contract.
 
-Before the first asynchronous submission, one synchronous transition records the attempt, closes its menu and opens its operation surface. Duplicate activation cannot submit twice.
+Duplicate activation cannot submit twice.
 
 Deferred initial focus never overrides a user-selected menu item.
 
-The interaction-continuity package command runs required state and real component suites, including the production snapshot subscription and observer. The cached commit group runs affected staged sources; bounded integration checks affected base-to-tip paths.
+The cached commit group runs affected staged sources; bounded integration checks affected base-to-tip paths.
 
 Synthetic composition verifies DOM continuity; it does not prove physical operating-system IME behavior.
 

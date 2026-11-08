@@ -7,14 +7,14 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Development launcher owns Desktop, local Runtime, saved Gateways and bundles. Launch exact current source and stop owned services together. Prune only verified inactive bundles, preserving user identity/data, unrelated services and recent/selected/live builds; incomplete inventory blocks pruning.
+Development launcher owns Desktop, local Runtime, saved Gateways and bundles. Read Rust pin from scripts/redevplugin_build_toolchain.json, shared with Runtime preparation, never a shell assignment. Capture pin/installed compiler identities without auto-installing; cache misses prepare absent tools.
 
 # Contract
 
 ## Identity, tools and acquisition
 `scripts/dev_desktop.sh` freezes HEAD/tracked/nonignored inputs, including authored OKF/builders/Go embeds, and rejects drift. Generated OKF/ignored assets are outputs. Reuse requires identical source/dependencies/tools/target/settings and verified Desktop/immutable Runtime; missing/corrupt/incomplete output rebuilds, never launches old bytes. --rebuild forces; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls three JS packages once. Manifests choose pnpm/npm/locks; only pinned Rust preparation may install tools.
 
-Read Rust pin from scripts/redevplugin_build_toolchain.json, shared with Runtime preparation, never a shell assignment. Capture pin/installed compiler identities without auto-installing; cache misses prepare absent tools. Invalid pins name configuration; drift invalidates preparation.
+Invalid pins name configuration; drift invalidates preparation.
 
 Resolve physical checkout before profile/service ownership/building so aliases share one owner and execute CLI preparation. Resolve parent aliases for dependency boundaries: package-local links may survive managed-worktree aliases; external links/symlinked roots remain forbidden. Toolchain CLI uses Node main-module identity.
 
@@ -50,14 +50,3 @@ Prune generated packages only in selected profile; builders own in-progress dire
 - November 4, 2026: fixed the stale shell-variable Rust-pin reader. An isolated macOS ARM64 session launched the real `dev_desktop.sh` through a managed checkout alias, rebuilt Desktop and published ReDevPlugin 3.15.0 resources, then restarted with verified cache reuse. Both real windows displayed the local Environment as Ready, both Runtime process identities were verified, and the same immutable bundle was reused. The supervised session passed cleanup with no remaining processes. Focused checks passed 39 cases including real Linux amd64/arm64 C/archive/Rust-link probes and offline/download failures; process ownership and all 12 signal/failure cleanup scenarios passed. Preserve the earlier alias-path failures as failed evidence; the final product launch and cache-reuse results are separate successful runs.
 - `redeven:scripts/dev_desktop.sh` - Source.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Tests.
-- `redeven:scripts/dev_desktop_gateways.test.mjs` - Tests.
-- `redeven:scripts/dev_desktop_build_proxy.test.mjs` and `redeven:scripts/dev_desktop_signal_cleanup_test.sh`
-- `redeven:scripts/resolve_node_archive.test.mjs` - Tests.
-- `redeven:scripts/run_parallel_builds.test.mjs` - Tests.
-- `redeven:scripts/build_assets.test.mjs` - Tests.
-- `redeven:scripts/ui_package_install.test.mjs` - Tests.
-- `redeven:desktop/src/main/developmentSecretStorage.test.ts` - Tests.
-- `redeven:desktop/scripts/build-main.test.mjs` - Tests.
-- `redeven:desktop/scripts/package-size.mjs` - Source.
-- `redeven:scripts/stage_computer_package.test.mjs` - Tests.
-- `redeven:scripts/desktop_signed_manifest.test.mjs` - Tests.

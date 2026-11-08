@@ -7,11 +7,10 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Both carriers project one readiness owner and typed Stop/Retry, retaining drafts/navigation. Close failure needs restart; contradictory facts are nonretryable. Initial content admits workspace, then refresh/reconnect preserves mounted state without another availability controller.
+Both carriers project one readiness owner and typed Stop/Retry, retaining drafts/navigation. Close failure needs restart; contradictory facts are nonretryable. Activity, Workbench and Settings share readiness. After Runtime readiness, retain Flower loading until the first authoritative list page or selected detail is applied. Confirmed empty lists admit; empty partial-ready envelopes do not. Remaining pages load progressively. Embedded conversations wait only for their own detail.
 
 # Contract
 
-- Activity, Workbench and Settings share readiness. After Runtime readiness, retain Flower loading until the first authoritative list page or selected detail is applied. Confirmed empty lists admit; empty partial-ready envelopes do not. Remaining pages load progressively. Embedded conversations wait only for their own detail.
 - Before admission, hide welcome suggestions, composer and stale reconnect banners. Initial retries retain loading; terminal failure stops the indicator and offers localized Retry/access/version/capacity guidance. Readiness HTTP begins only after the secure session connects; disconnect/relock cancels its owner. Connected slow readiness requests retain loading until response or explicit owner cancellation. Access revocation is consumed from protocol snapshots, so unrelated unlock UI changes cannot reapply an old failure. No raw diagnostics/error card or extra UI timer/controller.
 - A collapsed Activity companion presents runtime preparation/failure and initial conversation loading/failure as one bounded status button, including the 24-pixel Terminal footer. Pointer or keyboard activation opens details without retrying or stopping work. Expanded details retain close, progress and explicit recovery actions. Readiness never auto-expands the companion; compact presentation derives from the existing shell phase and readiness owner.
 - After admission, refresh/reconnect preserves selection, transcript, drafts and navigation with existing notices. [Message continuity](../ui/flower-live-timeline.md) also retains prose during growth/completion; body locators cannot restart loading.

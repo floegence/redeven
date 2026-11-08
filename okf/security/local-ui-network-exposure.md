@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Runtime owns public listeners, saved HTTPS identity and session admission; Desktop presents explicit next-start changes. Network exposure requires concrete authority and password, while certificate trust remains a separate user action. TLS failures never downgrade or expose the private Desktop bridge.
+Runtime owns public listeners, saved HTTPS identity and session admission; Desktop presents explicit next-start changes. A signing failure retains only current addresses covered by the previous valid leaf and reports `certificate_refresh_failed`; retries recover automatically.
 
 # Contract
 
@@ -62,7 +62,7 @@ This supports process-interruption recovery; it does not promise an OS trust rol
 ### Coverage during network changes
 [Local UI network exposure](#network-exposure) owns the two-second interface refresh and atomic public snapshot.
 
-A signing failure retains only current addresses covered by the previous valid leaf and reports `certificate_refresh_failed`; retries recover automatically. Startup and explicit saved-identity preflight retain their strict validation boundary.
+Startup and explicit saved-identity preflight retain their strict validation boundary.
 
 ### Desktop interaction and private input
 The compact HTTPS panel presents certificate validity, expiry, and system trust separately. Public path, fingerprint, and bounded selectable diagnostics live in the expandable details section.
@@ -79,6 +79,3 @@ Runtime owns saved identity validation and replacement; Desktop owns explicit ma
 
 - `redeven:internal/localui/public_address_refresh.go` - Source.
 - `redeven:internal/localui/public_address_refresh_test.go` - Tests.
-- `redeven:internal/config/catalog_test.go` - Tests.
-
-- `redeven:internal/localui/device_identity.go` - Source.

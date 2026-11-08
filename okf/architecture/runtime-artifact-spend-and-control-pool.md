@@ -22,4 +22,3 @@ This concept owns Redeven's durable spend ledger and control-artifact pool. Prod
 # Evidence
 
 - `redeven:internal/agent/agent.go:1149` - Source.
-- `redeven:internal/agent/control_artifact_pool.go:67` - Source.

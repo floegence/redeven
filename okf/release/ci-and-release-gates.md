@@ -7,14 +7,14 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Focused checks precede staged pre-commit and exact-tip main admission. Dependencies, assets, locales and OKF must agree. Browser/Desktop/native/long-thread acceptance remains explicit; releases require authenticated artifacts and same-commit historical-data qualification. Windows is internal-only.
+Focused checks precede staged pre-commit and exact-tip main admission. Long-thread/browser/Electron/broad UI/Docker/native/stress remain explicit. Release requires authenticated artifacts and same-commit historical-conversation Actions. Staged notices use index snapshot/installed metadata/cached exact Go with GOTOOLCHAIN=local, no network/index rewrite.
 
 # Contract
 
 ## Checks
 AGENTS owns workflow/100-line cap; quick_ci_policy enforces it. Development checks affected code; pre-commit checks staged locale/hygiene/notices/viewer bytes. Ordinary CI has one bounded source job. check_final_integration.sh runs once per exact clean rebased base/tip: pushed object=main, fast-forward ancestry, no unpublished merges. Earlier evidence cannot certify changed inputs. Fingerprints bind tools/inputs except variable macOS MANPATH; real-hook tests verify identity. Report all formatting faults; generators leave no diff.
 
-Long-thread/browser/Electron/broad UI/Docker/native/stress remain explicit. Release requires authenticated artifacts and same-commit historical-conversation Actions. Staged notices use index snapshot/installed metadata/cached exact Go with GOTOOLCHAIN=local, no network/index rewrite. Main checks full notices with GOWORK=off; dev startup skips. Floe notices match manifests/locks. Viewer validates staged source/locked deps without install/generation; buildHostApplicationAppearance.mjs generates.
+Main checks full notices with GOWORK=off; dev startup skips. Floe notices match manifests/locks. Viewer validates staged source/locked deps without install/generation; buildHostApplicationAppearance.mjs generates.
 
 Daily/manual CodeQL skips unchanged main only after successful scheduled scan; lookup failure scans. Review source/locks; dismissals need exact authority/input evidence. Unavailable/nonzero is not clean. Actions pins/Node24 are separate from product Node.
 

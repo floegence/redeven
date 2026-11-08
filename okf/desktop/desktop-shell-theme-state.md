@@ -7,11 +7,10 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-One validated Desktop theme snapshot drives Welcome, Env App, chrome and generated documents. New/reset themes use Porcelain; valid choices survive upgrades. Selection paints before persistence, retaining acknowledged state, drafts/focus/content and Retry on failure.
+One validated Desktop theme snapshot drives Welcome, Env App, chrome and generated documents. Selection paints before persistence, retaining acknowledged state, drafts/focus/content and Retry on failure. Admit ids/defaults/metadata from published Floe `/themes`; never copy palettes or weaken forced-color/high-contrast behavior. OS changes apply only in system mode.
 
 # Contract
 
-- Admit ids/defaults/metadata from published Floe `/themes`; never copy palettes or weaken forced-color/high-contrast behavior. OS changes apply only in system mode.
 - Preload supplies the initial snapshot; user writes use asynchronous IPC without blocking input. [Surface material](../ui/surface-material.md) remains independent.
 - Settings derive content, panels, insets, dividers, controls and selections from active tokens, including Classic presets.
 - Welcome and Env App theme popovers begin with one localized, single-line Theme heading. Omit the selected-preset subtitle and visible color-mode caption; keep the color-mode radiogroup accessibly named. Inline settings retain their visible mode label. Both presentations omit the resolved-system-mode hint so switching the source does not add or remove a row above the themes.
@@ -25,5 +24,4 @@ Resolve public npm dependencies without sibling wiring/patches. Renderer storage
 # Evidence
 
 - `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Source.
-- `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Source.
 - `redeven:internal/envapp/ui_src/src/styles/porcelainLightVisibility.browser.test.tsx` - Published CSS, visible control and Monaco bracket contrast; retained draft, selection, focus and scroll across theme switches.

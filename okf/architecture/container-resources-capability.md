@@ -7,12 +7,11 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Native resource services own endpoint-bound execution, admission and reconciliation; the console presents typed authorized facts and drafts. Missing engines and partial volume inspections stay explicit. UI reachability, size or reference guesses never grant mutation authority or replace resource preflight.
+Native resource services own endpoint-bound execution, admission and reconciliation; the console presents typed authorized facts and drafts. Disk usage never authorizes cleanup or overrides the reference preflight. [Runtime execution](containers-operation-observation.md#engine-execution) owns discovery, endpoint binding, typed CLI reads and normalization; [volume usage](#volume-observations) owns reference completeness and independent usage reads.
 
 # Contract
 
 ## Authority
-- [Runtime execution](containers-operation-observation.md#engine-execution) owns discovery, endpoint binding, typed CLI reads and normalization; [volume usage](#volume-observations) owns reference completeness and independent usage reads.
 - Strictly decode mutations and reject unknown fields. Keep uncertain outcomes explicit. Server gates `/_redeven_proxy/api/container-resources` and `container-resource-operations`; disabled controls are only presentation.
 - Renderer cannot construct argv, skip admission or mutate managed resources. DTOs expose typed redacted facts, excluding environment/label values, credentials, sockets/certificates, remote URLs and Compose paths. Terminal sessions retain Write/Execute checks.
 - [Console](#console) projects established targets/capabilities. Direct engine reachability proves resource readiness; host-service management state cannot replace that probe.
@@ -35,8 +34,6 @@ Volume inventory and detail return `referenced_containers`, `used_by`, and `refe
 ### Disk usage
 `GET /container-resources/volume-disk-usage` is an independent, Read-only, no-store observation. Unexpected layouts fail visibly instead of being interpreted as an empty measurement.
 
-Disk usage never authorizes cleanup or overrides the reference preflight.
-
 # Boundaries
 
 `containerengine` owns execution/redaction; `containerresource` owns admission, locks, cancellation, events and reconciliation; Web Services owns its resources. ReDevPlugin has no Containers adapter/package/client/UI role. Host administrators own engine installation and OS access.
@@ -48,11 +45,5 @@ Volume usage is an observation, not a capacity, quota, free-space, billing, or c
 # Evidence
 
 - `redeven:internal/containerengine/container_exec.go` - Source.
-- `redeven:internal/containerengine/resource_read.go` - Source.
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Responsive log geometry and interaction acceptance.
-
-- `redeven:internal/containerengine/volume_usage.go` - Source.
-- `redeven:internal/containerengine/volume_usage_test.go` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns canonical provider history/rendering lineage; Redeven supplies model, prompt, permissions and ephemeral overlays at declared boundaries. History stays readable without restoring removed tools or rewriting facts. Surface changes create compatible lineage, never a host continuation store.
+Floret owns canonical provider history/rendering lineage; Redeven supplies model, prompt, permissions and ephemeral overlays at declared boundaries. Hosted search includes web_search_call.action.sources for Activity URLs; Qwen keeps its tool shape. Floret7.97.0 ResponsesOutput reconciles done/terminal.
 
 # Contract
 
@@ -34,7 +34,7 @@ The nullable property's description retains its original guidance and explicitly
 says to use null for omission. Canonical schemas and non-strict DeepSeek requests
 remain unchanged. This belongs to Redeven's existing provider-schema adapter.
 
-Hosted search includes web_search_call.action.sources for Activity URLs; Qwen keeps its tool shape. Floret7.97.0 ResponsesOutput reconciles done/terminal. Completed reasoning ciphertext wins; fill only missing/null/empty from matching terminal item. Search done bytes win when only valid action.sources differ,never merge/overwrite lists; answer annotations independent. Validate terminal-only fallback; omitted terminal retains ordered done events. Duplicate done,identity/content/arguments/status/inputs/unknown fields/missing items/byte limits remain strict.
+Completed reasoning ciphertext wins; fill only missing/null/empty from matching terminal item. Search done bytes win when only valid action.sources differ,never merge/overwrite lists; answer annotations independent. Validate terminal-only fallback; omitted terminal retains ordered done events. Duplicate done,identity/content/arguments/status/inputs/unknown fields/missing items/byte limits remain strict.
 
 Redeven maps opaque SDK bytes/typed errors. CompleteWithDiagnostics returns safe paths,boundary,counts/chosen authority,never query/URL/values. Localize post-response.completed validation failure with exact copyable conflict detail. Attempt epochs identify requests,not failed retries. Validation never advances history,changes retry policy or replays effects.
 
@@ -66,8 +66,5 @@ Redeven maps typed product state,never persists envelopes,reconstructs history o
 - `redeven:internal/ai/model_gateway_result_test.go` and `desktop_model_source_test.go`: raw malformed, non-object and large-integer arguments survive transport and history; ambiguous authorities fail.
 - `redeven:internal/ai/flower_control_correction_integration_test.go` and `flower_argument_correction_integration_test.go`: real DeepSeek transport to Service correction, valid questions, exhaustion, restart and explicit Retry without replaying confirmed effects.
 - `redeven:internal/ai/model_gateway_tool_names_test.go` - Real builtin definitions across 15 provider routes verify dispatched mappings, unchanged inputs/schemas, canonical stream/final identities and byte-identical retries.
-- `redeven:internal/ai/floret_runtime.go` - Source.
-- `redeven:internal/ai/floret_bootstrap.go` - Source.
 - model_gateway_responses_output_test.go/Floret restart:source variants,terminal-only citations,all adapters,one Activity,Goal/restart/Fork/Retry with confirmed tools. TestResponsesLiveHostedSearchCompletion uses synthetic searches/recreated adapters/configured provider,never production state.
 - model_gateway_anthropic_test.go:wire/usage/cache/secrets/frozen identity;Service signed/redacted two-turn thinking plus shared arguments/attachments/cancel.
-- `redeven:internal/ai/model_gateway_deepseek_files_test.go`:23 images,reuse/accounting/credentials/custom endpoints/Desktop errors.

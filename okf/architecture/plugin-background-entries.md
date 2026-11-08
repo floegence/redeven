@@ -7,11 +7,11 @@ reviewed_at: "2026-10-31"
 ---
 # Summary
 
-ReDevPlugin owns headless Worker lifecycle and durable intervals. Redeven supplies environment permission policy and presents verified status through ordinary plugin management. No hidden surface, host scheduler, replay endpoint or second Worker protocol is involved.
+ReDevPlugin owns headless Worker lifecycle and durable intervals. A plugin may declare runtime_start, on_demand or interval. The first two use the platform background manager: starts are idempotent, scoped to the installed instance and environment, and independent of visible Activity or Workbench surfaces.
 
 # Contract
 
-A plugin may declare runtime_start, on_demand or interval. The first two use the platform background manager: starts are idempotent, scoped to the installed instance and environment, and independent of visible Activity or Workbench surfaces. Interval requires background.method.v1 and background.interval.v1, an explicit method and parameters, an environment-scoped job Worker, synchronous execution, no confirmation or preflight, a 1,000–86,400,000 ms period, and a 1–300,000 ms execution budget not exceeding the period.
+Interval requires background.method.v1 and background.interval.v1, an explicit method and parameters, an environment-scoped job Worker, synchronous execution, no confirmation or preflight, a 1,000–86,400,000 ms period, and a 1–300,000 ms execution budget not exceeding the period.
 
 The platform persists and claims each due invocation before dispatch. One instance runs at most one interval invocation; separate plugins remain independent. The first run waits one period, then each next run follows completion plus the period. Missed periods coalesce. Restart preserves completed plans; an unfinished claim becomes unknown and is never replayed. A later period is new work, not proof of the earlier result. Disable, uninstall, package replacement and revocation fence and cancel exact current work. Host close drains execution before closing state. ReDevPlugin owns contiguous control-store migration and unknown-outcome handling.
 
