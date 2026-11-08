@@ -57,14 +57,9 @@ The embedded conversation explicitly renders HTML links and fences as source;
 the sandbox owns the live application. Source links still open through the host's
 file action, and reference images, audio and video retain their ordinary rendering.
 Other Flower conversations retain inline HTML previews.
-Both the workspace and directly opened draft library use the shared Desktop drag contract and native window-control
-insets; removing the outer header must not place actions under system controls.
-The toolbar preserves a user-assigned draft title; otherwise it shows the
-verified active preview name, falling back to the localized untitled label only
-before a preview is available. This display choice does not rename stored drafts.
-The compact checks action reflects actual running, failed, passed or unrun stages;
-it never displays a success icon before checks have passed. Detailed output opens
-on demand without adding another permanent header.
+Workspace/history use shared Desktop drag and native-control insets. A user title
+wins; otherwise show verified preview name, then localized untitled, without renaming
+stored drafts. Checks reflect actual stages; detailed output opens on demand.
 
 Directory cards use 13px names, 12px summaries/padding and 32px icons.
 Selection/status never enlarge cards or duplicate refresh content.
@@ -74,12 +69,12 @@ installation review; it is absent during loading/errors, filtered searches and u
 Menu dismissal and installation return focus to the card. Compact toolbar actions
 keep accessible names while using icons to leave room for translated titles.
 
-The user-facing library is Creation history; durable draft IDs and APIs stay unchanged.
-A bounded-width list orders projects by modification time, with a neutral project
-mark, title, localized timestamp and continuation action. Search includes the localized
-untitled label. Refresh preserves visible records and the query; failures offer retry,
-initial loading shows non-interactive geometry, and empty history offers creation.
-No generated icon, preview or build status is inferred from a draft record.
+Creation history uses a bounded-width list ordered by modification time: project
+mark, title, localized timestamp and continuation. Search includes localized untitled
+names. Refresh retains records/query; loading, retry and empty states stay explicit.
+Draft records never imply generated icons or build status. Initialization and Flower
+renaming persist project titles; polling refreshes them without remounting the composer.
+Unnamed legacy projects display verified package names without changing durable titles.
 
 Draft creation is request-idempotent and the URL becomes durable after creation.
 Unsent text and File bytes persist through the canonical authority-free composer
@@ -112,17 +107,21 @@ Each applied artifact and platform generation owns a fresh preview container,
 including builds with identical package bytes. After confirmed close, an update
 failure re-reads authoritative preview state before reopening; cancelling close
 keeps the original surface and does not apply the artifact.
-Toolbar Back, browser Back/Forward and Open installed application share the preview close confirmation
-and persist the composer before navigation. A cancelled close keeps the current
-surface; failed navigation reconciles and reopens a fresh preview container.
-The shell leaves the draft route only after the installed target is authoritatively
-present and its placement succeeds; a missing or stale target retains the draft.
-A reload queries the original durable install request; it never starts another
-request to guess the outcome. A committed install remains successful if inventory
-refresh fails, and subsequent builds update the recorded installed instance.
-After an authoritative `not_committed` outcome, Try again requests a fresh review
-of the current preview instead of querying the same terminal failure forever.
-Unknown outcomes retain the original request and never authorize another install.
+Back/Forward await preview close and composer persistence; cancellation retains the
+surface and failure reconciles it. Open installed retains the route, conversation,
+composer and preview, showing an independent creation-owned floating surface in
+either display mode. Missing or stale targets keep the workspace and report failure.
+
+One primary action shows Install, Update for newer artifacts, or Open when current.
+Install/Update first applies a pending artifact through normal close confirmation,
+then reviews those exact bytes; it never commits without confirmation. Cancellation
+or failure stops the sequence. Open remains in the overflow menu during iteration.
+Review copy uses the Host's install/update intent. New builds arriving during review
+cannot replace its artifact. Composer identity survives draft metadata refreshes.
+Authoring increments source SemVer for changed bytes; Host update rules remain exact.
+Reload queries the original durable request; unknown outcomes prohibit another
+install. A committed install survives inventory refresh failure. Subsequent builds
+update the recorded instance; authoritative not_committed outcomes allow fresh review.
 
 ## Canvas comments
 
@@ -131,8 +130,10 @@ callback on the same sandbox channel. Product never reads cross-origin DOM.
 The selection binds the exact artifact, preview generation and current platform
 frame. Normalized geometry draws a non-interactive outline and pin; a compact
 selection-adjacent comment popover accepts explicit submission and clamps to the
-canvas edges. Its target, text and send action form one compact editing surface. Keyboard context menus and the toolbar's
-whole-preview comment provide alternatives. Closing the panel preserves text.
+canvas edges. Position is measured before reveal; published Floe presence owns
+enter/exit and reduced motion. Freshness changes do not move the editing anchor.
+Busy feedback stays on Send without a paragraph or height shift. Keyboard context
+menus and whole-preview comments are alternatives. Closing preserves text and focus.
 Compact screens retain 44-pixel comment action targets and legible input without
 adding another header or permanently covering the application.
 Their whole-preview comment and preview-update actions sit in the existing overflow
@@ -179,7 +180,7 @@ Management presentation never creates a second lifecycle or permission authority
 
 - redeven:internal/envapp/ui_src/src/ui/plugins/PluginRetainedDataDialog.browser.test.tsx:1 - Exercises single commits, uncertain outcomes, owner/target changes, permissions, focus, localized layouts and mobile geometry.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCreationWorkspace.browser.test.tsx` - Product interaction tests using fixture HTTP responses.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPreviewUpdates.browser.test.tsx` - Container lifetime across conversation suspension, identical-byte apply, rejected updates and cancelled close; the surface is a fixture.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPreviewUpdates.browser.test.tsx` - Preview/composer lifetime and repeated install/update review; fixture surfaces.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginComposerPersistence.browser.test.tsx` - Real browser IndexedDB text/File restoration.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCanvasWorkflow.browser.test.tsx` - Artifact-bound comment state, viewport invalidation, single-toolbar Desktop control insets and persistence failures; the sandbox is a fixture.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginFlowerAdmission.browser.test.tsx` - Real Flower outbox admission, retained ordinary input and exact-request recovery after lost receipts.

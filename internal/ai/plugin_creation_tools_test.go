@@ -2,10 +2,34 @@ package ai
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	fltools "github.com/floegence/floret/v7/tools"
 )
+
+func TestPluginAuthorStatusRetainsNamingContextInLargeModelResult(t *testing.T) {
+	encoded, err := encodeModelToolResult(ToolResult{ToolName: "plugin_author.status", Status: toolResultStatusSuccess, Data: map[string]any{
+		"project":   map[string]any{"title": "Focus timer", "revision": 17},
+		"workspace": map[string]any{"source_directory": "/managed/project/source"},
+		"artifacts": []any{map[string]any{"artifact_id": "latest-build", "stages": strings.Repeat("build evidence ", 1000)}},
+		"build":     map[string]any{"status": "failed", "error": strings.Repeat("compiler diagnostic ", 1000)},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, ok := encoded.result.Data.(map[string]any)
+	if !ok || data["project"] == nil || data["workspace"] == nil {
+		t.Fatal("status lost the structured project and source context needed to rename")
+	}
+	project := data["project"].(map[string]any)
+	if project["revision"] != json.Number("17") || project["title"] != "Focus timer" {
+		t.Fatal(project)
+	}
+	if !encoded.result.Truncated || len(encoded.text) > 16000 {
+		t.Fatal("large build evidence must remain bounded and explicitly truncated")
+	}
+}
 
 func TestPluginAuthorToolDefinitionsRespectRuntimeEffects(t *testing.T) {
 	for _, def := range builtInPluginAuthorToolDefinitions() {

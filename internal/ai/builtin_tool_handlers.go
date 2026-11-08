@@ -194,6 +194,25 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, err
 	}
 	payload = normalized
 	switch toolName {
+	case "plugin_author.status":
+		// Keep the current title, optimistic revision and source path usable even
+		// when retained build evidence exceeds the ordinary result budget.
+		record, ok := payload.(map[string]any)
+		if !ok {
+			return nil, false, fmt.Errorf("invalid plugin author status result")
+		}
+		truncated := false
+		for _, field := range []string{"artifacts", "build"} {
+			raw, err := json.Marshal(record[field])
+			if err != nil {
+				return nil, false, err
+			}
+			if excerpt, cut := truncateByRunes(string(raw), 4000); cut {
+				record[field] = map[string]any{"raw": excerpt, "truncated": true}
+				truncated = true
+			}
+		}
+		return record, truncated, nil
 	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
 		// Pagination owns output and cursor together; never truncate this page again.
 		return payload, false, nil

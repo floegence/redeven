@@ -201,6 +201,10 @@ func TestAuthorWorkspaceRealHostInstallRecoveryAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	projected := service.PresentDraft(ctx, meta, draft)
+	if projected.Title != "Created" || projected.Revision != draft.Revision {
+		t.Fatalf("legacy project name: %+v", projected)
+	}
 	// Continue the same source after restart and update the retained formal instance.
 	workspace, err := integration.author.store.Get(authorCtx, owner, draft.WorkspaceID)
 	if err != nil {

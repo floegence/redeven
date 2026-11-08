@@ -96,7 +96,7 @@ try {
     .click();
   await page.locator('[data-plugin-center-market-action]').click();
   await page.locator('[data-plugin-center-drafts]').click();
-  await page.locator('[data-plugin-draft-library] .divide-y > button').first().click();
+  await page.locator('[data-plugin-history-entry="' + draftID + '"]').click();
   await expect(workspace).toHaveAttribute('data-project-id', draftID);
   await expect(workspace.locator('textarea').first()).toHaveValue('Keep this plugin draft while I check the terminal.');
   await page.reload();
@@ -104,8 +104,8 @@ try {
   await expect(workspace.locator('textarea').first()).toHaveValue('Keep this plugin draft while I check the terminal.');
   report.assertions.push('The real product draft library and page reload restore the same unsent composer');
   await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.getByText('Delete draft', { exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete draft', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Delete project', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete project', exact: true }).click();
   await workspace.waitFor({ state: 'detached' });
   assert.deepEqual(pageErrors, []);
   report.passed = true;

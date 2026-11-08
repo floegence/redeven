@@ -397,7 +397,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
           )
     ),
     Dropdown: (props: any) => <>{props.trigger}</>,
-    FloatingWindow: (props: any) => testRealFlowerLauncher ? <actual.FloatingWindow {...props} /> : (
+    FloatingWindow: (props: any) => testRealFlowerLauncher || pluginCreationNavigationFixture ? <actual.FloatingWindow {...props} /> : (
       <Show when={props.open}>
         <div data-floe-geometry-surface="floating-window" class={props.class}>
           <div>{props.title}</div>
@@ -2040,6 +2040,49 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       await expect(pluginCreationNavigationFixture.open('installed-1')).rejects.toThrow('Plugin surface failed');
       expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('draft-1');
       expect(document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
+    } finally {
+      window.history.replaceState(window.history.state, '', initial);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  });
+
+  it.each(['activity', 'workbench', 'mobile'] as const)('opens installed plugins above their creation page without navigation in %s', async mode => {
+    await page.viewport(mode === 'mobile' ? 390 : 1280, 800);
+    pluginCreationNavigationFixture = { open: async () => { throw new Error('Workspace not mounted'); } };
+    publishProtocolConnected();
+    const target = { pluginID: 'dev.example.focus', pluginInstanceID: 'installed-1', surfaceID: 'focus.view', expectedManagementRevision: 1 };
+    pluginCreationInventory = { items: [{
+      inventoryKey: 'instance:installed-1', pluginID: target.pluginID, pluginInstanceID: target.pluginInstanceID,
+      displayName: 'Focus', description: '', lifecycleState: 'enabled', trustBadge: 'unknown',
+      defaultLaunchTarget: target, launchTargets: [target],
+    }] };
+    if (mode === 'mobile') await mountProductionMobileShell();
+    else await mountShell();
+    if (mode === 'workbench') await page.getByRole('button', { name: 'Switch Workbench', exact: true }).click();
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    const initial = window.location.href;
+    try {
+      const url = new URL(initial); url.searchParams.set('plugin_draft', 'draft-1');
+      window.history.pushState(window.history.state, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await expect.poll(() => document.querySelector('[data-plugin-creation-navigation-fixture]'), { timeout: 15000 }).not.toBeNull();
+      const workspace = document.querySelector('[data-plugin-creation-navigation-fixture]');
+      await pluginCreationNavigationFixture.open('installed-1');
+      expect(window.location.href).toBe(url.href);
+      expect(document.querySelector('[data-plugin-creation-navigation-fixture]')).toBe(workspace);
+      await expect.element(page.getByRole('dialog', { name: /dev.example.focus/ })).toBeVisible();
+      const windowSurface = document.querySelector<HTMLElement>('[data-redeven-plugin-activity-window]')!;
+      expect(windowSurface.closest('[hidden], [inert]')).toBeNull();
+      expect(document.querySelector<HTMLElement>('[data-redeven-plugin-creation-page]')!.inert).toBe(mode === 'mobile');
+      await pluginCreationNavigationFixture.open('installed-1');
+      expect(document.querySelectorAll('[data-redeven-plugin-activity-window]')).toHaveLength(1);
+      expect(document.querySelector('[data-redeven-plugin-activity-window]')).toBe(windowSurface);
+      await page.elementLocator(windowSurface).getByRole('button', { name: 'Close', exact: true }).click();
+      await expect.poll(() => document.querySelector('[data-redeven-plugin-activity-window]')).toBeNull();
+      expect(window.location.href).toBe(url.href);
+      expect(document.querySelector('[data-plugin-creation-navigation-fixture]')).toBe(workspace);
+      expect(document.querySelector<HTMLElement>('[data-redeven-plugin-creation-page]')!.inert).toBe(false);
     } finally {
       window.history.replaceState(window.history.state, '', initial);
       window.dispatchEvent(new PopStateEvent('popstate'));

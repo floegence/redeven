@@ -22,8 +22,9 @@ func builtInPluginAuthorToolDefinitions() []ToolDef {
 		}
 		defs = append(defs, ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}), Mutating: mutating, RequiresApproval: mutating, Visibility: visibility, Capabilities: capabilities, Source: "builtin", Namespace: "builtin.plugin_author", Priority: 100})
 	}
-	text := map[string]any{"type": "string"}
+	text := map[string]any{"type": "string", "minLength": 1, "maxLength": 120}
 	add("plugin_author.status", "Read the current dedicated plugin draft's managed source directory and retained build artifacts. Available only in a plugin creation conversation.", map[string]any{}, []string{}, false)
+	add("plugin_author.rename", "Set this creation project's title from the user's naming intent. Read plugin_author.status for project.revision first. Keep source plugin.display_name aligned through ordinary source edits and rebuild; this tool does not change installed package bytes or identity.", map[string]any{"title": map[string]any{"type": "string", "minLength": 1, "maxLength": 120}, "revision": map[string]any{"type": "integer", "minimum": 1}}, []string{"title", "revision"}, true)
 	add("plugin_author.initialize", "Initialize this draft's empty managed source using a short lowercase slug and the released platform template. Publication identity is generated; inspect status first.", map[string]any{"slug": map[string]any{"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}, "display_name": text, "template": map[string]any{"type": "string", "enum": []string{"web", "data", "files", "monitor", "worker"}}}, []string{"slug", "display_name", "template"}, true)
 	add("plugin_author.build", "Run this project's declared author pipeline under the current execution approval. Returns actual stages and an immutable package artifact. Never installs or grants permissions. Failed builds retain the last usable artifact.", map[string]any{}, []string{}, true)
 	add("plugin_author.capture", "Capture and verify an already-built package from the declared project output without running commands. Returns an immutable artifact; does not claim business tests ran.", map[string]any{}, []string{}, true)
@@ -39,6 +40,8 @@ func (r *run) execPluginAuthorTool(ctx context.Context, meta *session.Meta, name
 		operation = "status"
 	case "plugin_author.initialize":
 		operation = "initialize"
+	case "plugin_author.rename":
+		operation = "rename"
 	case "plugin_author.build":
 		operation = "build"
 	case "plugin_author.capture":
@@ -46,7 +49,7 @@ func (r *run) execPluginAuthorTool(ctx context.Context, meta *session.Meta, name
 	default:
 		return nil, errors.New("unknown plugin author operation")
 	}
-	if operation != "initialize" && len(args) != 0 {
+	if operation != "initialize" && operation != "rename" && len(args) != 0 {
 		return nil, errors.New("unexpected plugin author arguments")
 	}
 	return r.host.pluginCreation.AuthorOperation(ctx, meta, r.host.authorityThreadID, operation, args)

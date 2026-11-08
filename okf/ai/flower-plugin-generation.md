@@ -68,8 +68,16 @@ other projects, platform state and other task directories remain excluded. Addin
 this source never replaces existing private task-file isolation. Ordinary file
 and terminal tools use the same scope and existing effect approvals.
 
-`plugin_author.status`, `initialize`, `build` and `capture` are available only to
-the dedicated conversation. Build is a command-execution effect under Floret's
+`plugin_author.status`, `initialize`, `rename`, `build` and `capture` are available only to
+the dedicated conversation. Initialization saves the selected display name as the
+project title. Flower chooses a concise localized name when unspecified and follows
+names stated in chat. Rename binds the current project revision, authenticated owner
+and thread; source display-name edits and rebuilds remain separate from installed
+package authority. Status preserves structured project/revision and source metadata
+when long build evidence is excerpted. History projects unnamed legacy
+records through the released verified package reader without rewriting stored titles.
+Changed package bytes require a higher source SemVer; identity remains unchanged.
+Build is a command-execution effect under Floret's
 normal approval. The actual retained stage reports distinguish passed, failed,
 interrupted and not-run work; packaging alone is not business or browser proof.
 For multi-iteration implementation, author guidance asks for a small runnable

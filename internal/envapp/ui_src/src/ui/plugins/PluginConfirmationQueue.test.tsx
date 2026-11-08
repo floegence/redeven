@@ -228,6 +228,7 @@ describe('PluginConfirmationDialog', () => {
     document.body.append(mount);
 
     dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-confirmation-approve]')).not.toBeNull(), { timeout: 5000 });
     await Promise.resolve();
 
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Remove the api container?');
@@ -319,6 +320,7 @@ describe('PluginConfirmationDialog', () => {
     document.body.append(mount);
 
     dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-confirmation-approve]')).not.toBeNull());
     await Promise.resolve();
 
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Start the selected container?');
@@ -347,6 +349,7 @@ describe('PluginConfirmationDialog', () => {
     document.body.append(mount);
 
     dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-confirmation-approve]')).not.toBeNull());
 
     expect(document.querySelector('[data-plugin-confirmation-data-loss]')?.textContent?.trim()).toBe('data_loss');
     expect(document.querySelector('[data-plugin-confirmation-data-loss-risk]')?.textContent?.trim()).toBe('data_loss_risk');
@@ -365,6 +368,7 @@ describe('PluginConfirmationDialog', () => {
     document.body.append(mount);
 
     dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-confirmation-approve]')).not.toBeNull());
     const staleApprove = document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!;
     firstController.abort('surface request cancelled');
     await expect(first).resolves.toEqual({ confirmed: false });
@@ -385,11 +389,13 @@ describe('PluginConfirmationDialog', () => {
     document.body.append(mount);
 
     dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-confirmation-approve]')).not.toBeNull());
     document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!.click();
     await expect(first).resolves.toEqual({ confirmed: true });
     expect(queue.active()).toBeUndefined();
 
     const second = Promise.resolve(queue.createHandler(requestOwner)(intent('second', new AbortController().signal)));
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-confirmation-approve]')).not.toBeNull());
     const replacementApprove = document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!;
     expect(replacementApprove.disabled).toBe(true);
     replacementApprove.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
@@ -413,6 +419,7 @@ describe('PluginConfirmationDialog', () => {
     document.body.append(mount);
 
     dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-confirmation-approve]')).not.toBeNull());
     expect(document.querySelector('[data-plugin-confirmation-method-fallback]')?.textContent).toContain('metrics.delete');
 
     document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-reject]')!.click();

@@ -353,6 +353,7 @@ const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then(
 type EnvActivitySurfaceId = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
 
 type ActivityPluginWindow = Readonly<{
+  creationID?: string;
   instanceID: string;
   targetKey: string;
   target: Accessor<PluginSurfaceLaunchTarget>;
@@ -372,15 +373,6 @@ type ActivityPluginPageRuntime = Readonly<{
   close: Accessor<(() => Promise<boolean>) | null>;
   setClose: Setter<(() => Promise<boolean>) | null>;
 }>;
-
-function createActivityPluginWindow(
-  instanceID: string,
-  targetKey: string,
-  initialTarget: PluginSurfaceLaunchTarget,
-): ActivityPluginWindow {
-  const [target, setTarget] = createSignal({ ...initialTarget });
-  return { instanceID, targetKey, target, setTarget };
-}
 
 class AccessResumeTimeoutError extends Error {
   constructor(message: string) {
@@ -604,7 +596,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         const url = new URL(window.location.href);
         url.searchParams.set('plugin_draft', restartWorkspace.pluginDraftID);
         window.history.replaceState(window.history.state, '', url);
-        pluginCreationURL = url.href;
+        setPluginCreationURL(url.href);
         setPluginCreationProjectID(restartWorkspace.pluginDraftID);
         setPluginCreationOpen(true);
       }
@@ -1957,16 +1949,17 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const [pluginCreationOpen, setPluginCreationOpen] = createSignal(Boolean(initialPluginDraft));
   const [pluginCreationProjectID, setPluginCreationProjectID] = createSignal(initialPluginDraft || 'new');
   const [pluginCreationReference, setPluginCreationReference] = createSignal<string>();
-  let pluginCreationURL = window.location.href;
+  const [pluginCreationURL, setPluginCreationURL] = createSignal(window.location.href);
+  const pluginCreationOwner = createMemo(() => pluginCreationOpen() ? new URL(pluginCreationURL()).searchParams.get('plugin_draft') : null);
   let pluginCreationNavigate: ((commit: () => unknown) => Promise<boolean>) | undefined;
   let pluginCreationSaveForRestart: (() => Promise<string | undefined>) | undefined;
   let pluginHistoryPending = false;
-  let pluginHistoryTarget = { url: pluginCreationURL, state: window.history.state };
+  let pluginHistoryTarget = { url: pluginCreationURL(), state: window.history.state };
   const navigatePluginCreation = (id: string | undefined, replace = false) => {
     const url = new URL(window.location.href);
     if (id) url.searchParams.set('plugin_draft', id); else url.searchParams.delete('plugin_draft');
     window.history[replace ? 'replaceState' : 'pushState'](window.history.state, '', url);
-    pluginCreationURL = url.href;
+    setPluginCreationURL(url.href);
     if (!replace) setPluginCreationProjectID(id || 'new');
     setPluginCreationOpen(Boolean(id));
   };
@@ -1977,18 +1970,18 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       const { url, state } = pluginHistoryTarget;
       const id = new URL(url).searchParams.get('plugin_draft');
       window.history.replaceState(state, '', url);
-      pluginCreationURL = url;
+      setPluginCreationURL(url);
       setPluginCreationProjectID(id || 'new');
       setPluginCreationOpen(Boolean(id));
     };
     if (!pluginCreationOpen() || !pluginCreationNavigate
-      || new URL(pluginHistoryTarget.url).searchParams.get('plugin_draft') === new URL(pluginCreationURL).searchParams.get('plugin_draft')) {
+      || new URL(pluginHistoryTarget.url).searchParams.get('plugin_draft') === new URL(pluginCreationURL()).searchParams.get('plugin_draft')) {
       commit();
       return;
     }
     pluginHistoryPending = true;
     void pluginCreationNavigate(commit).then(committed => {
-      if (!committed) window.history.pushState(window.history.state, '', pluginCreationURL);
+      if (!committed) window.history.pushState(window.history.state, '', pluginCreationURL());
     }).finally(() => { pluginHistoryPending = false; });
   };
   window.addEventListener('popstate', syncPluginCreationNavigation);
@@ -2005,20 +1998,24 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
   const backFromPluginCreation = () => { navigatePluginCreation(undefined); void openPluginCenter(); };
+  const pluginSurfaceFailure = () => new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+  const refreshCreationInventory = async () => {
+    const inventory = await refetchPluginInventory();
+    if (!inventory) throw new Error(i18n.t('uiCopy.plugin.creation.inventoryFailed'));
+    return inventory;
+  };
   const renderPluginCreation = () => <Show when={pluginCreationProjectID()} keyed>{id => <Show when={id !== 'library'} fallback={<PluginDraftLibrary onBack={backFromPluginCreation} onOpen={openPluginDraft} />}>
     <PluginCreationWorkspace canManage={canAdmin()} draftCoordinator={flowerDraftCoordinator} draftID={id} visible={pluginCreationOpen()} centerEntry={localRuntime()?.web_entry === 'center-v1'} referenceThreadID={pluginCreationReference()}
       onBack={backFromPluginCreation} onSaved={saved => navigatePluginCreation(saved, true)}
       onNavigationReady={navigate => { pluginCreationNavigate = navigate; }}
       onRestartReady={save => { pluginCreationSaveForRestart = save; }}
-      onInstalled={async () => {if(!await refetchPluginInventory())throw new Error(i18n.t('uiCopy.plugin.creation.inventoryFailed'));}}
+      onInstalled={refreshCreationInventory}
       onOpenInstalled={async instanceID => {
-        const projection = await refetchPluginInventory();
-        if (!projection) throw new Error(i18n.t('uiCopy.plugin.creation.inventoryFailed'));
+        const creationID = pluginCreationOwner()!;
+        const projection = await refreshCreationInventory();
         const item = projection.items.find(item => item.pluginInstanceID === instanceID);
-        if (!item) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
-        if (item.defaultLaunchTarget) await openPluginSurface(item.defaultLaunchTarget);
-        else await openPluginCenter(item.inventoryKey);
-        navigatePluginCreation(undefined);
+        if (!item?.defaultLaunchTarget) throw pluginSurfaceFailure();
+        await openPluginSurface(item.defaultLaunchTarget, { activityPlacement: 'window', creationID });
       }}
       renderFlower={options => <EnvAIPage draftCoordinator={flowerDraftCoordinator} embeddedConversation={options.embeddedConversation}
         prepareTurnRoute={options.prepareTurnRoute} presentation="full" engaged={pluginCreationOpen()} transcriptVisible={pluginCreationOpen()}
@@ -2066,12 +2063,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     ));
     const currentTarget = inventoryItem?.launchTargets?.find((candidate) => candidate.surfaceID === target.surfaceID)
       ?? (inventoryItem?.defaultLaunchTarget?.surfaceID === target.surfaceID ? inventoryItem.defaultLaunchTarget : undefined);
+    const phase = pluginSurfacePhases()[target.pluginInstanceID];
     if (
       !canOpenPluginSurfaces()
       || pluginSessionRetired()
-      || pluginSurfacePhases()[target.pluginInstanceID] === 'pending'
-      || pluginSurfacePhases()[target.pluginInstanceID] === 'refreshing'
-      || pluginSurfacePhases()[target.pluginInstanceID] === 'unknown'
+      || phase === 'pending'
+      || phase === 'refreshing'
+      || phase === 'unknown'
       || !currentTarget
       || inventoryItem?.pluginID !== target.pluginID
       || currentTarget.surfaceID !== target.surfaceID
@@ -2123,23 +2121,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     setActivityPluginWindows((windows) => bringActivityPluginWindowToFront(windows, instanceID));
   };
 
+  const requestPluginWindowFocus = (instanceID: string) => {
+    activatePluginSurfaceWindow(instanceID);
+    setActivityPluginFocusRequests(requests => ({ ...requests, [instanceID]: (requests[instanceID] ?? 0) + 1 }));
+  };
+
   const closePluginSurfaceWindow = (instanceID: string) => {
     activityPluginCloseRequests.delete(instanceID);
     setActivityPluginWindows((windows) => windows.filter((window) => window.instanceID !== instanceID));
-  };
-
-  const closeMatchingActivityPluginWindows = async (target: Pick<PluginSurfaceLaunchTarget, 'pluginInstanceID' | 'surfaceID'>) => {
-    const matching = activityPluginWindows().filter((window) => (
-      window.target().pluginInstanceID === target.pluginInstanceID
-      && window.target().surfaceID === target.surfaceID
-    ));
-    for (const window of matching) {
-      const close = activityPluginCloseRequests.get(window.instanceID);
-      if (close) await close();
-      if (activityPluginWindows().some((candidate) => candidate.instanceID === window.instanceID)) {
-        throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
-      }
-    }
   };
 
   const resolveWorkbenchPluginSurfaceController = async (): Promise<WorkbenchPluginSurfaceController> => {
@@ -2147,13 +2136,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     while (!workbenchPluginSurfaceController && Date.now() < deadline) {
       await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 20));
     }
-    if (!workbenchPluginSurfaceController) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    if (!workbenchPluginSurfaceController) throw pluginSurfaceFailure();
     return workbenchPluginSurfaceController;
   };
 
   type PluginSurfaceOpenOptions = Readonly<{
     workbenchPlacement?: WorkbenchCanvasWidgetPlacement;
     activityPlacement?: 'window';
+    creationID?: string;
   }>;
 
   const performOpenPluginSurface = async (
@@ -2161,15 +2151,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     options: PluginSurfaceOpenOptions,
     mode: EnvViewMode,
   ) => {
-    if (pluginSessionRetired()) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    if (pluginSessionRetired() || options.creationID && options.creationID !== pluginCreationOwner()) throw pluginSurfaceFailure();
     const currentTarget = resolveCurrentPluginSurfaceTarget(target);
     if (
       !currentTarget
       || currentTarget.expectedManagementRevision !== target.expectedManagementRevision
     ) {
-      throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+      throw pluginSurfaceFailure();
     }
-    if (mode === 'workbench') {
+    if (mode === 'workbench' && !options.creationID) {
       const controller = await resolveWorkbenchPluginSurfaceController();
       if (options.workbenchPlacement) {
         await controller.open(currentTarget, options.workbenchPlacement);
@@ -2194,19 +2184,21 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       updatePluginPanel({ open: false });
       return;
     }
-    const existingWindow = activityPluginWindows().find((window) => window.targetKey === targetKey);
+    const existingWindow = activityPluginWindows().find((window) => window.targetKey === targetKey && window.creationID === options.creationID);
     if (!existingWindow && activityPluginWindows().length >= MAX_ACTIVITY_PLUGIN_WINDOWS) {
       const leastRecentlyActive = activityPluginWindows()[0];
-      await closeMatchingActivityPluginWindows(leastRecentlyActive.target());
+      await activityPluginCloseRequests.get(leastRecentlyActive.instanceID)?.();
+      if (activityPluginWindows().includes(leastRecentlyActive)) throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
+      if (options.creationID && options.creationID !== pluginCreationOwner()) return;
     }
     const instanceID = existingWindow?.instanceID ?? `activity_plugin_surface_${++nextActivityPluginWindowID}`;
     if (existingWindow) {
-      existingWindow.setTarget({ ...currentTarget });
-      activatePluginSurfaceWindow(instanceID);
+      existingWindow.setTarget(currentTarget);
     } else {
-      setActivityPluginWindows((windows) => [...windows, createActivityPluginWindow(instanceID, targetKey, currentTarget)]);
+      const [target, setTarget] = createSignal(currentTarget);
+      setActivityPluginWindows(windows => [...windows, { instanceID, targetKey, target, setTarget, creationID: options.creationID }]);
     }
-    setActivityPluginFocusRequests((requests) => ({ ...requests, [instanceID]: (requests[instanceID] ?? 0) + 1 }));
+    requestPluginWindowFocus(instanceID);
     updatePluginPanel({ open: false });
     if (!options.activityPlacement && viewMode() === mode) activateActivitySurface(lastActivitySurface(), { persist: false });
   };
@@ -2238,18 +2230,17 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       && candidate.item.defaultLaunchTarget
     ));
     if (!tile || tile.kind !== 'plugin' || !tile.item.defaultLaunchTarget) {
-      throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+      throw pluginSurfaceFailure();
     }
     const requestedTarget = { ...(restoredTarget ?? tile.item.defaultLaunchTarget) };
     const currentTarget = resolveCurrentPluginSurfaceTarget(requestedTarget);
-    if (!currentTarget) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    if (!currentTarget) throw pluginSurfaceFailure();
 
     updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(undefined);
-    const existingWindow = activityPluginWindows().find((window) => window.targetKey === pluginSurfaceTargetKey(currentTarget));
+    const existingWindow = activityPluginWindows().find((window) => !window.creationID && window.targetKey === pluginSurfaceTargetKey(currentTarget));
     if (existingWindow) {
-      activatePluginSurfaceWindow(existingWindow.instanceID);
-      setActivityPluginFocusRequests((requests) => ({ ...requests, [existingWindow.instanceID]: (requests[existingWindow.instanceID] ?? 0) + 1 }));
+      requestPluginWindowFocus(existingWindow.instanceID);
       if (viewMode() === 'activity') activateActivitySurface(lastActivitySurface(), { persist: false });
       return;
     }
@@ -5493,9 +5484,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     </div>
   );
 
-  const mobilePluginModalOpen = () => (
-    layout.isMobile() && viewMode() === 'activity' && activityPluginWindows().length > 0
-  );
+  const visiblePluginWindows = createMemo(() => activityPluginWindows().filter(window => pluginCreationOpen()
+    ? window.creationID === pluginCreationOwner() : !window.creationID && viewMode() === 'activity'));
+  const mobilePluginModalOpen = () => layout.isMobile() && visiblePluginWindows().length > 0;
 
   const standaloneTessivenReady = () => runtimeConnectionEstablished() && activityContentAvailable();
   const renderStandaloneTessiven = () => (
@@ -5593,8 +5584,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       />
       {renderActivityFlowerCompanion()}
       {renderFlowerProduct()}
+      {renderNotesOverlay()}
+      </div>
       <For each={activityPluginWindows()}>
-        {(window, index) => (
+        {(window) => (
           <ActivityPluginSurfaceWindow
             resolveSurface={resolvePluginSurface}
             refreshInventory={refreshPluginSurfaceInventory}
@@ -5602,8 +5595,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             target={window.target()}
             coordinator={pluginSurfaceCoordinator}
             confirmationQueue={pluginConfirmationQueue}
-            visible={viewMode() === 'activity'}
-            active={index() === activityPluginWindows().length - 1}
+            visible={visiblePluginWindows().includes(window)}
+            active={visiblePluginWindows().at(-1) === window}
             focusRequest={activityPluginFocusRequests()[window.instanceID] ?? 0}
             onActivate={handleActivityPluginSurfaceWindowInteraction}
             onClosed={closePluginSurfaceWindow}
@@ -5617,12 +5610,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           />
         )}
       </For>
-      {renderNotesOverlay()}
       <PluginConfirmationDialog queue={pluginConfirmationQueue} />
-      </div>
       <Show when={pluginCreationOpen()}>
         <AppViewport>
-          <div ref={bindFlowerShell} class="relative h-full min-h-0 overflow-hidden" data-redeven-plugin-creation-page>
+          <div ref={bindFlowerShell} class="relative h-full min-h-0 overflow-hidden" inert={mobilePluginModalOpen()} aria-hidden={mobilePluginModalOpen() || undefined} data-redeven-plugin-creation-page>
             <Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}>
               <Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense>
             </Show>

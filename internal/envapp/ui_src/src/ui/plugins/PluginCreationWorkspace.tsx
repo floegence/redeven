@@ -183,7 +183,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   const installationUnsettled = () =>
     installing() ||
     (Boolean(activeInstallRequest()) && !installAbsent() && (!install() || install()?.mutation_outcome === 'unknown'));
+  const installedInstance = () => draft()?.installed_plugin_id || (install()?.mutation_outcome === 'committed' && install()?.execution.status === 'completed' ? install()?.execution.plugin_instance_id : undefined);
   const currentInstalled = () =>
+    !pendingArtifact() &&
     install()?.mutation_outcome === 'committed' &&
     install()?.execution.status === 'completed' &&
     draft()?.install_artifact_id === currentArtifact()?.artifact_id;
@@ -334,8 +336,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     if (refreshPending) return refreshPending;
     const revision = snapshotRevision;
     refreshPending = (async () => {
-      const value = await authorStatus(id);
+      const [value, metadata] = await Promise.all([authorStatus(id), getPluginDraft(draft()!.id)]);
       if (disposed || snapshotRevision !== revision || draft()?.lifecycle !== 'active') return;
+      setDraft(current => !current || metadata.revision >= current.revision ? metadata : current);
       setSnapshot(value);
       setPreviewClosed(false);
       if (!value.preview.artifact_id && value.artifacts[0] && !applying()) {
@@ -444,16 +447,17 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   const apply = async () => {
     const id = draft()?.workspace_id;
     const next = pendingArtifact();
-    if (!id || !next || applying() || installationUnsettled()) return;
+    if (!id || !next || applying() || leaving() || deleting() || installationUnsettled()) return false;
     snapshotRevision++;
     setApplying(true);
     setError('');
     try {
-      if (previewClose && !(await previewClose())) return;
+      if (previewClose && !(await previewClose())) return false;
       setPreviewClosed(true);
       setReview(undefined);
       setSnapshot(await applyAuthorArtifact(id, next.artifact_id));
       setPreviewClosed(false);
+      return true;
     } catch (e) {
       fail(e);
     } finally {
@@ -463,12 +467,15 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   };
   const inspect = async () => {
     const id = draft()?.workspace_id;
-    const artifact = currentArtifact();
-    if (!id || !artifact || !props.canManage || applying() || previewClosed() || installationUnsettled()) return;
+    const artifact = pendingArtifact() ?? currentArtifact();
+    if (!id || !artifact || !props.canManage || reviewing() || applying() || leaving() || deleting() || previewClosed() || installationUnsettled()) return;
     setReviewing(true);
     setError('');
     try {
+      if (pendingArtifact() && !(await apply())) return;
+      if (disposed || artifact.artifact_id !== currentArtifact()?.artifact_id) return;
       const value = await inspectAuthorArtifact(id, artifact.artifact_id);
+      if (disposed || artifact.artifact_id !== currentArtifact()?.artifact_id) return;
       setReviewArtifact(artifact.artifact_id);
       setReview(value);
       const current = draft();
@@ -648,6 +655,18 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     }
   };
   const leave = () => navigateFromPreview(props.onBack);
+  const [openingInstalled, setOpeningInstalled] = createSignal(false);
+  const openInstalled = async () => {
+    const instance = installedInstance();
+    if (!instance || openingInstalled() || applying() || leaving() || deleting()) return;
+    setOpeningInstalled(true);
+    try {
+      await persistComposer();
+      await commentSave;
+      if (!disposed && !leaving() && !deleting() && instance === installedInstance()) await props.onOpenInstalled?.(instance);
+    } catch (error) { fail(error); }
+    finally { setOpeningInstalled(false); }
+  };
   const remove = async () => {
     if (deleting() || commentSending()) return;
     let value = draft();
@@ -758,7 +777,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
           <Show when={currentArtifact()}><span class="plugin-creation-version">{currentArtifact()?.version}</span></Show>
           <Show when={pendingArtifact() && currentArtifact()}>
             <Button size="sm" variant="secondary" class="plugin-creation-apply" aria-label={i18n.t('uiCopy.plugin.creation.apply')}
-              title={i18n.t('uiCopy.plugin.creation.apply')} disabled={applying() || installationUnsettled()} onClick={() => void apply()}>
+              title={i18n.t('uiCopy.plugin.creation.apply')} disabled={reviewing() || applying() || installationUnsettled()} onClick={() => void apply()}>
               <Refresh class="h-3.5 w-3.5" /><span>{i18n.t('uiCopy.plugin.creation.apply')}</span>
             </Button>
           </Show>
@@ -780,31 +799,32 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
             <Button
               size="sm"
               disabled={
-                !props.canManage || !currentArtifact() || reviewing() || applying() || previewClosed() || installationUnsettled() || currentInstalled()
+                !props.canManage || !currentArtifact() || reviewing() || applying() || leaving() || deleting() || previewClosed() || installationUnsettled() || currentInstalled()
               }
               onClick={() => void inspect()}
-              aria-label={currentInstalled() ? i18n.t('uiCopy.plugin.creation.installed') : i18n.t('uiCopy.plugin.creation.install')}
-              title={i18n.t('uiCopy.plugin.creation.install')}
+              aria-label={i18n.t(currentInstalled() ? 'uiCopy.plugin.creation.installed' : installedInstance() ? 'uiCopy.plugin.update' : 'uiCopy.plugin.creation.install')}
+              aria-busy={reviewing() || applying() || installationUnsettled()}
+              title={i18n.t(installedInstance() ? 'uiCopy.plugin.update' : 'uiCopy.plugin.creation.install')}
             >
               {currentInstalled()
                 ? i18n.t('uiCopy.plugin.creation.installed')
-                : i18n.t('uiCopy.plugin.install')}
+                : i18n.t(installedInstance() ? 'uiCopy.plugin.update' : 'uiCopy.plugin.install')}
             </Button>
           }
         >
           <Button
             size="sm"
-            disabled={applying() || previewClosed() || leaving()}
-            onClick={() =>
-              void navigateFromPreview(() => props.onOpenInstalled?.(install()!.execution.plugin_instance_id)).catch(fail)
-            }
+            disabled={applying() || previewClosed() || leaving() || deleting() || installationUnsettled() || openingInstalled()}
+            aria-busy={openingInstalled()}
+            onClick={() => void openInstalled()}
           >
             {i18n.t('common.actions.open')}
           </Button>
         </Show>
         <Dropdown
           items={[
-            ...(narrow() && pendingArtifact() && currentArtifact() ? [{ id: 'apply', label: i18n.t('uiCopy.plugin.creation.apply'), disabled: applying() || installationUnsettled() }] : []),
+            ...(!currentInstalled() && installedInstance() && props.onOpenInstalled ? [{ id: 'open', label: i18n.t('common.actions.open'), disabled: openingInstalled() }] : []),
+            ...(narrow() && pendingArtifact() && currentArtifact() ? [{ id: 'apply', label: i18n.t('uiCopy.plugin.creation.apply'), disabled: reviewing() || applying() || installationUnsettled() }] : []),
             ...(narrow() && preview() ? [{ id: 'comment', label: i18n.t('uiCopy.plugin.creation.comment') }] : []),
             ...(snapshot()?.preview.plugin_instance_id ? [{ id: 'permissions', label: i18n.t('uiCopy.plugin.external.permissions') }] : []),
             { id: 'checks', label: i18n.t('uiCopy.plugin.creation.checks') },
@@ -812,7 +832,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
             { id: 'delete', label: i18n.t('uiCopy.plugin.creation.deleteDraft') },
           ]}
           onSelect={(id) => {
-            if (id === 'apply') {
+            if (id === 'open') {
+              void openInstalled();
+            } else if (id === 'apply') {
               void apply();
             } else if (id === 'comment') {
               selectComment();
@@ -875,9 +897,9 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
                 `${pluginCreationAPI}/drafts/${encodeURIComponent((await ensureDraft()).id)}/turns`,
               embeddedConversation: {
                 scope: `plugin-creation:${initialID === 'new' ? requestID : initialID}`,
-                threadID: draft()?.thread_id,
-                placeholder: i18n.t('uiCopy.plugin.flowerCreationPlaceholder'),
-                contextAction: context(),
+                get threadID() { return draft()?.thread_id; },
+                get placeholder() { return i18n.t('uiCopy.plugin.flowerCreationPlaceholder'); },
+                get contextAction() { return context(); },
                 htmlPreviews: false,
                 emptyContent: <div />,
                 onSubmit: () => setStarted(true),
@@ -1069,7 +1091,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
             setReview(undefined);
           }
         }}
-        title={i18n.t('uiCopy.plugin.creation.review')}
+        title={review()?.intent.action === 'update' ? i18n.t('uiCopy.plugin.external.updateTitle', { plugin: title() }) : i18n.t('uiCopy.plugin.creation.review')}
       >
         <Show when={review()}>
           {(value) => (
@@ -1085,7 +1107,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
         <Button class="mt-4 w-full" disabled={applying() || previewClosed() || installationUnsettled()} onClick={() => void commit()}>
           {installing()
             ? i18n.t('uiCopy.plugin.creation.installUnknown')
-            : i18n.t('uiCopy.plugin.creation.confirmInstall')}
+            : i18n.t(review()?.intent.action === 'update' ? 'uiCopy.plugin.external.confirmUpdate' : 'uiCopy.plugin.creation.confirmInstall')}
         </Button>
       </Dialog>
     </section>

@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redevplugin/v3/pkg/authorproject"
 	"github.com/floegence/redevplugin/v3/pkg/host"
 	"github.com/floegence/redevplugin/v3/pkg/mutation"
+	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/v3/pkg/sessionctx"
 	"github.com/floegence/redevplugin/v3/pkg/websecurity"
 )
@@ -169,7 +170,15 @@ func (a *authorBackend) AuthorOperation(ctx context.Context, meta *session.Meta,
 			return nil, err
 		}
 		report, err := a.store.BuildReport(ctx, o, id)
-		return map[string]any{"workspace": w, "artifacts": artifacts, "build": report}, err
+		if err != nil {
+			return nil, err
+		}
+		owner, err := plugincreation.OwnerFromSession(meta)
+		if err != nil {
+			return nil, err
+		}
+		draft, err := a.drafts.Store.ForWorkspace(ctx, owner, id)
+		return map[string]any{"workspace": w, "artifacts": artifacts, "build": report, "project": draft}, err
 	case "initialize":
 		slug, _ := args["slug"].(string)
 		name, _ := args["display_name"].(string)
@@ -584,4 +593,25 @@ func (p authorPreviewPolicy) DeveloperModeEnabled(_ context.Context, s sessionct
 }
 func (p authorPreviewPolicy) LocalGeneratedPluginsEnabled(ctx context.Context, s sessionctx.Context) (bool, error) {
 	return p.DeveloperModeEnabled(ctx, s)
+}
+
+// ProjectTitle consumes the released package reader, never a product manifest parser.
+func (a *authorBackend) ProjectTitle(ctx context.Context, meta *session.Meta, id string) (string, error) {
+	ctx, owner, err := a.context(ctx, meta)
+	if err != nil {
+		return "", err
+	}
+	artifacts, err := a.store.ListArtifacts(ctx, owner, id)
+	if err != nil || len(artifacts) == 0 {
+		return "", err
+	}
+	_, raw, err := a.store.ReadArtifact(ctx, owner, id, artifacts[0].ID)
+	if err != nil {
+		return "", err
+	}
+	pkg, err := pluginpkg.Read(ctx, bytes.NewReader(raw), int64(len(raw)), pluginpkg.DefaultReadLimits())
+	if err != nil {
+		return "", err
+	}
+	return pkg.Manifest.Plugin.DisplayName, nil
 }

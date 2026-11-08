@@ -74,6 +74,9 @@ func (g *Server) handlePluginCreationAPI(w http.ResponseWriter, r *http.Request)
 	if len(parts) == 1 && parts[0] == "drafts" {
 		if r.Method == http.MethodGet {
 			v, e := g.pluginCreation.Store.List(r.Context(), owner)
+			for i := range v {
+				v[i] = g.pluginCreation.PresentDraft(r.Context(), meta, v[i])
+			}
 			writePluginDraftResult(w, v, e)
 			return true
 		}
@@ -103,7 +106,7 @@ func (g *Server) handlePluginCreationAPI(w http.ResponseWriter, r *http.Request)
 			return true
 		}
 		if len(parts) == 2 && r.Method == http.MethodGet {
-			writePluginDraftResult(w, d, nil)
+			writePluginDraftResult(w, g.pluginCreation.PresentDraft(r.Context(), meta, d), nil)
 			return true
 		}
 		if len(parts) == 3 && r.Method == http.MethodPost {

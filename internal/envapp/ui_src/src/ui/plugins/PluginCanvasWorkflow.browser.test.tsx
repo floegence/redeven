@@ -192,6 +192,7 @@ it.each([{ width: 1280, theme: 'light' }, { width: 1280, theme: 'dark' }, { widt
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   select(host);
   await page.getByRole('textbox', { name: 'What would you like Flower to change?' }).fill('Make this action quieter and align it with the timer.');
+  await expect.poll(() => getComputedStyle(host.querySelector('.plugin-canvas-comment')!).opacity).toBe('1');
   await page.screenshot({ path: `__screenshots__/canvas-comment-${width}-${theme}.png` });
   expect(host.scrollWidth).toBeLessThanOrEqual(width);
   document.documentElement.classList.remove(theme);

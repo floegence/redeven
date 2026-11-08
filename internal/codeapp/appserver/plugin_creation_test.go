@@ -15,6 +15,10 @@ import (
 
 type draftRouteAuthor struct{ creates int }
 
+func (*draftRouteAuthor) ProjectTitle(context.Context, *session.Meta, string) (string, error) {
+	return "Generated timer", nil
+}
+
 func (b *draftRouteAuthor) CreateWorkspace(_ context.Context, _ *session.Meta, request string) (string, error) {
 	b.creates++
 	return "workspace_" + request, nil
@@ -83,6 +87,12 @@ func TestPluginDraftRoutesBindOwnerAndRecoverRequests(t *testing.T) {
 	retried := decode(call(http.MethodPost, "/drafts", `{"request_id":"create"}`))
 	if draft.ID == "" || draft.WorkspaceID == "" || retried != draft || backend.creates != 1 {
 		t.Fatalf("retry created a second workspace: %+v %+v calls=%d", draft, retried, backend.creates)
+	}
+	if shown := decode(call(http.MethodGet, "/drafts/"+draft.ID, "")); shown.Title != "Generated timer" || shown.Revision != draft.Revision {
+		t.Fatalf("project projection: %+v", shown)
+	}
+	if list := call(http.MethodGet, "/drafts", ""); !strings.Contains(list.Body.String(), "Generated timer") {
+		t.Fatal(list.Body.String())
 	}
 	rename, _ := json.Marshal(map[string]any{"revision": draft.Revision, "title": "Focus timer"})
 	renamed := decode(call(http.MethodPost, "/drafts/"+draft.ID+"/rename", string(rename)))

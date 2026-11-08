@@ -18,13 +18,23 @@ project ID, capture another conversation, or initialize outside that directory.
 For a new empty source, use `plugin_author.initialize` with a short `slug`,
 `display_name`, and the selected template. The slug contains lowercase letters,
 digits and single separating hyphens; never request a repository ID or publisher ID.
+Use the user's requested plugin name, including names stated naturally in the
+conversation. If none is given, choose a concise descriptive name in their language
+without blocking creation on a naming question. Initialize with that `display_name`.
+For a later naming request, call `plugin_author.rename` with `title` and the current
+`project.revision` from status; keep source `plugin.display_name` aligned and rebuild.
+Do not change the slug or generated identity merely to rename a plugin. Preserve an
+existing user-selected name unless they request another.
 Use normal approved file and terminal tools to edit source and install required
 dependencies. Use `plugin_author.build` for explicit pipeline execution; it runs
 project commands under the same approval boundary. `plugin_author.capture` only
 validates an already-built output and is not evidence that business tests ran.
 
 The workspace owns the real preview. Keep the dedicated conversation and source
-through iterations. Apply newer artifacts through the workspace, and inspect and
+through iterations. Before building changed package contents, increment source
+`plugin.version` to a higher SemVer than the retained builds and installed release;
+never reuse a version for different bytes or change plugin identity to evade an
+update. Preserve application data and test its upgrade behavior. Apply newer artifacts through the workspace, and inspect and
 install the exact current preview there. Do not start a parallel dev server,
 install through a shell, grant permissions, or declare a fixture a real test.
 Follow the user's submitted request in the ordinary composer: discuss requirements

@@ -3,6 +3,8 @@ package plugincreation
 import (
 	"context"
 	"errors"
+	"math"
+	"strings"
 	"sync"
 
 	"github.com/floegence/redeven/internal/session"
@@ -181,6 +183,20 @@ func (s *Service) AuthorOperation(ctx context.Context, meta *session.Meta, threa
 	if d.Lifecycle != "active" {
 		return nil, ErrDeleting
 	}
+	if operation == "rename" {
+		title, ok := args["title"].(string)
+		revision, valid := args["revision"].(float64)
+		if len(args) != 2 || !ok || strings.TrimSpace(title) == "" || !valid || revision < 1 || revision > 9007199254740991 || math.Trunc(revision) != revision {
+			return nil, ErrInvalid
+		}
+		return s.Store.Rename(ctx, o, d.ID, int64(revision), title)
+	}
+	if operation == "initialize" {
+		name, ok := args["display_name"].(string)
+		if !ok || strings.TrimSpace(name) == "" || len([]rune(strings.TrimSpace(name))) > 120 {
+			return nil, ErrInvalid
+		}
+	}
 	b, err := s.Backend()
 	if err != nil {
 		return nil, err
@@ -189,7 +205,20 @@ func (s *Service) AuthorOperation(ctx context.Context, meta *session.Meta, threa
 	// admission lock across a command: deletion must be able to cancel the
 	// canonical run before asking the platform to remove its workspace.
 	unlock()
-	return b.AuthorOperation(ctx, meta, d.WorkspaceID, operation, args)
+	result, err := b.AuthorOperation(ctx, meta, d.WorkspaceID, operation, args)
+	if err != nil {
+		return result, err
+	}
+	if operation == "initialize" && d.Title == "" {
+		if name, ok := args["display_name"].(string); ok {
+			_, err = s.Store.Rename(ctx, o, d.ID, d.Revision, name)
+			// A simultaneous user rename wins; initialization already succeeded.
+			if errors.Is(err, ErrConflict) {
+				err = nil
+			}
+		}
+	}
+	return result, err
 }
 func (s *Service) ResumeDelete(ctx context.Context, meta *session.Meta, id string, deleteThread func(context.Context, string) error) (Draft, error) {
 	if meta == nil || !meta.CanWrite || !meta.CanExecute {
@@ -266,4 +295,24 @@ func (s *Service) ResumePreparation(ctx context.Context, meta *session.Meta, id 
 		return draft, err
 	}
 	return s.Store.Activate(ctx, owner, id, workspace)
+}
+
+// PresentDraft resolves unnamed legacy projects from verified platform artifacts.
+// It never changes the durable draft or replaces a user-assigned project title.
+func (s *Service) PresentDraft(ctx context.Context, meta *session.Meta, d Draft) Draft {
+	if d.Title != "" || d.Lifecycle != "active" || d.WorkspaceID == "" {
+		return d
+	}
+	backend, err := s.Backend()
+	if err != nil {
+		return d
+	}
+	if names, ok := backend.(interface {
+		ProjectTitle(context.Context, *session.Meta, string) (string, error)
+	}); ok {
+		if title, err := names.ProjectTitle(ctx, meta, d.WorkspaceID); err == nil {
+			d.Title = title
+		}
+	}
+	return d
 }

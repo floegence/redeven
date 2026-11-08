@@ -181,8 +181,7 @@ it.each([1200, 390].flatMap(width => ['applied', 'rejected', 'cancelled', 'pendi
   await expect.poll(() => lifetime.opened, { timeout: 6000 }).toBe(2);
   expect(lifetime.disposed).toBe(1);
 });
-it.each(['cancelled', 'accepted', 'failed', 'pending'])('handles %s navigation from the preview to the installed application', async (outcome) => {
-  lifetime.close.mockResolvedValue(outcome !== 'cancelled');
+it.each(['accepted', 'failed', 'pending'])('preserves the author preview while opening the installed application: %s', async (outcome) => {
   const draft = { id: 'draft-1', title: 'Focus Timer', lifecycle: 'active', revision: 3, workspace_id: 'author-1',
     install_request_id: 'install-1', install_artifact_id: 'artifact-1', install_inspection_id: 'review-1' };
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -216,23 +215,117 @@ it.each(['cancelled', 'accepted', 'failed', 'pending'])('handles %s navigation f
       renderFlower={() => <div>Conversation fixture</div>} />
   </I18nProvider></FloeConfigProvider>, host);
   await expect.poll(() => lifetime.opened).toBe(1);
+  const preview = host.querySelector('[data-preview-fixture]');
   await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await expect.poll(() => lifetime.close.mock.calls.length).toBe(1);
-  if (outcome === 'cancelled') {
-    expect(openInstalled).not.toHaveBeenCalled();
-    expect(lifetime.disposed).toBe(0);
-  } else {
+  try {
     await expect.poll(() => openInstalled.mock.calls.length).toBe(1);
     expect(openInstalled).toHaveBeenCalledWith('installed-1');
     if (outcome === 'pending') {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 2800));
+        await expect.element(page.getByRole('button', { name: 'Open', exact: true })).toBeDisabled();
         expect(lifetime.opened).toBe(1);
       } finally { finishNavigation?.(); }
     }
-    // This fixture leaves the page mounted, including when navigation fails.
-    await expect.poll(() => lifetime.opened).toBe(2);
-    expect(lifetime.disposed).toBe(1);
+    await expect.element(page.getByRole('button', { name: 'Open', exact: true })).toBeEnabled();
+    expect(lifetime.close).not.toHaveBeenCalled();
+    expect(lifetime.opened).toBe(1);
+    expect(lifetime.disposed).toBe(0);
+    expect(host.querySelector('[data-preview-fixture]')).toBe(preview);
     if (outcome === 'failed') await expect.element(page.getByText('Installed application unavailable', { exact: true })).toBeVisible();
+  } finally { finishNavigation?.(); }
+});
+
+// The released Host owns update validation; this fixture exercises the complete
+// product sequence and verifies exact artifact/request binding at each boundary.
+it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer'].map(outcome => ({ width, outcome }))))('updates an installed plugin without leaving creation: $outcome at $width px', async ({ width, outcome }) => {
+  await page.viewport(width, 800);
+  lifetime.close.mockResolvedValue(outcome !== 'cancelled');
+  let draft = { id: 'draft-1', title: 'Focus Timer', lifecycle: 'active', revision: 3, workspace_id: 'author-1',
+    installed_plugin_id: 'installed-1', install_request_id: 'install-1', install_artifact_id: 'artifact-1', install_inspection_id: 'review-1' };
+  let latest = 'artifact-1', preview = 'artifact-1';
+  const calls: Array<{ action: string; body: Record<string, string> }> = [];
+  const hash = 'sha256:' + 'a'.repeat(64);
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input), body = init?.body ? JSON.parse(String(init.body)) : {};
+    if (path.endsWith('/installation')) return Response.json({ data: { request_id: draft.install_request_id, mutation_outcome: 'committed',
+      execution: { status: 'completed', plugin_instance_id: 'installed-1' } } });
+    const snapshot = () => ({ artifacts: [...new Set([latest, preview, 'artifact-1'])].map(id => ({
+      artifact_id: id, version: id === 'artifact-1' ? '0.1.0' : '0.2.0', stages: [] })),
+      preview: { artifact_id: preview, plugin_instance_id: 'preview-1', generation: preview === 'artifact-1' ? 1 : 2 } });
+    if (path.endsWith('/status')) return Response.json({ data: snapshot() });
+    if (path.endsWith('/apply')) { calls.push({ action: 'apply', body });
+      if (outcome === 'failed') return Response.json({ error: { message: 'Update rejected' } }, { status: 409 });
+      preview = body.artifact_id; return Response.json({ data: snapshot() }); }
+    if (path.endsWith('/inspect')) {
+      calls.push({ action: 'inspect', body });
+      return Response.json({ data: { inspection_id: 'review-2', intent: { action: 'update', plugin_instance_id: 'installed-1' },
+        plugin_id: 'dev.example.focus', publisher_id: 'dev.example', version: '0.2.0', expires_at: '2026-12-01T00:00:00Z',
+        inspected_hashes: { package_sha256: hash, manifest_sha256: hash, entries_sha256: hash },
+        source_provenance: { kind: 'package_upload', package_sha256: hash, resolved_at: '2026-11-07T00:00:00Z' },
+        execution_approval: { state: 'pending', reason_codes: [], assessed_at: '2026-11-07T00:00:00Z' },
+        update_eligibility: { state: 'manual_only', reason_codes: [], assessed_at: '2026-11-07T00:00:00Z' },
+        security_summary: { summary_sha256: hash, permissions: [], methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [] },
+      } });
+    }
+    if (path.endsWith('/install')) {
+      calls.push({ action: 'install', body });
+      draft = { ...draft, revision: draft.revision + 1, install_request_id: body.request_id,
+        install_artifact_id: body.artifact_id, install_inspection_id: body.inspection_id };
+      return Response.json({ data: { request_id: body.request_id, mutation_outcome: 'committed', execution: { status: 'completed', plugin_instance_id: 'installed-1' } } });
+    }
+    if (path.endsWith('/catalog/query')) return Response.json({ ok: true, data: { plugins: [{
+      plugin_id: 'dev.example.focus', plugin_instance_id: 'preview-1', management_revision: 4,
+      manifest: { plugin: { display_name: 'Focus Timer' }, surfaces: [{ kind: 'view', surface_id: 'focus.view' }] },
+    }] } });
+    return Response.json({ data: draft });
+  });
+  vi.stubGlobal('fetch', fetch);
+  release = bindSessionHTTP({ fetch, events: async function* () {} });
+  const host = document.createElement('div'); host.style.cssText = 'height:700px;width:100%'; document.body.append(host);
+  const onOpen = vi.fn(), installed = vi.fn();
+  dispose = render(() => <FloeConfigProvider><I18nProvider>
+    <PluginCreationWorkspace draftCoordinator={createFlowerComposerDraftCoordinator()} draftID="draft-1"
+      visible canManage onBack={vi.fn()} onSaved={vi.fn()} onInstalled={installed} onOpenInstalled={onOpen}
+      renderFlower={() => <textarea aria-label="Conversation draft" />} />
+  </I18nProvider></FloeConfigProvider>, host);
+  await expect.element(page.getByRole('button', { name: 'Open', exact: true })).toBeEnabled();
+  const conversation = host.querySelector('textarea')!; conversation.value = 'Keep my next request';
+  draft = { ...draft, title: 'Daily Focus', revision: draft.revision + 1 };
+  latest = 'artifact-2';
+  await expect.element(page.getByRole('heading', { name: 'Daily Focus', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: 'Update', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Update', exact: true }).click();
+  if (outcome === 'cancelled' || outcome === 'failed') {
+    await expect.element(page.getByRole('button', { name: 'Update', exact: true })).toBeEnabled();
+    expect(calls.map(call => call.action)).toEqual(outcome === 'cancelled' ? [] : ['apply']);
+    expect(conversation.isConnected).toBe(true);
+    expect(conversation.value).toBe('Keep my next request');
+    return;
   }
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  if (outcome === 'newer') {
+    latest = 'artifact-3';
+    await expect.element(page.getByText('This installs the current preview. Changes that have not been applied are not included.', { exact: true })).toBeVisible();
+  }
+  expect(calls.map(call => call.action)).toEqual(['apply', 'inspect']);
+  expect(calls.every(call => call.body.artifact_id === 'artifact-2')).toBe(true);
+  await page.getByRole('dialog').getByRole('button', { name: 'Update plugin', exact: true }).click();
+  await expect.poll(() => calls.filter(call => call.action === 'install').length).toBe(1);
+  await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+  if (outcome === 'newer') {
+    await expect.element(page.getByRole('button', { name: 'Update', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'More actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Open', exact: true }).click();
+  } else {
+    await expect.element(page.getByRole('button', { name: 'Open', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Open', exact: true }).click();
+  }
+  const commit = calls.find(call => call.action === 'install')!;
+  expect(commit.body.artifact_id).toBe('artifact-2');
+  expect(commit.body.inspection_id).toBe('review-2');
+  expect(commit.body.request_id).not.toBe('install-1');
+  expect(installed).toHaveBeenLastCalledWith('installed-1');
+  expect(onOpen).toHaveBeenCalledWith('installed-1');
+  expect(conversation.isConnected).toBe(true);
+  expect(conversation.value).toBe('Keep my next request');
 });

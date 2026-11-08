@@ -74,7 +74,7 @@
 [data-landing='true'] .flower-surface-embedded { background: transparent; }
 [data-landing='true'] .plugin-creation-toolbar > button:not([aria-label]) { display: none; }
 [data-landing='true'] .plugin-creation-toolbar > button[title] { display: none; }
-.plugin-canvas-comment { position: absolute; z-index: 8; width: min(288px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; padding: 10px 12px; border-radius: 12px; background: var(--redeven-surface-panel-elevated, var(--card)); box-shadow: 0 8px 32px color-mix(in srgb, var(--foreground) 14%, transparent), 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent); }
+.plugin-canvas-comment { position: absolute; z-index: 8; width: min(288px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; padding: 10px 12px; border: 1px solid var(--floe-line); border-radius: var(--floe-radius-panel); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--floe-window-shadow); }
 .plugin-canvas-comment-context { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); }
 .plugin-canvas-comment-target { flex: 1; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-canvas-comment-context > button { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 5px; color: var(--muted-foreground); cursor: pointer; }

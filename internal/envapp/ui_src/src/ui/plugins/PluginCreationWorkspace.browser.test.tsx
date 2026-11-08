@@ -432,7 +432,7 @@ it.each(['rename', 'delete', 'rename_empty'])('completes %s after a new draft fi
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     if (path.endsWith('/drafts') && init?.method === 'POST') { await pending; return Response.json({ data: baseDraft }); }
-    if (path.endsWith('/rename')) { operations.push('rename'); return Response.json({ data: { ...baseDraft, title: JSON.parse(String(init?.body)).title } }); }
+    if (path.endsWith('/rename')) { operations.push('rename'); draft = { ...draft, revision: draft.revision + 1, title: JSON.parse(String(init?.body)).title }; return Response.json({ data: draft }); }
     if (path.endsWith('/delete')) operations.push('delete');
     return original(input, init);
   });
