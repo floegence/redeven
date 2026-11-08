@@ -38,6 +38,13 @@ function mountTools() {
 }
 
 describe('MobileShellTools', () => {
+  it('loads download contents on demand and returns to the tools menu', async () => {
+    const tools = mountTools(); tools.click('downloads');
+    await vi.waitFor(() => expect(tools.host.querySelector('[role="region"]')).not.toBeNull());
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    tools.host.firstElementChild!.dispatchEvent(escape);
+    expect(tools.page()).toBe('more'); expect(escape.defaultPrevented).toBe(true);
+  });
   it('hands commands to the shell and returns from every subpage before closing', () => {
     const tools = mountTools();
     expect(tools.host.querySelectorAll('[data-mobile-tool]')).toHaveLength(6);

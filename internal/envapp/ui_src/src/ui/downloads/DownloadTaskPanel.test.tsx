@@ -5,6 +5,8 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DownloadManager, DownloadTask } from './types';
 import { DownloadTaskPanel } from './DownloadTaskPanel';
+import { DownloadTaskButton } from './DownloadTaskButton';
+import { DownloadContext } from './DownloadContext';
 
 function task(overrides: Partial<DownloadTask>): DownloadTask {
   return {
@@ -65,6 +67,20 @@ function clickAction(host: HTMLElement, title: string) {
 }
 
 describe('DownloadTaskPanel', () => {
+  it('loads the header task panel on demand and retains its live retry action', async () => {
+    const [tasks, setTasks] = createSignal([task({})]); const manager = createManager(tasks);
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <DownloadContext.Provider value={manager}><DownloadTaskButton tooltip={false} /></DownloadContext.Provider>, host);
+    try {
+      expect(host.querySelector('[role="dialog"]')).toBeNull();
+      host.querySelector<HTMLButtonElement>('[aria-label="Downloads"]')!.click();
+      await vi.waitFor(() => expect(host.textContent).toContain('50%'));
+      setTasks([task({ status: 'failed', error: { code: 'source_unavailable', retryable: true, title: 'Failed', detail: 'Connection lost' } })]);
+      clickAction(host, 'Retry'); expect(manager.retry).toHaveBeenCalledWith('download-1');
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(host.querySelector('[aria-label="Downloads"]')?.getAttribute('aria-expanded')).toBe('false');
+    } finally { dispose(); }
+  });
   it('keeps live download actions in an embedded tools region', () => {
     const [tasks, setTasks] = createSignal([task({})]);
     const manager = createManager(tasks);

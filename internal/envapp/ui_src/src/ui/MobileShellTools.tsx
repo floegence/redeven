@@ -1,4 +1,4 @@
-import { For, Show, createEffect, type Component } from 'solid-js';
+import { For, Show, Suspense, lazy, createEffect, type Component } from 'solid-js';
 import { ArrowLeft, Download, Globe, Highlighter, LayoutDashboard, Search, X, ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import type { EnvAppThemePickerProps } from './EnvAppThemePicker';
@@ -6,18 +6,12 @@ import { EnvAppThemePicker } from './EnvAppThemePicker';
 import { LanguagePreferenceMenu } from './i18n/LanguagePreferenceMenu';
 import { localeDisplayName } from './i18n/localeMeta';
 import { useI18n } from './i18n';
-import { DownloadTaskPanel } from './downloads/DownloadTaskPanel';
 import type { DownloadManager } from './downloads/types';
 
-export type MobileToolsPage = 'more' | 'downloads' | 'language' | 'appearance';
+const DownloadTaskPanel = lazy(() => import('./downloads/DownloadTaskPanel').then(module => ({ default: module.DownloadTaskPanel })));
 
-export function handleMobileToolsEscape(event: KeyboardEvent, page: MobileToolsPage | 'plugins' | 'closed', onBack: () => void) {
-  if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing
-    && page !== 'more' && page !== 'plugins' && page !== 'closed') {
-    event.preventDefault();
-    onBack();
-  }
-}
+export { handleMobileToolsEscape, type MobileToolsPage } from './mobileToolsNavigation';
+import type { MobileToolsPage } from './mobileToolsNavigation';
 
 export function MobileShellTools(props: {
   page: MobileToolsPage;
@@ -73,7 +67,7 @@ export function MobileShellTools(props: {
           <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>}</For>
       </div></Show>
-      <Show when={props.page === 'downloads'}><DownloadTaskPanel manager={props.manager} inline /></Show>
+      <Show when={props.page === 'downloads'}><Suspense fallback={<div role="status" class="p-3 text-sm text-muted-foreground">{i18n.t('floeControls.loading')}</div>}><DownloadTaskPanel manager={props.manager} inline /></Suspense></Show>
       <Show when={props.page === 'language'}><LanguagePreferenceMenu variant="inline" notify={props.notify} /></Show>
       <Show when={props.page === 'appearance'}><EnvAppThemePicker presentation="inline" {...props.theme} /></Show>
     </div>

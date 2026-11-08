@@ -156,6 +156,8 @@ await session.run(async () => {
     }, 'browser Runtime');
     browser = await session.launchBrowser(chromium, { channel: 'chromium', headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
+    // Exercise the existing browser-download sink where File System Access is unavailable.
+    await context.addInitScript(() => { Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true }); });
     const page = await context.newPage(); observe(page); await page.goto(startup.local_ui_url);
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     await page.getByRole('button', { name: 'File Browser', exact: true }).filter({ visible: true }).last().click();
@@ -167,7 +169,6 @@ await session.run(async () => {
     console.log('Browser tab is ready');
     await tab.reload(); await verifyStandalone(tab, htmlFile); await (await frameFor(tab)).getByRole('heading', { name: 'Independent preview' }).waitFor();
     await tab.screenshot({ path: path.join(output, 'browser-tab.png') });
-    await tab.evaluate(() => { Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true }); });
     const downloadEvent = tab.waitForEvent('download'); await more(tab).click(); await tab.getByRole('menuitem', { name: 'Download file', exact: true }).click();
     const download = await downloadEvent; assert.equal(download.suggestedFilename(), path.basename(htmlFile));
     assert.equal(await readFile(await download.path(), 'utf8'), await readFile(htmlFile, 'utf8'));

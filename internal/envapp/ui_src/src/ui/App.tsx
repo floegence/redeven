@@ -1,4 +1,4 @@
-import { FILE_PREVIEW_WINDOW } from '../../../../../desktop/src/shared/filePreviewWindow';
+import { FILE_PREVIEW_WINDOW } from '../../../../../desktop/src/shared/filePreviewWindowRoute';
 import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
 import { desktopShellBridgeAvailable } from './services/desktopShellBridge';
 import { createActivityNavigation, activityTargetID, type ActivityNavigation } from './services/activityNavigation';

@@ -1,4 +1,3 @@
-import { navigateFilePreviewWindow } from './services/filePreviewWindow';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
@@ -171,7 +170,7 @@ import { ConnectionRecoveryView } from './reconnect/ConnectionRecoveryView';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { EnvAppThemePicker } from './EnvAppThemePicker';
-import { MobileShellTools, handleMobileToolsEscape, type MobileToolsPage } from './MobileShellTools';
+import { handleMobileToolsEscape, type MobileToolsPage } from './mobileToolsNavigation';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
 import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
@@ -329,6 +328,7 @@ const PLUGIN_ACTIVITY_COMPONENT_PREFIX = 'redeven.plugin.activity:';
 function pluginActivityComponentID(inventoryKey: string): string {
   return `${PLUGIN_ACTIVITY_COMPONENT_PREFIX}${encodeURIComponent(inventoryKey)}`;
 }
+const MobileShellTools = lazy(() => import('./MobileShellTools').then(module => ({ default: module.MobileShellTools })));
 const PluginCreationWorkspace = lazy(() => import('./plugins/PluginCreationWorkspace').then(module => ({ default: module.PluginCreationWorkspace })));
 const PluginDraftLibrary = lazy(() => import('./plugins/PluginDraftLibrary').then(module => ({ default: module.PluginDraftLibrary })));
 const EnvTessivenPage = lazy(() => import('./pages/EnvTessivenPage'));
@@ -2789,6 +2789,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
 
     if (standaloneFilePreview) {
+      const { navigateFilePreviewWindow } = await import('./services/filePreviewWindow');
       await navigateFilePreviewWindow(normalizedPath, {
         unavailable: i18n.t('filePreview.popoutFailed'), popupBlocked: i18n.t('webServices.errors.popupBlocked'),
       });
@@ -5303,21 +5304,22 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       />
   );
 
+  const [mobileToolsRequested, setMobileToolsRequested] = createSignal(false);
   const [mobilePanelDisplayPage, setMobilePanelDisplayPage] = createSignal<'plugins' | MobileToolsPage>('more');
   createEffect(() => {
     const page = mobileNavigationPage();
-    if (page !== 'closed') setMobilePanelDisplayPage(page);
+    if (page !== 'closed') { setMobilePanelDisplayPage(page); setMobileToolsRequested(true); }
   });
   const mobilePanelContents = () => <>
     <div ref={setMobilePluginContentHost} hidden={mobilePanelDisplayPage() !== 'plugins'} class="mobile-plugin-content-host flex min-h-0 flex-1 flex-col" />
-    <Show when={mobilePanelDisplayPage() !== 'plugins'}>
-      <MobileShellTools page={mobilePanelDisplayPage() as MobileToolsPage}
+    <Show when={layout.isMobile() && mobileToolsRequested() && mobilePanelDisplayPage() !== 'plugins'}>
+      <Suspense fallback={<ActivityPageLoading />}><MobileShellTools page={mobilePanelDisplayPage() as MobileToolsPage}
         onPageChange={openMobileTools} onClose={() => closeMobileNavigation(true)}
         onSearch={() => runAfterMobileNavigation(() => cmd.open())}
         onNotes={() => runAfterMobileNavigation(toggleNotesOverlay)}
         onDashboard={() => runAfterMobileNavigation(() => { void openDashboard(); })}
         manager={downloadManager} notify={notify}
-        theme={{ onSourceChange: setThemeSourceWithRenderBoundary, onShellThemeChange: setShellThemeWithRenderBoundary }} />
+        theme={{ onSourceChange: setThemeSourceWithRenderBoundary, onShellThemeChange: setShellThemeWithRenderBoundary }} /></Suspense>
     </Show>
   </>;
 

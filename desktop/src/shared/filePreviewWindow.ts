@@ -1,5 +1,6 @@
 /** File identity only. Authentication and file access remain owned by the session. */
-export const FILE_PREVIEW_WINDOW = 'file-preview';
+import { FILE_PREVIEW_WINDOW } from './filePreviewWindowRoute';
+export { FILE_PREVIEW_WINDOW } from './filePreviewWindowRoute';
 export const OPEN_FILE_PREVIEW_WINDOW_CHANNEL = 'redeven-desktop:shell-open-file-preview-window';
 export type FilePreviewWindowRequest = Readonly<{ path: string }>;
 export type FilePreviewWindowResponse = Readonly<{ ok: boolean }>;

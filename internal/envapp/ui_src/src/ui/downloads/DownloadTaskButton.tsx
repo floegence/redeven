@@ -1,11 +1,11 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Show, Suspense, lazy, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { Download, Refresh, X } from '@floegence/floe-webapp-core/icons';
 import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 
 import { Tooltip } from '../primitives/Tooltip';
 import { useI18n } from '../i18n';
 import { useDownloadManager } from './DownloadContext';
-import { DownloadTaskPanel } from './DownloadTaskPanel';
+const DownloadTaskPanel = lazy(() => import('./DownloadTaskPanel').then(module => ({ default: module.DownloadTaskPanel })));
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -90,7 +90,7 @@ export function DownloadTaskButton(props: { tooltip?: string | false }) {
           data-floating-presence={presence.state()}
           class="floe-floating-presence floe-floating-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-12"
         >
-          <DownloadTaskPanel manager={manager} />
+          <Suspense fallback={<div role="status" class="p-3 text-sm text-muted-foreground">{i18n.t('floeControls.loading')}</div>}><DownloadTaskPanel manager={manager} /></Suspense>
         </div>
       </Show>
     </div>
