@@ -4,15 +4,17 @@ import { expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { adapter, blockedDecision, decision, renderSurfaceWithAdapterProps, waitFor } from '../FlowerSurface.navigation.testHarness';
 import { streamingFixture } from '../../../../../flower_ui/testing/streamingFixture';
-import type { FlowerConversationParts } from '../../../../../flower_ui/src';
+import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../../../../flower_ui/src';
 import { flowerTurnAdmissionError } from '../../../../../flower_ui/src/flowerTurnAdmission';
 
-function embedded(base: ReturnType<typeof adapter>, threadID?: string) {
+function embedded(base: ReturnType<typeof adapter>, threadID?: string, contextAction?: FlowerEmbeddedConversation['contextAction'], initialContextAction?: FlowerEmbeddedConversation['initialContextAction']) {
   let parts!: FlowerConversationParts;
   const surface = renderSurfaceWithAdapterProps(base, {
     embeddedConversation: {
       scope: 'plugin-admission',
       threadID,
+      contextAction,
+      initialContextAction,
       render: (value) => {
         parts = value;
         return (
@@ -51,6 +53,27 @@ it('does not synthesize an implementation request from an empty composer', async
   surface.querySelector('textarea')!.focus();
   await userEvent.keyboard('{Enter}');
   expect(base.launchTurn).not.toHaveBeenCalled();
+});
+it('attaches an explicit reference conversation only to the first accepted turn', async () => {
+  const base = adapter(true);
+  const context = {
+    schema_version: 2 as const, action_id: 'assistant.ask.flower' as const, provider: 'flower' as const,
+    source: { surface: 'flower_composer' as const }, target: { target_id: 'current', locality: 'auto' as const },
+    presentation: { label: 'Reference conversation', priority: 100 },
+    context: [{ kind: 'text_snapshot' as const, title: 'Reference conversation', content: 'Use conversation reference-1 when relevant.' }],
+  };
+  const { parts } = embedded(base, undefined, undefined, context);
+  await expect.element(page.getByRole('textbox')).toBeEnabled();
+  await page.getByRole('textbox').fill('Create a focused timer');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => vi.mocked(base.launchTurn).mock.calls.length).toBe(1);
+  expect(vi.mocked(base.launchTurn).mock.calls[0][0].context_action).toEqual(context);
+  await expect.poll(() => parts().threadID()).toBe('thread-1');
+  await expect.element(page.getByRole('textbox')).toHaveValue('');
+  await page.getByRole('textbox').fill('Make the timer compact');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => vi.mocked(base.launchTurn).mock.calls.length).toBe(2);
+  expect(vi.mocked(base.launchTurn).mock.calls[1][0].context_action).toBeUndefined();
 });
 it('opens plugin navigation before a model is configured without dispatching a turn', async () => {
   const base = adapter(false),
@@ -118,6 +141,55 @@ it('submits a contextual canvas comment in the same thread while preserving unse
   await expect.poll(() => vi.mocked(base.launchTurn).mock.calls.length).toBe(1);
   expect(vi.mocked(base.launchTurn).mock.calls[0][0]).toMatchObject({ thread_id: 'thread-1', prompt: 'Make the selected button smaller' });
   await expect.element(page.getByRole('textbox')).toHaveValue('Keep this unfinished idea');
+});
+
+it('submits only the explicit comment context without inheriting composer references', async () => {
+  const base = adapter(true);
+  const context = {
+    schema_version: 2 as const, action_id: 'assistant.ask.flower' as const, provider: 'flower' as const,
+    source: { surface: 'flower_composer' as const }, target: { target_id: 'current', locality: 'auto' as const },
+    presentation: { label: 'Canvas comment', priority: 100 },
+    context: [{ kind: 'text_snapshot' as const, title: 'Selected element', content: 'Untrusted visual hint: button Save' }],
+  };
+  const { parts } = embedded(base, 'thread-1', context);
+  await expect.poll(() => parts().canSubmitMessage?.()).toBe(true);
+  expect(await parts().submitMessage?.({ prompt: 'Refine this button', context })).toBe(true);
+  await expect.poll(() => vi.mocked(base.launchTurn).mock.calls.length).toBe(1);
+  expect(vi.mocked(base.launchTurn).mock.calls[0][0].context_action).toEqual(context);
+});
+
+it('queues canvas comments during an active run without stopping it or consuming the composer', async () => {
+  const fixture = streamingFixture(2, 0);
+  const base = adapter(true);
+  const launchTurn = vi.fn(async (input: Parameters<typeof base.launchTurn>[0]) => {
+    const receipt = await base.launchTurn(input);
+    const current = fixture.current();
+    fixture.replace({ ...current, view_version: current.view_version + 1, queue: [...(current.queue ?? []), {
+      id: input.client_request_id, request_key: input.client_request_id, created_at: new Date().toISOString(),
+      input: { text: input.prompt },
+    }] });
+    return receipt;
+  });
+  const stopThread = vi.fn();
+  const { parts } = embedded({ ...fixture.adapter, launchTurn, stopThread } as ReturnType<typeof adapter>, fixture.thread.thread_id);
+  await expect.element(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+  await page.getByRole('textbox').fill('Keep this independent draft');
+  for (const prompt of ['Make this button smaller', 'Use a quieter accent color']) {
+    await expect.poll(() => parts().canSubmitMessage?.()).toBe(true);
+    expect(await parts().submitMessage?.({ prompt, context: {
+      schema_version: 2, action_id: 'assistant.ask.flower', provider: 'flower',
+      source: { surface: 'flower_composer' }, target: { target_id: 'current', locality: 'auto' },
+      presentation: { label: 'Canvas comment', priority: 100 },
+      context: [{ kind: 'text_snapshot', title: 'Selected element', content: 'button Save' }],
+    } })).toBe(true);
+    await expect.poll(() => fixture.current().queue?.some(item => item.input?.text === prompt)).toBe(true);
+    await expect.element(page.getByText(prompt, { exact: true })).toBeVisible();
+  }
+  expect(launchTurn).toHaveBeenCalledTimes(2);
+  expect(new Set(launchTurn.mock.calls.map(([input]) => input.client_request_id)).size).toBe(2);
+  expect(fixture.current().activity).toBe('active');
+  expect(stopThread).not.toHaveBeenCalled();
+  await expect.element(page.getByRole('textbox')).toHaveValue('Keep this independent draft');
 });
 
 it.each([true, false])('waits for handler resolution before dispatching a canvas comment (blocked: %s)', async (blocked) => {

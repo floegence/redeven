@@ -121,6 +121,9 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, section := range contextSnapshot.Sections {
+		if section.Key == "plugin_authoring" {
+			t.Fatal("ordinary model context contains plugin workspace guidance")
+		}
 		if section.Key == "skills" && strings.Contains(section.Text, "redeven-plugin-authoring") {
 			t.Fatal("ordinary model context advertises plugin authoring")
 		}
@@ -151,6 +154,18 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 	contextSnapshot, err = r.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, time.Now)
 	if err != nil || !strings.Contains(modelContextSnapshotText(contextSnapshot), pluginAuthoringSkillName) {
 		t.Fatalf("dedicated catalog: %v", err)
+	}
+	guidanceCount := 0
+	for _, section := range contextSnapshot.Sections {
+		if section.Key == "plugin_authoring" {
+			guidanceCount++
+			if !strings.Contains(section.Text, "plugin_author.status") || !strings.Contains(section.Text, pluginAuthoringSkillName) {
+				t.Fatal("dedicated runtime context lost authoring guidance")
+			}
+		}
+	}
+	if guidanceCount != 1 {
+		t.Fatalf("plugin workspace context sections=%d want=1", guidanceCount)
 	}
 	if _, _, err := r.activateSkill(activationContext, "redeven-plugin-authoring"); err != nil {
 		t.Fatal(err)

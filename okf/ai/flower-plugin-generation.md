@@ -61,6 +61,13 @@ Send action, without a separate direct-creation intent or fallback prompt. `/plu
 is navigation, works before a model is configured, and does not become a model
 turn when unavailable.
 
+Authenticated plugin runs add a stable `plugin_authoring` section to the existing
+runtime `ModelContextSnapshot`. Floret owns comparison and chronological admission;
+unchanged workspace guidance does not become a new user reference on each Send.
+Ordinary conversations omit the section. Existing persisted messages remain intact.
+An explicitly referenced ordinary conversation is attached only to the initial
+new-thread submission, then removed from the creation reference chip on acceptance.
+
 Draft turns and their input, approval, compaction and goal continuations use the
 authenticated environment HTTP carrier, like draft creation and platform operations.
 A synthetic Local UI session cannot authorize the managed author workspace or
@@ -112,7 +119,10 @@ require the same product review and cleanup path.
 Canvas comments submit explicit text and the reviewed artifact's bounded visual
 context into the same dedicated thread using Flower's durable outbox. This path
 preserves unrelated unsent composer content and retains normal uncertainty and
-approval behavior. Dispatch waits for the ordinary handler decision and storage
+approval behavior. An active run accepts the comment through the ordinary message
+queue without stopping Flower. The comment supplies only its reviewed visual
+context; package repair sends its prompt without synthetic workspace references.
+Dispatch waits for the ordinary handler decision and storage
 generation; a blocked or unresolved handler cannot launch a comment turn.
 The durable outbox retains rejected or uncertain submissions for the same recovery
 flow as ordinary messages. The model resolves current source through `plugin_author.status`,

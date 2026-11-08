@@ -28,6 +28,7 @@ let registeredCommands: Array<{ id: string; execute: () => void }> = [];
 let pluginCreationNavigationFixture: { open: (instanceID: string) => Promise<void>; navigate?: (commit: () => unknown) => Promise<boolean> } | undefined;
 let pluginCreationInventory: any | undefined;
 let pluginCreationSessionReady: (() => void) | undefined;
+let testInitialURL: string;
 const [assetRecoveryReason, setAssetRecoveryReason] = createSignal<DocumentAssetRecoveryReason>(null);
 
 vi.mock('./services/pluginSessionReadinessCoordinator', async (importOriginal) => {
@@ -59,7 +60,11 @@ vi.mock('./plugins/PluginCreationWorkspace', async (importOriginal) => {
     props.onNavigationReady?.(
       pluginCreationNavigationFixture.navigate ?? (async commit => { await commit(); return true; }),
     );
-    return <div data-plugin-creation-navigation-fixture />;
+    onCleanup(() => props.onNavigationReady?.(undefined));
+    return <div data-plugin-creation-navigation-fixture>
+      <button onClick={props.onBack}>Return to creation history</button>
+      <iframe title="Retained creation preview" srcdoc="<body>Creation preview</body>" />
+    </div>;
   } };
 });
 
@@ -1213,6 +1218,7 @@ function elementRect(element: Element): DOMRect {
 
 afterEach(async () => {
   while (disposers.length > 0) disposers.pop()?.();
+  window.history.replaceState(window.history.state, '', testInitialURL);
   document.body.replaceChildren();
   document.documentElement.removeAttribute('style');
   document.documentElement.removeAttribute('data-floe-shell-theme');
@@ -1226,6 +1232,7 @@ afterEach(async () => {
 });
 
 beforeEach(() => {
+  testInitialURL = window.location.href;
   testTerminalFooter = false;
   setTerminalFooterPalette({ background: '#0d1117', foreground: '#c9d1d9' });
   vi.clearAllMocks();
@@ -2111,13 +2118,13 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       await expect.poll(() => document.querySelector('[data-plugin-creation-navigation-fixture]')).not.toBeNull();
       window.history.back();
       await expect.poll(() => navigate.mock.calls.length).toBe(1);
-      expect(document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(true);
+      expect(document.querySelector('[data-redeven-plugin-creation-page]')).not.toBeNull();
       finish?.();
-      await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(outcome === 'failed');
+      await expect.poll(() => Boolean(document.querySelector('[data-redeven-plugin-creation-page]'))).toBe(outcome === 'failed');
       expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe(outcome === 'failed' ? 'draft-1' : null);
       if (outcome === 'saved') {
         window.history.forward();
-        await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(true);
+        await expect.poll(() => document.querySelector('[data-redeven-plugin-creation-page]')).not.toBeNull();
         expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('draft-1');
       }
     } finally {
@@ -2157,8 +2164,16 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const url = new URL(initial); url.searchParams.set('plugin_draft', 'new');
     window.history.pushState(window.history.state, '', url);
     window.dispatchEvent(new PopStateEvent('popstate'));
-    await expect.poll(() => document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')?.hidden).toBe(true);
     await expect.poll(() => document.querySelector('[data-plugin-creation-workspace]'), { timeout: 15000 }).not.toBeNull();
+    const shell = document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')!;
+    expect(shell.hidden).toBe(false);
+    expect(shell.inert).toBe(false);
+    await expect.element(page.elementLocator(document.querySelector('[data-floe-shell-slot=activity-bar]')!)).toBeVisible();
+    const creation = document.querySelector<HTMLElement>('[data-redeven-plugin-creation-page]')!;
+    const content = document.querySelector<HTMLElement>('[data-plugin-creation-content-host=activity]')!;
+    await expect.poll(() => Math.abs(creation.getBoundingClientRect().top - content.getBoundingClientRect().top)).toBeLessThan(1);
+    expect(creation.getBoundingClientRect().left).toBeGreaterThan(0);
+    await page.screenshot({ path: '__screenshots__/plugin-creation-retained-shell.png' });
     expect(document.querySelector('[data-redeven-plugin-creation-page] .display-mode-page-shell, [data-redeven-plugin-creation-page] [data-testid="display-mode-page-shell"]')).toBeNull();
     expect(flower.isConnected).toBe(true);
     expect(document.querySelector('[data-testid="file-preview-host"]')).toBe(preview);
@@ -2169,6 +2184,115 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flower);
     expect(fixture.input.value).toBe('Keep this ordinary conversation draft');
     expect(document.querySelector('[data-testid="file-preview-host"]')).toBe(preview);
+  });
+
+  it('returns from creation details to history before leaving for the plugin center', async () => {
+    pluginCreationNavigationFixture = { open: async () => {} };
+    await mountShell();
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    const initial = window.location.href;
+    try {
+      const url = new URL(initial); url.searchParams.set('plugin_draft', 'draft-1');
+      window.history.pushState(window.history.state, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await expect.element(page.getByRole('button', { name: 'Return to creation history', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Return to creation history', exact: true }).click();
+      await expect.poll(() => new URL(window.location.href).searchParams.get('plugin_draft')).toBe('library');
+      await expect.poll(() => document.querySelector('[data-plugin-draft-library]')).not.toBeNull();
+      expect(document.querySelector<HTMLElement>('[data-plugin-creation-retained-shell]')!.hidden).toBe(false);
+      await page.screenshot({ path: '__screenshots__/plugin-history-retained-shell.png' });
+      await page.getByRole('button', { name: 'Back to Plugin Center', exact: true }).click();
+      expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBeNull();
+    } finally {
+      window.history.replaceState(window.history.state, '', initial);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  });
+
+  it('keeps one creation frame below the real shell header across mode changes and viewport resizing', async () => {
+    testRealFlowerLauncher = true;
+    pluginCreationNavigationFixture = { open: async () => {} };
+    await mountShell();
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-floe-shell-slot=activity-bar] button[aria-label=Plugins]')!);
+    await page.getByRole('button', { name: 'Plugin Center', exact: true }).click();
+    const url = new URL(window.location.href); url.searchParams.set('plugin_draft', 'draft-1');
+    window.history.pushState(window.history.state, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await expect.element(page.getByRole('button', { name: 'Return to creation history', exact: true })).toBeVisible();
+    const creation = document.querySelector<HTMLElement>('[data-redeven-plugin-creation-page]')!;
+    const frame = creation.querySelector('iframe')!;
+    await expect.poll(() => frame.contentDocument?.body.textContent).toBe('Creation preview');
+    const previewDocument = frame.contentDocument;
+    for (const [mode, width] of [['Workbench', 1280], ['Activity', 1024], ['Workbench', 1440], ['Activity', 1280]] as const) {
+      const tab = Array.from(document.querySelectorAll<HTMLButtonElement>('[role=tab]'))
+        .find(element => element.textContent?.trim() === mode && element.getBoundingClientRect().width > 0)!;
+      await userEvent.click(tab);
+      await page.viewport(width, 800);
+      const content = () => document.querySelector<HTMLElement>(`[data-plugin-creation-content-host=${mode.toLowerCase()}]`)!;
+      await expect.poll(() => Math.abs(creation.getBoundingClientRect().top - content().getBoundingClientRect().top)).toBeLessThan(1);
+      await expect.poll(() => Math.abs(creation.getBoundingClientRect().width - content().getBoundingClientRect().width)).toBeLessThan(1);
+      expect(creation.getBoundingClientRect().height).toBeGreaterThan(600);
+      const headers = Array.from(document.querySelectorAll<HTMLElement>('[data-floe-shell-slot=top-bar]'))
+        .filter(element => element.getBoundingClientRect().width > 0);
+      expect(headers).toHaveLength(1);
+      expect(creation.getBoundingClientRect().top).toBeGreaterThanOrEqual(headers[0]!.getBoundingClientRect().bottom);
+      if (mode === 'Activity') await expect.element(page.elementLocator(document.querySelector('[data-floe-shell-slot=activity-bar]')!)).toBeVisible();
+      expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('draft-1');
+      expect(document.querySelector('[data-redeven-plugin-creation-page]')).toBe(creation);
+      expect(creation.querySelector('iframe')).toBe(frame);
+      expect(frame.contentDocument).toBe(previewDocument);
+    }
+  });
+
+  it.each(['saved', 'canceled'])('waits for creation persistence before activity navigation: %s', async outcome => {
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const navigate = vi.fn(async (commit: () => unknown) => {
+      await pending;
+      if (outcome === 'canceled') return false;
+      await commit();
+      return true;
+    });
+    pluginCreationNavigationFixture = { open: async () => {}, navigate };
+    await mountShell();
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    const url = new URL(window.location.href); url.searchParams.set('plugin_draft', 'draft-1');
+    window.history.pushState(window.history.state, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await expect.element(page.getByRole('button', { name: 'Return to creation history', exact: true })).toBeVisible();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-floe-shell-slot=activity-bar] button[aria-label=Terminal]')!);
+    await expect.poll(() => navigate.mock.calls.length).toBe(1);
+    expect(document.querySelector('[data-redeven-plugin-creation-page]')).not.toBeNull();
+    expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('draft-1');
+    finish();
+    await expect.poll(() => Boolean(document.querySelector('[data-redeven-plugin-creation-page]'))).toBe(outcome === 'canceled');
+    expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe(outcome === 'canceled' ? 'draft-1' : null);
+  });
+
+  it('keeps mobile navigation outside creation history and workspace', async () => {
+    await page.viewport(390, 800);
+    pluginCreationNavigationFixture = { open: async () => {} };
+    const fixture = await mountProductionMobileShell();
+    pluginCreationSessionReady?.();
+    await flushAsync();
+    const url = new URL(window.location.href); url.searchParams.set('plugin_draft', 'draft-1');
+    window.history.pushState(window.history.state, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await expect.element(page.getByRole('button', { name: 'Return to creation history', exact: true })).toBeVisible();
+    for (const history of [false, true]) {
+      if (history) await page.getByRole('button', { name: 'Return to creation history', exact: true }).click();
+      await expect.element(page.elementLocator(fixture.mobileTabBar)).toBeVisible();
+      const creation = document.querySelector<HTMLElement>('[data-redeven-plugin-creation-page]')!;
+      await expect.poll(() => creation.getBoundingClientRect().height).toBeGreaterThan(500);
+      expect(creation.getBoundingClientRect().bottom).toBeLessThanOrEqual(fixture.mobileTabBar.getBoundingClientRect().top);
+      expect(creation.scrollWidth).toBeLessThanOrEqual(creation.clientWidth);
+    }
+    await page.getByRole('button', { name: 'Back to Plugin Center', exact: true }).click();
+    await expect.poll(() => document.querySelector('[data-redeven-plugin-creation-page]')).toBeNull();
   });
 
   it('moves the same Flower surface into and out of the Workbench host', async () => {

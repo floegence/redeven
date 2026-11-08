@@ -257,6 +257,12 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 		{Key: "repository_rules", Title: "Repository rule sources", Text: strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, nil), "\n")},
 		{Key: "skills", Title: "Available skills", Text: skills},
 	}}
+	if r.hasPluginDraft() {
+		snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{
+			Key: "plugin_authoring", Title: "Plugin creation workspace",
+			Text: "This is a dedicated plugin creation conversation. Read the redeven-plugin-authoring skill and plugin_author.status before editing. Discuss requirements or implement as requested. Use the managed source directory and plugin_author.build; the workspace shows retained artifacts and handles preview and installation review.",
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

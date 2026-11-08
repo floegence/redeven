@@ -1,5 +1,5 @@
 .redeven-plugin-creation-page { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--redeven-surface-main, var(--background)); color: var(--foreground); font-size: 13px; }
-.plugin-creation-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; height: max(44px, var(--redeven-desktop-titlebar-height, 0px)); padding-block: 0; padding-inline-start: calc(max(10px, env(safe-area-inset-left)) + var(--redeven-desktop-titlebar-start-inset, 0px)); padding-inline-end: calc(max(10px, env(safe-area-inset-right)) + var(--redeven-desktop-titlebar-end-inset, 0px)); }
+.plugin-creation-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; height: 44px; padding: 0 10px; }
 .plugin-creation-toolbar > button { font-size: 11px; }
 .plugin-creation-identity { display: flex; align-items: baseline; gap: 8px; width: clamp(210px, calc(26vw - 48px), 280px); min-width: 0; padding-right: 14px; }
 .plugin-creation-identity h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
@@ -79,7 +79,7 @@
 .plugin-canvas-pin { position: absolute; z-index: 6; pointer-events: none; display: grid; place-items: center; width: 20px; height: 20px; transform: translate(-50%, -50%); border: 2px solid var(--background); border-radius: 50% 50% 50% 3px; background: var(--primary); color: var(--primary-foreground); font-size: 9px; box-shadow: 0 2px 6px color-mix(in srgb, var(--foreground) 12%, transparent); }
 @media (max-width: 900px) { .plugin-creation-save-state { display: none; } }
 @media (max-width: 720px) {
-  .plugin-creation-toolbar { gap: 2px; height: max(48px, var(--redeven-desktop-titlebar-height, 0px)); padding-inline-start: calc(max(4px, env(safe-area-inset-left)) + var(--redeven-desktop-titlebar-start-inset, 0px)); padding-inline-end: calc(max(4px, env(safe-area-inset-right)) + var(--redeven-desktop-titlebar-end-inset, 0px)); }
+  .plugin-creation-toolbar { gap: 2px; height: 48px; padding-inline: 4px; }
   .plugin-creation-toolbar > button, .plugin-creation-toolbar > [aria-haspopup] { min-height: 44px; }
   .plugin-creation-toolbar button, .plugin-creation-toolbar > [aria-haspopup] { min-width: 44px; }
   .plugin-creation-toolbar .plugin-creation-check-button, .plugin-creation-version { display: none; }

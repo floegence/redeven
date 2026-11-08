@@ -258,8 +258,8 @@ it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer
     if (path.endsWith('/apply')) { calls.push({ action: 'apply', body });
       if (outcome === 'failed') return Response.json({ error: { message: 'Update rejected' } }, { status: 409 });
       preview = body.artifact_id; return Response.json({ data: snapshot() }); }
-    if (path.endsWith('/inspect')) {
-      calls.push({ action: 'inspect', body });
+    if (path.endsWith('/check')) {
+      calls.push({ action: 'check', body });
       return Response.json({ data: { inspection_id: 'review-2', intent: { action: 'update', plugin_instance_id: 'installed-1' },
         plugin_id: 'dev.example.focus', publisher_id: 'dev.example', version: '0.2.0', expires_at: '2026-12-01T00:00:00Z',
         inspected_hashes: { package_sha256: hash, manifest_sha256: hash, entries_sha256: hash },
@@ -299,7 +299,7 @@ it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer
   await page.getByRole('button', { name: 'Update', exact: true }).click();
   if (outcome === 'cancelled' || outcome === 'failed') {
     await expect.element(page.getByRole('button', { name: 'Update', exact: true })).toBeEnabled();
-    expect(calls.map(call => call.action)).toEqual(outcome === 'cancelled' ? [] : ['apply']);
+    expect(calls.map(call => call.action)).toEqual(outcome === 'cancelled' ? ['check'] : ['check', 'apply']);
     expect(conversation.isConnected).toBe(true);
     expect(conversation.value).toBe('Keep my next request');
     return;
@@ -309,7 +309,7 @@ it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer
     latest = 'artifact-3';
     await expect.element(page.getByText('This installs the current preview. Changes that have not been applied are not included.', { exact: true })).toBeVisible();
   }
-  expect(calls.map(call => call.action)).toEqual(['apply', 'inspect']);
+  expect(calls.map(call => call.action)).toEqual(['check', 'apply']);
   expect(calls.every(call => call.body.artifact_id === 'artifact-2')).toBe(true);
   await page.getByRole('dialog').getByRole('button', { name: 'Update plugin', exact: true }).click();
   await expect.poll(() => calls.filter(call => call.action === 'install').length).toBe(1);

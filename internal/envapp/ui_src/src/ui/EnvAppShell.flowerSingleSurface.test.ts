@@ -17,7 +17,9 @@ describe('Env App Flower ownership', () => {
     expect(creation.match(/<EnvAIPage/g)).toHaveLength(1);
     expect(creation).toContain('embeddedConversation={options.embeddedConversation}');
     expect((shell.slice(0,creationStart)+shell.slice(creationEnd)).match(/<EnvAIPage/g)).toHaveLength(1);
-    expect(shell).toContain('hidden={pluginCreationOpen()} inert={pluginCreationOpen()}');
+    expect(shell).not.toContain('hidden={pluginCreationOpen()} inert={pluginCreationOpen()}');
+    expect(shell).toContain('data-plugin-creation-content-host="activity"');
+    expect(shell).toContain('data-plugin-creation-content-host="workbench"');
     expect(shell.match(/\{renderFlowerProduct\(\)\}/g)).toHaveLength(1);
     expect(shell.indexOf('{renderFlowerProduct()}')).toBeGreaterThan(shell.indexOf('const renderMainShell'));
     expect(shell).toContain("flowerProductPlacement() === 'workbench'");

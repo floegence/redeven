@@ -54,7 +54,7 @@ export function PluginDraftLibrary(props: { onOpen: (id: string) => void; onBack
   });
   return (
     <section class="redeven-plugin-creation-page plugin-creation-history" data-plugin-draft-library>
-      <header class="plugin-creation-toolbar" data-redeven-desktop-titlebar-drag-region="true">
+      <header class="plugin-creation-toolbar">
         <Button variant="ghost" size="icon" class="h-11 w-11 shrink-0 sm:h-8 sm:w-8" onClick={props.onBack} aria-label={i18n.t('uiCopy.plugin.backToCenter')}>
           <ArrowLeft class="h-4 w-4" />
         </Button>

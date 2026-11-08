@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower references, origin context and canonical admission
 tags: [ui, flower, composer, references, floret]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -44,6 +44,8 @@ Menus append to current draft without selecting/sending source. Shared type disp
 One privacy-checked mapper emits ordered MessageReference and UserInput.Context. Malformed/forged/unknown input or projection failure rejects while preserving drafts. Builders admit source fields before serialization: omit composer detail and file root_label; unsupported optional fields stay absent even if undefined. Test actual builders through strict parser/launch.
 
 One assistant.ask.flower carries target/source/presentation/items. Runtime matrix: file_path, terminal_selection, process_snapshot, bounded text_snapshot for Git/environment. Never reconstruct from product copies. Routing independently authorizes environment. Missing thread/reference means absent; other Floret faults remain unavailable without fallback.
+
+Plugin creation instructions belong to authenticated runtime model context, not repeated user-message references. An explicit source-conversation reference accompanies only the first new-thread submission and clears after acceptance. Independent canvas comments submit exactly their own reviewed context; package repair may submit text alone. Neither consumes or inherits the ordinary composer's text, files or references. An active run permits queuing through the existing durable outbox; unresolved admission, stop, handler, permission and pending-interaction guards remain.
 
 ## Context-menu discovery
 Floe freezes target/anchor/selection before focus. Unhandled backgrounds get compact menus; rich Workbench/file/terminal/Git/preview/Flower menus keep ownership, editing and one Ask action. Viewport portal keeps menus above retained cards; unrelated transcript scrolling cannot dismiss shell-anchored menus. Desktop cards use clicked owner; native child forwarding uses validated boundary. Remote pixels/third-party iframe input stays independent; host chrome/explicit commands remain entry points. Menu selection captures no image and never attaches automatically to existing tasks. Lazy attachment staging begins only for submissions with files, preserving startup budget.

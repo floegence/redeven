@@ -105,7 +105,7 @@ await session.run(async () => {
     await waitFor(() => workspace.getAttribute('data-project-id').then((id) => /^draft_/.test(id ?? '') && id), 30000, 'persisted author draft');
     const draft = await workspace.getAttribute('data-project-id');
     report.draft = draft;
-    await page.getByRole('button', { name: 'Back to Plugin Center', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to creation history', exact: true }).click();
     report.beforeRestartStorage = await readComposerStorage();
     const terminal = await selectSurface(page, 'panel');
     await createSession(page, terminal);
@@ -131,7 +131,7 @@ await session.run(async () => {
     assert.ok(sameProcess(identity, processIdentity(pid)), 'Inventory recovery must not depend on the child exiting');
     report.assertions.push('Plugin inventory and launcher remain available after Runtime restart with a surviving terminal child');
     await page.locator('[data-plugin-center-drafts]').click();
-    await page.locator('[data-plugin-draft-library] .divide-y > button').first().click();
+    await page.locator('[data-plugin-history-entry="' + draft + '"]').click();
     await waitFor(() => page.locator('[data-plugin-creation-workspace]').getAttribute('data-project-id').then((id) => id === draft), 30000, 'same retained author draft');
     await waitFor(() => page.locator('[data-plugin-creation-workspace] textarea').first().inputValue().then((value) => value === 'Keep this author draft across the Runtime restart.'), 30000, 'asynchronously restored composer draft');
     assert.equal(await page.locator('[data-plugin-creation-workspace] textarea').first().inputValue(), 'Keep this author draft across the Runtime restart.');

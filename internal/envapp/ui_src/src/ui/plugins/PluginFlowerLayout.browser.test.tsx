@@ -92,7 +92,7 @@ it.each([
   expect(getComputedStyle(background).pointerEvents).toBe('none');
   expect(host.scrollWidth).toBeLessThanOrEqual(width);
   if (locale === 'zh-CN') {
-    await expect.element(page.getByRole('button', { name: '返回插件中心', exact: true })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: '返回创建历史', exact: true })).toBeVisible();
     await expect.element(page.getByPlaceholder('告诉 Flower 你希望插件实现什么功能…')).toBeVisible();
   }
   const toolbar = host.querySelector<HTMLElement>('.plugin-creation-toolbar')!;

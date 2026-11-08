@@ -66,6 +66,19 @@ try {
   await page.locator('[data-plugin-center-create-plugin]').click();
   const workspace = page.locator('[data-plugin-creation-workspace]');
   await workspace.waitFor();
+  const assertContentPlacement = async () => {
+    const creation = page.locator('[data-redeven-plugin-creation-page]');
+    const header = page.locator('[data-floe-shell-slot="top-bar"]:visible');
+    await expect(header).toBeVisible();
+    await expect(activityBar).toBeVisible();
+    const bounds = await creation.boundingBox();
+    const headerBounds = await header.boundingBox();
+    const railBounds = await activityBar.boundingBox();
+    assert.ok(bounds && headerBounds && railBounds);
+    assert.ok(bounds.y >= headerBounds.y + headerBounds.height);
+    assert.ok(bounds.x >= railBounds.x + railBounds.width);
+  };
+  await assertContentPlacement();
   assert.equal(
     await page.evaluate(() => window.__pluginContinuityTerminal?.isConnected),
     true,
@@ -76,7 +89,14 @@ try {
   const draftID = await workspace.getAttribute('data-project-id');
   await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await page.screenshot({ path: path.join(evidence, 'workspace-light.png') });
+  await page.getByRole('button', { name: 'Back to creation history', exact: true }).click();
+  await page.locator('[data-plugin-draft-library]').waitFor();
+  await assertContentPlacement();
+  await expect(page.locator('[data-plugin-history-entry="' + draftID + '"]')).toBeVisible();
+  await page.screenshot({ path: path.join(evidence, 'history-light.png') });
   await page.getByRole('button', { name: 'Back to Plugin Center', exact: true }).click();
+  await page.locator('[data-plugin-center-view]').waitFor();
+  report.assertions.push('Detail returns to creation history, then Plugin Center; header and Activity rail remain available');
   const restored = await selectSurface(page, 'panel');
   const retained = restored.locator('[data-terminal-runtime-session="' + session.sessionID + '"]').first();
   await retained.waitFor();
@@ -99,6 +119,15 @@ try {
   await page.locator('[data-plugin-history-entry="' + draftID + '"]').click();
   await expect(workspace).toHaveAttribute('data-project-id', draftID);
   await expect(workspace.locator('textarea').first()).toHaveValue('Keep this plugin draft while I check the terminal.');
+  await activityBar.getByRole('button', { name: 'File Browser', exact: true }).click();
+  await workspace.waitFor({ state: 'detached' });
+  await expect(fileFilter).toHaveValue('plugin-continuity');
+  await activityBar.getByRole('button', { name: 'Plugins', exact: true }).click();
+  await page.locator('[data-plugin-center-market-action]').click();
+  await page.locator('[data-plugin-center-drafts]').click();
+  await page.locator('[data-plugin-history-entry="' + draftID + '"]').click();
+  await expect(workspace.locator('textarea').first()).toHaveValue('Keep this plugin draft while I check the terminal.');
+  report.assertions.push('Activity rail navigation saves the draft and preserves it when reopened');
   await page.reload();
   await expect(workspace).toHaveAttribute('data-project-id', draftID);
   await expect(workspace.locator('textarea').first()).toHaveValue('Keep this plugin draft while I check the terminal.');

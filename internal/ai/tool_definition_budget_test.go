@@ -61,6 +61,15 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 						if hasAuthorSkill != fixture.authoring {
 							t.Errorf("provider authoring guidance=%v want=%v", hasAuthorSkill, fixture.authoring)
 						}
+						guidance := []byte("This is a dedicated plugin creation conversation.")
+						guidanceCount := bytes.Count(body["input"], guidance) + bytes.Count(body["messages"], guidance)
+						wantGuidance := 0
+						if fixture.authoring {
+							wantGuidance = 1
+						}
+						if guidanceCount != wantGuidance {
+							t.Errorf("provider workspace guidance=%d want=%d", guidanceCount, wantGuidance)
+						}
 						if bytes.Contains(body["tools"], []byte("plugin_author")) != fixture.authoring {
 							t.Error("provider authoring tools do not match project scope")
 						}
@@ -200,6 +209,21 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 				final := waitForAskUserIntegrationThread(t, svc, meta, threadID, func(v *ThreadView) bool { return v.RunStatus == "success" || v.RunStatus == "failed" })
 				if final.RunStatus != "success" || requests.Load() != 1 {
 					t.Fatalf("runtime acceptance: status=%s requests=%d", final.RunStatus, requests.Load())
+				}
+				if fixture.authoring {
+					_, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+						ThreadID: threadID, ClientRequestID: "tool-budget-followup",
+						Input: RunInput{Text: "Keep refining this plugin."},
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					final = waitForAskUserIntegrationThread(t, svc, meta, threadID, func(v *ThreadView) bool {
+						return requests.Load() >= 2 && (v.RunStatus == "success" || v.RunStatus == "failed")
+					})
+					if final.RunStatus != "success" || requests.Load() != 2 {
+						t.Fatalf("followup acceptance: status=%s requests=%d", final.RunStatus, requests.Load())
+					}
 				}
 			})
 		}

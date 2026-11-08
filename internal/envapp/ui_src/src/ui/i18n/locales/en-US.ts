@@ -918,7 +918,7 @@ export const enUS = defineDictionary({
         commentPlaceholder: "What would you like Flower to change?",
         sendComment: "Ask Flower to change",
         commentStale: "The preview changed. Select a location again; your comment is kept.",
-        commentBusy: "Flower is busy. You can keep writing and send when it finishes.",
+        commentBusy: "This comment cannot be sent yet. Your text is kept.",
         commentTarget: "Selected element",
         commentPage: "Whole preview",
         commentClose: "Close comment",
@@ -926,6 +926,7 @@ export const enUS = defineDictionary({
 
         draftsLoadFailed: "Could not load creation history. Try again.",
         accessLoadFailed: "Could not load preview permissions. Try again.",
+        backToHistory: 'Back to creation history',
         resizeConversation: "Resize conversation",
         packageConflict: "This build conflicts with the current package. Ask Flower to check the version and rebuild.",
         repairPackage: "Ask Flower to fix",

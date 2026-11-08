@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page, commands, userEvent } from 'vitest/browser';
 import { FloeConfigProvider } from '@floegence/floe-webapp-core';
-import { createFlowerComposerDraftCoordinator, type FlowerConversationParts } from '../../../../../flower_ui/src';
+import { createFlowerComposerDraftCoordinator, type FlowerConversationParts, type FlowerEmbeddedConversation } from '../../../../../flower_ui/src';
 import { readUIStorageItem, removeUIStorageItem } from '../services/uiStorage';
 import { bindSessionHTTP } from '../services/sessionHTTP';
 import { I18nProvider } from '../i18n';
@@ -27,6 +27,7 @@ let release: (() => void) | undefined;
 const id = 'canvas-comment-fixture';
 afterEach(async () => { dispose?.(); release?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); writeStoredLanguagePreference('en-US'); await removePluginComposer(id); surface.opens = 0; surface.closes = 0; surface.current = true; removeUIStorageItem('redeven.plugin-creation.conversation-width.v1'); await page.viewport(1280, 800); });
 function mount(title = 'Focus Timer', pendingUpdate = false) {
+  let embedded!: FlowerEmbeddedConversation;
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     if (String(input).endsWith('/status')) return Response.json({ data: {
       artifacts: [...(pendingUpdate ? [{ artifact_id: 'artifact-2', version: '0.1.1', stages: [] }] : []), { artifact_id: 'artifact-1', version: '0.1.0', stages: [] }],
@@ -44,11 +45,11 @@ function mount(title = 'Focus Timer', pendingUpdate = false) {
   dispose = render(() => <FloeConfigProvider><I18nProvider><PluginCreationWorkspace
     draftCoordinator={createFlowerComposerDraftCoordinator()} draftID={id} visible canManage
     onBack={vi.fn()} onSaved={vi.fn()} onInstalled={vi.fn()}
-    renderFlower={options => options.embeddedConversation.render({ conversation: <div>Conversation</div>, composer: <textarea aria-label="Ordinary draft" />,
+    renderFlower={options => { embedded = options.embeddedConversation; return embedded.render({ conversation: <div>Conversation</div>, composer: <textarea aria-label="Ordinary draft" />,
       submit: vi.fn(), canSubmit: () => true, submitMessage: submit, canSubmitMessage: () => true,
       threadID: () => 'thread-1', actionLayout: () => 'chat', actions: () => [], actionOverlays: null,
-    })} /></I18nProvider></FloeConfigProvider>, host);
-  return { host, submit, fetch };
+    }); }} /></I18nProvider></FloeConfigProvider>, host);
+  return { host, submit, fetch, embedded: () => embedded };
 }
 function select(host: HTMLElement) {
   const frame = host.querySelector('iframe')!;
@@ -69,7 +70,13 @@ it('preserves the user-assigned draft title above the generated plugin name', as
   await expect.poll(() => surface.opens).toBe(1);
   await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent('Daily routine');
 });
-it.each(['darwin', 'win32', 'linux'] as const)('keeps the single toolbar clear of %s window controls and draggable', async platform => {
+it('does not attach workspace instructions to ordinary messages', async () => {
+  const fixture = mount();
+  await expect.poll(() => surface.opens).toBe(1);
+  expect(fixture.embedded().contextAction).toBeUndefined();
+  expect(fixture.embedded().initialContextAction).toBeUndefined();
+});
+it.each(['darwin', 'win32', 'linux'] as const)('keeps the content toolbar compact below the %s shell chrome', async platform => {
   await page.viewport(1280, 800);
   const chrome = resolveDesktopWindowChromeSnapshot(platform, { fullScreen: false });
   const style = document.createElement('style');
@@ -83,11 +90,11 @@ it.each(['darwin', 'win32', 'linux'] as const)('keeps the single toolbar clear o
     for (const button of toolbar.querySelectorAll('button')) {
       const rect = button.getBoundingClientRect();
       if (!rect.width) continue;
-      expect(rect.left).toBeGreaterThanOrEqual(chrome.contentInsetStart);
-      expect(rect.right).toBeLessThanOrEqual(1280 - chrome.contentInsetEnd);
+      expect(rect.left).toBeGreaterThanOrEqual(10);
+      expect(rect.right).toBeLessThanOrEqual(1270);
     }
-    expect(toolbar.getAttribute('data-redeven-desktop-titlebar-drag-region')).toBe('true');
-    expect(toolbar.getBoundingClientRect().height).toBeGreaterThanOrEqual(chrome.titleBarHeight);
+    expect(toolbar.getAttribute('data-redeven-desktop-titlebar-drag-region')).toBeNull();
+    expect(toolbar.getBoundingClientRect().height).toBe(44);
     expect(toolbar.getBoundingClientRect().height).toBeLessThanOrEqual(48);
   } finally { style.remove(); }
 });
@@ -142,7 +149,7 @@ it('sends exact artifact-bound visual context and keeps the preview mounted thro
   await page.getByRole('button', { name: 'Ask Flower to change', exact: true }).click();
   expect(submit).toHaveBeenCalledTimes(1);
   expect(submit.mock.calls[0][0]).toMatchObject({ prompt: 'Make Start more compact' });
-  const snapshot = submit.mock.calls[0][0].context.context[0];
+  const snapshot = submit.mock.calls[0][0].context!.context[0];
   if (snapshot.kind !== 'text_snapshot') throw new Error('Expected a visual context snapshot');
   const context = JSON.parse(snapshot.content);
   expect(context).toMatchObject({ artifact_id: 'artifact-1', preview_generation: 1, version: '0.1.0', target: { text: 'Start' } });
@@ -286,6 +293,7 @@ it('keeps the live canvas and composer on package conflict and sends one explici
   await page.getByRole('button', { name: 'Ask Flower to fix', exact: true }).click();
   expect(fixture.submit).toHaveBeenCalledOnce();
   expect(fixture.submit.mock.calls[0][0].prompt).toContain('Preserve plugin identity and data');
+  expect(fixture.submit.mock.calls[0][0].context).toBeUndefined();
   await expect.element(page.getByRole('textbox', { name: 'Ordinary draft' })).toHaveValue('Keep this unsent note');
 });
 

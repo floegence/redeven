@@ -13,7 +13,7 @@ import { resolveDesktopWindowChromeSnapshot } from '../../../../../../desktop/sr
 let dispose: (() => void) | undefined;
 let release: (() => void) | undefined;
 afterEach(() => { dispose?.(); release?.(); document.body.replaceChildren(); localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY); document.documentElement.classList.remove('light', 'dark'); });
-it.each(['darwin', 'win32', 'linux'] as const)('opens the library directly with one toolbar clear of %s window controls', async platform => {
+it.each(['darwin', 'win32', 'linux'] as const)('uses one compact library toolbar below the %s shell chrome', async platform => {
   await page.viewport(1280, 800);
   const chrome = resolveDesktopWindowChromeSnapshot(platform, { fullScreen: false });
   const style = document.createElement('style');
@@ -31,11 +31,11 @@ it.each(['darwin', 'win32', 'linux'] as const)('opens the library directly with 
     expect(host.querySelectorAll('header')).toHaveLength(1);
     for (const button of toolbar.querySelectorAll('button')) {
       const rect = button.getBoundingClientRect();
-      expect(rect.left).toBeGreaterThanOrEqual(chrome.contentInsetStart);
-      expect(rect.right).toBeLessThanOrEqual(1280 - chrome.contentInsetEnd);
+      expect(rect.left).toBeGreaterThanOrEqual(10);
+      expect(rect.right).toBeLessThanOrEqual(1270);
     }
-    expect(toolbar.getAttribute('data-redeven-desktop-titlebar-drag-region')).toBe('true');
-    expect(toolbar.getBoundingClientRect().height).toBeGreaterThanOrEqual(chrome.titleBarHeight);
+    expect(toolbar.getAttribute('data-redeven-desktop-titlebar-drag-region')).toBeNull();
+    expect(toolbar.getBoundingClientRect().height).toBe(44);
     expect(toolbar.getBoundingClientRect().height).toBeLessThanOrEqual(48);
   } finally { style.remove(); }
 });

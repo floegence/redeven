@@ -1517,6 +1517,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
+    if (pluginCreationOpen()) { leavePluginCreation(() => openSettings(section, options)); return; }
     if (viewMode() === 'activity') { transientActivityFallback = ''; setPendingPluginRestore(undefined); navigation.commit({ kind: 'builtin', page: 'settings' }); }
     updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(undefined);
@@ -1957,6 +1958,29 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const pluginCreationOwner = createMemo(() => pluginCreationOpen() ? new URL(pluginCreationURL()).searchParams.get('plugin_draft') : null);
   let pluginCreationNavigate: ((commit: () => unknown) => Promise<boolean>) | undefined;
   let pluginCreationSaveForRestart: (() => Promise<string | undefined>) | undefined;
+  const [pluginCreationBoundsHost, setPluginCreationBoundsHost] = createSignal<HTMLElement>();
+  const [pluginCreationBounds, setPluginCreationBounds] = createSignal<{ left: number; top: number; width: number; height: number }>();
+  // One stable creation container follows the content viewport in either mode.
+  // Moving its iframe between parents would reset the live application.
+  createEffect(() => {
+    if (!pluginCreationOpen()) return;
+    setPluginCreationBounds(undefined);
+    const parent = pluginCreationBoundsHost(), content = notesViewportAnchor();
+    if (!parent || !content) return;
+    let frame = 0;
+    const measure = () => {
+      const outer = parent.getBoundingClientRect(), inner = content.getBoundingClientRect();
+      if (!outer.width || !outer.height || !inner.width || !inner.height) return;
+      const scaleX = outer.width / parent.offsetWidth, scaleY = outer.height / parent.offsetHeight;
+      setPluginCreationBounds({ left: (inner.left - outer.left) / scaleX, top: (inner.top - outer.top) / scaleY,
+        width: inner.width / scaleX, height: inner.height / scaleY });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(parent); observer.observe(content);
+    window.addEventListener('resize', measure);
+    measure(); frame = requestAnimationFrame(measure);
+    onCleanup(() => { observer.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('resize', measure); });
+  });
   let pluginHistoryPending = false;
   let pluginHistoryTarget = { url: pluginCreationURL(), state: window.history.state };
   const navigatePluginCreation = (id: string | undefined, replace = false) => {
@@ -1991,7 +2015,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   window.addEventListener('popstate', syncPluginCreationNavigation);
   onCleanup(() => window.removeEventListener('popstate', syncPluginCreationNavigation));
   const openPluginDraft = (id: string) => {
-    navigatePluginCreation(id); setWorkbenchPluginCenterOpen(false); updatePluginPanel({ open: false });
+    const commit = () => { navigatePluginCreation(id); setWorkbenchPluginCenterOpen(false); updatePluginPanel({ open: false }); };
+    if (pluginCreationOpen() && pluginCreationNavigate && id !== pluginCreationOwner()) {
+      void pluginCreationNavigate(commit).catch(reportPluginNavigationFailure);
+    } else commit();
   };
   const openPluginCreation = (threadID?: string) => {
     setPluginCreationReference(undefined);
@@ -2001,16 +2028,21 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       else notify.error(i18n.t('uiCopy.plugin.creationTitle'), String(error));
     });
   };
-  const backFromPluginCreation = () => { navigatePluginCreation(undefined); void openPluginCenter(); };
+  const leavePluginCreation = (commit: () => unknown) => {
+    const leave = () => { navigatePluginCreation(undefined); return commit(); };
+    if (pluginCreationNavigate) void pluginCreationNavigate(leave).catch(reportPluginNavigationFailure);
+    else leave();
+  };
+  const backFromPluginHistory = () => { navigatePluginCreation(undefined); void openPluginCenter(); };
   const pluginSurfaceFailure = () => new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
   const refreshCreationInventory = async () => {
     const inventory = await refetchPluginInventory();
     if (!inventory) throw new Error(i18n.t('uiCopy.plugin.creation.inventoryFailed'));
     return inventory;
   };
-  const renderPluginCreation = () => <Show when={pluginCreationProjectID()} keyed>{id => <Show when={id !== 'library'} fallback={<PluginDraftLibrary onBack={backFromPluginCreation} onOpen={openPluginDraft} />}>
+  const renderPluginCreation = () => <Show when={pluginCreationProjectID()} keyed>{id => <Show when={id !== 'library'} fallback={<PluginDraftLibrary onBack={backFromPluginHistory} onOpen={openPluginDraft} />}>
     <PluginCreationWorkspace canManage={canAdmin()} draftCoordinator={flowerDraftCoordinator} draftID={id} visible={pluginCreationOpen()} centerEntry={localRuntime()?.web_entry === 'center-v1'} referenceThreadID={pluginCreationReference()}
-      onBack={backFromPluginCreation} onSaved={saved => navigatePluginCreation(saved, true)}
+      onBack={() => navigatePluginCreation('library')} onSaved={saved => navigatePluginCreation(saved, true)}
       onNavigationReady={navigate => { pluginCreationNavigate = navigate; }}
       onRestartReady={save => { pluginCreationSaveForRestart = save; }}
       onInstalled={refreshCreationInventory}
@@ -2037,6 +2069,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     setPluginWidgetCounts(counts);
   };
   const openPluginCenter = async (selectedInventoryKey?: string) => {
+    if (pluginCreationOpen()) { leavePluginCreation(() => openPluginCenter(selectedInventoryKey)); return; }
     if (pluginsPanelOpen()) pluginsPanelTrigger()?.focus({ preventScroll: true });
     updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(selectedInventoryKey);
@@ -3538,7 +3571,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   ));
   const activityFlowerExpanded = createMemo(() => activityFlowerPlacement() !== 'collapsed');
   const activityFlowerCompanionVisible = createMemo(() => (
-    viewMode() === 'activity'
+    !pluginCreationOpen() && viewMode() === 'activity'
     && !layout.isMobile()
     && activityFlowerPlacement() !== 'full_page'
     && layout.sidebarActiveTab() !== ENV_TESSIVEN_ACTIVITY_ID
@@ -3589,6 +3622,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     && !activityFlowerLauncherVisible()
     && activityContentAvailable()
     && !recoveryBlocking()
+    && !pluginCreationOpen()
   ));
   const flowerSurfaceEngaged = createMemo(() => (
     flowerSurfaceVisible()
@@ -4212,6 +4246,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const activateActivitySurface = (surface: EnvActivitySurfaceId, opts?: { persist?: boolean }) => {
+    if (pluginCreationOpen() && opts?.persist !== false) { leavePluginCreation(() => activateActivitySurface(surface, opts)); return; }
     if (layout.isMobile()) setMobileNavigationPage('closed');
     if (opts?.persist !== false && viewMode() === 'activity') {
       transientActivityFallback = '';
@@ -4368,7 +4403,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       return;
     }
     if (leavingActivityOnlyPluginCenter) {
-      activateActivitySurface(targetSurface);
+      activateActivitySurface(targetSurface, { persist: !pluginCreationOpen() });
     }
     if (!flowerTurnLauncherOpen()) {
       setActivityFlowerPresentation('collapsed');
@@ -4398,6 +4433,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   const openSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
+    if (pluginCreationOpen()) { leavePluginCreation(() => openSurface(surfaceId, options)); return; }
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
 
     if (viewMode() === 'workbench') {
@@ -4561,7 +4597,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     onCleanup(remove);
   };
   const withFlowerNavigation = (item: ActivityBarItem): ActivityBarItem => ({
-    ...item, buttonRef: button => {
+    ...item, onClick: item.onClick ? () => {
+      if (pluginCreationOpen() && item.id !== 'plugins') leavePluginCreation(() => item.onClick?.());
+      else item.onClick?.();
+    } : undefined, buttonRef: button => {
       item.buttonRef?.(button);
       flowerNavigationBindings.get(item.id)?.();
       flowerNavigationBindings.delete(item.id);
@@ -5385,12 +5424,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <div
           ref={setActivityNotesViewportAnchor}
           class="flex-1 min-h-0 overflow-hidden relative outline-none"
+          data-plugin-creation-content-host="activity"
           tabindex={-1}
         >
           <div
             class={`h-full min-h-0 ${recoveryBlocking() ? 'pointer-events-none' : ''}`}
-            inert={recoveryBlocking()}
-            aria-hidden={recoveryBlocking() ? 'true' : undefined}
+            style={{ visibility: pluginCreationOpen() ? 'hidden' : undefined }}
+            inert={recoveryBlocking() || pluginCreationOpen()}
+            aria-hidden={recoveryBlocking() || pluginCreationOpen() ? 'true' : undefined}
           >
             <Show when={activityContentAvailable()}>
               <ActivityAppsMain
@@ -5437,23 +5478,24 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const renderWorkbenchContent = () => (
-    <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden outline-none" tabindex={-1}>
+    <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden outline-none" tabindex={-1} data-plugin-creation-content-host="workbench">
       <div
         class={`h-full min-h-0 ${recoveryBlocking() ? 'pointer-events-none' : ''}`}
-        inert={recoveryBlocking() || workbenchPluginCenterBlocking()}
-        aria-hidden={recoveryBlocking() || workbenchPluginCenterBlocking() ? 'true' : undefined}
+        style={{ visibility: pluginCreationOpen() ? 'hidden' : undefined }}
+        inert={recoveryBlocking() || workbenchPluginCenterBlocking() || pluginCreationOpen()}
+        aria-hidden={recoveryBlocking() || workbenchPluginCenterBlocking() || pluginCreationOpen() ? 'true' : undefined}
       >
         <Show when={activityContentAvailable()}>
           <FlowerContextSource id="workbench:canvas" pageID="workbench" pageName="Workbench" mode="workbench">
           <EnvWorkbenchPage
-            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryBlocking()}
+            inputEnabled={viewMode() === 'workbench' && !pluginCreationOpen() && !workbenchPluginCenterBlocking() && !recoveryBlocking()}
             dockItems={pluginDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
             dockActions={workbenchDockActions()}
             pluginSurfaceHost={{
               coordinator: pluginSurfaceCoordinator,
               confirmationQueue: pluginConfirmationQueue,
-              workbenchVisible: () => viewMode() === 'workbench' && !workbenchPluginCenterBlocking(),
+              workbenchVisible: () => viewMode() === 'workbench' && !pluginCreationOpen() && !workbenchPluginCenterBlocking(),
               resolveTarget: resolveCurrentPluginSurfaceTarget,
               resolveSurface: resolvePluginSurface,
               refreshInventory: refreshPluginSurfaceInventory,
@@ -5471,7 +5513,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         </Show>
       </div>
       <Show when={workbenchPluginCenterVisited()}>
-        <PluginCenterDrawer open={workbenchPluginCenterOpen() && viewMode() === 'workbench' && !recoveryBlocking()}
+        <PluginCenterDrawer open={workbenchPluginCenterOpen() && viewMode() === 'workbench' && !pluginCreationOpen() && !recoveryBlocking()}
           onOpenChange={setWorkbenchPluginCenterOpen} onPresenceChange={onPluginCenterPresenceChange}
           title={i18n.t('uiCopy.plugin.centerTitle')}>
           <FlowerContextSource id="workbench:plugins" pageID="plugins" pageName={i18n.t('uiCopy.plugin.centerTitle')} mode="overlay" selected={workbenchPluginCenterOpen() && viewMode() === 'workbench'}>{renderPluginCenter(true)}</FlowerContextSource>
@@ -5536,11 +5578,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const renderMainShell = () => (
     <>
-      <div class="h-full min-h-0" hidden={pluginCreationOpen()} inert={pluginCreationOpen()} data-plugin-creation-retained-shell>
+      <div class="h-full min-h-0" data-plugin-creation-retained-shell>
       <AppViewport>
         <div
-          ref={bindFlowerShell}
-          class="flex h-full min-h-0 flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+          ref={element => { bindFlowerShell(element); setPluginCreationBoundsHost(element); }}
+          class="relative flex h-full min-h-0 flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
           inert={mobilePluginModalOpen()}
           aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
           data-redeven-interaction-mode={layout.isMobile() ? 'mobile' : 'desktop'}
@@ -5581,6 +5623,17 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
               },
             ]}
           />
+          <Show when={pluginCreationOpen()}>
+            <div class="absolute z-10 overflow-hidden bg-background"
+              style={{ left: `${pluginCreationBounds()?.left ?? 0}px`, top: `${pluginCreationBounds()?.top ?? 0}px`,
+                width: `${pluginCreationBounds()?.width ?? 0}px`, height: `${pluginCreationBounds()?.height ?? 0}px`,
+                visibility: pluginCreationBounds() ? 'visible' : 'hidden' }}
+              inert={mobilePluginModalOpen()} aria-hidden={mobilePluginModalOpen() || undefined} data-redeven-plugin-creation-page>
+              <Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}>
+                <Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense>
+              </Show>
+            </div>
+          </Show>
         </div>
         <Show when={canUseFlower()}>{renderActivityFlowerAnchor()}</Show>
       </AppViewport>
@@ -5625,15 +5678,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         )}
       </For>
       <PluginConfirmationDialog queue={pluginConfirmationQueue} />
-      <Show when={pluginCreationOpen()}>
-        <AppViewport>
-          <div ref={bindFlowerShell} class="relative h-full min-h-0 overflow-hidden" inert={mobilePluginModalOpen()} aria-hidden={mobilePluginModalOpen() || undefined} data-redeven-plugin-creation-page>
-            <Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}>
-              <Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense>
-            </Show>
-          </div>
-        </AppViewport>
-      </Show>
     </>
   );
 

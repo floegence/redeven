@@ -644,8 +644,8 @@ export type FlowerConversationParts = Readonly<{
   threadID: Accessor<string>;
   submit: (intent?: Readonly<{ fallbackPrompt?: string; context?: ContextActionEnvelope }>) => Promise<void>;
   canSubmit: (fallbackPrompt?: string) => boolean;
-  /** Submit an explicit host-authored message to this thread without consuming its composer draft. */
-  submitMessage?: (input: Readonly<{ prompt: string; context: ContextActionEnvelope }>) => Promise<boolean>;
+  /** Queue an independent message with only its explicit context, preserving the composer. */
+  submitMessage?: (input: Readonly<{ prompt: string; context?: ContextActionEnvelope }>) => Promise<boolean>;
   canSubmitMessage?: () => boolean;
 }>;
 
@@ -6905,11 +6905,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const canSubmitMessage = () => Boolean(selectedThreadID()) && bottomActionMode() === 'chat'
-    && !pendingThreadSelection() && !selectedThreadReadOnly() && !selectedThreadCanStop()
+    && !pendingThreadSelection() && !selectedThreadReadOnly()
     && !selectedThreadStopPending() && !composerSendPreparing() && !selectedComposerPendingSend()
     && settingsReady() && readyForChat() && handlerAllowsSubmitIntent()
     && !threadLoadError() && !visibleTransportOutbox().some(entry => entry.delivery !== 'accepted');
-  const submitMessage = async (input: Readonly<{ prompt: string; context: ContextActionEnvelope }>): Promise<boolean> => {
+  const submitMessage = async (input: Readonly<{ prompt: string; context?: ContextActionEnvelope }>): Promise<boolean> => {
     if (!canSubmitMessage() || !input.prompt.trim()) return false;
     const inspection = inspectFlowerText(input.prompt);
     if (!inspection || inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) return false;
@@ -6917,10 +6917,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const requestID = createFlowerClientRequestID();
     const adapter = props.adapter;
     const capturedDecision = currentHandlerDecision();
-    const context = props.embeddedConversation?.contextAction;
     const launchInput: FlowerTurnLaunchInput = {
       client_request_id: requestID, thread_id: threadID, prompt: input.prompt,
-      context_action: context ? { ...context, context: [...context.context, ...input.context.context] } : input.context,
+      ...(input.context ? { context_action: input.context } : {}),
       decision: null,
     };
     let storageGenerationRequest = adapter.resolveStorageGeneration?.();

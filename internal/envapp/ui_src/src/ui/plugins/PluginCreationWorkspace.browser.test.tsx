@@ -304,7 +304,7 @@ it.each(['pending', 'rejected', 'snapshot_failed'].flatMap(outcome => ['toolbar'
   embedded!.onDraftChange?.(session.snapshot());
   embedded!.onDraftPresence?.(true);
   try {
-    if (navigation === 'toolbar') await page.getByRole('button', { name: 'Back to Plugin Center', exact: true }).click();
+    if (navigation === 'toolbar') await page.getByRole('button', { name: 'Back to creation history', exact: true }).click();
     else void navigateFromHistory!(onBack);
     await new Promise(resolve => setTimeout(resolve, 100));
     expect(onBack).not.toHaveBeenCalled();
