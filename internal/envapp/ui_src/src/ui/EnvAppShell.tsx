@@ -103,7 +103,7 @@ import { flowerTurnAdmissionFailureKind } from '../../../../flower_ui/src/flower
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import { captureSessionRestartState, desktopSessionRestartBridge, restoreSessionRestartState, type RestartWorkspace } from './services/sessionRestart';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
-import { createFlowerWorkingDirectoryNavigation } from './flower/workingDirectoryNavigation';
+import type { FlowerWorkingDirectoryNavigation } from './flower/workingDirectoryNavigation';
 import { classifyFilePreviewError, getFilePreviewErrorMeta } from './widgets/filePreviewErrorUtils';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
@@ -2770,7 +2770,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
 
-  const flowerWorkingDirectoryActions = createFlowerWorkingDirectoryNavigation({
+  const flowerWorkingDirectoryOptions = {
     availability: () => {
       const connected = protocol.status() === 'connected';
       const permissions = env()?.permissions;
@@ -2789,7 +2789,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     invalidDirectoryMessage: () => i18n.t('flowerSurface.threadList.workingDirectoryUnavailable'),
     openFileBrowserAtPath,
     openTerminalInDirectory,
-  });
+  };
+  const loadFlowerWorkingDirectoryActions = async () => (await import('./flower/workingDirectoryNavigation')).createFlowerWorkingDirectoryNavigation(flowerWorkingDirectoryOptions);
+  const flowerWorkingDirectoryActions: FlowerWorkingDirectoryNavigation = {
+    workingDirectoryActionAvailability: flowerWorkingDirectoryOptions.availability,
+    openWorkingDirectoryInFileBrowser: async request => (await loadFlowerWorkingDirectoryActions()).openWorkingDirectoryInFileBrowser!(request),
+    openWorkingDirectoryInTerminal: async request => (await loadFlowerWorkingDirectoryActions()).openWorkingDirectoryInTerminal!(request),
+  };
 
   const openCheckedFilePreview = async (
     item: FileItem,

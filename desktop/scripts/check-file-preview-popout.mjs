@@ -70,7 +70,7 @@ await session.run(async () => {
       if (request.url === '/v1/models') { response.end(JSON.stringify({ data: [{ id: 'gpt-5-mini' }] })); return; }
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const input = JSON.parse(Buffer.concat(chunks));
-      const marker = strings(input.input).join('\n').match(/POPOUT_FLOWER_(NATIVE|BROWSER)/)?.[0];
+      const marker = strings(input.input).join('\n').match(/POPOUT_FLOWER_(NATIVE|BROWSER_NARROW|BROWSER)/)?.[0];
       if (input.tools?.length) {
         assert.ok(marker, 'User question reaches the configured provider');
         assert.ok(strings(input.input).some(text => text.includes(htmlFile) || text.includes(JSON.stringify(htmlFile).slice(1, -1))), 'Exact file reference reaches the provider');
@@ -146,6 +146,11 @@ await session.run(async () => {
     await child.screenshot({ path: path.join(output, 'native-local-reply.png') });
     assert.equal(await initialFrame.getByRole('textbox', { name: 'Retained input' }).inputValue(), 'retained through Flower');
     assert.equal(await initialFrame.evaluate(() => scrollY), 400);
+    await child.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
+    await child.locator('#redeven-activity-flower-product[data-presentation="collapsed"]').waitFor();
+    await initialFrame.getByRole('textbox', { name: 'Retained input' }).fill('editable after Flower');
+    assert.equal(await initialFrame.getByRole('textbox', { name: 'Retained input' }).inputValue(), 'editable after Flower');
+    await initialFrame.evaluate(() => scrollTo(0, 400));
     await child.bringToFront();
     await child.keyboard.press('ControlOrMeta+Shift+J');
     await child.locator('[data-floe-prompt-card]').waitFor();
@@ -268,7 +273,7 @@ await session.run(async () => {
     await tab.setViewportSize({ width: 390, height: 740 });
     await tab.getByRole('button', { name: 'Ask Flower', exact: true }).click();
     await tab.locator('[data-floe-prompt-card]').waitFor();
-    await submitFlower(tab, 'POPOUT_FLOWER_BROWSER');
+    await submitFlower(tab, 'POPOUT_FLOWER_BROWSER_NARROW');
     await tab.screenshot({ path: path.join(output, 'browser-narrow-reply.png') });
     assert.equal(context.pages().length, initialPageCount);
     await tab.setViewportSize({ width: 1280, height: 900 });
