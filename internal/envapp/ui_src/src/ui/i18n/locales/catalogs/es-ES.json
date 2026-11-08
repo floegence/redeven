@@ -1656,7 +1656,6 @@
     "openInTab": "Abrir en una pestaña nueva",
     "saveBeforePopout": "Guarda los cambios antes de abrir una vista previa independiente.",
     "popoutFailed": "No se pudo abrir la vista previa",
-
     "pdf": {
       "search": "Buscar en el PDF",
       "previous": "Coincidencia anterior",
@@ -8216,8 +8215,8 @@
     "deployProtocolFailed": "Esta autenticación de administrador o protocolo no es compatible. Cambie el método de autorización o actualice Redeven."
   },
   "hostAccess": {
-    "permissionApp": "En Ajustes del Sistema, busca «{app}».",
-    "permissionAppUnknown": "No se ha confirmado el nombre asociado a los permisos de este inicio. macOS puede mostrar el terminal que inició Redeven. Abre Redeven Desktop desde Finder para concederle sus propios permisos.",
+    "permissionApp": "Permite «{app}» en macOS. Este asistente muestra la pantalla y transmite las acciones del ratón y el teclado.",
+    "permissionAppUnknown": "Desktop Access no está disponible. Instala una versión firmada de Redeven para configurar los permisos.",
     "welcome": "Usar aplicaciones o el escritorio",
     "choose": "Elige cómo quieres usar este equipo. Te guiaremos en la configuración.",
     "applications": "Abrir aplicaciones individuales",
@@ -8268,7 +8267,17 @@
     "setup": "Configurar",
     "openSystemSettings": "Abrir ajustes del sistema",
     "needsAttention": "Configuración pendiente",
-    "controlMode": "Ratón y teclado"
+    "controlMode": "Ratón y teclado",
+    "permissionHelp": "¿No encuentras la app o los permisos no surten efecto?",
+    "missingApplication": "Encontrar la app que necesita permiso",
+    "addApplicationHint": "En este panel, pulsa + y añade «{app}». El botón selecciona la app exacta en Finder.",
+    "revealApplication": "Mostrar app en Finder",
+    "changedPermissions": "¿Ya cambiaste los permisos?",
+    "helperRestartHint": "Reinicia Desktop Access para aplicar los cambios. Redeven y tus apps seguirán abiertos.",
+    "helperRestartConfirm": "Se cerrarán las conexiones actuales al escritorio y las apps compartidas. Vuelve a conectarte tras reiniciar.",
+    "applyPermissions": "Aplicar cambios de permisos",
+    "restartHelper": "Reiniciar Desktop Access",
+    "requestPending": "Completa la solicitud de macOS. Se comprobará automáticamente cuando vuelvas. Si no aparece, abre Ajustes del Sistema."
   },
   "storage": {
     "title": "Almacenamiento",

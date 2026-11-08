@@ -1656,7 +1656,6 @@
     "openInTab": "Abrir em uma nova aba",
     "saveBeforePopout": "Salve as alterações antes de abrir uma prévia separada.",
     "popoutFailed": "Não foi possível abrir a prévia",
-
     "pdf": {
       "search": "Buscar no PDF",
       "previous": "Resultado anterior",
@@ -8216,8 +8215,8 @@
     "deployProtocolFailed": "Esta autenticação de administrador ou protocolo não é compatível. Troque o método de autorização ou atualize o Redeven."
   },
   "hostAccess": {
-    "permissionApp": "Nos Ajustes do Sistema, procure “{app}”.",
-    "permissionAppUnknown": "O nome associado às permissões desta inicialização não foi confirmado. O macOS pode mostrar o terminal que iniciou o Redeven. Abra o Redeven Desktop pelo Finder para conceder permissões próprias.",
+    "permissionApp": "Permita “{app}” no macOS. Este auxiliar exibe a tela e transmite as ações do mouse e do teclado.",
+    "permissionAppUnknown": "O Desktop Access está indisponível. Instale uma versão assinada do Redeven para configurar as permissões.",
     "welcome": "Usar aplicativos ou a área de trabalho",
     "choose": "Escolha como deseja usar este host. Vamos orientar a configuração.",
     "applications": "Abrir aplicativos individuais",
@@ -8268,7 +8267,17 @@
     "setup": "Configurar",
     "openSystemSettings": "Abrir configurações do sistema",
     "needsAttention": "Configuração pendente",
-    "controlMode": "Mouse e teclado"
+    "controlMode": "Mouse e teclado",
+    "permissionHelp": "Não encontra o app ou as permissões não funcionam?",
+    "missingApplication": "Encontrar o app que precisa de permissão",
+    "addApplicationHint": "Neste painel, clique em + e adicione “{app}”. O botão abaixo seleciona o app correto no Finder.",
+    "revealApplication": "Mostrar app no Finder",
+    "changedPermissions": "Já alterou as permissões?",
+    "helperRestartHint": "Reinicie o Desktop Access para aplicar as alterações. O Redeven e seus apps continuarão abertos.",
+    "helperRestartConfirm": "As conexões atuais com a mesa e os apps compartilhados serão encerradas. Conecte-se novamente após reiniciar.",
+    "applyPermissions": "Aplicar alterações de permissões",
+    "restartHelper": "Reiniciar Desktop Access",
+    "requestPending": "Conclua a solicitação do macOS. A verificação será automática ao voltar. Se não houver solicitação, abra os Ajustes do Sistema."
   },
   "storage": {
     "title": "Armazenamento",

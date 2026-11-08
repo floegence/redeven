@@ -1656,7 +1656,6 @@
     "openInTab": "在新标签页中打开",
     "saveBeforePopout": "请先保存修改，再打开独立预览。",
     "popoutFailed": "无法打开预览",
-
     "pdf": {
       "search": "在 PDF 中查找",
       "previous": "上一个匹配",
@@ -8212,8 +8211,8 @@
     "deployProtocolFailed": "不支持此管理员交互或协议。请切换授权方式或更新 Redeven。"
   },
   "hostAccess": {
-    "permissionApp": "在系统设置中找到“{app}”。",
-    "permissionAppUnknown": "当前启动方式的授权名称尚未确认，macOS 可能显示启动 Redeven 的终端名称。从访达打开 Redeven Desktop 后，可单独为其授权。",
+    "permissionApp": "请在 macOS 中允许“{app}”。此辅助程序负责显示画面和传递鼠标、键盘操作。",
+    "permissionAppUnknown": "桌面访问辅助程序不可用。请安装已签名的 Redeven 版本后配置权限。",
     "welcome": "使用应用或整个桌面",
     "choose": "选择一种使用方式，我们会带你完成设置。",
     "applications": "单独打开应用",
@@ -8264,7 +8263,17 @@
     "setup": "设置",
     "openSystemSettings": "打开系统设置",
     "needsAttention": "需要完成设置",
-    "controlMode": "鼠标和键盘"
+    "controlMode": "鼠标和键盘",
+    "permissionHelp": "找不到应用，或权限没有生效？",
+    "missingApplication": "找到需要授权的应用",
+    "addApplicationHint": "在此权限页面点击“+”，添加“{app}”。下方按钮会在 Finder 中选中准确的应用。",
+    "revealApplication": "在 Finder 中显示应用",
+    "changedPermissions": "已经修改了权限？",
+    "helperRestartHint": "重启桌面访问辅助程序即可应用更改。Redeven 和已打开的应用会继续运行。",
+    "helperRestartConfirm": "当前的应用共享和桌面连接将结束。辅助程序重启后，请重新连接。",
+    "applyPermissions": "应用权限更改",
+    "restartHelper": "重启桌面访问辅助程序",
+    "requestPending": "请完成 macOS 授权提示。返回后会自动检查；如果没有出现提示，请打开系统设置。"
   },
   "storage": {
     "title": "存储管理",

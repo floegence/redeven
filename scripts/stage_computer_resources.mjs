@@ -1,5 +1,6 @@
 import { copyComputerPackage } from './stage_computer_package.mjs';
 import { stageBrowserExtension } from './stage_browser_extension.mjs';
+import { stageDesktopAccess, desktopAccessIdentity } from './stage_desktop_access.mjs';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -26,6 +27,9 @@ export function stageComputerResources(destination, platform = process.platform,
     throw new Error('Darwin computer resources require a matching native builder.');
   }
   if (existsSync(destination)) throw new Error('Computer resource destination must be new.');
+  if (platform === 'darwin' && ![process.env.REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY, process.env.REDEVEN_DESKTOP_MAC_IDENTITY].some(value => value && value !== '-')) {
+    throw new Error('Set REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY to an Apple Development or Developer ID Application certificate before staging macOS desktop access.');
+  }
   const requireUI = createRequire(path.join(repo, 'internal/envapp/ui_src/package.json'));
   const catalog = JSON.parse(readFileSync(path.join(repo, 'internal/browserinstall/catalog.json')));
   if (requireUI('playwright/package.json').version !== catalog.playwright_version) throw new Error('Browser catalog must match the published Playwright version.');
@@ -89,6 +93,10 @@ export function stageComputerResources(destination, platform = process.platform,
     const nativePackage = path.join(repo, 'desktop/native/computer-host');
     execFileSync('/usr/bin/swift', ['build', '-c', 'release', '--package-path', nativePackage], { stdio: 'inherit' });
     copy(path.join(nativePackage, '.build/release/redeven-computer-host'), 'redeven-computer-host');
+    const development = !process.env.REDEVEN_DESKTOP_MAC_IDENTITY;
+    stageDesktopAccess({ binary: path.join(destination, 'redeven-computer-host'),
+      destination: path.join(destination, `${desktopAccessIdentity(development).name}.app`),
+      icon: path.join(repo, 'desktop/build/desktop-access.icns'), development });
   }
   const files = [];
   function inventory(directory, prefix = '') {

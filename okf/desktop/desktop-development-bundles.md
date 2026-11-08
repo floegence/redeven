@@ -36,7 +36,7 @@ Reuse compatible intact Gateways; drift never auto-upgrades. Owner repairs corru
 
 Dev gzip1/Brotli4 preserves decoded bytes; release uses maximum compression; profile belongs to identity. Exclude other worktrees/native cache from Gateway copies. Record dependency/verification/Desktop/Runtime/Gateway durations. Rebuilt/reused launch acceptance needs saved local Gateway,exact Runtime commit and verified cleanup; empty profile timing is insufficient. Exit/signals/failure stop owned services only. Electron resolver emits only path to stdout, diagnostics stderr, propagates failure and rechecks executable after build.
 
-macOS stages a profile-owned, signed `Redeven Desktop Dev.app` from installed Electron and opens it through Launch Services. Direct terminal exec inherits terminal privacy authority and is not equivalent. Stable per-profile identity and verified source/output receipts preserve grants across reuse. The supervisor records the real app PID, forwards interruption, observes exit status and never substitutes another running instance. Packaged Launch Services metadata names `Redeven Desktop`; CLI ancestry without launcher evidence remains unknown.
+macOS stages a profile-owned `Redeven Desktop Dev.app` and opens it through Launch Services. Desktop capture/input permissions belong to the separately signed `Redeven Desktop Access Dev.app`, not the Electron wrapper. Set `REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY` to an Apple Development or Developer ID Application certificate; ad-hoc signing is rejected. Its certificate and stable bundle identifier preserve designated requirements across rebuilds. The value participates in build-cache identity. Production staging uses `REDEVEN_DESKTOP_MAC_IDENTITY` and the distinct `com.floegence.redeven.desktop-access` identifier. The computer manifest includes every helper bundle file and signature seal. Outer Electron signing preserves this independently sealed helper; validation rejects missing or ambiguous application inventories. Only explicit exclusion PID and media metadata cross the relay boundary.
 
 ## Credentials/retention
 Unpackaged dev uses AES-256-GCM with random retained0600 profile key, protecting plaintext rather than same-user access. Other modes use system storage without constructor probes. Explicit legacy Keychain recovery never reads preferences/secrets automatically; migrate files atomically, retaining credentials/Retry/Quit on failure. Corrupt keys cannot reset accounts/Runtime/Keychain.
@@ -53,3 +53,8 @@ Prune generated packages only in selected profile; builders own in-progress dire
 - November 8, 2026: Launch Services fixture verified independent TCC identity, denied unrequested grants, sandboxed renderer, normal/error exits and interruption cleanup. Product UI fixtures covered permission destinations and refresh; no new user grant was made.
 - `redeven:scripts/dev_desktop.sh` - Source.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Tests.
+
+- November 8, 2026: independently signed helper staging, localized usage strings,
+  enclosing-app resource sealing and relocated complete computer resources passed.
+  Ad-hoc or missing signing identity fails before macOS resource staging. The
+  explicit native helper qualification requests no grants and never resets TCC.

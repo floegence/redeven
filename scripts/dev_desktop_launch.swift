@@ -13,7 +13,6 @@ configuration.allowsRunningApplicationSubstitution = false
 configuration.addsToRecentItems = false
 configuration.arguments = Array(args.dropFirst(3))
 configuration.environment = ProcessInfo.processInfo.environment
-configuration.environment["REDEVEN_HOST_PERMISSION_APP_NAME"] = "Redeven Desktop Dev"
 
 var application: NSRunningApplication?
 var interrupted: Int32?

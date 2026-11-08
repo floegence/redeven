@@ -1656,7 +1656,6 @@
     "openInTab": "In neuem Tab öffnen",
     "saveBeforePopout": "Speichern Sie Ihre Änderungen, bevor Sie eine separate Vorschau öffnen.",
     "popoutFailed": "Vorschau konnte nicht geöffnet werden",
-
     "pdf": {
       "search": "Im PDF suchen",
       "previous": "Vorheriger Treffer",
@@ -8216,8 +8215,8 @@
     "deployProtocolFailed": "Diese Administratorauthentifizierung oder dieses Protokoll wird nicht unterstützt. Wechseln Sie die Autorisierungsmethode oder aktualisieren Sie Redeven."
   },
   "hostAccess": {
-    "permissionApp": "Suchen Sie in den Systemeinstellungen nach „{app}“.",
-    "permissionAppUnknown": "Der Berechtigungsname ist für diesen Start nicht bestätigt. macOS zeigt möglicherweise das Terminal an, das Redeven gestartet hat. Öffnen Sie Redeven Desktop im Finder, um eigene Berechtigungen zu erteilen.",
+    "permissionApp": "Erlauben Sie „{app}“ in macOS. Diese Hilfs-App zeigt den Bildschirm und überträgt Maus- und Tastatureingaben.",
+    "permissionAppUnknown": "Desktop Access ist nicht verfügbar. Installieren Sie eine signierte Redeven-Version, um Berechtigungen einzurichten.",
     "welcome": "Apps oder den Desktop verwenden",
     "choose": "Wählen Sie die gewünschte Nutzung. Wir führen Sie durch die Einrichtung.",
     "applications": "Einzelne Anwendungen öffnen",
@@ -8268,7 +8267,17 @@
     "setup": "Einrichten",
     "openSystemSettings": "Systemeinstellungen öffnen",
     "needsAttention": "Einrichtung erforderlich",
-    "controlMode": "Maus und Tastatur"
+    "controlMode": "Maus und Tastatur",
+    "permissionHelp": "App fehlt oder Berechtigungen greifen nicht?",
+    "missingApplication": "Berechtigungs-App finden",
+    "addApplicationHint": "Klicken Sie in diesem Bereich auf + und fügen Sie „{app}“ hinzu. Die Schaltfläche wählt die richtige App im Finder aus.",
+    "revealApplication": "App im Finder anzeigen",
+    "changedPermissions": "Berechtigungen bereits geändert?",
+    "helperRestartHint": "Starten Sie Desktop Access neu, um die Änderungen anzuwenden. Redeven und geöffnete Apps laufen weiter.",
+    "helperRestartConfirm": "Aktuelle App-Freigaben und Desktop-Verbindungen werden beendet. Verbinden Sie sich nach dem Neustart erneut.",
+    "applyPermissions": "Berechtigungsänderungen anwenden",
+    "restartHelper": "Desktop Access neu starten",
+    "requestPending": "Bestätigen Sie die macOS-Berechtigungsabfrage. Nach Ihrer Rückkehr wird automatisch geprüft. Erscheint keine Abfrage, öffnen Sie die Systemeinstellungen."
   },
   "storage": {
     "title": "Speicher",

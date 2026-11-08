@@ -2,7 +2,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createSignal } from 'solid-js';
 import { useI18n } from '../i18n';
 import type { HostAccessState } from '../services/hostAccess';
-import { HostAccessFeatureIllustration, HostAccessFeatureMark, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
+import { HostAccessFeatureIllustration, HostAccessFeatureMark, HostAccessHelperIllustration, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
 import './host-access.css';
 export function HostAccessWelcome(props: {
     applicationsStarted?: boolean;
@@ -24,6 +24,7 @@ export function HostAccessWelcome(props: {
 }
 export function HostAccessPermissions(props: {
     permissionAppName?: string;
+    onRecovery?: (action: 'reveal_application' | 'restart_application') => void;
     screen: boolean;
     input: boolean;
     needsInput: boolean;
@@ -34,6 +35,7 @@ export function HostAccessPermissions(props: {
     onRefresh: () => void;
 }) {
     const i18n = useI18n();
+    const [requested, setRequested] = createSignal<'screen_recording' | 'accessibility'>();
     const next = (): 'screen_recording' | 'accessibility' | undefined => !props.screen ? 'screen_recording' : props.needsInput && !props.input ? 'accessibility' : undefined;
     return <section class="host-access-permissions" aria-label={i18n.t('hostAccess.requirements')}>
   <Show when={next()}><HostAccessPermissionDestination name={props.permissionAppName} /></Show>
@@ -45,14 +47,17 @@ export function HostAccessPermissions(props: {
    </div>
   </Show>}</For>
   <Show when={next()} fallback={<p role="status">{i18n.t('hostAccess.permissionsReady')}</p>}>{permission => <div class="host-access-actions">
-   <Button disabled={!props.allowed || props.busy} onClick={() => props.onPermission(permission())}>{i18n.t(permission() === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
+   <Button disabled={!props.allowed || props.busy} onClick={() => { setRequested(permission()); props.onPermission(permission()); }}>{i18n.t(permission() === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
    <Button variant="ghost" disabled={props.busy} onClick={props.onRefresh}>{i18n.t('hostAccess.checkAgain')}</Button>
   </div>}</Show>
 
+  <Show when={next() && requested() === next()}><div class="host-access-requested" role="status"><p>{i18n.t('hostAccess.requestPending')}</p><Button variant="outline" disabled={!props.allowed || props.busy} onClick={() => props.onPermission(next()!, true)}>{i18n.t('hostAccess.openSystemSettings')}</Button></div></Show>
+  <Show when={next() && props.onRecovery}><HostAccessRecovery name={props.permissionAppName} allowed={props.allowed} busy={props.busy} onRecovery={props.onRecovery!} /></Show>
  </section>;
 }
 export function HostAccessSystemPermissions(props: {
     permissionAppName?: string;
+    onRecovery?: (action: 'reveal_application' | 'restart_application') => void;
     screen: boolean;
     input: boolean;
     allowed: boolean;
@@ -67,6 +72,19 @@ export function HostAccessSystemPermissions(props: {
         <Button size="sm" variant="outline" disabled={!props.allowed || props.busy} onClick={() => props.onPermission(permission, permission === 'screen_recording' ? props.screen : props.input)}>{i18n.t((permission === 'screen_recording' ? props.screen : props.input) ? 'hostAccess.openSystemSettings' : permission === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
       </div>}</For>
       <p>{i18n.t('hostAccess.sharedPermissions')}</p>
+      <Show when={props.onRecovery}><HostAccessRecovery name={props.permissionAppName} allowed={props.allowed} busy={props.busy} onRecovery={props.onRecovery!} /></Show>
+    </details>;
+}
+
+function HostAccessRecovery(props: { name?: string; allowed: boolean; busy: boolean; onRecovery: (action: 'reveal_application' | 'restart_application') => void }) {
+    const i18n = useI18n();
+    const [confirmRestart, setConfirmRestart] = createSignal(false);
+    return <details class="host-access-recovery"><summary>{i18n.t('hostAccess.permissionHelp')}</summary>
+      <div class="host-access-recovery-step"><HostAccessHelperIllustration kind="locate" /><div><h4>{i18n.t('hostAccess.missingApplication')}</h4><p>{i18n.t('hostAccess.addApplicationHint', { app: props.name || 'Redeven Desktop Access' })}</p><Button size="sm" variant="outline" disabled={!props.allowed || props.busy || !props.name} onClick={() => props.onRecovery('reveal_application')}>{i18n.t('hostAccess.revealApplication')}</Button></div></div>
+      <div class="host-access-recovery-step"><HostAccessHelperIllustration kind="restart" /><div><h4>{i18n.t('hostAccess.changedPermissions')}</h4><p>{i18n.t('hostAccess.helperRestartHint')}</p>
+      <Show when={confirmRestart()} fallback={<Button size="sm" variant="outline" disabled={!props.allowed || props.busy} onClick={() => setConfirmRestart(true)}>{i18n.t('hostAccess.applyPermissions')}</Button>}>
+        <p role="alert">{i18n.t('hostAccess.helperRestartConfirm')}</p><div class="host-access-actions"><Button size="sm" variant="ghost" disabled={props.busy} onClick={() => setConfirmRestart(false)}>{i18n.t('common.actions.cancel')}</Button><Button size="sm" disabled={!props.allowed || props.busy} onClick={() => { props.onRecovery('restart_application'); setConfirmRestart(false); }}>{i18n.t('hostAccess.restartHelper')}</Button></div>
+      </Show></div></div>
     </details>;
 }
 

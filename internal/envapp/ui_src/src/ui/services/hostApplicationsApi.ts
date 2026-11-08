@@ -205,7 +205,7 @@ export function listHostApplicationSessions(signal?: AbortSignal) {
  return fetchSessionJSON<HostApplicationSession[]>(`${base}/sessions?client_id=${encodeURIComponent(currentHostApplicationClientID())}`, { method: 'GET', signal });
 }
 
-export function requestHostApplicationPermission(permission: 'screen_recording' | 'accessibility' | 'screen_recording_settings' | 'accessibility_settings') {
+export function requestHostApplicationPermission(permission: 'screen_recording' | 'accessibility' | 'screen_recording_settings' | 'accessibility_settings' | 'reveal_application' | 'restart_application') {
   return fetchSessionJSON(`${base}/permissions`, {method: 'POST', body: JSON.stringify({permission})});
 }
 

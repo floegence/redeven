@@ -63,3 +63,17 @@
 @media(max-width:380px){.host-access-feature-settings{padding:14px;}.host-access-feature-heading{gap:12px;align-items:flex-start;}.host-access-feature-heading>.host-access-feature-mark{width:48px;height:40px;}.host-access-feature-settings .host-access-management{margin-inline-start:0;}.host-access-system-row{flex-wrap:wrap;}}
 
 .host-access-state[data-state=enabled][data-ready=false]::before{background:var(--redeven-status-warning-foreground);}
+
+.host-access-requested{display:grid;gap:10px;margin-block:16px;font-size:13px;color:var(--muted-foreground);}
+.host-access-requested button{justify-self:start;}
+.host-access-recovery{margin-top:18px;border-top:1px solid var(--border);padding-top:14px;font-size:12px;}
+.host-access-recovery summary{cursor:pointer;color:var(--foreground);}
+.host-access-recovery-step{display:grid;grid-template-columns:72px minmax(0,1fr);gap:14px;margin-top:18px;}
+.host-access-recovery-step h4{font-weight:600;color:var(--foreground);font-size:13px;}
+.host-access-recovery-step p{margin:6px 0 10px;line-height:1.6;color:var(--muted-foreground);}
+.host-access-helper-scene{width:72px;height:54px;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
+.host-access-recovery-step button{min-width:0;max-width:100%;white-space:normal;height:auto;min-height:32px;overflow-wrap:anywhere;}
+.host-access-recovery-step button span{min-width:0;white-space:normal;overflow-wrap:anywhere;}
+@media(max-width:380px){.host-access-recovery-step{grid-template-columns:48px minmax(0,1fr);gap:10px;}.host-access-helper-scene{width:48px;height:38px;}}
+
+.host-access-recovery-step>div{min-width:0;overflow-wrap:anywhere;}

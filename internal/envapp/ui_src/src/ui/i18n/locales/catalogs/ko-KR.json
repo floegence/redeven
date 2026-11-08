@@ -1656,7 +1656,6 @@
     "openInTab": "새 탭에서 열기",
     "saveBeforePopout": "별도 미리보기를 열기 전에 변경 사항을 저장하세요.",
     "popoutFailed": "미리보기를 열 수 없습니다",
-
     "pdf": {
       "search": "PDF에서 찾기",
       "previous": "이전 검색 결과",
@@ -8212,8 +8211,8 @@
     "deployProtocolFailed": "이 관리자 인증 또는 프로토콜을 지원하지 않습니다. 인증 방식을 바꾸거나 Redeven을 업데이트하세요."
   },
   "hostAccess": {
-    "permissionApp": "시스템 설정에서 “{app}”을 찾으세요.",
-    "permissionAppUnknown": "현재 실행 방식의 권한 대상 이름을 확인할 수 없습니다. macOS에 Redeven을 실행한 터미널 이름이 표시될 수 있습니다. Finder에서 Redeven Desktop을 열면 별도로 권한을 부여할 수 있습니다.",
+    "permissionApp": "macOS에서 “{app}”을 허용하세요. 이 보조 앱이 화면 표시와 마우스 및 키보드 입력을 담당합니다.",
+    "permissionAppUnknown": "Desktop Access를 사용할 수 없습니다. 서명된 Redeven 버전을 설치한 후 권한을 설정하세요.",
     "welcome": "앱 또는 전체 데스크톱 사용",
     "choose": "사용 방식을 선택하세요. 설정을 단계별로 안내합니다.",
     "applications": "개별 앱 열기",
@@ -8264,7 +8263,17 @@
     "setup": "설정",
     "openSystemSettings": "시스템 설정 열기",
     "needsAttention": "설정을 완료해야 함",
-    "controlMode": "마우스와 키보드"
+    "controlMode": "마우스와 키보드",
+    "permissionHelp": "앱을 찾을 수 없거나 권한이 적용되지 않나요?",
+    "missingApplication": "권한을 부여할 앱 찾기",
+    "addApplicationHint": "이 권한 화면에서 +를 클릭하고 “{app}”을 추가하세요. 아래 버튼으로 Finder에서 정확한 앱을 선택할 수 있습니다.",
+    "revealApplication": "Finder에서 앱 보기",
+    "changedPermissions": "이미 권한을 변경했나요?",
+    "helperRestartHint": "Desktop Access를 다시 시작하면 변경 사항이 적용됩니다. Redeven과 열려 있는 앱은 계속 실행됩니다.",
+    "helperRestartConfirm": "현재 앱 공유 및 데스크탑 연결이 종료됩니다. 보조 앱이 다시 시작되면 다시 연결하세요.",
+    "applyPermissions": "권한 변경 사항 적용",
+    "restartHelper": "Desktop Access 다시 시작",
+    "requestPending": "macOS 권한 요청을 완료하세요. 돌아오면 자동으로 확인합니다. 요청이 나타나지 않으면 시스템 설정을 여세요."
   },
   "storage": {
     "title": "저장 공간",

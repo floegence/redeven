@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -160,8 +159,8 @@ func (m *Manager) StatusTarget(ctx context.Context, owner, target string) (Statu
 	case message := <-connection.Control():
 		if message.Capabilities != nil {
 			status.Capabilities = *message.Capabilities
-			if status.Capabilities.Backend == "macos" {
-				status.PermissionAppName = os.Getenv("REDEVEN_HOST_PERMISSION_APP_NAME")
+			if status.Capabilities.Backend == "macos" && status.Capabilities.PermissionApplication != nil {
+				status.PermissionAppName = status.Capabilities.PermissionApplication.Name
 			}
 			if status.Capabilities.Service != "" {
 				status.LoginService = nativeapps.ServiceStatus{State: status.Capabilities.Service, Backend: status.Capabilities.Backend}

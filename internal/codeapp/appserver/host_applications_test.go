@@ -470,3 +470,22 @@ func (s *hostAppsStub) ClientAssets(owner, digest string) *nativeapps.ClientAsse
 	}
 	return nil
 }
+
+func TestDesktopAccessRecoveryRequiresFullSessionAuthority(t *testing.T) {
+	for _, action := range []string{"reveal_application", "restart_application"} {
+		for _, full := range []bool{false, true} {
+			backend := &hostAppsStub{}
+			server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}
+			request := httptest.NewRequest(http.MethodPost, hostApplicationsAPI+"/permissions", strings.NewReader(`{"permission":"`+action+`"}`))
+			request.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
+			response := httptest.NewRecorder()
+			server.handleHostApplicationsAPI(response, request)
+			if full && (response.Code != http.StatusOK || backend.calls != 1) {
+				t.Fatalf("authorized %s: %d %d", action, response.Code, backend.calls)
+			}
+			if !full && (response.Code != http.StatusForbidden || backend.calls != 0) {
+				t.Fatalf("unauthorized %s: %d %d", action, response.Code, backend.calls)
+			}
+		}
+	}
+}

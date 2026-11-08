@@ -20,7 +20,12 @@ export async function validateComputerResources(root: string, expectedDigest: un
   }
   const declared = new Map(manifest.files.map(file => [file.path, file]));
   const required = ['node', 'NODE_LICENSE', 'redevenComputerHost.mjs', 'redevenComputerScript.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserDetails.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'computerBrowserArguments.mjs', 'computerBrowserFrame.mjs', 'node_modules/quickjs-emscripten/package.json', 'extension/manifest.json', 'extension/background.mjs', 'extension/popup.html', 'extension/popup.css', 'extension/popup.mjs', 'extension/messages.mjs', 'extension/input-focus.css', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
-  if (platform === 'darwin') required.push('redeven-computer-host');
+  if (platform === 'darwin') {
+    required.push('redeven-computer-host');
+    const applications = ['Redeven Desktop Access.app', 'Redeven Desktop Access Dev.app'].filter(name => declared.has(`${name}/Contents/Info.plist`));
+    if (applications.length !== 1) throw new Error('Desktop access application inventory is incomplete or ambiguous.');
+    for (const file of ['Contents/MacOS/redeven-computer-host', 'Contents/Resources/desktop-access.icns', 'Contents/_CodeSignature/CodeResources']) required.push(`${applications[0]}/${file}`);
+  }
   if (declared.size !== manifest.files.length || required.some(name => !declared.has(name))) throw new Error('Computer resource inventory is incomplete.');
   const seen = new Set<string>();
   async function walk(directory: string, prefix = ''): Promise<void> {

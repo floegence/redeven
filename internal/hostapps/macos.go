@@ -170,9 +170,6 @@ func (m *Manager) macCatalog(ctx context.Context, owner string) (Catalog, error)
 		return result, nil
 	}
 	result.Availability = msg.Availability
-	// Presentation only: Launch Services supplies this name; never infer TCC
-	// ownership from an ancestor executable or use the name as grant evidence.
-	result.Availability.PermissionAppName = os.Getenv("REDEVEN_HOST_PERMISSION_APP_NAME")
 	result.Applications = msg.Applications
 	result.Running = msg.Running
 	return result, nil
@@ -284,14 +281,24 @@ func (m *Manager) macAdd(ctx context.Context, req AddRequest) error {
 	return os.WriteFile(filepath.Join(m.custom, randomID()+".json"), data, 0600)
 }
 func (m *Manager) Permissions(ctx context.Context, permission string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if m.macHelper() == "" {
 		return ErrUnavailable
 	}
-	if permission != "screen_recording" && permission != "accessibility" && permission != "screen_recording_settings" && permission != "accessibility_settings" {
+	if permission != "screen_recording" && permission != "accessibility" && permission != "screen_recording_settings" && permission != "accessibility_settings" && permission != "reveal_application" && permission != "restart_application" {
 		return ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	if permission == "restart_application" {
+		// Close only native sharing; user applications and Runtime stay alive.
+		// A fresh helper rechecks grants. Never replay input or reconnect viewers.
+		m.closeMacHost()
+		_, err := m.macOnce(ctx, map[string]any{"action": "catalog", "paths": m.macPaths()})
+		return err
+	}
 	_, err := m.macOnce(ctx, map[string]any{"action": "permissions", "permission": permission})
 	return err
 }

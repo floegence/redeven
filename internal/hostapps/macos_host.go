@@ -93,8 +93,17 @@ func (h *macHost) read(output io.ReadCloser) {
 	defer func() {
 		_ = output.Close()
 		_ = h.input.Close()
-		_ = h.cmd.Process.Kill()
-		_ = h.cmd.Wait()
+		// Let the relay terminate and observe its independently launched app.
+		// Killing the relay immediately could overlap predecessor capture owners.
+		_ = h.cmd.Process.Signal(os.Interrupt)
+		waited := make(chan struct{})
+		go func() { _ = h.cmd.Wait(); close(waited) }()
+		select {
+		case <-waited:
+		case <-time.After(6 * time.Second):
+			_ = h.cmd.Process.Kill()
+			<-waited
+		}
 		h.mu.Lock()
 		for _, c := range h.clients {
 			close(c.done)
@@ -186,16 +195,16 @@ func (c *macHostClient) Close() error {
 
 func (m *Manager) closeMacHost() {
 	m.nativeMu.Lock()
+	defer m.nativeMu.Unlock()
 	h := m.nativeHost
 	m.nativeHost = nil
-	m.nativeMu.Unlock()
 	if h == nil {
 		return
 	}
 	_ = h.input.Close()
 	select {
 	case <-h.done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(8 * time.Second):
 		_ = h.cmd.Process.Kill()
 		<-h.done
 	}

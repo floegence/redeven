@@ -43,7 +43,7 @@ app.whenReady().then(async () => {
       }
       assert.ok(observed?.pid, 'The exact launched app reports readiness');
       assert.equal(Number(readFileSync(pidFile, 'utf8')), observed.pid);
-      assert.equal(observed.name, 'Redeven Desktop Dev');
+      assert.equal(observed.name, undefined);
       assert.equal(observed.title, 'Permission launch acceptance');
       assert.equal(observed.input, false, 'A new launch identity must not inherit terminal accessibility grants');
       assert.notEqual(observed.screen, 'granted', 'A new launch identity must not inherit terminal capture grants');

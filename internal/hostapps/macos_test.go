@@ -79,7 +79,7 @@ while IFS= read -r request; do
  esac
 done
 `)
-	for _, permission := range []string{"screen_recording", "accessibility", "screen_recording_settings", "accessibility_settings"} {
+	for _, permission := range []string{"screen_recording", "accessibility", "screen_recording_settings", "accessibility_settings", "reveal_application"} {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		err := m.Permissions(ctx, permission)
 		cancel()
@@ -94,7 +94,7 @@ done
 	}
 }
 
-func TestMacPermissionAppNameComesOnlyFromLauncher(t *testing.T) {
+func TestMacPermissionAppNameCannotBeOverriddenByLauncher(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("native macOS adapter")
 	}
@@ -102,7 +102,7 @@ func TestMacPermissionAppNameComesOnlyFromLauncher(t *testing.T) {
 		t.Setenv("REDEVEN_HOST_PERMISSION_APP_NAME", name)
 		m := macFixture(t)
 		catalog, err := m.macCatalog(context.Background(), "alice")
-		if err != nil || catalog.Availability.PermissionAppName != name {
+		if err != nil || catalog.Availability.PermissionAppName != "" {
 			t.Fatalf("permission identity: %+v, %v", catalog.Availability, err)
 		}
 	}
@@ -835,5 +835,73 @@ func TestMacViewerNegotiatesOnceBeforeControlAndWaitsForHelper(t *testing.T) {
 	_ = c.SetReadDeadline(time.Now().Add(time.Second))
 	if _, _, err := c.ReadMessage(); err == nil {
 		t.Fatal("duplicate negotiation retained control")
+	}
+}
+
+func TestMacPermissionRecoveryRestartsOnlyNativeSharing(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native macOS adapter")
+	}
+	m := macFixture(t)
+	first, err := m.openMacClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := first.host
+	if err = m.Permissions(context.Background(), "restart_application"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-old.done:
+	default:
+		t.Fatal("predecessor survives restart")
+	}
+	select {
+	case <-first.done:
+	default:
+		t.Fatal("old authority remains valid")
+	}
+	next, err := m.openMacClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer next.Close()
+	if next.host == old || next.host.cmd.Process.Pid == old.cmd.Process.Pid {
+		t.Fatal("helper was not restarted")
+	}
+	if _, err := first.Write([]byte(`{"action":"resume"}`)); err == nil {
+		t.Fatal("old channel regained authority")
+	}
+	if m.closed || m.accessDisabled {
+		t.Fatal("recovery changed runtime or feature intent")
+	}
+	catalog, err := m.macCatalog(context.Background(), "alice")
+	if err != nil || !catalog.Availability.NativeReady {
+		t.Fatal(catalog, err)
+	}
+}
+
+func TestCancelledPermissionRecoveryLeavesCurrentHelperRunning(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native macOS adapter")
+	}
+	m := macFixture(t)
+	first, err := m.openMacClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err = m.Permissions(ctx, "restart_application"); err != context.Canceled {
+		t.Fatal(err)
+	}
+	if m.nativeHost != first.host {
+		t.Fatal("canceled operation restarted helper")
+	}
+	select {
+	case <-first.host.done:
+		t.Fatal("canceled operation ended sharing")
+	default:
 	}
 }

@@ -20,7 +20,9 @@ cat > "$tmp/Fixture.app/Contents/Info.plist" <<'PLIST'
 PLIST
 swiftc "$root/scripts/fixtures/nativeComputerUse.swift" -o "$tmp/Fixture.app/Contents/MacOS/Fixture" -framework AppKit
 swift build -c release --package-path "$root/desktop/native/computer-host" >/dev/null
-python3 - "$tmp" "$root/desktop/native/computer-host/.build/release/redeven-computer-host" <<'PYTHON' &
+cp "$root/desktop/native/computer-host/.build/release/redeven-computer-host" "$tmp/redeven-computer-host"
+node "$root/scripts/stage_desktop_access.mjs" "$tmp/redeven-computer-host" "$tmp/Redeven Desktop Access Dev.app"
+python3 - "$tmp" "$tmp/redeven-computer-host" <<'PYTHON' &
 import json, pathlib, select, signal, subprocess, sys, time
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
 root, binary = pathlib.Path(sys.argv[1]), sys.argv[2]

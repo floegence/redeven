@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { captureMediaSigningState, deriveSignedMediaManifest, mediaManifestPath } from './signed-media.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -77,10 +78,22 @@ export async function signPackagedRuntime(options) {
   const root = path.join(options.app, 'Contents', 'Resources', 'bin');
   await validatePackagedRuntime(root);
   const mediaState = captureMediaSigningState(path.join(root, 'computer'));
+  // The helper is already independently sealed by the runtime publisher.
+  // Preserve its identity and resource seal while signing the enclosing app.
+  const helper = path.join(root, 'computer', 'Redeven Desktop Access.app');
+  execFileSync('/usr/bin/codesign', ['--verify', '--strict', helper]);
+  const previousIgnore = options.ignore;
+  const ignored = file => {
+    const resolved = path.resolve(file);
+    if (resolved === helper || resolved.startsWith(helper + path.sep)) return true;
+    return (Array.isArray(previousIgnore) ? previousIgnore : previousIgnore ? [previousIgnore] : [])
+      .some(rule => typeof rule === 'function' ? rule(file) : file.match(rule));
+  };
   const signedPaths = new Set();
   let sealed = false;
   await sign({
     ...options,
+    ignore: ignored,
     optionsForFile(file) {
       if (path.resolve(file) === path.resolve(options.app)) {
         refreshSignedRuntimeManifests(root, signedPaths, mediaState);
@@ -92,5 +105,6 @@ export async function signPackagedRuntime(options) {
     },
   });
   if (!sealed) throw new Error('Desktop signing did not seal the final Runtime manifests.');
+  execFileSync('/usr/bin/codesign', ['--verify', '--strict', helper]);
   await validatePackagedRuntime(root);
 }

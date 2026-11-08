@@ -126,13 +126,13 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     return 'hostAccess.beforeUse';
   };
   const [permissionBusy, setPermissionBusy] = createSignal(false);
-  const requestPermission = async (permission: 'screen_recording' | 'accessibility', manage = false) => {
+  const requestPermission = async (permission: 'screen_recording' | 'accessibility' | 'reveal_application' | 'restart_application', manage = false) => {
     if (!canLaunch() || permissionBusy()) return;
     setPermissionBusy(true);
     try {
       const app = selectedApplication();
-      if (app && !manage) await reserveApplication(app);
-      await requestHostApplicationPermission(manage ? `${permission}_settings` : permission);
+      if (app && !manage && (permission === 'screen_recording' || permission === 'accessibility')) await reserveApplication(app);
+      await requestHostApplicationPermission(manage && (permission === 'screen_recording' || permission === 'accessibility') ? `${permission}_settings` : permission);
       await refresh();
     }
     catch (e) {setError(translateError(e));}
@@ -862,7 +862,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
             else { setManageOpen(false); setDesktopRequest(value => value + 1); }
           }} />
         </Show>
-        <Show when={isMac()}><HostAccessSystemPermissions permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording)} input={Boolean(catalog()?.availability.permissions?.accessibility)} allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission, manage) => void requestPermission(permission, manage)} /></Show>
+        <Show when={isMac()}><HostAccessSystemPermissions onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording)} input={Boolean(catalog()?.availability.permissions?.accessibility)} allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission, manage) => void requestPermission(permission, manage)} /></Show>
       </div>
     </Dialog>
     <Dialog open={setupDialog()} onOpenChange={value=>{setSetupDialog(value);if(!value){for(const pending of pendingApplications.values())closePending(pending);pendingApplications.clear();setSelectedApplication(null);}}} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} title={<Show when={selectedApplication()} keyed fallback={i18n.t(isMac()?'hostAccess.applications':setup()?.installed ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>{app => <span class="host-apps-dialog-identity"><ApplicationIcon app={app} /><span>{app.name}</span></span>}</Show>}>
@@ -870,7 +870,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
       <Show when={isMac()} fallback={<Show when={!ready()||setupManaging()||!selectedApplication()}>{preparationPanel(true)}</Show>}>
         <Show when={catalog()?.availability.native_ready} fallback={<p>{i18n.t(availabilityDescription())}</p>}>
           <Show when={!nativeLaunch()||!selectedApplication()} fallback={<p>{i18n.t('hostAccess.nativeReady')}</p>}><Show when={!catalog()?.availability.ready} fallback={<p class="host-access-ready" role="status">{i18n.t('hostAccess.permissionsReady')}</p>}>
-            <HostAccessPermissions permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording??catalog()?.availability.ready)} input={Boolean(catalog()?.availability.permissions?.accessibility??catalog()?.availability.ready)} needsInput allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission,manage)=>void requestPermission(permission,manage)} onRefresh={()=>void refresh()} />
+            <HostAccessPermissions onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording??catalog()?.availability.ready)} input={Boolean(catalog()?.availability.permissions?.accessibility??catalog()?.availability.ready)} needsInput allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission,manage)=>void requestPermission(permission,manage)} onRefresh={()=>void refresh()} />
           </Show></Show>
         </Show>
       </Show>

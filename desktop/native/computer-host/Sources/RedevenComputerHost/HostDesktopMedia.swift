@@ -8,7 +8,7 @@ enum HostDesktopMedia {
     private static var pending = 0
 
     static func emit(_ value: [String: Any]) -> Bool {
-        guard let descriptor = ProcessInfo.processInfo.environment["REDEVEN_HOST_MEDIA_FD"].flatMap(Int32.init),
+        guard let descriptor = ProcessInfo.processInfo.environment["FLOE_NATIVE_MEDIA_FD"].flatMap(Int32.init),
               let encoded = value["data"] as? String, let payload = Data(base64Encoded: encoded) else { return false }
         lock.lock()
         let admitted = pending < 32

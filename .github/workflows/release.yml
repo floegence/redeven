@@ -185,6 +185,8 @@ jobs:
           done
 
       - name: Stage browser helpers without browser binaries
+        env:
+          REDEVEN_DESKTOP_MAC_IDENTITY: ${{ secrets.REDEVEN_DESKTOP_MAC_IDENTITY }}
         run: node scripts/stage_computer_archive.mjs dist/computer.zip
 
       - name: Build signed ReDevPlugin runtime and package archives

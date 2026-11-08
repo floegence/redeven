@@ -1656,7 +1656,6 @@
     "openInTab": "Ouvrir dans un nouvel onglet",
     "saveBeforePopout": "Enregistrez vos modifications avant d’ouvrir un aperçu séparé.",
     "popoutFailed": "Impossible d’ouvrir l’aperçu",
-
     "pdf": {
       "search": "Rechercher dans le PDF",
       "previous": "Résultat précédent",
@@ -8216,8 +8215,8 @@
     "deployProtocolFailed": "Cette authentification administrateur ou ce protocole n’est pas pris en charge. Changez de méthode d’autorisation ou mettez Redeven à jour."
   },
   "hostAccess": {
-    "permissionApp": "Dans Réglages Système, recherchez « {app} ».",
-    "permissionAppUnknown": "Le nom associé aux autorisations de ce lancement n’est pas confirmé. macOS peut afficher le terminal qui a lancé Redeven. Ouvrez Redeven Desktop depuis le Finder pour lui accorder ses propres autorisations.",
+    "permissionApp": "Autorisez « {app} » dans macOS. Cet assistant affiche l’écran et transmet les actions de la souris et du clavier.",
+    "permissionAppUnknown": "Desktop Access est indisponible. Installez une version signée de Redeven pour configurer les autorisations.",
     "welcome": "Utiliser des applications ou le bureau",
     "choose": "Choisissez votre mode d’utilisation. Nous vous guiderons dans la configuration.",
     "applications": "Ouvrir des applications séparément",
@@ -8268,7 +8267,17 @@
     "setup": "Configurer",
     "openSystemSettings": "Ouvrir les réglages système",
     "needsAttention": "Configuration à terminer",
-    "controlMode": "Souris et clavier"
+    "controlMode": "Souris et clavier",
+    "permissionHelp": "Application introuvable ou autorisations sans effet ?",
+    "missingApplication": "Trouver l’application à autoriser",
+    "addApplicationHint": "Dans ce panneau, cliquez sur + et ajoutez « {app} ». Le bouton ci-dessous sélectionne l’application exacte dans le Finder.",
+    "revealApplication": "Afficher dans le Finder",
+    "changedPermissions": "Autorisations déjà modifiées ?",
+    "helperRestartHint": "Redémarrez Desktop Access pour appliquer les modifications. Redeven et vos applications restent ouverts.",
+    "helperRestartConfirm": "Les partages d’applications et connexions au bureau seront interrompus. Reconnectez-vous après le redémarrage.",
+    "applyPermissions": "Appliquer les autorisations",
+    "restartHelper": "Redémarrer Desktop Access",
+    "requestPending": "Répondez à la demande de macOS. La vérification reprend automatiquement à votre retour. Sans invite, ouvrez les Réglages Système."
   },
   "storage": {
     "title": "Stockage",

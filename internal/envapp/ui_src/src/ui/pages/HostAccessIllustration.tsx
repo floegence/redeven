@@ -123,3 +123,16 @@ export function HostAccessStateIllustration(props: { state: HostAccessState | 'r
     </svg>
   );
 }
+
+// Finder-to-Settings and helper-only restart have distinct, literal scenes.
+export function HostAccessHelperIllustration(props: { kind: 'locate' | 'restart' }) {
+  return <svg class="host-access-helper-scene" data-scene={props.kind} viewBox="0 0 96 64" fill="none" aria-hidden="true"><g class="host-access-art-selected">
+    <Show when={props.kind === 'locate'} fallback={<>
+      <rect x="4" y="10" width="43" height="39" rx="4" class="host-access-art-paper" /><path d="M4 20h43m-32 8h18m-18 7h13m-13 7h18" />
+      <rect x="66" y="23" width="21" height="22" rx="4" class="host-access-art-tint" /><path d="M72 29h9v7h-9zm4 7v3m-3 0h6M60 29a18 18 0 0 1 31-9m0-8v8h-8M92 40a18 18 0 0 1-31 9m0 8v-8h8" />
+    </>}>
+      <path d="M4 19v31a4 4 0 0 0 4 4h31a4 4 0 0 0 4-4V23H23l-5-7H8a4 4 0 0 0-4 3Z" class="host-access-art-paper" /><rect x="13" y="28" width="20" height="18" rx="3" class="host-access-art-tint" /><path d="M18 34h10m-5 0v7m-4 0h8M47 35h12m-4-4 4 4-4 4" />
+      <rect x="65" y="10" width="27" height="44" rx="4" class="host-access-art-paper" /><path d="M65 20h27m-20 8h12m-12 7h12m-12 9h12m-6-6v12" />
+    </Show>
+  </g></svg>;
+}

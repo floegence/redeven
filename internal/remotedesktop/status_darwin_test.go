@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	nativeapps "github.com/floegence/floe-native-apps"
+	"github.com/floegence/floe-native-apps/hostdesktop"
 )
 
 // The macOS adapter is injectable without provisioning native components.
@@ -47,9 +48,9 @@ func TestStatusPreservesNativeReadinessAndAuthorization(t *testing.T) {
 func TestStatusIdentifiesPermissionAppOnlyForMacOS(t *testing.T) {
 	for _, name := range []string{"", "Redeven Desktop Dev"} {
 		for _, backend := range []string{"macos", "x11"} {
-			t.Setenv("REDEVEN_HOST_PERMISSION_APP_NAME", name)
+			t.Setenv("REDEVEN_HOST_PERMISSION_APP_NAME", "Untrusted parent name")
 			native := &socketTransport{fakeTransport: fakeTransport{done: make(chan struct{})}, control: make(chan nativeapps.HostDesktopMessage, 1)}
-			native.control <- nativeapps.HostDesktopMessage{Type: "capabilities", Capabilities: &nativeapps.HostDesktopCapabilities{Backend: backend, State: "ready"}}
+			native.control <- nativeapps.HostDesktopMessage{Type: "capabilities", Capabilities: &nativeapps.HostDesktopCapabilities{Backend: backend, State: "ready", PermissionApplication: &hostdesktop.HostDesktopPermissionApplication{Name: name, Identifier: "com.example.fixture"}}}
 			m := New(t.TempDir(), nil, func(context.Context) (Transport, error) { return native, nil })
 			status, err := m.Status(context.Background(), "alice")
 			m.Close()

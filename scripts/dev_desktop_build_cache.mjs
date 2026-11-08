@@ -100,7 +100,7 @@ export async function captureBuildContext(root) {
   const pendingDependencies = dependencyDigests(root);
   pendingDependencies.catch(() => {});
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-    /^(GO|CGO_|RUST|CARGO|VITE_|npm_config_|PNPM|REDEVEN_ASSET_BUILD_PROFILE$|REDEVEN_DESKTOP_BUNDLE_|REDEVEN_DESKTOP_(RUNTIME|AGENT)_TARBALL$|REDEVEN_NODE_ARCHIVE$|REDEVEN_DESKTOP_VERSION$)/u.test(key)
+    /^(GO|CGO_|RUST|CARGO|VITE_|npm_config_|PNPM|REDEVEN_ASSET_BUILD_PROFILE$|REDEVEN_DESKTOP_BUNDLE_|REDEVEN_DESKTOP_(RUNTIME|AGENT)_TARBALL$|REDEVEN_NODE_ARCHIVE$|REDEVEN_DESKTOP_VERSION$|REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY$|REDEVEN_DESKTOP_MAC_IDENTITY$)/u.test(key)
     || /^(PATH|NODE_OPTIONS|NODE_ENV|CC|CXX|CFLAGS|CPPFLAGS|LDFLAGS|AR|SDKROOT|DEVELOPER_DIR|MACOSX_DEPLOYMENT_TARGET|SOURCE_DATE_EPOCH|CI)$/u.test(key)
   ).sort(([a], [b]) => a.localeCompare(b)));
   const tools = {

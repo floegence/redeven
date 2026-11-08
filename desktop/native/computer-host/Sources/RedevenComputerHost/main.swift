@@ -7,6 +7,27 @@ import CryptoKit
 import ImageIO
 import UniformTypeIdentifiers
 
+// Establish the independent Launch Services identity before any privacy API.
+do {
+    if try !NativeApplicationBridge.attach() {
+        let executable = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL.resolvingSymlinksInPath()
+        let root = executable.deletingLastPathComponent()
+        let candidates = ["Redeven Desktop Access.app", "Redeven Desktop Access Dev.app"]
+            .map { root.appendingPathComponent($0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard candidates.count == 1 else { throw NativeApplicationBridge.Failure.invalidBundle }
+        var environment: [String: String] = [:]
+        if let excluded = try NativeScreenCapture.excludedOwner(environment: ProcessInfo.processInfo.environment) {
+            environment["REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID"] = String(excluded)
+        }
+        let media = ProcessInfo.processInfo.environment["REDEVEN_HOST_MEDIA_FD"] == "3" ? Int32(3) : nil
+        exit(try NativeApplicationBridge.relay(bundle: candidates[0], arguments: Array(CommandLine.arguments.dropFirst()), mediaFD: media, environment: environment))
+    }
+} catch {
+    FileHandle.standardError.write(Data("Desktop Access could not start: \(error)\n".utf8))
+    exit(1)
+}
+
 let outputLock = NSLock()
 let execution = NativeExecution()
 

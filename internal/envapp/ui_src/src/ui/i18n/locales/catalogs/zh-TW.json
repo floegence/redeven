@@ -1656,7 +1656,6 @@
     "openInTab": "在新分頁中開啟",
     "saveBeforePopout": "請先儲存變更，再開啟獨立預覽。",
     "popoutFailed": "無法開啟預覽",
-
     "pdf": {
       "search": "在 PDF 中尋找",
       "previous": "上一個相符項目",
@@ -8212,8 +8211,8 @@
     "deployProtocolFailed": "不支援此管理員互動或協定。請切換授權方式或更新 Redeven。"
   },
   "hostAccess": {
-    "permissionApp": "在系統設定中找到「{app}」。",
-    "permissionAppUnknown": "目前啟動方式的授權名稱尚未確認，macOS 可能顯示啟動 Redeven 的終端機名稱。從 Finder 打開 Redeven Desktop 後，即可單獨為其授權。",
+    "permissionApp": "請在 macOS 中允許「{app}」。此輔助程式負責顯示畫面與傳遞滑鼠、鍵盤操作。",
+    "permissionAppUnknown": "桌面存取輔助程式無法使用。請安裝已簽署的 Redeven 版本後設定權限。",
     "welcome": "使用應用程式或整個桌面",
     "choose": "選擇使用方式，我們會引導你完成設定。",
     "applications": "單獨開啟應用程式",
@@ -8264,7 +8263,17 @@
     "setup": "設定",
     "openSystemSettings": "開啟系統設定",
     "needsAttention": "需要完成設定",
-    "controlMode": "滑鼠與鍵盤"
+    "controlMode": "滑鼠與鍵盤",
+    "permissionHelp": "找不到 App，或權限未生效？",
+    "missingApplication": "找到需要授權的 App",
+    "addApplicationHint": "在此權限頁面按一下「+」，加入「{app}」。下方按鈕會在 Finder 中選取正確的 App。",
+    "revealApplication": "在 Finder 中顯示 App",
+    "changedPermissions": "已經變更權限？",
+    "helperRestartHint": "重新啟動桌面存取輔助程式即可套用變更。Redeven 與已開啟的 App 會繼續執行。",
+    "helperRestartConfirm": "目前的 App 共享與桌面連線將結束。輔助程式重新啟動後，請重新連線。",
+    "applyPermissions": "套用權限變更",
+    "restartHelper": "重新啟動桌面存取輔助程式",
+    "requestPending": "請完成 macOS 授權提示。返回後會自動檢查；若未出現提示，請開啟系統設定。"
   },
   "storage": {
     "title": "儲存空間管理",

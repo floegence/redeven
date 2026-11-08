@@ -21,7 +21,9 @@ PLIST
 swiftc "$root/scripts/fixtures/nativeComputerCapture.swift" -o "$temporary/Fixture.app/Contents/MacOS/Fixture" -framework AppKit
 "$temporary/Fixture.app/Contents/MacOS/Fixture" --preflight
 swift build -c release --package-path "$root/desktop/native/computer-host" >/dev/null
-python3 - "$temporary" "$root/desktop/native/computer-host/.build/release/redeven-computer-host" <<'PYTHON' &
+cp "$root/desktop/native/computer-host/.build/release/redeven-computer-host" "$temporary/redeven-computer-host"
+node "$root/scripts/stage_desktop_access.mjs" "$temporary/redeven-computer-host" "$temporary/Redeven Desktop Access Dev.app"
+python3 - "$temporary" "$temporary/redeven-computer-host" <<'PYTHON' &
 import base64, json, os, pathlib, select, signal, subprocess, sys, time
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
 root, binary = pathlib.Path(sys.argv[1]), sys.argv[2]

@@ -101,9 +101,11 @@ enum HostApplicationCatalog {
     }
     static func availability() -> [String: Any] {
         let console = consoleAvailable, screen = CGPreflightScreenCaptureAccess(), accessibility = AXIsProcessTrusted()
-        return ["supported": true, "ready": console && screen && accessibility, "native_ready": console,
+        var result: [String: Any] = ["supported": true, "ready": console && screen && accessibility, "native_ready": console,
                 "backend": "macos", "reason": !console ? "graphical_session_required" : (!screen || !accessibility ? "macos_permissions" : ""),
                 "permissions": ["screen_recording": screen, "accessibility": accessibility], "requirements": [String]()]
+        if let application = NativeApplicationAccess.identity() { result["permission_app_name"] = application.name }
+        return result
     }
 }
 

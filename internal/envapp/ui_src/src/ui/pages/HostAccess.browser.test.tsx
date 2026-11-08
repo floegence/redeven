@@ -33,7 +33,7 @@ it.each(SUPPORTED_LOCALES)('keeps compact paused and incomplete cards readable a
    <HostAccessFeatureSettings feature="desktop" state="enabled" ready={false} allowed busy={false} onChange={async () => {}} onReconfigure={() => {}} />
  </div></I18nProvider>, host);
  for (const element of host.querySelectorAll<HTMLElement>('.host-access-feature-settings, .host-access-feature-title, [role=status], button')) {
-   expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+   expect(element.scrollWidth, element.outerHTML).toBeLessThanOrEqual(element.clientWidth + 1);
    expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(320);
  }
  if (locale === 'zh-CN') await page.screenshot({ element: host, path: '__screenshots__/host-access-compact-states-narrow.png' });
@@ -227,7 +227,7 @@ it.each(['Redeven Desktop Dev', ''] as const)('identifies the system permission 
  const dialog = document.querySelector<HTMLElement>('[role=dialog]')!;
  await userEvent.click(page.getByText('管理系统权限', { exact: true }));
  const destination = dialog.querySelector('.host-access-permission-destination')!;
- expect(destination.textContent).toContain(name || '尚未确认');
+ expect(destination.textContent).toContain(name || '不可用');
  if (!name) expect(destination.textContent).not.toContain('找到“Redeven');
  await userEvent.click(page.getByRole('button', { name: '打开系统设置', exact: true }).first());
  expect(state.permission).toHaveBeenCalledExactlyOnceWith('screen_recording_settings');
@@ -241,4 +241,51 @@ it.each(['Redeven Desktop Dev', ''] as const)('identifies the system permission 
  await userEvent.click(page.getByRole('button', { name: '去允许显示画面', exact: true }));
  expect(state.permission).toHaveBeenLastCalledWith('screen_recording');
  expect(state.access).toBe('enabled');
+});
+
+it.each(SUPPORTED_LOCALES)('offers precise helper recovery without restarting the host in %s', async locale => {
+ await page.viewport(320, 1000); await loadEnvAppDictionary(locale); writeStoredLanguagePreference(locale);
+ const dictionary = await loadEnvAppDictionary(locale);
+ const host = document.createElement('main'); host.style.padding = '16px'; document.body.append(host);
+ const permission = vi.fn(), recovery = vi.fn();
+ dispose = render(() => <I18nProvider><HostAccessPermissions permissionAppName="Redeven Desktop Access Dev" screen={false} input={false} needsInput allowed busy={false} onPermission={permission} onRefresh={() => {}} onRecovery={recovery} /></I18nProvider>, host);
+ await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.allowScreen, exact: true}));
+ expect(permission).toHaveBeenCalledExactlyOnceWith('screen_recording');
+ await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.openSystemSettings, exact: true}));
+ expect(permission).toHaveBeenLastCalledWith('screen_recording', true);
+ await userEvent.click(page.getByText(dictionary.hostAccess.permissionHelp, {exact: true}));
+ expect(host.querySelector('[data-scene=locate]')).not.toBeNull();
+ expect(host.querySelector('[data-scene=restart]')).not.toBeNull();
+ await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.revealApplication, exact: true}));
+ expect(recovery).toHaveBeenCalledExactlyOnceWith('reveal_application');
+ await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.applyPermissions, exact: true}));
+ expect(recovery).toHaveBeenCalledTimes(1);
+ expect(host.querySelector('[role=alert]')?.textContent).toBe(dictionary.hostAccess.helperRestartConfirm);
+ await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.restartHelper, exact: true}));
+ expect(recovery).toHaveBeenLastCalledWith('restart_application');
+ for (const element of host.querySelectorAll<HTMLElement>('button, .host-access-recovery, .host-access-recovery-step')) {
+   expect(element.scrollWidth, element.outerHTML).toBeLessThanOrEqual(element.clientWidth + 1);
+   expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(320);
+ }
+ expect((await axe.run(host, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa']}})).violations).toEqual([]);
+ if (locale === 'zh-CN') await page.screenshot({element: host, path: '__screenshots__/host-access-helper-recovery-narrow.png'});
+});
+
+it('preserves feature intent and refreshes after explicit helper recovery', async () => {
+ await page.viewport(900, 850); writeStoredLanguagePreference('en-US');
+ state.local = true; state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = 'paused'; state.permissionApp = 'Redeven Desktop Access Dev';
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><EnvHostApplicationsPage /></I18nProvider>, host);
+ await userEvent.click(page.getByRole('button', {name: 'Access settings', exact: true}));
+ await userEvent.click(page.getByText('Manage system permissions', {exact: true}));
+ await userEvent.click(page.getByText('Cannot find the app or permissions are not taking effect?', {exact: true}));
+ await userEvent.click(page.getByRole('button', {name: 'Show app in Finder', exact: true}));
+ expect(state.permission).toHaveBeenCalledExactlyOnceWith('reveal_application');
+ await userEvent.click(page.getByRole('button', {name: 'Apply permission changes', exact: true}));
+ expect(state.permission).toHaveBeenCalledTimes(1);
+ await userEvent.click(page.getByRole('button', {name: 'Restart Desktop Access', exact: true}));
+ await expect.poll(() => state.permission.mock.calls.length).toBe(2);
+ expect(state.permission).toHaveBeenLastCalledWith('restart_application');
+ expect(state.access).toBe('enabled'); expect(state.desktopAccess).toBe('paused');
+ expect(state.save).not.toHaveBeenCalled(); expect(state.launch).not.toHaveBeenCalled();
 });
