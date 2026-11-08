@@ -33,6 +33,27 @@ function mount() {
   };
   return { host, background, move, setActive };
 }
+it('moves light across a registered fine lattice without drifting the grid', () => {
+  const { background, setActive } = mount();
+  const grid = background.querySelector('.plugin-creation-atmosphere-grid')!;
+  const sheen = background.querySelector('.plugin-creation-atmosphere-sheen')!;
+  const pointer = background.querySelector('.plugin-creation-atmosphere-pointer')!;
+  const [light] = sheen.getAnimations();
+  light.pause();
+  light.currentTime = 0;
+  const initialMask = getComputedStyle(sheen).maskPosition;
+  const initialGrid = getComputedStyle(grid).backgroundPosition;
+  light.currentTime = 12000;
+  expect(getComputedStyle(sheen).maskPosition).not.toBe(initialMask);
+  expect(getComputedStyle(grid).backgroundPosition).toBe(initialGrid);
+  expect(getComputedStyle(grid).transform).toBe('none');
+  expect(getComputedStyle(grid).backgroundImage).toContain('linear-gradient');
+  expect(getComputedStyle(grid).backgroundImage).not.toContain('radial-gradient');
+  expect(getComputedStyle(pointer, '::after').backgroundSize).toBe(getComputedStyle(sheen).backgroundSize);
+  light.play();
+  setActive(false);
+  expect(getComputedStyle(sheen).animationPlayState).toBe('paused');
+});
 it('smoothly follows a mouse and settles without changing composer focus or selection', async () => {
   const { host, background, move } = mount();
   const input = host.querySelector('textarea')!;

@@ -82,11 +82,7 @@ export function PluginCreationCanvasBackground(props: { active: boolean }) {
     <div ref={canvas} class="plugin-creation-atmosphere" aria-hidden="true" data-active={active()} data-pointer-active="false">
       <span class="plugin-creation-atmosphere-grid" />
       <span class="plugin-creation-atmosphere-light" />
-      <svg class="plugin-creation-atmosphere-contours" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
-        <path d="M-160 550C90 550 85 115 400 115S770 420 980 235s380-140 420-70" />
-        <path d="M-120 625C140 625 125 160 430 160S795 465 1010 280s350-125 420-70" />
-        <path d="M-80 700C190 700 165 205 460 205S820 510 1040 325s320-110 420-70" />
-      </svg>
+      <span class="plugin-creation-atmosphere-sheen" />
       <span class="plugin-creation-atmosphere-pointer" />
     </div>
   );

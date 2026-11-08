@@ -23,19 +23,19 @@
 .plugin-creation-check-button[data-build-state='failed'] { color: var(--destructive); }
 .plugin-creation-canvas-tools button:focus-visible, .plugin-creation-check-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .plugin-creation-canvas-tool-divider { width: 1px; height: 12px; margin: 0 5px; background: var(--border); }
-.plugin-creation-atmosphere { position: absolute; z-index: -1; inset: 0; overflow: hidden; pointer-events: none; contain: paint; mask-image: radial-gradient(ellipse at 50% 48%, var(--foreground) 24%, transparent 82%); }
-.plugin-creation-atmosphere-grid { position: absolute; inset: 0; background-image: radial-gradient(circle, color-mix(in srgb, var(--foreground) 16%, transparent) .7px, transparent 1px); background-size: 28px 28px; animation: plugin-canvas-breathe 12s ease-in-out infinite alternate; }
-.plugin-creation-atmosphere-light { position: absolute; inset: -12%; background: radial-gradient(ellipse at 26% 34%, color-mix(in srgb, var(--info) 9%, transparent), transparent 44%), radial-gradient(ellipse at 76% 64%, color-mix(in srgb, var(--warning) 7%, transparent), transparent 42%); animation: plugin-canvas-light 22s ease-in-out infinite alternate; }
-.plugin-creation-atmosphere-contours { position: absolute; inset: -5%; width: 110%; height: 110%; fill: none; stroke: color-mix(in srgb, var(--ring) 10%, transparent); stroke-width: .75; animation: plugin-canvas-contours 26s ease-in-out infinite alternate; }
-.plugin-creation-atmosphere-contours path:nth-child(2) { opacity: .6; }
-.plugin-creation-atmosphere-contours path:nth-child(3) { opacity: .3; }
-.plugin-creation-atmosphere-pointer { position: absolute; inset: 0; opacity: 0; background: radial-gradient(240px circle at var(--canvas-pointer-x, 50%) var(--canvas-pointer-y, 50%), color-mix(in srgb, var(--info) 12%, transparent), transparent 80%); transition: opacity 500ms ease; }
-.plugin-creation-atmosphere-pointer::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, color-mix(in srgb, var(--ring) 45%, transparent) 1px, transparent 1.4px); background-size: 28px 28px; mask-image: radial-gradient(180px circle at var(--canvas-pointer-x, 50%) var(--canvas-pointer-y, 50%), var(--foreground), transparent); }
+.plugin-creation-atmosphere { --canvas-grid-step: 48px; --canvas-grid-major-step: 240px; position: absolute; z-index: -1; inset: 0; overflow: hidden; pointer-events: none; contain: paint; mask-image: radial-gradient(ellipse at 50% 48%, var(--foreground) 22%, transparent 80%); }
+.plugin-creation-atmosphere-grid { position: absolute; inset: 0; background-image: linear-gradient(to right, color-mix(in srgb, var(--foreground) 5%, transparent) .75px, transparent .75px), linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 5%, transparent) .75px, transparent .75px), linear-gradient(to right, color-mix(in srgb, var(--foreground) 3%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 3%, transparent) 1px, transparent 1px); background-size: var(--canvas-grid-step) var(--canvas-grid-step), var(--canvas-grid-step) var(--canvas-grid-step), var(--canvas-grid-major-step) var(--canvas-grid-major-step), var(--canvas-grid-major-step) var(--canvas-grid-major-step); animation: plugin-canvas-breathe 14s ease-in-out infinite alternate; }
+.plugin-creation-atmosphere-light { position: absolute; inset: -12%; background: radial-gradient(ellipse at 26% 34%, color-mix(in srgb, var(--info) 7%, transparent), transparent 44%), radial-gradient(ellipse at 76% 64%, color-mix(in srgb, var(--warning) 5%, transparent), transparent 42%); animation: plugin-canvas-light 24s ease-in-out infinite alternate; }
+/* The lattice stays registered. Only the light travels, avoiding drifting lines and moire. */
+.plugin-creation-atmosphere-sheen, .plugin-creation-atmosphere-pointer::after { position: absolute; inset: 0; background-image: linear-gradient(to right, color-mix(in srgb, var(--ring) 23%, transparent) .75px, transparent .75px), linear-gradient(to bottom, color-mix(in srgb, var(--ring) 23%, transparent) .75px, transparent .75px); background-size: var(--canvas-grid-step) var(--canvas-grid-step); }
+.plugin-creation-atmosphere-sheen { mask-image: radial-gradient(ellipse at 50% 50%, var(--foreground), transparent 68%); mask-size: 65% 140%; mask-repeat: no-repeat; mask-position: -120% 50%; animation: plugin-canvas-weave 24s ease-in-out infinite alternate; }
+.plugin-creation-atmosphere-pointer { position: absolute; inset: 0; opacity: 0; background: radial-gradient(280px circle at var(--canvas-pointer-x, 50%) var(--canvas-pointer-y, 50%), color-mix(in srgb, var(--info) 8%, transparent), transparent 80%); transition: opacity 600ms ease; }
+.plugin-creation-atmosphere-pointer::after { content: ''; mask-image: radial-gradient(220px circle at var(--canvas-pointer-x, 50%) var(--canvas-pointer-y, 50%), var(--foreground), transparent); }
 .plugin-creation-atmosphere[data-pointer-active='true'] .plugin-creation-atmosphere-pointer { opacity: 1; }
 .plugin-creation-atmosphere[data-active='false'] > * { animation-play-state: paused; }
-@keyframes plugin-canvas-breathe { from { opacity: .65; } to { opacity: 1; } }
+@keyframes plugin-canvas-breathe { from { opacity: .7; } to { opacity: 1; } }
 @keyframes plugin-canvas-light { from { transform: translate(-3%, -2%) scale(.96); } to { transform: translate(4%, 3%) scale(1.04); } }
-@keyframes plugin-canvas-contours { from { transform: translate(-12px, 8px) rotate(-2deg); opacity: .5; } to { transform: translate(12px, -8px) rotate(2deg); opacity: 1; } }
+@keyframes plugin-canvas-weave { from { mask-position: -120% 35%; opacity: .45; } to { mask-position: 220% 65%; opacity: .9; } }
 @media (prefers-reduced-motion: reduce) {
   .plugin-creation-atmosphere > * { animation: none; }
   .plugin-creation-atmosphere-pointer { display: none; transition: none; }
