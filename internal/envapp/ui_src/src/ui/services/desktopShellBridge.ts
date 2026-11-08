@@ -1,3 +1,4 @@
+import type { FilePreviewWindowRequest, FilePreviewWindowResponse } from '../../../../../../desktop/src/shared/filePreviewWindow';
 import type { HostApplicationComponentsRequest, HostApplicationComponentsResult, HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 import type { DesktopDeploymentRequest, DesktopDeploymentResult, DesktopDeploymentProgress } from '../../../../../../desktop/src/shared/remoteDesktopDeployment';
 import {
@@ -59,6 +60,7 @@ export interface DesktopShellBridge {
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   openCodespaceWindow?: (request: DesktopShellCodespaceWindowOpenRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
   openWebServiceWindow?: (request: DesktopShellOpenWebServiceWindowRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
+  openFilePreviewWindow?: (request: FilePreviewWindowRequest) => Promise<FilePreviewWindowResponse>;
   openServiceCanvasWindow?: (request: DesktopShellOpenServiceCanvasWindowRequest) => Promise<DesktopShellOpenServiceCanvasWindowResponse>;
   applicationComponents?: (request: HostApplicationComponentsRequest) => Promise<HostApplicationComponentsResult>;
   onApplicationComponentsProgress?: (listener: (value: HostApplicationComponentsProgress) => void) => () => void;
@@ -99,6 +101,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.openCodespaceWindow !== 'function'
       && typeof candidate.openWebServiceWindow !== 'function'
+      && typeof candidate.openFilePreviewWindow !== 'function'
       && typeof candidate.openServiceCanvasWindow !== 'function'
       && typeof candidate.openDashboard !== 'function'
       && typeof candidate.getRuntimeMaintenanceContext !== 'function'

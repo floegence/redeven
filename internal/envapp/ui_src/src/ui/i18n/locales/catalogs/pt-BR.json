@@ -1651,6 +1651,12 @@
     }
   },
   "filePreview": {
+    "openSeparately": "Abrir separadamente",
+    "openInWindow": "Abrir em uma janela separada",
+    "openInTab": "Abrir em uma nova aba",
+    "saveBeforePopout": "Salve as alterações antes de abrir uma prévia separada.",
+    "popoutFailed": "Não foi possível abrir a prévia",
+
     "pdf": {
       "search": "Buscar no PDF",
       "previous": "Resultado anterior",

@@ -3,7 +3,10 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { openFilePreviewWindow } from '../services/filePreviewWindow';
 import { FilePreviewHost } from './FilePreviewHost';
+
+vi.mock('../services/filePreviewWindow', () => ({ openFilePreviewWindow: vi.fn(async () => undefined) }));
 
 const openFlowerTurnLauncherMock = vi.fn();
 const notificationErrorMock = vi.fn();
@@ -77,6 +80,7 @@ vi.mock('../downloads/DownloadContext', () => ({
 vi.mock('./FilePreviewSurface', () => ({
   FilePreviewSurface: (props: any) => (
     <div>
+      <button data-testid="popout" onClick={props.onOpenSeparately}>Open separately</button>
       <button
         type="button"
         data-testid="ask-flower"
@@ -101,9 +105,47 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  filePreviewController.dirty = () => false;
+  filePreviewController.saving = () => false;
+  filePreviewController.loading = () => false;
+  vi.mocked(openFilePreviewWindow).mockResolvedValue(undefined);
 });
 
 describe('FilePreviewHost', () => {
+  it.each(['dirty', 'saving', 'loading'] as const)('protects the original preview while %s', state => {
+    filePreviewController[state] = () => true;
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <FilePreviewHost />, host);
+    try {
+      (host.querySelector('[data-testid="popout"]') as HTMLButtonElement).click();
+      expect(openFilePreviewWindow).not.toHaveBeenCalled();
+      expect(filePreviewController.confirmDiscardAndContinue).not.toHaveBeenCalled();
+      expect(filePreviewController.handleOpenChange).not.toHaveBeenCalled();
+      if (state === 'dirty') expect(notificationErrorMock).toHaveBeenCalledWith('Open separately', 'Save your changes before opening a separate preview.');
+    } finally { dispose(); }
+  });
+  it('opens the current file once and retains the original preview', async () => {
+    let resolve!: () => void;
+    vi.mocked(openFilePreviewWindow).mockReturnValue(new Promise<void>(done => { resolve = done; }));
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <FilePreviewHost />, host);
+    try {
+      const button = host.querySelector<HTMLButtonElement>('[data-testid="popout"]')!;
+      button.click(); button.click(); expect(openFilePreviewWindow).toHaveBeenCalledOnce();
+      expect(openFilePreviewWindow).toHaveBeenCalledWith('/workspace/demo.txt', expect.any(Object));
+      expect(filePreviewController.handleOpenChange).not.toHaveBeenCalled(); resolve(); await Promise.resolve();
+    } finally { dispose(); }
+  });
+  it('reports native failure without closing the original document', async () => {
+    vi.mocked(openFilePreviewWindow).mockRejectedValue(new Error('Native open failed'));
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <FilePreviewHost />, host);
+    try {
+      host.querySelector<HTMLButtonElement>('[data-testid="popout"]')!.click(); await Promise.resolve();
+      expect(notificationErrorMock).toHaveBeenCalledWith('Could not open the preview', 'Native open failed');
+      expect(filePreviewController.handleOpenChange).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  });
   it('opens Ask Flower directly from the floating preview host', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

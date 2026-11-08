@@ -1651,6 +1651,12 @@
     }
   },
   "filePreview": {
+    "openSeparately": "따로 열기",
+    "openInWindow": "별도 창에서 열기",
+    "openInTab": "새 탭에서 열기",
+    "saveBeforePopout": "별도 미리보기를 열기 전에 변경 사항을 저장하세요.",
+    "popoutFailed": "미리보기를 열 수 없습니다",
+
     "pdf": {
       "search": "PDF에서 찾기",
       "previous": "이전 검색 결과",

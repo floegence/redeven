@@ -1,3 +1,5 @@
+import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
+import { openFilePreviewWindow } from './filePreviewWindow';
 import { captureAuthorizedPage } from './manualScreenshot';
 import { RELEASE_FLOWER_SOURCE_CHANNEL, type DesktopAskFlowerSource, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
 import { attachDesktopEditContextMenu } from './editContextMenu';
@@ -8291,6 +8293,7 @@ function openSessionChildWindow(
   targetURL: string,
   parent: BrowserWindow,
   frameName = '',
+  focusExisting = false,
 ): BrowserWindow | null {
   const sessionRecord = sessionsByKey.get(sessionKey);
   if (!sessionRecord) {
@@ -8301,7 +8304,7 @@ function openSessionChildWindow(
   const existing = sessionRecord.child_windows.get(childKey);
   const existingWindow = liveTrackedBrowserWindow(existing);
   if (existing && existingWindow) {
-    void existingWindow.loadURL(targetURL);
+    if (!focusExisting) void existingWindow.loadURL(targetURL);
     presentAppWindow(existingWindow);
     return existingWindow;
   }
@@ -20030,6 +20033,16 @@ if (!app.requestSingleInstanceLock()) {
     const record = sessionRecordForWebContentsID(event.sender.id);
     if (normalized.preparation_id && (!record || event.senderFrame !== event.sender.mainFrame)) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
     return openWebServiceWindowFromShell(record, normalized, record ? `${record.session_key}:${event.sender.id}` : undefined);
+  });
+  ipcMain.handle(OPEN_FILE_PREVIEW_WINDOW_CHANNEL, (event, request) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    return openFilePreviewWindow(request, record && !record.closing && parent ? {
+      mainFrame: event.senderFrame === event.sender.mainFrame,
+      allowed: isAllowedSessionNavigation(record.session_key, event.sender.getURL()),
+      sourceURL: event.sender.getURL(), entryURL: record.entry_url,
+      open: (url, identity) => openSessionChildWindow(record.session_key, url, parent, identity, true) !== null,
+    } : null);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_SERVICE_CANVAS_WINDOW_CHANNEL, (event, request): DesktopShellOpenServiceCanvasWindowResponse => {
     const normalized = normalizeDesktopShellOpenServiceCanvasWindowRequest(request);

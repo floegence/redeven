@@ -1,3 +1,4 @@
+import { readFilePreviewWindowRequest } from '../shared/filePreviewWindow';
 export interface DesktopWindowSpec {
   width: number;
   height: number;
@@ -15,7 +16,9 @@ const DEFAULT_WINDOW_SPEC: DesktopWindowSpec = {
 };
 
 export function resolveDesktopWindowSpec(targetURL: string, parented: boolean): DesktopWindowSpec {
-  void targetURL;
+  try {
+    if (readFilePreviewWindowRequest(new URL(targetURL).search)) return { width: 1100, height: 800, minWidth: 480, minHeight: 360, attachToParent: false };
+  } catch { /* Unrecognized URLs keep the ordinary window specification. */ }
   void parented;
   return DEFAULT_WINDOW_SPEC;
 }

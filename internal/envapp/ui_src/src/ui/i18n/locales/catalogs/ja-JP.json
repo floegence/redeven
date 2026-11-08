@@ -1651,6 +1651,12 @@
     }
   },
   "filePreview": {
+    "openSeparately": "別に開く",
+    "openInWindow": "別ウィンドウで開く",
+    "openInTab": "新しいタブで開く",
+    "saveBeforePopout": "別のプレビューを開く前に変更を保存してください。",
+    "popoutFailed": "プレビューを開けませんでした",
+
     "pdf": {
       "search": "PDF 内を検索",
       "previous": "前の一致箇所",

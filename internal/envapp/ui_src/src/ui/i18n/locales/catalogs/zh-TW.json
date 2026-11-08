@@ -1651,6 +1651,12 @@
     }
   },
   "filePreview": {
+    "openSeparately": "獨立開啟",
+    "openInWindow": "在獨立視窗中開啟",
+    "openInTab": "在新分頁中開啟",
+    "saveBeforePopout": "請先儲存變更，再開啟獨立預覽。",
+    "popoutFailed": "無法開啟預覽",
+
     "pdf": {
       "search": "在 PDF 中尋找",
       "previous": "上一個相符項目",

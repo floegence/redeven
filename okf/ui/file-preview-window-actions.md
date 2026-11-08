@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview actions and dismissal
 tags: [ui, files, preview, floating-windows, selection]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -19,6 +19,13 @@ Alt+Shift+Left/Right sorts;Escape cancels before dismissal. Preserve selection/p
 One retained controller/panel per normalized path serves all filesystem entries; repeated open selects without reread/discard. Switching preserves draft/nodes/position/mode and pauses inactive native media. Published Floe RetainedPanel keeps each inactive panel laid out at the current viewport size with visibility hidden, inert and ARIA-hidden; never use hidden/display:none for tab activation. Panel DOM order remains independent of tab order. Independent actions/load/errors/Retry per tab. Inactive close preserves active;active close selects adjacent;last closes window. Window close confirms all unsaved together;cancel preserves all. Saving blocks discard until settled.
 
 Flower attachments use source-identity tabs through same header in both hosts,independent loaders/retry/cancel/object-URL retirement;repeat selects existing source. Snapshot inspectors,Workbench widgets and modal conversation-file back navigation retain separate ownership. Workbench starts beneath header except sync notices;tooltip/Copy exposes path,keyboard/Escape/Tab cannot trigger canvas or shell focus reclaim. FilePreviewActions is sole availability/feedback owner and download builder retains draft mapping. Writable PDFs use Edit;PDF.js saves Unicode,NeedAppearances for unsupported fonts,no replacement-font embed. Product Downloads owns all downloads,including child previews ([lifetime](../ai/flower-task-files.md#downloads-and-panel)). Live navigation opens current objects;historical snapshots retain bytes;failed targets offer Retry/Open parent.
+
+## Separate preview
+Filesystem previews expose Open in separate window (Desktop) or Open in new tab (browser) in More. Open only the active saved file; retain the original preview, document state and drafts. Busy/loading actions are disabled. Unsaved edits receive a localized save-first message without discarding or automatically saving. Separate previews are read-only; they retain Find, Copy path, Download, format rendering and local Retry. Attachments remain source-identity snapshots and do not acquire this filesystem action.
+
+The dedicated `window=file-preview&path=...` shell entry uses the existing access gate, connection recovery, file controller and sandboxed renderers. It omits Activity/Workbench chrome, uses the filename as document title, and never embeds credentials in its URL. Invalid/ambiguous paths do not load a file. File reads and media requests retain Runtime authorization; the route itself grants no access. Browser opens synchronously during the click, preserves the tab's session bootstrap and clears opener; blocked opens report failure without automatic retries.
+
+Desktop accepts only a bounded absolute file identity through a dedicated IPC method. Main validates the live session, top-level sender and trusted Env App entry before deriving the URL and partition from that session. Preview windows are independent OS windows with shared theme/language, native controls and reading-size bounds. Identity is session plus path; repeat opens focus the existing window without navigation, retaining iframe and scroll. Close retires its record and subsequent open creates a fresh window. Native failures never fall through to browser opening. Session shutdown still owns its children.
 
 ## Preview retirement
 Cancel/fence reads immediately on accepted close; no new edits/retries/probes. Retain document/title/existing resources through Floe exit,release on unmount;switching tabs never closes controller. Reopen reverses same presence owner;old release cannot clear current/retained preview. Store constant-size presentation token/references only,no copied lifecycle/timer/blank iframe/extra read or brightness rebound. Disposal always cleans/fences late responses.
@@ -38,3 +45,5 @@ Loading/errors stay in body. [Rendering](file-preview-viewport-and-rendering.md)
 
 - `redeven:desktop/scripts/check-file-preview-continuity.mjs` - Production-built file:// Electron workspace with real product controllers/panels, deterministic byte transport, optional external HTML evidence and verified cleanup; no installer claim.
 - 2026-11-06: published Floe 0.96.0, Electron 45.1.0; synthetic and two supplied dark reports each passed 16 tab switches with zero light samples, preserved scroll420, no repeated read and verified disposal. Reintroducing display:none failed the same retained-viewport assertion. External documents/screenshots stay outside tracked source.
+
+- `redeven:desktop/scripts/check-file-preview-popout.mjs` - Built Runtime and real Desktop/Chromium acceptance for menu routing, authorization, special-character paths, repeat focus, reload, read-only presentation, unsaved drafts, themes, narrow viewports, close/reopen and missing-file Retry; supervisor verifies owned cleanup. Not installer or all-platform qualification.

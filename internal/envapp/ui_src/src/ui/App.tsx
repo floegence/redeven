@@ -1,3 +1,4 @@
+import { FILE_PREVIEW_WINDOW } from '../../../../../desktop/src/shared/filePreviewWindow';
 import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
 import { desktopShellBridgeAvailable } from './services/desktopShellBridge';
 import { createActivityNavigation, activityTargetID, type ActivityNavigation } from './services/activityNavigation';
@@ -212,7 +213,7 @@ function DesktopThemeSync() {
   return null;
 }
 
-function EnvAppProviders(props: { standaloneTessiven: boolean }) {
+function EnvAppProviders(props: { standaloneTessiven: boolean; standaloneFilePreview: boolean }) {
   const i18n = useI18n();
   const navigation = createActivityNavigation({ envID });
   const floeConfig = createMemo(() => buildFloeConfig(i18n.t, navigation));
@@ -230,11 +231,11 @@ function EnvAppProviders(props: { standaloneTessiven: boolean }) {
                     <WidgetRegistryProvider>
                       <CommandProvider>
                         <EnvAppFloatingWindowStackProvider>
-                          <EnvAppShell navigation={navigation} standaloneTessiven={props.standaloneTessiven} />
-                          <Show when={!props.standaloneTessiven}>
+                          <EnvAppShell navigation={navigation} standaloneTessiven={props.standaloneTessiven} standaloneFilePreview={props.standaloneFilePreview} />
+                          <Show when={!props.standaloneTessiven && !props.standaloneFilePreview}>
                             <CommandPalette zIndex={ENV_APP_FLOATING_LAYER.commandPalette} />
-                            <NotificationContainer />
                           </Show>
+                          <NotificationContainer />
                         </EnvAppFloatingWindowStackProvider>
                       </CommandProvider>
                     </WidgetRegistryProvider>
@@ -260,7 +261,7 @@ export function App() {
 
   return (
     <I18nProvider>
-      <EnvAppProviders standaloneTessiven={standaloneTessiven} />
+      <EnvAppProviders standaloneTessiven={standaloneTessiven} standaloneFilePreview={new URLSearchParams(window.location.search).get('window') === FILE_PREVIEW_WINDOW} />
     </I18nProvider>
   );
 }

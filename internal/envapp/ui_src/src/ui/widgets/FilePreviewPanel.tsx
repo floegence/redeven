@@ -50,6 +50,9 @@ export interface FilePreviewPanelProps {
   onRenderError?: (path: string, message?: string) => void;
   onResourceError?: (path:string,source:string) => void;
   onRetry?: () => void;
+  onOpenSeparately?: () => void | Promise<void>;
+  openSeparatelyLabel?: string;
+  openingSeparately?: boolean;
   onCopyPath?: () => boolean | Promise<boolean>;
   onDownload?: () => void;
   onAskFlower?: (selectionText: string, anchor?: { x: number; y: number }) => void | Promise<void>;
@@ -107,6 +110,9 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             onResourceError={props.onResourceError}
             onRenderError={props.onRenderError}
             onRetry={props.onRetry}
+            onOpenSeparately={props.onOpenSeparately}
+            openSeparatelyLabel={props.openSeparatelyLabel}
+            openingSeparately={props.openingSeparately}
             onCopyPath={props.onCopyPath}
             onStartEdit={props.onStartEdit}
             onDraftChange={props.onDraftChange}

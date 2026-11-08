@@ -2894,6 +2894,12 @@ export const enUS = defineDictionary({
   },
   ...enUSActivityChrome,
   filePreview: {
+    openSeparately: "Open separately",
+    openInWindow: "Open in separate window",
+    openInTab: "Open in new tab",
+    saveBeforePopout: "Save your changes before opening a separate preview.",
+    popoutFailed: "Could not open the preview",
+
     findInFile: 'Find in file',
     pdf: {
       "search": "Find in PDF",

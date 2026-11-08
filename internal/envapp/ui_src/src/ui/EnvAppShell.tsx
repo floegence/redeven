@@ -346,6 +346,7 @@ const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow'
 const AuditLogDialog = lazy(() => import('./widgets/AuditLogDialog').then((module) => ({ default: module.AuditLogDialog })));
 const FlowerTurnLauncherWindow = lazy(() => import('./widgets/FlowerTurnLauncherWindow').then((module) => ({ default: module.FlowerTurnLauncherWindow })));
 const GitDiffDialog = lazy(() => import('./widgets/GitDiffDialog').then((module) => ({ default: module.GitDiffDialog })));
+const FilePreviewStandalone = lazy(() => import('./widgets/FilePreviewStandalone').then(module => ({ default: module.FilePreviewStandalone })));
 const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((module) => ({ default: module.FilePreviewHost })));
 const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
@@ -527,12 +528,14 @@ function EnvDisplayModeSwitcher(props: {
   );
 }
 
-export function EnvAppShell(props: { navigation?: ActivityNavigation; standaloneTessiven?: boolean } = {}) {
+export function EnvAppShell(props: { navigation?: ActivityNavigation; standaloneTessiven?: boolean; standaloneFilePreview?: boolean } = {}) {
   const desktopBootstrapReadyMs = Math.max(0, envAppNowMs() - envAppModuleStartedAtMs);
   const layout = useLayout();
   const navigation = props.navigation ?? createActivityNavigation();
   const initialTessivenSurface = new URLSearchParams(window.location.search).get('surface') === ENV_TESSIVEN_ACTIVITY_ID;
   const standaloneTessiven = props.standaloneTessiven === true;
+  const standaloneFilePreview = props.standaloneFilePreview === true;
+  const standalone = standaloneTessiven || standaloneFilePreview;
   const initialSurface = initialTessivenSurface ? ENV_TESSIVEN_ACTIVITY_ID : activityTargetID(navigation.initial);
   const initialRegularSurface = isEnvSurfaceId(initialSurface) ? initialSurface : ENV_DEFAULT_SURFACE_ID;
   if (layout.sidebarActiveTab() !== initialSurface) layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
@@ -751,7 +754,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const filePreviewWorkspace = createFilePreviewWorkspace({
     client: () => protocol.session?.(),
     rpc: () => rpc,
-    canWrite: () => Boolean(env()?.permissions?.can_write),
+    canWrite: () => !standaloneFilePreview && Boolean(env()?.permissions?.can_write),
     onSaved: (path) => {
       notify.success(i18n.t('filePreview.savedTitle'), i18n.t('filePreview.savedMessage', { path }));
     },
@@ -1231,7 +1234,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   let externalScreenshot: ((signal: AbortSignal) => Promise<File>) | undefined;
   let flowerScreenshotSource: ManualScreenshotSource | undefined;
   const captureNewConversationContext = () => {
-    if (standaloneTessiven || viewMode() !== 'activity' || layout.isMobile() || flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench') return undefined;
+    if (standalone || viewMode() !== 'activity' || layout.isMobile() || flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench') return undefined;
     const pageID = layout.sidebarActiveTab();
     if (pageID === 'ai') return undefined;
     const source = captureFlowerSource(true);
@@ -2793,7 +2796,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       name: String(item?.name ?? '').trim() || basenameFromAbsolutePath(normalizedPath) || 'File',
     };
 
-    if (!layout.isMobile() && viewMode() === 'workbench') {
+    if (!standaloneFilePreview && !layout.isMobile() && viewMode() === 'workbench') {
       const reusePolicy = options?.reusePolicy ?? 'same_file_or_create';
       const openStrategy = reusePolicy === 'single_surface' ? 'same_file_or_create' : reusePolicy;
       setWorkbenchFilePreviewActivation({
@@ -3307,7 +3310,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const reconnectController = createRuntimeReconnectController({
-    enabled: () => runtimeConnectionEstablished() || (standaloneTessiven && connectionAttemptSeq() > 0)
+    enabled: () => runtimeConnectionEstablished() || (standalone && connectionAttemptSeq() > 0)
       || (desktopTransportRecovery()?.generation ?? 0) > 0,
     desktopTransport: desktopTransportRecovery,
     retryProtocolNow: () => protocol.retryNow(),
@@ -3799,7 +3802,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   createEffect(() => {
-    if ((!runtimeConnectionEstablished() && !standaloneTessiven) || connectionAttemptSeq() <= 0) return;
+    if ((!runtimeConnectionEstablished() && !standalone) || connectionAttemptSeq() <= 0) return;
 
     const protocolSnapshot = protocol.snapshot();
     const protocolStatusValue = String(protocolSnapshot.state ?? '').trim();
@@ -5488,15 +5491,17 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     ? window.creationID === pluginCreationOwner() : !window.creationID && viewMode() === 'activity'));
   const mobilePluginModalOpen = () => layout.isMobile() && visiblePluginWindows().length > 0;
 
-  const standaloneTessivenReady = () => runtimeConnectionEstablished() && activityContentAvailable();
-  const renderStandaloneTessiven = () => (
+  const standaloneReady = () => runtimeConnectionEstablished() && activityContentAvailable();
+  const renderStandalone = () => (
     <div
       ref={bindFlowerShell}
       class="h-full min-h-0"
-      data-env-service-canvas-window
-      data-env-service-canvas-ready={standaloneTessivenReady() ? 'true' : 'false'}
+      data-env-service-canvas-window={standaloneTessiven ? true : undefined}
+      data-env-file-preview-window={standaloneFilePreview ? true : undefined}
+      data-env-service-canvas-ready={standaloneTessiven ? String(standaloneReady()) : undefined}
+      data-env-file-preview-ready={standaloneFilePreview ? String(standaloneReady()) : undefined}
     >
-      <Show when={standaloneTessivenReady()} fallback={(
+      <Show when={standaloneReady()} fallback={(
         <Show when={accessGatePhase() === 'checking' || accessGatePhase() === 'ready'} fallback={accessGatePanel()}>
           <Show when={recoveryVisible()} fallback={renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}>
             <ConnectionRecoveryView
@@ -5512,7 +5517,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
           <Suspense fallback={<ActivityPageLoading />}>
             <div class="h-full min-h-0 flex flex-col">
-              <div class="min-h-0 flex-1"><EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone /></div>
+              <div class="min-h-0 flex-1"><Show when={standaloneFilePreview} fallback={<EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone />}><FilePreviewStandalone /></Show></div>
             </div>
           </Suspense>
         </ErrorBoundary>
@@ -5697,7 +5702,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         consumeAIThreadFocusRequest,
       }}
     >
-      <Show when={!standaloneTessiven}>
+      <Show when={!standalone}>
         {renderPluginPanel()}
       </Show>
       <PluginPinContextMenu
@@ -5746,7 +5751,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                   </div></section>
                 )}>
                   <div class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
-                    {standaloneTessiven ? renderStandaloneTessiven() : renderMainShell()}
+                    {standalone ? renderStandalone() : renderMainShell()}
                   </div>
                 </Show>
                 <Show when={restartPreparing()}>
@@ -5767,7 +5772,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                       desktopFloatingWindow
                     />
                   </Show>
-                  <Show when={viewMode() !== 'workbench' && filePreviewHostRequested()}>
+                  <Show when={!standaloneFilePreview && viewMode() !== 'workbench' && filePreviewHostRequested()}>
                     <FilePreviewHost />
                   </Show>
                   <FlowerTurnLauncherWindow

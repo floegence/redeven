@@ -23,6 +23,7 @@
     "test:flower-startup": "node scripts/check-flower-startup.mjs",
     "test:office-preview": "node scripts/check-office-preview.mjs",
     "test:ask-flower-previews": "node scripts/check-ask-flower-previews.mjs",
+    "test:file-preview-popout": "node scripts/check-file-preview-popout.mjs",
     "test:file-preview-continuity": "node scripts/check-file-preview-continuity.mjs",
     "test:global-ask-flower": "node scripts/check-global-ask-flower.mjs",
     "test:flower-media": "node scripts/check-flower-media.mjs",

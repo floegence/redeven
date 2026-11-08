@@ -28,6 +28,16 @@ function button(host: ParentNode, label: string) {
 }
 
 describe('File preview action presentations', () => {
+  it('offers popout in More for the active loaded document only', () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const run = vi.fn(); const [busy, setBusy] = createSignal(false);
+    const dispose = render(() => <FilePreviewActions item={item} descriptor={{ mode: 'markdown' }} presentation="header"
+      onOpenSeparately={run} openSeparatelyLabel="Open in new tab" openingSeparately={busy()} />, host);
+    try {
+      button(host, 'More file actions').click(); button(host, 'Open in new tab').click(); expect(run).toHaveBeenCalledOnce();
+      setBusy(true); button(host, 'More file actions').click(); expect(button(host, 'Open in new tab').disabled).toBe(true);
+    } finally { dispose(); }
+  });
   it.each(['icons', 'menu', 'header'] as const)('places Find only in More for %s actions', presentation => {
     const host = document.createElement('div'); document.body.append(host);
     const show = vi.fn();

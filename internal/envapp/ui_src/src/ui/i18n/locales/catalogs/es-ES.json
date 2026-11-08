@@ -1651,6 +1651,12 @@
     }
   },
   "filePreview": {
+    "openSeparately": "Abrir por separado",
+    "openInWindow": "Abrir en una ventana independiente",
+    "openInTab": "Abrir en una pestaña nueva",
+    "saveBeforePopout": "Guarda los cambios antes de abrir una vista previa independiente.",
+    "popoutFailed": "No se pudo abrir la vista previa",
+
     "pdf": {
       "search": "Buscar en el PDF",
       "previous": "Coincidencia anterior",

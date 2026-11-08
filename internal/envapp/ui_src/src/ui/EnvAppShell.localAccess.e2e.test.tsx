@@ -1424,6 +1424,7 @@ vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
+vi.mock('./widgets/FilePreviewStandalone', () => ({ FilePreviewStandalone: () => <div data-testid="standalone-preview" /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
 vi.mock('./utils/askFlowerPath', () => ({
   basenameFromAbsolutePath: (value: string) => {
@@ -3990,6 +3991,48 @@ describe('EnvAppShell environment entry affordances', () => {
       dispose();
       delete window.redevenDesktopShell;
     }
+  }, 10000);
+
+  it('mounts the standalone file preview after authorization without the main shell', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.history.replaceState({}, '', '/?window=file-preview&path=%2Fa.html');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell standaloneFilePreview />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="standalone-preview"]')));
+      expect(host.querySelector('[data-env-file-preview-window]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="shell-sidebar"]')).toBeNull();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
+      expect(host.querySelector('[data-testid="tessiven-page"]')).toBeNull();
+    } finally { dispose(); window.history.replaceState({}, '', '/'); }
+  }, 10000);
+
+  it('keeps standalone file previews behind access approval', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell standaloneFilePreview />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-env-file-preview-window]')));
+      expect(host.querySelector('[data-testid="standalone-preview"]')).toBeNull();
+      expect(host.querySelector('[data-env-file-preview-window]')?.getAttribute('data-env-file-preview-ready')).toBe('false');
+    } finally { dispose(); }
+  }, 10000);
+
+  it('shows initial connection recovery in a standalone file preview', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    connectMock.mockRejectedValueOnce(new Error('agent_offline'));
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell standaloneFilePreview />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="connection-recovery-view"]')));
+      expect(host.querySelector('[data-testid="standalone-preview"]')).toBeNull();
+    } finally { dispose(); }
   }, 10000);
 
   it('renders the standalone Service Canvas window without the Env App shell', async () => {

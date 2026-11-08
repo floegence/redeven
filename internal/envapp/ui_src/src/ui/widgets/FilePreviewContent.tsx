@@ -44,6 +44,9 @@ export interface FilePreviewContentProps {
   onOpenParent?: () => void | Promise<void>;
   onRenderError?: (path: string, message?: string) => void;
   onResourceError?: (path:string,source:string) => void;
+  onOpenSeparately?: () => void | Promise<void>;
+  openSeparatelyLabel?: string;
+  openingSeparately?: boolean;
   onCopyPath?: () => boolean | Promise<boolean>;
   contentRef?: (element: HTMLDivElement) => void;
   onStartEdit?: () => void;

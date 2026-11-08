@@ -1,3 +1,4 @@
+import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
 /// <reference lib="dom" />
 
 import { RELEASE_FLOWER_SOURCE_CHANNEL, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, type DesktopAskFlowerSource, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
@@ -143,6 +144,10 @@ export function bootstrapDesktopShellBridge(): void {
     openWebServiceWindow: async (request: unknown) => normalizeDesktopShellOpenWebServiceWindowResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL, request),
     ),
+    openFilePreviewWindow: async (request: unknown) => {
+      const result = await ipcRenderer.invoke(OPEN_FILE_PREVIEW_WINDOW_CHANNEL, request);
+      return { ok: result?.ok === true };
+    },
     openServiceCanvasWindow: async (request: unknown) => normalizeDesktopShellOpenServiceCanvasWindowResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_SERVICE_CANVAS_WINDOW_CHANNEL, request),
     ),

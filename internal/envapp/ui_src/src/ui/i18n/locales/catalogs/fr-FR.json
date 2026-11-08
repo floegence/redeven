@@ -1651,6 +1651,12 @@
     }
   },
   "filePreview": {
+    "openSeparately": "Ouvrir séparément",
+    "openInWindow": "Ouvrir dans une fenêtre séparée",
+    "openInTab": "Ouvrir dans un nouvel onglet",
+    "saveBeforePopout": "Enregistrez vos modifications avant d’ouvrir un aperçu séparé.",
+    "popoutFailed": "Impossible d’ouvrir l’aperçu",
+
     "pdf": {
       "search": "Rechercher dans le PDF",
       "previous": "Résultat précédent",

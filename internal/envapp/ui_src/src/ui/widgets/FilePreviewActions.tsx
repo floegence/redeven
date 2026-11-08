@@ -11,7 +11,7 @@ import {
 } from 'solid-js';
 import { Button, FeedbackIndicator, capturePromptCardAnchor } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
-import { Check, Copy, Download, Loader2, MoreHorizontal, Pencil, Save, Search, X } from '@floegence/floe-webapp-core/icons';
+import { Check, Copy, Download, ExternalLink, Loader2, MoreHorizontal, Pencil, Save, Search, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { useI18n } from '../i18n';
@@ -33,6 +33,9 @@ export interface FilePreviewActionsProps extends Pick<
   | 'saveError'
   | 'loading'
   | 'selectedText'
+  | 'onOpenSeparately'
+  | 'openSeparatelyLabel'
+  | 'openingSeparately'
   | 'onCopyPath'
   | 'onStartEdit'
   | 'onSave'
@@ -137,6 +140,12 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
     return true;
   };
   const actions: PreviewAction[] = [
+    {
+      id: 'open-separately', label: () => props.openSeparatelyLabel ?? i18n.t('filePreview.openSeparately'), icon: ExternalLink,
+      visible: () => !!props.onOpenSeparately,
+      disabled: () => props.active === false || !props.item || !!props.loading || !!props.saving || !!props.openingSeparately,
+      run: () => { void props.onOpenSeparately?.(); },
+    },
     {
       id: 'find', label: () => i18n.t('filePreview.findInFile'), icon: Search,
       visible: () => !!search?.action(),

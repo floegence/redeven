@@ -1651,6 +1651,12 @@
     }
   },
   "filePreview": {
+    "openSeparately": "独立打开",
+    "openInWindow": "在独立窗口中打开",
+    "openInTab": "在新标签页中打开",
+    "saveBeforePopout": "请先保存修改，再打开独立预览。",
+    "popoutFailed": "无法打开预览",
+
     "pdf": {
       "search": "在 PDF 中查找",
       "previous": "上一个匹配",

@@ -1,3 +1,5 @@
+import { openFilePreviewWindow } from '../services/filePreviewWindow';
+import { desktopShellBridgeAvailable } from '../services/desktopShellBridge';
 import { FilePreviewSearchScope } from './FilePreviewSearch';
 import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { Dynamic, Portal } from 'solid-js/web';
@@ -24,12 +26,28 @@ import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewSurface } from './FilePreviewSurface';
 import { useI18n } from '../i18n';
 
-function FilePreviewDocument(props: { controller: FilePreviewController; surface?: Component<FilePreviewSurfaceProps> }) {
+export function FilePreviewDocument(props: { controller: FilePreviewController; surface?: Component<FilePreviewSurfaceProps>; standalone?: boolean }) {
   const notification = useNotification();
   const i18n = useI18n();
   const env = useEnvContext();
   const filePreview = { get controller() { return props.controller; } };
   const downloads = useDownloadManager();
+  const [opening, setOpening] = createSignal(false);
+  const openSeparately = async () => {
+    if (opening() || props.controller.loading() || props.controller.saving()) return;
+    if (props.controller.dirty()) {
+      notification.error(i18n.t('filePreview.openSeparately'), i18n.t('filePreview.saveBeforePopout'));
+      return;
+    }
+    setOpening(true);
+    try {
+      await openFilePreviewWindow(props.controller.item()?.path ?? '', {
+        unavailable: i18n.t('filePreview.popoutFailed'), popupBlocked: i18n.t('webServices.errors.popupBlocked'),
+      });
+    } catch (error) {
+      notification.error(i18n.t('filePreview.popoutFailed'), error instanceof Error ? error.message : String(error));
+    } finally { setOpening(false); }
+  };
 
   const handleCopyPath = async (): Promise<boolean> => {
     const path = String(filePreview.controller.item()?.path ?? '').trim();
@@ -128,10 +146,13 @@ function FilePreviewDocument(props: { controller: FilePreviewController; surface
       onRetry={() => void filePreview.controller.retry()}
       onRenderError={filePreview.controller.reportRenderError}
       onResourceError={(path,source) => void filePreview.controller.reportResourceError(path,source)}
-      onOpenParent={() => env.openFileBrowserAtPath(dirnameAbsolute(filePreview.controller.item()?.path ?? ''),{openStrategy:'focus_latest_or_create'})}
+      onOpenParent={props.standalone ? undefined : () => env.openFileBrowserAtPath(dirnameAbsolute(filePreview.controller.item()?.path ?? ''),{openStrategy:'focus_latest_or_create'})}
       onCopyPath={handleCopyPath}
       onDownload={handleDownload}
-      onAskFlower={handleAskFlower}
+      onAskFlower={props.standalone ? undefined : handleAskFlower}
+      onOpenSeparately={props.standalone ? undefined : openSeparately}
+      openSeparatelyLabel={i18n.t(desktopShellBridgeAvailable() ? 'filePreview.openInWindow' : 'filePreview.openInTab')}
+      openingSeparately={opening()}
     />
   );
 }

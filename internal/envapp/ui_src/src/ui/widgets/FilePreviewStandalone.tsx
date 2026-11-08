@@ -1,0 +1,40 @@
+import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { readFilePreviewWindowRequest } from '../../../../../../desktop/src/shared/filePreviewWindow';
+import { useFilePreviewContext } from './FilePreviewContext';
+import { FilePreviewDocument } from './FilePreviewHost';
+import { FilePreviewPanel } from './FilePreviewPanel';
+import { FilePreviewActions } from './FilePreviewActions';
+import { FilePreviewSearchScope } from './FilePreviewSearch';
+import type { FilePreviewSurfaceProps } from './FilePreviewSurface';
+import { useI18n } from '../i18n';
+
+function StandaloneSurface(props: FilePreviewSurfaceProps) {
+  const [content, setContent] = createSignal<HTMLDivElement>();
+  const originalTitle = document.title;
+  createEffect(() => { document.title = props.item?.name ?? originalTitle; });
+  onCleanup(() => { document.title = originalTitle; });
+  return <FilePreviewSearchScope>
+    <section class="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground" data-file-preview-standalone>
+      <header class="flex h-11 shrink-0 items-center gap-3 border-b border-border px-3"
+        data-redeven-desktop-titlebar-drag-region="true" data-redeven-desktop-window-titlebar="true" data-redeven-desktop-window-titlebar-content="true">
+        <h1 class="min-w-0 flex-1 truncate text-sm font-medium" title={props.item?.path}>{props.item?.name}</h1>
+        <FilePreviewActions {...props} active compact presentation="header" contentElement={content()} />
+      </header>
+      <div class="min-h-0 flex-1"><FilePreviewPanel {...props} active surface="main" showHeader={false} contentRef={setContent} /></div>
+    </section>
+  </FilePreviewSearchScope>;
+}
+
+export function FilePreviewStandalone() {
+  const context = useFilePreviewContext();
+  const i18n = useI18n();
+  const request = readFilePreviewWindowRequest(window.location.search);
+  onMount(() => {
+    if (!request) return;
+    const name = request.path.slice(request.path.lastIndexOf('/') + 1);
+    void context.workspace?.openPreview({ id: request.path, path: request.path, name, type: 'file' });
+  });
+  return <Show when={request} fallback={<div class="p-6 text-sm" role="alert">{i18n.t('shell.notifications.invalidFilePath')}</div>}>
+    <FilePreviewDocument controller={context.controller} surface={StandaloneSurface} standalone />
+  </Show>;
+}
