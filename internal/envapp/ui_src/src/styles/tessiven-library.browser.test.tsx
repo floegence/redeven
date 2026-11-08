@@ -2,6 +2,7 @@ import '../index.css';
 import '../ui/flower-feature.css';
 import { CanvasFlowerTestSurface, canvasFlowerAdapter } from './tessiven-flower.test-support';
 import { render } from 'solid-js/web';
+import { FloeProvider } from '@floegence/floe-webapp-core';
 import { page } from 'vitest/browser';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
@@ -144,14 +145,14 @@ it('creates immediately, delegates edits to Flower, and follows current versions
   const flowerAdapter = { ...canvasFlowerAdapter(), launchTurn: ask };
   dispose = render(
     () => (
-      <TessivenPage
+      <FloeProvider config={{ storage: { enabled: false } }}><TessivenPage
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
         renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
         registerPageContext={read => { readPage = read; }}
         onOpenService={() => {}}
-      />
+      /></FloeProvider>
     ),
     host,
   );
@@ -225,19 +226,20 @@ it('creates immediately, delegates edits to Flower, and follows current versions
     .getByRole('menuitem', { name: 'View document', exact: true })
     .click();
   await expect.element(page.getByRole('dialog', { name: 'View document' })).toBeVisible();
-  expect(document.querySelector('.tessiven-dialog textarea')).toBeNull();
+  await expect.element(page.getByRole('button', { name: 'Find in document' })).toBeEnabled();
+  expect(document.querySelector('.tessiven-document-editor .view-lines')).toBeTruthy();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   dispose();
   dispose = render(
     () => (
-      <TessivenPage
+      <FloeProvider config={{ storage: { enabled: false } }}><TessivenPage
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
         renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
         onOpenService={() => {}}
         openRequest={{ canvasID: 'commerce', version: 1, nonce: 1 }}
-      />
+      /></FloeProvider>
     ),
     host,
   );

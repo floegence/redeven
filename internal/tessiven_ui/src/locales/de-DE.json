@@ -1,4 +1,10 @@
 {
+  "wrapLines": "Zeilenumbruch",
+  "findDocument": "Im Dokument suchen",
+  "copyDocument": "Kopieren",
+  "documentCopied": "Kopiert",
+  "documentCopyFailed": "Das Dokument konnte nicht kopiert werden. Wählen Sie den Text zum Kopieren aus oder exportieren Sie die YAML-Datei.",
+  "documentHighlightUnavailable": "Die Syntaxhervorhebung ist nicht verfügbar. Das Originaldokument wird angezeigt.",
   "conversationBusy": "Beende das aktive Gespräch und seine ausstehenden Aufgaben, bevor du wechselst.",
   "conversationInactive": "Aktiviere dieses Gespräch, bevor du es ausführst.",
   "newConversation": "Neues Gespräch",

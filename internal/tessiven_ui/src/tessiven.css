@@ -569,16 +569,124 @@
 .tessiven-error {
   color: var(--error);
 }
+.tessiven-document-dialog {
+  height: min(800px, calc(100dvh - 48px));
+}
+.tessiven-document-dialog .tessiven-document-body {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+}
+.tessiven-document-reader {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.tessiven-document-toolbar,
+.tessiven-document-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 10px 16px;
+}
+.tessiven-document-toolbar {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+}
+.tessiven-document-identity,
+.tessiven-document-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tessiven-document-identity {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font: 12px/1.5 var(--font-mono, monospace);
+}
+.tessiven-document-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tessiven-document-identity small {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+.tessiven-document-identity svg,
+.tessiven-document-tools svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.tessiven-document-tools { flex: none; }
+.tessiven-document-tools [aria-pressed="true"] {
+  color: var(--foreground);
+  background: var(--background);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.tessiven-document-content {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--background);
+}
+.tessiven-document-editor,
+.tessiven-source {
+  position: absolute;
+  inset: 0;
+}
 .tessiven-source {
   margin: 0;
-  max-height: 65vh;
   overflow: auto;
-  padding: 20px 24px;
-  font: 12px/1.8 var(--font-mono, monospace);
+  padding: 16px 24px;
+  font: 13px/22px var(--font-mono, monospace);
   color: var(--foreground);
-  background: var(--muted);
+  background: var(--background);
   user-select: text;
   tab-size: 2;
+}
+.tessiven-source--wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tessiven-document-footer {
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+}
+.tessiven-document-footer > p {
+  flex: 1;
+  min-width: 160px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+.tessiven-document-footer .tessiven-document-copy-error {
+  flex-basis: 100%;
+  color: var(--error);
+}
+.tessiven-document-unavailable {
+  position: absolute;
+  bottom: 0;
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+@media (max-width: 560px) {
+  .tessiven-document-toolbar,
+  .tessiven-document-footer { padding: 8px 12px; gap: 8px; }
+  .tessiven-document-identity small { display: none; }
+  .tessiven-document-footer > p { flex-basis: 100%; }
+  .tessiven-document-footer > .tessiven-document-tools { margin-left: auto; }
 }
 .tessiven-object-search {
   padding: 16px;

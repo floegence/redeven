@@ -1,4 +1,10 @@
 {
+  "wrapLines": "自动换行",
+  "findDocument": "在文档中查找",
+  "copyDocument": "复制",
+  "documentCopied": "已复制",
+  "documentCopyFailed": "无法复制文档。请选择文本复制，或导出 YAML 文件。",
+  "documentHighlightUnavailable": "语法高亮不可用，当前显示原始文档。",
   "conversationBusy": "请先停止当前对话并处理完待完成的任务，再切换对话。",
   "conversationInactive": "请先激活此对话，再运行。",
   "newConversation": "新对话",

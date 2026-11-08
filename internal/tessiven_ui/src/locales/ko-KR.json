@@ -1,4 +1,10 @@
 {
+  "wrapLines": "자동 줄 바꿈",
+  "findDocument": "문서에서 찾기",
+  "copyDocument": "복사",
+  "documentCopied": "복사됨",
+  "documentCopyFailed": "문서를 복사하지 못했습니다. 텍스트를 선택하여 복사하거나 YAML 파일로 내보내세요.",
+  "documentHighlightUnavailable": "구문 강조를 사용할 수 없어 원본 문서를 표시합니다.",
   "conversationBusy": "전환하기 전에 활성 대화를 중지하고 대기 중인 작업을 완료하세요.",
   "conversationInactive": "실행하기 전에 이 대화를 활성화하세요.",
   "newConversation": "새 대화",

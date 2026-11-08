@@ -1,4 +1,10 @@
 {
+  "wrapLines": "Retour à la ligne",
+  "findDocument": "Rechercher dans le document",
+  "copyDocument": "Copier",
+  "documentCopied": "Copié",
+  "documentCopyFailed": "Impossible de copier le document. Sélectionnez le texte à copier ou exportez le fichier YAML.",
+  "documentHighlightUnavailable": "La coloration syntaxique est indisponible. Le document original est affiché.",
   "conversationBusy": "Arrêtez la conversation active et terminez ses tâches en attente avant de changer.",
   "conversationInactive": "Activez cette conversation avant de la lancer.",
   "newConversation": "Nouvelle conversation",

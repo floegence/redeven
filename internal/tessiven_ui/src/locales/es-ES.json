@@ -1,4 +1,10 @@
 {
+  "wrapLines": "Ajustar líneas",
+  "findDocument": "Buscar en el documento",
+  "copyDocument": "Copiar",
+  "documentCopied": "Copiado",
+  "documentCopyFailed": "No se pudo copiar el documento. Selecciona el texto para copiarlo o exporta el archivo YAML.",
+  "documentHighlightUnavailable": "El resaltado de sintaxis no está disponible. Se muestra el documento original.",
   "conversationBusy": "Detén la conversación activa y termina sus tareas pendientes antes de cambiar.",
   "conversationInactive": "Activa esta conversación antes de ejecutarla.",
   "newConversation": "Nueva conversación",

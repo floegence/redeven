@@ -30,6 +30,7 @@ import {
 import { TessivenGraph, type GraphBrowseState } from './TessivenGraph';
 import { toRenderVersion } from './presentation';
 import { TessivenIcon } from './TessivenIcon';
+import { TessivenDocumentDialog } from './TessivenDocumentDialog';
 import { TessivenLibraryCard } from './TessivenLibraryCard';
 import { compareDocuments, type Difference } from './projection';
 import { TessivenResourceDialog } from './TessivenResourceDialog';
@@ -754,28 +755,13 @@ export function TessivenPage(props: {
           />
         </Show>
       </div>
-      <Dialog
-        closeLabel={props.t('close')}
+      <TessivenDocumentDialog
         open={props.visible !== false && sourceOpen()}
         onOpenChange={setSourceOpen}
-        title={props.t('viewSource')}
-        bodyDescription={props.t('sourceDescription')}
-        class="tessiven-dialog"
-        footer={
-          <Button variant="outline" onClick={download}>
-            <Download class="h-4 w-4" />
-            {props.t('export')}
-          </Button>
-        }
-      >
-        <pre
-          class="tessiven-source"
-          tabIndex={0}
-          aria-label={props.t('documentLabel')}
-        >
-          {version()?.document_yaml}
-        </pre>
-      </Dialog>
+        version={version()}
+        t={props.t}
+        onDownload={download}
+      />
       <Dialog
         closeLabel={props.t('close')}
         open={props.visible !== false && historyOpen()}

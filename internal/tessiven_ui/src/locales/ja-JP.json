@@ -1,4 +1,10 @@
 {
+  "wrapLines": "行を折り返す",
+  "findDocument": "ドキュメント内を検索",
+  "copyDocument": "コピー",
+  "documentCopied": "コピー済み",
+  "documentCopyFailed": "コピーできませんでした。テキストを選択してコピーするか、YAML ファイルを書き出してください。",
+  "documentHighlightUnavailable": "構文の強調表示を利用できないため、元のドキュメントを表示しています。",
   "conversationBusy": "切り替える前に、アクティブな会話を停止し、保留中の作業を完了してください。",
   "conversationInactive": "実行する前に、この会話をアクティブにしてください。",
   "newConversation": "新しい会話",

@@ -28,6 +28,17 @@ The interactive overview and library thumbnails always paint the root overview, 
 ### Controls and rendering
 - Canvas controls expand or collapse all logical groups in one compact reflow. They preserve the selected visible object, or its enclosing group when hidden, and never create a document version. Large-graph qualification measures actual host counts, including groups of ten so a thousand-host fixture never silently measures only aggregate cards.
 
+## Document reading
+View document opens the current saved YAML in the published Floe read-only code
+viewer, loaded only on demand. The shared Env App/Desktop surface follows the
+shell theme, shows line numbers and indentation guides, supports folding and
+find, and wraps long lines by default. A visible wrap toggle restores original
+line layout. Escape dismisses the editor's find control before the dialog.
+The filename includes the canvas and version; copy and export use the exact
+saved YAML, never rendered tokens or a reserialized document. Viewing, finding,
+wrapping and folding do not create a version or modify the canvas. Plain source
+stays readable while the editor loads; clipboard failure remains visible.
+
 ## Relationship summaries
 ### Group summaries
 Patterns use ordered canonical endpoint identities, endpoint granularity, relationship kind, exact protocol and locality.
@@ -96,6 +107,8 @@ Both surfaces send a Flower turn, display the canonical streamed reply and exerc
 It never attaches to an existing user browser or Runtime.
 
 # Evidence
+
+- `internal/envapp/ui_src/src/styles/tessiven-document.browser.test.tsx` — Rendered syntax colors, themes, wrapping, read-only interaction, find, copy and export.
 
 - `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts`
 - Identity-only native request/ACK.

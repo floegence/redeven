@@ -1,4 +1,10 @@
 {
+  "wrapLines": "Wrap lines",
+  "findDocument": "Find in document",
+  "copyDocument": "Copy",
+  "documentCopied": "Copied",
+  "documentCopyFailed": "Could not copy the document. Select the text to copy it, or export the YAML file.",
+  "documentHighlightUnavailable": "Syntax highlighting is unavailable. The original document is shown.",
   "conversationBusy": "Stop the active conversation and finish its pending work before switching.",
   "conversationInactive": "Activate this conversation before running it.",
   "newConversation": "New conversation",
