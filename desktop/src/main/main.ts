@@ -1,5 +1,7 @@
+import { ASK_FILE_PREVIEW_FLOWER_CHANNEL } from '../shared/filePreviewWindowRoute';
+import { readFilePreviewWindowRequest } from '../shared/filePreviewWindow';
 import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
-import { openFilePreviewWindow } from './filePreviewWindow';
+import { askFilePreviewFlower, openFilePreviewWindow } from './filePreviewWindow';
 import { captureAuthorizedPage } from './manualScreenshot';
 import { RELEASE_FLOWER_SOURCE_CHANNEL, type DesktopAskFlowerSource, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
 import { attachDesktopEditContextMenu } from './editContextMenu';
@@ -18940,7 +18942,8 @@ function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRec
   root.webContents.once('destroyed', clearFlowerWindowOrigin);
   root.webContents.removeListener('did-navigate', clearFlowerWindowOrigin);
   root.webContents.once('did-navigate', clearFlowerWindowOrigin);
-  const metadata = { id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now(), ...(selection ? { selection } : {}) };
+  const preview = new URL(url).pathname === LOCAL_UI_ENV_APP_ENTRY_PATH ? readFilePreviewWindowRequest(new URL(url).search) : null;
+  const metadata = { ...(preview ? { file_path: preview.path } : {}), id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now(), ...(selection ? { selection } : {}) };
   flowerWindowOrigins.set(root.webContents.id, { id, source, url, record, metadata });
   root.webContents.send(ASK_FLOWER_SOURCE_CHANNEL, metadata);
   root.show(); root.focus();
@@ -20033,6 +20036,16 @@ if (!app.requestSingleInstanceLock()) {
     const record = sessionRecordForWebContentsID(event.sender.id);
     if (normalized.preparation_id && (!record || event.senderFrame !== event.sender.mainFrame)) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
     return openWebServiceWindowFromShell(record, normalized, record ? `${record.session_key}:${event.sender.id}` : undefined);
+  });
+  ipcMain.handle(ASK_FILE_PREVIEW_FLOWER_CHANNEL, (event, request) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const root = record && !record.closing ? liveTrackedBrowserWindow(record.root_window) : null;
+    return askFilePreviewFlower(request, record && root ? {
+      mainFrame: event.senderFrame === event.sender.mainFrame,
+      allowed: isAllowedSessionNavigation(record.session_key, event.sender.getURL()),
+      sourceURL: event.sender.getURL(), entryURL: record.entry_url,
+      open: () => { askFlowerFromOwnedWindow(event.sender, record); return true; },
+    } : null);
   });
   ipcMain.handle(OPEN_FILE_PREVIEW_WINDOW_CHANNEL, (event, request) => {
     const record = sessionRecordForWebContentsID(event.sender.id);

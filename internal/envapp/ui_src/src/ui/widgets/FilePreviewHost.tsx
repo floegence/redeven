@@ -149,7 +149,7 @@ export function FilePreviewDocument(props: { controller: FilePreviewController; 
       onOpenParent={props.standalone ? undefined : () => env.openFileBrowserAtPath(dirnameAbsolute(filePreview.controller.item()?.path ?? ''),{openStrategy:'focus_latest_or_create'})}
       onCopyPath={handleCopyPath}
       onDownload={handleDownload}
-      onAskFlower={props.standalone ? undefined : handleAskFlower}
+      onAskFlower={handleAskFlower}
       onOpenSeparately={props.standalone ? undefined : openSeparately}
       openSeparatelyLabel={i18n.t(desktopShellBridgeAvailable() ? 'filePreview.openInWindow' : 'filePreview.openInTab')}
       openingSeparately={opening()}

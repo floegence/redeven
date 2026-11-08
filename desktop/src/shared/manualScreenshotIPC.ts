@@ -11,4 +11,4 @@ export function parseManualScreenshotRequest(value: unknown): { url: string; reg
 export const ASK_FLOWER_SOURCE_CHANNEL = 'redeven-desktop:ask-flower-source';
 export const RELEASE_FLOWER_SOURCE_CHANNEL = 'redeven-desktop:release-flower-source';
 export const SOURCE_SCREENSHOT_CHANNEL = 'redeven-desktop:source-screenshot';
-export type DesktopAskFlowerSource = Readonly<{ id: string; title: string; url: string; captured_at_ms: number; selection?: string }>;
+export type DesktopAskFlowerSource = Readonly<{ id: string; title: string; url: string; captured_at_ms: number; selection?: string; file_path?: string }>;

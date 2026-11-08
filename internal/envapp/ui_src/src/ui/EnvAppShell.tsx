@@ -1,3 +1,5 @@
+import { FILE_PREVIEW_FLOWER_QUERY } from '../../../../../desktop/src/shared/filePreviewWindowRoute';
+import { askFilePreviewFlower } from './services/filePreviewFlower';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
@@ -2616,7 +2618,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       environment === envId() && mode === viewMode() && (source.value.kind === 'navigation' || mode !== 'activity' || page === layout.sidebarActiveTab())
       && current()?.id === source.id && current()?.value.resourceKey === source.value.resourceKey } : undefined;
   };
+  const reportPreviewFlowerError = (error: unknown) => notify.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), getErrorMessage(error));
+  const handoffPreviewToFlower = () => {
+    const path = filePreviewWorkspace.activeController().item()?.path;
+    if (!path) return;
+    void askFilePreviewFlower(path, { unavailable: i18n.t('shell.notifications.askFlowerUnavailableTitle'),
+      popupBlocked: i18n.t('webServices.errors.popupBlocked') }).catch(reportPreviewFlowerError);
+  };
   const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
+    if (standaloneFilePreview) return handoffPreviewToFlower;
     const source = captureFlowerSource(false, request?.target, request?.selection ?? '');
     const snapshot = source ? flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
       pageID: source.value.pageID, pageName: source.value.pageName, capturedAtMs: Date.now(),
@@ -2641,6 +2651,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
+    if (standaloneFilePreview) { handoffPreviewToFlower(); return; }
     bindScreenshotSource(captureFlowerSource());
     const capturedAnchor = anchor ?? capturePromptCardAnchor();
     const capturedMode = viewMode();
@@ -2701,15 +2712,34 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
 
+  const openFileFlowerLauncher = async (path: string) => {
+    const { filePreviewFlowerIntent } = await import('./services/filePreviewFlowerIntent');
+    const intent = filePreviewFlowerIntent(path);
+    if (intent) { openFlowerTurnLauncher(intent); bindScreenshotSource(undefined); }
+    else notify.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
+  };
+  let pendingPreviewFlower = new URLSearchParams(window.location.search).get(FILE_PREVIEW_FLOWER_QUERY);
+  createEffect(() => {
+    if (!pendingPreviewFlower || standalone || !runtimeConnectionEstablished() || accessGateVisible()) return;
+    const path = pendingPreviewFlower; pendingPreviewFlower = null;
+    const url = new URL(window.location.href); url.searchParams.delete(FILE_PREVIEW_FLOWER_QUERY);
+    window.history.replaceState(window.history.state, '', url);
+    void openFileFlowerLauncher(path).catch(reportPreviewFlowerError);
+  });
   onMount(() => {
-    const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(source => {
+    const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(async source => {
       if (flowerTurnLauncherLocked()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
+      if (source.file_path) {
+        try { await openFileFlowerLauncher(source.file_path); }
+        catch (error) { reportPreviewFlowerError(error); }
+      } else {
       const snapshot = flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
         pageID: '', pageName: source.title || environmentName(), capturedAtMs: source.captured_at_ms,
         state: { url: source.url, ...(source.selection ? { selection: source.selection } : {}) } });
       const context = { kind: 'text_snapshot' as const, title: snapshot.title, content: snapshot.content };
       openFlowerTurnLauncher({ id: createClientId(), source_surface: 'flower_composer', context_items: [context],
         context_action: buildAskFlowerContextAction({ source: 'flower_composer', context_items: [context], surfaceId: source.id }) }, { x: 32, y: 80 });
+      }
       if (!flowerTurnLauncherOpen()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
       externalScreenshot = async signal => {
         signal.throwIfAborted();
@@ -5041,7 +5071,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       });
     }
 
-    const unregister = cmd.registerAll(list as any);
+    const unregister = cmd.registerAll((standaloneFilePreview ? list.filter(command => command.id === 'redeven.askFlower') : list) as any);
     onCleanup(() => unregister());
   });
 

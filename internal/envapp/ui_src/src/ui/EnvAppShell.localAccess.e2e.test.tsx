@@ -1422,7 +1422,7 @@ vi.mock('./pages/EnvSettingsPage', async () => {
 });
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
-vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: () => <div /> }));
+vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: (props: any) => <div data-testid="flower-launcher" data-open={String(props.open)} data-intent={JSON.stringify(props.intent)} /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
 vi.mock('./widgets/FilePreviewStandalone', () => ({ FilePreviewStandalone: () => <div data-testid="standalone-preview" /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
@@ -1439,6 +1439,7 @@ vi.mock('./utils/askFlowerPath', () => ({
     if (raw === '/') return '/';
     return raw.replace(/\/+$/, '') || '/';
   },
+  dirnameAbsolute: (value: string) => value.slice(0, value.lastIndexOf('/')) || '/',
   resolveSuggestedWorkingDirAbsolute: () => '',
 }));
 vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), reloadCurrentPage: reloadCurrentPageMock }));
@@ -4006,6 +4007,23 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="shell-sidebar"]')).toBeNull();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
       expect(host.querySelector('[data-testid="tessiven-page"]')).toBeNull();
+      expect(commandState.commands.map(command => command.id)).toEqual(['redeven.askFlower']);
+    } finally { dispose(); window.history.replaceState({}, '', '/'); }
+  }, 10000);
+
+  it('consumes a browser file handoff once after authorization in the complete shell', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.history.replaceState({}, '', '/?ask_file=%2Fdocs%2Freport%20%23%25.md');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => host.querySelector('[data-testid="flower-launcher"]')?.getAttribute('data-open') === 'true');
+      const intent = JSON.parse(host.querySelector('[data-testid="flower-launcher"]')!.getAttribute('data-intent')!);
+      expect(intent.source_surface).toBe('file_preview');
+      expect(intent.context_items).toEqual([{ kind: 'file_path', path: '/docs/report #%.md', is_directory: false }]);
+      expect(window.location.search).toBe('');
     } finally { dispose(); window.history.replaceState({}, '', '/'); }
   }, 10000);
 

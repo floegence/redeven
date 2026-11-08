@@ -60,6 +60,7 @@ export interface DesktopShellBridge {
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   openCodespaceWindow?: (request: DesktopShellCodespaceWindowOpenRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
   openWebServiceWindow?: (request: DesktopShellOpenWebServiceWindowRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
+  askFilePreviewFlower?: (request: FilePreviewWindowRequest) => Promise<FilePreviewWindowResponse>;
   openFilePreviewWindow?: (request: FilePreviewWindowRequest) => Promise<FilePreviewWindowResponse>;
   openServiceCanvasWindow?: (request: DesktopShellOpenServiceCanvasWindowRequest) => Promise<DesktopShellOpenServiceCanvasWindowResponse>;
   applicationComponents?: (request: HostApplicationComponentsRequest) => Promise<HostApplicationComponentsResult>;
@@ -101,6 +102,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.openCodespaceWindow !== 'function'
       && typeof candidate.openWebServiceWindow !== 'function'
+      && typeof candidate.askFilePreviewFlower !== 'function'
       && typeof candidate.openFilePreviewWindow !== 'function'
       && typeof candidate.openServiceCanvasWindow !== 'function'
       && typeof candidate.openDashboard !== 'function'

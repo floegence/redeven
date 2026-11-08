@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
+import http from 'node:http';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -18,7 +19,7 @@ await session.run(async () => {
   const bundle = path.resolve(bundleArgument), output = path.resolve(outputArgument);
   const manifest = JSON.parse(await readFile(path.join(bundle, 'desktop-bundle-manifest.json'), 'utf8'));
   const state = await session.directory(await mkdtemp(path.join(os.homedir(), '.redeven-file-popout-')));
-  const report = { status: 'running', commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), state, bundle, scenarios: [], errors: [] };
+  const report = { status: 'running', commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), state, bundle, scenarios: [], errors: [], flower: [] };
   assert.ok(report.commit.startsWith(manifest.commit), 'Acceptance bundle must match the source commit');
   await mkdir(output, { recursive: true });
   const files = path.join(state, 'files'); await mkdir(files);
@@ -61,6 +62,49 @@ await session.run(async () => {
     assert.equal(await page.getByRole('menuitem', { name: /Open in (new tab|separate window)/ }).count(), 0);
     await page.keyboard.press('Escape');
   };
+  const providerRequests = [], providerFailures = [];
+  const strings = value => typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : [];
+  let sequence = 0;
+  const provider = http.createServer(async (request, response) => {
+    try {
+      if (request.url === '/v1/models') { response.end(JSON.stringify({ data: [{ id: 'gpt-5-mini' }] })); return; }
+      const chunks = []; for await (const chunk of request) chunks.push(chunk);
+      const input = JSON.parse(Buffer.concat(chunks));
+      const marker = strings(input.input).join('\n').match(/POPOUT_FLOWER_(NATIVE|BROWSER)/)?.[0];
+      if (input.tools?.length) {
+        assert.ok(marker, 'User question reaches the configured provider');
+        assert.ok(strings(input.input).some(text => text.includes(htmlFile) || text.includes(JSON.stringify(htmlFile).slice(1, -1))), 'Exact file reference reaches the provider');
+        providerRequests.push({ marker, path: htmlFile, exactReference: true });
+      }
+      const id = 'popout-' + ++sequence, text = marker ? marker + '_COMPLETE' : 'Preview acceptance';
+      response.setHeader('Content-Type', 'text/event-stream');
+      const event = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
+      const item = { type: 'message', id: 'message-' + id, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] };
+      event({ type: 'response.created', response: { id, model: 'gpt-5-mini', created_at: Math.floor(Date.now() / 1000) } });
+      event({ type: 'response.output_item.added', output_index: 0, item: { ...item, status: 'in_progress', content: [] } });
+      event({ type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: item.id, delta: text });
+      event({ type: 'response.output_item.done', output_index: 0, item });
+      event({ type: 'response.completed', response: { id, model: 'gpt-5-mini', status: 'completed', output: [item], usage: { input_tokens: 200, output_tokens: 30 } } });
+      response.end('data: [DONE]\n\n');
+    } catch (error) { providerFailures.push(String(error)); if (!response.headersSent) response.writeHead(500); response.end(); }
+  });
+  await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
+  await session.port(provider.address().port);
+  await session.defer('Preview Flower provider', async () => { provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); });
+  const configureFlower = async api => {
+    await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Preview qualification', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text'], context_window: 128000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'qualification-only' }], web_search_provider_key_patches: [] });
+    await api('/_redeven_proxy/api/ai/default_permission', 'PUT', { permission_type: 'readonly' });
+  };
+  const submitFlower = async (page, marker) => {
+    const card = page.locator('[data-floe-prompt-card]'); await card.waitFor();
+    assert.ok((await card.innerText()).includes(path.basename(htmlFile)), 'Visible file context accompanies the question');
+    await card.locator('textarea').fill(marker + ': inspect the referenced file.');
+    await card.locator('.floe-prompt-card-submit').click();
+    await page.getByText(marker + '_COMPLETE', { exact: true }).filter({ visible: true }).waitFor({ timeout: 60000 });
+    await card.waitFor({ state: 'hidden' });
+    assert.deepEqual(providerFailures, []); assert.ok(providerRequests.some(request => request.marker === marker));
+    report.flower.push({ marker, visibleReply: true, exactFileReference: true });
+  };
   let app, browser;
   try {
     execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), [path.join(root, 'desktop')], { stdio: 'inherit' });
@@ -77,6 +121,8 @@ await session.run(async () => {
     await welcome.waitForFunction(() => Boolean(window.redevenDesktopLanguage));
     await welcome.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
     await until(async () => (await welcome.evaluate(() => window.redevenDesktopSettings.requestRuntimeFlower({ method: 'GET', path: '/_redeven_proxy/api/ai/threads' }))).ok, 'Runtime startup');
+    const nativeAPI = async (route, method = 'GET', body) => { const result = await welcome.evaluate(request => window.redevenDesktopSettings.requestRuntimeFlower(request), { path: route, method, body }); assert.equal(result.ok, true, JSON.stringify(result)); return result.data; };
+    await configureFlower(nativeAPI);
     await welcome.getByRole('button', { name: /^(Open|Show) window$/ }).first().click({ timeout: 60000 });
     const parent = await until(() => app.context().pages().find(page => page.url().includes('/_redeven_proxy/env/')), 'Env App'); observe(parent);
     await parent.getByRole('tab', { name: 'Activity', exact: true }).click();
@@ -88,6 +134,18 @@ await session.run(async () => {
     await popout(parent, true);
     const child = await until(() => children()[0], 'native preview'); await verifyStandalone(child, htmlFile);
     console.log('Native standalone page is ready');
+    await child.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+    await submitFlower(parent, 'POPOUT_FLOWER_NATIVE');
+    await child.bringToFront();
+    await child.keyboard.press('ControlOrMeta+Shift+J');
+    await parent.locator('[data-floe-prompt-card]').waitFor();
+    assert.ok((await parent.locator('[data-floe-prompt-card]').innerText()).includes(path.basename(htmlFile)));
+    await parent.keyboard.press('Escape'); await parent.locator('[data-floe-prompt-card]').waitFor({ state: 'hidden' });
+    await child.bringToFront();
+    await more(child).click(); await child.getByRole('menuitem', { name: 'Copy path', exact: true }).click();
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), htmlFile);
+    assert.equal(await child.evaluate(path => window.redevenDesktopShell.askFilePreviewFlower({ path }), markdownFile).then(result => result.ok), false);
+
     const frame = await frameFor(child); await frame.getByRole('heading', { name: 'Independent preview' }).waitFor();
     assert.equal(await frame.evaluate(() => typeof window.redevenDesktopShell), 'undefined', 'Untrusted HTML has no native bridge');
     await more(child).click(); await child.getByRole('menuitem', { name: 'Find in file', exact: true }).click();
@@ -154,6 +212,11 @@ await session.run(async () => {
       if (runtime.exitCode !== null) throw new Error(runtimeOutput);
       try { const value = JSON.parse(await readFile(startupFile, 'utf8')); return value.status === 'ready' ? value : null; } catch { return null; }
     }, 'browser Runtime');
+    const browserAPI = async (route, method = 'GET', body) => {
+      const response = await fetch(new URL(route, startup.local_ui_url), { method, headers: { 'Content-Type': 'application/json', Origin: new URL(startup.local_ui_url).origin }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      const result = await response.json(); assert.ok(response.ok && result.ok !== false, JSON.stringify(result)); return result.data ?? result;
+    };
+    await configureFlower(browserAPI);
     browser = await session.launchBrowser(chromium, { channel: 'chromium', headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
     // Exercise the existing browser-download sink where File System Access is unavailable.
@@ -167,6 +230,18 @@ await session.run(async () => {
     assert.equal(await tab.evaluate(() => window.opener === null), true);
     assert.equal(new URL(tab.url()).searchParams.get('path'), htmlFile); assert.equal(page.isClosed(), false);
     console.log('Browser tab is ready');
+    const flowerOpened = context.waitForEvent('page'); await tab.getByRole('button', { name: 'Ask Flower', exact: true }).click();
+    const flower = await flowerOpened; observe(flower); await submitFlower(flower, 'POPOUT_FLOWER_BROWSER');
+    assert.equal(new URL(flower.url()).searchParams.has('window'), false);
+    assert.equal(new URL(flower.url()).searchParams.has('ask_file'), false);
+    assert.equal(await flower.evaluate(() => window.opener), null); assert.equal(tab.isClosed(), false); await flower.close();
+    await tab.getByRole('heading', { name: path.basename(htmlFile), exact: true }).click({ button: 'right' });
+    const contextFlowerOpened = context.waitForEvent('page');
+    await tab.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+    const contextFlower = await contextFlowerOpened; observe(contextFlower);
+    await contextFlower.locator('[data-floe-prompt-card]').waitFor();
+    assert.ok((await contextFlower.locator('[data-floe-prompt-card]').innerText()).includes(path.basename(htmlFile))); await contextFlower.close();
+
     await tab.reload(); await verifyStandalone(tab, htmlFile); await (await frameFor(tab)).getByRole('heading', { name: 'Independent preview' }).waitFor();
     await tab.screenshot({ path: path.join(output, 'browser-tab.png') });
     const downloadEvent = tab.waitForEvent('download'); await more(tab).click(); await tab.getByRole('menuitem', { name: 'Download file', exact: true }).click();
@@ -187,7 +262,8 @@ await session.run(async () => {
     await writeFile(missing, '# Recovered preview'); await errorTab.getByRole('button', { name: 'Retry', exact: true }).click();
     await errorTab.getByRole('heading', { name: 'Recovered preview', exact: true }).waitFor(); await errorTab.close();
     report.scenarios.push('browser-download-and-file-link-history', 'browser-menu-opens-new-tab', 'browser-exact-special-character-path', 'browser-isolated-opener-and-reload', 'browser-narrow-layout', 'real-missing-file-retry');
-    assert.deepEqual(report.errors, []); report.status = 'passed';
+    report.scenarios.push('native-flower-file-context-submit-visible-reply', 'native-flower-shortcut-and-copy-path', 'browser-flower-submit-visible-reply', 'browser-flower-context-menu');
+    assert.deepEqual(providerFailures, []); assert.deepEqual(report.errors, []); report.status = 'passed';
   } catch (error) {
     report.status = 'failed'; report.error = error.stack ?? String(error);
     const pages = app?.context().pages() ?? browser?.contexts()[0]?.pages() ?? [];

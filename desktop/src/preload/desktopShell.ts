@@ -1,3 +1,4 @@
+import { ASK_FILE_PREVIEW_FLOWER_CHANNEL } from '../shared/filePreviewWindowRoute';
 import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
 /// <reference lib="dom" />
 
@@ -144,6 +145,10 @@ export function bootstrapDesktopShellBridge(): void {
     openWebServiceWindow: async (request: unknown) => normalizeDesktopShellOpenWebServiceWindowResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL, request),
     ),
+    askFilePreviewFlower: async (request: unknown) => {
+      const result = await ipcRenderer.invoke(ASK_FILE_PREVIEW_FLOWER_CHANNEL, request);
+      return { ok: result?.ok === true };
+    },
     openFilePreviewWindow: async (request: unknown) => {
       const result = await ipcRenderer.invoke(OPEN_FILE_PREVIEW_WINDOW_CHANNEL, request);
       return { ok: result?.ok === true };

@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { openFilePreviewWindow } from '../services/filePreviewWindow';
-import { FilePreviewHost } from './FilePreviewHost';
+import { FilePreviewDocument, FilePreviewHost } from './FilePreviewHost';
 
 vi.mock('../services/filePreviewWindow', () => ({ openFilePreviewWindow: vi.fn(async () => undefined) }));
 
@@ -84,7 +84,8 @@ vi.mock('./FilePreviewSurface', () => ({
       <button
         type="button"
         data-testid="ask-flower"
-        onClick={() => props.onAskFlower('selected line', { x: 820, y: 520 })}
+        disabled={!props.onAskFlower}
+        onClick={() => props.onAskFlower?.('selected line', { x: 820, y: 520 })}
       >
         Ask Flower
       </button>
@@ -112,6 +113,15 @@ beforeEach(() => {
 });
 
 describe('FilePreviewHost', () => {
+  it('keeps Ask Flower available in separate file previews', () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <FilePreviewDocument controller={filePreviewController as any} standalone />, host);
+    try {
+      const ask = host.querySelector<HTMLButtonElement>('[data-testid="ask-flower"]')!;
+      expect(ask.disabled).toBe(false); ask.click();
+      expect(openFlowerTurnLauncherMock).toHaveBeenCalledWith(expect.objectContaining({ source_surface: 'file_preview', context_items: [{ kind: 'file_path', path: '/workspace/demo.txt', is_directory: false }] }), { x: 820, y: 520 });
+    } finally { dispose(); }
+  });
   it.each(['dirty', 'saving', 'loading'] as const)('protects the original preview while %s', state => {
     filePreviewController[state] = () => true;
     const host = document.createElement('div'); document.body.append(host);
