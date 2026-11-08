@@ -64,7 +64,7 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
       <TessivenGraph t={tessivenText('en-US')} historical={false} onAsk={() => {}} onInspect={() => {}}
         version={toRenderVersion({ canvas_id: 'hadoop', number: 2, document: hadoop as CanvasDocument, document_yaml: '', digest: 'fixture', created_at: 1, source: 'flower', summary: '' })} />
       <TessivenFlowerPanel visible request={{ selection: { canvas_id: 'hadoop', version_id: 2, object_refs: [] }, labels: {}, nonce: 0 }}
-        t={tessivenText('en-US')} conversations={[]} onSelectConversation={async () => {}} onRemoveReference={() => {}}
+        t={tessivenText('en-US')} onRemoveReference={() => {}}
         renderSurface={surface => <DesktopFlowerRuntimeBoundary embedded i18n={createDesktopI18n('en-US')} onBack={() => {}} onRecover={async () => {}}
           snapshot={normalizeRuntimeServiceSnapshot({ compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH, protocol_version: RUNTIME_SERVICE_PROTOCOL_VERSION,
             compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: state() } })}>

@@ -26,6 +26,7 @@ var (
 	ErrArchived               = errors.New("tessiven canvas is archived")
 	ErrInvalidRequest         = errors.New("invalid Tessiven request")
 	ErrFlowerThreadReferenced = errors.New("Flower thread is referenced by a Tessiven canvas")
+	ErrFlowerThreadBound      = errors.New("Tessiven canvas has a fixed Flower conversation")
 )
 
 type Canvas struct {
@@ -440,8 +441,8 @@ func (s *Service) Archive(ctx context.Context, id string, expected int64, archiv
 	return nil
 }
 
-// BindFlowerThread records canvas ownership before the thread is published and
-// selects it for the next visit. Previously owned conversations remain reachable.
+// BindFlowerThread fixes the canvas conversation before its settings are published.
+// Repeating the same binding is safe; another conversation cannot replace it.
 func (s *Service) BindFlowerThread(ctx context.Context, canvasID, threadID string) error {
 	canvasID, threadID = strings.TrimSpace(canvasID), strings.TrimSpace(threadID)
 	if canvasID == "" || threadID == "" {
@@ -452,6 +453,15 @@ func (s *Service) BindFlowerThread(ctx context.Context, canvasID, threadID strin
 		return err
 	}
 	defer tx.Rollback()
+	var bound string
+	if err := tx.QueryRowContext(ctx, `SELECT flower_thread_id FROM canvases WHERE id=?`, canvasID).Scan(&bound); errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
+	if bound != "" && bound != threadID {
+		return ErrFlowerThreadBound
+	}
 	var existing string
 	err = tx.QueryRowContext(ctx, `SELECT canvas_id FROM flower_threads WHERE thread_id=?`, threadID).Scan(&existing)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {

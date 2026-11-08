@@ -286,6 +286,8 @@ func writeTessivenError(w http.ResponseWriter, err error) {
 		status, code, message = 404, "TESSIVEN_NOT_FOUND", err.Error()
 	case errors.Is(err, tessiven.ErrConflict):
 		status, code, message = 409, "TESSIVEN_VERSION_CONFLICT", err.Error()
+	case errors.Is(err, tessiven.ErrFlowerThreadBound):
+		status, code, message = 409, "TESSIVEN_CONVERSATION_BOUND", err.Error()
 	case errors.Is(err, tessiven.ErrRequestConflict):
 		status, code, message = 409, "TESSIVEN_REQUEST_CONFLICT", err.Error()
 	case errors.Is(err, tessiven.ErrArchived):

@@ -23,8 +23,11 @@ API, dependency replacement, or canonical journal migration is required.
 New turns and new Goals carry `create.tessiven_canvas_id` (or the Goal's
 `new_thread` field). Redeven validates the canvas and records ownership before
 publishing root settings or starting a provider request. Create retries retain
-ownership; an existing ordinary root cannot be adopted. Forks retain the canvas,
-and child threads inherit their parent's scope. Ordinary lists, live summary
+ownership; an existing ordinary root cannot be adopted. Each canvas admits one
+fixed conversation. Replacement creates and new Goals cannot change an existing
+binding; canvas forks are rejected before canonical fork execution. Existing-thread
+Goals continue normally, and child threads inherit their parent's tool scope.
+Ordinary lists, live summary
 membership, conversation queries and cross-conversation references exclude these
 threads; direct authorized content reads remain available to the canvas UI.
 Canonical runtime facts and tool execution stay owned by Floret.
@@ -99,6 +102,6 @@ Flower and the UI call the same Tessiven service; neither writes its database di
 - `internal/managedwebservice/open_session_test.go` — Running entrance preparation and stopped-service refusal without lifecycle dispatch.
 - `internal/tessiven/broker_test.go` — Unattributed/device-generation denial, permission recheck and unknown effects.
 
-- `internal/ai/tessiven_threads_test.go` — Admission, pagination, query scope, children, forks and restart.
+- `internal/ai/tessiven_threads_test.go` — Admission, pagination, query scope, children, fixed binding, fork rejection and restart.
 - `internal/ai/tool_definition_budget_test.go` — Final OpenAI/DeepSeek request inventories and JSON-byte budgets.
 - `internal/codeapp/appserver/tessiven_test.go` — Authorized canvas conversation routes.

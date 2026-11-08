@@ -153,7 +153,7 @@ func TestTessivenBusinessRejectsSelfDeclaredAuthorityAndRemoteTarget(t *testing.
 	}
 }
 
-func TestTessivenConversationRoutesAuthorizeAndKeepHistoryOnCanvas(t *testing.T) {
+func TestTessivenConversationRoutesAuthorizeAndPreserveFixedBinding(t *testing.T) {
 	library, err := tessiven.Open(filepath.Join(t.TempDir(), "canvases.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -199,6 +199,22 @@ func TestTessivenConversationRoutesAuthorizeAndKeepHistoryOnCanvas(t *testing.T)
 	}
 	request(http.MethodPost, "/flower-thread", `{"thread_id":"`+dedicated.ThreadID+`"}`, 200)
 	request(http.MethodPost, "/flower-thread", `{"thread_id":"`+ordinary.ThreadID+`"}`, 409)
+	for _, action := range []struct{ path, body string }{
+		{"/_redeven_proxy/api/ai/threads", `{"client_request_id":"replacement","tessiven_canvas_id":"` + canvas.Canvas.ID + `"}`},
+		{"/_redeven_proxy/api/ai/threads/" + dedicated.ThreadID + "/fork", `{"client_request_id":"fork"}`},
+	} {
+		req := httptest.NewRequest(http.MethodPost, action.path, strings.NewReader(action.body))
+		req.Header.Set("Origin", envOriginWithChannel(channel))
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("%s: %d %s", action.path, rr.Code, rr.Body.String())
+		}
+	}
+	bound, err := library.Canvas(t.Context(), canvas.Canvas.ID)
+	if err != nil || bound.FlowerThreadID != dedicated.ThreadID {
+		t.Fatalf("binding changed: %+v %v", bound, err)
+	}
 	meta.EndpointID = "foreign"
 	response = request(http.MethodGet, "/flower-threads", "", 200)
 	if strings.Contains(response.Body.String(), dedicated.ThreadID) {

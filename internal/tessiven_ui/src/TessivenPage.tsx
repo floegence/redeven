@@ -6,7 +6,6 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  on,
   onCleanup,
   onMount,
   untrack,
@@ -73,7 +72,6 @@ export function TessivenPage(props: {
   const [version, setVersion] = createSignal<Version>();
   const [browseHistory, setBrowseHistory] = createSignal(false);
   const [history, setHistory] = createSignal<VersionSummary[]>([]);
-  const [conversations, setConversations] = createSignal<readonly { thread_id: string; title: string }[]>([]);
   const [historyOpen, setHistoryOpen] = createSignal(false);
   const [sourceOpen, setSourceOpen] = createSignal(false);
   const [differences, setDifferences] = createSignal<Difference[] | null>(null);
@@ -166,21 +164,12 @@ export function TessivenPage(props: {
     }
 
   }
-  async function loadConversations(canvasID: string) {
-    const result = await request<{ threads: { thread_id: string; title: string }[] }>('GET', `/canvases/${encodeURIComponent(canvasID)}/flower-threads`);
-    if (!disposed && canvas()?.id === canvasID) setConversations(result.threads);
-  }
-  createEffect(on(() => canvas()?.id, id => {
-    setConversations([]);
-    if (id) void loadConversations(id).catch(cause => { if (!disposed && canvas()?.id === id) setError(message(cause)); });
-  }));
   async function bindFlowerThread(canvasID: string, threadID: string) {
     const session = flowerSessions().find(item => item.id === canvasID);
     if (session?.request().flower_thread_id === threadID) return;
     await request('POST', `/canvases/${encodeURIComponent(canvasID)}/flower-thread`, { thread_id: threadID });
     setCanvas(previous => previous?.id === canvasID ? { ...previous, flower_thread_id: threadID } : previous);
     if (session) session.update({ ...session.request(), flower_thread_id: threadID });
-    await loadConversations(canvasID);
   }
   const acceptFlowerRequest = (submitted: CanvasFlowerRequest, threadID: string) => {
     const session = flowerSessions().find(item => item.id === submitted.selection.canvas_id);
@@ -312,7 +301,6 @@ export function TessivenPage(props: {
       if (disposed || view !== viewGeneration || refresh !== refreshGeneration)
         return;
       setCanvas(next);
-      void loadConversations(next.id).catch(cause => { if (!disposed && canvas()?.id === next.id) setError(message(cause)); });
       // Follow Flower saves in the current view. Explicit history stays pinned.
       if (
         !browseHistory() &&
@@ -732,11 +720,6 @@ export function TessivenPage(props: {
             visible={props.visible !== false && !!canvas()}
             t={props.t}
             renderSurface={props.renderFlower}
-            conversations={conversations()}
-            onSelectConversation={async threadID => {
-              try { await bindFlowerThread(flowerRequest()!.selection.canvas_id, threadID); }
-              catch (cause) { if (!disposed) setError(message(cause)); throw cause; }
-            }}
             onAccepted={acceptFlowerRequest}
           />
         </Show>

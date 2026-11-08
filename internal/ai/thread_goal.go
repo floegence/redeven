@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/tessiven"
 )
 
 // ErrThreadGoalOutcomeUnknown keeps the original request replayable when a
@@ -56,7 +57,7 @@ func (s *Service) ManageThreadGoal(ctx context.Context, meta *session.Meta, req 
 		create.ClientRequestID = "goal-thread:" + hex.EncodeToString(digest[:])
 		thread, err := s.CreateThreadWithOptions(ctx, meta, create)
 		if err != nil {
-			if !errors.Is(err, flruntime.ErrRequestConflict) {
+			if !errors.Is(err, flruntime.ErrRequestConflict) && !errors.Is(err, tessiven.ErrFlowerThreadBound) {
 				err = fmt.Errorf("%w: %w", ErrThreadGoalOutcomeUnknown, err)
 			}
 			return flruntime.GoalMutationResult{}, flruntime.ThreadView{}, err

@@ -60,12 +60,14 @@ func TestTessivenThreadOwnershipIsolatesInventoryAndRuntime(t *testing.T) {
 	if err := svc.SelectTessivenThread(t.Context(), meta, canvas.Canvas.ID, ordinary.ThreadID); !errors.Is(err, tessiven.ErrConflict) {
 		t.Fatalf("ordinary root selected: %v", err)
 	}
-	fork, err := svc.ForkThreadWithOptions(t.Context(), meta, dedicated.ThreadID, ForkThreadRequest{ClientRequestID: "fork"})
-	if err != nil || fork.TessivenCanvasID != canvas.Canvas.ID {
-		t.Fatalf("fork owner: %+v %v", fork, err)
+	if _, err := svc.ForkThreadWithOptions(t.Context(), meta, dedicated.ThreadID, ForkThreadRequest{ClientRequestID: "fork"}); !errors.Is(err, tessiven.ErrFlowerThreadBound) {
+		t.Fatalf("canvas fork allowed: %v", err)
+	}
+	if _, err := svc.CreateThreadWithOptions(t.Context(), meta, CreateThreadRequest{ClientRequestID: "replacement", TessivenCanvasID: canvas.Canvas.ID}); !errors.Is(err, tessiven.ErrFlowerThreadBound) {
+		t.Fatalf("replacement create allowed: %v", err)
 	}
 	history, err := svc.ListTessivenThreads(t.Context(), meta, canvas.Canvas.ID)
-	if err != nil || len(history) != 2 {
+	if err != nil || len(history) != 1 || history[0].ThreadID != dedicated.ThreadID {
 		t.Fatalf("canvas history: %+v %v", history, err)
 	}
 	foreign := *meta
@@ -94,7 +96,11 @@ func TestTessivenThreadOwnershipIsolatesInventoryAndRuntime(t *testing.T) {
 	for i := range 205 {
 		settings := *seed
 		settings.ThreadID = fmt.Sprintf("hidden-%d", i)
-		if err := library.BindFlowerThread(t.Context(), canvas.Canvas.ID, settings.ThreadID); err != nil {
+		hiddenCanvas, err := library.Create(t.Context(), settings.ThreadID, "Hidden canvas")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := library.BindFlowerThread(t.Context(), hiddenCanvas.Canvas.ID, settings.ThreadID); err != nil {
 			t.Fatal(err)
 		}
 		if err := svc.threadsDB.CreateThreadSettings(t.Context(), settings); err != nil {
@@ -147,7 +153,7 @@ func TestTessivenThreadOwnershipIsolatesInventoryAndRuntime(t *testing.T) {
 		t.Fatalf("model query scope: %+v %v", scope, err)
 	}
 	scoped, err := svc.threadQueryScope(t.Context(), meta, canvas.Canvas.ID)
-	if err != nil || len(scoped.ThreadIDs) != 208 {
+	if err != nil || len(scoped.ThreadIDs) != 2 {
 		t.Fatalf("dedicated query scope: %d %v", len(scoped.ThreadIDs), err)
 	}
 	if err := svc.authorizeThreadReferences(t.Context(), meta, threadReferenceAction(flowerThreadReferenceRuntimeID(meta.EndpointID), dedicated.ThreadID)); err == nil {
@@ -156,7 +162,7 @@ func TestTessivenThreadOwnershipIsolatesInventoryAndRuntime(t *testing.T) {
 	for _, tc := range []struct {
 		id   string
 		want bool
-	}{{ordinary.ThreadID, false}, {dedicated.ThreadID, true}, {fork.ThreadID, true}} {
+	}{{ordinary.ThreadID, false}, {dedicated.ThreadID, true}, {childSettings.ThreadID, true}} {
 		host, err := svc.bindRunHostCapabilities(meta.EndpointID, tc.id)
 		if err != nil {
 			t.Fatal(err)
@@ -242,6 +248,12 @@ func TestTessivenGoalAdmissionRetainsCanvasWithoutDispatch(t *testing.T) {
 	owner, err := svc.tessivenThreadCanvas(t.Context(), current.ThreadID.String())
 	if err != nil || owner != canvas.Canvas.ID {
 		t.Fatalf("goal owner=%q %v", owner, err)
+	}
+	req.ClientRequestID = "replacement-goal"
+	if _, _, err := svc.ManageThreadGoal(t.Context(), meta, req); !errors.Is(err, tessiven.ErrFlowerThreadBound) {
+		t.Fatalf("replacement Goal allowed: %v", err)
+	} else if errors.Is(err, ErrThreadGoalOutcomeUnknown) {
+		t.Fatalf("known binding conflict reported as uncertain: %v", err)
 	}
 	page, err := svc.ListThreads(t.Context(), meta, 10, "")
 	if err != nil || len(page.Threads) != 0 {

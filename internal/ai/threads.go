@@ -1092,6 +1092,13 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	if source == nil {
 		return nil, sql.ErrNoRows
 	}
+	canvasID, err := s.tessivenThreadCanvas(ctxOrBackground(ctx), sourceThreadID)
+	if err != nil {
+		return nil, err
+	}
+	if canvasID != "" {
+		return nil, tessiven.ErrFlowerThreadBound
+	}
 	runtime, err := s.typedFloretRuntime()
 	if err != nil {
 		return nil, err
@@ -1152,13 +1159,6 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	forked.SettingsUpdatedAtUnixMs = now
 	uploadIDs, err := s.canonicalUploadIDs(ctxOrBackground(ctx), endpointID, current.ThreadID.String(), canonicalViewAttachments(current))
 	if err != nil {
-		return nil, err
-	}
-	canvasID, err := s.tessivenThreadCanvas(ctxOrBackground(ctx), sourceThreadID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.admitTessivenThread(ctxOrBackground(ctx), forked.ThreadID, canvasID); err != nil {
 		return nil, err
 	}
 	if err := db.AdoptCanonicalRootWithUploads(ctxOrBackground(ctx), forked, uploadIDs); err != nil {

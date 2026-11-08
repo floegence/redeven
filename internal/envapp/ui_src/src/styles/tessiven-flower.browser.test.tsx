@@ -43,7 +43,6 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
       await new Promise<void>(resolve => { wake = resolve; signal.addEventListener('abort', () => resolve(), { once: true }); });
     }
   } };
-  const selectConversation = vi.fn(async () => {});
   const accepted = vi.fn();
   dispose = render(() => <FloeConfigProvider><LayoutProvider>
     {graph && <TessivenGraph t={tessivenText('en-US')} historical={false} onAsk={() => {}} onInspect={() => {}}
@@ -59,14 +58,14 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
           presentation: { initiallyExpanded: ['app'] },
         } })} />}
     <TessivenFlowerPanel
-    request={request()} visible initialComposer={initialComposer} t={tessivenText('en-US')} conversations={[{ thread_id: 'history-thread', title: 'Earlier canvas conversation' }]} onSelectConversation={selectConversation}
+    request={request()} visible initialComposer={initialComposer} t={tessivenText('en-US')}
     onAccepted={accepted}
     onRemoveReference={id => setRequest(previous => ({ ...previous, selection: {
       ...previous.selection, object_refs: previous.selection.object_refs.filter(ref => ref !== id),
     } }))}
     renderSurface={surface => <CanvasFlowerTestSurface {...surface} adapter={adapter} />}
   /></LayoutProvider></FloeConfigProvider>, host);
-  return { setRequest, sent, connections, selectConversation, accepted, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
+  return { setRequest, sent, connections, accepted, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
 }
 const editor = () => page.getByRole('textbox');
 const replyMenu = () => page.getByRole('button', { name: 'Reply actions', exact: true });
@@ -320,7 +319,7 @@ it('keeps a quiet reply titlebar with secondary actions in an accessible menu', 
   expect(document.querySelector('.tessiven-flower-output')!.getBoundingClientRect().width).toBe(356);
   await expect.element(page.getByRole('button', { name: 'Reply actions', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
-  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
   await expect.element(page.getByRole('menuitem', { name: 'Flower settings', exact: true })).toBeVisible();
   expect(document.querySelector('[role="menu"]')?.closest('[data-floe-surface="floating"]')).not.toBeNull();
   await expect.poll(() => document.activeElement?.getAttribute('role')).toBe('menuitem');
@@ -332,18 +331,38 @@ it('keeps a quiet reply titlebar with secondary actions in an accessible menu', 
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('canvas-thread');
   await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Earlier canvas conversation', exact: true }).click();
-  await expect.poll(() => runtime.selectConversation.mock.calls).toEqual([['history-thread']]);
-  await expect.poll(() => document.querySelector<HTMLElement>('[data-flower-selected-thread-id]')?.dataset.flowerSelectedThreadId).toBe('history-thread');
-  await page.getByRole('button', { name: 'Reply actions', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'New conversation', exact: true }).click();
-  await editor().fill('A separate conversation');
+  await expect.element(page.getByRole('menuitem', { name: 'Earlier canvas conversation', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+  await userEvent.keyboard('{Escape}');
+  await editor().fill('Continue this canvas conversation');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
-  expect(runtime.sent.mock.calls[1][0].thread_id).toBeUndefined();
+  expect(runtime.sent.mock.calls[1][0].thread_id).toBe('canvas-thread');
   expect(runtime.sent.mock.calls[0][0].tessiven_canvas_id).toBe('commerce');
-  expect(runtime.sent.mock.calls[1][0].tessiven_canvas_id).toBe('commerce');
+  expect(runtime.sent.mock.calls[1][0].tessiven_canvas_id).toBeUndefined();
 });
+it('keeps the bound transcript readable without offering a fork', async () => {
+  await page.viewport(1200, 800);
+  const content = 'The canvas stays in this conversation.';
+  const bound = interactionThread({ thread_id: 'saved-canvas-thread', tessiven_canvas_id: 'commerce',
+    turns: [{ turn_id: 'turn', run_id: 'run', started_at: '2026-11-08T01:00:00Z', ended_at: '2026-11-08T01:00:01Z',
+      outcome: 'completed', elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: ['answer'], final_boundary_complete: true }],
+    messages: [{ id: 'answer', turn_id: 'turn', run_id: 'run', role: 'assistant', content, blocks: [{ type: 'markdown', content }], status: 'complete', created_at_ms: 2 }] });
+  const forkThread = vi.fn();
+  mount(false, { loadThread: async () => interactionBootstrap(bound, 2), forkThread }, false, false, {
+    selection: { canvas_id: 'commerce', version_id: 3, object_refs: [] }, labels: {}, nonce: 0,
+    flower_thread_id: 'saved-canvas-thread',
+  });
+  await expect.element(page.getByText('The canvas stays in this conversation.')).toBeVisible();
+  await expect.element(page.getByRole('button', { name: 'Fork from this answer', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('button', { name: 'Export HTML', exact: true })).toBeVisible();
+  await replyMenu().click();
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('menuitem', { name: 'Flower settings', exact: true })).toBeVisible();
+  await page.screenshot({ element: host, path: '__screenshots__/tessiven-fixed-conversation-menu.png' });
+  expect(forkThread).not.toHaveBeenCalled();
+});
+
 it('keeps the whole canvas implicit in a clean default composer', async () => {
   await page.viewport(1200, 800);
   const runtime = mount();
@@ -363,15 +382,11 @@ it('keeps the whole canvas implicit in a clean default composer', async () => {
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
   expect(runtime.sent.mock.calls[1][0].thread_id).toBe('canvas-thread');
   expect(runtime.sent.mock.calls[1][0].context_action).toBeUndefined();
-  await replyMenu().click();
-  await page.getByRole('menuitem', { name: 'New conversation', exact: true }).click();
   await editor().fill('Inspect the updated canvas');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(3);
-  expect(runtime.sent.mock.calls[2][0].thread_id).toBeUndefined();
-  expect(runtime.sent.mock.calls[2][0].context_action).toMatchObject({ context: [
-    { kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 3, object_refs: [] },
-  ] });
+  expect(runtime.sent.mock.calls[2][0].thread_id).toBe('canvas-thread');
+  expect(runtime.sent.mock.calls[2][0].context_action).toBeUndefined();
 });
 
 it('resumes a saved canvas thread without adding implicit whole-canvas context', async () => {
@@ -446,7 +461,6 @@ it('keeps the canonical composer inside the same floating window as conversation
   const reply = liveBootstrap(thread({ thread_id: 'canvas-thread', messages: [{ id: 'reply', turn_id: 'turn', role: 'assistant', content: 'Orders reads from the primary database.', status: 'complete', created_at_ms: 2 }] }), 2);
   runtime.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'canvas-thread', current: reply.current });
   await expect.element(page.getByText('Orders reads from the primary database.')).toBeVisible();
-  expect(runtime.selectConversation).not.toHaveBeenCalled();
   expect(runtime.connections).toHaveBeenCalledTimes(1);
   const output = document.querySelector('[data-floe-geometry-surface="floating-window"]')!.getBoundingClientRect();
   const input = document.querySelector('.tessiven-flower-composer')!.getBoundingClientRect();
@@ -613,7 +627,7 @@ it('keeps touch controls usable and the reading surface legible in forced colors
       expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     }
     await replyMenu().click();
-    await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).toBeVisible();
+    await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
     await expect.poll(() => document.activeElement?.getAttribute('role')).toBe('menuitem');
     await userEvent.keyboard('{Escape}');
     await page.screenshot({ element: host, path: '__screenshots__/tessiven-reply-touch.png' });
@@ -661,7 +675,7 @@ it('keeps late acceptance bound to its original canvas and resumes the accepted 
   expect(runtime.connections).toHaveBeenCalledTimes(1);
 });
 
-it('reopens replies on send and does not reopen an older conversation after starting a new one', async () => {
+it('keeps the bound conversation and newer draft when acceptance arrives after hiding replies', async () => {
   await page.viewport(1200, 800);
   let accept!: (value: Awaited<ReturnType<FlowerSurfaceAdapter['launchTurn']>>) => void;
   const runtime = mount(false, { launchTurn: () => new Promise(resolve => { accept = resolve; }) });
@@ -675,14 +689,15 @@ it('reopens replies on send and does not reopen an older conversation after star
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   await expect.element(page.getByRole('button', { name: 'Hide replies', exact: true })).toBeVisible();
   await replyMenu().click();
-  await page.getByRole('menuitem', { name: 'New conversation', exact: true }).click();
-  await editor().fill('A separate question');
+  await expect.element(page.getByRole('menuitem', { name: 'New conversation', exact: true })).not.toBeInTheDocument();
+  await userEvent.keyboard('{Escape}');
+  await editor().fill('A follow-up question');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
-  await expect.element(editor()).toHaveValue('A separate question');
+  await expect.element(editor()).toHaveValue('A follow-up question');
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 2 });
-  await expect.element(editor()).toHaveValue('A separate question');
-  await expectConversationAction(false);
+  await expect.element(editor()).toHaveValue('A follow-up question');
+  await expectConversationAction(true);
 });
 
 it.each([{ objectRefs: [] }, { objectRefs: ['orders'] }])('retries an uncertain send with its original canvas references $objectRefs after the selection changes', async ({ objectRefs }) => {

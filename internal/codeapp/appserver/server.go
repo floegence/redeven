@@ -1645,6 +1645,7 @@ func aiThreadActionHTTPStatus(err error) int {
 	case errors.Is(err, sql.ErrNoRows):
 		return http.StatusNotFound
 	case errors.Is(err, flruntime.ErrRequestConflict),
+		errors.Is(err, tessiven.ErrFlowerThreadBound),
 		errors.Is(err, flruntime.ErrThreadBusy),
 		errors.Is(err, ai.ErrFlowerStorageRestored),
 		errors.Is(err, ai.ErrThreadBusy),
@@ -5138,7 +5139,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		th, err := aiSvc.CreateThreadWithOptions(r.Context(), meta, body)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			status := http.StatusBadRequest
+			if errors.Is(err, tessiven.ErrFlowerThreadBound) {
+				status = http.StatusConflict
+			}
+			writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 			return
 		}
 		view, err := g.buildAIThreadEnvelope(r.Context(), meta, th)
@@ -5822,7 +5827,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
-				} else if errors.Is(err, ai.ErrThreadForkUnavailable) {
+				} else if errors.Is(err, ai.ErrThreadForkUnavailable) || errors.Is(err, tessiven.ErrFlowerThreadBound) {
 					status = http.StatusConflict
 				}
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})

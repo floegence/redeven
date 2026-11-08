@@ -46,15 +46,16 @@ The window uses the theme's main reading surface continuously across its titleba
 End padding keeps the final choice fully readable when scrolled to the bottom; the action controls remain outside the fade.
 
 ### Actions and continuity
-Less frequent actions live in the More menu: new conversation, settings,
-subagents, available Computer actions and this canvas's conversation history.
-Selecting history keeps the transcript, composer and draft within Tessiven;
-there is no exit into the ordinary Flower conversation surface. Both Desktop
-and Env App use the same embedding contract. New conversations, Goals and forks
-retain canvas ownership before first execution. Ordinary navigation cannot render
-a canvas transcript, including a stale direct ThreadID navigation request or
-live receipt. Existing-thread runtime content waits for product metadata; a new
-conversation's provisional receipt retains its submitted canvas ownership.
+Each canvas has one fixed Flower conversation. The More menu contains settings,
+subagents, available Computer actions and conversation files; it never offers a
+new conversation or a conversation switcher. Answer actions retain copy and export
+without offering a fork. Both Desktop and Env App use this same embedding contract.
+The first message or Goal establishes the binding; later requests continue it.
+Canvas changes, reply visibility and late receipts preserve that identity and the
+user's pending draft. Ordinary navigation cannot render a canvas transcript,
+including a stale direct ThreadID navigation request or live receipt.
+Existing-thread runtime content waits for product metadata; a new conversation's
+provisional receipt retains its submitted canvas ownership.
 
 Messages, tool disclosures, questions, approvals and errors remain canonical.
 

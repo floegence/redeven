@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
-import { Clock, Layers, MoreHorizontal, Plus } from '@floegence/floe-webapp-core/icons';
+import { Layers, MoreHorizontal } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { FlowerConversationParts, FlowerEmbeddedConversation } from '../../flower_ui/src/FlowerSurface';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
@@ -28,8 +28,6 @@ export function TessivenFlowerPanel(props: {
   initialComposer?: boolean;
   t: TessivenText;
   renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
-  conversations: readonly { thread_id: string; title: string }[];
-  onSelectConversation: (threadID: string) => Promise<void>;
   onRemoveReference: (objectRef: string) => void;
   onAccepted?: (request: CanvasFlowerRequest, threadID: string) => void;
 }) {
@@ -53,14 +51,7 @@ export function TessivenFlowerPanel(props: {
   const contextAction = createMemo(() => tessivenFlowerIntent(props.request.selection, props.t).context_action);
   const renderConversation = (parts: FlowerConversationParts) => {
     let menuAnchor: HTMLSpanElement | undefined;
-    const menuItems = () => [
-      { id: 'canvas-new', label: props.t('newConversation'), icon: () => <Plus /> },
-      ...parts.actions().map(({ id, label, icon, disabled }) => ({ id, label, icon, disabled })),
-      ...(props.conversations.length ? [
-        { id: 'canvas-history-separator', label: '', separator: true },
-        ...props.conversations.map(thread => ({ id: `conversation:${thread.thread_id}`, label: thread.title || props.t('flowerConversation'), icon: () => <Clock />, disabled: thread.thread_id === parts.threadID() })),
-      ] : []),
-    ];
+    const menuItems = () => parts.actions().map(({ id, label, icon, disabled }) => ({ id, label, icon, disabled }));
     return (
       <>
         <div class="tessiven-flower-output-boundary" ref={setBoundary} />
@@ -82,18 +73,8 @@ export function TessivenFlowerPanel(props: {
                 trigger={<span ref={menuAnchor} class="tessiven-flower-menu-trigger"><MoreHorizontal /></span>}
                 items={menuItems}
                 onSelect={id => {
-                  if (id === 'canvas-new') parts.newConversation();
-                  else if (id.startsWith('conversation:')) {
-                    const threadID = id.slice('conversation:'.length);
-                    const sourceCanvas = canvasID();
-                    void props.onSelectConversation(threadID).then(() => {
-                      if (canvasID() === sourceCanvas) parts.selectConversation(threadID);
-                    }).catch(() => {});
-                  }
-                  else {
-                    const source = menuAnchor?.closest<HTMLElement>('button, [role="button"]');
-                    if (source) parts.actions().find(action => action.id === id)?.run(source);
-                  }
+                  const source = menuAnchor?.closest<HTMLElement>('button, [role="button"]');
+                  if (source) parts.actions().find(action => action.id === id)?.run(source);
                 }} />
               {parts.actionOverlays}
               {parts.trailingActions}

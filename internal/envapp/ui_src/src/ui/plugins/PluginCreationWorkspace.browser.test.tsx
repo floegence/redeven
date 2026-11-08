@@ -100,7 +100,6 @@ function mount(canManage = true) {
                 actions: () => [],
                 actionOverlays: null,
                 threadID: () => 'thread-1',
-                newConversation: vi.fn(), selectConversation: vi.fn(),
               })
             }
           />

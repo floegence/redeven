@@ -21,10 +21,13 @@ Canvas identities, archive state, immutable YAML versions, and idempotent reques
 The v1 → v2 → v3 library lineage preserves immutable versions and request
 receipts. v3 records canvas conversation ownership in `flower_threads`, backfills
 exact v2 `flower_thread_id` bindings, and retains that existing column as the
-selected conversation pointer. A thread has one canvas owner; ambiguous historical
-bindings fail transactionally without mutating source state. Selecting or creating
-a conversation preserves every previous binding. Fresh, upgraded and reopened
-stores use the same verified schema. Floret journals remain opaque and unchanged.
+fixed conversation pointer. A thread has one canvas owner; ambiguous historical
+bindings fail transactionally without mutating source state. The first binding is
+immutable: identical retries succeed, while another thread cannot replace it,
+including under concurrent admission. Previously recorded v3 ownership rows remain
+intact and scoped, but do not enable switching or replacement of the saved binding.
+Fresh, upgraded and reopened stores use the same verified schema. Floret journals
+remain opaque and unchanged.
 
 ## DSL versions
 The contiguous v1→v1.0.0→v1.1.0 chain changes version only and retains legacy layout. New canvases use v1.1.0; invalid/unknown/failed migration remains unchanged for explicit repair. Reads preserve YAML/digest/revision; writes create current snapshots.
