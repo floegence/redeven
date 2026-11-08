@@ -25,7 +25,7 @@ func TestModelGatewayResultToolCallJSONRequiresAndPreservesArguments(t *testing.
 		FinishReason: "tool_calls",
 		ToolCalls: []ToolCall{{
 			ID:   "call_okf_index",
-			Name: "okf.index",
+			Name: "okf_get_index",
 			Args: map[string]any{},
 		}},
 	}
@@ -57,9 +57,9 @@ func TestValidateModelGatewayResultRejectsIncompleteToolCalls(t *testing.T) {
 		call         ToolCall
 		missingField string
 	}{
-		{name: "missing id", call: ToolCall{Name: "okf.index", Args: map[string]any{}}, missingField: "id"},
+		{name: "missing id", call: ToolCall{Name: "okf_get_index", Args: map[string]any{}}, missingField: "id"},
 		{name: "missing name", call: ToolCall{ID: "call_1", Args: map[string]any{}}, missingField: "name"},
-		{name: "missing args", call: ToolCall{ID: "call_1", Name: "okf.index"}, missingField: "args"},
+		{name: "missing args", call: ToolCall{ID: "call_1", Name: "okf_get_index"}, missingField: "args"},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -83,7 +83,7 @@ func TestFloretProviderRejectsIncompleteModelGatewayToolCallBeforeDispatch(t *te
 			FinishReason: "tool_calls",
 			ToolCalls: []ToolCall{{
 				ID:   "call_1",
-				Name: "okf.index",
+				Name: "okf_get_index",
 			}},
 		}},
 		"deepseek",

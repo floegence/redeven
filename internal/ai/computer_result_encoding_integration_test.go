@@ -29,7 +29,7 @@ type encodingComputerExecutor struct {
 
 func (e *encodingComputerExecutor) ExecuteTargetTool(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: "fixture"}
-	if call.ToolName == "computer.exec" {
+	if call.ToolName == "computer_exec" {
 		e.effects.Add(1) // A real, counted effect precedes the malformed optional result.
 		result.executionFacts.completedActions = []string{"click"}
 		result.executionFacts.needsObservation = true

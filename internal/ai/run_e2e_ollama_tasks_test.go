@@ -371,10 +371,10 @@ func ollamaTaskFiles(f *ollamaTaskFixture) {
 	if err := os.WriteFile(filepath.Join(f.root, "input.csv"), []byte("name,amount\nalpha,7\nbeta,11\ngamma,19\n"), 0600); err != nil {
 		f.t.Fatal(err)
 	}
-	d := f.finish("files", "Use terminal.exec to read input.csv from the current working directory, calculate the sum of its amount column, and write exactly 37 followed by a newline into total.txt. Verify the file with a terminal command. Work only in the current directory. Report TOTAL=37 after verifying.", "TOTAL=37")
+	d := f.finish("files", "Use terminal_exec to read input.csv from the current working directory, calculate the sum of its amount column, and write exactly 37 followed by a newline into total.txt. Verify the file with a terminal command. Work only in the current directory. Report TOTAL=37 after verifying.", "TOTAL=37")
 	f.file("total.txt", "37\n")
-	f.tool(d, "terminal.exec")
-	f.finish("file-followup", "Use terminal.exec to append exactly VERIFIED followed by a newline to total.txt, then read the file and report its two lines. Do not recompute or duplicate the original total.", "VERIFIED")
+	f.tool(d, "terminal_exec")
+	f.finish("file-followup", "Use terminal_exec to append exactly VERIFIED followed by a newline to total.txt, then read the file and report its two lines. Do not recompute or duplicate the original total.", "VERIFIED")
 	f.file("total.txt", "37\nVERIFIED\n")
 }
 
@@ -400,7 +400,7 @@ func ollamaTaskStopGeneration(f *ollamaTaskFixture, mode string) {
 }
 
 func ollamaTaskStopTerminal(f *ollamaTaskFixture) {
-	f.send("terminal-stop", "Use terminal.exec with yield_ms 30000 and execute exactly: printf STARTED > started.txt; sleep 30; printf SHOULD_NOT_RUN > late.txt . Wait for the command and then report completion. Work only in the current directory.")
+	f.send("terminal-stop", "Use terminal_exec with yield_ms 30000 and execute exactly: printf STARTED > started.txt; sleep 30; printf SHOULD_NOT_RUN > late.txt . Wait for the command and then report completion. Work only in the current directory.")
 	f.wait("terminal started", func(d *FlowerThreadDetail) bool {
 		_, err := os.Stat(filepath.Join(f.root, "started.txt"))
 		return err == nil
@@ -410,7 +410,7 @@ func ollamaTaskStopTerminal(f *ollamaTaskFixture) {
 	f.file("started.txt", "STARTED")
 	f.missing("late.txt")
 	f.noRunningTerminalProcesses()
-	f.finish("terminal-after-stop", "Use terminal.exec to write exactly RECOVERED into recovered.txt in the current directory. Reply RECOVERED.", "RECOVERED")
+	f.finish("terminal-after-stop", "Use terminal_exec to write exactly RECOVERED into recovered.txt in the current directory. Reply RECOVERED.", "RECOVERED")
 	f.file("recovered.txt", "RECOVERED")
 }
 
@@ -418,14 +418,14 @@ func ollamaTaskQueue(f *ollamaTaskFixture) {
 	f.fault.arm("hold")
 	f.send("queue-active", "Reply exactly FIRST. Do not call tools.")
 	f.fault.waitHit(f.t)
-	a := f.send("queue-a", "Use terminal.exec to append OLD followed by a newline into order.txt in the current directory, then reply OLD.")
-	b := f.send("queue-b", "Use terminal.exec to append B followed by a newline into order.txt in the current directory, then reply B.")
-	c := f.send("queue-c", "Use terminal.exec to append DELETED followed by a newline into order.txt in the current directory, then reply DELETED.")
+	a := f.send("queue-a", "Use terminal_exec to append OLD followed by a newline into order.txt in the current directory, then reply OLD.")
+	b := f.send("queue-b", "Use terminal_exec to append B followed by a newline into order.txt in the current directory, then reply B.")
+	c := f.send("queue-c", "Use terminal_exec to append DELETED followed by a newline into order.txt in the current directory, then reply DELETED.")
 	if a.Kind != "queued" || b.Kind != "queued" || c.Kind != "queued" {
 		f.t.Fatal("active input was not queued")
 	}
-	old := "Use terminal.exec to append OLD followed by a newline into order.txt in the current directory, then reply OLD."
-	edited := "Use terminal.exec to append A followed by a newline into order.txt in the current directory, then reply A."
+	old := "Use terminal_exec to append OLD followed by a newline into order.txt in the current directory, then reply OLD."
+	edited := "Use terminal_exec to append A followed by a newline into order.txt in the current directory, then reply A."
 	if _, err := f.svc.EditQueuedInput(f.ctx, f.meta, f.threadID, a.QueueID, EditQueuedInputRequest{ClientRequestID: "edit-a", ExpectedText: &old, Text: edited}); err != nil {
 		f.t.Fatal(err)
 	}
@@ -456,7 +456,7 @@ func ollamaTaskSendNow(f *ollamaTaskFixture) {
 	f.fault.arm("hold")
 	f.send("now-active", "Without tools, write 30 paragraphs explaining the history of compilers.")
 	f.fault.waitHit(f.t)
-	a := f.send("now-queued", "Use terminal.exec to write exactly NEW_INPUT into new-input.txt in the current directory. Reply NEW_INPUT.")
+	a := f.send("now-queued", "Use terminal_exec to write exactly NEW_INPUT into new-input.txt in the current directory. Reply NEW_INPUT.")
 	if a.Kind != "queued" {
 		f.t.Fatal("new input was not queued")
 	}
@@ -474,7 +474,7 @@ func ollamaTaskStopQueue(f *ollamaTaskFixture) {
 	f.fault.arm("hold")
 	f.send("stop-queue-active", "Without tools, explain transactions in 30 paragraphs.")
 	f.fault.waitHit(f.t)
-	q := f.send("stop-queue-pending", "Use terminal.exec to append exactly RESUMED followed by a newline to resumed.txt in the current directory. Reply RESUMED.")
+	q := f.send("stop-queue-pending", "Use terminal_exec to append exactly RESUMED followed by a newline to resumed.txt in the current directory. Reply RESUMED.")
 	if q.Kind != "queued" {
 		f.t.Fatal("input was not queued")
 	}
@@ -497,7 +497,7 @@ func ollamaTaskRetryStream(f *ollamaTaskFixture) {
 	// Cut the real inference request AFTER the same turn's committed tool
 	// result. A retry must continue that turn without repeating its write.
 	f.fault.armAfterTool("cut", "EFFECT_COMMITTED")
-	f.send("retry-effect", "Use terminal.exec exactly once to run: printf 'ONCE\\n' >> effects.txt; printf EFFECT_COMMITTED . Then, without any more tools, explain durable side-effect identity in six numbered points and end with RETRY_COMPLETE. Work only in the current directory.")
+	f.send("retry-effect", "Use terminal_exec exactly once to run: printf 'ONCE\\n' >> effects.txt; printf EFFECT_COMMITTED . Then, without any more tools, explain durable side-effect identity in six numbered points and end with RETRY_COMPLETE. Work only in the current directory.")
 	f.fault.waitHit(f.t)
 	d := f.terminal(flruntime.TurnOutcomeFailed)
 	f.file("effects.txt", "ONCE\n")
@@ -546,7 +546,7 @@ func ollamaTaskApprovals(f *ollamaTaskFixture) {
 		f.t.Fatal(err)
 	}
 	for _, action := range []string{"accept", "reject", "stop"} {
-		f.send("approval-"+action, fmt.Sprintf("Use terminal.exec to write exactly APPROVED into %s.txt in the current directory. If permission is denied or cancelled, do not try any other tool or alternate route. Report the actual outcome.", action))
+		f.send("approval-"+action, fmt.Sprintf("Use terminal_exec to write exactly APPROVED into %s.txt in the current directory. If permission is denied or cancelled, do not try any other tool or alternate route. Report the actual outcome.", action))
 		i := f.approval()
 		f.missing(action + ".txt")
 		if action == "stop" {
@@ -612,9 +612,9 @@ func (f *ollamaTaskFixture) ask() *RequestUserInputPrompt {
 	return d.Thread.WaitingPrompt
 }
 func ollamaTaskAskUser(f *ollamaTaskFixture) {
-	f.send("ask", "Before doing any work, use ask_user to ask me for a release codename. Use one free-text question with id codename and response_mode write. After I answer, use terminal.exec to write that exact answer to codename.txt in the current directory, then reply CODENAME_SAVED.")
+	f.send("ask", "Before doing any work, use user_ask to ask me for a release codename. Use one free-text question with id codename and response_mode write. After I answer, use terminal_exec to write that exact answer to codename.txt in the current directory, then reply CODENAME_SAVED.")
 	p := f.ask()
-	queued := f.send("ask-queued", "After the codename task, use terminal.exec to read codename.txt and write its contents to copied.txt in the current directory. Reply COPY_DONE.")
+	queued := f.send("ask-queued", "After the codename task, use terminal_exec to read codename.txt and write its contents to copied.txt in the current directory. Reply COPY_DONE.")
 	if queued.Kind != "queued" {
 		f.t.Fatal("input while waiting was not queued")
 	}
@@ -640,7 +640,7 @@ func ollamaTaskAskUser(f *ollamaTaskFixture) {
 }
 
 func ollamaTaskStopAskUser(f *ollamaTaskFixture) {
-	f.send("ask-stop", "Use ask_user to ask for the missing release name with one free-text question, then wait for my answer. Do not guess it.")
+	f.send("ask-stop", "Use user_ask to ask for the missing release name with one free-text question, then wait for my answer. Do not guess it.")
 	f.ask()
 	f.stop()
 	f.terminal(flruntime.TurnOutcomeCancelled)
@@ -663,7 +663,7 @@ func ollamaTaskSubagents(f *ollamaTaskFixture) {
 	if err := os.WriteFile(filepath.Join(f.root, "right.txt"), []byte("23\n29\n"), 0600); err != nil {
 		f.t.Fatal(err)
 	}
-	f.finish("subagents", fmt.Sprintf("Use subagents to spawn exactly two children with mission_only context: Left Audit must use terminal.exec to read %s/left.txt and return LEFT_SUM=36; Right Audit must use terminal.exec to read %s/right.txt and return RIGHT_SUM=52. Spawn both before waiting. Ask them to actually calculate from the files and not modify files. Use subagents wait for both complete handoffs, then use terminal.exec to save the combined total as exactly 88 followed by a newline in combined.txt in your current directory, and report both sums and the total. Do not calculate the individual sums on their behalf. Do not close them.", f.root, f.root), "")
+	f.finish("subagent_manage", fmt.Sprintf("Use subagent_manage to spawn exactly two children with mission_only context: Left Audit must use terminal_exec to read %s/left.txt and return LEFT_SUM=36; Right Audit must use terminal_exec to read %s/right.txt and return RIGHT_SUM=52. Spawn both before waiting. Ask them to actually calculate from the files and not modify files. Use subagent_manage wait for both complete handoffs, then use terminal_exec to save the combined total as exactly 88 followed by a newline in combined.txt in your current directory, and report both sums and the total. Do not calculate the individual sums on their behalf. Do not close them.", f.root, f.root), "")
 	f.file("combined.txt", "88\n")
 	children := f.children()
 	if len(children) != 2 {
@@ -679,14 +679,14 @@ func ollamaTaskSubagents(f *ollamaTaskFixture) {
 		}
 		found := false
 		for _, i := range d.Current.Items {
-			found = found || i.Activity != nil && i.Activity.ToolName == "terminal.exec" && string(i.Activity.Status) == "success"
+			found = found || i.Activity != nil && i.Activity.ToolName == "terminal_exec" && string(i.Activity.Status) == "success"
 		}
 		if !found {
 			f.t.Fatal("child did not execute terminal task")
 		}
 	}
 	f.report["children"] = children
-	f.finish("subagent-followup", "Use subagents list and inspect the two completed children. Send a follow-up input to Left Audit asking it to use terminal.exec to calculate 36*2 and report LEFT_DOUBLE=72. Wait for its new complete handoff, then report LEFT_DOUBLE=72. Do not spawn new children.", "LEFT_DOUBLE=72")
+	f.finish("subagent-followup", "Use subagent_manage list and inspect the two completed children. Send a follow-up input to Left Audit asking it to use terminal_exec to calculate 36*2 and report LEFT_DOUBLE=72. Wait for its new complete handoff, then report LEFT_DOUBLE=72. Do not spawn new children.", "LEFT_DOUBLE=72")
 	if len(f.children()) != 2 {
 		f.t.Fatal("follow-up duplicated children")
 	}
@@ -694,7 +694,7 @@ func ollamaTaskSubagents(f *ollamaTaskFixture) {
 
 func ollamaTaskSubagentHistory(f *ollamaTaskFixture) {
 	f.finish("history-seed", "This is a synthetic conversation-history test. The fictional release codename is LIFECYCLE_FACT_AMBER_731. It is a non-sensitive fixture label that a later task will refer to within this conversation only; no permanent memory or file storage is requested. Reply exactly REMEMBERED without tools or questions.", "REMEMBERED")
-	d := f.finish("history-child", "Use subagents to spawn exactly one child named History Audit with full_history context. Ask it to recover the release codename only from inherited conversation messages, never by reading other files. It must use terminal.exec only to write exactly that codename with no trailing newline into inherited.txt in the current directory and verify that file. Do not include the codename in the mission message. Do not call terminal.exec yourself. Wait for its handoff and report HISTORY_SAVED.", "HISTORY_SAVED")
+	d := f.finish("history-child", "Use subagent_manage to spawn exactly one child named History Audit with full_history context. Ask it to recover the release codename only from inherited conversation messages, never by reading other files. It must use terminal_exec only to write exactly that codename with no trailing newline into inherited.txt in the current directory and verify that file. Do not include the codename in the mission message. Do not call terminal_exec yourself. Wait for its handoff and report HISTORY_SAVED.", "HISTORY_SAVED")
 	f.file("inherited.txt", "LIFECYCLE_FACT_AMBER_731")
 	children := f.children()
 	if len(children) != 1 {
@@ -716,25 +716,25 @@ func ollamaTaskSubagentHistory(f *ollamaTaskFixture) {
 				inherited = inherited || strings.Contains(item.Text, "LIFECYCLE_FACT_AMBER_731")
 			}
 		}
-		executed = executed || item.TurnID == child.Current.TurnID && item.Activity != nil && item.Activity.ToolName == "terminal.exec" && string(item.Activity.Status) == "success"
+		executed = executed || item.TurnID == child.Current.TurnID && item.Activity != nil && item.Activity.ToolName == "terminal_exec" && string(item.Activity.Status) == "success"
 	}
 	if !inherited || !mission || !executed || child.Current.LastOutcome == nil || *child.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
 		f.t.Fatal("child did not complete a tool task from inherited history")
 	}
 	for _, item := range d.Current.Items {
-		if item.Activity != nil && item.Activity.ToolName == "terminal.exec" {
+		if item.Activity != nil && item.Activity.ToolName == "terminal_exec" {
 			f.t.Fatal("parent performed the child's file task")
 		}
 	}
 	f.report["history_inherited_without_mission_leak"] = true
-	f.finish("history-close", "Use subagents close on History Audit, then list the children and report HISTORY_CLOSED. Do not spawn children or delete conversation history.", "HISTORY_CLOSED")
+	f.finish("history-close", "Use subagent_manage close on History Audit, then list the children and report HISTORY_CLOSED. Do not spawn children or delete conversation history.", "HISTORY_CLOSED")
 	if len(f.children()) != 1 {
 		f.t.Fatal("closing a child deleted its conversation")
 	}
 }
 
 func ollamaTaskSubagentInterrupt(f *ollamaTaskFixture) {
-	f.finish("child-steer", fmt.Sprintf("Use subagents to spawn exactly one child named Slow Audit with mission_only context. Its mission is to execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-old.txt', then report OLD. After spawning, use terminal.exec yourself to wait until %s/child-started.txt exists (a bounded shell loop). Then immediately call subagents send_input on that child's returned thread_id with message: 'The old task is cancelled. Use terminal.exec to write exactly STEERED into %s/child-new.txt and report STEERED. Do not run the old command again.' Wait for the child and report STEERED. Do not create a second child.", f.root, f.root, f.root, f.root), "STEERED")
+	f.finish("child-steer", fmt.Sprintf("Use subagent_manage to spawn exactly one child named Slow Audit with mission_only context. Its mission is to execute terminal_exec with yield_ms 30000 and command 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-old.txt', then report OLD. After spawning, use terminal_exec yourself to wait until %s/child-started.txt exists (a bounded shell loop). Then immediately call subagent_manage send_input on that child's returned thread_id with message: 'The old task is cancelled. Use terminal_exec to write exactly STEERED into %s/child-new.txt and report STEERED. Do not run the old command again.' Wait for the child and report STEERED. Do not create a second child.", f.root, f.root, f.root, f.root), "STEERED")
 	f.file("child-started.txt", "STARTED")
 	f.file("child-new.txt", "STEERED")
 	f.missing("child-old.txt")
@@ -744,7 +744,7 @@ func ollamaTaskSubagentInterrupt(f *ollamaTaskFixture) {
 }
 
 func ollamaTaskParentStop(f *ollamaTaskFixture) {
-	f.send("parent-stop", fmt.Sprintf("Use subagents to spawn one child named Pending Audit with mission_only context. The child must execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/parent-child-started.txt; sleep 30; printf OLD > %s/parent-child-old.txt', then report OLD. After spawning call subagents wait for the child with timeout_ms 120000.", f.root, f.root))
+	f.send("parent-stop", fmt.Sprintf("Use subagent_manage to spawn one child named Pending Audit with mission_only context. The child must execute terminal_exec with yield_ms 30000 and command 'printf STARTED > %s/parent-child-started.txt; sleep 30; printf OLD > %s/parent-child-old.txt', then report OLD. After spawning call subagent_manage wait for the child with timeout_ms 120000.", f.root, f.root))
 	f.wait("child running", func(*FlowerThreadDetail) bool {
 		_, err := os.Stat(filepath.Join(f.root, "parent-child-started.txt"))
 		return err == nil

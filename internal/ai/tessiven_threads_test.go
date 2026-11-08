@@ -193,7 +193,7 @@ func TestTessivenThreadOwnershipIsolatesInventoryAndRuntime(t *testing.T) {
 		}
 		count := 0
 		for _, tool := range registry.Snapshot() {
-			if strings.HasPrefix(tool.Name, "tessiven.") {
+			if strings.HasPrefix(tool.Name, "tessiven_") {
 				count++
 			}
 		}
@@ -216,7 +216,7 @@ func TestTessivenThreadOwnershipIsolatesInventoryAndRuntime(t *testing.T) {
 		if (err == nil) != tc.want {
 			t.Fatalf("skill activation: %v want=%v", err, tc.want)
 		}
-		_, err = r.execTessivenTool(t.Context(), meta, "tessiven.schema", map[string]any{})
+		_, err = r.execTessivenTool(t.Context(), meta, "tessiven_read_schema", map[string]any{})
 		if (err == nil) != tc.want {
 			t.Fatalf("tool dispatch: %v want=%v", err, tc.want)
 		}

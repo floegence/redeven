@@ -545,7 +545,7 @@ it('keeps title motion through failure updates and cleans animations on navigati
 it('claims argument previews once when the same call becomes canonical', async () => {
   const { root, push } = await mount();
   const preview: FlowerToolCallPreview = { thread_id: 'typing', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
-    attempt_id: 'attempt', attempt_epoch: 0, call_id: 'preview', name: 'apply_patch', arguments_complete: false,
+    attempt_id: 'attempt', attempt_epoch: 0, call_id: 'preview', name: 'file_apply_patch', arguments_complete: false,
     preview: { display_name: 'src/browser.ts', additions: 2 } };
   push([tool('history', 'success')], [preview]);
   await waitFor(() => Boolean(root.querySelector('[data-flower-tool-call-id="preview"]')));
@@ -553,7 +553,7 @@ it('claims argument previews once when the same call becomes canonical', async (
   expect(reveals(label)).toHaveLength(1);
   const animation = reveals(label)[0];
   animation.pause();
-  push([tool('history', 'success'), { ...tool('preview'), activity: { ...tool('preview').activity!, tool_name: 'apply_patch',
+  push([tool('history', 'success'), { ...tool('preview'), activity: { ...tool('preview').activity!, tool_name: 'file_apply_patch',
     presentation: { label: 'Edit src/browser.ts', renderer: 'patch', payload: {} } } }]);
   await waitFor(() => Boolean(title(root, 'preview')));
   expect(reveals(title(root, 'preview')!)).toEqual([animation]);

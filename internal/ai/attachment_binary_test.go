@@ -60,7 +60,7 @@ func TestOpaqueAttachmentUploadToModelToolExecutionAndRestart(t *testing.T) {
 		if !bytes.Contains(input, []byte(locator.Load().(string))) || !bytes.Contains(input, []byte("content_included: false")) {
 			t.Error("provider request omitted attachment metadata")
 		}
-		for _, instruction := range []string{"Use attachment.materialize", "Decide how to handle this attachment", "explain that limitation to the user"} {
+		for _, instruction := range []string{"Use attachment_materialize", "Decide how to handle this attachment", "explain that limitation to the user"} {
 			if bytes.Contains(input, []byte(instruction)) {
 				t.Errorf("provider input contains redundant attachment guidance: %s", instruction)
 			}

@@ -24,11 +24,11 @@ func TestTessivenToolCanvasLifecycleWithoutModel(t *testing.T) {
 	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
 	document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Commerce}\n"
-	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven.schema", map[string]any{}); err != nil {
+	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven_read_schema", map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
 	args := map[string]any{"request_id": "flower-first", "expected_version": 0, "document_yaml": document, "summary": "Map commerce"}
-	saved, err := r.execTessivenTool(t.Context(), meta, "tessiven.save", args)
+	saved, err := r.execTessivenTool(t.Context(), meta, "tessiven_save_canvas", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestTessivenToolCanvasLifecycleWithoutModel(t *testing.T) {
 	args["expected_version"] = 1
 	args["request_id"] = "flower-next"
 	args["document_yaml"] = strings.Replace(document, "Commerce", "Commerce / Production", 1)
-	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven.save", args); err != nil {
+	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven_save_canvas", args); err != nil {
 		t.Fatal(err)
 	}
 	versions, err := library.Versions(t.Context(), canvas.ID, 0)
@@ -51,10 +51,10 @@ func TestTessivenToolCanvasLifecycleWithoutModel(t *testing.T) {
 	if versions[0].Source != "flower" {
 		t.Fatal("tool source lost")
 	}
-	if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.save", args); err == nil {
+	if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_save_canvas", args); err == nil {
 		t.Fatal("read-only caller saved")
 	}
-	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven.read", map[string]any{"canvas_id": canvas.ID, "before": 1}); err == nil {
+	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven_read_canvas", map[string]any{"canvas_id": canvas.ID, "before": 1}); err == nil {
 		t.Fatal("unrelated field accepted")
 	}
 }
@@ -69,7 +69,7 @@ func TestTessivenInspectReturnsStructuredUnavailableForDescriptiveRuntime(t *tes
 		tessiven:          library,
 		tessivenResources: &tessiven.ResourceBackend{},
 	}}
-	result, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.inspect", map[string]any{
+	result, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_inspect_resource", map[string]any{
 		"runtime_ref": "demo:application",
 		"action":      "list",
 	})
@@ -143,7 +143,7 @@ func TestTessivenToolsRejectUnplacedServicesWithoutCreatingVersions(t *testing.T
 	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
 	document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Reference architecture}\nservices: [{id: api, name: API, kind: api}]\n"
-	result, err := r.execTessivenTool(t.Context(), meta, "tessiven.validate", map[string]any{"document_yaml": document})
+	result, err := r.execTessivenTool(t.Context(), meta, "tessiven_validate_canvas", map[string]any{"document_yaml": document})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestTessivenToolsRejectUnplacedServicesWithoutCreatingVersions(t *testing.T
 	if validation.Valid || len(validation.Diagnostics) != 1 || validation.Diagnostics[0].Path != "/services/0/id" {
 		t.Fatalf("missing model-facing placement diagnostic: %+v", validation)
 	}
-	_, err = r.execTessivenTool(t.Context(), meta, "tessiven.save", map[string]any{"request_id": "unplaced", "expected_version": 0, "document_yaml": document, "summary": "Create"})
+	_, err = r.execTessivenTool(t.Context(), meta, "tessiven_save_canvas", map[string]any{"request_id": "unplaced", "expected_version": 0, "document_yaml": document, "summary": "Create"})
 	if err == nil {
 		t.Fatal("Flower saved an unplaced service")
 	}
@@ -162,7 +162,7 @@ func TestTessivenToolsRejectUnplacedServicesWithoutCreatingVersions(t *testing.T
 	if toolError.Meta["validation_details"].(map[string]any)["path"] != "/services/0/id" {
 		t.Fatalf("save failure lost its source location: %+v", toolError)
 	}
-	payload, err := modelToolResultPayload(ToolResult{ToolName: "tessiven.save", Status: "error", Error: toolError, Data: validation})
+	payload, err := modelToolResultPayload(ToolResult{ToolName: "tessiven_save_canvas", Status: "error", Error: toolError, Data: validation})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
 		if version != "" {
 			args["version"] = version
 		}
-		raw, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.schema", args)
+		raw, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_read_schema", args)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -222,7 +222,7 @@ func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
 		}
 	}
 	for _, args := range []map[string]any{{"version": "v9.0.0"}, {"version": 1}, {"other": "v1"}} {
-		if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.schema", args); err == nil {
+		if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_read_schema", args); err == nil {
 			t.Fatal("unsupported selector accepted")
 		}
 	}
@@ -233,17 +233,17 @@ func TestTessivenDirectResourceDoesNotRequireCanvasLibrary(t *testing.T) {
 	manager := &directManagedFixture{}
 	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessivenResources: &tessiven.ResourceBackend{Managed: manager}}}
 	args := map[string]any{"runtime_ref": "local:local", "action": "inspect", "binding": map[string]any{"owner": "managed_service", "resourceId": "host"}}
-	result, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.inspect", args)
+	result, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_inspect_resource", args)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.(tessiven.ResourceResult).Inspection.Binding.ResourceID != "host" || manager.calls != 1 {
 		t.Fatal("exact managed resource was not inspected")
 	}
-	if _, err := r.execTessivenTool(t.Context(), &session.Meta{}, "tessiven.inspect", args); !errors.Is(err, tessiven.ErrPermissionDenied) || manager.calls != 1 {
+	if _, err := r.execTessivenTool(t.Context(), &session.Meta{}, "tessiven_inspect_resource", args); !errors.Is(err, tessiven.ErrPermissionDenied) || manager.calls != 1 {
 		t.Fatal("read permission bypassed", err)
 	}
-	if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.list", map[string]any{}); err == nil {
+	if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_list_canvases", map[string]any{}); err == nil {
 		t.Fatal("missing canvas library silently accepted")
 	}
 }

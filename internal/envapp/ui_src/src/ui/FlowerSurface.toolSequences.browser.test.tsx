@@ -16,7 +16,7 @@ import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor 
 const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void>; emulateMediaPreferences: (input: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void> };
 const item = (id: string, kind: FlowerRuntimeCurrentItem['kind'], text = id): FlowerRuntimeCurrentItem => ({ id, kind, text, turn_id: 'turn', run_id: 'run', ordinal: 0 });
 const emptyLiveText = (id: string): FlowerRuntimeCurrentItem => ({ ...item(id, 'assistant', ''), live: true });
-const tool = (id: string, status: 'success' | 'running' | 'error' = 'success', toolName = 'terminal.exec', renderer = 'terminal'): FlowerRuntimeCurrentItem => ({ ...item(id, 'tool'), activity: {
+const tool = (id: string, status: 'success' | 'running' | 'error' = 'success', toolName = 'terminal_exec', renderer = 'terminal'): FlowerRuntimeCurrentItem => ({ ...item(id, 'tool'), activity: {
   item_id: id, tool_id: id, kind: 'tool', tool_name: toolName, status, severity: status === 'error' ? 'error' : status === 'running' ? 'normal' : 'quiet',
   needs_attention: status !== 'success', requires_approval: false,
   ...(status === 'error' ? { attention_reasons: ['error'] } : status === 'running' ? { attention_reasons: ['running'] } : {}),
@@ -35,7 +35,7 @@ function current(items: FlowerRuntimeCurrentItem[], version = 1, parentEvents: r
 }
 const preview = (id: string): FlowerToolCallPreview => ({
   thread_id: 'sequences', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
-  attempt_id: 'attempt', attempt_epoch: 0, call_id: id, name: 'apply_patch', arguments_complete: false,
+  attempt_id: 'attempt', attempt_epoch: 0, call_id: id, name: 'file_apply_patch', arguments_complete: false,
   preview: { display_name: `${id}.ts`, additions: 2 },
 });
 async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], parentEvents: readonly FlowerParentEvent[] = [], partial = false, copy?: FlowerSurfaceCopy, surfaceProps?: Pick<FlowerSurfaceProps, 'presentation'>) {
@@ -149,12 +149,12 @@ describe('consecutive tools in the shared Flower surface', () => {
   });
 
   it.each([
-    ['terminal.exec', 'terminal'], ['web_search', 'web_search'],
-    ['computer.exec', 'computer'], ['browser.navigate', 'browser'], ['computer.screenshot', 'computer'],
-    ['read_files', 'structured'], ['extension.inspect', 'structured'],
+    ['terminal_exec', 'terminal'], ['web_search', 'web_search'],
+    ['computer_exec', 'computer'], ['browser_navigate', 'browser'], ['computer_capture_screenshot', 'computer'],
+    ['file_read_many', 'structured'], ['extension.inspect', 'structured'],
   ])('points the %s disclosure right when closed and down when open', async (name, renderer) => {
     const base = tool('direction', 'success', name, renderer);
-    const defaultOpen = name === 'computer.screenshot';
+    const defaultOpen = name === 'computer_capture_screenshot';
     const call = { ...base, activity: { ...base.activity!, presentation: { ...base.activity!.presentation as Record<string, unknown>,
       ...(renderer === 'web_search' ? { payload: { operation: 'search', query: 'release', results_provided: true,
         results: [{ title: 'Release notes', url: 'https://example.test/release', snippet: 'A useful result.' }] } } : {}),
@@ -203,7 +203,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const i18n = createTestI18nHelpers(locale);
     const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
       tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
-    const base = tool('browser-clean', 'success', 'computer.exec', 'computer');
+    const base = tool('browser-clean', 'success', 'computer_exec', 'computer');
     const call = { ...base, activity: { ...base.activity!, presentation: { ...base.activity!.presentation as Record<string, unknown>,
       chips: [{ kind: 'browser_source', label: 'source', value: 'browser.managed' },
         { kind: 'computer_observation', label: 'observation', value: 'not_observed' }],
@@ -782,7 +782,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(button.textContent).not.toContain('Consecutive tool calls');
   });
   it('keeps returned uncertainty grouped and visible while preserving manual disclosure', async () => {
-    const failed = tool('uncertain', 'error', 'computer.exec', 'structured');
+    const failed = tool('uncertain', 'error', 'computer_exec', 'structured');
     const uncertain = { ...failed, activity: { ...failed.activity!, presentation: { ...failed.activity!.presentation as Record<string, unknown>,
       chips: [{ kind: 'effect_outcome', label: 'result', value: 'uncertain', tone: 'warning' }] } } };
     const { root, push } = await mount([tool('before'), tool('uncertain', 'running')]);
@@ -1070,10 +1070,10 @@ describe('consecutive tools in the shared Flower surface', () => {
   });
 
   it.each([
-    ['terminal', 'terminal.exec', '.flower-activity-terminal-output', { operation: 'exec', command: 'echo output', output: 'Output line.\n'.repeat(80) }],
-    ['file', 'read_file', '.flower-activity-file-read-content', { operation: 'read', display_name: 'example.txt', content: 'File line.\n'.repeat(80) }],
+    ['terminal', 'terminal_exec', '.flower-activity-terminal-output', { operation: 'exec', command: 'echo output', output: 'Output line.\n'.repeat(80) }],
+    ['file', 'file_read', '.flower-activity-file-read-content', { operation: 'read', display_name: 'example.txt', content: 'File line.\n'.repeat(80) }],
     ['web_fetch', 'web_fetch', '.flower-activity-web-fetch-preview', { url: 'https://example.com', format: 'text', content_preview: 'Fetched line.\n'.repeat(80) }],
-    ['patch', 'apply_patch', '.flower-activity-file-diff-unified', { mutations: [{ display_name: 'example.txt', change_type: 'update', additions: 80, deletions: 1, unified_diff: '@@ -1 +1,80 @@\n-old\n' + '+New line.\n'.repeat(80) }] }],
+    ['patch', 'file_apply_patch', '.flower-activity-file-diff-unified', { mutations: [{ display_name: 'example.txt', change_type: 'update', additions: 80, deletions: 1, unified_diff: '@@ -1 +1,80 @@\n-old\n' + '+New line.\n'.repeat(80) }] }],
   ] as const)('hands %s preview edges through a sequence to the transcript', async (renderer, toolName, selector, payload) => {
     const template = tool('preview', 'success', toolName, renderer);
     const result = { ...template, activity: { ...template.activity!, presentation: { label: 'Inspect output', renderer, payload } } };

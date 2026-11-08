@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools. Redeven projects bounded safe results into Floret v7.26.0 structured Activity rows, and the shared Flower surface expands those rows without reading raw OKF result JSON.
+Redeven exposes the embedded OKF bundle through read-only `okf_get_index`, `okf_search`, and `okf_open` builtin tools. Redeven projects bounded safe results into Floret v7.26.0 structured Activity rows, and the shared Flower surface expands those rows without reading raw OKF result JSON.
 
 # Contract
 
@@ -15,11 +15,11 @@ Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.sear
 Runtime OKF code loads the embedded bundle once, indexes root directory sections, scores structured summaries and sections in memory, and opens a concept summary or one selected section by id or path. Internal ids, paths, and unfiltered result objects never enter that display contract. OKF activity labels and operation values come from `ToolPresentationSpec`, so the Floret projection does not own a separate OKF display vocabulary.
 
 ## Tool workflow
-`okf.index` browses `okf/index.md` as a structured directory and returns summaries plus section counts. `okf.search` returns a bounded short candidate list with query-aware snippets and the best matching section id/title; title and Summary matches outrank section body matches.
+`okf_get_index` browses `okf/index.md` as a structured directory and returns summaries plus section counts. `okf_search` returns a bounded short candidate list with query-aware snippets and the best matching section id/title; title and Summary matches outrank section body matches.
 
 Evidence narrative participates in search and the section catalog. Explicit `section: "evidence"` reads its bounded body and references; `include_evidence` on another section adds only structured references. Default opening omits evidence content.
 
-Models should follow `okf.index -> okf.search -> okf.open Summary -> okf.open section` and must not rely on snippets for detailed contracts.
+Models should follow `okf_get_index -> okf_search -> okf_open Summary -> okf_open section` and must not rely on snippets for detailed contracts.
 
 # Boundaries
 

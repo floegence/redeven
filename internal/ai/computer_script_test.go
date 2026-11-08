@@ -46,7 +46,7 @@ func scriptRuntimeFixture(t *testing.T, fn func(context.Context, TargetToolCall)
 		"test-target":  scriptTestExecutor{fn},
 	}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
-	return runtime, TargetToolCall{ThreadID: "thread", TurnID: "turn", RunID: "run", TargetID: "test-target", ToolCallID: "call", ToolName: "computer.exec", revalidate: func(ctx context.Context) error { return ctx.Err() }}
+	return runtime, TargetToolCall{ThreadID: "thread", TurnID: "turn", RunID: "run", TargetID: "test-target", ToolCallID: "call", ToolName: "computer_exec", revalidate: func(ctx context.Context) error { return ctx.Err() }}
 }
 
 func executeTestScript(ctx context.Context, runtime *ComputerUseRuntime, call TargetToolCall, code string) (TargetToolResult, error) {
@@ -62,7 +62,7 @@ func TestComputerScriptNamespaceLifetimeAndPartialResult(t *testing.T) {
 			return TargetToolResult{}, computerTargetFailure(call, "STALE_REFERENCE")
 		}
 		result := map[string]any{"action_executed": computerCallMutates(call)}
-		if call.ToolName == "computer.observe" {
+		if call.ToolName == "computer_observe" {
 			result["observation"] = map[string]any{"semantic_schema_version": 2, "document_id": "fixture:1", "nodes": []any{}, "truncated": false}
 		}
 		return TargetToolResult{Result: result}, nil
@@ -389,7 +389,7 @@ func TestComputerScriptScrollCoordinatesAndSemanticRouting(t *testing.T) {
 		return TargetToolResult{Result: map[string]any{}}, nil
 	})
 	_, err := executeTestScript(t.Context(), rt, call, "await ui.scrollAt(12,34,80); await ui.ref('area').scroll(40);")
-	if err != nil || len(calls) != 2 || calls[0].ToolName != "computer.scroll" || calls[1].ToolName != "computer.action" {
+	if err != nil || len(calls) != 2 || calls[0].ToolName != "computer_scroll" || calls[1].ToolName != "computer.action" {
 		t.Fatalf("routing: %#v %v", calls, err)
 	}
 	var args map[string]any
@@ -594,7 +594,7 @@ func TestComputerScriptNativeScrollUsesCoordinateRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tool != "computer.scroll" || args["selector"] != nil {
+	if tool != "computer_scroll" || args["selector"] != nil {
 		t.Fatalf("unexpected routing: %s %#v", tool, args)
 	}
 	t.Logf("documented ui.scroll dispatches %s without selector: %#v", tool, args)

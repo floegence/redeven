@@ -105,7 +105,7 @@ func TestComputerFieldIntegrityGuestAndObservationDiff(t *testing.T) {
 	}
 	host, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
 		payload := map[string]any{"action_executed": false, "semantic_schema_version": 2}
-		if c.ToolName == "computer.observe" {
+		if c.ToolName == "computer_observe" {
 			payload["observation"] = tree
 		} else {
 			payload["node"] = node

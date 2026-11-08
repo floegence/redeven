@@ -60,11 +60,11 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 			return nil, err
 		}
 		toolDef.NewArgumentPreview = flowerArgumentPreviewFactory(name)
-		if isComputerUseTool(name) && name != "computer.targets" {
+		if isComputerUseTool(name) && name != "computer_list_targets" {
 			toolDef.BatchExclusiveGroup = "computer_control"
 		}
 		var decode func([]byte) (map[string]any, error)
-		if name == "subagents" {
+		if name == "subagent_manage" {
 			decode = decodeSubagentsToolInput
 		}
 		tool := fltools.Define[map[string]any](
@@ -74,7 +74,7 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 				if isComputerUseTool(inv.Name) {
 					return floretComputerResources(r, inv)
 				}
-				if inv.Name == "apply_patch" && !r.shouldRouteTargetTool(inv.Name) {
+				if inv.Name == "file_apply_patch" && !r.shouldRouteTargetTool(inv.Name) {
 					return r.patchToolResources(anyToString(inv.Args["input"]))
 				}
 				return floretToolResources(inv)
@@ -105,7 +105,7 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 				}
 				ctx = contextWithFloretToolExecutionAuthorization(ctx, call.ID, call.Name, effectAttemptID, authorizedSnapshot, policy.ApprovalDecision, true, inv.HostContext)
 				ctx = contextWithToolAuthorizationSnapshot(ctx, authorizedSnapshot)
-				if call.Name == "report_to_parent" {
+				if call.Name == "subagent_report" {
 					return execRun.reportToParent(ctx, inv)
 				}
 				handler := &builtInToolHandler{
@@ -290,7 +290,7 @@ func toolErrorPayload(toolErr *aitools.ToolError) map[string]any {
 
 func modelToolErrorPayload(toolErr *aitools.ToolError, toolName string) map[string]any {
 	payload := toolErrorPayload(toolErr)
-	if toolName == "apply_patch" && toolErr != nil && len(toolErr.SuggestedFixes) > 0 {
+	if toolName == "file_apply_patch" && toolErr != nil && len(toolErr.SuggestedFixes) > 0 {
 		meta := cloneAnyMap(toolErr.Meta)
 		meta["suggested_fixes"] = append([]string(nil), toolErr.SuggestedFixes...)
 		payload["meta"] = meta
@@ -397,7 +397,7 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 	if status == toolResultStatusAborted && result.cancellationConfirmed {
 		raw["outcome"] = fltools.ResultOutcomeCanceled
 	}
-	if isComputerUseTool(result.ToolName) || result.ToolName == "subagent_events" {
+	if isComputerUseTool(result.ToolName) || result.ToolName == "subagent_read_events" {
 		return raw, nil
 	}
 	// Validate before the bounded projection can turn an unsupported value into text.
@@ -414,7 +414,7 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 		// metadata is projected. Activity keeps the original tool result.
 		return modelPayload, nil
 	}
-	if result.ToolName == "terminal.read" {
+	if result.ToolName == "terminal_read" {
 		if data, ok := modelPayload["data"].(map[string]any); ok {
 			// Activity retains the command and process timing. Model reads carry
 			// incremental output and execution facts without echoing the command.
@@ -423,7 +423,7 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 			}
 		}
 	}
-	if result.ToolName == "apply_patch" && status == toolResultStatusSuccess {
+	if result.ToolName == "file_apply_patch" && status == toolResultStatusSuccess {
 		if data, ok := modelPayload["data"].(map[string]any); ok {
 			// The canonical Activity retains the full diff and format metadata. The
 			// provider needs the confirmed files and counts, not an echo of its patch.
@@ -438,7 +438,7 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 	}
 	// File readers own complete-line pagination and the aggregate batch budget.
 	// Presentation clipping must not invalidate model continuation coordinates.
-	if result.ToolName == "read_file" || result.ToolName == "read_files" || result.ToolName == "find" {
+	if result.ToolName == "file_read" || result.ToolName == "file_read_many" || result.ToolName == "path_find" {
 		return modelPayload, nil
 	}
 	payload, bounded := boundedJSONMap(modelPayload, 0)
@@ -446,7 +446,9 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 	return payload, nil
 }
 
-func completeReportTool(name string) bool { return name == "subagents" || name == "subagent_events" }
+func completeReportTool(name string) bool {
+	return name == "subagent_manage" || name == "subagent_read_events"
+}
 
 func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot PermissionSnapshot) (fltools.Definition, error) {
 	def = normalizeToolPermissionMetadata(def)
@@ -463,7 +465,7 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 		}
 	}
 	effects := floretToolEffects(def)
-	readOnly := !def.Mutating && !floretToolOpenWorld(def) && toolName != "terminal.exec" && toolName != "report_to_parent"
+	readOnly := !def.Mutating && !floretToolOpenWorld(def) && toolName != "terminal_exec" && toolName != "subagent_report"
 	permissionType := authorizationSnapshot.PermissionType
 	if permissionType == "" {
 		return fltools.Definition{}, fmt.Errorf("permission snapshot for Floret tool %s is missing permission type", toolName)
@@ -473,7 +475,7 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 		"source":    strings.TrimSpace(def.Source),
 		"namespace": strings.TrimSpace(def.Namespace),
 	}
-	if toolName == "terminal.read" {
+	if toolName == "terminal_read" {
 		annotations[fltools.AnnotationRepeatPolicy] = fltools.RepeatPolicyPolling
 	}
 	return fltools.Definition{
@@ -492,7 +494,7 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 		},
 		Activity: func(inv fltools.Invocation[any]) (*fltools.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
-			if toolName == "terminal.exec" {
+			if toolName == "terminal_exec" {
 				args = normalizeTerminalExecArgs(args)
 			}
 			activity := floretActivityForToolCall(toolName, args)
@@ -503,7 +505,7 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 		},
 		InvalidActivity: func(inv fltools.Invocation[map[string]any]) (*fltools.ActivityPresentation, error) {
 			args := cloneAnyMap(inv.Args)
-			if toolName == "terminal.exec" {
+			if toolName == "terminal_exec" {
 				args = normalizeTerminalExecArgs(args)
 			}
 			activity := floretActivityForToolCall(toolName, args)
@@ -546,19 +548,19 @@ func floretPermissionMode(decision ApprovalDecisionKind) fltools.PermissionMode 
 
 func floretToolResourceKinds(toolName string) []string {
 	switch strings.TrimSpace(toolName) {
-	case "terminal.exec":
+	case "terminal_exec":
 		return []string{"command"}
-	case "image.read", "read_file", "read_files", "rgrep", "find", "file.write", "file.present", "apply_patch":
+	case "image_read", "file_read", "file_read_many", "file_search", "path_find", "file_write", "file_present", "file_apply_patch":
 		return []string{"file"}
-	case "attachment.read", "attachment.materialize":
+	case "attachment_read", "attachment_materialize":
 		return []string{"attachment"}
-	case "web.search":
+	case "web_search_pages":
 		return []string{"web_query"}
-	case "okf.index", "okf.search", "okf.open":
+	case "okf_get_index", "okf_search", "okf_open":
 		return []string{"knowledge_query"}
-	case "use_skill":
+	case "skill_use":
 		return []string{"skill"}
-	case "subagents":
+	case "subagent_manage":
 		return []string{"subagent", "subagent_thread"}
 	default:
 		return nil
@@ -570,7 +572,7 @@ func floretToolOpenWorld(def ToolDef) bool {
 		return true
 	}
 	switch strings.TrimSpace(def.Name) {
-	case "terminal.exec", "terminal.write", "terminal.terminate", "web.search", "use_skill":
+	case "terminal_exec", "terminal_write", "terminal_terminate", "web_search_pages", "skill_use":
 		return true
 	default:
 		return false
@@ -580,11 +582,11 @@ func floretToolOpenWorld(def ToolDef) bool {
 func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
 	args := cloneAnyMap(inv.Args)
 	switch strings.TrimSpace(inv.Name) {
-	case "attachment.read", "attachment.materialize":
+	case "attachment_read", "attachment_materialize":
 		if locator := strings.TrimSpace(anyToString(args["locator"])); locator != "" {
 			return []fltools.ResourceRef{{Kind: "attachment", Value: locator}}, nil
 		}
-	case "terminal.exec":
+	case "terminal_exec":
 		out := []fltools.ResourceRef{}
 		if command := strings.TrimSpace(anyToString(args["command"])); command != "" {
 			out = append(out, fltools.ResourceRef{Kind: "command", Value: command})
@@ -595,18 +597,18 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		if len(out) > 0 {
 			return out, nil
 		}
-	case "terminal.read", "terminal.write", "terminal.terminate":
+	case "terminal_read", "terminal_write", "terminal_terminate":
 		if processID := strings.TrimSpace(anyToString(args["process_id"])); processID != "" {
 			return []fltools.ResourceRef{{Kind: "terminal_process", Value: processID}}, nil
 		}
-	case "image.read", "read_file", "file.write", "file.present":
+	case "image_read", "file_read", "file_write", "file_present":
 		if path := strings.TrimSpace(anyToString(args["file_path"])); path != "" {
 			return []fltools.ResourceRef{{Kind: "file", Value: path}}, nil
 		}
 		if path := strings.TrimSpace(anyToString(args["path"])); path != "" {
 			return []fltools.ResourceRef{{Kind: "file", Value: path}}, nil
 		}
-	case "read_files":
+	case "file_read_many":
 		paths := extractStringSlice(args["paths"])
 		out := make([]fltools.ResourceRef, 0, len(paths))
 		for _, path := range paths {
@@ -617,7 +619,7 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		if len(out) > 0 {
 			return out, nil
 		}
-	case "rgrep":
+	case "file_search":
 		paths := extractStringSlice(args["paths"])
 		if len(paths) == 0 {
 			if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
@@ -633,41 +635,41 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		if len(out) > 0 {
 			return out, nil
 		}
-	case "find":
+	case "path_find":
 		if root := strings.TrimSpace(anyToString(args["root"])); root != "" {
 			return []fltools.ResourceRef{{Kind: "file", Value: root}}, nil
 		}
-	case "apply_patch":
+	case "file_apply_patch":
 		if patch := strings.TrimSpace(anyToString(args["input"])); patch != "" {
 			files := resourceRefsFromPatch(patch)
 			if len(files) > 0 {
 				return files, nil
 			}
 		}
-	case "web.search":
+	case "web_search_pages":
 		if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
 			return []fltools.ResourceRef{{Kind: "web_query", Value: query}}, nil
 		}
-	case "okf.index":
+	case "okf_get_index":
 		if section := strings.TrimSpace(anyToString(args["section"])); section != "" {
 			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: section}}, nil
 		}
-	case "okf.search":
+	case "okf_search":
 		if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
 			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: query}}, nil
 		}
-	case "okf.open":
+	case "okf_open":
 		if conceptID := strings.TrimSpace(anyToString(args["concept_id"])); conceptID != "" {
 			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: conceptID}}, nil
 		}
 		if path := strings.TrimSpace(anyToString(args["path"])); path != "" {
 			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: path}}, nil
 		}
-	case "use_skill":
+	case "skill_use":
 		if name := strings.TrimSpace(anyToString(args["name"])); name != "" {
 			return []fltools.ResourceRef{{Kind: "skill", Value: name}}, nil
 		}
-	case "subagents":
+	case "subagent_manage":
 		if action := strings.TrimSpace(anyToString(args["action"])); action != "" {
 			out := []fltools.ResourceRef{{Kind: "subagent", Value: action}}
 			if action == subagentActionStatus {
@@ -764,23 +766,23 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 	}
 	name := strings.TrimSpace(def.Name)
 	switch name {
-	case "computer.select_target", "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "browser.navigate", "browser.back", "browser.reload":
+	case "computer_select_target", "computer_exec", "computer_click", "computer_double_click", "computer_type_text", "computer_press_key", "computer_scroll", "computer_drag", "browser_navigate", "browser_go_back", "browser_reload":
 		return []fltools.Effect{fltools.EffectWrite}
-	case "terminal.exec", "terminal.write", "terminal.terminate":
+	case "terminal_exec", "terminal_write", "terminal_terminate":
 		return []fltools.Effect{fltools.EffectShell}
-	case "tessiven.inspect", "tessiven.runtimes", "tessiven.runtime.inspect":
+	case "tessiven_inspect_resource", "tessiven_list_runtimes", "tessiven_inspect_runtime":
 		return []fltools.Effect{fltools.EffectRead, fltools.EffectNetwork}
-	case "tessiven.action", "tessiven.runtime.action":
+	case "tessiven_manage_instance", "tessiven_manage_runtime":
 		return []fltools.Effect{fltools.EffectWrite, fltools.EffectNetwork}
-	case "plugin_author.build":
+	case "plugin_author_build":
 		return []fltools.Effect{fltools.EffectShell, fltools.EffectWrite}
-	case "plugin_author.initialize", "plugin_author.capture", "plugin_author.rename", "tessiven.save", "tessiven.edit":
+	case "plugin_author_initialize", "plugin_author_capture", "plugin_author_rename", "tessiven_save_canvas", "tessiven_edit_canvas":
 		return []fltools.Effect{fltools.EffectWrite}
-	case "web.search":
+	case "web_search_pages":
 		return []fltools.Effect{fltools.EffectNetwork}
-	case "use_skill":
+	case "skill_use":
 		return []fltools.Effect{fltools.EffectNetwork}
-	case "report_to_parent", "file.write", "apply_patch", "attachment.materialize":
+	case "subagent_report", "file_write", "file_apply_patch", "attachment_materialize":
 		return []fltools.Effect{fltools.EffectWrite}
 	default:
 		return []fltools.Effect{fltools.EffectRead}
@@ -822,7 +824,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		return fltools.Result{}, err
 	}
 	var outputPolicy *fltools.OutputPolicy
-	if name := strings.TrimSpace(result.ToolName); completeReportTool(name) || isComputerUseTool(name) || strings.HasPrefix(name, "terminal.") {
+	if name := strings.TrimSpace(result.ToolName); completeReportTool(name) || isComputerUseTool(name) || strings.HasPrefix(name, "terminal_") {
 		// Explicit child reports must remain complete through savepoints and retry.
 		// The normal provider request budget still applies to the full result.
 		outputPolicy = &fltools.OutputPolicy{VisibleMaxBytes: len(text) + 1, VisibleMaxLines: strings.Count(string(text), "\n") + 1, Strategy: fltools.OutputHead, PreserveFull: true}
@@ -831,7 +833,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		}
 	}
 	var boundedWait *fltools.BoundedWait
-	if result.ToolName == "terminal.read" && status == toolResultStatusSuccess && dispatchErr == nil {
+	if result.ToolName == "terminal_read" && status == toolResultStatusSuccess && dispatchErr == nil {
 		data, _ := structured["data"].(map[string]any)
 		if readBoolField(data, "wait_expired") && anyToString(data["status"]) == terminalProcessStatusRunning && readInt64Field(data, "wait_ms") > 0 {
 			boundedWait = &fltools.BoundedWait{Timeout: time.Duration(readInt64Field(data, "wait_ms")) * time.Millisecond, TimedOut: true}
@@ -841,7 +843,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	if result.effectUncertain && dispatchErr == nil && status != toolResultStatusAborted {
 		effectOutcome = fltools.EffectOutcomeUncertain
 	}
-	if result.ToolName == "subagents" && !isError {
+	if result.ToolName == "subagent_manage" && !isError {
 		// Engine control metadata comes from the executed result, never its
 		// compact model-facing presentation.
 		data, _ := result.Data.(map[string]any)
@@ -852,7 +854,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		}
 	}
 	observedHostWork := ""
-	if r != nil && r.threadRuntime != nil && (result.ToolName == "terminal.exec" || result.ToolName == "terminal.read" || result.ToolName == "terminal.terminate") {
+	if r != nil && r.threadRuntime != nil && (result.ToolName == "terminal_exec" || result.ToolName == "terminal_read" || result.ToolName == "terminal_terminate") {
 		if data, ok := result.Data.(map[string]any); ok {
 			status, _ := data["status"].(string)
 			if status == terminalProcessStatusSuccess || status == terminalProcessStatusError || status == terminalProcessStatusCanceled {
@@ -896,7 +898,7 @@ func floretToolAttachments(items []ToolAttachment) ([]fltools.ArtifactRef, error
 }
 
 func floretToolResultProgressToken(result ToolResult, structured map[string]any) string {
-	if strings.TrimSpace(result.ToolName) != "terminal.read" || structured == nil {
+	if strings.TrimSpace(result.ToolName) != "terminal_read" || structured == nil {
 		return ""
 	}
 	data, _ := structured["data"].(map[string]any)
@@ -947,7 +949,7 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 	payload := activityPayloadFromFieldList(spec.CallPayloadFields, args)
 	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
 	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
-	if toolName == "web.search" {
+	if toolName == "web_search_pages" {
 		payload["operation"] = "search"
 	}
 	payload = publicActivityPayloadForTool(toolName, payload)
@@ -959,7 +961,7 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 	}
 	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
 		structured.Inputs = structuredToolInputs(toolName, args, spec)
-		if toolName == "subagent_events" {
+		if toolName == "subagent_read_events" {
 			structured.Operation = anyToString(args["action"])
 		}
 		activity.Payload = structured
@@ -1247,7 +1249,7 @@ func activityTodoCountValue(source map[string]any, field string) (any, bool) {
 }
 
 func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, args map[string]any, payload map[string]any) string {
-	if isComputerUseTool(toolName) || toolName == "threads.query" || toolName == "threads.read" {
+	if isComputerUseTool(toolName) || toolName == "thread_query" || toolName == "thread_read" {
 		return activityPresentationLabel(anyToString(args["description"]))
 	}
 	if renderer == fltools.ActivityRendererTerminal {
@@ -1261,7 +1263,7 @@ func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSp
 }
 
 func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, payload map[string]any) string {
-	if isComputerUseTool(toolName) || toolName == "threads.query" || toolName == "threads.read" {
+	if isComputerUseTool(toolName) || toolName == "thread_query" || toolName == "thread_read" {
 		return "" // Result metadata must never replace the invocation intent.
 	}
 	if renderer == fltools.ActivityRendererTerminal {
@@ -1344,7 +1346,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	if rows := structuredActivityRowsForTool(toolName, payload); len(rows) > 0 {
 		payload["rows"] = rows
 	}
-	if toolName == "web.search" {
+	if toolName == "web_search_pages" {
 		payload["operation"] = "search"
 	}
 	payload = publicActivityPayloadForTool(toolName, payload)
@@ -1366,11 +1368,11 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "truncated", Label: "truncated", Value: "true"})
 	}
 	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
-		if toolName == "threads.query" || toolName == "threads.read" {
+		if toolName == "thread_query" || toolName == "thread_read" {
 			activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))
 		}
 		structured.Inputs = structuredToolInputs(toolName, result.activityInput, spec)
-		if toolName == "subagent_events" {
+		if toolName == "subagent_read_events" {
 			structured.Operation = anyToString(result.activityInput["action"])
 			activity.Label = structured.Operation
 		}
@@ -1382,7 +1384,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		applyFileActivityTargets(activity, toolName, result.Data)
 		applyParentEventActivity(activity, toolName, result.Data)
 	}
-	if status == toolResultStatusError && toolName == "apply_patch" && result.effectUncertain && (r == nil || !r.shouldRouteTargetTool(toolName)) {
+	if status == toolResultStatusError && toolName == "file_apply_patch" && result.effectUncertain && (r == nil || !r.shouldRouteTargetTool(toolName)) {
 		// Partial patch data contains only confirmed edits. Navigation facts do
 		// not imply completion or grant permission to read the affected files.
 		applyFileActivityTargets(activity, toolName, result.Data)
@@ -1431,7 +1433,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "browser_source", Label: "Browser", Value: kind})
 		}
 		if status == toolResultStatusSuccess {
-			if toolName == "computer.targets" {
+			if toolName == "computer_list_targets" {
 				value := "targets"
 				if len(toAnySlice(rawPayload["candidates"])) == 0 {
 					value = "no_targets"
@@ -1493,7 +1495,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			}
 		}
 	}
-	if toolName == "image.read" || strings.HasPrefix(toolName, "mcp_") {
+	if toolName == "image_read" || strings.HasPrefix(toolName, "mcp_") {
 		for _, attachment := range result.Attachments {
 			ref := attachment.ResourceRef
 			if !imageSnapshotResourcePattern.MatchString(ref) && strings.HasPrefix(attachment.MIMEType, "image/") {
@@ -1564,7 +1566,7 @@ func firstActionableToolActivityText(values ...string) string {
 }
 
 func publicActivityPayloadForTool(toolName string, payload map[string]any) map[string]any {
-	if strings.TrimSpace(toolName) != "subagents" || len(payload) == 0 {
+	if strings.TrimSpace(toolName) != "subagent_manage" || len(payload) == 0 {
 		return payload
 	}
 	if sanitized, ok := sanitizeSubagentsActivityPayloadValue(payload); ok {
@@ -2037,7 +2039,7 @@ func subAgentOperationTargets(payload map[string]any, requestedIDs []string) []f
 
 func structuredActivityRowsForTool(toolName string, payload map[string]any) []map[string]any {
 	switch strings.TrimSpace(toolName) {
-	case "okf.index":
+	case "okf_get_index":
 		rows := make([]map[string]any, 0)
 		for _, value := range toAnySlice(payload["sections"]) {
 			section, _ := value.(map[string]any)
@@ -2048,7 +2050,7 @@ func structuredActivityRowsForTool(toolName string, payload map[string]any) []ma
 			rows = appendStructuredActivityRow(rows, title, fmt.Sprintf("%d concepts", len(toAnySlice(section["entries"]))), "", fltools.StructuredActivityRowFormatText)
 		}
 		return rows
-	case "okf.search":
+	case "okf_search":
 		rows := make([]map[string]any, 0)
 		for _, value := range toAnySlice(payload["matches"]) {
 			match, _ := value.(map[string]any)
@@ -2061,7 +2063,7 @@ func structuredActivityRowsForTool(toolName string, payload map[string]any) []ma
 			rows = appendStructuredActivityRow(rows, title, meta, content, fltools.StructuredActivityRowFormatText)
 		}
 		return rows
-	case "okf.open":
+	case "okf_open":
 		concept, _ := payload["concept"].(map[string]any)
 		title := firstNonEmptyString(anyToString(payload["concept_title"]), anyToString(concept["title"]), anyToString(payload["section_title"]))
 		body := strings.TrimSpace(anyToString(payload["body"]))
@@ -2188,7 +2190,7 @@ func activityIntValue(value any) (int, bool) {
 
 func isOKFToolName(toolName string) bool {
 	switch strings.TrimSpace(toolName) {
-	case "okf.index", "okf.search", "okf.open":
+	case "okf_get_index", "okf_search", "okf_open":
 		return true
 	default:
 		return false
@@ -2384,7 +2386,7 @@ func activityScalarString(value any) string {
 }
 
 func isFlowerControlTool(name string) bool {
-	return strings.TrimSpace(name) == "ask_user"
+	return strings.TrimSpace(name) == "user_ask"
 }
 
 // terminalActivityInput copies display facts only. Interactive input is never

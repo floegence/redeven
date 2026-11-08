@@ -17,10 +17,10 @@ type bindingTestExecutor struct {
 
 func (e *bindingTestExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
 	result, err := e.recordingTargetExecutor.ExecuteTargetTool(ctx, call)
-	if call.ToolName == "computer.observe" {
+	if call.ToolName == "computer_observe" {
 		result.Result.(map[string]any)["observation"] = semanticTestTree()
 	}
-	if call.ToolName == "computer.screenshot" && len(e.frameBytes) > 0 {
+	if call.ToolName == "computer_capture_screenshot" && len(e.frameBytes) > 0 {
 		attachment := e.frameAttachment
 		attachment.ResourceRef = "computer://" + call.TargetID + "/" + attachment.SHA256
 		result.Attachments = []TargetToolAttachment{attachment}
@@ -78,7 +78,7 @@ func TestComputerTargetSwitchPersistsOnlyForExecutingThread(t *testing.T) {
 		{first, "current", "desktop-main"},
 		{second, "browser.managed", "browser-main"},
 	} {
-		if _, err := step.run.execTargetTool(computerPermissionContext(t, "full_access"), "call", "computer.screenshot", map[string]any{"target": step.alias}); err != nil {
+		if _, err := step.run.execTargetTool(computerPermissionContext(t, "full_access"), "call", "computer_capture_screenshot", map[string]any{"target": step.alias}); err != nil {
 			t.Fatal(err)
 		}
 		call := executor.calls[len(executor.calls)-1]
@@ -95,7 +95,7 @@ func TestComputerTargetBindingRestoresWithoutRestoringReadiness(t *testing.T) {
 	runtime, _, store, path := computerBindingFixture(t)
 	run := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
 	bindTargetTestRun(t, run)
-	if _, err := run.execTargetTool(computerPermissionContext(t, "full_access"), "select", "computer.screenshot", map[string]any{"target": "desktop.screen"}); err != nil {
+	if _, err := run.execTargetTool(computerPermissionContext(t, "full_access"), "select", "computer_capture_screenshot", map[string]any{"target": "desktop.screen"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := runtime.Close(); err != nil {
@@ -131,7 +131,7 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 			runtime, executor, store, _ := computerBindingFixture(t)
 			r := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
 			bindTargetTestRun(t, r)
-			if _, err := r.execTargetTool(computerPermissionContext(t, "full_access"), "initial", "computer.screenshot", map[string]any{"target": "browser-main"}); err != nil {
+			if _, err := r.execTargetTool(computerPermissionContext(t, "full_access"), "initial", "computer_capture_screenshot", map[string]any{"target": "browser-main"}); err != nil {
 				t.Fatal(err)
 			}
 			ctx := computerPermissionContext(t, "full_access")
@@ -153,7 +153,7 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 				ctx, cancel = context.WithCancel(ctx)
 				cancel()
 			}
-			result, err := r.execTargetTool(ctx, "rejected", "computer.click", map[string]any{"target": "desktop.screen", "x": 10, "y": 10})
+			result, err := r.execTargetTool(ctx, "rejected", "computer_click", map[string]any{"target": "desktop.screen", "x": 10, "y": 10})
 			if reason == "takeover" {
 				paused, ok := result.(toolExecutionOutput)
 				if err == nil || !ok || paused.Payload == nil {

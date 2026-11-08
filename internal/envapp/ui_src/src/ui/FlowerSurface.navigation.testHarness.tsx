@@ -692,7 +692,7 @@ export function activityItem(overrides: Partial<FlowerActivityItem> = {}): Flowe
   return {
     item_id: 'tool-terminal',
     tool_id: 'tool-terminal',
-    tool_name: 'terminal.exec',
+    tool_name: 'terminal_exec',
     kind: 'tool',
     status: 'success',
     severity: 'quiet',
@@ -785,7 +785,7 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
           id: 'call-terminal-running', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 2,
           kind: 'tool', created_at: new Date(130).toISOString(),
           activity: { ...activityItem({
-            item_id: 'call-terminal-running', tool_id: 'call-terminal-running', tool_name: 'terminal.exec',
+            item_id: 'call-terminal-running', tool_id: 'call-terminal-running', tool_name: 'terminal_exec',
             renderer: 'terminal', label: 'go test ./internal/ui', status: 'running',
             payload: { command: 'go test ./internal/ui', status: 'running' },
           }) },
@@ -794,7 +794,7 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
           id: 'call-terminal', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 3,
           kind: 'tool', created_at: new Date(140).toISOString(),
           activity: { ...activityItem({
-            item_id: 'call-terminal', tool_id: 'call-terminal', tool_name: 'terminal.exec',
+            item_id: 'call-terminal', tool_id: 'call-terminal', tool_name: 'terminal_exec',
             renderer: 'terminal', label: 'go test ./internal/ai', status: 'success',
             payload: {
               command: 'go test ./internal/ai', status: 'success', output: 'PASS ./internal/ai',

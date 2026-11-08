@@ -51,10 +51,10 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 					return meta
 				}
 			}
-			name := "tessiven_save"
+			name := "tessiven_save_canvas"
 			args := map[string]any{"request_id": "provider-save", "expected_version": 0, "document_yaml": document, "summary": "Observed fixture"}
 			if directory {
-				name = "tessiven_runtimes"
+				name = "tessiven_list_runtimes"
 				args = map[string]any{}
 			}
 			if scenario == "invalid_placement" {
@@ -75,7 +75,7 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				name = "tessiven_action"
+				name = "tessiven_manage_instance"
 				args = map[string]any{"canvas_id": saved.Canvas.ID, "version_id": 1, "instance_id": "orders", "runtime_ref": "ssh:fixture", "action": "start", "request_id": "provider-start", "identity": "fixture:1"}
 			}
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

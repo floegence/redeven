@@ -14,11 +14,11 @@ export function canonicalProcessFixture(forkDepth = 0): FlowerRuntimeCurrentView
       { id: 'research-user', ordinal: 1, canonical_ordinal: 2, kind: 'user' as const, text: 'Inspect the project.' },
       { id: 'research-intro', ordinal: 2, canonical_ordinal: 3, kind: 'assistant' as const, text: 'I will inspect the sources.' },
       { id: 'research-tool-a', ordinal: 3, canonical_ordinal: 4, kind: 'tool' as const, activity: {
-        item_id: 'inspect-a', tool_id: 'inspect-a', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+        item_id: 'inspect-a', tool_id: 'inspect-a', tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
       } },
       { id: 'research-progress', ordinal: 4, canonical_ordinal: 8, kind: 'assistant' as const, text: 'The first source is confirmed.' },
       { id: 'research-tool-b', ordinal: 5, canonical_ordinal: 9, kind: 'tool' as const, activity: {
-        item_id: 'inspect-b', tool_id: 'inspect-b', tool_name: 'terminal.exec', kind: 'tool', status: 'error', severity: 'error', needs_attention: false, requires_approval: false,
+        item_id: 'inspect-b', tool_id: 'inspect-b', tool_name: 'terminal_exec', kind: 'tool', status: 'error', severity: 'error', needs_attention: false, requires_approval: false,
       } },
     ].map(item => ({ ...item, turn_id: 'research-turn', run_id: 'research-run', created_at: forkDepth ? '2026-10-18T15:17:31Z' : at })),
     parent_events: { thread_id: threadID, first_event_id: 'research-event-0', last_event_id: 'research-event-5', events: Array.from({ length: 6 }, (_, index) => ({

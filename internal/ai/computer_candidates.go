@@ -532,7 +532,7 @@ func (r *ComputerUseRuntime) selectComputerTarget(ctx context.Context, call Targ
 	}
 	if strings.HasPrefix(target.Kind, "browser.") {
 		selection := call
-		selection.ToolName = "computer.select_target"
+		selection.ToolName = "computer_select_target"
 		selection.Arguments = nil
 		result, selectErr := executor.ExecuteTargetTool(ctx, selection)
 		if selectErr != nil {
@@ -565,11 +565,11 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName, revalidate: r.computerToolRevalidator(toolID, toolName)}
 	if continuation := r.computerContinuation; continuation != nil && continuation.RunID != runID &&
 		continuation.ThreadID == threadID && continuation.TurnID == turnID && continuation.interactionID != "" &&
-		(toolName == "computer.targets" || toolName == "computer.select_target") {
+		(toolName == "computer_list_targets" || toolName == "computer_select_target") {
 		call.interactionID = continuation.interactionID
 		call.recoverySelection = true
 	}
-	if toolName == "computer.targets" {
+	if toolName == "computer_list_targets" {
 		call.Arguments, _ = json.Marshal(args)
 		inventory, err := host.ComputerTargets(ctx, call, r.toolTargetPolicy)
 		if err != nil {
@@ -614,7 +614,7 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	}
 	// Selection is already committed. Observe through the same Runtime gate and
 	// privacy boundary; an observation failure must not erase that selection.
-	call.TargetID, call.ToolName = target.ID, "computer.observe"
+	call.TargetID, call.ToolName = target.ID, "computer_observe"
 	call.Arguments = json.RawMessage(`{"limit":80}`)
 	observed, observeErr := host.ExecuteTargetTool(ctx, call)
 	if takeoverResult(observed, observeErr) {

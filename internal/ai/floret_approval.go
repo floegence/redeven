@@ -6,17 +6,17 @@ import (
 
 func visibilityForToolName(toolName string) ToolVisibilityClass {
 	switch strings.TrimSpace(toolName) {
-	case "computer.screenshot":
+	case "computer_capture_screenshot":
 		return ToolVisibilitySharedReadonly
-	case "rgrep":
+	case "file_search":
 		return ToolVisibilityReadonlyExclusive
-	case "read_file", "read_files", "find", "web_fetch", "web.search", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
+	case "file_read", "file_read_many", "path_find", "web_fetch", "web_search_pages", "okf_get_index", "okf_search", "okf_open", "attachment_read", "image_read":
 		return ToolVisibilitySharedReadonly
-	case "write_todos":
+	case "todo_write":
 		return ToolVisibilityInteraction
-	case "ask_user":
+	case "user_ask":
 		return ToolVisibilityControl
-	case "subagents":
+	case "subagent_manage":
 		return ToolVisibilityDelegationControl
 	default:
 		return ToolVisibilityStandard
@@ -25,25 +25,25 @@ func visibilityForToolName(toolName string) ToolVisibilityClass {
 
 func capabilitiesForToolName(toolName string) []ToolCapabilityClass {
 	switch strings.TrimSpace(toolName) {
-	case "computer.screenshot":
+	case "computer_capture_screenshot":
 		return []ToolCapabilityClass{ToolCapabilityReadonlyLocal}
-	case "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "browser.navigate", "browser.back", "browser.reload":
+	case "computer_click", "computer_double_click", "computer_type_text", "computer_press_key", "computer_scroll", "browser_navigate", "browser_go_back", "browser_reload":
 		return []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation}
-	case "computer.wait":
+	case "computer_wait":
 		return []ToolCapabilityClass{ToolCapabilityInteraction}
-	case "terminal.exec":
+	case "terminal_exec":
 		return []ToolCapabilityClass{ToolCapabilityShell, ToolCapabilityOpenWorld}
-	case "file.write", "apply_patch", "attachment.materialize":
+	case "file_write", "file_apply_patch", "attachment_materialize":
 		return []ToolCapabilityClass{ToolCapabilityMutation}
-	case "read_file", "read_files", "rgrep", "find", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
+	case "file_read", "file_read_many", "file_search", "path_find", "okf_get_index", "okf_search", "okf_open", "attachment_read", "image_read":
 		return []ToolCapabilityClass{ToolCapabilityReadonlyLocal}
-	case "web_fetch", "web.search":
+	case "web_fetch", "web_search_pages":
 		return []ToolCapabilityClass{ToolCapabilityReadonlyNetwork, ToolCapabilityOpenWorld}
-	case "write_todos", "ask_user":
+	case "todo_write", "user_ask":
 		return []ToolCapabilityClass{ToolCapabilityInteraction}
-	case "subagents":
+	case "subagent_manage":
 		return []ToolCapabilityClass{ToolCapabilityDelegation}
-	case "use_skill":
+	case "skill_use":
 		return []ToolCapabilityClass{ToolCapabilityOpenWorld}
 	default:
 		return nil

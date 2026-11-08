@@ -78,7 +78,7 @@ func TestOpenAIWebSocketContinuationUsesCompletePreparedHistory(t *testing.T) {
 	}))
 	defer server.Close()
 	req := testOpenAISocketRequest("scope")
-	req.Tools = []ToolDef{{Name: "file.write", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}
+	req.Tools = []ToolDef{{Name: "file_write", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}
 	first, err := testOpenAISocketProvider(t, server, pool).StreamTurn(t.Context(), req, nil)
 	if err != nil {
 		t.Fatal(err)

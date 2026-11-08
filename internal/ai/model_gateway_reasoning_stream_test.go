@@ -55,11 +55,11 @@ func TestOpenAICompatibleStreamTurn_ProjectsAdvertisedReasoningContent(t *testin
 func TestBuildOpenAIChatMessagesWithCapability_GatesReasoningReplay(t *testing.T) {
 	messages := []Message{{Role: "assistant", Content: []ContentPart{
 		{Type: "reasoning", Text: "inspect first"},
-		{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal.exec", ArgsJSON: `{"cmd":"pwd"}`},
+		{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal_exec", ArgsJSON: `{"cmd":"pwd"}`},
 	}}}
-	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	aliases, err := newProviderToolContract([]ToolDef{{Name: "terminal_exec"}})
 	if err != nil {
-		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+		t.Fatalf("newProviderToolContract: %v", err)
 	}
 
 	withReplay, err := buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{
@@ -93,7 +93,7 @@ func TestBuildOpenAIChatMessagesWithCapability_GatesReasoningReplay(t *testing.T
 }
 
 func TestBuildOpenAIChatMessagesPreservesEmptyContentWithReasoning(t *testing.T) {
-	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	aliases, err := newProviderToolContract([]ToolDef{{Name: "terminal_exec"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestBuildOpenAIChatMessagesPreservesEmptyContentWithReasoning(t *testing.T)
 			t.Run(fmt.Sprintf("%s/tool=%v", field, toolCall), func(t *testing.T) {
 				parts := []ContentPart{{Type: "reasoning", Text: "Inspect first."}}
 				if toolCall {
-					parts = append(parts, ContentPart{Type: "tool_call", ToolCallID: "call", ToolName: "terminal.exec", ArgsJSON: `{}`})
+					parts = append(parts, ContentPart{Type: "tool_call", ToolCallID: "call", ToolName: "terminal_exec", ArgsJSON: `{}`})
 				}
 				messages, err := buildOpenAIChatMessagesWithCapability([]Message{{Role: "assistant", Content: parts}}, config.AIReasoningCapability{Kind: "toggle", HistoryReplayRequirements: []string{field}}, aliases)
 				if err != nil {

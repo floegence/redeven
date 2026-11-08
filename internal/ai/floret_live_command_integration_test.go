@@ -18,7 +18,7 @@ import (
 func TestPublishedFloretPublishesCommandBeforeTerminalOutput(t *testing.T) {
 	var terminalDef ToolDef
 	for _, candidate := range builtInToolDefinitions() {
-		if candidate.Name == "terminal.exec" {
+		if candidate.Name == "terminal_exec" {
 			terminalDef = candidate
 			break
 		}
@@ -43,7 +43,7 @@ func TestPublishedFloretPublishesCommandBeforeTerminalOutput(t *testing.T) {
 		flprovider.Identity{Provider: "test", Model: "live-command", StateCompatibilityKey: "test:live-command:v1"},
 		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
 		florettest.Step{Events: []flprovider.Event{
-			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "live-command", Name: "terminal.exec", Args: `{"description":"Inspect environment status","command":"printf READY","yield_ms":10000}`}}},
+			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "live-command", Name: "terminal_exec", Args: `{"description":"Inspect environment status","command":"printf READY","yield_ms":10000}`}}},
 			{Type: flprovider.EventDone, Reason: "tool_calls"},
 		}},
 		florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "Finished."}, {Type: flprovider.EventDone, Reason: "stop"}}},

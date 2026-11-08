@@ -59,9 +59,9 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 				WaitingPrompt:  "forbidden",
 			},
 			Tools: taskToolAssertions{
-				MustCall:    []string{"terminal.exec", "write_todos"},
-				MustSucceed: []string{"terminal.exec", "write_todos"},
-				MustNotCall: []string{"apply_patch"},
+				MustCall:    []string{"terminal_exec", "todo_write"},
+				MustSucceed: []string{"terminal_exec", "todo_write"},
+				MustNotCall: []string{"file_apply_patch"},
 				MaxCalls:    6,
 			},
 			Todos: taskTodoAssertions{
@@ -83,9 +83,9 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 			WaitingPrompt:  false,
 		},
 		rawToolCalls: []canonicalToolCall{
-			{ToolName: "terminal.exec", Status: "success"},
-			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"in_progress"},{"content":"Summarize risk","status":"pending"},{"content":"Verify command","status":"pending"}]}`},
-			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"completed"},{"content":"Summarize risk","status":"completed"},{"content":"Verify command","status":"completed"}]}`},
+			{ToolName: "terminal_exec", Status: "success"},
+			{ToolName: "todo_write", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"in_progress"},{"content":"Summarize risk","status":"pending"},{"content":"Verify command","status":"pending"}]}`},
+			{ToolName: "todo_write", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"completed"},{"content":"Summarize risk","status":"completed"},{"content":"Verify command","status":"completed"}]}`},
 		},
 		rawTodos: &todoSnapshot{
 			Version: 1,
@@ -196,7 +196,7 @@ func TestAssessTaskOutcome_FailsWhenWorkspaceScopedToolEscapesSandbox(t *testing
 		ID: "workspace_scope",
 		Assertions: taskAssertionsSpec{
 			Tools: taskToolAssertions{
-				WorkspaceScopedTools: []string{"terminal.exec"},
+				WorkspaceScopedTools: []string{"terminal_exec"},
 			},
 		},
 	}
@@ -205,7 +205,7 @@ func TestAssessTaskOutcome_FailsWhenWorkspaceScopedToolEscapesSandbox(t *testing
 		WorkspacePath: "/tmp/workspace",
 		rawToolCalls: []canonicalToolCall{
 			{
-				ToolName: "terminal.exec",
+				ToolName: "terminal_exec",
 				Status:   "success",
 				ArgsJSON: `{"command":"cat /etc/hosts","cwd":"/tmp/workspace"}`,
 			},
@@ -216,7 +216,7 @@ func TestAssessTaskOutcome_FailsWhenWorkspaceScopedToolEscapesSandbox(t *testing
 	if outcome.Passed {
 		t.Fatalf("expected workspace scope violation to fail")
 	}
-	if len(outcome.HardFailReasons) == 0 || outcome.HardFailReasons[0] != "tool_args_escape_workspace:terminal.exec" {
+	if len(outcome.HardFailReasons) == 0 || outcome.HardFailReasons[0] != "tool_args_escape_workspace:terminal_exec" {
 		t.Fatalf("hard_fail_reasons=%v", outcome.HardFailReasons)
 	}
 }
@@ -236,18 +236,18 @@ func TestFirstWorkspaceScopeViolation_AllowsWorkspaceBoundTerminalExecCommands(t
 	workspace := "/tmp/workspace"
 	calls := []canonicalToolCall{
 		{
-			ToolName: "terminal.exec",
+			ToolName: "terminal_exec",
 			Status:   "success",
 			ArgsJSON: `{"command":"cat /tmp/workspace/README.md 2>/dev/null","description":"Read README"}`,
 		},
 		{
-			ToolName: "terminal.exec",
+			ToolName: "terminal_exec",
 			Status:   "success",
 			ArgsJSON: `{"command":"find /tmp/workspace -type f | head -20","description":"List files"}`,
 		},
 	}
 
-	if violation := firstWorkspaceScopeViolation("terminal.exec", calls, workspace); violation != "" {
+	if violation := firstWorkspaceScopeViolation("terminal_exec", calls, workspace); violation != "" {
 		t.Fatalf("unexpected violation: %s", violation)
 	}
 }
@@ -258,13 +258,13 @@ func TestFirstWorkspaceScopeViolation_ApplyPatchIgnoresOutsidePathMentionsInFile
 	workspace := "/tmp/workspace"
 	calls := []canonicalToolCall{
 		{
-			ToolName: "apply_patch",
+			ToolName: "file_apply_patch",
 			Status:   "success",
 			ArgsJSON: `{"patch":"*** Begin Patch\n*** Add File: boundary_note.txt\n+Original request: write /tmp/outside.txt\n*** End Patch"}`,
 		},
 	}
 
-	if violation := firstWorkspaceScopeViolation("apply_patch", calls, workspace); violation != "" {
+	if violation := firstWorkspaceScopeViolation("file_apply_patch", calls, workspace); violation != "" {
 		t.Fatalf("unexpected violation: %s", violation)
 	}
 }
@@ -275,7 +275,7 @@ func TestFirstWorkspaceScopeViolation_AllowsStructuredFileToolInsideWorkspace(t 
 	workspace := "/tmp/workspace"
 	calls := []canonicalToolCall{
 		{
-			ToolName: "file.write",
+			ToolName: "file_write",
 			Status:   "success",
 			ArgsJSON: `{"file_path":"/tmp/workspace/notes/inside.txt","content":"hello"}`,
 		},
@@ -286,8 +286,8 @@ func TestFirstWorkspaceScopeViolation_AllowsStructuredFileToolInsideWorkspace(t 
 		},
 	}
 
-	if violation := firstWorkspaceScopeViolation("file.write", calls[:1], workspace); violation != "" {
-		t.Fatalf("unexpected file.write violation: %s", violation)
+	if violation := firstWorkspaceScopeViolation("file_write", calls[:1], workspace); violation != "" {
+		t.Fatalf("unexpected file_write violation: %s", violation)
 	}
 	if violation := firstWorkspaceScopeViolation("file.read", calls[1:], workspace); violation != "" {
 		t.Fatalf("unexpected file.read violation: %s", violation)
@@ -303,10 +303,10 @@ func TestFirstWorkspaceScopeViolation_ChecksReadonlyToolsInsideWorkspace(t *test
 		toolName string
 		argsJSON string
 	}{
-		{name: "read_file", toolName: "read_file", argsJSON: `{"path":"/tmp/workspace/README.md"}`},
-		{name: "read_files", toolName: "read_files", argsJSON: `{"paths":["/tmp/workspace/README.md","docs/note.md"]}`},
+		{name: "file_read", toolName: "file_read", argsJSON: `{"path":"/tmp/workspace/README.md"}`},
+		{name: "file_read_many", toolName: "file_read_many", argsJSON: `{"paths":["/tmp/workspace/README.md","docs/note.md"]}`},
 		{name: "find", toolName: "find", argsJSON: `{"root":"/tmp/workspace/internal"}`},
-		{name: "rgrep", toolName: "rgrep", argsJSON: `{"query":"TODO","paths":["/tmp/workspace/internal"]}`},
+		{name: "file_search", toolName: "file_search", argsJSON: `{"query":"TODO","paths":["/tmp/workspace/internal"]}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -329,10 +329,10 @@ func TestFirstWorkspaceScopeViolation_FailsWhenReadonlyToolEscapesWorkspace(t *t
 		argsJSON string
 		want     string
 	}{
-		{name: "read_file_abs", toolName: "read_file", argsJSON: `{"path":"/tmp/outside.txt"}`, want: "/tmp/outside.txt"},
-		{name: "read_files_parent", toolName: "read_files", argsJSON: `{"paths":["../outside.txt"]}`, want: "parent:../outside.txt"},
+		{name: "read_file_abs", toolName: "file_read", argsJSON: `{"path":"/tmp/outside.txt"}`, want: "/tmp/outside.txt"},
+		{name: "read_files_parent", toolName: "file_read_many", argsJSON: `{"paths":["../outside.txt"]}`, want: "parent:../outside.txt"},
 		{name: "find_abs", toolName: "find", argsJSON: `{"root":"/var/tmp"}`, want: "/var/tmp"},
-		{name: "rgrep_parent", toolName: "rgrep", argsJSON: `{"query":"x","paths":["../outside"]}`, want: "parent:../outside"},
+		{name: "rgrep_parent", toolName: "file_search", argsJSON: `{"query":"x","paths":["../outside"]}`, want: "parent:../outside"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -352,7 +352,7 @@ func TestAssessTaskOutcome_FailsWhenStructuredFileToolEscapesSandbox(t *testing.
 		ID: "structured_file_scope",
 		Assertions: taskAssertionsSpec{
 			Tools: taskToolAssertions{
-				WorkspaceScopedTools: []string{"file.write"},
+				WorkspaceScopedTools: []string{"file_write"},
 			},
 		},
 	}
@@ -361,7 +361,7 @@ func TestAssessTaskOutcome_FailsWhenStructuredFileToolEscapesSandbox(t *testing.
 		WorkspacePath: "/tmp/workspace",
 		rawToolCalls: []canonicalToolCall{
 			{
-				ToolName: "file.write",
+				ToolName: "file_write",
 				Status:   "success",
 				ArgsJSON: `{"file_path":"/tmp/outside.txt","content":"escape"}`,
 			},
@@ -372,7 +372,7 @@ func TestAssessTaskOutcome_FailsWhenStructuredFileToolEscapesSandbox(t *testing.
 	if outcome.Passed {
 		t.Fatalf("expected workspace scope violation to fail")
 	}
-	if len(outcome.HardFailReasons) == 0 || outcome.HardFailReasons[0] != "tool_args_escape_workspace:file.write" {
+	if len(outcome.HardFailReasons) == 0 || outcome.HardFailReasons[0] != "tool_args_escape_workspace:file_write" {
 		t.Fatalf("hard_fail_reasons=%v", outcome.HardFailReasons)
 	}
 }

@@ -468,7 +468,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 		}
 	} else {
 		switch call.ToolName {
-		case "computer.screenshot", "computer.click", "computer.type", "computer.key", "computer.scroll":
+		case "computer_capture_screenshot", "computer_click", "computer_type_text", "computer_press_key", "computer_scroll":
 		default:
 			return result, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 		}
@@ -485,7 +485,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 			outErr = errComputerEffectUnknown
 		}
 	}()
-	if tool == "computer.observe" {
+	if tool == "computer_observe" {
 		observation, err := e.atspi.observe(ctx, args)
 		if err != nil {
 			return result, computerTargetFailure(call, err.Error())
@@ -507,13 +507,13 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 		if tool == "computer.action" {
 			switch args["action"] {
 			case "pointer_click":
-				tool = "computer.click"
+				tool = "computer_click"
 			case "drag":
-				tool = "computer.drag"
+				tool = "computer_drag"
 			case "key":
-				tool = "computer.key"
+				tool = "computer_press_key"
 			case "scroll":
-				tool = "computer.scroll"
+				tool = "computer_scroll"
 			default:
 				return result, computerTargetFailure(call, "INVALID_REQUEST")
 			}
@@ -527,14 +527,14 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 			if err != nil {
 				return result, computerTargetFailure(call, err.Error())
 			}
-			if tool == "computer.key" {
+			if tool == "computer_press_key" {
 				dispatched = true
 				var focused bool
 				if err := e.atspi.call(ctx, element.object, "org.a11y.atspi.Component.GrabFocus").Store(&focused); err != nil || !focused {
 					return result, errComputerEffectUnknown
 				}
 			}
-			if tool == "computer.scroll" {
+			if tool == "computer_scroll" {
 				var rect struct{ X, Y, Width, Height int32 }
 				if err := e.atspi.call(ctx, element.object, "org.a11y.atspi.Component.GetExtents", uint32(0)).Store(&rect); err != nil {
 					return result, computerTargetFailure(call, "STALE_REFERENCE")
@@ -548,7 +548,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 				}
 			}
 		}
-		dispatched = tool != "computer.screenshot" && tool != "computer.wait"
+		dispatched = tool != "computer_capture_screenshot" && tool != "computer_wait"
 		if err := action(ctx, e); err != nil {
 			if ctx.Err() != nil {
 				return result, ctx.Err()
@@ -568,7 +568,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 			return result, nil
 		}
 	}
-	if tool == "computer.screenshot" || (!private && ((tool == "computer.observe" && args["screenshot"] == true) || (tool != "computer.observe" && !call.scriptOperation))) {
+	if tool == "computer_capture_screenshot" || (!private && ((tool == "computer_observe" && args["screenshot"] == true) || (tool != "computer_observe" && !call.scriptOperation))) {
 		body, attachment, err := e.capture(ctx, call.TargetID)
 		if err != nil {
 			return computerObservationFailure(call, map[string]any{"action_executed": dispatched, "observation_stage": "capture"}, result.ExecutionLocation)
@@ -673,20 +673,20 @@ func x11Action(tool string, args map[string]any) (x11ActionFunc, error) {
 		}
 	}
 	switch tool {
-	case "computer.screenshot":
+	case "computer_capture_screenshot":
 		return func(context.Context, *XvfbTargetExecutor) error { return nil }, nil
-	case "computer.click", "computer.double_click":
+	case "computer_click", "computer_double_click":
 		p, err := point("x", "y")
 		if err != nil {
 			return nil, err
 		}
 		args := append([]string{"mousemove", "--sync"}, p...)
 		args = append(args, "click", "--clearmodifiers")
-		if tool == "computer.double_click" {
+		if tool == "computer_double_click" {
 			args = append(args, "--repeat", "2", "--delay", "100")
 		}
 		return command(append(args, "1")...), nil
-	case "computer.type":
+	case "computer_type_text":
 		text, ok := args["text"].(string)
 		if !ok || len([]rune(text)) > 20000 || strings.ContainsRune(text, 0) {
 			return nil, errors.New("invalid X11 text")
@@ -695,7 +695,7 @@ func x11Action(tool string, args map[string]any) (x11ActionFunc, error) {
 			_, err := e.command(ctx, e.paths.input, strings.NewReader(text), 4096, "type", "--clearmodifiers", "--delay", "0", "--file", "-")
 			return err
 		}, nil
-	case "computer.key":
+	case "computer_press_key":
 		key, ok := args["key"].(string)
 		if !ok || len(key) > 80 || !x11KeyPattern.MatchString(key) {
 			return nil, errors.New("invalid X11 key chord")
@@ -708,7 +708,7 @@ func x11Action(tool string, args map[string]any) (x11ActionFunc, error) {
 			}
 		}
 		return command("key", "--clearmodifiers", "--", strings.Join(keys, "+")), nil
-	case "computer.scroll":
+	case "computer_scroll":
 		x, err := number("delta_x", 0, -12000, 12000)
 		if err != nil {
 			return nil, err
@@ -747,7 +747,7 @@ func x11Action(tool string, args map[string]any) (x11ActionFunc, error) {
 			}
 			return nil
 		}, nil
-	case "computer.wait":
+	case "computer_wait":
 		ms, err := number("milliseconds", 0, 0, 30000)
 		if err != nil {
 			return nil, err
@@ -755,7 +755,7 @@ func x11Action(tool string, args map[string]any) (x11ActionFunc, error) {
 		return func(ctx context.Context, _ *XvfbTargetExecutor) error {
 			return x11Wait(ctx, time.Duration(ms)*time.Millisecond)
 		}, nil
-	case "computer.drag":
+	case "computer_drag":
 		from, err := point("from_x", "from_y")
 		if err != nil {
 			return nil, err

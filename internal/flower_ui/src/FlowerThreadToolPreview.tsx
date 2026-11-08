@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import { For, Show, type Component } from 'solid-js';
 import type { FlowerToolPreview } from './contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from './copy';
@@ -35,7 +36,7 @@ export const FlowerThreadToolPreview: Component<{
       </dl>
       <Show when={preview().total !== undefined}><p class="flower-activity-detail-notice">{words().previewMatches.replace('{count}', String(preview().total))}</p></Show>
       <FlowerActivityPreview copy={props.copy} block={{ kind: 'structured_rows', section: 'results', preview: true, previewMeta: true,
-        rows: preview().rows.map(row => ({ ...row, title: preview().tool_name === 'threads.read' ? label(row.title ?? '') ?? '' : row.title ?? '', content: row.content ?? '', meta: row.meta ?? '' })),
+        rows: preview().rows.map(row => ({ ...row, title: historicalToolName(preview().tool_name) === 'thread_read' ? label(row.title ?? '') ?? '' : row.title ?? '', content: row.content ?? '', meta: row.meta ?? '' })),
         ...(!preview().rows.length && preview().tool_name !== 'threads.aggregate' ? { notice: preview().content_unavailable ? words().previewUnavailable : words().noOutput } : {}),
       }} />
       <Show when={preview().has_more}><p class="flower-activity-detail-notice">{words().previewMore}</p></Show>

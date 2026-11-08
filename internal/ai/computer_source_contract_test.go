@@ -49,7 +49,7 @@ func TestComputerSourceContractExtensionDiagnosticsCrossTransport(t *testing.T) 
 	}
 }
 func TestComputerSourceContractSuccessfulScriptShowsActualOperations(t *testing.T) {
-	rows := computerActivityResultRows("computer.exec", map[string]any{"completed": true, "completed_actions": []any{"snapshot", "source"}})
+	rows := computerActivityResultRows("computer_exec", map[string]any{"completed": true, "completed_actions": []any{"snapshot", "source"}})
 	found := false
 	for _, r := range rows {
 		if r.Meta == "completed_actions" {
@@ -72,7 +72,7 @@ func TestComputerSourceContractActivityKeepsEmptyOperationsAndConnectionFacts(t 
 		{map[string]any{"completed": true, "completed_actions": []any{}}, "[]"},
 		{map[string]any{"selected": false, "connection_diagnostic": map[string]any{"phase": "tab_restore", "reason": "timed_out"}}, "timed_out"},
 	} {
-		rows := computerActivityResultRows("computer.exec", fixture.payload)
+		rows := computerActivityResultRows("computer_exec", fixture.payload)
 		body, _ := json.Marshal(rows)
 		if !strings.Contains(string(body), fixture.expected) {
 			t.Fatalf("facts missing: %s", body)

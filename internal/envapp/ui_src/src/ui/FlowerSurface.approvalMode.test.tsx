@@ -9,7 +9,7 @@ function approvalThread() {
     thread_id: 'approval-mode', status: 'waiting_approval', permission_type: 'approval_required',
     approval_actions: [{
       action_id: 'approval-date', turn_id: 'turn-fixture', run_id: 'run-fixture', origin: 'main_tool',
-      tool_id: 'tool-date', tool_name: 'terminal.exec', state: 'requested', status: 'pending',
+      tool_id: 'tool-date', tool_name: 'terminal_exec', state: 'requested', status: 'pending',
       requested_at_ms: 1, can_approve: true,
       summary: { label: 'Check the current date', command: 'date', description: 'Read the system clock.',
         targets: [{ kind: 'working_directory', label: '/workspace' }] },

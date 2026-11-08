@@ -158,7 +158,7 @@ try {
     .locator('textarea')
     .first()
     .fill(
-      'Create a compact focus timer plugin in this dedicated draft. Read the redeven-plugin-authoring skill and plugin_author.status, initialize a web template with slug focus-timer and display_name Focus Timer. Implement a 25-minute timer showing 25:00 initially, with accessible buttons named Start, Pause and Reset, a live mm:ss display, and a compact 13px interface following the host light/dark theme. Compose it directly on the host canvas without an enclosing card, border, shadow or repeated page header. Use normal tools to edit the managed source and install dependencies, then plugin_author.build. Keep the original generated bindings and real tests. Do not delegate, start another preview server, install the plugin or grant permissions; I will review it in this workspace. Continue until a successful artifact is returned.',
+      'Create a compact focus timer plugin in this dedicated draft. Read the redeven-plugin-authoring skill and plugin_author_get_status, initialize a web template with slug focus-timer and display_name Focus Timer. Implement a 25-minute timer showing 25:00 initially, with accessible buttons named Start, Pause and Reset, a live mm:ss display, and a compact 13px interface following the host light/dark theme. Compose it directly on the host canvas without an enclosing card, border, shadow or repeated page header. Use normal tools to edit the managed source and install dependencies, then plugin_author_build. Keep the original generated bindings and real tests. Do not delegate, start another preview server, install the plugin or grant permissions; I will review it in this workspace. Continue until a successful artifact is returned.',
     );
   const send = workspace.getByRole('button', { name: 'Send', exact: true });
   report.sendAction = await send.evaluate(element => {
@@ -251,7 +251,7 @@ try {
   await expect(comment).toBeVisible();
   await expect(comment.locator('.plugin-canvas-comment-target')).toContainText('Start');
   await comment.getByRole('textbox').fill(
-    'Change the selected Start button label to Begin focus. Add a compact heading with the exact text Focus session ready. Keep this same plugin identity, Pause, Reset and the initial 25:00 display. Set the package version to 0.1.1, update the real tests and run plugin_author.build. Do not install or grant permissions. Continue until the new successful artifact is returned.',
+    'Change the selected Start button label to Begin focus. Add a compact heading with the exact text Focus session ready. Keep this same plugin identity, Pause, Reset and the initial 25:00 display. Set the package version to 0.1.1, update the real tests and run plugin_author_build. Do not install or grant permissions. Continue until the new successful artifact is returned.',
   );
   await expect(comment.getByRole('button', { name: 'Ask Flower to change', exact: true })).toBeEnabled({ timeout: 120000 });
   await page.screenshot({ path: path.join(reportRoot, 'canvas-comment.png') });

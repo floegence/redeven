@@ -123,8 +123,8 @@ describe('Flower streaming presentation stability', () => {
     const fixture = streamingFixture(8, 2);
     const base = fixture.current();
     const tools = base.items!.filter(item => item.kind === 'tool').map((item, index): FlowerRuntimeCurrentItem => ({ ...item, activity: {
-      ...item.activity!, tool_name: index === 0 ? 'terminal_exec' : 'apply_patch',
-      presentation: index === 0 ? item.activity!.presentation : { renderer: 'patch', label: 'Add billing tests', payload: { operation: 'apply_patch', mutations: [{ display_name: 'limits_test.go', change_type: 'add', additions: 12, deletions: 0 }] } },
+      ...item.activity!, tool_name: index === 0 ? 'terminal_exec' : 'file_apply_patch',
+      presentation: index === 0 ? item.activity!.presentation : { renderer: 'patch', label: 'Add billing tests', payload: { operation: 'file_apply_patch', mutations: [{ display_name: 'limits_test.go', change_type: 'add', additions: 12, deletions: 0 }] } },
     } }));
     const items = [base.items![0], ...tools, { ...base.items!.at(-1)!, text: '' }];
     const turn = { turn_id: base.turn_id!, run_id: base.run_id!, started_at: '2026-10-22T10:00:00Z', elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false };
@@ -240,7 +240,7 @@ describe('Flower complete interaction subtree stability', () => {
     const request = { logical_request_id: 'preview-request', attempt_id: 'preview-attempt', attempt_epoch: 1,
       started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 128 };
     fixture.replace({ ...base, view_version: 2, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request },
-      tool_call_previews: ['file.write', 'apply_patch'].map((name) => ({
+      tool_call_previews: ['file_write', 'file_apply_patch'].map((name) => ({
         thread_id: base.thread_id, turn_id: base.turn_id!, run_id: base.run_id!,
         logical_request_id: request.logical_request_id, attempt_id: request.attempt_id, attempt_epoch: request.attempt_epoch, call_id: name, name,
         arguments_complete: false, preview: { display_name: 'example.ts', additions: 8 },
@@ -277,7 +277,7 @@ describe('Flower complete interaction subtree stability', () => {
     await waitFor(() => icons.every(icon => icon.getAnimations({ subtree: true }).length > 0));
   });
 
-  it.each(['file.write', 'apply_patch'])('keeps one animated %s row through argument generation, approval and actual zero changes', async (toolName) => {
+  it.each(['file_write', 'file_apply_patch'])('keeps one animated %s row through argument generation, approval and actual zero changes', async (toolName) => {
     const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
     onTestFinished(() => media.emulateMediaPreferences({ reducedMotion: 'no-preference' }));
     onTestFinished(() => page.viewport(1280, 900));
@@ -305,8 +305,8 @@ describe('Flower complete interaction subtree stability', () => {
     await waitFor(() => row.querySelector('.flower-activity-inline-title-target')?.textContent === 'example.ts');
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(row.querySelector('.flower-activity-inline-title-target')?.getAttribute('title')).toBe('example.ts');
-    const names = toolName === 'apply_patch' ? 'example.ts, second.ts, third-with-a-long-filename-for-responsive-layout.ts' : 'example.ts';
-    if (toolName === 'apply_patch') {
+    const names = toolName === 'file_apply_patch' ? 'example.ts, second.ts, third-with-a-long-filename-for-responsive-layout.ts' : 'example.ts';
+    if (toolName === 'file_apply_patch') {
       fixture.replace({ ...base, view_version: 5, sampled_at_ms: Date.now(), run_progress: streamingProgress, tool_call_previews: [{ ...call, preview: { ...call.preview, display_name: names } }] });
       await waitFor(() => row.querySelector('.flower-activity-inline-title-target')?.textContent === names);
       expect(row.querySelector('.flower-activity-inline-title-target')?.getAttribute('title')).toBe(names);
@@ -334,11 +334,11 @@ describe('Flower complete interaction subtree stability', () => {
     await page.screenshot({ element: runtime, path: '__screenshots__/flower-output-progress-narrow.png' });
     const preparedCall = { ...call, arguments_complete: true, preview: { ...call.preview, display_name: names } };
     const operation = 'write';
-    const presentation = toolName === 'apply_patch'
-      ? { renderer: 'patch', payload: { operation: 'apply_patch' } }
+    const presentation = toolName === 'file_apply_patch'
+      ? { renderer: 'patch', payload: { operation: 'file_apply_patch' } }
       : { renderer: 'file', payload: { operation, display_name: 'example.ts' } };
-    const resultPresentation = toolName === 'apply_patch'
-      ? { renderer: 'patch', payload: { operation: 'apply_patch', mutations: [{ display_name: 'example.ts', change_type: 'noop' }] } }
+    const resultPresentation = toolName === 'file_apply_patch'
+      ? { renderer: 'patch', payload: { operation: 'file_apply_patch', mutations: [{ display_name: 'example.ts', change_type: 'noop' }] } }
       : { renderer: 'file', payload: { operation, display_name: 'example.ts', change_type: 'noop' } };
     const tool = { id: `tool:${base.turn_id}:${call.call_id}`, turn_id: base.turn_id!, run_id: base.run_id!, ordinal: base.items!.length + 1, kind: 'tool' as const,
       activity: { item_id: 'journal-tool-entry', tool_id: call.call_id, tool_name: call.name, kind: 'tool', status: 'waiting', severity: 'normal',
@@ -372,7 +372,7 @@ describe('Flower complete interaction subtree stability', () => {
     const fixture = streamingFixture(8, 0);
     const base = fixture.current();
     const call = { thread_id: base.thread_id, turn_id: base.turn_id!, run_id: base.run_id!, logical_request_id: 'stop-edit-request', attempt_id: 'stop-edit-attempt', attempt_epoch: 1,
-      call_id: 'stop-edit', name: 'file.write', arguments_complete: phase === 'approval', preview: phase === 'before path' ? { additions: 4096 } : { display_name: 'example.ts', additions: 4096 } };
+      call_id: 'stop-edit', name: 'file_write', arguments_complete: phase === 'approval', preview: phase === 'before path' ? { additions: 4096 } : { display_name: 'example.ts', additions: 4096 } };
     const tool = { id: 'stop-edit-tool', turn_id: base.turn_id!, run_id: base.run_id!, ordinal: base.items!.length + 1, kind: 'tool' as const,
       activity: { item_id: 'stop-edit-tool', tool_id: call.call_id, tool_name: call.name, kind: 'tool', status: 'waiting', severity: 'normal',
         presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts' } } } };
@@ -430,7 +430,7 @@ describe('Flower complete interaction subtree stability', () => {
     const fixture = streamingFixture(16, 5);
     const source = fixture.current();
     const extraDetails = [
-      { renderer: 'patch', tool_name: 'apply_patch', payload: { mutations: [{ target: {kind:'file',label:'app.ts',path:'/workspace/app.ts'}, display_name: 'app.ts', change_type: 'update', additions: 1, deletions: 1, unified_diff: '@@ -1 +1 @@\n-old\n+new\n' }] } },
+      { renderer: 'patch', tool_name: 'file_apply_patch', payload: { mutations: [{ target: {kind:'file',label:'app.ts',path:'/workspace/app.ts'}, display_name: 'app.ts', change_type: 'update', additions: 1, deletions: 1, unified_diff: '@@ -1 +1 @@\n-old\n+new\n' }] } },
       { renderer: 'structured', tool_name: 'inspect', payload: { summary: 'Verified file permissions' } },
       { renderer: 'structured', tool_name: 'inspect', status: 'error', payload: { error: { message: 'Visible tool failure' } } },
       { renderer: 'question', tool_name: 'ask_user', payload: { questions: [{ id: 'historical-question', question: 'Choose a route', options: ['Fast', 'Scenic'] }] } },
@@ -504,7 +504,7 @@ describe('Flower complete interaction subtree stability', () => {
     const fixture = streamingFixture(8, 0);
     const current = fixture.current();
     const request = inputRequest({ prompt_id: 'question-stability', tool_id: 'ask-tool', questions: [{ id: 'channel', header: 'Channel', question: 'Choose a channel', response_mode: 'select_or_write', choices: [{ choice_id: 'stable', value: 'stable', label: 'Stable', kind: 'select' }, { choice_id: 'beta', value: 'beta', label: 'Beta', kind: 'select' }], write_label: 'Custom' }] });
-    if (mode !== 'subagents') fixture.replace({ ...current, interactions: [{ id: mode === 'input' ? request.prompt_id : 'approval-stability', turn_id: current.turn_id!, run_id: current.run_id!, kind: mode === 'input' ? 'input' : 'approval', ...(mode === 'input' ? { input: { summary: 'Choose a channel', questions: [{ id: 'channel', prompt: 'Choose a channel', kind: 'select_or_write', options: ['Stable', 'Beta'], write_label: 'Custom' }] } } : { approval: { label: 'Inspect directory', command: 'ls', tool_name: 'terminal.exec', tool_call_id: 'approve-tool' } }) }] });
+    if (mode !== 'subagents') fixture.replace({ ...current, interactions: [{ id: mode === 'input' ? request.prompt_id : 'approval-stability', turn_id: current.turn_id!, run_id: current.run_id!, kind: mode === 'input' ? 'input' : 'approval', ...(mode === 'input' ? { input: { summary: 'Choose a channel', questions: [{ id: 'channel', prompt: 'Choose a channel', kind: 'select_or_write', options: ['Stable', 'Beta'], write_label: 'Custom' }] } } : { approval: { label: 'Inspect directory', command: 'ls', tool_name: 'terminal_exec', tool_call_id: 'approve-tool' } }) }] });
     const runtime = await mountFixture(fixture);
     if (mode === 'subagents') {
       fixture.emit({ schema_version: 3, kind: 'thread.batch', thread_id: fixture.thread.thread_id, subagents: [subagentSummary({ parent_thread_id: fixture.thread.thread_id, thread_id: 'child-stability', status: 'completed' })] });

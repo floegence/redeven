@@ -32,7 +32,7 @@ async function mount(tool = false, pending = false, options: { count?: number; t
     const older = Boolean(request.anchor_id) && (request.direction === 'before' || request.direction === 'around');
     let item: FlowerRuntimeCurrentItem = tool ? { id: 'history-tool', kind: 'tool', ordinal: 1, turn_id: 'turn', run_id: 'run',
       activity_bodies: [{ entry_id: 'activity', bytes: 10000, sha256: 'hash' }],
-      activity: { item_id: 'history-tool', tool_id: 'history-tool', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false } }
+      activity: { item_id: 'history-tool', tool_id: 'history-tool', tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false } }
       : message(older ? 'old' : 'latest', !older);
     if (!tool && !older && options.text && item.body) item = { ...item, body: { ...item.body, bytes: new TextEncoder().encode(options.text).length } };
     const selected = request.item_ids ? request.item_ids.map(id => message(id, id === 'latest')) : [item];
@@ -173,7 +173,7 @@ describe('bounded Flower history', () => {
         update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: 8, view_version: 9,
           facts: { activity: 'active', attention: {}, queue_count: 0, run_progress: { phase: 'streaming' } }, items: [
             { kind: 'add', item_id: 'next-tool', item: { id: 'next-tool', kind: 'tool', ordinal: 3, turn_id: 'turn', run_id: 'run',
-              activity: { item_id: 'next-tool', tool_id: 'next-tool', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet' } } },
+              activity: { item_id: 'next-tool', tool_id: 'next-tool', tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'quiet' } } },
             { kind: 'add', item_id: 'next-text', item: { id: 'next-text', kind: 'assistant', ordinal: 4, turn_id: 'turn', run_id: 'run', text: 'Continued after the tool', live: true } },
           ] } });
       await waitFor(() => root.textContent?.includes('Continued after the tool') === true);
@@ -600,7 +600,7 @@ describe('bounded Flower history', () => {
     const { root, body } = await mount(true);
     body.mockImplementationOnce(async () => { throw Object.assign(new Error('offline'), { code: 'transport' }); });
     body.mockImplementation(async () => ({ id: 'history-tool', kind: 'tool', ordinal: 1, turn_id: 'turn', run_id: 'run',
-      activity: { item_id: 'history-tool', tool_id: 'history-tool', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+      activity: { item_id: 'history-tool', tool_id: 'history-tool', tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
         presentation: { label: 'Inspect', renderer: 'terminal', payload: { operation: 'exec', command: 'inspect', output: 'Explicitly requested tool output', status: 'success' } } } }));
     expect(body).not.toHaveBeenCalled();
     const toggle = () => root.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="history-tool"] .flower-activity-inline-button')!;

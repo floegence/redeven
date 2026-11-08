@@ -29,7 +29,7 @@ func TestComputerCollectionFactsSurviveGuestErrorAndFinalModelEncoding(t *testin
 			if err == nil {
 				t.Fatal("expected guest fault")
 			}
-			encoded, e := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusError, Data: result.Result})
+			encoded, e := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusError, Data: result.Result})
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -56,7 +56,7 @@ func TestComputerReadOutcomeExcludesContentAndRejectsInventedCounts(t *testing.T
 	}
 }
 func TestComputerFailedReadClassificationKeepsCanonicalFailure(t *testing.T) {
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "ELEMENT_NOT_FOUND", Message: "missing"}, Data: map[string]any{"action_executed": true, "completed_actions": []any{"click"}, "failed_action": "read", "failed_operation_index": 1}})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "ELEMENT_NOT_FOUND", Message: "missing"}, Data: map[string]any{"action_executed": true, "completed_actions": []any{"click"}, "failed_action": "read", "failed_operation_index": 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestComputerRetiredLinkSummaryDiagnosticReachesFinalModel(t *testing.T) {
 	if err == nil || calls != 0 {
 		t.Fatalf("retired read dispatched: %d %v", calls, err)
 	}
-	encoded, e := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusError, Data: result.Result})
+	encoded, e := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusError, Data: result.Result})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -121,7 +121,7 @@ func TestComputerFrameSourceIdentityReachesGuestReceiptsAndModelTree(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, e := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result})
+	encoded, e := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: result.Result})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -137,7 +137,7 @@ func TestComputerFrameSourceIdentityReachesGuestReceiptsAndModelTree(t *testing.
 
 func TestComputerReadFailureSummaryNeverReclassifiesGuestFaultOrUnknownEffect(t *testing.T) {
 	for _, code := range []aitools.ErrorCode{"SCRIPT_FAILED", "EFFECT_OUTCOME_UNKNOWN", "TARGET_OBSERVATION_UNAVAILABLE"} {
-		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: code, Message: "fixture"}, Data: map[string]any{"action_executed": true, "completed_actions": []any{"click"}, "failed_action": "text"}})
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: code, Message: "fixture"}, Data: map[string]any{"action_executed": true, "completed_actions": []any{"click"}, "failed_action": "text"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +164,7 @@ func TestComputerSnapshotReceiptsRetainSourceCompletenessWithoutEmission(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result})
+			published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: result.Result})
 			if err != nil {
 				t.Fatal(err)
 			}

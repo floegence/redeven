@@ -22,7 +22,7 @@ it('shows the search itself without parameter labels or technical options', () =
   ], rows: [], rows_provided: true };
   const original = JSON.stringify(payload);
   const presentation = presentFlowerActivityItem({
-    item_id: 'search', tool_id: 'search', tool_name: 'threads.query', kind: 'tool',
+    item_id: 'search', tool_id: 'search', tool_name: 'thread_query', kind: 'tool',
     renderer: 'structured', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false, payload,
   });
   const block = presentation.detailBlocks.find(block => block.kind === 'structured_rows' && block.section === 'inputs');
@@ -59,7 +59,7 @@ it('starts a long result as a bounded preview without changing its literal conte
 });
 
 it('keeps existing edit, terminal, and search details on their original presenters', () => {
-  for (const [tool_name, renderer] of [['tessiven.edit', 'structured'], ['file.write', 'file'], ['terminal.exec', 'terminal'], ['rgrep', 'structured']] as const) {
+  for (const [tool_name, renderer] of [['tessiven_edit_canvas', 'structured'], ['file_write', 'file'], ['terminal_exec', 'terminal'], ['rgrep', 'structured']] as const) {
     const presentation = presentFlowerActivityItem({
       item_id: tool_name, tool_id: tool_name, tool_name, renderer, kind: 'tool',
       status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
@@ -71,7 +71,7 @@ it('keeps existing edit, terminal, and search details on their original presente
 
 it('explains a missing preview without claiming that the tool returned nothing', () => {
   const presentation = presentFlowerActivityItem({
-    item_id: 'query', tool_id: 'query', tool_name: 'threads.query', renderer: 'structured', kind: 'tool',
+    item_id: 'query', tool_id: 'query', tool_name: 'thread_query', renderer: 'structured', kind: 'tool',
     status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
     payload: { rows_provided: true },
   });

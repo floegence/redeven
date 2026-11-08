@@ -103,7 +103,7 @@ func TestSubagentStatusRequiresBoundedExplicitTargets(t *testing.T) {
 }
 
 func TestSubagentStatusResourceReferencesIncludeEveryTarget(t *testing.T) {
-	refs, err := floretToolResources(fltools.Invocation[map[string]any]{Name: "subagents", Args: map[string]any{"action": "status", "target": "one", "ids": []any{"two", "one"}}})
+	refs, err := floretToolResources(fltools.Invocation[map[string]any]{Name: "subagent_manage", Args: map[string]any{"action": "status", "target": "one", "ids": []any{"two", "one"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,8 +120,8 @@ func TestSubagentStatusResourceReferencesIncludeEveryTarget(t *testing.T) {
 
 func TestSubagentStatusActivityPreservesRequestedOrderAndReturnedStates(t *testing.T) {
 	args := map[string]any{"action": "status", "target": "one", "ids": []any{"two", "one", "missing"}}
-	call := floretActivityForToolCall("subagents", args)
-	result, err := floretActivityForToolResult(nil, ToolResult{ToolName: "subagents", Status: toolResultStatusSuccess, activityInput: args, Data: map[string]any{
+	call := floretActivityForToolCall("subagent_manage", args)
+	result, err := floretActivityForToolResult(nil, ToolResult{ToolName: "subagent_manage", Status: toolResultStatusSuccess, activityInput: args, Data: map[string]any{
 		"action": "status", "status": "partial", "requested_ids": []string{"one", "two", "missing"}, "requested_count": 3, "missing_count": 1,
 		"items": []map[string]any{{"thread_id": "one", "status": subagentStatusCompleted}, {"thread_id": "two", "status": subagentStatusFailed}},
 	}})

@@ -20,9 +20,9 @@ func TestToolFailureUsesClassifierAndPreservesPartialExecution(t *testing.T) {
 		failure    error
 		completed  bool
 	}{
-		{"file_timeout", "file.write", fmt.Errorf("fixture: %w", context.DeadlineExceeded), false},
-		{"computer_timeout", "computer.exec", fmt.Errorf("fixture: %w", context.DeadlineExceeded), false},
-		{"file_multiline", "file.write", errors.New("fixture\nforged failure"), true},
+		{"file_timeout", "file_write", fmt.Errorf("fixture: %w", context.DeadlineExceeded), false},
+		{"computer_timeout", "computer_exec", fmt.Errorf("fixture: %w", context.DeadlineExceeded), false},
+		{"file_multiline", "file_write", errors.New("fixture\nforged failure"), true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			name, failure := scenario.tool, scenario.failure
@@ -86,12 +86,12 @@ func TestComputerTypedStartupAndUnknownEffectReachModel(t *testing.T) {
 			snapshot := buildPermissionSnapshot(FlowerPermissionFullAccess, builtInToolDefinitions(), nil)
 			snapshot.SnapshotID = "facts-fixture"
 			ctx := contextWithToolAuthorizationSnapshot(t.Context(), snapshot)
-			ctx = contextWithFloretToolExecutionAuthorization(ctx, "call", "computer.exec", "attempt", snapshot, ApprovalDecisionAllow, true, nil)
-			outcome, err := r.handleToolCall(ctx, "call", "computer.exec", map[string]any{"target": "fixture"})
+			ctx = contextWithFloretToolExecutionAuthorization(ctx, "call", "computer_exec", "attempt", snapshot, ApprovalDecisionAllow, true, nil)
+			outcome, err := r.handleToolCall(ctx, "call", "computer_exec", map[string]any{"target": "fixture"})
 			if err != nil || outcome.ToolError.Code != tc.code || outcome.effectUncertain != tc.uncertain || executor.calls.Load() != 1 {
 				t.Fatalf("unexpected execution: %+v, %v, calls=%d", outcome, err, executor.calls.Load())
 			}
-			result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "call", ToolName: "computer.exec", Status: toolResultStatusError, Error: outcome.ToolError, Data: outcome.Result, effectUncertain: outcome.effectUncertain})
+			result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "call", ToolName: "computer_exec", Status: toolResultStatusError, Error: outcome.ToolError, Data: outcome.Result, effectUncertain: outcome.effectUncertain})
 			if err != nil || !strings.Contains(result.Text, string(tc.code)) {
 				t.Fatalf("model result: %+v, %v", result, err)
 			}

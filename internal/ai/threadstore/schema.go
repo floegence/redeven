@@ -13,7 +13,7 @@ import (
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
 	threadstoreMinimumSchemaVersion = 1
-	threadstoreCurrentSchemaVersion = 12
+	threadstoreCurrentSchemaVersion = 13
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -47,6 +47,7 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 			{FromVersion: 9, ToVersion: 10, Apply: migrateThreadstoreV9ToV10},
 			{FromVersion: 10, ToVersion: 11, Apply: migrateThreadstoreV10ToV11},
 			{FromVersion: 11, ToVersion: 12, Apply: migrateThreadstoreV11ToV12},
+			{FromVersion: 12, ToVersion: 13, Apply: migrateThreadstoreV12ToV13},
 		},
 		Verify: verifyThreadstoreSchema,
 	}

@@ -26,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/redeven/internal/ai/agentplugins"
+	"github.com/floegence/redeven/internal/ai/toolnames"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -568,7 +569,7 @@ func mcpToolName(server mcpServerRecord, tool mcpToolRecord) string {
 	if len(id) > 32 {
 		id = id[:32]
 	}
-	return "mcp_" + id + "_" + hex.EncodeToString(hash[:8])
+	return toolnames.MCP("mcp_" + id + "_" + hex.EncodeToString(hash[:8]))
 }
 
 func (m *mcpManager) Tools() []ToolDef {

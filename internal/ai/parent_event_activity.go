@@ -11,14 +11,14 @@ import (
 // Returned source identities are presentation facts, never navigation authority.
 // Keep report text in canonical results and the existing parent event timeline.
 func applyParentEventActivity(activity *fltools.ActivityPresentation, name string, data any) {
-	if activity == nil || (name != "subagent_events" && name != "report_to_parent") {
+	if activity == nil || (name != "subagent_read_events" && name != "subagent_report") {
 		return
 	}
 	body, err := json.Marshal(data)
 	if err != nil {
 		return
 	}
-	if name == "report_to_parent" {
+	if name == "subagent_report" {
 		var receipt flruntime.ParentEventReceipt
 		if json.Unmarshal(body, &receipt) == nil && receipt.Accepted && receipt.EventID != "" && receipt.ParentThreadID != "" {
 			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "parent_event", Label: string(receipt.ParentThreadID), ResourceRef: receipt.EventID})
@@ -44,9 +44,9 @@ func applyParentEventActivity(activity *fltools.ActivityPresentation, name strin
 }
 
 func activityTargetsComplete(name string, activity *fltools.ActivityPresentation) bool {
-	if name == "subagent_events" || name == "report_to_parent" {
+	if name == "subagent_read_events" || name == "subagent_report" {
 		for _, target := range activity.TargetRefs {
-			if name == "subagent_events" && target.Kind == "subagent" || name == "report_to_parent" && target.Kind == "parent_event" {
+			if name == "subagent_read_events" && target.Kind == "subagent" || name == "subagent_report" && target.Kind == "parent_event" {
 				return true
 			}
 		}

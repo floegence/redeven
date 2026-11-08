@@ -127,7 +127,7 @@ it('rejects an obsolete option identity and preserves read-only restrictions', a
 
 it('retains a newly arrived approval during a pending batch and keeps navigation usable', async () => {
   const approval = (id: string) => ({ action_id: id, turn_id: 'turn-fixture', run_id: 'run-fixture', tool_id: id,
-    tool_name: 'terminal.exec', origin: 'main_tool' as const, state: 'requested' as const, status: 'pending' as const,
+    tool_name: 'terminal_exec', origin: 'main_tool' as const, state: 'requested' as const, status: 'pending' as const,
     can_approve: true, requested_at_ms: 1, summary: { label: `Run ${id}`, command: `printf ${id}` } });
   const first = approval('first'); const second = approval('second'); const later = approval('later');
   const waiting = thread({ thread_id: 'thread-batch-race', status: 'waiting_approval', approval_actions: [first, second] });
@@ -161,7 +161,7 @@ it('retains a newly arrived approval during a pending batch and keeps navigation
 });
 
 it('uses the same pending guard for returning computer control', async () => {
-  const s = await setup({ request: inputRequest({ prompt_id: 'tool-input:legacy-capture', tool_name: 'computer.screenshot',
+  const s = await setup({ request: inputRequest({ prompt_id: 'tool-input:legacy-capture', tool_name: 'computer_capture_screenshot',
     computer_assistance: { kind: 'inspection', target_id: 'browser-main', tool_call_id: 'legacy-capture' }, questions: [{ id: 'computer_control',
     header: '', question: 'Return control when ready.', response_mode: 'select',
     choices: [{ choice_id: 'return', value: 'Return control to Flower', label: 'Return control', kind: 'select' }] }] }) });

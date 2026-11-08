@@ -68,7 +68,7 @@ func qualifyPatchHostedRun(t *testing.T, scratch bool) {
 		if step > 6 {
 			for _, raw := range request["input"].([]any) {
 				item, _ := raw.(map[string]any)
-				if item["type"] != "function_call" || item["name"] != "apply_patch" {
+				if item["type"] != "function_call" || item["name"] != "file_apply_patch" {
 					continue
 				}
 				key := "input"
@@ -93,15 +93,15 @@ func qualifyPatchHostedRun(t *testing.T, scratch bool) {
 		args := map[string]any{"file_path": path, "content": "alpha:\nsame\nbeta:\nsame\n"}
 		switch step {
 		case 2:
-			name, id, args = "apply_patch", "invalid-schema", map[string]any{"patch": patch}
+			name, id, args = "file_apply_patch", "invalid-schema", map[string]any{"patch": patch}
 		case 3:
-			name, id, args = "apply_patch", "patch", map[string]any{"input": patch}
+			name, id, args = "file_apply_patch", "patch", map[string]any{"input": patch}
 		case 4:
-			name, id, args = "apply_patch", "out-of-order", map[string]any{"input": backwards}
+			name, id, args = "file_apply_patch", "out-of-order", map[string]any{"input": backwards}
 		case 5:
-			name, id, args = "apply_patch", "reordered", map[string]any{"input": ordered}
+			name, id, args = "file_apply_patch", "reordered", map[string]any{"input": ordered}
 		case 6:
-			name, id, args = "apply_patch", "unique-backwards", map[string]any{"input": uniqueBackwards}
+			name, id, args = "file_apply_patch", "unique-backwards", map[string]any{"input": uniqueBackwards}
 		}
 		raw, err := json.Marshal(args)
 		if err != nil {
@@ -221,12 +221,12 @@ func assertPatchProviderContract(t *testing.T, request map[string]any) {
 			t.Errorf("provider exposes removed file mutation tool %q", name)
 		}
 	}
-	if !seen["file_write"] || !seen["apply_patch"] {
+	if !seen["file_write"] || !seen["file_apply_patch"] {
 		t.Errorf("provider lost supported file mutation tools: %v", seen)
 	}
 	for _, raw := range request["tools"].([]any) {
 		tool := raw.(map[string]any)
-		if tool["name"] != "apply_patch" {
+		if tool["name"] != "file_apply_patch" {
 			continue
 		}
 		parameters, ok := tool["parameters"].(map[string]any)
@@ -257,5 +257,5 @@ func assertPatchProviderContract(t *testing.T, request map[string]any) {
 		}
 		return
 	}
-	t.Error("provider request omitted apply_patch")
+	t.Error("provider request omitted file_apply_patch")
 }

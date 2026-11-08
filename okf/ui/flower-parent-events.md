@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Flower parent event timeline
-tags: [ai, flower, subagents, ui]
+tags: [ai, flower, subagent_manage, ui]
 lifecycle: contract
 reviewed_at: "2026-11-01"
 ---

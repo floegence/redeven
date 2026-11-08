@@ -113,7 +113,7 @@ it.each([
     { id: 'old-user', kind: 'user', ordinal: 1, canonical_ordinal: 1, turn_id: 'old-turn', run_id: 'old-run', text: 'Prepare a report.' }, old,
     { id: 'active-user', kind: 'user', ordinal: 3, canonical_ordinal: 3, turn_id: 'active-turn', run_id: 'active-run', text: 'Continue with the next task.' },
     ...Array.from({ length: 24 }, (_, i): FlowerRuntimeCurrentItem => ({ id: `tool-${i}`, kind: 'tool', ordinal: i + 4,
-      turn_id: 'active-turn', run_id: 'active-run', activity: { item_id: `tool-${i}`, tool_id: `tool-${i}`, tool_name: 'terminal.exec',
+      turn_id: 'active-turn', run_id: 'active-run', activity: { item_id: `tool-${i}`, tool_id: `tool-${i}`, tool_name: 'terminal_exec',
         status: 'success', kind: 'tool', severity: 'quiet', needs_attention: false, requires_approval: false } })),
     { id: 'active-answer', kind: 'assistant', ordinal: 28, turn_id: 'active-turn', run_id: 'active-run', live: true,
       text: 'Current progress.\n\n'.repeat(32) },

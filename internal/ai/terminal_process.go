@@ -239,7 +239,7 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		runID:           strings.TrimSpace(req.RunID),
 		turnID:          strings.TrimSpace(req.TurnID),
 		toolID:          strings.TrimSpace(req.ToolID),
-		toolName:        firstNonEmptyString(req.ToolName, "terminal.exec"),
+		toolName:        firstNonEmptyString(req.ToolName, "terminal_exec"),
 		command:         command,
 		description:     strings.TrimSpace(req.Description),
 		cwd:             cwd,

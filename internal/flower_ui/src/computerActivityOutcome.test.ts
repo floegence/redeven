@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import type { FlowerActivityItem } from './contracts/flowerSurfaceContracts';
 import { computerObservationInterruption, isPresentedToolFailure } from './computerActivityOutcome';
 
-const item = (changes: Partial<FlowerActivityItem> = {}): FlowerActivityItem => ({item_id:'read',kind:'tool',status:'error',severity:'error',needs_attention:true,requires_approval:false,tool_name:'computer.exec',...changes});
+const item = (changes: Partial<FlowerActivityItem> = {}): FlowerActivityItem => ({item_id:'read',kind:'tool',status:'error',severity:'error',needs_attention:true,requires_approval:false,tool_name:'computer_exec',...changes});
 const diagnosis = {code:'TARGET_OBSERVATION_UNAVAILABLE',message:'A localized or arbitrary detail'};
 it('classifies both full details and bounded historical summaries using structured evidence', () => {
   for (const changes of [{payload:{error:diagnosis}}, {chips:[{kind:'computer_observation',label:'observation',value:'unavailable'}]}]) {
@@ -12,7 +12,7 @@ it('classifies both full details and bounded historical summaries using structur
 });
 it('never infers an interruption from error text or a missing observation alone', () => {
   for (const changes of [{payload:{error:{message:diagnosis.code}}}, {chips:[{kind:'computer_observation',label:'observation',value:'not_observed'}]},
-    {tool_name:'terminal.exec',payload:{error:diagnosis}}, {payload:{error:{code:'SCRIPT_ARGUMENT_ERROR',message:diagnosis.code}}}]) {
+    {tool_name:'terminal_exec',payload:{error:diagnosis}}, {payload:{error:{code:'SCRIPT_ARGUMENT_ERROR',message:diagnosis.code}}}]) {
     expect(computerObservationInterruption(item(changes))).toBeUndefined();
     expect(isPresentedToolFailure(item(changes))).toBe(true);
   }

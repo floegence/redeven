@@ -34,8 +34,8 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_1","trace_id":"trace_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":2,"counts":{"success":2}},"items":[
-				{"item_id":"tool_structured","tool_id":"tool_structured","tool_name":"use_skill","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"use_skill","renderer":"structured","target_refs":[{"kind":"file","label":"app.ts","path":"/workspace/private/app.ts","uri":"https://example.test/app.ts","line":7}],"payload":{"operation":"use_skill","name":"frontend-design","root_dir":"/workspace/skills/frontend-design","data":{"filePath":"/workspace/private/app.ts","cwd":"/workspace/private","visible":"kept"},"rows":[{"title":"Safe result","meta":"1 match","content":"Visible detail","format":"text","path":"/workspace/private/app.ts","internal_id":"private"}],"result":{"workdir":"/workspace/private","items":[{"previewPath":"/workspace/private/app.ts","status":"kept"}]}}},
-				{"item_id":"tool_patch","tool_id":"tool_patch","tool_name":"apply_patch","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"apply_patch","renderer":"patch","payload":{"operation":"apply_patch","mutations":[{"display_name":"app.ts","file_action_id":"edit_app","change_type":"update","additions":1,"deletions":1,"unified_diff":"--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new","content":"secret full file","directoryPath":"/workspace/private","stdin":"secret"}]}}
+				{"item_id":"tool_structured","tool_id":"tool_structured","tool_name":"skill_use","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"skill_use","renderer":"structured","target_refs":[{"kind":"file","label":"app.ts","path":"/workspace/private/app.ts","uri":"https://example.test/app.ts","line":7}],"payload":{"operation":"skill_use","name":"frontend-design","root_dir":"/workspace/skills/frontend-design","data":{"filePath":"/workspace/private/app.ts","cwd":"/workspace/private","visible":"kept"},"rows":[{"title":"Safe result","meta":"1 match","content":"Visible detail","format":"text","path":"/workspace/private/app.ts","internal_id":"private"}],"result":{"workdir":"/workspace/private","items":[{"previewPath":"/workspace/private/app.ts","status":"kept"}]}}},
+				{"item_id":"tool_patch","tool_id":"tool_patch","tool_name":"file_apply_patch","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"file_apply_patch","renderer":"patch","payload":{"operation":"file_apply_patch","mutations":[{"display_name":"app.ts","file_action_id":"edit_app","change_type":"update","additions":1,"deletions":1,"unified_diff":"--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new","content":"secret full file","directoryPath":"/workspace/private","stdin":"secret"}]}}
 			],"file_actions":{"edit_app":{"action_id":"edit_app","display_name":"app.ts","preview_path":"/workspace/private/app.ts","directory_path":"/workspace/private"}}}
 		]
 	}`
@@ -87,7 +87,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentPublicPayload(t *testin
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_subagents","thread_id":"thread_parent","turn_id":"msg_subagents","trace_id":"trace_subagents","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
-				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"subagent_operation","payload":{"action":"spawn","status":"success","targets":[{"thread_id":"thread_child_review","task_name":"Review API","task_description":"Review the public API boundary.","status":"completed"}],"requested_count":1,"completed_count":1}}
+				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagent_manage","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"subagent_operation","payload":{"action":"spawn","status":"success","targets":[{"thread_id":"thread_child_review","task_name":"Review API","task_description":"Review the public API boundary.","status":"completed"}],"requested_count":1,"completed_count":1}}
 			]}
 		]
 	}`
@@ -133,7 +133,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsCanonicalTodoPayload(t *testing
 	raw := `{
 		"id":"msg_todos","role":"assistant","status":"complete","timestamp":1700000000000,
 		"blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_todos","thread_id":"thread_1","turn_id":"turn_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{
-			"item_id":"tool_todos","tool_id":"tool_todos","tool_name":"write_todos","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,
+			"item_id":"tool_todos","tool_id":"tool_todos","tool_name":"todo_write","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,
 			"presentation":{"label":"Update todos","renderer":"todos","payload":{"operation":"write","items":[{"text":"Inspect the public payload","status":"completed","note":"private"},{"text":"Verify current work","status":"in_progress","id":"private-id"}],"todos":[{"content":"legacy","status":"pending"}],"summary":"legacy"}}
 		}]}]
 	}`
@@ -293,7 +293,7 @@ func TestSanitizeActivityTimelineMessageJSONFiltersTerminalHostPaths(t *testing.
 			"items":[{
 				"item_id":"tool_terminal",
 				"tool_id":"tool_terminal",
-				"tool_name":"terminal.exec",
+				"tool_name":"terminal_exec",
 				"kind":"tool",
 				"status":"success",
 				"severity":"quiet",

@@ -51,13 +51,13 @@ func TestTerminalReadReturnsOnOutputOrProcessExit(t *testing.T) {
 		start := time.Now()
 		payload := readTerminalProcessForTest(t, process, 4, 1_000)
 		if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
-			t.Fatalf("terminal.read waited %s despite new output", elapsed)
+			t.Fatalf("terminal_read waited %s despite new output", elapsed)
 		}
 		if payload["status"] != terminalProcessStatusRunning || payload["process_id"] != process.id || payload["output"] != "new output\n" {
-			t.Fatalf("terminal.read output result mismatch: %#v", payload)
+			t.Fatalf("terminal_read output result mismatch: %#v", payload)
 		}
 		if payload["first_seq"] != int64(5) || payload["last_seq"] != int64(5) || payload["latest_seq"] != int64(5) || payload["has_more"] != false {
-			t.Fatalf("terminal.read cursor changed unexpectedly: %#v", payload)
+			t.Fatalf("terminal_read cursor changed unexpectedly: %#v", payload)
 		}
 		assertTerminalReadHasNoBoundedWait(t, payload)
 	})
@@ -76,13 +76,13 @@ func TestTerminalReadReturnsOnOutputOrProcessExit(t *testing.T) {
 		start := time.Now()
 		payload := readTerminalProcessForTest(t, process, 4, 1_000)
 		if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
-			t.Fatalf("terminal.read waited %s despite process exit", elapsed)
+			t.Fatalf("terminal_read waited %s despite process exit", elapsed)
 		}
 		if payload["status"] != terminalProcessStatusSuccess || payload["process_id"] != process.id || payload["completed"] != true {
-			t.Fatalf("terminal.read did not return completed process: %#v", payload)
+			t.Fatalf("terminal_read did not return completed process: %#v", payload)
 		}
 		if payload["output"] != "" || payload["last_seq"] != int64(4) || payload["latest_seq"] != int64(4) {
-			t.Fatalf("terminal.read changed cursor without output: %#v", payload)
+			t.Fatalf("terminal_read changed cursor without output: %#v", payload)
 		}
 		assertTerminalReadHasNoBoundedWait(t, payload)
 	})
@@ -95,13 +95,13 @@ func TestTerminalReadTimeoutKeepsRunningCursor(t *testing.T) {
 	payload := readTerminalProcessForTest(t, process, 4, waitMS)
 	elapsed := time.Since(start)
 	if elapsed < time.Duration(waitMS-10)*time.Millisecond || elapsed > time.Second {
-		t.Fatalf("terminal.read wait=%s, expected approximately %dms", elapsed, waitMS)
+		t.Fatalf("terminal_read wait=%s, expected approximately %dms", elapsed, waitMS)
 	}
 	if payload["status"] != terminalProcessStatusRunning || payload["process_id"] != process.id || payload["completed"] != false {
-		t.Fatalf("terminal.read timeout did not preserve running process: %#v", payload)
+		t.Fatalf("terminal_read timeout did not preserve running process: %#v", payload)
 	}
 	if payload["output"] != "" || payload["first_seq"] != int64(0) || payload["last_seq"] != int64(4) || payload["latest_seq"] != int64(4) {
-		t.Fatalf("terminal.read timeout changed cursor: %#v", payload)
+		t.Fatalf("terminal_read timeout changed cursor: %#v", payload)
 	}
 }
 
@@ -110,7 +110,7 @@ func TestTerminalReadQuietWaitReachesFloretRepeatGuard(t *testing.T) {
 	const waitMS = int64(10)
 	payload := readTerminalProcessForTest(t, process, 4, waitMS)
 	result, err := floretToolResultFromFlower(nil, ToolResult{
-		ToolID: "quiet-read", ToolName: "terminal.read",
+		ToolID: "quiet-read", ToolName: "terminal_read",
 		Status: toolResultStatusSuccess, Data: payload,
 	})
 	if err != nil {
@@ -209,13 +209,13 @@ func TestTerminalReadHandlerCancellationPreservesProcess(t *testing.T) {
 		snapshot := buildPermissionSnapshot(FlowerPermissionFullAccess, builtInToolDefinitions(), nil)
 		snapshot.SnapshotID = "terminal-cancellation"
 		ctx := contextWithToolAuthorizationSnapshot(t.Context(), snapshot)
-		ctx = contextWithFloretToolExecutionAuthorization(ctx, "read", "terminal.read", "read-attempt", snapshot, ApprovalDecisionAllow, true, nil)
+		ctx = contextWithFloretToolExecutionAuthorization(ctx, "read", "terminal_read", "read-attempt", snapshot, ApprovalDecisionAllow, true, nil)
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		go func() { time.Sleep(time.Second); cancel() }()
 		start := time.Now()
-		handler := &builtInToolHandler{r: r, toolName: "terminal.read"}
-		result, err := handler.Execute(ctx, ToolCall{ID: "read", Name: "terminal.read", Args: map[string]any{"process_id": process.id, "after_seq": 4, "description": "Wait for existing command"}})
+		handler := &builtInToolHandler{r: r, toolName: "terminal_read"}
+		result, err := handler.Execute(ctx, ToolCall{ID: "read", Name: "terminal_read", Args: map[string]any{"process_id": process.id, "after_seq": 4, "description": "Wait for existing command"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -231,7 +231,7 @@ func TestTerminalReadHandlerCancellationPreservesProcess(t *testing.T) {
 
 func assertTerminalReadHasNoBoundedWait(t *testing.T, payload map[string]any) {
 	t.Helper()
-	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "terminal.read", Status: toolResultStatusSuccess, Data: payload})
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "terminal_read", Status: toolResultStatusSuccess, Data: payload})
 	if err != nil || result.BoundedWait != nil || payload["wait_expired"] != false {
 		t.Fatalf("early read qualified as a full wait: %#v, %v", result, err)
 	}
@@ -242,7 +242,7 @@ func TestTerminalReadModelOutputIsIncrementalAndActivityKeepsCommand(t *testing.
 	process.command = "printf " + strings.Repeat("long-command-", 300)
 	process.cwd = "/task/workspace"
 	payload := readTerminalProcessForTest(t, process, 4, 0)
-	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "terminal.read", Status: toolResultStatusSuccess, Data: payload})
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "terminal_read", Status: toolResultStatusSuccess, Data: payload})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,14 +311,14 @@ func readTerminalProcessForTest(t *testing.T, process *terminalProcess, afterSeq
 	}
 	result, err := r.toolTerminalReadWithWait(t.Context(), process.id, afterSeq, waitMS)
 	if err != nil {
-		t.Fatalf("terminal.read: %v", err)
+		t.Fatalf("terminal_read: %v", err)
 	}
 	payload, ok := result.(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.read returned %T, want map payload", result)
+		t.Fatalf("terminal_read returned %T, want map payload", result)
 	}
 	if payload["operation"] != "read" {
-		t.Fatalf("terminal.read operation=%v, want read", payload["operation"])
+		t.Fatalf("terminal_read operation=%v, want read", payload["operation"])
 	}
 	return payload
 }

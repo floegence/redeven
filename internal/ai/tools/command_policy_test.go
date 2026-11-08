@@ -298,35 +298,35 @@ func TestInvocationPolicies_TerminalExec(t *testing.T) {
 	t.Parallel()
 
 	readonlyArgs := map[string]any{"command": `curl -s https://example.com`}
-	if RequiresApprovalForInvocation("terminal.exec", readonlyArgs) {
+	if RequiresApprovalForInvocation("terminal_exec", readonlyArgs) {
 		t.Fatalf("readonly command should not require approval")
 	}
-	if IsMutatingForInvocation("terminal.exec", readonlyArgs) {
+	if IsMutatingForInvocation("terminal_exec", readonlyArgs) {
 		t.Fatalf("readonly command should not be mutating")
 	}
-	if IsDangerousInvocation("terminal.exec", readonlyArgs) {
+	if IsDangerousInvocation("terminal_exec", readonlyArgs) {
 		t.Fatalf("readonly command should not be dangerous")
 	}
 
 	mutatingArgs := map[string]any{"command": `curl -d a=1 https://example.com`}
-	if !RequiresApprovalForInvocation("terminal.exec", mutatingArgs) {
+	if !RequiresApprovalForInvocation("terminal_exec", mutatingArgs) {
 		t.Fatalf("mutating command must require approval")
 	}
-	if !IsMutatingForInvocation("terminal.exec", mutatingArgs) {
+	if !IsMutatingForInvocation("terminal_exec", mutatingArgs) {
 		t.Fatalf("mutating command must be classified as mutating")
 	}
-	if IsDangerousInvocation("terminal.exec", mutatingArgs) {
+	if IsDangerousInvocation("terminal_exec", mutatingArgs) {
 		t.Fatalf("mutating but non-dangerous command should not be dangerous")
 	}
 
 	dangerousArgs := map[string]any{"command": "rm -rf /"}
-	if !RequiresApprovalForInvocation("terminal.exec", dangerousArgs) {
+	if !RequiresApprovalForInvocation("terminal_exec", dangerousArgs) {
 		t.Fatalf("dangerous command must require approval")
 	}
-	if !IsMutatingForInvocation("terminal.exec", dangerousArgs) {
+	if !IsMutatingForInvocation("terminal_exec", dangerousArgs) {
 		t.Fatalf("dangerous command must be mutating")
 	}
-	if !IsDangerousInvocation("terminal.exec", dangerousArgs) {
+	if !IsDangerousInvocation("terminal_exec", dangerousArgs) {
 		t.Fatalf("dangerous command must be flagged")
 	}
 }
@@ -334,7 +334,7 @@ func TestInvocationPolicies_TerminalExec(t *testing.T) {
 func TestInvocationCommandProfile(t *testing.T) {
 	t.Parallel()
 
-	profile := InvocationCommandProfile("terminal.exec", map[string]any{
+	profile := InvocationCommandProfile("terminal_exec", map[string]any{
 		"command": `bash -lc 'curl -I https://example.com'`,
 	})
 	if profile.Risk != TerminalCommandRiskReadonly {
@@ -348,7 +348,7 @@ func TestInvocationCommandProfile(t *testing.T) {
 func TestInvocationRiskInfo_NormalizedCommand(t *testing.T) {
 	t.Parallel()
 
-	risk, normalized := InvocationRiskInfo("terminal.exec", map[string]any{
+	risk, normalized := InvocationRiskInfo("terminal_exec", map[string]any{
 		"command": `bash -lc 'pwd && rg --files | head -n 20'`,
 	})
 	if risk != string(TerminalCommandRiskReadonly) {
@@ -370,14 +370,14 @@ func TestInvocationPolicies_WriteTodos(t *testing.T) {
 			},
 		},
 	}
-	if RequiresApprovalForInvocation("write_todos", args) {
-		t.Fatalf("write_todos should not require approval")
+	if RequiresApprovalForInvocation("todo_write", args) {
+		t.Fatalf("todo_write should not require approval")
 	}
-	if IsMutatingForInvocation("write_todos", args) {
-		t.Fatalf("write_todos should not be classified as mutating")
+	if IsMutatingForInvocation("todo_write", args) {
+		t.Fatalf("todo_write should not be classified as mutating")
 	}
-	if IsDangerousInvocation("write_todos", args) {
-		t.Fatalf("write_todos should not be dangerous")
+	if IsDangerousInvocation("todo_write", args) {
+		t.Fatalf("todo_write should not be dangerous")
 	}
 }
 
@@ -439,13 +439,13 @@ func TestInvocationPolicies_Subagents(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := RequiresApprovalForInvocation("subagents", tc.args); got != tc.approval {
+			if got := RequiresApprovalForInvocation("subagent_manage", tc.args); got != tc.approval {
 				t.Fatalf("RequiresApprovalForInvocation=%v, want %v", got, tc.approval)
 			}
-			if got := IsMutatingForInvocation("subagents", tc.args); got != tc.approval {
+			if got := IsMutatingForInvocation("subagent_manage", tc.args); got != tc.approval {
 				t.Fatalf("IsMutatingForInvocation=%v, want %v", got, tc.approval)
 			}
-			risk, detail := InvocationRiskInfo("subagents", tc.args)
+			risk, detail := InvocationRiskInfo("subagent_manage", tc.args)
 			if risk != tc.risk || detail != tc.detail {
 				t.Fatalf("InvocationRiskInfo=(%q, %q), want (%q, %q)", risk, detail, tc.risk, tc.detail)
 			}
@@ -457,26 +457,26 @@ func TestInvocationPolicies_StructuredFileTools(t *testing.T) {
 	t.Parallel()
 
 	readArgs := map[string]any{"file_path": "/tmp/workspace/readme.md"}
-	if RequiresApprovalForInvocation("read_file", readArgs) {
-		t.Fatalf("read_file should not require approval")
+	if RequiresApprovalForInvocation("file_read", readArgs) {
+		t.Fatalf("file_read should not require approval")
 	}
-	if IsMutatingForInvocation("read_file", readArgs) {
-		t.Fatalf("read_file should not be classified as mutating")
+	if IsMutatingForInvocation("file_read", readArgs) {
+		t.Fatalf("file_read should not be classified as mutating")
 	}
 
 	writeArgs := map[string]any{"file_path": "/tmp/workspace/note.txt", "content": "hello"}
-	if !RequiresApprovalForInvocation("file.write", writeArgs) {
-		t.Fatalf("file.write should require approval")
+	if !RequiresApprovalForInvocation("file_write", writeArgs) {
+		t.Fatalf("file_write should require approval")
 	}
-	if !IsMutatingForInvocation("file.write", writeArgs) {
-		t.Fatalf("file.write should be classified as mutating")
+	if !IsMutatingForInvocation("file_write", writeArgs) {
+		t.Fatalf("file_write should be classified as mutating")
 	}
 
 	patchArgs := map[string]any{"input": "*** Begin Patch\n*** Update File: /tmp/workspace/note.txt\n@@\n-a\n+b\n*** End Patch"}
-	if !RequiresApprovalForInvocation("apply_patch", patchArgs) {
-		t.Fatalf("apply_patch should require approval")
+	if !RequiresApprovalForInvocation("file_apply_patch", patchArgs) {
+		t.Fatalf("file_apply_patch should require approval")
 	}
-	if !IsMutatingForInvocation("apply_patch", patchArgs) {
-		t.Fatalf("apply_patch should be classified as mutating")
+	if !IsMutatingForInvocation("file_apply_patch", patchArgs) {
+		t.Fatalf("file_apply_patch should be classified as mutating")
 	}
 }

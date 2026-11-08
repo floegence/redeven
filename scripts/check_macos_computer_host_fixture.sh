@@ -86,13 +86,13 @@ try:
                 return response['payload']
     deadline = time.monotonic() + 10
     while True:
-        targets = action('computer.targets', {})['targets']
+        targets = action('computer_list_targets', {})['targets']
         selected = [target for target in targets if target.get('app_bundle_id') == 'dev.floegence.redeven.computer-fixture']
         if selected or time.monotonic() >= deadline: break
         time.sleep(.1)
     assert len(selected) == 1, 'fixture window was not uniquely discovered'
     target_id = selected[0]['id']
-    observed = action('computer.observe', {})
+    observed = action('computer_observe', {})
     assert 'screenshot_base64' not in observed, 'semantic observation captured pixels'
     controls = observed['observation']['nodes']
     buttons = [node for node in controls if node['role']=='AXButton' and node['name']=='Complete native step']
@@ -129,18 +129,18 @@ try:
         if pressed['background_interference']: assert pressed['execution_mode']=='foreground'
     result = json.loads((root/'result.json').read_text())
     def point(name): return {'x':geometry[name+'X']-geometry['x'], 'y':geometry[name+'Y']-geometry['y']}
-    action('computer.double_click', point('double'))
+    action('computer_double_click', point('double'))
     action('computer.action', {'action':'key','selector':{'ref':fields[0]['ref']},'key':'Enter'})
-    action('computer.click', point('scroll'))
+    action('computer_click', point('scroll'))
     scrolls = [node for node in controls if node['role']=='AXScrollArea']
     assert len(scrolls)==1, 'scroll area missing'
     action('computer.action', {'action':'scroll','selector':{'ref':scrolls[0]['ref']},'delta_y':400})
-    action('computer.wait', {'milliseconds':300})
+    action('computer_wait', {'milliseconds':300})
     semantic_offset = json.loads((root/'result.json').read_text())['scrollOffset']
     assert semantic_offset > 0, 'semantic scroll did not move the selected control'
-    action('computer.scroll', {**point('scroll'), 'delta_y':200})
-    action('computer.wait', {'milliseconds':300})
-    action('computer.screenshot', {})
+    action('computer_scroll', {**point('scroll'), 'delta_y':200})
+    action('computer_wait', {'milliseconds':300})
+    action('computer_capture_screenshot', {})
     result = json.loads((root/'result.json').read_text())
     assert result['clicks'] == 2 and result['doubleClicked'] and result['entered'], 'native input effects did not complete'
     assert result['scrolled'] and result['scrollOffset'] > 0 and result['wheelEvents'] > 0, 'scroll did not move native content: '+json.dumps(result)
@@ -149,7 +149,7 @@ try:
     fixture.stdin.write(b'protect\n'); fixture.stdin.flush()
     assert select.select([fixture.stdout], [], [], 5)[0], 'secure fixture update timeout'
     json.loads(fixture.stdout.readline())
-    blocked = action('computer.observe', {}, require_routine=False)
+    blocked = action('computer_observe', {}, require_routine=False)
     assert blocked.get('safety', {}).get('level') == 'takeover', 'secure role did not pause observation'
     assert 'secret_input' in blocked['safety']['reason_codes']
     assert 'fixture-private-value' not in json.dumps(blocked), 'secure value leaked'

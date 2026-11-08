@@ -29,7 +29,7 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 	createdAt := time.UnixMilli(1_700_000_000_000)
 	activity := func(id string, status observation.ActivityStatus) *observation.ActivityItem {
 		return &observation.ActivityItem{
-			ItemID: id, ToolID: id, ToolName: "terminal.exec", Kind: observation.ActivityKindTool,
+			ItemID: id, ToolID: id, ToolName: "terminal_exec", Kind: observation.ActivityKindTool,
 			Status: status, Severity: observation.ActivitySeverityNormal,
 		}
 	}
@@ -139,7 +139,7 @@ func TestTypedThreadItemsPreserveEachHistoricalRun(t *testing.T) {
 			item.ID = fmt.Sprintf("tool-%d", index)
 			item.Kind = flruntime.ThreadItemTool
 			item.Activity = &observation.ActivityItem{
-				ItemID: item.ID, ToolID: fmt.Sprintf("call-%d", index), ToolName: "terminal.exec",
+				ItemID: item.ID, ToolID: fmt.Sprintf("call-%d", index), ToolName: "terminal_exec",
 				Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
 				Severity: observation.ActivitySeverityNormal,
 			}
@@ -344,7 +344,7 @@ func TestPublicFloretActivityProjectionOnlyExposesExplicitTargetPaths(t *testing
 		UnifiedDiff: "--- a/private.md\n+++ b/private.md\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
 	}
 	activity := &observation.ActivityItem{
-		ItemID: "activity:file-write", ToolID: "file-write", ToolName: "file.write",
+		ItemID: "activity:file-write", ToolID: "file-write", ToolName: "file_write",
 		Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
 		Presentation: &fltools.ActivityPresentation{
 			Label: "private.md", Renderer: fltools.ActivityRendererFile, Payload: pathPayload,

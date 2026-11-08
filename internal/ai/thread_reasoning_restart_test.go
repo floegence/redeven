@@ -51,12 +51,12 @@ func TestThreadReasoningOffSurvivesRestartAndWaitingContinuation(t *testing.T) {
 			for _, event := range []string{"response.output_item.added", "response.output_item.done"} {
 				writeOpenAISSEJSON(w, flusher, map[string]any{
 					"type": event, "output_index": 0,
-					"item": map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "ask_user", "arguments": args},
+					"item": map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "user_ask", "arguments": args},
 				})
 			}
 			writeOpenAISSEJSON(w, flusher, map[string]any{
 				"type": "response.completed", "response": map[string]any{"id": "waiting", "status": "completed",
-					"output": []any{map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "ask_user", "arguments": args}}},
+					"output": []any{map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "user_ask", "arguments": args}}},
 			})
 			return
 		}

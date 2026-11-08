@@ -94,11 +94,11 @@ func TestProductionProvidersPreservePairedToolImagesAndNativeBudget(t *testing.T
 			}
 			request := flprovider.Request{RunID: "run-images", PromptScopeID: "scope-images", Messages: []flprovider.Message{
 				{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{
-					{ID: "first", Name: "image.read", Args: `{"file_path":"first.png"}`},
-					{ID: "second", Name: "image.read", Args: `{"file_path":"second.png"}`},
+					{ID: "first", Name: "image_read", Args: `{"file_path":"first.png"}`},
+					{ID: "second", Name: "image_read", Args: `{"file_path":"second.png"}`},
 				}},
-				{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "first", ToolName: "image.read", Text: "first image pair", Attachments: []flprovider.Attachment{attachment('a'), attachment('b')}}},
-				{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "second", ToolName: "image.read", Text: "second image", Attachments: []flprovider.Attachment{attachment('c')}}},
+				{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "first", ToolName: "image_read", Text: "first image pair", Attachments: []flprovider.Attachment{attachment('a'), attachment('b')}}},
+				{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "second", ToolName: "image_read", Text: "second image", Attachments: []flprovider.Attachment{attachment('c')}}},
 			}}
 			prepared, err := adapter.Prepare(t.Context(), request)
 			if err != nil {
@@ -196,7 +196,7 @@ func TestResponsesToolOutputPreservesNativeFile(t *testing.T) {
 		{Type: "file", FileURI: "data:application/pdf;base64,AQID", MimeType: "application/pdf", Text: "evidence.pdf"},
 		{Type: "tool_result", ToolCallID: "pdf", Text: "read PDF"},
 	}}}
-	input, _, err := buildOpenAIInput(messages, providerToolAliases{})
+	input, _, err := buildOpenAIInput(messages, providerToolContract{})
 	if err != nil {
 		t.Fatal(err)
 	}

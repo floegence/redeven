@@ -125,7 +125,7 @@ async function mountWindow(theme: Theme, withContext = false) {
         <SubagentDetailWindow {...windowProps(open(), setOpen)} contextIndicator={withContext ? <FlowerComposerContextIndicator
           placement="below-start" copy={DEFAULT_FLOWER_SURFACE_COPY} usage={{
             confirmed: { available: true, measured: true, characters_available: true, input_tokens: 30, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
-              characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (30), categories: [{ category: 'tool_definition', characters: 30, details: [{ source: 'builtin', key: 'terminal.exec', characters: 30 }] }] } },
+              characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (30), categories: [{ category: 'tool_definition', characters: 30, details: [{ source: 'builtin', key: 'terminal_exec', characters: 30 }] }] } },
           }} modelContext={{
             snapshot: { sections: [{ key: 'skills', title: 'Available skills', text: 'Complete current catalog' }] },
             entry_id: 'context-entry', path_depth: 1, turn_id: 'turn-child', run_id: 'run-child',
@@ -177,7 +177,7 @@ describe('Subagent detail window boundary', () => {
     expect(panel.querySelectorAll('.flower-context-composition-row')).toHaveLength(1);
     expect(panel.querySelector('pre')).toBeNull();
     panel.querySelector<HTMLElement>('summary')!.click();
-    await expect.poll(() => panel.textContent).toContain('terminal.exec');
+    await expect.poll(() => panel.textContent).toContain('terminal_exec');
     expect(panel.textContent).not.toContain('Complete current catalog');
     panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await nextFrame();

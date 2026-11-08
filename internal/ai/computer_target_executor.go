@@ -197,7 +197,7 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		healthy = valid && !errors.Is(err, errComputerEffectUnknown)
 		return result, err
 	}
-	if userControl && call.ToolName != "computer.screenshot" {
+	if userControl && call.ToolName != "computer_capture_screenshot" {
 		if !response.Acknowledged || response.Screenshot != nil {
 			return failedExchange(errors.New("invalid private input acknowledgement"))
 		}

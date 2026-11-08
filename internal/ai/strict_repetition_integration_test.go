@@ -34,7 +34,7 @@ func TestPublishedStrictRepetitionThroughFlowerAdapter(t *testing.T) {
 			child := completedSubagentTestSummary("child-result", "Review", "preview", time.Now())
 			adapter, _ := newSubagentHandoffTestAdapter(t, []flruntime.ThreadSummary{child}, map[identity.ThreadID]flruntime.ThreadView{child.ID: completedSubagentTestView(child, report)})
 			var dispatched, independent atomic.Int32
-			collect := fltools.Define[map[string]any](fltools.Definition{Name: "subagents", ReadOnly: true, InputSchema: fltools.StrictObject(map[string]any{"action": fltools.String("Action"), "description": fltools.String("Description")}, []string{"action", "description"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
+			collect := fltools.Define[map[string]any](fltools.Definition{Name: "subagent_manage", ReadOnly: true, InputSchema: fltools.StrictObject(map[string]any{"action": fltools.String("Action"), "description": fltools.String("Description")}, []string{"action", "description"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 				dispatched.Add(1)
 				data, err := adapter.manage(ctx, inv.CallID, inv.Args)
 				if err != nil {
@@ -58,7 +58,7 @@ func TestPublishedStrictRepetitionThroughFlowerAdapter(t *testing.T) {
 					search := flprovider.ToolCall{ID: fmt.Sprintf("search-%d", i), Name: "web_search", Args: "{}"}
 					events = append(events, flprovider.Event{Type: flprovider.EventHostedToolCall, HostedToolCall: &search}, flprovider.Event{Type: flprovider.EventHostedToolResult, HostedToolCall: &search, HostedResult: &flprovider.HostedToolResult{Text: "Search complete"}})
 				}
-				calls := []flprovider.ToolCall{{ID: fmt.Sprintf("inspect-%d", i), Name: "subagents", Args: string(args)}}
+				calls := []flprovider.ToolCall{{ID: fmt.Sprintf("inspect-%d", i), Name: "subagent_manage", Args: string(args)}}
 				if tc.alternating {
 					calls = append(calls, flprovider.ToolCall{ID: fmt.Sprintf("other-%d", i), Name: "independent", Args: "{}"})
 				}
@@ -115,7 +115,7 @@ func TestPublishedStrictRepetitionThroughFlowerAdapter(t *testing.T) {
 				}
 				code, _ := projectFloretTurnFailure(view.Failure, "")
 				detail := scopedFailureDetail(view.Failure, created.ThreadID.String(), string(view.TurnID), string(view.RunID))
-				for _, fact := range []string{"subagents", "inspect-4", "\"consecutive_calls\": 5", "\"repeat_limit\": 3", "\"not_executed\": true", "\"feedback_given\": true"} {
+				for _, fact := range []string{"subagent_manage", "inspect-4", "\"consecutive_calls\": 5", "\"repeat_limit\": 3", "\"not_executed\": true", "\"feedback_given\": true"} {
 					if !strings.Contains(detail, fact) {
 						t.Fatalf("missing %s: %s", fact, detail)
 					}

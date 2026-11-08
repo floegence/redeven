@@ -10,7 +10,7 @@ test('navigation receipts depend on control and destination rather than the old 
  await page.setContent('<main>Old document</main><iframe srcdoc="<p>changing child</p>"></iframe>');
  let inventories=0,navigations=0;const send=transport.send.bind(transport);
  transport.send=async(method,args)=>{if(method==='Page.navigate')navigations++;if(method==='Page.getFrameTree'||method==='DOMSnapshot.captureSnapshot'){inventories++;throw new Error('old document unavailable');}return send(method,args);};
- const result=await controller.execute({target_id:'fixture',tool_name:'browser.navigate',script_operation:true,full_access:true,args:{url:'about:blank',wait_until:'commit'}});
+ const result=await controller.execute({target_id:'fixture',tool_name:'browser_navigate',script_operation:true,full_access:true,args:{url:'about:blank',wait_until:'commit'}});
  assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.result.command_acknowledged,true);assert.equal(navigations,1);assert.equal(inventories,0);
 }));
 
@@ -47,17 +47,17 @@ for(const boundary of ['permission','user_control','cancel','connection'])test('
  if(boundary==='user_control')controller.page.stopped=true;
  if(boundary==='cancel')controller.page.operationCancelled=true;
  if(boundary==='connection')controller.page.invalid=true;
- const result=await controller.execute({target_id:'fixture',tool_name:'browser.navigate',script_operation:true,full_access:boundary!=='permission',args:{url:'https://unauthorized.test',wait_until:'commit'}});
+ const result=await controller.execute({target_id:'fixture',tool_name:'browser_navigate',script_operation:true,full_access:boundary!=='permission',args:{url:'https://unauthorized.test',wait_until:'commit'}});
  assert.equal(dispatched,0);assert.equal(result.result?.action_executed===true,false);assert.ok(result.error||result.safety?.level==='takeover',JSON.stringify(result));
 }));
 
 test('ordinary reads and input still stop at secret fields; a navigation receipt reveals no content',()=>fixture(async({page,controller})=>{
  await page.setContent('<input type="password" value="never published"><button>Action</button>');
- const read=await controller.execute({target_id:'fixture',tool_name:'computer.observe',script_operation:true,full_access:true,args:{}});
+ const read=await controller.execute({target_id:'fixture',tool_name:'computer_observe',script_operation:true,full_access:true,args:{}});
  assert.equal(read.safety.level,'takeover');assert.equal(read.result.observation,undefined);
  const click=await controller.execute(action('click',{selector:{role:'button',name:'Action'}}));
  assert.equal(click.safety.level,'takeover');assert.equal(click.result.action_executed,false);
- const nav=await controller.execute({target_id:'fixture',tool_name:'browser.navigate',script_operation:true,full_access:true,args:{url:'about:blank',wait_until:'commit'}});
+ const nav=await controller.execute({target_id:'fixture',tool_name:'browser_navigate',script_operation:true,full_access:true,args:{url:'about:blank',wait_until:'commit'}});
  assert.equal(nav.result.command_acknowledged,true);assert.equal(nav.result.observation,undefined);assert.equal(nav.safety.safe_to_send_to_model,false);
  assert.equal(JSON.stringify([read,click,nav]).includes('never published'),false);
 }));

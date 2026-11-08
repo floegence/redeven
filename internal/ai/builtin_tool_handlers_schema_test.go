@@ -37,17 +37,17 @@ func TestAskUserResponseModesMatchFloret(t *testing.T) {
 
 	var redevenDefinition ToolDef
 	for _, definition := range builtInControlSignalDefinitions() {
-		if definition.Name == flruntime.CoreControlAskUser {
+		if definition.Name == "user_ask" {
 			redevenDefinition = definition
 			break
 		}
 	}
 	if redevenDefinition.Name == "" {
-		t.Fatal("Redeven ask_user definition not found")
+		t.Fatal("Redeven user_ask definition not found")
 	}
 	var redevenSchema map[string]any
 	if err := json.Unmarshal(redevenDefinition.InputSchema, &redevenSchema); err != nil {
-		t.Fatalf("parse Redeven ask_user schema: %v", err)
+		t.Fatalf("parse Redeven user_ask schema: %v", err)
 	}
 	coreJSON, err := json.Marshal(coreDefinitions[0].InputSchema)
 	if err != nil {
@@ -126,13 +126,13 @@ func TestSubagentsSpawnSchemaUsesParentProvidedInstructions(t *testing.T) {
 
 	var definition ToolDef
 	for _, item := range builtInToolDefinitions() {
-		if item.Name == "subagents" {
+		if item.Name == "subagent_manage" {
 			definition = item
 			break
 		}
 	}
 	if definition.Name == "" {
-		t.Fatal("subagents definition not found")
+		t.Fatal("subagent_manage definition not found")
 	}
 	var schema map[string]any
 	if err := json.Unmarshal(definition.InputSchema, &schema); err != nil {
@@ -147,15 +147,15 @@ func TestSubagentsSpawnSchemaUsesParentProvidedInstructions(t *testing.T) {
 		t.Fatalf("schema action does not include spawn: %#v", properties["action"])
 	}
 	if _, exists := properties["agent_type"]; exists {
-		t.Fatal("subagents schema still exposes agent_type")
+		t.Fatal("subagent_manage schema still exposes agent_type")
 	}
 	for _, required := range []string{"task_name", "task_description", "message"} {
 		if _, exists := properties[required]; !exists {
-			t.Errorf("subagents schema is missing %q", required)
+			t.Errorf("subagent_manage schema is missing %q", required)
 		}
 	}
 	if !strings.Contains(definition.Description, "message (task instructions and execution authorization)") || strings.Contains(definition.Description, "agent_type") {
-		t.Fatalf("subagents description does not match direct delegation: %q", definition.Description)
+		t.Fatalf("subagent_manage description does not match direct delegation: %q", definition.Description)
 	}
 }
 
@@ -164,13 +164,13 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 
 	var applyPatch ToolDef
 	for _, def := range builtInToolDefinitions() {
-		if def.Name == "apply_patch" {
+		if def.Name == "file_apply_patch" {
 			applyPatch = def
 			break
 		}
 	}
 	if applyPatch.Name == "" {
-		t.Fatal("apply_patch definition not found")
+		t.Fatal("file_apply_patch definition not found")
 	}
 	if !strings.Contains(applyPatch.Description, "Begin/End Patch") {
 		t.Fatalf("description missing canonical patch contract: %q", applyPatch.Description)
@@ -209,11 +209,11 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	var terminalExec, terminalRead, terminalTerminate ToolDef
 	for _, def := range builtInToolDefinitions() {
 		switch def.Name {
-		case "terminal.exec":
+		case "terminal_exec":
 			terminalExec = def
-		case "terminal.read":
+		case "terminal_read":
 			terminalRead = def
-		case "terminal.terminate":
+		case "terminal_terminate":
 			terminalTerminate = def
 		}
 	}
@@ -226,74 +226,74 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		t.Fatalf("parse schema: %v", err)
 	}
 	if ap, ok := execSchema["additionalProperties"].(bool); !ok || ap {
-		t.Fatalf("terminal.exec must keep a closed schema: %#v", execSchema["additionalProperties"])
+		t.Fatalf("terminal_exec must keep a closed schema: %#v", execSchema["additionalProperties"])
 	}
 	execProps, ok := execSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.exec schema missing properties: %#v", execSchema)
+		t.Fatalf("terminal_exec schema missing properties: %#v", execSchema)
 	}
 	yieldSchema, ok := execProps["yield_ms"].(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.exec schema missing yield_ms: %#v", execProps)
+		t.Fatalf("terminal_exec schema missing yield_ms: %#v", execProps)
 	}
 	if _, ok := execProps["timeout_ms"]; ok {
-		t.Fatalf("terminal.exec schema retained timeout_ms: %#v", execProps)
+		t.Fatalf("terminal_exec schema retained timeout_ms: %#v", execProps)
 	}
 	if fmt.Sprint(yieldSchema["type"]) != "integer" || fmt.Sprint(yieldSchema["maximum"]) != "30000" {
 		t.Fatalf("yield_ms maximum=%v, want 30000", yieldSchema["maximum"])
 	}
 	stdinSchema, ok := execProps["stdin"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "does not close stdin or send EOF") {
-		t.Fatal("terminal.exec stdin must describe its interactive input boundary")
+		t.Fatal("terminal_exec stdin must describe its interactive input boundary")
 	}
 	if !strings.Contains(terminalExec.Description, "exit_code") || !strings.Contains(terminalExec.Description, "status=running") || !strings.Contains(terminalExec.Description, "process_id") || !strings.Contains(terminalExec.Description, "Waits 5 seconds by default") || !strings.Contains(terminalExec.Description, "not the command's runtime") || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "Echo alone is not command completion") {
-		t.Fatal("terminal.exec must distinguish completion, running processes and PTY echo")
+		t.Fatal("terminal_exec must distinguish completion, running processes and PTY echo")
 	}
 	yieldDescription := fmt.Sprint(yieldSchema["description"])
 	for _, phrase := range []string{"foreground", "nohup", "setsid", "PTY process group", "unsupported", "managed browser"} {
 		if !strings.Contains(terminalExec.Description, phrase) {
-			t.Fatalf("terminal.exec must explain process ownership: missing %q", phrase)
+			t.Fatalf("terminal_exec must explain process ownership: missing %q", phrase)
 		}
 	}
 	if !strings.Contains(yieldDescription, "omitted or 0 uses 5000") || !strings.Contains(yieldDescription, "command runtime timeout") {
-		t.Fatalf("terminal.exec yield_ms description must explain its default and scope: %q", yieldDescription)
+		t.Fatalf("terminal_exec yield_ms description must explain its default and scope: %q", yieldDescription)
 	}
 
 	var readSchema map[string]any
 	if err := json.Unmarshal(terminalRead.InputSchema, &readSchema); err != nil {
-		t.Fatalf("parse terminal.read schema: %v", err)
+		t.Fatalf("parse terminal_read schema: %v", err)
 	}
 	readProps, ok := readSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.read schema missing properties: %#v", readSchema)
+		t.Fatalf("terminal_read schema missing properties: %#v", readSchema)
 	}
 	descriptionSchema, ok := readProps["description"].(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.read schema missing description: %#v", readProps)
+		t.Fatalf("terminal_read schema missing description: %#v", readProps)
 	}
 	if fmt.Sprint(descriptionSchema["minLength"]) != "1" || fmt.Sprint(descriptionSchema["maxLength"]) != "120" {
-		t.Fatalf("terminal.read description bounds=%#v, want 1..120", descriptionSchema)
+		t.Fatalf("terminal_read description bounds=%#v, want 1..120", descriptionSchema)
 	}
 	description := strings.ToLower(fmt.Sprint(descriptionSchema["description"]))
 	if !strings.Contains(description, "user's language") || !strings.Contains(description, "command/task") {
-		t.Fatalf("terminal.read description guidance is incomplete: %q", description)
+		t.Fatalf("terminal_read description guidance is incomplete: %q", description)
 	}
 	afterSeqSchema, ok := readProps["after_seq"].(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.read schema missing after_seq: %#v", readProps)
+		t.Fatalf("terminal_read schema missing after_seq: %#v", readProps)
 	}
 	afterSeqDescription := strings.ToLower(fmt.Sprint(afterSeqSchema["description"]))
 	if !strings.Contains(afterSeqDescription, "0 for the first read") || !strings.Contains(afterSeqDescription, "previous result's last_seq unchanged") {
-		t.Fatalf("terminal.read after_seq guidance is incomplete: %q", afterSeqDescription)
+		t.Fatalf("terminal_read after_seq guidance is incomplete: %q", afterSeqDescription)
 	}
 	for _, removed := range []string{"wait_ms", "max_bytes"} {
 		if _, exists := readProps[removed]; exists {
-			t.Fatalf("terminal.read schema retained %s: %#v", removed, readProps)
+			t.Fatalf("terminal_read schema retained %s: %#v", removed, readProps)
 		}
 	}
 	required, _ := readSchema["required"].([]any)
 	if !containsAnyString(required, "process_id") || containsAnyString(required, "description") || !containsAnyString(required, "after_seq") {
-		t.Fatalf("terminal.read required=%#v, want process_id and after_seq only", required)
+		t.Fatalf("terminal_read required=%#v, want process_id and after_seq only", required)
 	}
 	toolDescription := strings.ToLower(terminalRead.Description)
 	for _, phrase := range []string{
@@ -306,35 +306,35 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		"unavailable observation does not prove the command stopped",
 	} {
 		if !strings.Contains(toolDescription, phrase) {
-			t.Fatalf("terminal.read description missing %q: %q", phrase, terminalRead.Description)
+			t.Fatalf("terminal_read description missing %q: %q", phrase, terminalRead.Description)
 		}
 	}
 	if terminalProcessModelReadWaitMS != 60_000 {
-		t.Fatalf("model terminal.read wait=%dms, want 60000ms", terminalProcessModelReadWaitMS)
+		t.Fatalf("model terminal_read wait=%dms, want 60000ms", terminalProcessModelReadWaitMS)
 	}
 
 	var terminateSchema map[string]any
 	if err := json.Unmarshal(terminalTerminate.InputSchema, &terminateSchema); err != nil {
-		t.Fatalf("parse terminal.terminate schema: %v", err)
+		t.Fatalf("parse terminal_terminate schema: %v", err)
 	}
 	terminateProps, ok := terminateSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.terminate schema missing properties: %#v", terminateSchema)
+		t.Fatalf("terminal_terminate schema missing properties: %#v", terminateSchema)
 	}
 	terminateDescriptionSchema, ok := terminateProps["description"].(map[string]any)
 	if !ok {
-		t.Fatalf("terminal.terminate schema missing description: %#v", terminateProps)
+		t.Fatalf("terminal_terminate schema missing description: %#v", terminateProps)
 	}
 	if fmt.Sprint(terminateDescriptionSchema["minLength"]) != "1" || fmt.Sprint(terminateDescriptionSchema["maxLength"]) != "120" {
-		t.Fatalf("terminal.terminate description bounds=%#v, want 1..120", terminateDescriptionSchema)
+		t.Fatalf("terminal_terminate description bounds=%#v, want 1..120", terminateDescriptionSchema)
 	}
 	terminateDescription := strings.ToLower(fmt.Sprint(terminateDescriptionSchema["description"]))
 	if !strings.Contains(terminateDescription, "user's language") || !strings.Contains(terminateDescription, "command/task being stopped") {
-		t.Fatalf("terminal.terminate description guidance is incomplete: %q", terminateDescription)
+		t.Fatalf("terminal_terminate description guidance is incomplete: %q", terminateDescription)
 	}
 	terminateRequired, _ := terminateSchema["required"].([]any)
 	if !containsAnyString(terminateRequired, "process_id") || containsAnyString(terminateRequired, "description") {
-		t.Fatalf("terminal.terminate required=%#v, want process_id only", terminateRequired)
+		t.Fatalf("terminal_terminate required=%#v, want process_id only", terminateRequired)
 	}
 }
 
@@ -342,8 +342,8 @@ func TestBuiltInToolDefinitions_TargetScopedToolsExposeTargetID(t *testing.T) {
 	t.Parallel()
 
 	targetScoped := map[string]bool{
-		"file.write":  true,
-		"apply_patch": true,
+		"file_write":       true,
+		"file_apply_patch": true,
 	}
 	seen := map[string]bool{}
 	for _, def := range builtInToolDefinitions() {
@@ -446,7 +446,7 @@ func TestBuiltInFileMutationSurface(t *testing.T) {
 				got[definition.Name] = true
 			}
 		}
-		want := map[string]bool{"file.write": true, "apply_patch": true}
+		want := map[string]bool{"file_write": true, "file_apply_patch": true}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("permission=%s file mutation tools=%v, want=%v", permission, got, want)
 		}

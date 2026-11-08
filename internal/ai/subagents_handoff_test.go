@@ -269,7 +269,7 @@ func TestFloretSubagentCompletedHandoffFailsClosed(t *testing.T) {
 func TestFloretSubagentModelResultPreservesLongHandoffAndBoundsActivity(t *testing.T) {
 	content := "handoff:" + strings.Repeat("H", 9_000)
 	result, err := floretToolResultFromFlower(nil, ToolResult{
-		ToolID: "tool-wait", ToolName: "subagents", Status: toolResultStatusSuccess,
+		ToolID: "tool-wait", ToolName: "subagent_manage", Status: toolResultStatusSuccess,
 		Data: map[string]any{
 			"action": "wait", "requested_count": 1,
 			"items":    []map[string]any{{"thread_id": "thread-child", "task_name": "Research", "status": subagentStatusCompleted, "last_message_preview": "preview"}},
@@ -309,7 +309,7 @@ func TestFloretSubagentModelResultPreservesLongHandoffAndBoundsActivity(t *testi
 
 func TestSubagentDefinitionUsesOneHandoffContract(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
-		if def.Name != "subagents" {
+		if def.Name != "subagent_manage" {
 			continue
 		}
 		for _, want := range []string{"handoffs[].content", "items[].failure", "status returns metadata"} {
@@ -320,5 +320,5 @@ func TestSubagentDefinitionUsesOneHandoffContract(t *testing.T) {
 		}
 		return
 	}
-	t.Fatal("subagents definition missing")
+	t.Fatal("subagent_manage definition missing")
 }

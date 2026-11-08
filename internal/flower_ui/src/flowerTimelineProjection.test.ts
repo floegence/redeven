@@ -16,7 +16,7 @@ function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivi
   return {
     item_id: 'tool-1',
     tool_id: 'tool-1',
-    tool_name: 'terminal.exec',
+    tool_name: 'terminal_exec',
     kind: 'tool',
     status: 'success',
     severity: 'quiet',
@@ -557,7 +557,7 @@ describe('buildFlowerTimelineEntries', () => {
               items: [activityItem({
                 item_id: 'tool-terminal',
                 tool_id: 'tool-terminal',
-                tool_name: 'terminal.exec',
+                tool_name: 'terminal_exec',
                 renderer: 'terminal',
                 label: 'ls -la',
                 payload: { command: 'ls -la' },
@@ -611,7 +611,7 @@ describe('buildFlowerTimelineEntries', () => {
               items: [activityItem({
                 item_id: 'tool:todos',
                 tool_id: 'todos',
-                tool_name: 'write_todos',
+                tool_name: 'todo_write',
                 renderer: 'todos',
                 label: 'Update plan',
                 payload: { items: [{ text: 'Inspect projection', status: 'completed' }] },
@@ -622,7 +622,7 @@ describe('buildFlowerTimelineEntries', () => {
               items: [activityItem({
                 item_id: 'tool:subagents',
                 tool_id: 'subagents',
-                tool_name: 'subagents',
+                tool_name: 'subagent_manage',
                 renderer: 'structured',
                 label: 'Research sources',
                 payload: { task_name: 'Research sources', status: 'completed' },
@@ -638,8 +638,8 @@ describe('buildFlowerTimelineEntries', () => {
     if (first?.type !== 'message') throw new Error('expected message entry');
     expect(first.blocks.map((block) => block.type)).toEqual(['activity', 'activity']);
     expect(first.blocks.map((block) => (block.type === 'activity' ? block.block.items[0]?.tool_name : ''))).toEqual([
-      'write_todos',
-      'subagents',
+      'todo_write',
+      'subagent_manage',
     ]);
   });
 
@@ -1164,7 +1164,7 @@ describe('buildFlowerTimelineEntries', () => {
         prompt_id: 'prompt-1',
         message_id: 'assistant-1',
         tool_id: 'tool-ask',
-        tool_name: 'ask_user',
+        tool_name: 'user_ask',
         questions: [
           {
             id: 'choice',
@@ -1233,7 +1233,7 @@ describe('buildFlowerTimelineEntries', () => {
   it('preserves exact resource targets in timeline presentation', () => {
     for (const path of ['/one/app.ts', '/two/app.ts']) {
       const timeline = activityTimeline({ items: [activityItem({
-        tool_name: 'read_file', renderer: 'file', target_refs: [{ kind: 'file', label: 'app.ts', path }],
+        tool_name: 'file_read', renderer: 'file', target_refs: [{ kind: 'file', label: 'app.ts', path }],
         payload: { operation: 'read', display_name: 'app.ts' },
       })] });
       const entries = buildFlowerTimelineEntries(thread({ messages: [{

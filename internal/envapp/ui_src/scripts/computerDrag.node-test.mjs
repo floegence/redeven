@@ -58,7 +58,7 @@ for (const mode of ['managed', 'connected']) test(mode + ' browser drag honors t
   const ready = await next(); assert.equal(ready.error, undefined, JSON.stringify(ready));
   assert.equal(ready.execution_location, mode === 'connected' ? 'connected_browser' : process.platform + '_headless_browser');
   for (const duration of [0, 1, 500, 5000]) {
-    assert.equal((await send('browser.navigate', { url: origin })).error, undefined);
+    assert.equal((await send('browser_navigate', { url: origin })).error, undefined);
     const result = await send('computer.action', { action: 'drag', from_x: 20, from_y: 30, to_x: 150, to_y: 100, duration_ms: duration });
     assert.equal(result.error, undefined, JSON.stringify(result));
     assert.equal(result.result.action_executed, true);
@@ -75,10 +75,10 @@ for (const mode of ['managed', 'connected']) test(mode + ' browser drag honors t
     assert.ok(moves.every(e => e.buttons === 1 && e.x >= 20 && e.x <= 150 && e.y >= 30 && e.y <= 100));
     if (duration >= 500) assert.ok(moves.some(e => e.x > 20 && e.x < 150), 'timed drag must move along its path');
   }
-  await send('browser.navigate', { url: origin });
-  const capture = await send('computer.screenshot', {});
+  await send('browser_navigate', { url: origin });
+  const capture = await send('computer_capture_screenshot', {});
   const geometry = capture.result.frame_geometry;
-  const imageDrag = await send('computer.drag', {from_x:20,from_y:30,to_x:150,to_y:100,duration_ms:500,
+  const imageDrag = await send('computer_drag', {from_x:20,from_y:30,to_x:150,to_y:100,duration_ms:500,
     coordinate_space:'image_pixels',frame:geometry.frame,document_id:geometry.document_id});
   assert.equal(imageDrag.error, undefined, JSON.stringify(imageDrag));
   const imageRead = await send('computer.action', { action:'text',selector:{role:'region',name:'Telemetry',exact:true} });
@@ -87,7 +87,7 @@ for (const mode of ['managed', 'connected']) test(mode + ' browser drag honors t
   assert.equal(imageEvents.filter(e => e.type === 'mouseup').length, 1);
   assert.ok(imageEvents.at(-1).time-imageEvents[0].time >= 475);
   for (const duration of [-1, 0.5, 5001]) {
-    await send('browser.navigate', { url: origin });
+    await send('browser_navigate', { url: origin });
     const result = await send('computer.action', { action: 'drag', from_x: 20, from_y: 30, to_x: 150, to_y: 100, duration_ms: duration });
     assert.equal(result.error, 'INVALID_REQUEST'); assert.equal(result.result.action_executed, false);
     const read = await send('computer.action', { action: 'text', selector: { role: 'region', name: 'Telemetry', exact: true } });

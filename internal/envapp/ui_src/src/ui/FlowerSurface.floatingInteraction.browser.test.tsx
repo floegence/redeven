@@ -18,7 +18,7 @@ it.each((['release', 'cancel', 'blur'] as const).flatMap(ending =>
       run_progress: { phase: 'streaming', request: { logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1,
         started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 1 } },
       tool_call_previews: [{ thread_id: current.thread_id, turn_id: current.turn_id!, run_id: current.run_id!, logical_request_id: 'request',
-        attempt_id: 'attempt', attempt_epoch: 1, call_id: 'preview', name: 'apply_patch', arguments_complete: false,
+        attempt_id: 'attempt', attempt_epoch: 1, call_id: 'preview', name: 'file_apply_patch', arguments_complete: false,
         preview: { display_name: 'build.ts', additions: 1 } }],
     });
   }

@@ -3,7 +3,7 @@ import type { FlowerActivityItem } from './contracts/flowerSurfaceContracts';
 // Display semantics only. Canonical tool status and execution authority remain
 // unchanged. Neither message wording nor an unrelated later success is proof.
 export function computerObservationInterruption(item: FlowerActivityItem): 'unavailable' | 'not_dispatched' | 'effect_confirmed' | 'prepared' | 'partial_input' | 'budget' | 'output' | 'read_failed' | undefined {
-  if (item.status !== 'error' || !/^(computer|browser)\./u.test(item.tool_name ?? '')) return;
+  if (item.status !== 'error' || !/^(computer|browser)[._]/u.test(item.tool_name ?? '')) return;
   const chips = item.chips ?? [];
   const phase = chips.find(chip => chip.kind === 'computer_failure_phase')?.value;
   if (item.field_summary?.uncertain_effect || phase === 'unknown' || chips.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain')

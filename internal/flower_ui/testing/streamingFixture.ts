@@ -9,10 +9,10 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
   const tool = (index: number): FlowerActivityItem => {
     const common = { item_id: `tool-${index}`, tool_id: `tool-${index}`, kind: 'tool' as const, status: 'success' as const, severity: 'quiet' as const, needs_attention: false, requires_approval: false };
     switch (index % 5) {
-      case 0: return { ...common, tool_name: 'terminal.exec', renderer: 'terminal', label: 'Inspect workspace', payload: { operation: 'exec', command: 'git status --short', output: 'Workspace inspection complete.\n'.repeat(12), exit_code: 0 } };
+      case 0: return { ...common, tool_name: 'terminal_exec', renderer: 'terminal', label: 'Inspect workspace', payload: { operation: 'exec', command: 'git status --short', output: 'Workspace inspection complete.\n'.repeat(12), exit_code: 0 } };
       case 1: return { ...common, tool_name: 'file.read', renderer: 'file', label: 'Read README.md', target_refs: [{ kind: 'file', label: 'README.md', path: '/workspace/README.md' }], payload: { operation: 'read', display_name: 'README.md', content: '# Architecture\n\nStable presentation data.\n'.repeat(20), line_count: 60, total_lines: 60 } };
       case 2: return { ...common, tool_name: 'inspect', renderer: 'structured', label: 'Inspect structured results', payload: { rows: [{ title: 'Summary', content: 'Stable result row', format: 'text' }, { title: 'Code', content: 'const result = true;', format: 'code' }] } };
-      case 3: return { ...common, tool_name: 'write_todos', renderer: 'todos', label: 'Update task checklist', payload: { items: [{ text: 'Inspect current state', status: 'completed' }, { text: 'Verify interactions', status: 'in_progress' }] } };
+      case 3: return { ...common, tool_name: 'todo_write', renderer: 'todos', label: 'Update task checklist', payload: { items: [{ text: 'Inspect current state', status: 'completed' }, { text: 'Verify interactions', status: 'in_progress' }] } };
       default: return { ...common, tool_name: 'web_search', renderer: 'web_search', label: 'Search documentation', payload: { query: 'streaming interface', results: [{ title: 'Documentation', url: 'https://example.com/docs', snippet: 'Stable search result.' }] } };
     }
   };

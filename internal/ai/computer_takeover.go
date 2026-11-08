@@ -10,7 +10,7 @@ import (
 )
 
 // Blocked operations report facts. Only the Agent may request input in a later
-// ask_user call; an unsuccessful capture never becomes a successful question.
+// user_ask call; an unsuccessful capture never becomes a successful question.
 func computerBlockedExecution(call TargetToolCall, target TargetDescriptor, safety InteractionSafetyDecision, observed ...TargetToolResult) (toolExecutionOutput, error) {
 	safety.ActionID, safety.Level = call.ToolCallID, "takeover"
 	safety.SafeToCapture, safety.SafeToSendToModel = false, false
@@ -58,7 +58,7 @@ func computerAssistanceKind(safety InteractionSafetyDecision) string {
 
 func computerRecoveryAllowsTool(toolName string) bool {
 	switch strings.TrimSpace(toolName) {
-	case "computer.targets", "computer.select_target", "computer.observe", "computer.screenshot":
+	case "computer_list_targets", "computer_select_target", "computer_observe", "computer_capture_screenshot":
 		return true
 	default:
 		return false

@@ -154,7 +154,7 @@ func TestImageReadUsesExplicitTargetWithoutLocalFallback(t *testing.T) {
 	if _, err := r.toolImageRead(t.Context(), &session.Meta{CanRead: true}, "read", map[string]any{"file_path": "source.png", "target_id": "allowed"}); err == nil {
 		t.Fatal("executor without image silently read local file")
 	}
-	if len(executor.calls) != 1 || executor.calls[0].ToolName != "image.read" {
+	if len(executor.calls) != 1 || executor.calls[0].ToolName != "image_read" {
 		t.Fatal("target routing lost image tool")
 	}
 }
@@ -173,7 +173,7 @@ func TestImageReadRejectsPixelBoundsBeforeDecoding(t *testing.T) {
 
 func TestImageResultNeverInfersAuthorityFromOrdinaryJSON(t *testing.T) {
 	ref := "image://" + strings.Repeat("a", 64) + "/png"
-	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "untyped", ToolName: "image.read", Status: toolResultStatusSuccess, Data: map[string]any{"resource_ref": ref, "mime_type": "image/png", "base64": "untrusted"}})
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "untyped", ToolName: "image_read", Status: toolResultStatusSuccess, Data: map[string]any{"resource_ref": ref, "mime_type": "image/png", "base64": "untrusted"}})
 	if err != nil {
 		t.Fatal(err)
 	}

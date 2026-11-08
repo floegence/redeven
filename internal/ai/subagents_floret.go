@@ -146,7 +146,7 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 	taskDescription := strings.TrimSpace(anyToString(args["task_description"]))
 	message := anyToString(args["message"])
 	if taskName == "" || taskDescription == "" || strings.TrimSpace(message) == "" {
-		return nil, errors.New("subagents spawn requires task_name, task_description, and message")
+		return nil, errors.New("subagent_manage spawn requires task_name, task_description, and message")
 	}
 	contextMode := normalizeSubagentContextMode(anyToString(args["context_mode"]))
 	// Floret requires a host reference for child threads; this shared value selects no role or policy.
@@ -366,7 +366,7 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 	target := strings.TrimSpace(anyToString(args["target"]))
 	message := anyToString(args["message"])
 	if target == "" || strings.TrimSpace(message) == "" {
-		return nil, errors.New("subagents send_input requires target and message")
+		return nil, errors.New("subagent_manage send_input requires target and message")
 	}
 	summary, found, err := runtime.childSummary(ctx, target)
 	if err != nil {

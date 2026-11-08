@@ -25,8 +25,8 @@ func TestObserveTypedTurnUsesInteractionAndTurnScopedToolState(t *testing.T) {
 			ID: "interaction_approval", Kind: flruntime.ThreadInteractionApproval,
 		}},
 		Items: []flruntime.ThreadItem{
-			{ID: "tool_current", TurnID: turnID, Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ToolID: "tool_current", ToolName: "terminal.exec", Status: observation.ActivityStatusWaiting, RequiresApproval: true}},
-			{ID: "tool_previous", TurnID: identity.TurnID("turn_old"), Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ToolID: "tool_previous", ToolName: "terminal.exec", Status: observation.ActivityStatusSuccess}},
+			{ID: "tool_current", TurnID: turnID, Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ToolID: "tool_current", ToolName: "terminal_exec", Status: observation.ActivityStatusWaiting, RequiresApproval: true}},
+			{ID: "tool_previous", TurnID: identity.TurnID("turn_old"), Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ToolID: "tool_previous", ToolName: "terminal_exec", Status: observation.ActivityStatusSuccess}},
 		},
 	}
 
@@ -157,7 +157,7 @@ func TestCanonicalToolCallsFromMessagePagesUsesLatestActivityProjection(t *testi
 						"items": []any{
 							map[string]any{
 								"tool_id":   "tool_1",
-								"tool_name": "terminal.exec",
+								"tool_name": "terminal_exec",
 								"status":    "success",
 								"payload": map[string]any{
 									"command":   "go test ./...",
@@ -178,7 +178,7 @@ func TestCanonicalToolCallsFromMessagePagesUsesLatestActivityProjection(t *testi
 						"items": []any{
 							map[string]any{
 								"tool_id":   "tool_1",
-								"tool_name": "terminal.exec",
+								"tool_name": "terminal_exec",
 								"status":    "running",
 								"payload": map[string]any{
 									"command": "go test ./...",
@@ -196,7 +196,7 @@ func TestCanonicalToolCallsFromMessagePagesUsesLatestActivityProjection(t *testi
 		t.Fatalf("tool call count=%d, want 1", len(calls))
 	}
 	call := calls[0]
-	if call.RunID != "run_1" || call.ToolID != "tool_1" || call.ToolName != "terminal.exec" || call.Status != "success" {
+	if call.RunID != "run_1" || call.ToolID != "tool_1" || call.ToolName != "terminal_exec" || call.Status != "success" {
 		t.Fatalf("canonical tool call=%+v", call)
 	}
 	var payload map[string]any

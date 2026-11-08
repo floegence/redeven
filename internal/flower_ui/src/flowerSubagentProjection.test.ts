@@ -113,7 +113,7 @@ describe('buildFlowerSubagentPanelItems', () => {
           items: [{
             item_id: 'subagent:legacy',
             tool_id: 'subagents',
-            tool_name: 'subagents',
+            tool_name: 'subagent_manage',
             kind: 'tool',
             status: 'success',
             severity: 'quiet',

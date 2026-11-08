@@ -46,7 +46,7 @@ func TestFlowerRuntimeContextRejectsOverflowWithoutClipping(t *testing.T) {
 	if err != nil || !strings.Contains(modelContextSnapshotText(item), description) {
 		t.Fatalf("valid context beyond the old limit was clipped: %v", err)
 	}
-	assertPromptNotContains(t, modelContextSnapshotText(item), "Use use_skill")
+	assertPromptNotContains(t, modelContextSnapshotText(item), "Use skill_use")
 	assertPromptNotContains(t, modelContextSnapshotText(item), "Tool approval policy:")
 	writeContextTestSkill(t, root, strings.Repeat("界", 65_000))
 	item, err = r.collectModelContextSnapshot(t.Context(), FlowerPermissionApprovalRequired, time.Now)

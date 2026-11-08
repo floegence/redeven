@@ -38,11 +38,11 @@ test('real file navigation, SVG image, unique role, contains/exact, scoped refs 
     await controller.initialize();
     const execute = (tool_name, args = {}, fields = {}) => controller.execute({ tool_name, args, full_access: true, script_operation: true, ...fields });
     const url = pathToFileURL(filename).href;
-    const navigation = await execute('browser.navigate', { url });
+    const navigation = await execute('browser_navigate', { url });
     assert.equal(navigation.error, undefined, JSON.stringify(navigation));
     assert.equal(native.url(), url);
     assert.equal(navigation.result.action_executed, true);
-    const observation = await execute('computer.observe');
+    const observation = await execute('computer_observe');
     assert.equal(observation.error, undefined, JSON.stringify(observation));
     const group = observation.result.observation.nodes.find(node => node.role === 'group');
     const image = await execute('computer.action', { action: 'read', selector: { roles: ['image', 'img'], name: 'animation' } });
@@ -57,15 +57,15 @@ test('real file navigation, SVG image, unique role, contains/exact, scoped refs 
     assert.equal(timeout.result.state, 'timeout');
     assert.equal(timeout.result.requested_state, 'visible');
     const oldImageRef = image.result.node.ref;
-    await execute('browser.navigate', { url: 'data:text/html,%3Ch1%3ENew%3C/h1%3E' });
+    await execute('browser_navigate', { url: 'data:text/html,%3Ch1%3ENew%3C/h1%3E' });
     assert.equal((await execute('computer.action', { action: 'read', selector: { ref: oldImageRef } })).error, 'STALE_REFERENCE');
-    assert.equal((await execute('browser.navigate', { url: 'about:blank' })).error, undefined);
-    const restricted = await execute('browser.navigate', { url }, { full_access: false });
+    assert.equal((await execute('browser_navigate', { url: 'about:blank' })).error, undefined);
+    const restricted = await execute('browser_navigate', { url }, { full_access: false });
     assert.equal(restricted.error, 'TARGET_PERMISSION_REQUIRED');
     assert.equal(restricted.result.action_executed, false);
-    const approved = await execute('browser.navigate', { url }, { full_access: false, allowed_navigation_urls: [url] });
+    const approved = await execute('browser_navigate', { url }, { full_access: false, allowed_navigation_urls: [url] });
     assert.equal(approved.error, undefined, JSON.stringify(approved));
-    assert.equal((await execute('computer.observe', {}, { full_access: false, allowed_navigation_urls: [url] })).error, undefined);
+    assert.equal((await execute('computer_observe', {}, { full_access: false, allowed_navigation_urls: [url] })).error, undefined);
   } finally { await browser.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -83,7 +83,7 @@ test('redirect requires a fresh exact approval and recovers without takeover or 
     const native = await browser.newPage();
     const controller = new BrowserComputerController(await native.context().newCDPSession(native));
     await controller.initialize();
-    const execute = (url, grants, full_access = false) => controller.execute({ tool_name: 'browser.navigate', args: { url }, allowed_navigation_urls: grants, full_access, script_operation: true });
+    const execute = (url, grants, full_access = false) => controller.execute({ tool_name: 'browser_navigate', args: { url }, allowed_navigation_urls: grants, full_access, script_operation: true });
     const blocked = await execute(sourceURL, [sourceURL]);
     assert.equal(blocked.error, 'TARGET_PERMISSION_REQUIRED', JSON.stringify(blocked));
     assert.equal(blocked.result.required_navigation_url, destinationURL);

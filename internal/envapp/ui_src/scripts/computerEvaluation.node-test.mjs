@@ -35,7 +35,7 @@ class EvaluationFixture extends EventEmitter {
 test('failed observer installation remains unprepared until the next explicit observation', async () => {
   const transport = new EvaluationFixture();
   const controller = new BrowserComputerController(transport);
-  const request = {target_id:'fixture',tool_name:'computer.observe',args:{},full_access:true,script_operation:true};
+  const request = {target_id:'fixture',tool_name:'computer_observe',args:{},full_access:true,script_operation:true};
   try {
     const failure = await controller.execute(request);
     assert.equal(failure.error, 'TARGET_OBSERVATION_UNAVAILABLE');
@@ -104,7 +104,7 @@ test('malformed installation responses never publish readiness or retry internal
       return send(method, args);
     };
     try {
-      const result = await controller.execute({target_id:'fixture',tool_name:'computer.observe',args:{},full_access:true,script_operation:true});
+      const result = await controller.execute({target_id:'fixture',tool_name:'computer_observe',args:{},full_access:true,script_operation:true});
       assert.equal(result.error, 'TARGET_OBSERVATION_UNAVAILABLE');
       assert.deepEqual(result.result.diagnostic, {phase:'evaluation',method:'Runtime.evaluate',reason:'invalid_result'});
       assert.equal(controller.page.observedFrames.size, 0);
@@ -122,17 +122,17 @@ test('real browser evaluation failures retain facts, never input and allow expli
     owner = await createComputerBrowserSource(page, 'fixture');
     let controller = owner.controller;
     const run = (tool_name, args = {}) => controller.execute({target_id:'fixture',tool_name,args,full_access:true,script_operation:true});
-    const initial = await run('computer.observe');
+    const initial = await run('computer_observe');
     assert.equal(initial.error, undefined);
     for (const [name, role] of [['Plain search','textbox'],['Native search','searchbox'],['Suggested search','combobox']]) {
       assert.equal(initial.result.observation.nodes.find(node => node.name === name)?.role, role);
     }
     let send = controller.transport.send.bind(controller.transport);
     const cases = [
-      {stage:'safety_scan',method:'Runtime.evaluate',match:p=>p.expression?.includes('secretChanged()'),tool:'computer.observe'},
+      {stage:'safety_scan',method:'Runtime.evaluate',match:p=>p.expression?.includes('secretChanged()'),tool:'computer_observe'},
       {stage:'semantic_read',method:'Runtime.callFunctionOn',match:p=>p.functionDeclaration?.includes('property:"innerText"'),tool:'computer.action',args:{action:'text',selector:{role:'region',name:'Report'}}},
-      {stage:'capture',method:'Runtime.evaluate',match:p=>p.expression?.includes('innerWidth-document'),tool:'computer.screenshot'},
-      {stage:'metadata',method:'Runtime.evaluate',match:p=>p.expression==='({url:document.URL,title:document.title})',tool:'computer.observe'},
+      {stage:'capture',method:'Runtime.evaluate',match:p=>p.expression?.includes('innerWidth-document'),tool:'computer_capture_screenshot'},
+      {stage:'metadata',method:'Runtime.evaluate',match:p=>p.expression==='({url:document.URL,title:document.title})',tool:'computer_observe'},
     ];
     for (const item of cases) for (const reason of ['exception','invalid_result']) {
       let injections = 0, inputs = 0;
@@ -154,7 +154,7 @@ test('real browser evaluation failures retain facts, never input and allow expli
       assert.equal(injections, 1);
       assert.equal(inputs, 0);
       controller.transport.send = send;
-      assert.equal((await run('computer.observe')).error, undefined);
+      assert.equal((await run('computer_observe')).error, undefined);
     }
     // A mutation response containing an exception cannot confirm completion.
     // Preserve uncertainty even when independent fixture inspection sees an effect.
@@ -178,14 +178,14 @@ test('real browser evaluation failures retain facts, never input and allow expli
     owner = await createComputerBrowserSource(page, 'fixture');
     controller = owner.controller;
     send = controller.transport.send.bind(controller.transport);
-    assert.equal((await run('computer.observe')).error, undefined);
+    assert.equal((await run('computer_observe')).error, undefined);
     // Privacy evidence still takes precedence over an unavailable scan.
     await page.locator('body').evaluate(body => { const input = document.createElement('input'); input.type = 'password'; body.append(input); });
     controller.transport.send = async (method, parameters = {}) => {
       if (method === 'Runtime.evaluate' && parameters.expression?.includes('secretChanged()')) return {exceptionDetails:{text:'private'}};
       return send(method, parameters);
     };
-    const paused = await run('computer.observe');
+    const paused = await run('computer_observe');
     assert.equal(paused.safety.level, 'takeover');
     assert.equal(paused.result.observation, undefined);
     assert.equal(paused.result.diagnostic, undefined);

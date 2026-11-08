@@ -12,22 +12,22 @@ permissions, sandboxing, execution, and runtime preparation.
 
 ## Dedicated Plugin Center drafts
 
-In a Plugin Center creation conversation, call `plugin_author.status` first.
+In a Plugin Center creation conversation, call `plugin_author_get_status` first.
 It resolves the authenticated draft and managed source directory; never invent a
 project ID, capture another conversation, or initialize outside that directory.
-For a new empty source, use `plugin_author.initialize` with a short `slug`,
+For a new empty source, use `plugin_author_initialize` with a short `slug`,
 `display_name`, and the selected template. The slug contains lowercase letters,
 digits and single separating hyphens; never request a repository ID or publisher ID.
 Use the user's requested plugin name, including names stated naturally in the
 conversation. If none is given, choose a concise descriptive name in their language
 without blocking creation on a naming question. Initialize with that `display_name`.
-For a later naming request, call `plugin_author.rename` with `title` and the current
+For a later naming request, call `plugin_author_rename` with `title` and the current
 `project.revision` from status; keep source `plugin.display_name` aligned and rebuild.
 Do not change the slug or generated identity merely to rename a plugin. Preserve an
 existing user-selected name unless they request another.
 Use normal approved file and terminal tools to edit source and install required
-dependencies. Use `plugin_author.build` for explicit pipeline execution; it runs
-project commands under the same approval boundary. `plugin_author.capture` only
+dependencies. Use `plugin_author_build` for explicit pipeline execution; it runs
+project commands under the same approval boundary. `plugin_author_capture` only
 validates an already-built output and is not evidence that business tests ran.
 
 The workspace owns the real preview. Keep the dedicated conversation and source
@@ -45,7 +45,7 @@ Follow the user's submitted request in the ordinary composer: discuss requiremen
 or implement as requested; ask only for a decision required to proceed.
 For implementation requests that need several iterations, make the first milestone
 a small runnable version of the user's actual application: its main layout and
-one useful end-to-end interaction. Run `plugin_author.build` as soon as that
+one useful end-to-end interaction. Run `plugin_author_build` as soon as that
 coherent milestone is ready, before polishing every secondary feature. The
 workspace automatically opens the first valid artifact; keep improving the same
 source while the user can inspect it, and leave later preview updates to Apply.

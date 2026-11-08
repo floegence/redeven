@@ -41,7 +41,7 @@ func TestComputerExchangeStopReasonIsIndependentOfEffect(t *testing.T) {
 func TestComputerActivityPreservesMeasuredActionability(t *testing.T) {
 	raw := map[string]any{"stage": "hit_or_layout", "connected": true, "failed_checks": []any{"receives"}, "tested_point": map[string]any{"x": 136., "y": 237.}, "private": "excluded"}
 	want := computerActionabilityFacts(raw)
-	rows := computerActivityResultRows("computer.exec", map[string]any{"actionability": raw})
+	rows := computerActivityResultRows("computer_exec", map[string]any{"actionability": raw})
 	for _, row := range rows {
 		if row.Title == "actionability" {
 			var got map[string]any

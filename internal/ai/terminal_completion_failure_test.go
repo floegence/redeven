@@ -33,7 +33,7 @@ func TestTerminalCompletionPersistenceFailureIsImmediatelyObservable(t *testing.
 	service := &terminalCompletionFailureService{failure: failure}
 	var logs bytes.Buffer
 	r := &run{threadRuntime: service, log: slog.New(slog.NewJSONHandler(&logs, nil))}
-	req := terminalProcessStartRequest{ThreadID: "thread", RunID: "run", TurnID: "turn", ToolID: "exec", ToolName: "terminal.exec", ProcessID: "process"}
+	req := terminalProcessStartRequest{ThreadID: "thread", RunID: "run", TurnID: "turn", ToolID: "exec", ToolName: "terminal_exec", ProcessID: "process"}
 	ctx := context.WithValue(t.Context(), floretToolExecutionAuthorizationContextKey{}, floretToolExecutionAuthorization{toolID: req.ToolID, toolName: req.ToolName, effectAttemptID: "effect"})
 	if err := r.bindTerminalWork(ctx, &req); err != nil {
 		t.Fatal(err)

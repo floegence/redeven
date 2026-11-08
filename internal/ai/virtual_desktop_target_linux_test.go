@@ -15,20 +15,20 @@ import (
 )
 
 func TestX11ActionRejectsUnsafeCoordinatesAndKeys(t *testing.T) {
-	if _, err := x11Action("computer.click", map[string]any{"x": float64(-1), "y": float64(2)}); err == nil {
+	if _, err := x11Action("computer_click", map[string]any{"x": float64(-1), "y": float64(2)}); err == nil {
 		t.Fatal("negative coordinate accepted")
 	}
-	if _, err := x11Action("computer.click", map[string]any{"x": float64(2), "y": float64(900)}); err == nil {
+	if _, err := x11Action("computer_click", map[string]any{"x": float64(2), "y": float64(900)}); err == nil {
 		t.Fatal("out-of-range coordinate accepted")
 	}
-	if _, err := x11Action("computer.key", map[string]any{"key": "A;id"}); err == nil {
+	if _, err := x11Action("computer_press_key", map[string]any{"key": "A;id"}); err == nil {
 		t.Fatal("shell metacharacter accepted")
 	}
 	for _, args := range []map[string]any{
 		{"x": float64(100), "delta_y": float64(120)},
 		{"x": float64(100), "y": float64(900), "delta_y": float64(120)},
 	} {
-		if _, err := x11Action("computer.scroll", args); err == nil {
+		if _, err := x11Action("computer_scroll", args); err == nil {
 			t.Fatal("incomplete or out-of-bounds scroll coordinates accepted")
 		}
 	}
@@ -39,11 +39,11 @@ func TestX11ActionAcceptsTypedActions(t *testing.T) {
 		tool string
 		args map[string]any
 	}{
-		{"computer.click", map[string]any{"x": float64(1), "y": float64(2)}}, {"computer.double_click", map[string]any{"x": float64(1), "y": float64(2)}},
-		{"computer.type", map[string]any{"text": "Flower"}}, {"computer.key", map[string]any{"key": "Control+L"}},
-		{"computer.scroll", map[string]any{"delta_y": float64(120)}}, {"computer.wait", map[string]any{"milliseconds": float64(1)}},
-		{"computer.scroll", map[string]any{"x": float64(100), "y": float64(200), "delta_y": float64(120)}},
-		{"computer.drag", map[string]any{"from_x": float64(1), "from_y": float64(2), "to_x": float64(3), "to_y": float64(4)}},
+		{"computer_click", map[string]any{"x": float64(1), "y": float64(2)}}, {"computer_double_click", map[string]any{"x": float64(1), "y": float64(2)}},
+		{"computer_type_text", map[string]any{"text": "Flower"}}, {"computer_press_key", map[string]any{"key": "Control+L"}},
+		{"computer_scroll", map[string]any{"delta_y": float64(120)}}, {"computer_wait", map[string]any{"milliseconds": float64(1)}},
+		{"computer_scroll", map[string]any{"x": float64(100), "y": float64(200), "delta_y": float64(120)}},
+		{"computer_drag", map[string]any{"from_x": float64(1), "from_y": float64(2), "to_x": float64(3), "to_y": float64(4)}},
 	} {
 		action, err := x11Action(tc.tool, tc.args)
 		if err != nil || action == nil {

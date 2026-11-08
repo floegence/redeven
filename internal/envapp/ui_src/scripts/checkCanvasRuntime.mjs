@@ -405,7 +405,7 @@ async function verifyLargeHistoryStream(page, origin) {
     probe.thinking.release();
     await until(async () => {
       const current = (await requestJSON(origin, `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`)).current;
-      return current.items.some(item => item.kind === 'tool' && item.activity?.tool_name === 'tessiven.list' && item.activity.status === 'success');
+      return current.items.some(item => item.kind === 'tool' && item.activity?.tool_name === 'tessiven_list_canvases' && item.activity.status === 'success');
     }, 'canonical tool result before provider completion');
     await replies.locator('.flower-activity-inline-row').filter({ hasText: /canvas/i }).last().waitFor();
     probe.tool.release();

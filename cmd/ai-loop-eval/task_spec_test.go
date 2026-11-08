@@ -39,9 +39,9 @@ tasks:
         waiting_prompt: required
       tools:
         must_call:
-          - "ask_user"
+          - "user_ask"
         workspace_scoped_tools:
-          - "apply_patch"
+          - "file_apply_patch"
   - id: fixture_task
     title: Fixture Task
     stage: deep
@@ -78,7 +78,7 @@ tasks:
 	if tasks[0].Assertions.Thread.WaitingPrompt != "required" {
 		t.Fatalf("waiting_prompt=%q", tasks[0].Assertions.Thread.WaitingPrompt)
 	}
-	if len(tasks[0].Assertions.Tools.WorkspaceScopedTools) != 1 || tasks[0].Assertions.Tools.WorkspaceScopedTools[0] != "apply_patch" {
+	if len(tasks[0].Assertions.Tools.WorkspaceScopedTools) != 1 || tasks[0].Assertions.Tools.WorkspaceScopedTools[0] != "file_apply_patch" {
 		t.Fatalf("workspace_scoped_tools=%v", tasks[0].Assertions.Tools.WorkspaceScopedTools)
 	}
 	if tasks[0].Runtime.Workspace.Mode != taskWorkspaceModeSourceReadonly {

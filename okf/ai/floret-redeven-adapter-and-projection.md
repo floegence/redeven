@@ -31,8 +31,9 @@ Workspace facts preserve equal sidebar cache identity. Each observer has two can
 
 Optional encoding loss emits factual error and continues provider loop, never soliciting human confirmation merely for possible mutation. Preserve result_unavailable/result_error_code separately from original owner error, invocation ID, completed_actions, needs_observation and target, including confirmed prefix/uncertain remainder. Malformed metadata cannot replace classification. Empty prefix proves no absence of effects; invocation completion is not task success. Model chooses authorized observation/work; never replay tools. Actual interactions/cancellation/dispatch/uncertainty retain authority; failure to encode safe result is infrastructure failure. Persisted questions keep canonical answer/cancel after restart, without host migration/auto-answer.
 
-Published Floret v7.108.1 owns the model-visible `ask_user` schema and field guidance. Flower
-capability definitions consume `runtime.CoreControlDefinitions()` unchanged;
+Published Floret v7.108.2 owns the model-visible `user_ask` schema and field guidance. Flower
+capability definitions consume `runtime.CoreControlDefinitions()` with the selected
+public built-in names;
 there is no alternate product schema or model-only `open_subagent` choice field.
 Guidance for input modes, evidence and Goal operations belongs upstream. Final
 HTTP request tests cover control guidance, interaction continuation and provider
@@ -53,7 +54,7 @@ browser regressions cover compact presentation, selected/custom answers, draft
 continuity and secret input. Computer takeover tests cover restart and return
 without replaying the blocked action.
 
-request_key remains send idempotency for transient browser outbox, not invocation identity. ask_user supports write and select_or_write; fixed choices always include custom text even without write_label. Floret normalizes historical select; ordinary InputRequired is separate. No product compatibility path.
+request_key remains send idempotency for transient browser outbox, not invocation identity. user_ask supports write and select_or_write; fixed choices always include custom text even without write_label. Floret normalizes historical select; ordinary InputRequired is separate. No product compatibility path.
 
 # Boundaries
 

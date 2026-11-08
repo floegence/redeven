@@ -10,7 +10,7 @@ func TestCanonicalRunInputFromFloretKeepsOriginalTurnObjective(t *testing.T) {
 	t.Parallel()
 
 	got, err := canonicalRunInputFromFloret(flruntime.AgentRequest{
-		Input:              flruntime.UserInput{Text: "the ask_user answer"},
+		Input:              flruntime.UserInput{Text: "the user_ask answer"},
 		CanonicalTurnInput: flruntime.UserInput{Text: "the original user objective"},
 	})
 	if err != nil {
@@ -25,7 +25,7 @@ func TestCanonicalRunInputFromFloretRejectsMissingOriginalTurn(t *testing.T) {
 	t.Parallel()
 
 	if _, err := canonicalRunInputFromFloret(flruntime.AgentRequest{
-		Input: flruntime.UserInput{Text: "the ask_user answer"},
+		Input: flruntime.UserInput{Text: "the user_ask answer"},
 	}); err == nil {
 		t.Fatal("missing canonical turn input must fail closed")
 	}

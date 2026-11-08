@@ -72,7 +72,7 @@ func (f *ollamaTaskFixture) stoppedQueue(count int) {
 }
 
 func ollamaAppendPrompt(file, line string) string {
-	return fmt.Sprintf("In the current directory, use terminal.exec exactly once to execute: printf '%s\\n' >> %s . Then verify the file with a read-only command and report DONE. Do not repeat the append.", line, file)
+	return fmt.Sprintf("In the current directory, use terminal_exec exactly once to execute: printf '%s\\n' >> %s . Then verify the file with a read-only command and report DONE. Do not repeat the append.", line, file)
 }
 
 func ollamaInterleaveStopImmediateRestart(f *ollamaTaskFixture) {
@@ -93,7 +93,7 @@ func ollamaInterleaveStopImmediateRestart(f *ollamaTaskFixture) {
 				return err
 			}
 		case "input":
-			f.send("shutdown-input", "Use ask_user to request a fictional fixture label with a single free-text question id label and response_mode write. After the answer, write it to cancelled-shutdown.txt. Do not guess the answer.")
+			f.send("shutdown-input", "Use user_ask to request a fictional fixture label with a single free-text question id label and response_mode write. After the answer, write it to cancelled-shutdown.txt. Do not guess the answer.")
 			p := f.ask()
 			stale = func() error {
 				_, err := f.svc.SubmitRequestUserInputResponse(f.ctx, f.meta, SubmitRequestUserInputResponseRequest{ThreadID: f.threadID, Response: RequestUserInputResponse{PromptID: p.PromptID, Answers: map[string]RequestUserInputAnswer{"label": {Text: "STALE"}}}})
@@ -216,7 +216,7 @@ func ollamaInterleaveApprovalQueue(f *ollamaTaskFixture) {
 
 func ollamaInterleaveApprovalReplay(f *ollamaTaskFixture) {
 	f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionApprovalRequired))
-	f.send("approval-once", "Use terminal.exec exactly once to execute: printf 'APPROVED\\n' >> approved-once.txt . Do not issue further tools. Report the command's actual result. If approval is denied, do not use another tool.")
+	f.send("approval-once", "Use terminal_exec exactly once to execute: printf 'APPROVED\\n' >> approved-once.txt . Do not issue further tools. Report the command's actual result. If approval is denied, do not use another tool.")
 	i := f.approval()
 	f.missing("approved-once.txt")
 	approve := func() error {
@@ -241,9 +241,9 @@ func ollamaInterleaveApprovalReplay(f *ollamaTaskFixture) {
 }
 
 func ollamaInterleaveStaleAnswer(f *ollamaTaskFixture) {
-	f.send("question-old", "Use ask_user to request a fictional fixture label with a single free-text question id label and response_mode write. After the answer, write it to old-answer.txt. Do not guess the answer.")
+	f.send("question-old", "Use user_ask to request a fictional fixture label with a single free-text question id label and response_mode write. After the answer, write it to old-answer.txt. Do not guess the answer.")
 	p := f.ask()
-	q := f.send("question-next", "The previous question is cancelled. Use terminal.exec to execute: printf 'NEW\\n' > new-answer.txt . Verify that file and report NEW.")
+	q := f.send("question-next", "The previous question is cancelled. Use terminal_exec to execute: printf 'NEW\\n' > new-answer.txt . Verify that file and report NEW.")
 	f.stop()
 	f.stoppedQueue(1)
 	f.restart()
@@ -261,7 +261,7 @@ func ollamaInterleaveStaleAnswer(f *ollamaTaskFixture) {
 
 func ollamaInterleaveRetryRestart(f *ollamaTaskFixture) {
 	f.fault.armAfterTool("cut", "EFFECT_COMMITTED")
-	f.send("retry-twice", "Use terminal.exec to execute: printf 'ONCE\\n' >> retry-once.txt; printf EFFECT_COMMITTED . After the tool succeeds, explain photosynthesis in three short sentences and end with RETRY_DONE. The append must run only once.")
+	f.send("retry-twice", "Use terminal_exec to execute: printf 'ONCE\\n' >> retry-once.txt; printf EFFECT_COMMITTED . After the tool succeeds, explain photosynthesis in three short sentences and end with RETRY_DONE. The append must run only once.")
 	f.fault.waitHit(f.t)
 	f.terminal(flruntime.TurnOutcomeFailed)
 	f.file("retry-once.txt", "ONCE\n")
@@ -350,7 +350,7 @@ func ollamaInterleavePermissions(f *ollamaTaskFixture) {
 	}
 	f.check(f.svc.SetThreadModel(f.ctx, f.meta, f.threadID, f.opts.Config.CurrentModelID))
 	f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionApprovalRequired))
-	f.send("permission-pending", "Use terminal.exec exactly once to execute: printf DENIED > permission-denied.txt . If permission is denied do not call other tools; report it.")
+	f.send("permission-pending", "Use terminal_exec exactly once to execute: printf DENIED > permission-denied.txt . If permission is denied do not call other tools; report it.")
 	i := f.approval()
 	f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionFullAccess))
 	current := f.view()
@@ -379,7 +379,7 @@ func ollamaInterleavePermissionHistory(f *ollamaTaskFixture) {
 		f.finish(prefix+"-readonly", "Create forbidden-history.txt containing BLOCKED if your current tools permit it. Otherwise explain which command execution and file mutation tools are unavailable. Do not request user input or approval.", "")
 		f.missing("forbidden-history.txt")
 		f.check(f.svc.SetThreadPermissionType(f.ctx, f.meta, f.threadID, config.AIPermissionApprovalRequired))
-		prompt := fmt.Sprintf("Use terminal.exec exactly once to execute: printf 'APPROVED_%d\\n' >> permission-history.txt; printf %s . After it succeeds, explain transactions in three sentences. The append must run only once. Do not call other tools.", cycle, committed)
+		prompt := fmt.Sprintf("Use terminal_exec exactly once to execute: printf 'APPROVED_%d\\n' >> permission-history.txt; printf %s . After it succeeds, explain transactions in three sentences. The append must run only once. Do not call other tools.", cycle, committed)
 		f.send(prefix+"-cancel-on-shutdown", prompt)
 		approval := f.approval()
 		f.restart()
@@ -499,7 +499,7 @@ func ollamaInterleaveRoots(f *ollamaTaskFixture) {
 	other, err := f.svc.CreateThread(f.ctx, f.meta, "Independent root", f.opts.Config.CurrentModelID, "", f.root)
 	f.check(err)
 	f.threadID = other.ThreadID
-	f.send("root-b-active", "Use terminal.exec with yield_ms 30000 to execute: printf STARTED > other-started.txt; sleep 5; printf 'OTHER_OK\\n' > other-done.txt . Verify the result and finish.")
+	f.send("root-b-active", "Use terminal_exec with yield_ms 30000 to execute: printf STARTED > other-started.txt; sleep 5; printf 'OTHER_OK\\n' > other-done.txt . Verify the result and finish.")
 	f.wait("independent root started", func(*FlowerThreadDetail) bool {
 		_, err := os.Stat(filepath.Join(f.root, "other-started.txt"))
 		return err == nil
@@ -516,12 +516,12 @@ func ollamaInterleaveRoots(f *ollamaTaskFixture) {
 }
 
 func ollamaInterleaveChildRestart(f *ollamaTaskFixture) {
-	f.send("child-restart", fmt.Sprintf("Spawn exactly one worker child named Interleaved Audit with mission_only context. Its mission: use terminal.exec with yield_ms 30000 to run 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-late.txt', then finish. Wait for that child. Do not spawn another child.", f.root, f.root))
+	f.send("child-restart", fmt.Sprintf("Spawn exactly one worker child named Interleaved Audit with mission_only context. Its mission: use terminal_exec with yield_ms 30000 to run 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-late.txt', then finish. Wait for that child. Do not spawn another child.", f.root, f.root))
 	f.wait("child terminal running", func(*FlowerThreadDetail) bool {
 		_, err := os.Stat(filepath.Join(f.root, "child-started.txt"))
 		return err == nil
 	})
-	q := f.send("child-parent-next", "The old delegated task is cancelled. Do not spawn or resume children. Use terminal.exec to execute: printf 'PARENT_NEW\\n' > parent-new.txt . Verify that file and finish.")
+	q := f.send("child-parent-next", "The old delegated task is cancelled. Do not spawn or resume children. Use terminal_exec to execute: printf 'PARENT_NEW\\n' > parent-new.txt . Verify that file and finish.")
 	children := f.children()
 	if len(children) != 1 {
 		f.t.Fatal("expected exactly one child")

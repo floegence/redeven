@@ -138,7 +138,7 @@ describe('Flower bottom decision surface', () => {
   it('does not describe a computer write effect as modifying files', async () => {
     const current: FlowerRuntimeCurrentView = { ...decisionFixtures.approval_date as FlowerRuntimeCurrentView,
       interactions: [{ ...decisionFixtures.approval_date.interactions[0], kind: 'approval',
-        approval: { label: 'Click the selected control', effects: ['write'], tool_name: 'computer.click', tool_call_id: 'decision-call' } }] };
+        approval: { label: 'Click the selected control', effects: ['write'], tool_name: 'computer_click', tool_call_id: 'decision-call' } }] };
     const waiting = applyFlowerRuntimeCurrentView(thread({ thread_id: current.thread_id }), current);
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [waiting]), loadThread: vi.fn(async () => ({ thread: waiting, current })) });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fixture"] button')));
@@ -153,7 +153,7 @@ describe('Flower bottom decision surface', () => {
     origin: 'main_tool' as const,
     run_id: 'run-decision-surface',
     tool_id: `tool-${id}`,
-    tool_name: 'terminal.exec',
+    tool_name: 'terminal_exec',
     state: 'requested' as const,
     status: 'pending' as const,
     requested_at_ms: 20_000,
@@ -503,7 +503,7 @@ describe('Flower bottom decision surface', () => {
       origin: 'main_tool' as const,
       run_id: 'run-decision-surface',
       tool_id: 'tool-decision-surface',
-      tool_name: 'terminal.exec',
+      tool_name: 'terminal_exec',
       state: 'requested' as const,
       status: 'pending' as const,
       revision: 3,
@@ -618,7 +618,7 @@ describe('Flower bottom decision surface', () => {
     expect(surface.textContent).not.toContain('Review before this runs');
     expect(surface.querySelector('.flower-approval-question')).toBeNull();
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
-    expect(surface.textContent).not.toContain('terminal.exec');
+    expect(surface.textContent).not.toContain('terminal_exec');
     expect(surface.querySelector('.flower-approval-operation-label')?.textContent).toContain('Validate the release endpoint');
     expect(surface.querySelector('.flower-approval-operation-description')).toBeNull();
     expect(surface.querySelector('.flower-approval-risk')?.textContent).not.toContain('Validate the release endpoint');
@@ -811,7 +811,7 @@ describe('Flower bottom decision surface', () => {
       origin: 'main_tool' as const,
       run_id: 'run-preserved-draft',
       tool_id: 'tool-preserved-draft',
-      tool_name: 'terminal.exec',
+      tool_name: 'terminal_exec',
       state: 'requested' as const,
       status: 'pending' as const,
       revision: 1,

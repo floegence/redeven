@@ -16,6 +16,8 @@ import (
 
 	"github.com/floegence/redeven/internal/ai/agentplugins"
 	"golang.org/x/net/http/httpguts"
+
+	"github.com/floegence/redeven/internal/ai/toolnames"
 )
 
 func pluginServerID(id, key string) string {
@@ -29,7 +31,7 @@ func pluginMCPToolName(server mcpServerRecord, tool mcpToolRecord) string {
 		Tool                                   mcpToolRecord
 	}{server.pluginID, server.pluginDigest, server.componentKey, server.credentialRef, server.Revision, tool})
 	h := sha256.Sum256(b)
-	return "mcp_" + server.ID + "_" + hex.EncodeToString(h[:8])
+	return toolnames.MCP("mcp_" + server.ID + "_" + hex.EncodeToString(h[:8]))
 }
 func (m *mcpManager) allServersLocked() []mcpServerRecord {
 	out := append([]mcpServerRecord{}, m.servers...)

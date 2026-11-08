@@ -24,10 +24,10 @@ func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) (re
 			resourceErr = &fltools.PreparationError{Code: string(failure.Code), Message: failure.Message + " Tool execution has not started; no action was executed.", Cause: resourceErr}
 		}
 	}()
-	if inv.Name == "computer.targets" {
+	if inv.Name == "computer_list_targets" {
 		return []fltools.ResourceRef{{Kind: "computer_inventory", Value: string(inv.ThreadID)}}, nil
 	}
-	if inv.Name == "computer.select_target" {
+	if inv.Name == "computer_select_target" {
 		host, ok := r.targetToolExecutor.(*ComputerUseRuntime)
 		if !ok {
 			return nil, errors.New("computer runtime is unavailable")
@@ -65,7 +65,7 @@ func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) (re
 		return nil, &targetToolPolicyError{code: "target_not_allowed", tool: inv.Name, target: target.ID}
 	}
 	resources = []fltools.ResourceRef{{Kind: "computer_target", Value: target.ID}}
-	if inv.Name == "browser.navigate" {
+	if inv.Name == "browser_navigate" {
 		u, err := parseComputerNavigationURL(anyToString(inv.Args["url"]))
 		if err != nil {
 			return nil, errors.New("invalid browser navigation URL")

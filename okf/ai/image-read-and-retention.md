@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-image.read inspects authorized files/snapshots. File references stay references; results use native
+image_read inspects authorized files/snapshots. File references stay references; results use native
 images, not browsers, temporary servers or Base64 result JSON. One in-process media gate protects writes and the complete canonical inventory through deletion, following Floret's published retention contract.
 
 # Contract
@@ -23,7 +23,7 @@ images, not browsers, temporary servers or Base64 result JSON. One in-process me
 - Locator-only crop accepts integer x/y/width/height within original image pixels,
   never clips, and saves a new lossless PNG with source_crop metadata. It uses
   fresh canonical authorization. Image pixels differ from CSS action coordinates.
-- image.read stores original snapshots, while every model input (including crops
+- image_read stores original snapshots, while every model input (including crops
   and summaries) uses [default model preparation](computer-use-media.md). Original
   locators remain available for detail crops; no durable derivative cache exists.
 - Floret preserves every image in ordered summary batches; capacity failures shrink

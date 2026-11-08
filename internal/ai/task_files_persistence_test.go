@@ -27,9 +27,9 @@ func TestTaskFilesCanonicalDeliverySurvivesForkAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	gateway := florettest.NewScriptedGateway(provider.Identity{Provider: "test", Model: "files", StateCompatibilityKey: "files:v1"}, provider.Capabilities{Reasoning: provider.ReasoningUnsupported},
-		florettest.Step{Events: []provider.Event{{Type: provider.EventToolCalls, ToolCalls: []provider.ToolCall{{ID: "present", Name: "file.present", Args: "{}"}}}, {Type: provider.EventDone, Reason: "tool_calls"}}},
+		florettest.Step{Events: []provider.Event{{Type: provider.EventToolCalls, ToolCalls: []provider.ToolCall{{ID: "present", Name: "file_present", Args: "{}"}}}, {Type: provider.EventDone, Reason: "tool_calls"}}},
 		florettest.Step{Events: []provider.Event{{Type: provider.EventDelta, Text: "Report delivered."}, {Type: provider.EventDone, Reason: "stop"}}})
-	tool := fltools.Define[map[string]any](fltools.Definition{Name: "file.present", InputSchema: fltools.StrictObject(nil, nil), ReadOnly: true, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, call fltools.Invocation[map[string]any]) (fltools.Result, error) {
+	tool := fltools.Define[map[string]any](fltools.Definition{Name: "file_present", InputSchema: fltools.StrictObject(nil, nil), ReadOnly: true, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, call fltools.Invocation[map[string]any]) (fltools.Result, error) {
 		r := newRun(runOptions{StateDir: svc.stateDir, AgentHomeDir: svc.agentHomeDir, WorkingDir: svc.agentHomeDir, FilesystemScope: svc.scope, ThreadID: call.ThreadID.String(), RunID: call.RunID.String(), TurnID: call.TurnID.String(), EndpointID: meta.EndpointID})
 		if err := r.observeFloretCanonicalIdentity(call.RunID.String(), call.ThreadID.String(), call.TurnID.String()); err != nil {
 			return fltools.Result{}, err

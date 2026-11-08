@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/floegence/redeven/internal/ai/toolnames"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -17,13 +18,7 @@ const (
 	toolResultStatusTimeout = "timeout"
 )
 
-var sourceRank = map[string]int{
-	"floret":   5,
-	"builtin":  4,
-	"mcp":      3,
-	"skill":    2,
-	"subagent": 1,
-}
+func validateCallableToolName(name string) error { return toolnames.Validate(name) }
 
 type InMemoryToolRegistry struct {
 	mu    sync.RWMutex
@@ -42,11 +37,20 @@ func (r *InMemoryToolRegistry) Register(tool ToolDef) error {
 	if name == "" {
 		return errors.New("tool name is required")
 	}
+	if err := validateCallableToolName(name); err != nil {
+		return err
+	}
 	tool.Name = name
 	tool = normalizeToolPermissionMetadata(tool)
 	tool.Source = strings.ToLower(strings.TrimSpace(tool.Source))
 	if tool.Source == "" {
 		tool.Source = "builtin"
+	}
+	if toolnames.IsFirstParty(name) && tool.Source != "builtin" && tool.Source != "floret" {
+		return fmt.Errorf("tool_registry_conflict: first-party name %q is reserved", name)
+	}
+	if strings.HasPrefix(name, "mcp_") && tool.Source != "mcp" {
+		return fmt.Errorf("tool_registry_conflict: MCP namespace is reserved")
 	}
 	if tool.Namespace == "" {
 		tool.Namespace = "builtin"
@@ -58,35 +62,11 @@ func (r *InMemoryToolRegistry) Register(tool ToolDef) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if existing, ok := r.tools[name]; ok {
-		replace, err := shouldReplaceTool(existing, tool)
-		if err != nil {
-			return err
-		}
-		if !replace {
-			return nil
-		}
+	if _, ok := r.tools[name]; ok {
+		return fmt.Errorf("tool_registry_conflict: duplicate tool %q", name)
 	}
 	r.tools[name] = tool
 	return nil
-}
-
-func shouldReplaceTool(existing ToolDef, candidate ToolDef) (bool, error) {
-	if candidate.Priority > existing.Priority {
-		return true, nil
-	}
-	if candidate.Priority < existing.Priority {
-		return false, nil
-	}
-	existingRank := sourceRank[strings.ToLower(strings.TrimSpace(existing.Source))]
-	candidateRank := sourceRank[strings.ToLower(strings.TrimSpace(candidate.Source))]
-	if candidateRank > existingRank {
-		return true, nil
-	}
-	if candidateRank < existingRank {
-		return false, nil
-	}
-	return false, fmt.Errorf("tool_registry_conflict: duplicate tool %q with same priority/source", existing.Name)
 }
 
 func (r *InMemoryToolRegistry) Unregister(name string) error {

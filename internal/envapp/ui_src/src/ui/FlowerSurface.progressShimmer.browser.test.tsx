@@ -57,7 +57,7 @@ describe('Flower progress shimmer', () => {
       messages: [{
         id: 'message-progress', turn_id: 'turn-progress', role: 'assistant', content: '', status: 'streaming', created_at_ms: 1,
         blocks: [activityTimeline({ thread_id: threadID, run_id: runID, turn_id: 'turn-progress', status: 'running', items: statuses.map((status, i) => activityItem({
-          item_id: `tool-${i}`, tool_id: `tool-${i}`, tool_name: i === 1 ? 'terminal.exec' : 'web_fetch', status, label: i === 1 ? 'Run command' : 'Web fetch', renderer: i === 1 ? 'terminal' : 'web_fetch',
+          item_id: `tool-${i}`, tool_id: `tool-${i}`, tool_name: i === 1 ? 'terminal_exec' : 'web_fetch', status, label: i === 1 ? 'Run command' : 'Web fetch', renderer: i === 1 ? 'terminal' : 'web_fetch',
           description: i === 1 ? 'node scripts/verify-progress.mjs --theme classic-light --material soft-neumorphic --include-long-translated-status' : undefined,
           payload: i === 1
             ? { operation: 'exec', command: 'node scripts/verify-progress.mjs --theme classic-light --material soft-neumorphic --include-long-translated-status', output: 'Verifying progress' }

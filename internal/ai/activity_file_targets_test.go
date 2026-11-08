@@ -18,7 +18,7 @@ import (
 )
 
 func TestFileActivityTargetsConfirmedExecution(t *testing.T) {
-	for _, name := range []string{"read_file", "file.write", "image.read"} {
+	for _, name := range []string{"file_read", "file_write", "image_read"} {
 		t.Run(name, func(t *testing.T) {
 			for _, status := range []string{"success", "error", "aborted", "rejected"} {
 				if status == "rejected" {
@@ -49,7 +49,7 @@ func TestFileActivityTargetsConfirmedExecution(t *testing.T) {
 func TestFileActivityTargetsOwnBatchResource(t *testing.T) {
 	activity := &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererStructured, Payload: fltools.StructuredActivityPayload{}}
 	files := []any{map[string]any{"path": "/one/a.txt", "error": "not found"}, map[string]any{"path": "/two/a.txt", "result": map[string]any{"file_path": "/two/a.txt", "content": "confirmed"}}}
-	applyFileActivityTargets(activity, "read_files", map[string]any{"files": files})
+	applyFileActivityTargets(activity, "file_read_many", map[string]any{"files": files})
 	rows := activity.Payload.(fltools.StructuredActivityPayload).Rows
 	if len(rows) != 2 || rows[0].Target != nil || rows[1].Target == nil || rows[1].Target.Path != "/two/a.txt" {
 		t.Fatalf("rows=%+v", rows)
@@ -58,13 +58,13 @@ func TestFileActivityTargetsOwnBatchResource(t *testing.T) {
 	for i := 0; i < structuredActivityRowLimit+2; i++ {
 		files = append(files, map[string]any{"result": map[string]any{"file_path": fmt.Sprintf("/file-%d", i), "content": "x"}})
 	}
-	applyFileActivityTargets(activity, "read_files", map[string]any{"files": files})
+	applyFileActivityTargets(activity, "file_read_many", map[string]any{"files": files})
 	rows = activity.Payload.(fltools.StructuredActivityPayload).Rows
 	if len(rows) != structuredActivityRowLimit || rows[len(rows)-1].Target.Path != fmt.Sprintf("/file-%d", structuredActivityRowLimit-1) {
 		t.Fatalf("bounded row target shifted: %+v", rows[len(rows)-1])
 	}
 	patch := &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererPatch, Payload: fltools.PatchActivityPayload{}}
-	applyFileActivityTargets(patch, "apply_patch", map[string]any{"mutations": []any{
+	applyFileActivityTargets(patch, "file_apply_patch", map[string]any{"mutations": []any{
 		map[string]any{"file_path": "/old/a.txt", "old_path": "/old/a.txt", "new_path": "/new/a.txt", "change_type": "move"},
 		map[string]any{"file_path": "/gone/a.txt", "old_path": "/gone/a.txt", "change_type": "delete"},
 	}})
@@ -72,7 +72,7 @@ func TestFileActivityTargetsOwnBatchResource(t *testing.T) {
 	if mutations[0].Target.Path != "/new/a.txt" || mutations[1].Target.Kind != "directory" || mutations[1].Target.Path != "/gone" {
 		t.Fatalf("mutations=%+v", mutations)
 	}
-	for _, name := range []string{"read_file", "read_files", "apply_patch"} {
+	for _, name := range []string{"file_read", "file_read_many", "file_apply_patch"} {
 		p := &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererFile, Payload: fltools.FileActivityPayload{}}
 		applyFileActivityTargets(p, name, map[string]any{"target_id": "remote", "file_path": "/remote/a.txt"})
 		if len(p.TargetRefs) != 0 {
@@ -117,7 +117,7 @@ func (r *fileTargetQueryRuntime) Read(_ context.Context, scope threadquery.Scope
 	return threadquery.ReadPage{}, errors.New("unknown ref")
 }
 func TestHydrateFileActivityTargetsExactCanonicalIdentity(t *testing.T) {
-	for _, toolName := range []string{"read_file", "file.edit"} {
+	for _, toolName := range []string{"file_read", "file.edit"} {
 		t.Run(toolName, func(t *testing.T) {
 			svc := newTestService(t, &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}})
 			meta := testSendTurnMeta()
@@ -164,9 +164,9 @@ func TestHistoricalBatchTargetsRequireExactTypedEvidence(t *testing.T) {
 		map[string]any{"path": "/first/same.txt", "error": "not found"},
 		map[string]any{"path": "/second/same.txt", "result": map[string]any{"file_path": "/second/same.txt", "content": "confirmed"}},
 	}}
-	rows := structuredToolResults("read_files", data, nil)
+	rows := structuredToolResults("file_read_many", data, nil)
 	activity := &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererStructured, Payload: fltools.StructuredActivityPayload{Rows: rows, Summary: "original summary", RowsProvided: true}}
-	mergeHistoricalFileActivityTargets(activity, "read_files", data)
+	mergeHistoricalFileActivityTargets(activity, "file_read_many", data)
 	result := activity.Payload.(fltools.StructuredActivityPayload)
 	if result.Summary != "original summary" || !result.RowsProvided || len(result.Rows) != 2 || result.Rows[0].Target != nil || result.Rows[1].Target == nil || result.Rows[1].Target.Path != "/second/same.txt" {
 		t.Fatalf("historical batch=%+v", result)
@@ -179,7 +179,7 @@ func TestHistoricalBatchTargetsRequireExactTypedEvidence(t *testing.T) {
 	payload.Rows[1].Content = "different historical snapshot"
 	changed.Payload = payload
 	before, _ := json.Marshal(changed)
-	mergeHistoricalFileActivityTargets(&changed, "read_files", data)
+	mergeHistoricalFileActivityTargets(&changed, "file_read_many", data)
 	after, _ := json.Marshal(changed)
 	if string(before) != string(after) {
 		t.Fatal("unproven historical rows changed")
@@ -201,7 +201,7 @@ func TestHistoricalFileTargetsReauthorizeEveryCanonicalRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	item := flruntime.ThreadItem{ID: "item", Kind: flruntime.ThreadItemTool, TurnID: "turn", RunID: "run", Activity: &observation.ActivityItem{ToolID: "call", ToolName: "read_file", Status: observation.ActivityStatusSuccess, Presentation: &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererFile, Payload: fltools.FileActivityPayload{}}}}
+	item := flruntime.ThreadItem{ID: "item", Kind: flruntime.ThreadItemTool, TurnID: "turn", RunID: "run", Activity: &observation.ActivityItem{ToolID: "call", ToolName: "file_read", Status: observation.ActivityStatusSuccess, Presentation: &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererFile, Payload: fltools.FileActivityPayload{}}}}
 	runtime := &fileTargetQueryRuntime{
 		queryHook: func(scope threadquery.Scope, _ threadquery.QueryInput) (threadquery.Page, error) {
 			want, _ := json.Marshal([]string{meta.UserPublicID, meta.EndpointID, meta.NamespacePublicID})
@@ -209,7 +209,7 @@ func TestHistoricalFileTargetsReauthorizeEveryCanonicalRead(t *testing.T) {
 				t.Fatalf("authority=%q", scope.Authority)
 			}
 			meta.CanRead = false
-			return threadquery.Page{Records: []threadquery.Record{{Ref: "result", ThreadID: identity.ThreadID(thread.ThreadID), TurnID: "turn", RunID: "run", ToolCallID: "call", ToolName: "read_file", Status: "success"}}}, nil
+			return threadquery.Page{Records: []threadquery.Record{{Ref: "result", ThreadID: identity.ThreadID(thread.ThreadID), TurnID: "turn", RunID: "run", ToolCallID: "call", ToolName: "file_read", Status: "success"}}}, nil
 		},
 	}
 	svc.threadRuntime = runtime
@@ -227,8 +227,8 @@ func TestHistoricalFileTargetsValidateEveryResultChunk(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			item := flruntime.ThreadItem{ID: "item", Kind: flruntime.ThreadItemTool, TurnID: "turn", RunID: "run", Activity: &observation.ActivityItem{ToolID: "call", ToolName: "read_file", Status: observation.ActivityStatusSuccess, Presentation: &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererFile, Payload: fltools.FileActivityPayload{}}}}
-			record := threadquery.Record{Ref: "result", ThreadID: identity.ThreadID(thread.ThreadID), TurnID: "turn", RunID: "run", ToolCallID: "call", ToolName: "read_file", Status: "success"}
+			item := flruntime.ThreadItem{ID: "item", Kind: flruntime.ThreadItemTool, TurnID: "turn", RunID: "run", Activity: &observation.ActivityItem{ToolID: "call", ToolName: "file_read", Status: observation.ActivityStatusSuccess, Presentation: &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererFile, Payload: fltools.FileActivityPayload{}}}}
+			record := threadquery.Record{Ref: "result", ThreadID: identity.ThreadID(thread.ThreadID), TurnID: "turn", RunID: "run", ToolCallID: "call", ToolName: "file_read", Status: "success"}
 			first := "{\"status\":\"success\",\"data\":{\"file_path\":"
 			runtime := &fileTargetQueryRuntime{records: []threadquery.Record{record}}
 			runtime.readHook = func(_ threadquery.Scope, input threadquery.ReadInput) (threadquery.ReadPage, error) {

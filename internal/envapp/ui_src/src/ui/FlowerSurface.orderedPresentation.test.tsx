@@ -48,7 +48,7 @@ function orderedCurrent(stage: 'waiting' | 'running' | 'completed'): FlowerRunti
       {
         id: 'tool:ordered', turn_id: 'turn-ordered-dom', run_id: 'run-fixture', ordinal: 3, kind: 'tool',
         activity: {
-          item_id: 'tool:ordered', tool_id: 'call-ordered', tool_name: 'terminal.exec', kind: 'tool', status,
+          item_id: 'tool:ordered', tool_id: 'call-ordered', tool_name: 'terminal_exec', kind: 'tool', status,
           severity: 'quiet', needs_attention: stage === 'waiting', requires_approval: stage === 'waiting',
           presentation: { label: 'Run command', renderer: 'terminal', payload: { command: 'printf ordered' } },
         },

@@ -100,7 +100,7 @@ describe('Flower navigation intent', () => {
   it('blocks old composer Stop and approval actions while the rail points at another thread', async () => {
     const waiting = thread({ ...summaries[0], status: 'waiting_approval', permission_type: 'approval_required',
       approval_actions: [{ action_id: 'approval-date', turn_id: 'turn-fixture', run_id: 'run-fixture', origin: 'main_tool',
-        tool_id: 'tool-date', tool_name: 'terminal.exec', state: 'requested', status: 'pending', requested_at_ms: 1,
+        tool_id: 'tool-date', tool_name: 'terminal_exec', state: 'requested', status: 'pending', requested_at_ms: 1,
         can_approve: true, summary: { label: 'Check date', command: 'date', targets: [] } }],
     });
     const stopThread = vi.fn(adapter(true).stopThread);

@@ -8,7 +8,7 @@ import { FlowerToolIcon } from '../../../../flower_ui/src/FlowerToolIcon';
 import { flowerToolMotion } from '../../../../flower_ui/src/flowerToolMotion';
 import { waitFor } from './FlowerSurface.navigation.testHarness';
 
-const editTools = ['file.write', 'apply_patch', 'tessiven.edit'];
+const editTools = ['file_write', 'file_apply_patch', 'tessiven_edit_canvas'];
 
 it('keeps the pencil tip on the revealed stroke and lifts it for the return', async () => {
   await page.viewport(1000, 760);
@@ -29,7 +29,7 @@ it('keeps the pencil tip on the revealed stroke and lifts it for the return', as
     const animations = icons.map(icon => icon.getAnimations({ subtree: true }));
     expect(animations.every(tracks => tracks.length === 2)).toBe(true);
     animations.flat().forEach(animation => animation.pause());
-    const sample = (phase: number) => animations.flat().forEach(animation => { animation.currentTime = flowerToolMotion['file.write'].cycle * phase; });
+    const sample = (phase: number) => animations.flat().forEach(animation => { animation.currentTime = flowerToolMotion['file_write'].cycle * phase; });
     const expectPencilInside = (svg: SVGSVGElement) => {
       const pencil = svg.querySelector<SVGPathElement>('[data-flower-writing-part="pencil"]')!;
       const box = pencil.getBBox();

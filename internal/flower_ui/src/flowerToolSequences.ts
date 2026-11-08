@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import { isPresentedToolFailure } from './computerActivityOutcome';
 import { createComputed, createMemo, createSignal, mapArray, untrack, type Accessor } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
@@ -24,11 +25,11 @@ type SequenceToken = SequenceNode | { outputScope: string; contentKey: string } 
 type MessageEntry = Extract<FlowerTimelineEntry, { type: 'message' }>;
 const sequenceInputs = new WeakMap<FlowerToolSequence, Readonly<{ nodes: readonly SequenceNode[]; entries: readonly FlowerTimelineEntry[]; settled: boolean; trailing: boolean }>>();
 
-const sequenceBoundaryToolNames = new Set(['ask_user']);
+const sequenceBoundaryToolNames = new Set(['user_ask']);
 const sequenceableParentEventKinds = new Set(['report', 'completed', 'failed', 'cancelled', 'interrupted', 'timed_out']);
 
 function isSequenceTool(toolName: string | undefined): boolean {
-  return !sequenceBoundaryToolNames.has(toolName ?? '');
+  return !sequenceBoundaryToolNames.has(historicalToolName(toolName ?? ''));
 }
 
 export type FlowerToolSequence = Readonly<{
@@ -111,7 +112,7 @@ function messageSequenceTokens(entry: MessageEntry,
         const presentedFailure = isPresentedToolFailure(item);
         const uncertain = item.status === 'unknown' || Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
         const attentionReasons = item.attention_reasons ?? [];
-        const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
+        const subagentWait = item.tool_name === 'subagent_manage' && item.renderer === 'subagent_operation'
           && (item.field_summary?.action ?? item.payload?.action) === 'wait' && (item.status === 'running' || item.status === 'waiting');
         const runningAttention = item.status === 'running' && attentionReasons.length > 0
           && attentionReasons.every(reason => reason === 'running');

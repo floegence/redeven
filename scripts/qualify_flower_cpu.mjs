@@ -99,8 +99,8 @@ if (process.argv.includes('--build')) {
           await page.locator('main[data-flower-selected-thread-id=' + JSON.stringify(id) + '][data-flower-selected-thread-loading="false"]').waitFor();
         }
       }
-      await page.locator('button[aria-controls="flower-subagents-dropdown"]').click();
-      const ended = page.locator('.flower-subagents-dropdown-disclosure');
+      await page.locator('button[aria-controls="flower-subagent_manage-dropdown"]').click();
+      const ended = page.locator('.flower-subagent_manage-dropdown-disclosure');
       if (await ended.count() && await ended.getAttribute('aria-expanded') === 'false') await ended.click();
       await page.locator('[data-flower-subagent-row]').first().click();
       await page.locator(bodySelector + '[data-flower-message-id]').first().waitFor();

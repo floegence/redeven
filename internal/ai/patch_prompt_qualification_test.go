@@ -11,15 +11,15 @@ func patchPromptQualificationCases() []promptQualificationCase {
 	const before = "roof=1\nkeep-a\nwater=2\nkeep-b\nsun=3\n"
 	const after = "roof=10\nkeep-a\nwater=20\nkeep-b\nsun=30\n"
 	const path = "/workspace/demo/scene.txt"
-	const input = "The current file /workspace/demo/scene.txt was just read and its complete content is roof=1, keep-a, water=2, keep-b, sun=3 on separate lines, with a final newline. All applicable repository rules are already read; no additional requirements apply. Use a single apply_patch call to change sun to 30, roof to 10, and water to 20, preserving the keep lines. The path and current content are confirmed; submit the edit now."
+	const input = "The current file /workspace/demo/scene.txt was just read and its complete content is roof=1, keep-a, water=2, keep-b, sun=3 on separate lines, with a final newline. All applicable repository rules are already read; no additional requirements apply. Use a single file_apply_patch call to change sun to 30, roof to 10, and water to 20, preserving the keep lines. The path and current content are confirmed; submit the edit now."
 	patch := func(body string) string {
 		return "*** Begin Patch\n*** Update File: " + path + "\n" + body + "\n*** End Patch"
 	}
 	backwards := patch("@@ keep-b\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20")
 	duplicate := patch("@@\n-roof=1\n+roof=10\n*** Update File: " + path + "\n@@\n-water=2\n+water=20\n@@\n-sun=3\n+sun=30")
 	check := func(result ModelGatewayResult) error {
-		if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "apply_patch" {
-			return fmt.Errorf("expected one apply_patch call")
+		if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "file_apply_patch" {
+			return fmt.Errorf("expected one file_apply_patch call")
 		}
 		text, _ := result.ToolCalls[0].Args["input"].(string)
 		parsed, err := parsePatchText(text)
@@ -36,7 +36,7 @@ func patchPromptQualificationCases() []promptQualificationCase {
 		}
 		return nil
 	}
-	cases := []promptQualificationCase{{name: "patch_ordered_chunks", input: input, wantTools: []string{"apply_patch"}, check: check}}
+	cases := []promptQualificationCase{{name: "patch_ordered_chunks", input: input, wantTools: []string{"file_apply_patch"}, check: check}}
 	for _, fixture := range []struct{ name, text string }{{"patch_order_recovery", backwards}, {"patch_duplicate_recovery", duplicate}} {
 		parsed, err := parsePatchText(fixture.text)
 		if err != nil {
@@ -51,7 +51,7 @@ func patchPromptQualificationCases() []promptQualificationCase {
 		failure := patchToolError(&patchApplyError{cause: diagnostic})
 		args, _ := json.Marshal(map[string]any{"input": fixture.text})
 		result, _ := json.Marshal(map[string]any{"status": "error", "error": failure})
-		cases = append(cases, promptQualificationCase{name: fixture.name, input: input, history: promptQualificationReceipt("apply_patch", string(args), string(result)), wantTools: []string{"apply_patch"}, check: check})
+		cases = append(cases, promptQualificationCase{name: fixture.name, input: input, history: promptQualificationReceipt("file_apply_patch", string(args), string(result)), wantTools: []string{"file_apply_patch"}, check: check})
 	}
 	return cases
 }
@@ -74,7 +74,7 @@ func TestPatchPromptQualificationRejectsInvalidEdits(t *testing.T) {
 			{"out_of_order", map[string]any{"input": "*** Begin Patch\n*** Update File: /workspace/demo/scene.txt\n@@\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20\n*** End Patch"}, true},
 		} {
 			t.Run(tc.name+"/"+trial.name, func(t *testing.T) {
-				result := ModelGatewayResult{ToolCalls: []ToolCall{{Name: "apply_patch", Args: trial.args}}}
+				result := ModelGatewayResult{ToolCalls: []ToolCall{{Name: "file_apply_patch", Args: trial.args}}}
 				issues := evaluatePromptQualificationResponse(t, tc, defs, result)
 				if (len(issues) == 0) != trial.valid {
 					t.Fatalf("valid=%v issues=%v", trial.valid, issues)

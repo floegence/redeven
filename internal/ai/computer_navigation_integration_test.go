@@ -76,7 +76,7 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 		name, args := "", map[string]any{}
 		switch step {
 		case 1:
-			name = "computer_targets"
+			name = "computer_list_targets"
 		case 2:
 			if candidate == "" {
 				t.Error("missing browser candidate")
@@ -100,7 +100,7 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 		}
 		if args["description"] == nil {
 			args["description"] = map[string]string{
-				"computer_targets":       "Find available task browser pages",
+				"computer_list_targets":  "Find available task browser pages",
 				"computer_select_target": "Select the discovered task page",
 				"computer_observe":       "Inspect the page after navigation failed",
 			}[name]

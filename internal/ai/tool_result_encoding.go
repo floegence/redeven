@@ -67,7 +67,7 @@ func encodeModelToolResult(result ToolResult) (encodedModelToolResult, error) {
 		}
 	}
 	prepared := result
-	if result.ToolName == "computer.exec" {
+	if result.ToolName == "computer_exec" {
 		if data, ok := result.Data.(map[string]any); ok && data["observation"] != nil {
 			for index, raw := range toAnySlice(data["observations"]) {
 				emitted, _ := raw.(map[string]any)

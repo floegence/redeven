@@ -43,12 +43,12 @@ func TestComputerAnimationProviderEvidenceQualification(t *testing.T) {
 		t.Fatal(err)
 	}
 	url, _ := json.Marshal("file://" + fixture)
-	call := TargetToolCall{ThreadID: "animation", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "animation", ToolName: "computer.exec", fullAccess: true, revalidate: func(ctx context.Context) error { return ctx.Err() }}
+	call := TargetToolCall{ThreadID: "animation", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "animation", ToolName: "computer_exec", fullAccess: true, revalidate: func(ctx context.Context) error { return ctx.Err() }}
 	result, err := executeTestScript(t.Context(), host, call, "await browser.navigate("+string(url)+"); await ui.getByRole('button',{name:'Pause animation',exact:true}).click(); await ui.observe({full:true});")
 	if err != nil {
 		t.Fatalf("animation: %+v %v", result, err)
 	}
-	published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "animation", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result})
+	published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "animation", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: result.Result})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 		t.Fatalf("browser readiness: %+v %v", target, err)
 	}
 	owner := &run{stateDir: t.TempDir(), threadID: "examples"}
-	call := TargetToolCall{ThreadID: "examples", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "examples", ToolName: "computer.exec", fullAccess: true, downloadWriter: owner.saveComputerDownload, revalidate: func(ctx context.Context) error { return ctx.Err() }}
+	call := TargetToolCall{ThreadID: "examples", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "examples", ToolName: "computer_exec", fullAccess: true, downloadWriter: owner.saveComputerDownload, revalidate: func(ctx context.Context) error { return ctx.Err() }}
 	execute := func(code string) TargetToolResult {
 		t.Helper()
 		result, err := executeTestScript(t.Context(), host, call, code)
@@ -133,7 +133,7 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 	if textObservation["encoding"] != "tree_text" || textObservation["nodes"] != nil || !strings.Contains(textObservation["tree"].(string), "Export domains") {
 		t.Fatalf("real-browser model observation: %+v", textObservation)
 	}
-	published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: "qualified-observation", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: payload})
+	published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: "qualified-observation", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: payload})
 	if publishErr != nil || !strings.Contains(published.Text, "tree_text") {
 		t.Fatalf("final provider boundary: %v", publishErr)
 	}
@@ -238,7 +238,7 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 	_, example, _ = strings.Cut(guide, "Example: ")
 	example, _, _ = strings.Cut(example, "\n")
 	large := execute(example)
-	published, publishErr = floretToolResultFromFlower(nil, ToolResult{ToolID: "large-example", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: large.Result})
+	published, publishErr = floretToolResultFromFlower(nil, ToolResult{ToolID: "large-example", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: large.Result})
 	if publishErr != nil {
 		t.Fatal(publishErr)
 	}

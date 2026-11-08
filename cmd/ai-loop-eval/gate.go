@@ -304,13 +304,13 @@ func firstWorkspaceScopeViolation(toolName string, calls []canonicalToolCall, wo
 
 func findWorkspaceScopeViolation(toolName string, args any, workspacePath string) string {
 	switch toolName {
-	case "terminal.exec":
+	case "terminal_exec":
 		return findTerminalExecWorkspaceScopeViolation(args, workspacePath)
-	case "apply_patch":
+	case "file_apply_patch":
 		return findApplyPatchWorkspaceScopeViolation(args, workspacePath)
-	case "file.read", "file.write":
+	case "file.read", "file_write":
 		return findStructuredFileToolWorkspaceScopeViolation(args, workspacePath)
-	case "read_file", "read_files", "find", "rgrep":
+	case "file_read", "file_read_many", "find", "file_search":
 		return findReadonlyToolWorkspaceScopeViolation(toolName, args, workspacePath)
 	}
 	return ""
@@ -392,9 +392,9 @@ func findReadonlyToolWorkspaceScopeViolation(toolName string, args any, workspac
 		return ""
 	}
 	switch toolName {
-	case "read_file":
+	case "file_read":
 		return validateOptionalToolPath(anyToString(obj["path"]), workspacePath)
-	case "read_files", "rgrep":
+	case "file_read_many", "file_search":
 		for _, candidate := range anyToStringSlice(obj["paths"]) {
 			if violation := validateOptionalToolPath(candidate, workspacePath); violation != "" {
 				return violation
@@ -628,7 +628,7 @@ func hasWriteTodosInProgressDiscipline(calls []canonicalToolCall) (bool, bool) {
 	sawUpdate := false
 	sawSingleInProgress := false
 	for _, call := range calls {
-		if normalizeName(call.ToolName) != "write_todos" || normalizeName(call.Status) != "success" {
+		if normalizeName(call.ToolName) != "todo_write" || normalizeName(call.Status) != "success" {
 			continue
 		}
 		items := parseWriteTodosArgs(call)

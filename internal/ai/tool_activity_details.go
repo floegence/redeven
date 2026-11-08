@@ -17,7 +17,7 @@ func structuredToolInputs(toolName string, args map[string]any, spec aitools.Too
 	if isThreadQueryTool(toolName) {
 		return nil
 	}
-	if toolName == "report_to_parent" {
+	if toolName == "subagent_report" {
 		// Preserve the complete allowed report, including leading whitespace.
 		// Code rows use the published byte budget rather than the text preview cap.
 		if message, ok := args["message"].(string); ok && message != "" {
@@ -25,7 +25,7 @@ func structuredToolInputs(toolName string, args map[string]any, spec aitools.Too
 		}
 		return nil
 	}
-	if toolName == "computer.exec" {
+	if toolName == "computer_exec" {
 		if code, ok := args["code"].(string); ok && code != "" {
 			return []fltools.StructuredActivityRow{toolDetailRow("", "", code, fltools.StructuredActivityRowFormatCode, "javascript", false)}
 		}
@@ -44,7 +44,7 @@ func structuredToolInputs(toolName string, args map[string]any, spec aitools.Too
 		if !exists || value == nil {
 			continue
 		}
-		if toolName == "tessiven.edit" && field == "edits" {
+		if toolName == "tessiven_edit_canvas" && field == "edits" {
 			diffs := []string{}
 			for _, value := range toAnySlice(value) {
 				edit, _ := value.(map[string]any)
@@ -55,7 +55,7 @@ func structuredToolInputs(toolName string, args map[string]any, spec aitools.Too
 			rows = append(rows, toolDetailRow("", "", strings.Join(diffs, "\n\n"), fltools.StructuredActivityRowFormatCode, "diff", false))
 			continue
 		}
-		if toolName == "tessiven.save" && field == "document_yaml" {
+		if toolName == "tessiven_save_canvas" && field == "document_yaml" {
 			rows = append(rows, toolDetailRow("", "", anyToString(value), fltools.StructuredActivityRowFormatCode, "yaml", false))
 			continue
 		}
@@ -135,38 +135,38 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 		return computerActivityResultRows(toolName, payload)
 	}
 	switch toolName {
-	case "file.present":
+	case "file_present":
 		add(anyToString(payload["title"]), fmt.Sprintf("%v bytes · %s", payload["size"], anyToString(payload["mime"])), anyToString(payload["file_path"]), fltools.StructuredActivityRowFormatText, "", false)
 		if len(rows) > 0 {
 			rows[0].Target = fileActivityTarget(anyToString(payload["file_path"]), "file")
 		}
-	case "tessiven.read":
+	case "tessiven_read_canvas":
 		add(anyToString(payload["title"]), fmt.Sprintf("v%v · %v–%v", payload["version"], payload["start_line"], payload["end_line"]), anyToString(payload["document_yaml"]), fltools.StructuredActivityRowFormatCode, "yaml", false)
 		for _, value := range toAnySlice(payload["diagnostics"]) {
 			diagnostic, _ := value.(map[string]any)
 			add(anyToString(diagnostic["path"]), "", anyToString(diagnostic["message"]), fltools.StructuredActivityRowFormatText, "", false)
 		}
-	case "tessiven.search":
+	case "tessiven_search_canvas":
 		for _, value := range toAnySlice(payload["matches"]) {
 			match, _ := value.(map[string]any)
 			add(anyToString(payload["title"]), fmt.Sprintf("%v", match["line"]), anyToString(match["text"]), fltools.StructuredActivityRowFormatCode, "yaml", readBoolField(match, "truncated"))
 		}
-	case "tessiven.save", "tessiven.edit":
+	case "tessiven_save_canvas", "tessiven_edit_canvas":
 		add(anyToString(payload["title"]), fmt.Sprintf("v%v", payload["version"]), anyToString(payload["summary"]), fltools.StructuredActivityRowFormatText, "", false)
-	case "tessiven.schema", "tessiven.validate":
+	case "tessiven_read_schema", "tessiven_validate_canvas":
 		raw, _ := json.MarshalIndent(value, "", "  ")
 		add("", "", string(raw), fltools.StructuredActivityRowFormatCode, "json", false)
-	case "tessiven.list":
+	case "tessiven_list_canvases":
 		for _, value := range toAnySlice(payload["canvases"]) {
 			canvas, _ := value.(map[string]any)
 			add(anyToString(canvas["title"]), fmt.Sprintf("v%v", canvas["latest_version"]), anyToString(canvas["description"]), fltools.StructuredActivityRowFormatText, "", false)
 		}
-	case "tessiven.versions":
+	case "tessiven_list_versions":
 		for _, value := range toAnySlice(value) {
 			version, _ := value.(map[string]any)
 			add(fmt.Sprintf("v%v", version["number"]), "", anyToString(version["summary"]), fltools.StructuredActivityRowFormatText, "", false)
 		}
-	case "rgrep":
+	case "file_search":
 		for _, value := range toAnySlice(payload["matches"]) {
 			match, _ := value.(map[string]any)
 			content := anyToString(match["text"])
@@ -180,12 +180,12 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 			}
 			add(firstNonEmptyString(anyToString(match["display_name"]), displayNameForFilePath(anyToString(match["path"]))), fmt.Sprint(readIntField(match, "line")), content, fltools.StructuredActivityRowFormatCode, "text", false)
 		}
-	case "find":
+	case "path_find":
 		for _, value := range toAnySlice(payload["results"]) {
 			item, _ := value.(map[string]any)
 			add(firstNonEmptyString(anyToString(item["display_name"]), displayNameForFilePath(anyToString(item["path"]))), "", "", fltools.StructuredActivityRowFormatText, "", false)
 		}
-	case "read_files":
+	case "file_read_many":
 		for _, value := range toAnySlice(payload["files"]) {
 			file, _ := value.(map[string]any)
 			result, _ := file["result"].(map[string]any)
@@ -200,7 +200,7 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 				rows[len(rows)-1].Target = fileActivityTarget(anyToString(result["file_path"]), "file")
 			}
 		}
-	case "use_skill":
+	case "skill_use":
 		add(anyToString(payload["name"]), anyToString(payload["reason"]), anyToString(payload["content"]), fltools.StructuredActivityRowFormatMarkdown, "", readBoolField(payload, "truncated"))
 	default:
 		if len(existing) > 0 && readBoolField(payload, "truncated") {

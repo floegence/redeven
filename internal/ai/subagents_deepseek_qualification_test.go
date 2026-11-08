@@ -176,7 +176,7 @@ func TestE2E_FlowerSubagentDeepSeekResearch(t *testing.T) {
 			toolCounts[result.ToolName]++
 			resultChars += utf8.RuneCountInString(result.Content)
 			evidence = append(evidence, map[string]any{"thread_id": view.ThreadID, "tool_call_id": item.Activity.ToolID, "result": result})
-			if view.ThreadID != parentID || result.ToolName != "subagents" {
+			if view.ThreadID != parentID || result.ToolName != "subagent_manage" {
 				continue
 			}
 			var args map[string]any
@@ -315,7 +315,7 @@ func TestFlowerSubagentRetainedDeepSeekEvidence(t *testing.T) {
 	}
 	before, after, coordinationErrors := 0, 0, 0
 	for _, tool := range report.Tools {
-		if tool.Result.ToolName != "subagents" {
+		if tool.Result.ToolName != "subagent_manage" {
 			continue
 		}
 		if tool.Result.Status == "error" || strings.HasPrefix(tool.Result.Content, "ERROR:") {

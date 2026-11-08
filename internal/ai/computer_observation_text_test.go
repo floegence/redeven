@@ -238,7 +238,7 @@ func TestComputerObservationTextFloretBoundary(t *testing.T) {
 	if payload["target_name"] != "Current title" || payload["observation_status"] != "current" {
 		t.Fatalf("user-visible target lost: %+v", payload)
 	}
-	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "call", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: payload})
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "call", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: payload})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,13 +346,13 @@ func TestComputerObservationTextActivityBoundary(t *testing.T) {
 	tree := map[string]any{"document_id": "doc", "title": "Report", "url": "https://example.test/report", "truncated": false, "nodes": []any{map[string]any{"ref": "root", "role": "document", "name": "Report", "child_refs": []any{"a", "b"}}, map[string]any{"ref": "a", "parent_ref": "root", "role": "text", "name": "Revenue USD 42"}, map[string]any{"ref": "b", "parent_ref": "root", "role": "button", "name": "Export"}}}
 	var out computerObservationOutput
 	projected := out.render(tree, "scope", false)
-	before, _ := json.Marshal(computerActivityResultRows("computer.exec", map[string]any{"observation": tree}))
-	after, _ := json.Marshal(computerActivityResultRows("computer.exec", map[string]any{"observation": projected}))
+	before, _ := json.Marshal(computerActivityResultRows("computer_exec", map[string]any{"observation": tree}))
+	after, _ := json.Marshal(computerActivityResultRows("computer_exec", map[string]any{"observation": projected}))
 	if string(before) != string(after) {
 		t.Fatalf("Activity lost content: %s != %s", before, after)
 	}
 
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: map[string]any{"completed": true, "observation": projected}})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: map[string]any{"completed": true, "observation": projected}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestComputerObservationTextActivityBoundary(t *testing.T) {
 	if json.Unmarshal(body, &record) != nil {
 		t.Fatal("Activity payload")
 	}
-	public, ok := sanitizeActivityPayloadValue(record, "structured", "computer.exec")
+	public, ok := sanitizeActivityPayloadValue(record, "structured", "computer_exec")
 	body, _ = json.Marshal(public)
 	if !ok || !strings.Contains(string(body), "Revenue USD 42") || !strings.Contains(string(body), "Export") {
 		t.Fatalf("public Activity lost rows: %s", body)

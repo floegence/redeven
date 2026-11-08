@@ -143,7 +143,7 @@ func TestPreparedReplayRebindsPhysicalAttemptIdentity(t *testing.T) {
 	req.AttemptID = "attempt:1"
 	req.AttemptEpoch = 1
 	var actual ModelGatewayRequest
-	prepared, err := newPreparedModelWire("openai", "gpt-5.5", flprovider.RequestFormatOpenAIResponses, map[string]any{"model": "gpt-5.5", "input": []any{}}, req, providerToolAliases{}, func(_ context.Context, req ModelGatewayRequest, _ []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	prepared, err := newPreparedModelWire("openai", "gpt-5.5", flprovider.RequestFormatOpenAIResponses, map[string]any{"model": "gpt-5.5", "input": []any{}}, req, providerToolContract{}, func(_ context.Context, req ModelGatewayRequest, _ []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
 		actual = req
 		return ModelGatewayResult{}, nil
 	})

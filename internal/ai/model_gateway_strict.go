@@ -41,8 +41,8 @@ func compileArgumentSchema(schema map[string]any) (*jsonschema.Schema, error) {
 	return c.Compile("https://redeven.invalid/tool.json")
 }
 
-func prepareOpenAIToolSchemas(defs []ToolDef, strict bool) ([]ToolDef, providerToolAliases, error) {
-	aliases, err := newOpenAIProviderToolAliases(defs)
+func prepareOpenAIToolSchemas(defs []ToolDef, strict bool) ([]ToolDef, providerToolContract, error) {
+	aliases, err := newProviderToolContract(defs)
 	if err != nil {
 		return nil, aliases, err
 	}
@@ -187,7 +187,7 @@ func compileStrictArgumentRule(schema map[string]any, depth int) (*strictArgumen
 	return rule, nil
 }
 
-func (a providerToolAliases) restoreArguments(name string, args map[string]any) map[string]any {
+func (a providerToolContract) restoreArguments(name string, args map[string]any) map[string]any {
 	if rule := a.argumentRules[name]; rule != nil {
 		rule.restore(args)
 	}

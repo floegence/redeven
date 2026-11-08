@@ -12,7 +12,7 @@ import (
 // children, contacts a Runtime or executes model-proposed tools.
 func toolGuidanceQualificationCases() []promptQualificationCase {
 	return []promptQualificationCase{
-		{name: "tool_guidance_child_inspect", runtimeSurface: true, input: "The direct child references returned for this parent are child-a and child-b. Inspect both children's complete available reports in a single call now.", wantTools: []string{"subagents"}, check: func(result ModelGatewayResult) error {
+		{name: "tool_guidance_child_inspect", runtimeSurface: true, input: "The direct child references returned for this parent are child-a and child-b. Inspect both children's complete available reports in a single call now.", wantTools: []string{"subagent_manage"}, check: func(result ModelGatewayResult) error {
 			if len(result.ToolCalls) != 1 {
 				return fmt.Errorf("expected one inspection")
 			}
@@ -40,7 +40,7 @@ func toolGuidanceQualificationCases() []promptQualificationCase {
 			}
 			return nil
 		}},
-		{name: "tool_guidance_cancel_receipt", runtimeSurface: true, input: "Cancel all unfinished direct children of this parent. After the cancellation receipt, report only the confirmed facts as JSON with boolean fields all_stopped and effects_rolled_back; do not call more tools.", history: promptQualificationReceipt("subagents", `{"action":"close_all"}`, `{"accepted_count":2,"stopped_count":1,"closed_count":1}`), noTools: true, check: func(result ModelGatewayResult) error {
+		{name: "tool_guidance_cancel_receipt", runtimeSurface: true, input: "Cancel all unfinished direct children of this parent. After the cancellation receipt, report only the confirmed facts as JSON with boolean fields all_stopped and effects_rolled_back; do not call more tools.", history: promptQualificationReceipt("subagent_manage", `{"action":"close_all"}`, `{"accepted_count":2,"stopped_count":1,"closed_count":1}`), noTools: true, check: func(result ModelGatewayResult) error {
 			text := strings.TrimSpace(result.Text)
 			if strings.HasPrefix(text, "```") {
 				_, body, ok := strings.Cut(text, "\n")
@@ -58,7 +58,7 @@ func toolGuidanceQualificationCases() []promptQualificationCase {
 			}
 			return nil
 		}},
-		{name: "tool_guidance_direct_service", runtimeSurface: true, tessivenSurface: true, input: "Inspect this referenced Web Service now: runtime_ref=local:local, owner=managed_service, service_id=service-metrics, display name Metrics, port 8080. The service reference has no canvas. Its exact binding is already provided; retrieve the service description and workspace.", wantTools: []string{"tessiven.inspect"}, check: func(result ModelGatewayResult) error {
+		{name: "tool_guidance_direct_service", runtimeSurface: true, tessivenSurface: true, input: "Inspect this referenced Web Service now: runtime_ref=local:local, owner=managed_service, service_id=service-metrics, display name Metrics, port 8080. The service reference has no canvas. Its exact binding is already provided; retrieve the service description and workspace.", wantTools: []string{"tessiven_inspect_resource"}, check: func(result ModelGatewayResult) error {
 			if len(result.ToolCalls) != 1 {
 				return fmt.Errorf("expected one resource inspection")
 			}
@@ -80,14 +80,14 @@ func toolGuidanceQualificationCases() []promptQualificationCase {
 func TestToolGuidanceQualificationOracles(t *testing.T) {
 	cases := toolGuidanceQualificationCases()
 	good := []ModelGatewayResult{
-		{ToolCalls: []ToolCall{{Name: "subagents", Args: map[string]any{"action": "inspect", "target": "child-a", "ids": []any{"child-b", "child-a"}}}}},
+		{ToolCalls: []ToolCall{{Name: "subagent_manage", Args: map[string]any{"action": "inspect", "target": "child-a", "ids": []any{"child-b", "child-a"}}}}},
 		{Text: `{"all_stopped":false,"effects_rolled_back":false}`},
-		{ToolCalls: []ToolCall{{Name: "tessiven.inspect", Args: map[string]any{"action": "inspect", "runtime_ref": "local:local", "binding": map[string]any{"owner": "managed_service", "resourceId": "service-metrics"}}}}},
+		{ToolCalls: []ToolCall{{Name: "tessiven_inspect_resource", Args: map[string]any{"action": "inspect", "runtime_ref": "local:local", "binding": map[string]any{"owner": "managed_service", "resourceId": "service-metrics"}}}}},
 	}
 	bad := []ModelGatewayResult{
-		{ToolCalls: []ToolCall{{Name: "subagents", Args: map[string]any{"action": "inspect", "target": "child-a", "scope": "current_thread"}}}},
+		{ToolCalls: []ToolCall{{Name: "subagent_manage", Args: map[string]any{"action": "inspect", "target": "child-a", "scope": "current_thread"}}}},
 		{Text: `{"all_stopped":true,"effects_rolled_back":false}`},
-		{ToolCalls: []ToolCall{{Name: "tessiven.inspect", Args: map[string]any{"action": "inspect", "runtime_ref": "local:local", "canvas_id": "service-metrics"}}}},
+		{ToolCalls: []ToolCall{{Name: "tessiven_inspect_resource", Args: map[string]any{"action": "inspect", "runtime_ref": "local:local", "canvas_id": "service-metrics"}}}},
 	}
 	if err := cases[1].check(ModelGatewayResult{Text: "```json\n{\"all_stopped\":false,\"effects_rolled_back\":false}\n```\nOne child is confirmed stopped."}); err != nil {
 		t.Fatal(err)

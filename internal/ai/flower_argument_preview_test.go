@@ -15,10 +15,10 @@ func TestFlowerArgumentPreviewChunkBoundaries(t *testing.T) {
 		name, tool, raw string
 		want            *fltools.ArgumentPreview
 	}{
-		{"write", "file.write", `{"file_path":"/missing/a.txt","content":"a\r\nb\n"}`, &fltools.ArgumentPreview{DisplayName: "a.txt", Additions: integer(2)}},
-		{"empty", "file.write", `{"content":""}`, &fltools.ArgumentPreview{Additions: integer(0)}},
-		{"unicode", "file.write", `{"content":"\u4e2d\ud83d\ude00\n中文😀","ignored":[true,null,{"content":"ignored"}]}`, &fltools.ArgumentPreview{Additions: integer(2)}},
-		{"escaped", "file.write", `{"content":"quote: \" / \\ \t \b \f \r"}`, &fltools.ArgumentPreview{Additions: integer(1)}},
+		{"write", "file_write", `{"file_path":"/missing/a.txt","content":"a\r\nb\n"}`, &fltools.ArgumentPreview{DisplayName: "a.txt", Additions: integer(2)}},
+		{"empty", "file_write", `{"content":""}`, &fltools.ArgumentPreview{Additions: integer(0)}},
+		{"unicode", "file_write", `{"content":"\u4e2d\ud83d\ude00\n中文😀","ignored":[true,null,{"content":"ignored"}]}`, &fltools.ArgumentPreview{Additions: integer(2)}},
+		{"escaped", "file_write", `{"content":"quote: \" / \\ \t \b \f \r"}`, &fltools.ArgumentPreview{Additions: integer(1)}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			for split := 0; split <= len(test.raw); split++ {
@@ -51,7 +51,7 @@ func TestFlowerArgumentPreviewPatchFormats(t *testing.T) {
 		"diff --git a/missing.txt b/missing.txt\r\n--- a/missing.txt\r\n+++ b/missing.txt\r\n@@ -1,2 +1,2 @@\r\n--- header-like content\r\n+++ header-like content\r\n context\r\ndiff --git a/second.txt b/second.txt\r\n--- /dev/null\r\n+++ b/second.txt\r\n@@ -0,0 +1,2 @@\r\n+\r\n+text",
 	} {
 		raw, _ := json.Marshal(map[string]string{"input": patch})
-		parse := flowerArgumentPreviewFactory("apply_patch")()
+		parse := flowerArgumentPreviewFactory("file_apply_patch")()
 		for i := range len(raw) {
 			got, err := parse(string(raw[i:i+1]), i == len(raw)-1)
 			if err != nil {
@@ -65,7 +65,7 @@ func TestFlowerArgumentPreviewPatchFormats(t *testing.T) {
 }
 
 func TestFlowerArgumentPreviewPartialAndIsolation(t *testing.T) {
-	first, second := flowerArgumentPreviewFactory("file.write")(), flowerArgumentPreviewFactory("file.write")()
+	first, second := flowerArgumentPreviewFactory("file_write")(), flowerArgumentPreviewFactory("file_write")()
 	got, err := first(`{"content":"a\nb`, false)
 	if err != nil || got.Additions == nil || *got.Additions != 2 || got.Deletions != nil {
 		t.Fatalf("partial %#v %v", got, err)
@@ -84,7 +84,7 @@ func TestFlowerArgumentPreviewPartialAndIsolation(t *testing.T) {
 }
 
 func TestFlowerArgumentPreviewNamesArriveBeforeArgumentsComplete(t *testing.T) {
-	for _, tool := range []string{"file.write"} {
+	for _, tool := range []string{"file_write"} {
 		t.Run(tool, func(t *testing.T) {
 			parse := flowerArgumentPreviewFactory(tool)()
 			preview, err := parse(`{"file_path":"src/exam`, false)
@@ -102,7 +102,7 @@ func TestFlowerArgumentPreviewNamesArriveBeforeArgumentsComplete(t *testing.T) {
 func TestFlowerArgumentPreviewLongBodyFirstKeepsProgressUntilPathArrives(t *testing.T) {
 	body := strings.Repeat("long body line\n", 4096)
 	encoded, _ := json.Marshal(body)
-	parse := flowerArgumentPreviewFactory("file.write")()
+	parse := flowerArgumentPreviewFactory("file_write")()
 	prefix := `{"content":` + string(encoded)
 	for start := 0; start < len(prefix); start += 137 {
 		end := min(start+137, len(prefix))
@@ -129,7 +129,7 @@ func TestFlowerArgumentPreviewLongBodyFirstKeepsProgressUntilPathArrives(t *test
 }
 
 func TestFlowerArgumentPreviewPatchNamesStreamFromCompleteHeaders(t *testing.T) {
-	parse := flowerArgumentPreviewFactory("apply_patch")()
+	parse := flowerArgumentPreviewFactory("file_apply_patch")()
 	for _, step := range []struct{ delta, name string }{
 		{`{"input":"*** Begin Patch\n*** Update File: src/exam`, ""},
 		{`ple.ts\n@@\n-old\n+new`, "example.ts"},
@@ -156,7 +156,7 @@ func TestFlowerArgumentPreviewPatchNamesRespectPatchStructure(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			raw, _ := json.Marshal(map[string]string{"input": test.patch})
-			parse := flowerArgumentPreviewFactory("apply_patch")()
+			parse := flowerArgumentPreviewFactory("file_apply_patch")()
 			for i := range len(raw) {
 				preview, err := parse(string(raw[i:i+1]), i == len(raw)-1)
 				if err != nil {
@@ -178,7 +178,7 @@ func TestFlowerArgumentPreviewRejectsMalformedAndBoundedInput(t *testing.T) {
 		`{"content":"` + strings.Repeat("x", maxFlowerArgumentPreviewBytes) + `"}`,
 		`{"ignored":` + strings.Repeat("[", 65) + strings.Repeat("]", 65) + `}`,
 	} {
-		if _, err := flowerArgumentPreviewFactory("file.write")()(raw, true); err == nil {
+		if _, err := flowerArgumentPreviewFactory("file_write")()(raw, true); err == nil {
 			t.Fatalf("accepted malformed input %.80q", raw)
 		}
 	}
@@ -192,7 +192,7 @@ func TestFlowerArgumentPreviewPatchNamesStayBounded(t *testing.T) {
 	}
 	patch.WriteString("*** End Patch")
 	raw, _ := json.Marshal(map[string]string{"input": patch.String()})
-	preview, err := flowerArgumentPreviewFactory("apply_patch")()(string(raw), true)
+	preview, err := flowerArgumentPreviewFactory("file_apply_patch")()(string(raw), true)
 	if err != nil || len([]rune(preview.DisplayName)) > 200 || !strings.HasSuffix(preview.DisplayName, "…") {
 		t.Fatalf("unbounded display name: %#v, %v", preview, err)
 	}

@@ -12,7 +12,7 @@ Browser/native reads deliver the promised shape or explicit failure; absent obse
 # Contract
 
 ## Validation and identity
-Validate min/max arity before every guest/image/download-cursor dispatch; extras fail SCRIPT_ARGUMENT_ERROR with method/documented_arity. Keep existing types/options and promised empty/zero/null. Validate whole operations before focus/scroll/input; diagnostics phase/field/expected/recovery exclude secrets/page errors. Keys accept characters/documented names plus Alt/Control/Meta/Shift,not physical Equal. computer.wait defaults0/no settling;legacy waitFor retains state.
+Validate min/max arity before every guest/image/download-cursor dispatch; extras fail SCRIPT_ARGUMENT_ERROR with method/documented_arity. Keep existing types/options and promised empty/zero/null. Validate whole operations before focus/scroll/input; diagnostics phase/field/expected/recovery exclude secrets/page errors. Keys accept characters/documented names plus Alt/Control/Meta/Shift,not physical Equal. computer_wait defaults0/no settling;legacy waitFor retains state.
 
 Wait-only browser sequences need neither page revision nor virtual focus; mixed sequences bind initial revision through events/waits,stop replacement input and release owned transitions. Normal delays differ from typed invalidation. Missing/malformed observations seal,never fabricate trees. [Scripts](computer-use-scripts.md) owns explicit on_invalidated:return.
 

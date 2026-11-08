@@ -16,41 +16,24 @@ import (
 	flprovider "github.com/floegence/floret/v7/provider"
 )
 
-func TestProviderToolNameGuidanceUsesRegisteredAliases(t *testing.T) {
-	definitions := []ToolDef{
-		{Name: "web.search", Description: "Search the web."},
-		{Name: "plugin.lookup"},
-		{Name: "plugin.nested.read", Description: "Read plugin.lookup; preserve ui.ref('plugin.lookup').click()."},
-		{Name: "inspect", Description: "Inspect without renaming."},
-	}
-	aliases, err := newOpenAIProviderToolAliases(definitions)
+func TestProviderToolNamesStayIdentical(t *testing.T) {
+	defs := []ToolDef{{Name: "web_search_pages", Description: "Search the web."}, {Name: "computer_exec", Description: "Run ui.ref('example').click()."}}
+	contract, err := newProviderToolContract(defs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wanted := []string{"web_search_tool", "plugin_lookup", "plugin_nested_read", "inspect"}
-	responses := buildOpenAITools(definitions, false, aliases)
-	chat := buildOpenAIChatTools(definitions, false, aliases)
-	for i, definition := range definitions {
-		for _, actual := range []struct{ name, description string }{
-			{responses[i].OfFunction.Name, responses[i].OfFunction.Description.Value},
-			{chat[i].OfFunction.Function.Name, chat[i].OfFunction.Function.Description.Value},
-		} {
-			if actual.name != wanted[i] {
-				t.Fatalf("callable name=%q, want %q", actual.name, wanted[i])
-			}
-			if definition.Name == actual.name {
-				if actual.description != definition.Description {
-					t.Error("unchanged tool acquired name guidance")
-				}
-				continue
-			}
-			if !strings.HasPrefix(actual.description, definition.Description) || !strings.Contains(actual.description, "`"+definition.Name+"`") || !strings.Contains(actual.description, "`"+wanted[i]+"`") {
-				t.Errorf("description omits registered mapping: %q", actual.description)
-			}
-			if len(actual.description)-len(definition.Description) > len(definition.Name)+len(actual.name)+40 {
-				t.Errorf("name guidance exceeds its fixed overhead budget: %q", actual.description)
-			}
+	for i, tool := range buildOpenAITools(defs, false, contract) {
+		if tool.OfFunction.Name != defs[i].Name || tool.OfFunction.Description.Value != defs[i].Description {
+			t.Fatalf("name or description changed: %+v", tool)
 		}
+	}
+	for _, name := range []string{"tool.read", "Upper", "foo__bar", "hyphen-name", strings.Repeat("a", 65)} {
+		if _, err := newProviderToolContract([]ToolDef{{Name: name}}); err == nil {
+			t.Fatalf("invalid name accepted: %q", name)
+		}
+	}
+	if _, err := newProviderToolContract([]ToolDef{{Name: "file_read"}, {Name: "file_read"}}); err == nil {
+		t.Fatal("duplicate accepted")
 	}
 }
 
@@ -127,14 +110,14 @@ func TestProviderToolNameGuidanceAtWireBoundary(t *testing.T) {
 			if prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(bodies[0])) {
 				t.Fatal("guidance was added after freezing the request")
 			}
-			if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "computer.exec" {
+			if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "computer_exec" {
 				t.Fatalf("returned calls lost canonical identity: %+v", result.ToolCalls)
 			}
 			if len(observedNames) == 0 {
 				t.Fatal("missing tool-call stream observations")
 			}
 			for _, name := range observedNames {
-				if name != "computer.exec" {
+				if name != "computer_exec" {
 					t.Fatalf("stream leaked callable alias %q", name)
 				}
 			}
@@ -160,7 +143,7 @@ func TestProviderToolNameGuidanceAtWireBoundary(t *testing.T) {
 }
 
 func toolNameGuidanceRequest() ModelGatewayRequest {
-	wanted := map[string]bool{"ask_user": true, "computer.exec": true, "computer.select_target": true, "attachment.materialize": true, "file.present": true, "file.write": true, "apply_patch": true, "terminal.exec": true}
+	wanted := map[string]bool{"user_ask": true, "computer_exec": true, "computer_select_target": true, "attachment_materialize": true, "file_present": true, "file_write": true, "file_apply_patch": true, "terminal_exec": true}
 	var definitions []ToolDef
 	for _, definition := range builtInModelCapabilityDefinitions() {
 		if wanted[definition.Name] {
@@ -171,7 +154,7 @@ func toolNameGuidanceRequest() ModelGatewayRequest {
 	return ModelGatewayRequest{
 		Messages: []Message{
 			{Role: "system", Content: []ContentPart{{Type: "text", Text: buildFlowerSystemPrompt()}}},
-			{Role: "user", Content: []ContentPart{{Type: "text", Text: "Inspect the document. Preserve literal computer.exec in /workspace/computer.exec.txt."}}},
+			{Role: "user", Content: []ContentPart{{Type: "text", Text: "Inspect the document. Preserve literal computer_exec in /workspace/computer_exec.txt."}}},
 		},
 		Tools: definitions,
 	}
@@ -233,7 +216,7 @@ func assertToolNameGuidanceWire(t *testing.T, raw []byte, request ModelGatewayRe
 		if canonicalNames {
 			renderedSchema = fn["input_schema"]
 		}
-		if definition.Name == "ask_user" {
+		if definition.Name == "user_ask" {
 			assertCanonicalAskUserWireGuidance(t, renderedSchema)
 		}
 		if !reflect.DeepEqual(schema, renderedSchema) {
@@ -260,7 +243,7 @@ func writeToolNameGuidanceResponse(w http.ResponseWriter, r *http.Request, provi
 			w.(http.Flusher).Flush()
 		}
 		emit(map[string]any{"type": "message_start", "message": map[string]any{"id": "response", "type": "message", "role": "assistant", "model": "fixture", "content": []any{}, "usage": map[string]any{"input_tokens": 1, "output_tokens": 0}}})
-		emit(map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "tool_use", "id": "call", "name": "computer.exec", "input": map[string]any{}}})
+		emit(map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "tool_use", "id": "call", "name": "computer_exec", "input": map[string]any{}}})
 		emit(map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "input_json_delta", "partial_json": args}})
 		emit(map[string]any{"type": "content_block_stop", "index": 0})
 		emit(map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": "tool_use"}, "usage": map[string]any{"output_tokens": 1}})

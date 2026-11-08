@@ -22,7 +22,7 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := &run{targetResolver: host, targetToolExecutor: host}
-			toolName, args, wantCode := "browser.reload", map[string]any{"description": "Reload the selected page"}, "TARGET_UNAVAILABLE"
+			toolName, args, wantCode := "browser_reload", map[string]any{"description": "Reload the selected page"}, "TARGET_UNAVAILABLE"
 			switch scenario {
 			case "closed current", "closed explicit":
 				host.registry.remove("browser-main")
@@ -41,7 +41,7 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 					stored.threadID = "thread-second"
 				}
 				host.candidates[candidate.CandidateRef] = stored
-				toolName, args, wantCode = "computer.select_target", map[string]any{"candidate_ref": candidate.CandidateRef, "description": "Select discovered page"}, "TARGET_SELECTION_STALE"
+				toolName, args, wantCode = "computer_select_target", map[string]any{"candidate_ref": candidate.CandidateRef, "description": "Select discovered page"}, "TARGET_SELECTION_STALE"
 			case "not allowed":
 				r.toolTargetPolicy = ToolTargetPolicy{AllowedTargetIDs: []string{"replacement"}}
 				wantCode = "TARGET_NOT_ALLOWED"
@@ -97,7 +97,7 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 				if modelError["code"] != wantCode || execution["started"] != false {
 					t.Fatalf("model preparation facts: %s", result.Text)
 				}
-				if strings.Contains(result.Text, "computer.targets") || strings.Contains(result.Text, "computer.select_target:") {
+				if strings.Contains(result.Text, "computer_list_targets") || strings.Contains(result.Text, "computer_select_target:") {
 					t.Fatalf("resource error prescribes a route: %s", result.Text)
 				}
 			}
@@ -110,14 +110,14 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 }
 
 func TestComputerModelErrorKeepsFactsAndActivityKeepsAssistance(t *testing.T) {
-	failure := &targetToolPolicyError{code: "target_connection_required", tool: "browser.reload", target: "closed", targetKind: "browser.connected", targetState: "connection_required", repairAction: "connect_current_browser", safety: &InteractionSafetyDecision{Level: "takeover"}}
-	source := ToolResult{ToolID: "reload", ToolName: "browser.reload", Status: toolResultStatusError, Error: aitools.ClassifyError(failure), Data: map[string]any{"target_id": "closed", "action_executed": false}}
+	failure := &targetToolPolicyError{code: "target_connection_required", tool: "browser_reload", target: "closed", targetKind: "browser.connected", targetState: "connection_required", repairAction: "connect_current_browser", safety: &InteractionSafetyDecision{Level: "takeover"}}
+	source := ToolResult{ToolID: "reload", ToolName: "browser_reload", Status: toolResultStatusError, Error: aitools.ClassifyError(failure), Data: map[string]any{"target_id": "closed", "action_executed": false}}
 	result, err := floretToolResultFromFlower(nil, source)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, text := range []string{result.Text, string(mustMarshalComputerError(t, result.Structured))} {
-		for _, route := range []string{"repair_action", "suggested_targets", "Use computer.targets"} {
+		for _, route := range []string{"repair_action", "suggested_targets", "Use computer_list_targets"} {
 			if strings.Contains(text, route) {
 				t.Fatalf("model error contains route %q: %s", route, text)
 			}
@@ -139,12 +139,12 @@ func TestComputerModelErrorKeepsFactsAndActivityKeepsAssistance(t *testing.T) {
 
 func TestComputerModelErrorProjectionPreservesTopLevelFacts(t *testing.T) {
 	failure := &aitools.ToolError{Code: aitools.ErrorCodeTargetUnavailable, Message: "The selected page is unavailable.", Meta: map[string]any{"target_state": "unavailable", "repair_action": "choose_target", "suggested_targets": []string{"browser.managed"}}}
-	model := modelToolErrorPayload(failure, "browser.reload")
+	model := modelToolErrorPayload(failure, "browser_reload")
 	meta := model["meta"].(map[string]any)
 	if meta["target_state"] != "unavailable" || meta["repair_action"] != nil || meta["suggested_targets"] != nil {
 		t.Fatalf("unexpected model metadata: %+v", meta)
 	}
-	if failure.Meta["repair_action"] == nil || modelToolErrorPayload(failure, "read_file")["meta"].(map[string]any)["repair_action"] == nil {
+	if failure.Meta["repair_action"] == nil || modelToolErrorPayload(failure, "file_read")["meta"].(map[string]any)["repair_action"] == nil {
 		t.Fatal("computer projection modified source or unrelated tools")
 	}
 }
@@ -152,7 +152,7 @@ func TestComputerModelErrorProjectionPreservesTopLevelFacts(t *testing.T) {
 func TestComputerTargetErrorsDescribeStateWithoutToolRoutes(t *testing.T) {
 	for _, code := range []string{"target_connection_required", "target_in_use", "target_ambiguous", "target_selection_stale", "target_unavailable", "target_observation_unavailable", "frame_unavailable", "target_action_failed", "recovery_observation_required"} {
 		message := (&targetToolPolicyError{code: code}).Error()
-		for _, route := range []string{"computer.", "Use ", "Choose ", "Refresh ", "Observe ", "Inspect ", "reconnect"} {
+		for _, route := range []string{"computer_", "Use ", "Choose ", "Refresh ", "Observe ", "Inspect ", "reconnect"} {
 			if strings.Contains(message, route) {
 				t.Fatalf("%s prescribes %q: %s", code, route, message)
 			}
@@ -161,7 +161,7 @@ func TestComputerTargetErrorsDescribeStateWithoutToolRoutes(t *testing.T) {
 }
 
 func TestComputerEncodingFailurePreservesNoReplayWithoutToolRoutes(t *testing.T) {
-	for _, name := range []string{"computer.targets", "computer.exec", "computer.observe"} {
+	for _, name := range []string{"computer_list_targets", "computer_exec", "computer_observe"} {
 		encoded, err := encodeModelToolResult(ToolResult{ToolName: name, Status: toolResultStatusSuccess, Data: func() {}})
 		if err != nil {
 			t.Fatal(err)
@@ -173,7 +173,7 @@ func TestComputerEncodingFailurePreservesNoReplayWithoutToolRoutes(t *testing.T)
 		if !strings.Contains(message, "does not establish that an action did not execute") || !strings.Contains(message, "Completed actions must not be replayed") {
 			t.Fatalf("encoding error lost effect safety: %s", message)
 		}
-		for _, tool := range []string{"computer.targets", "computer.select_target", "computer.observe", "computer.screenshot"} {
+		for _, tool := range []string{"computer_list_targets", "computer_select_target", "computer_observe", "computer_capture_screenshot"} {
 			if strings.Contains(message, tool) {
 				t.Fatalf("encoding failure prescribed a tool route: %s", message)
 			}

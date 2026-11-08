@@ -140,7 +140,7 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 		}
 		count := 0
 		for _, def := range registry.Snapshot() {
-			if strings.HasPrefix(def.Name, "plugin_author.") {
+			if strings.HasPrefix(def.Name, "plugin_author_") {
 				count++
 			}
 		}

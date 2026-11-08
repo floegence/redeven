@@ -225,7 +225,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     // observation contract without repeating any effect or selecting a new tab.
     let observed;
     for (let reads = 0; reads < 3; reads++) {
-      observed = await execute('computer.observe');
+      observed = await execute('computer_observe');
       if (!observed.result?.observation_invalidated) break;
     }
     assert.ok(observed.result?.observation, JSON.stringify(observed));
@@ -243,7 +243,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       try {
         await Promise.race([snapshot, new Promise(resolve => setTimeout(resolve, 3000))]);
         assert.ok(messages.some(message => message.type === 'snapshot'), JSON.stringify(messages));
-        assert.equal((await execute('computer.observe')).error, undefined);
+        assert.equal((await execute('computer_observe')).error, undefined);
         await assert.rejects(owner.source.transport.send('Target.getTargetInfo', { targetId: 'ungranted' }), /EXTENSION_COMMAND_FAILED/);
         await assert.rejects(owner.source.transport.send('Browser.getVersion'), /EXTENSION_COMMAND_FAILED/);
         await assert.rejects(owner.source.transport.send('IO.read', { handle: 'ungranted' }), /EXTENSION_COMMAND_FAILED/);
@@ -260,7 +260,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         };
       });
       try {
-        const failed = await execute('computer.screenshot');
+        const failed = await execute('computer_capture_screenshot');
         assert.equal(failed.error, 'TARGET_OBSERVATION_UNAVAILABLE');
         assert.equal(failed.result.action_executed, false);
         assert.equal(failed.result.observation_stage, 'safety_scan');
@@ -271,7 +271,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       } finally {
         await worker.evaluate(() => { chrome.debugger.sendCommand = globalThis.fixtureSendCommand; delete globalThis.fixtureSendCommand; });
       }
-      const fresh = await execute('computer.observe');
+      const fresh = await execute('computer_observe');
       assert.equal(fresh.safety.level, 'routine', JSON.stringify(fresh));
       assert.ok(fresh.result.observation);
     });
@@ -282,7 +282,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
           ? {strings:[]} : globalThis.fixtureSendCommand(target, method, args);
       });
       try {
-        const failed = await execute('computer.observe');
+        const failed = await execute('computer_observe');
         assert.equal(failed.error, 'TARGET_OBSERVATION_UNAVAILABLE');
         assert.equal(failed.result.observation_stage, 'safety_scan');
         assert.deepEqual(failed.result.diagnostic, {phase:'adapter',method:'DOMSnapshot.captureSnapshot',reason:'invalid_result'});
@@ -291,10 +291,10 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       } finally {
         await worker.evaluate(() => {chrome.debugger.sendCommand=globalThis.fixtureSendCommand;delete globalThis.fixtureSendCommand;});
       }
-      assert.equal((await execute('computer.observe')).error, undefined);
+      assert.equal((await execute('computer_observe')).error, undefined);
     });
     await t.test('reference preflight preserves actual debugger rejection facts', async () => {
-      const tree=(await execute('computer.observe')).result.observation;
+      const tree=(await execute('computer_observe')).result.observation;
       const ref=tree.nodes.find(node=>node.role==='button'&&node.name==='Apply').ref;
       await task.evaluate(()=>{window.probeInputs=0;document.addEventListener('pointerdown',()=>window.probeInputs++);});
       for(const action of ['read','click'])for(const method of ['DOM.describeNode','Accessibility.getPartialAXTree']){
@@ -325,33 +325,33 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await call('unbind', { tab_id: selected.id });
     assert.equal(await task.evaluate(() => document.hasFocus()), false, 'detach must release virtual focus');
     await call('bind', { tab_id: selected.id, tab_title: selected.title, tab_url: selected.url });
-    await execute('computer.observe');
+    await execute('computer_observe');
     await t.test('extension frames retire after errors and input while invalid keys cannot focus', async () => {
-      const shot=await execute('computer.screenshot');
+      const shot=await execute('computer_capture_screenshot');
       assert.ok(shot.result.frame_geometry,JSON.stringify(shot.result));
       const g=shot.result.frame_geometry;
       assert.equal(g.image.width/g.viewport.capture_width,2);
       const inputsBefore=await task.evaluate(()=>window.probeInputs);
-      const invalid=await execute('computer.key',{key:'Meta+Equal'});
+      const invalid=await execute('computer_press_key',{key:'Meta+Equal'});
       assert.equal(invalid.error,'INVALID_REQUEST');assert.equal(invalid.result.action_executed,false);assert.equal(invalid.result.diagnostic.field,'key');
       const point={x:0,y:0,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id};
-      const retired=await execute('computer.click',point);
+      const retired=await execute('computer_click',point);
       assert.equal(retired.error,'STALE_REFERENCE');assert.equal(retired.result.action_executed,false);
-      const renewed=(await execute('computer.screenshot')).result.frame_geometry;
-      const mismatch=await execute('computer.click',{...point,frame:renewed.frame,document_id:'old'});
+      const renewed=(await execute('computer_capture_screenshot')).result.frame_geometry;
+      const mismatch=await execute('computer_click',{...point,frame:renewed.frame,document_id:'old'});
       assert.equal(mismatch.error,'STALE_REFERENCE');assert.equal(mismatch.result.action_executed,false);
       assert.equal(await task.evaluate(()=>document.hasFocus()),false);
       assert.equal(await task.evaluate(()=>window.probeInputs),inputsBefore);
-      const fresh=(await execute('computer.screenshot')).result.frame_geometry;
+      const fresh=(await execute('computer_capture_screenshot')).result.frame_geometry;
       const freshPoint={...point,frame:fresh.frame,document_id:fresh.document_id};
-      const clicked=await execute('computer.click',freshPoint);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
+      const clicked=await execute('computer_click',freshPoint);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
       assert.equal(clicked.result.action_executed,true);
-      const reused=await execute('computer.click',freshPoint);
+      const reused=await execute('computer_click',freshPoint);
       assert.equal(reused.error,'STALE_REFERENCE');assert.equal(reused.result.action_executed,false);
       assert.equal(await task.evaluate(()=>window.probeInputs),inputsBefore+1);
     });
     await t.test('document and nonfocusable presses retain the real extension connection', async () => {
-      const tree = (await execute('computer.observe')).result.observation;
+      const tree = (await execute('computer_observe')).result.observation;
       const root = tree.nodes.find(node => node.role === 'RootWebArea');
       await task.evaluate(() => { const node = document.createElement('h2'); node.textContent = 'Focus rejection fixture'; document.body.append(node); });
       try {
@@ -361,7 +361,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
           assert.deepEqual(rejected.result, { action_executed: false, needs_observation: false, stage: 'focus', reason: 'not_focusable' });
           assert.equal(owners.get(selected.id).controller.page.invalid, false);
         }
-        assert.equal((await execute('computer.key', { key: 'Escape' })).error, undefined);
+        assert.equal((await execute('computer_press_key', { key: 'Escape' })).error, undefined);
       } finally { await task.locator('h2', { hasText: 'Focus rejection fixture' }).evaluate(node => node.remove()); }
     });
     const nested = await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Nested query' }, text: 'Cross-site value' });
@@ -380,7 +380,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       const frames=task.frames();
       for(const frame of frames)await frame.evaluate(()=>{document.body.style.minHeight='3000px';window.probeWheels=0;document.addEventListener('wheel',()=>window.probeWheels++);});
       try {
-        const observed=await execute('computer.observe');
+        const observed=await execute('computer_observe');
         assert.ok(observed.result.observation,JSON.stringify(observed));
         const tree=await owners.get(selected.id).controller.transport.send('Page.getFrameTree');
         const root=observed.result.observation.nodes.find(node=>node.role==='RootWebArea'&&node.frame_id===tree.frameTree.frame.id);
@@ -407,17 +407,17 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     // A slow wait on one target must not block another target or tear down the
     // profile when cancelled. The extension receives real concurrent messages.
     const waiting = call('execute', { tab_id: selected.id, request: { tool_name: 'computer.action', script_operation: true, allowed_origins: origins, args: { action: 'wait', selector: { role: 'button', name: 'Never present' }, timeout_ms: 10000 } } });
-    const sibling = await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {}, allowed_origins: [] } });
+    const sibling = await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer_observe', args: {}, allowed_origins: [] } });
     assert.equal(sibling.safety.level, 'routine');
     owners.get(selected.id).controller.cancel();
     const cancelled = { result: await waiting };
     assert.equal(cancelled.result.safety.level, 'takeover');
-    assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).safety.level, 'routine');
-    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', recovery_observation: true, allowed_origins: origins } });
+    assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer_observe', args: {} } })).safety.level, 'routine');
+    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer_capture_screenshot', recovery_observation: true, allowed_origins: origins } });
     await task.keyboard.press('Escape');
     assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query', exact: true }, text: 'Continued' })).safety.level, 'routine');
     assert.equal(await task.locator('input').inputValue(), 'Continued');
-    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', recovery_observation: true, allowed_origins: origins } });
+    await call('execute', { tab_id: selected.id, request: { tool_name: 'computer_capture_screenshot', recovery_observation: true, allowed_origins: origins } });
     await user.bringToFront();
     const activeBeforeDownload = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
     const downloadCursor = (await execute('browser.download_cursor')).result.cursor;
@@ -460,9 +460,9 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.ok(child);
     assert.equal(child.opener_tab_id, popupResult.result.opener_tab_id);
     assert.equal(child.opener_tab_id, selected.id);
-    assert.equal((await call('execute', { tab_id: child.id, request: { tool_name: 'computer.observe', args: {} } })).error, 'TARGET_CONNECTION_REQUIRED');
+    assert.equal((await call('execute', { tab_id: child.id, request: { tool_name: 'computer_observe', args: {} } })).error, 'TARGET_CONNECTION_REQUIRED');
     await call('bind', { tab_id: child.id, tab_url: child.url, tab_title: child.title });
-    const childResult = await call('execute', { tab_id: child.id, request: { tool_name: 'computer.observe', args: {}, full_access: true } });
+    const childResult = await call('execute', { tab_id: child.id, request: { tool_name: 'computer_observe', args: {}, full_access: true } });
     assert.equal(childResult.safety.level, 'routine');
     assert.equal((await call('inventory')).filter(tab => tab.url === origin + '/popup').length, 1);
     });
@@ -471,7 +471,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       withheldCredits = root.binding;
       await root.send('Runtime.evaluate', { expression: "for(let i=0;i<1100;i++)console.log('bounded-native-event-fixture')" }).catch(() => undefined);
       await assert.rejects(nativeCall('status', { tab_id: selected.id }), /EXTENSION_COMMAND_FAILED/);
-      assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).safety.level, 'routine');
+      assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer_observe', args: {} } })).safety.level, 'routine');
       await nativeCall('status', { tab_id: created.tab_id });
       withheldCredits = '';
     });
@@ -480,7 +480,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query', exact: true }, text: 'Forbidden' })).error, 'TARGET_CONNECTION_REQUIRED');
     assert.equal(await task.locator('input').inputValue(), 'Continued');
     await task.close();
-    assert.equal((await execute('computer.observe')).error, 'TARGET_CONNECTION_REQUIRED');
+    assert.equal((await execute('computer_observe')).error, 'TARGET_CONNECTION_REQUIRED');
     await t.test('reconnect updates an open popup without restoring tab authority', async () => {
       const activeTabs = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
       const profile = await worker.evaluate(async () => (await chrome.storage.local.get('profile')).profile);
@@ -503,7 +503,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       assert.equal(state.connected, true); assert.equal(state.tabs, 0); assert.equal(state.error, '');
       assert.deepEqual(await worker.evaluate(async () => (await chrome.storage.local.get('profile')).profile), profile);
       assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeTabs);
-      assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).error, 'TARGET_CONNECTION_REQUIRED');
+      assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer_observe', args: {} } })).error, 'TARGET_CONNECTION_REQUIRED');
       await popup.bringToFront();
       await popup.locator('#disconnect').click();
       await popup.locator('#connect-button').waitFor({ state: 'visible' });

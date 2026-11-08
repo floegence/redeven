@@ -50,8 +50,8 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     const ready = await next();
     assert.equal(ready.protocol_version, 6);
     assert.equal(ready.error, undefined, JSON.stringify(ready));
-    assert.ok((await send('browser.navigate', { url: origin })).screenshot);
-    const observed = await send('computer.observe');
+    assert.ok((await send('browser_navigate', { url: origin })).screenshot);
+    const observed = await send('computer_observe');
     assert.equal(observed.error, undefined, JSON.stringify(observed));
     assert.equal(observed.screenshot, undefined);
     const input = observed.result.observation.nodes.find(node => node.role === 'textbox' && node.name === 'Search');
@@ -69,7 +69,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     assert.equal(input.states.required, true);
     assert.equal(input.description, 'Enter a search term');
     assert.ok(input.relations.controls.some(ref => byRef.get(ref).name === 'Result'));
-    const bounded = (await send('computer.observe', { limit: 2 })).result.observation;
+    const bounded = (await send('computer_observe', { limit: 2 })).result.observation;
     assert.equal(bounded.truncated, true);
     assert.equal(bounded.nodes.length, 2);
     assert.ok(bounded.nodes[0].child_refs.includes(bounded.nodes[1].ref));
@@ -94,26 +94,26 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     assert.equal(read.result.node.value, 'Completed');
     const ambiguous = await perform({ action: 'click', selector: { role: 'button', name: 'Duplicate' } });
     assert.equal(ambiguous.error, 'AMBIGUOUS_ELEMENT');
-    const invalidScroll = await send('computer.scroll', { x: 150, delta_y: 200 }, { script_operation: true });
+    const invalidScroll = await send('computer_scroll', { x: 150, delta_y: 200 }, { script_operation: true });
     assert.equal(invalidScroll.error, 'INVALID_REQUEST');
-    const scrolled = await send('computer.scroll', { x: 150, y: 150, delta_y: 200 }, { script_operation: true });
+    const scrolled = await send('computer_scroll', { x: 150, y: 150, delta_y: 200 }, { script_operation: true });
     assert.equal(scrolled.error, undefined, JSON.stringify(scrolled));
     const scrollResult = await perform({ action: 'wait', selector: { role: 'status', name: 'Scrolled region' }, timeout_ms: 3000 });
     assert.equal(scrollResult.error, undefined, JSON.stringify(scrollResult));
     await perform({ action: 'click', selector: { role: 'button', name: 'Load' } });
     const waited = await perform({ action: 'wait', selector: { roles: ['button', 'push button', 'AXButton'], name: 'Ready' }, timeout_ms: 3000 });
     assert.equal(waited.error, undefined, JSON.stringify(waited));
-    await send('browser.navigate', { url: origin + '/next' });
+    await send('browser_navigate', { url: origin + '/next' });
     const stale = await perform({ action: 'click', selector: { ref: input.ref } });
     assert.equal(stale.error, 'STALE_REFERENCE');
-    const denied = await send('browser.navigate', { url: 'https://unapproved.invalid' });
+    const denied = await send('browser_navigate', { url: 'https://unapproved.invalid' });
     assert.equal(denied.error, 'TARGET_PERMISSION_REQUIRED');
     assert.equal(denied.result.action_executed, false);
     assert.equal(denied.screenshot, undefined);
     // An allowed URL may redirect to an ungranted origin. Fetch interception
     // stops the document request before Chromium contacts the new site.
-    await send('computer.screenshot', {}, { recovery_observation: true });
-    const redirect = await send('browser.navigate', { url: origin + '/redirect' }, { script_operation: true });
+    await send('computer_capture_screenshot', {}, { recovery_observation: true });
+    const redirect = await send('browser_navigate', { url: origin + '/redirect' }, { script_operation: true });
     assert.equal(redirect.error, 'TARGET_PERMISSION_REQUIRED');
     assert.equal(redirect.result.required_navigation_url, 'https://unapproved.invalid/landing');
     assert.equal(redirect.screenshot, undefined);
@@ -166,7 +166,7 @@ test('inventory and explicit tab attachment preserve the browser, other tabs and
       finally { clearTimeout(timeout); }
     };
     assert.equal((await next()).protocol_version, 6);
-    helper.stdin.write(JSON.stringify({ id: 'observe', target_id: 'connected', tool_name: 'computer.observe', args: {}, allowed_origins: [origin] }) + '\n');
+    helper.stdin.write(JSON.stringify({ id: 'observe', target_id: 'connected', tool_name: 'computer_observe', args: {}, allowed_origins: [origin] }) + '\n');
     const observed = await next();
     assert.equal(observed.result.title, 'Signed-in task');
     assert.ok(observed.result.observation.nodes.some(node => node.name === 'Search'));
@@ -257,13 +257,13 @@ test('incidental wheel input does not pause browser work', async () => {
       }
       return send(method, parameters);
     };
-    const scrolled = await controller.execute({ tool_name: 'computer.scroll', args: { delta_y: 600, delta_x: 0 } });
+    const scrolled = await controller.execute({ tool_name: 'computer_scroll', args: { delta_y: 600, delta_x: 0 } });
     assert.equal(scrolled.safety.level, 'routine', JSON.stringify(scrolled.safety));
     await page.waitForFunction(() => document.scrollingElement.scrollTop > 0);
-    assert.equal((await controller.execute({ tool_name: 'computer.observe', args: {} })).safety.level, 'routine');
+    assert.equal((await controller.execute({ tool_name: 'computer_observe', args: {} })).safety.level, 'routine');
     await page.mouse.wheel(0, 100);
     await page.waitForFunction(() => document.scrollingElement.scrollTop > 600);
-    const continued = await controller.execute({ tool_name: 'computer.observe', args: {} });
+    const continued = await controller.execute({ tool_name: 'computer_observe', args: {} });
     assert.equal(continued.safety.level, 'routine');
   } finally { await browser.close(); }
 });
@@ -301,7 +301,7 @@ test('nested cross-site frames use semantic actions and downloads survive helper
   };
   try {
     assert.equal((await next()).protocol_version, 6);
-    await call('browser.navigate', { url: origins[0] });
+    await call('browser_navigate', { url: origins[0] });
     const selector = { role: 'textbox', name: 'Deep entry' };
     assert.equal((await call('computer.action', { action: 'wait', selector, timeout_ms: 5000 })).state, 'visible');
     await call('computer.action', { action: 'fill', selector, text: 'Across processes' });
@@ -314,7 +314,7 @@ test('nested cross-site frames use semantic actions and downloads survive helper
     assert.equal(first.state, 'completed'); assert.equal(first.filename, 'results.csv');
     assert.equal(await readFile(first.path, 'utf8'), 'name,count\nfixture,42\n');
     const secondCursor = (await call('browser.download_cursor')).cursor;
-    assert.equal((await call('browser.navigate', { url: origins[0] + '/export' })).download_started, true);
+    assert.equal((await call('browser_navigate', { url: origins[0] + '/export' })).download_started, true);
     const second = (await call('browser.wait_for_download', { after: secondCursor, timeout_ms: 5000 })).download;
     assert.equal(second.state, 'completed'); assert.notEqual(first.id, second.id);
     const timeout = await call('browser.wait_for_download', { id: 'missing', timeout_ms: 5 });
@@ -348,18 +348,18 @@ test('sensitive DOM transitions during observation discard pixels even after the
       await page.evaluate(() => document.getElementById('transient').remove());
       return result;
     };
-    const result = await controller.execute({ tool_name: 'computer.screenshot' });
+    const result = await controller.execute({ tool_name: 'computer_capture_screenshot' });
     assert.equal(result.safety.level, 'takeover');
     assert.ok(result.safety.reason_codes.includes('secret_input'));
     assert.equal(result.safety.reason_codes.includes('login'), false, 'secret input does not establish a login workflow');
     assert.equal(result.screenshot, undefined); assert.equal(JSON.stringify(result).includes('private-fixture'), false);
     session.send = send;
-    assert.equal((await controller.execute({ tool_name: 'computer.screenshot', recovery_observation: true })).safety.level, 'routine');
+    assert.equal((await controller.execute({ tool_name: 'computer_capture_screenshot', recovery_observation: true })).safety.level, 'routine');
     await page.evaluate(() => {
       const host = document.createElement('div'); document.body.append(host);
       host.attachShadow({ mode: 'open' }).innerHTML = '<input autocomplete="one-time-code" aria-label="Private code" value="fixture-code">';
     });
-    const shadow = await controller.execute({ tool_name: 'computer.observe' });
+    const shadow = await controller.execute({ tool_name: 'computer_observe' });
     assert.equal(shadow.safety.level, 'takeover');
     assert.equal(shadow.result.observation, undefined);
     assert.equal(JSON.stringify(shadow).includes('fixture-code'), false);
@@ -380,12 +380,12 @@ test('a document change during capture discards the stale frame and requests a f
       if (method === 'Page.captureScreenshot') await page.setContent('<h1>After navigation</h1>');
       return result;
     };
-    const result = await controller.execute({ tool_name: 'computer.screenshot' });
+    const result = await controller.execute({ tool_name: 'computer_capture_screenshot' });
     assert.equal(result.screenshot, undefined);
     assert.equal(result.safety.level, 'routine', JSON.stringify(result));
     assert.equal(result.result.observation_invalidated, true);
     session.send = send;
-    const fresh = await controller.execute({ tool_name: 'computer.observe' });
+    const fresh = await controller.execute({ tool_name: 'computer_observe' });
     assert.ok(fresh.result.observation.nodes.some(node => node.name === 'After navigation'));
   } finally { await browser.close(); }
 });
@@ -403,7 +403,7 @@ test('closed shadow inputs cannot expose passwords or verification codes to obse
       }, attributes);
       const controller = new BrowserComputerController(await page.context().newCDPSession(page));
       await controller.initialize();
-      const result = await controller.execute({ tool_name: 'computer.observe', args: { screenshot: true } });
+      const result = await controller.execute({ tool_name: 'computer_observe', args: { screenshot: true } });
       assert.equal(result.safety.level, 'takeover', JSON.stringify(result));
       assert.ok(result.safety.reason_codes.includes('secret_input'));
     assert.equal(result.safety.reason_codes.includes('login'), false, 'secret input does not establish a login workflow');
@@ -457,14 +457,14 @@ test('navigation during a safety read preserves the confirmed action without exp
     assert.equal(result.result.title, undefined);
     assert.equal(result.screenshot, undefined);
     session.send = send;
-    const fresh = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });
+    const fresh = await controller.execute({ tool_name: 'computer_observe', allowed_origins: [origin] });
     assert.ok(fresh.result.observation.nodes.some(node => node.name === 'Saved'), JSON.stringify(fresh));
     // A persistent read failure withholds content without inventing a human step.
     session.send = async (method, parameters) => {
       if (method === 'DOMSnapshot.captureSnapshot') throw new Error('privacy scan unavailable');
       return send(method, parameters);
     };
-    const failed = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });
+    const failed = await controller.execute({ tool_name: 'computer_observe', allowed_origins: [origin] });
     assert.equal(failed.error, 'TARGET_OBSERVATION_UNAVAILABLE');
     assert.equal(failed.safety, undefined);
     assert.equal(failed.result.action_executed, false);
@@ -491,20 +491,20 @@ test('full access permits new sites and redirects while preserving private input
     const controller = new BrowserComputerController(await page.context().newCDPSession(page));
     await controller.initialize();
     const execute = (tool_name, args = {}, fields = {}) => controller.execute({ tool_name, args, full_access: true, script_operation: true, ...fields });
-    const navigated = await execute('browser.navigate', { url: `http://127.0.0.1:${source.address().port}` });
+    const navigated = await execute('browser_navigate', { url: `http://127.0.0.1:${source.address().port}` });
     assert.equal(navigated.safety?.level, 'routine', JSON.stringify(navigated));
     assert.equal(page.url(), destinationOrigin + '/');
-    const observation = await execute('computer.observe');
+    const observation = await execute('computer_observe');
     assert.ok(observation.result.observation.nodes.some(node => node.name === 'Search results'), JSON.stringify(observation));
     await page.setContent('<input type="password" value="private-fixture">');
-    const sensitive = await execute('computer.screenshot');
+    const sensitive = await execute('computer_capture_screenshot');
     assert.ok(sensitive.safety.reason_codes.includes('secret_input'));
     assert.equal(sensitive.screenshot, undefined);
     assert.equal(JSON.stringify(sensitive).includes('private-fixture'), false);
     await page.setContent('<h1>Signed in</h1>');
-    assert.equal((await execute('computer.observe')).safety.level, 'routine', 'the helper reports current safety; Runtime owns the control barrier');
-    assert.equal((await execute('computer.screenshot', {}, { recovery_observation: true })).safety.level, 'routine');
-    const revoked = await execute('computer.observe', {}, { full_access: false });
+    assert.equal((await execute('computer_observe')).safety.level, 'routine', 'the helper reports current safety; Runtime owns the control barrier');
+    assert.equal((await execute('computer_capture_screenshot', {}, { recovery_observation: true })).safety.level, 'routine');
+    const revoked = await execute('computer_observe', {}, { full_access: false });
     assert.equal(revoked.safety.required_origin, destinationOrigin);
     assert.equal(revoked.result.observation, undefined);
   } finally { await browser.close(); source.close(); destination.close(); }
@@ -519,7 +519,7 @@ test('a detached iframe invalidates a sampled view without inventing user takeov
     await page.setContent('<h1>Normal results</h1><iframe srcdoc="<p>Supplemental content</p>"></iframe>');
     const session = await page.context().newCDPSession(page);
     const controller = new BrowserComputerController(session); await controller.initialize();
-    assert.equal((await controller.execute({ tool_name: 'computer.observe', full_access: true })).safety.level, 'routine');
+    assert.equal((await controller.execute({ tool_name: 'computer_observe', full_access: true })).safety.level, 'routine');
     const { frameTree } = await session.send('Page.getFrameTree');
     const child = frameTree.childFrames[0].frame.id;
     const send = session.send.bind(session);
@@ -533,7 +533,7 @@ test('a detached iframe invalidates a sampled view without inventing user takeov
       if (method === 'Page.createIsolatedWorld' && parameters.frameId === child) childContext = response.executionContextId;
       return response;
     };
-    const sample = await controller.execute({ tool_name: 'computer.screenshot', full_access: true });
+    const sample = await controller.execute({ tool_name: 'computer_capture_screenshot', full_access: true });
     assert.equal(removed, true);
     assert.equal(sample.result.observation_invalidated, true);
     assert.equal(sample.result.reason, 'document_changed');
@@ -544,7 +544,7 @@ test('a detached iframe invalidates a sampled view without inventing user takeov
     assert.equal(sample.result.action_executed, false);
     assert.equal(sample.screenshot, undefined);
     session.send = send;
-    const fresh = await controller.execute({ tool_name: 'computer.observe', full_access: true });
+    const fresh = await controller.execute({ tool_name: 'computer_observe', full_access: true });
     assert.equal(fresh.safety.level, 'routine');
     assert.ok(fresh.result.observation.nodes.some(node => node.name === 'Normal results'));
   } finally { await browser.close(); }
@@ -570,11 +570,11 @@ test('unknown safety failures stop the read and fresh calls preserve completed e
       if (method === 'Input.dispatchMouseEvent' && parameters.type === 'mouseReleased') effects++;
       return response;
     };
-    const initial = await controller.execute({ tool_name: 'computer.screenshot' });
+    const initial = await controller.execute({ tool_name: 'computer_capture_screenshot' });
     assert.equal(initial.error, 'TARGET_OBSERVATION_UNAVAILABLE');
     assert.equal(scans, 1);
     assert.equal(initial.screenshot, undefined);
-    const recovered = await controller.execute({ tool_name: 'computer.screenshot' });
+    const recovered = await controller.execute({ tool_name: 'computer_capture_screenshot' });
     assert.equal(recovered.error, undefined);
     assert.equal(recovered.safety.level, 'routine', JSON.stringify(recovered));
     assert.ok(recovered.screenshot);
@@ -594,19 +594,19 @@ test('unknown safety failures stop the read and fresh calls preserve completed e
     assert.equal(completed.result.observation, undefined);
     assert.equal(JSON.stringify(completed).includes('private scan exception'), false);
     assert.equal(await page.evaluate(() => globalThis.clicks), 1);
-    const stillUnavailable = await controller.execute({ tool_name: 'computer.observe' });
+    const stillUnavailable = await controller.execute({ tool_name: 'computer_observe' });
     assert.equal(stillUnavailable.error, 'TARGET_OBSERVATION_UNAVAILABLE');
     assert.equal(stillUnavailable.result.action_executed, false);
     assert.equal(stillUnavailable.result.observation, undefined);
     assert.equal(await page.evaluate(() => globalThis.clicks), 1);
     session.send = send;
     await page.evaluate(() => { document.body.insertAdjacentHTML('beforeend', '<input type="password" value="private-value">'); });
-    const secret = await controller.execute({ tool_name: 'computer.observe' });
+    const secret = await controller.execute({ tool_name: 'computer_observe' });
     assert.equal(secret.safety.level, 'takeover');
     assert.ok(secret.safety.reason_codes.includes('secret_input'));
     assert.equal(JSON.stringify(secret).includes('private-value'), false);
     await page.evaluate(() => document.querySelector('input').remove());
-    const fresh = await controller.execute({ tool_name: 'computer.observe' });
+    const fresh = await controller.execute({ tool_name: 'computer_observe' });
     assert.equal(fresh.safety.level, 'routine');
     assert.equal(await page.evaluate(() => globalThis.clicks), 1, 'read recovery never replays the click');
     // A readonly focus lookup inside an input operation uses the same closed
@@ -619,7 +619,7 @@ test('unknown safety failures stop the read and fresh calls preserve completed e
       }
       return send(method, parameters);
     };
-    const focusFailure = await controller.execute({ tool_name: 'computer.type', args: { text: 'Unsent' } });
+    const focusFailure = await controller.execute({ tool_name: 'computer_type_text', args: { text: 'Unsent' } });
     assert.deepEqual(focusFailure, { error: 'TARGET_OBSERVATION_UNAVAILABLE', result: { action_executed: false, needs_observation: true, observation_stage: 'semantic_read', diagnostic: {phase:'evaluation',method:'Runtime.evaluate',reason:'exception'} } });
     assert.equal(await page.locator('input').inputValue(), '');
   } finally { await browser.close(); }
@@ -646,7 +646,7 @@ test('confirmed private input still requires takeover when a frame changes durin
       }
       return response;
     };
-    const result = await controller.execute({ tool_name: 'computer.screenshot', full_access: true });
+    const result = await controller.execute({ tool_name: 'computer_capture_screenshot', full_access: true });
     assert.equal(changed, true);
     assert.equal(result.safety.level, 'takeover', JSON.stringify(result));
     assert.ok(result.safety.reason_codes.includes('secret_input'));
@@ -672,7 +672,7 @@ test('ordinary security vocabulary never establishes a sensitive platform fact',
       const controller = new BrowserComputerController(await tab.context().newCDPSession(tab));
       await controller.initialize();
       try {
-        const result = await controller.execute({tool_name:'computer.observe',full_access:true});
+        const result = await controller.execute({tool_name:'computer_observe',full_access:true});
         assert.equal(result.error, undefined, label);
         assert.equal(result.safety.level, 'routine', label);
         assert.ok(result.result.observation.nodes.some(node => node.name === label), label);

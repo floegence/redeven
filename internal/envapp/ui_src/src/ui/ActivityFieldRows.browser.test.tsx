@@ -61,7 +61,7 @@ describe('visible structured result rows', () => {
   it('preserves input labels and screenshot filtering for oversized plain text', async () => {
     for (const fixture of [
       { tool: 'inspect', section: 'inputs' as const, title: 'path', content: ' '.repeat(70000) + '/bounded/file', expected: DEFAULT_FLOWER_SURFACE_COPY.chat.toolActivity.inputPaths },
-      { tool: 'computer.screenshot', section: 'results' as const, title: 'Screenshot', content: ' '.repeat(70000), expected: undefined },
+      { tool: 'computer_capture_screenshot', section: 'results' as const, title: 'Screenshot', content: ' '.repeat(70000), expected: undefined },
     ]) {
       const reader = createActivityFieldReader({});
       const raw = new TextEncoder().encode(fixture.content);
@@ -77,7 +77,7 @@ describe('visible structured result rows', () => {
       });
       const item: FlowerActivityItem = { item_id: 'call', tool_name: fixture.tool, renderer: 'structured', kind: 'tool', status: 'success',
         severity: 'normal', needs_attention: false, requires_approval: false,
-        ...(fixture.tool === 'computer.screenshot' ? { target_refs: [{ kind: 'computer_frame' as const, label: 'Screenshot', resource_ref: 'computer://capture/' + 'a'.repeat(64) }] } : {}) };
+        ...(fixture.tool === 'computer_capture_screenshot' ? { target_refs: [{ kind: 'computer_frame' as const, label: 'Screenshot', resource_ref: 'computer://capture/' + 'a'.repeat(64) }] } : {}) };
       const root = document.createElement('div'); document.body.append(root);
       const dispose = render(() => <ActivityFieldRows reader={reader} threadID="thread" itemID="tool" item={item}
         field={{ path: fixture.section === 'inputs' ? '/payload/inputs' : '/payload/rows', kind: 'array', count: 1 }}

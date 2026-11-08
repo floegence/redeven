@@ -113,7 +113,7 @@ func TestTaskFilesCurrentPolicyAndWorkingDirectoryRemainIntact(t *testing.T) {
 			t.Fatal("fork shares working files")
 		}
 	}
-	if !strings.Contains(buildFlowerSystemPrompt(), "Save final deliverables") || !strings.Contains(buildFlowerSystemPrompt(), "file.present") {
+	if !strings.Contains(buildFlowerSystemPrompt(), "Save final deliverables") || !strings.Contains(buildFlowerSystemPrompt(), "file_present") {
 		t.Fatal("delivery contract absent")
 	}
 }
@@ -210,7 +210,7 @@ func TestTaskFilesBackgroundProcessPreventsCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	process, err := svc.terminalProcessManager().Start(terminalProcessStartRequest{ProcessID: "tp-task-files-test", EndpointID: meta.EndpointID, ThreadID: thread.ThreadID, RunID: "run-background", TurnID: "turn-background", ToolID: "terminal", ToolName: "terminal.exec", Command: "sleep 30", CwdAbs: svc.agentHomeDir, Shell: "/bin/sh", Env: os.Environ()})
+	process, err := svc.terminalProcessManager().Start(terminalProcessStartRequest{ProcessID: "tp-task-files-test", EndpointID: meta.EndpointID, ThreadID: thread.ThreadID, RunID: "run-background", TurnID: "turn-background", ToolID: "terminal", ToolName: "terminal_exec", Command: "sleep 30", CwdAbs: svc.agentHomeDir, Shell: "/bin/sh", Env: os.Environ()})
 	if err != nil {
 		t.Fatal(err)
 	}

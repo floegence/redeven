@@ -42,7 +42,7 @@ func TestReadFlowerToolPreviewUsesHistoricalCanonicalResultAndCurrentAuthorizati
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := &previewTestRuntime{found: true, result: flruntime.ThreadToolResult{ToolName: "threads.query", Arguments: `{"object":"messages","filter":{"text":{"contains":"release"}}}`, Status: "success", Content: `{"status":"success","data":{"records":[{"ref":"opaque","thread_id":"other-thread","title":"Release plan","snippet":"Ready to ship"}],"total":1}}`}}
+	runtime := &previewTestRuntime{found: true, result: flruntime.ThreadToolResult{ToolName: "thread_query", Arguments: `{"object":"messages","filter":{"text":{"contains":"release"}}}`, Status: "success", Content: `{"status":"success","data":{"records":[{"ref":"opaque","thread_id":"other-thread","title":"Release plan","snippet":"Ready to ship"}],"total":1}}`}}
 	svc.threadRuntime = runtime
 	request := FlowerToolPreviewRequest{ThreadID: thread.ThreadID, TurnID: "historical-turn", RunID: "historical-run", ToolCallID: "historical-call"}
 	preview, err := svc.ReadFlowerToolPreview(t.Context(), meta, request)
@@ -71,7 +71,7 @@ func TestReadFlowerToolPreviewUsesHistoricalCanonicalResultAndCurrentAuthorizati
 }
 
 func TestThreadToolPreviewPreservesReadableChunksAndPagination(t *testing.T) {
-	result := flruntime.ThreadToolResult{ToolName: "threads.read", Status: "success", Content: `{"status":"success","data":{"record":{"ref":"hidden","title":"Plan"},"chunks":[{"field":"body","offset":0,"text":"  Hello\n"},{"field":"body","offset":8,"text":"世界  "},{"field":"body","offset":40,"text":"another fragment"},{"field":"context","text":"PRIVATE_CONTEXT"},{"field":"references","text":"PRIVATE_REFERENCE"}],"next_cursor":"opaque-cursor"}}`}
+	result := flruntime.ThreadToolResult{ToolName: "thread_read", Status: "success", Content: `{"status":"success","data":{"record":{"ref":"hidden","title":"Plan"},"chunks":[{"field":"body","offset":0,"text":"  Hello\n"},{"field":"body","offset":8,"text":"世界  "},{"field":"body","offset":40,"text":"another fragment"},{"field":"context","text":"PRIVATE_CONTEXT"},{"field":"references","text":"PRIVATE_REFERENCE"}],"next_cursor":"opaque-cursor"}}`}
 	preview, err := threadToolPreview(result)
 	if err != nil || len(preview.Rows) != 2 || preview.Rows[0].Content != "  Hello\n世界  " || preview.Rows[1].Content != "another fragment" || !preview.HasMore {
 		t.Fatalf("preview=%+v err=%v", preview, err)
@@ -83,7 +83,7 @@ func TestThreadToolPreviewPreservesReadableChunksAndPagination(t *testing.T) {
 }
 
 func TestThreadToolPreviewEmptyAndAggregateResults(t *testing.T) {
-	for _, name := range []string{"threads.query", "threads.aggregate"} {
+	for _, name := range []string{"thread_query", "threads.aggregate"} {
 		result := flruntime.ThreadToolResult{ToolName: name, Status: "success", Arguments: `{"object":"threads"}`, Content: `{"status":"success","data":{"records":[],"groups":[],"total":0}}`}
 		preview, err := threadToolPreview(result)
 		if err != nil || preview.Total == nil || *preview.Total != 0 || preview.Rows == nil || len(preview.Rows) != 0 {
@@ -95,7 +95,7 @@ func TestThreadToolPreviewEmptyAndAggregateResults(t *testing.T) {
 	if err != nil || preview.Rows[0].Title != "assistant" || preview.Rows[0].Content != "27" || *preview.Total != 27 {
 		t.Fatalf("preview=%+v err=%v", preview, err)
 	}
-	for _, invalid := range []flruntime.ThreadToolResult{{ToolName: "terminal.exec", Status: "success", Content: `{"status":"success","data":{}}`}, {ToolName: "threads.read", Status: "error", Content: `{"status":"error"}`}, {ToolName: "threads.query", Status: "success", Content: `broken`}} {
+	for _, invalid := range []flruntime.ThreadToolResult{{ToolName: "terminal_exec", Status: "success", Content: `{"status":"success","data":{}}`}, {ToolName: "thread_read", Status: "error", Content: `{"status":"error"}`}, {ToolName: "thread_query", Status: "success", Content: `broken`}} {
 		if _, err := threadToolPreview(invalid); err == nil {
 			t.Fatal("accepted invalid result")
 		}
@@ -112,12 +112,12 @@ func TestReadFlowerToolPreviewAfterRestartDoesNotDispatchOrChangeCanonicalView(t
 		t.Fatal(err)
 	}
 	definition.Activity = func(inv fltools.Invocation[any]) (*fltools.ActivityPresentation, error) {
-		return floretActivityForToolCall("threads.query", inv.Args.(map[string]any)), nil
+		return floretActivityForToolCall("thread_query", inv.Args.(map[string]any)), nil
 	}
 	tool := fltools.Define[map[string]any](definition, nil, nil, func(_ context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 		dispatches.Add(1)
 		data := map[string]any{"records": []map[string]any{{"title": "Saved release", "snippet": "Historical result"}}, "total": 1}
-		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "threads.query", Status: "success", activityInput: inv.Args, Data: data})
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "thread_query", Status: "success", activityInput: inv.Args, Data: data})
 		if err != nil {
 			return fltools.Result{}, err
 		}
@@ -125,7 +125,7 @@ func TestReadFlowerToolPreviewAfterRestartDoesNotDispatchOrChangeCanonicalView(t
 		return fltools.Result{Text: string(content), Activity: activity}, err
 	})
 	gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "preview", StateCompatibilityKey: "test:preview:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
-		florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "saved-call", Name: "threads.query", Args: `{"object":"messages","description":"Find release discussions"}`}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}},
+		florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "saved-call", Name: "thread_query", Args: `{"object":"messages","description":"Find release discussions"}`}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}},
 		florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "Done"}, {Type: flprovider.EventDone, Reason: "stop"}}})
 	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "preview", Name: "Preview"}, SystemPrompt: "Test saved previews.", Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}}, gateway, flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect))
 	if err != nil {
@@ -213,7 +213,7 @@ func TestThreadToolPreviewReadsToolContentWithoutDumpingEnvelopes(t *testing.T) 
 		if field == "result" {
 			content = `{"status":"success","data":{"output":"ready","process_id":"PRIVATE"},"metadata":"PRIVATE"}`
 		}
-		rows := threadToolContentRows("terminal.exec", field, content)
+		rows := threadToolContentRows("terminal_exec", field, content)
 		if len(rows) == 0 {
 			t.Fatalf("missing %s preview", field)
 		}
@@ -230,7 +230,7 @@ func TestThreadToolPreviewBoundsAndEffectiveQueryParameters(t *testing.T) {
 		records[i] = map[string]any{"title": strings.Repeat("界", 300), "snippet": strings.Repeat("界", 4000), "role": "assistant"}
 	}
 	content, _ := json.Marshal(map[string]any{"status": "success", "data": map[string]any{"records": records, "total": 30}})
-	result := flruntime.ThreadToolResult{ToolName: "threads.query", Status: "success", Arguments: `{"object":"messages","filter":{"text":{"contains":"release"}},"sort":{"descending":false}}`, Content: string(content)}
+	result := flruntime.ThreadToolResult{ToolName: "thread_query", Status: "success", Arguments: `{"object":"messages","filter":{"text":{"contains":"release"}},"sort":{"descending":false}}`, Content: string(content)}
 	preview, err := threadToolPreview(result)
 	if err != nil || len(preview.Rows) > 10 || !preview.HasMore || !preview.Rows[0].Truncated {
 		t.Fatalf("unbounded preview: rows=%d more=%v err=%v", len(preview.Rows), preview.HasMore, err)
@@ -275,7 +275,7 @@ func TestThreadToolPreviewBoundsAndEffectiveQueryParameters(t *testing.T) {
 func TestThreadReadPreviewBoundsUTF8Chunks(t *testing.T) {
 	chunks := []map[string]any{{"field": "body", "offset": 0, "text": strings.Repeat("界", 4000)}, {"field": "body", "offset": 12000, "text": strings.Repeat("界", 4000)}}
 	content, _ := json.Marshal(map[string]any{"status": "success", "data": map[string]any{"record": map[string]any{"object": "messages", "role": "assistant", "title": "Release"}, "chunks": chunks}})
-	preview, err := threadToolPreview(flruntime.ThreadToolResult{ToolName: "threads.read", Status: "success", Content: string(content)})
+	preview, err := threadToolPreview(flruntime.ThreadToolResult{ToolName: "thread_read", Status: "success", Content: string(content)})
 	if err != nil || len(preview.Rows) != 1 || len([]rune(preview.Rows[0].Content)) > 1200 || !preview.Rows[0].Truncated || !preview.HasMore {
 		t.Fatalf("unbounded read: rows=%d more=%v err=%v", len(preview.Rows), preview.HasMore, err)
 	}

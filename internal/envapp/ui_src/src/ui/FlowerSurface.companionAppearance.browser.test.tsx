@@ -51,7 +51,7 @@ describe('Flower production companion appearance', () => {
       ...(state === 'approval' ? {
         approval_actions: [{
           action_id: 'appearance-approval', origin: 'main_tool' as const, run_id: 'run-appearance',
-          tool_id: 'tool-appearance', tool_name: 'terminal.exec', state: 'requested' as const,
+          tool_id: 'tool-appearance', tool_name: 'terminal_exec', state: 'requested' as const,
           status: 'pending' as const, requested_at_ms: 20_000, can_approve: true,
           surface_role: 'primary_action' as const, summary: { label: 'Review command', command: 'pwd' },
         }],

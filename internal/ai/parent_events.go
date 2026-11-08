@@ -15,8 +15,8 @@ import (
 
 func builtInParentEventToolDefinitions() []ToolDef {
 	return []ToolDef{
-		{Name: "report_to_parent", Description: "You are a child task managed by your direct parent. Report a discovery, question, blocker or help request to that parent. Returns an event ref; does not pause, complete or wake a task. Finishing your response automatically notifies the parent; the parent reads your full result through subagents inspect/wait.", InputSchema: toolSchemaRaw(map[string]any{"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string", "minLength": 1, "maxLength": 8192, "description": "At most 8192 UTF-8 bytes."}}, "required": []string{"message"}, "additionalProperties": false}), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityInteraction}, Source: "builtin", Namespace: "builtin.subagent", Priority: 100},
-		{Name: "subagent_events", Description: "List child event refs or read report text addressed to the current parent thread, including earlier turns. This is not a global event stream. read requires event_id or a fixed first_event_id/last_event_id range; continue with next_after_event_id. Completion events contain no final report; use subagents inspect/wait for reports and failures.", InputSchema: toolSchemaRaw(map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "read"}}, "event_id": map[string]any{"type": "string"}, "first_event_id": map[string]any{"type": "string"}, "last_event_id": map[string]any{"type": "string"}, "after_event_id": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}}, "required": []string{"action"}, "additionalProperties": false}), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.subagent", Priority: 100},
+		{Name: "subagent_report", Description: "You are a child task managed by your direct parent. Report a discovery, question, blocker or help request to that parent. Returns an event ref; does not pause, complete or wake a task. Finishing your response automatically notifies the parent; the parent reads your full result through subagent_manage inspect/wait.", InputSchema: toolSchemaRaw(map[string]any{"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string", "minLength": 1, "maxLength": 8192, "description": "At most 8192 UTF-8 bytes."}}, "required": []string{"message"}, "additionalProperties": false}), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityInteraction}, Source: "builtin", Namespace: "builtin.subagent", Priority: 100},
+		{Name: "subagent_read_events", Description: "List child event refs or read report text addressed to the current parent thread, including earlier turns. This is not a global event stream. read requires event_id or a fixed first_event_id/last_event_id range; continue with next_after_event_id. Completion events contain no final report; use subagent_manage inspect/wait for reports and failures.", InputSchema: toolSchemaRaw(map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "read"}}, "event_id": map[string]any{"type": "string"}, "first_event_id": map[string]any{"type": "string"}, "last_event_id": map[string]any{"type": "string"}, "after_event_id": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}}, "required": []string{"action"}, "additionalProperties": false}), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.subagent", Priority: 100},
 	}
 }
 
@@ -35,7 +35,7 @@ func (r *run) parentEventService() (flruntime.ThreadParentEventService, error) {
 // Neither the model nor a product setting supplies sender or recipient identities.
 func (r *run) reportToParent(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 	if r.subagentDepth == 0 {
-		return fltools.Result{}, errors.New("report_to_parent is available only to child tasks")
+		return fltools.Result{}, errors.New("subagent_report is available only to child tasks")
 	}
 	message, ok := inv.Args["message"].(string)
 	if !ok || !utf8.ValidString(message) || strings.TrimSpace(message) == "" || len(message) > 8192 {
@@ -79,7 +79,7 @@ func readParentEventPage(ctx context.Context, service flruntime.ThreadParentEven
 	case "read":
 		return service.ReadParentEvents(ctx, flruntime.ReadParentEventsInput{ThreadID: threadID, EventID: field("event_id"), FirstEventID: field("first_event_id"), LastEventID: field("last_event_id"), AfterEventID: field("after_event_id"), Limit: limit})
 	default:
-		return flruntime.ParentEventPage{}, fmt.Errorf("unsupported subagent_events action %q", field("action"))
+		return flruntime.ParentEventPage{}, fmt.Errorf("unsupported subagent_read_events action %q", field("action"))
 	}
 }
 

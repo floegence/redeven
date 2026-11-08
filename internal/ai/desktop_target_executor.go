@@ -96,7 +96,7 @@ func (e *NativeDesktopTargetExecutor) ListTargets(ctx context.Context) ([]Target
 	if err := e.EnsureTargetReady(ctx, "desktop-main"); err != nil {
 		return nil, err
 	}
-	result, err := e.executeTargetTool(ctx, TargetToolCall{TargetID: "desktop-main", ToolName: "computer.targets"}, false)
+	result, err := e.executeTargetTool(ctx, TargetToolCall{TargetID: "desktop-main", ToolName: "computer_list_targets"}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, cal
 		healthy = true
 		return result, nil
 	}
-	if userControl && call.ToolName != "computer.screenshot" {
+	if userControl && call.ToolName != "computer_capture_screenshot" {
 		if event.Payload["acknowledged"] != true || event.Payload["screenshot_base64"] != nil {
 			return TargetToolResult{}, errors.New("invalid native private input acknowledgement")
 		}

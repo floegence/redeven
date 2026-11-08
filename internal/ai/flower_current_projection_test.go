@@ -291,14 +291,14 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 }
 
 func TestFlowerCurrentPublishesParsedPatchNameBeforeArgumentsComplete(t *testing.T) {
-	parse := flowerArgumentPreviewFactory("apply_patch")()
+	parse := flowerArgumentPreviewFactory("file_apply_patch")()
 	preview, err := parse(`{"input":"*** Begin Patch\n*** Update File: src/example.ts\n@@\n-old\n+new`, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	current := flruntime.ThreadView{ThreadID: "thread-preview", TurnID: "turn-preview", RunID: "run-preview", Activity: flruntime.ThreadActivityActive,
 		RunProgress:      &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: time.Now()}},
-		ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread-preview", TurnID: "turn-preview", RunID: "run-preview", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, CallID: "patch", Name: "apply_patch", Preview: preview}},
+		ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread-preview", TurnID: "turn-preview", RunID: "run-preview", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, CallID: "patch", Name: "file_apply_patch", Preview: preview}},
 	}
 	encoded, err := flowerCurrentJSON(current)
 	if err != nil {
@@ -326,7 +326,7 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 			LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: started, FirstOutputAt: &first, LastProgressAt: &first, EstimatedOutputTokens: 128,
 		}},
 		ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread-progress", TurnID: "turn-progress", RunID: "run-progress", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1,
-			CallID: "call", Name: "file.write", Preview: &fltools.ArgumentPreview{DisplayName: "safe.txt", Additions: &zero}}},
+			CallID: "call", Name: "file_write", Preview: &fltools.ArgumentPreview{DisplayName: "safe.txt", Additions: &zero}}},
 	}
 
 	encoded, err := flowerCurrentJSON(current)
@@ -665,7 +665,7 @@ func TestFlowerChildWindowRetainsComputerAuthorityOutsideMembership(t *testing.T
 		if !strings.Contains(string(raw), "computer_assistance") {
 			t.Fatalf("lost authorized pending control: %s", raw)
 		}
-		if strings.Contains(string(raw), "browser.navigate") {
+		if strings.Contains(string(raw), "browser_navigate") {
 			t.Fatalf("out-of-window tool body leaked: %s", raw)
 		}
 	}

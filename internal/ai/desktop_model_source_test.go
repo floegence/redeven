@@ -766,7 +766,7 @@ func TestDesktopModelSourceProviderPreservesEmptyToolArguments(t *testing.T) {
 				},
 				ToolCalls: []ToolCall{{
 					ID:   "call_okf_index",
-					Name: "okf.index",
+					Name: "okf_get_index",
 					Args: map[string]any{},
 				}},
 			})
@@ -821,15 +821,15 @@ func TestDesktopModelSourcePreservesMalformedArgumentsForFloret(t *testing.T) {
 		}
 		return testDesktopModelSourceResult(t, frame.ID, ModelGatewayResult{
 			FinishReason: "tool_calls",
-			ToolCalls:    []ToolCall{{ID: "ask", Name: "ask_user", ArgsJSON: arguments}},
+			ToolCalls:    []ToolCall{{ID: "ask", Name: "user_ask", ArgsJSON: arguments}},
 		})
 	})
 	defer cleanup()
 	adapter := newFloretProviderAdapter(modelSource.ModelGateway("desktop:model_test"), "desktop_model_source", "desktop:model_test", ProviderControls{}, TurnBudgets{}, "")
 	stream, err := adapter.Stream(t.Context(), flprovider.Request{Messages: []flprovider.Message{
 		{Role: flprovider.RoleUser, Text: "Ask about restart."},
-		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "rejected", Name: "ask_user", Args: arguments}}},
-		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "rejected", ToolName: "ask_user", Text: "Invalid JSON; call did not execute."}},
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "rejected", Name: "user_ask", Args: arguments}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "rejected", ToolName: "user_ask", Text: "Invalid JSON; call did not execute."}},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -841,7 +841,7 @@ func TestDesktopModelSourcePreservesMalformedArgumentsForFloret(t *testing.T) {
 		}
 		calls = append(calls, event.ToolCalls...)
 	}
-	if len(calls) != 1 || calls[0].ID != "ask" || calls[0].Name != "ask_user" || calls[0].Args != arguments {
+	if len(calls) != 1 || calls[0].ID != "ask" || calls[0].Name != "user_ask" || calls[0].Args != arguments {
 		t.Fatalf("RPC lost original rejected arguments: %+v", calls)
 	}
 }

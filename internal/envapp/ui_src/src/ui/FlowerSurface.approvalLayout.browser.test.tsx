@@ -23,7 +23,7 @@ function mountApprovals(count: number, options: { input?: ReturnType<typeof inpu
     permission_type: 'approval_required',
     approval_actions: Array.from({ length: count }, (_, index) => ({
       action_id: `approval-${index}`, turn_id: 'turn-fixture', origin: 'main_tool' as const, run_id: 'run-layout',
-      tool_id: `tool-${index}`, tool_name: 'terminal.exec', state: 'requested' as const,
+      tool_id: `tool-${index}`, tool_name: 'terminal_exec', state: 'requested' as const,
       status: 'pending' as const, requested_at_ms: 1, can_approve: true, queue_order: index,
       summary: { label: `Inspect installed development tools ${index + 1}`,
         command: options.command ?? 'for c in node npm pnpm yarn python3 pip3 pipx go cargo rustc; do command -v "$c"; done' },
@@ -385,7 +385,7 @@ it('keeps targets, risks, unavailable reasons, and supporting context directly v
   const path = '/workspace/' + 'long-directory/'.repeat(12) + 'settings.json';
   const fixture = mountApprovals(2, { transformAction: (action, index) => ({ ...action,
     can_approve: index === 0, read_only_reason: index === 1 ? 'This action requires the task owner.' : undefined,
-    tool_name: index === 0 ? 'file.write' : 'web_fetch',
+    tool_name: index === 0 ? 'file_write' : 'web_fetch',
     summary: index === 0 ? {
       label: 'Update project settings', description: 'Apply the selected development configuration.',
       targets: [{ kind: 'file' as const, label: path }, { kind: 'file' as const, label: '/workspace/package.json' }, { kind: 'working_directory' as const, label: '/workspace' }],

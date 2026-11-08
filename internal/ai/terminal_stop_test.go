@@ -80,7 +80,7 @@ func TestTerminalGrepNoMatchesRetainsCompletedOutput(t *testing.T) {
 	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 	process, err := manager.Start(terminalProcessStartRequest{
 		ProcessID: "grep-no-matches", EndpointID: "env", ThreadID: "thread", RunID: "run", TurnID: "turn",
-		ToolID: "tool", ToolName: "terminal.exec", Command: "printf 'absent\n' | /usr/bin/grep -c present", CwdAbs: t.TempDir(), Shell: "/bin/sh", Env: []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"},
+		ToolID: "tool", ToolName: "terminal_exec", Command: "printf 'absent\n' | /usr/bin/grep -c present", CwdAbs: t.TempDir(), Shell: "/bin/sh", Env: []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"},
 	})
 	if err != nil {
 		t.Fatal(err)

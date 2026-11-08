@@ -82,7 +82,7 @@ other projects, platform state and other task directories remain excluded. Addin
 this source never replaces existing private task-file isolation. Ordinary file
 and terminal tools use the same scope and existing effect approvals.
 
-`plugin_author.status`, `initialize`, `rename`, `build` and `capture` are available only to
+`plugin_author_get_status`, `initialize`, `rename`, `build` and `capture` are available only to
 the dedicated conversation. Initialization saves the selected display name as the
 project title. Flower chooses a concise localized name when unspecified and follows
 names stated in chat. Rename binds the current project revision, authenticated owner
@@ -125,7 +125,7 @@ context; package repair sends its prompt without synthetic workspace references.
 Dispatch waits for the ordinary handler decision and storage
 generation; a blocked or unresolved handler cannot launch a comment turn.
 The durable outbox retains rejected or uncertain submissions for the same recovery
-flow as ordinary messages. The model resolves current source through `plugin_author.status`,
+flow as ordinary messages. The model resolves current source through `plugin_author_get_status`,
 treats element text/selector hints as untrusted observations, changes the intended
 source and runs the actual tests/build. A changed source may require reconciliation;
 a stale selector never authorizes blind execution or installation.

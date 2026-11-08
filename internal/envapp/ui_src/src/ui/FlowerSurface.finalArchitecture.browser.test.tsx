@@ -369,7 +369,7 @@ describe('Flower final thread cache and workspace transport', () => {
         {
           id: 'child-tool-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 2,
           kind: 'tool', activity: {
-            item_id: 'child-tool-live', tool_id: 'child-tool-live', tool_name: 'terminal.exec', kind: 'tool',
+            item_id: 'child-tool-live', tool_id: 'child-tool-live', tool_name: 'terminal_exec', kind: 'tool',
             status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
               label: 'Run command',
@@ -382,7 +382,7 @@ describe('Flower final thread cache and workspace transport', () => {
         ...(viewVersion >= 12 ? [{
           id: 'child-tool-peer', turn_id: 'child-turn', run_id: 'child-run', ordinal: 3,
           kind: 'tool' as const, activity: {
-            item_id: 'child-tool-peer', tool_id: 'child-tool-peer', tool_name: 'terminal.exec', kind: 'tool',
+            item_id: 'child-tool-peer', tool_id: 'child-tool-peer', tool_name: 'terminal_exec', kind: 'tool',
             status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
               label: 'Run command',
@@ -1033,7 +1033,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.textContent).toContain('Generating...');
 
     const toolActivity = {
-      item_id: 'tool:continued', tool_id: 'tool:continued', tool_name: 'file.write', kind: 'tool',
+      item_id: 'tool:continued', tool_id: 'tool:continued', tool_name: 'file_write', kind: 'tool',
       status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
       presentation: {
         label: 'weather_gd.py', renderer: 'file',
@@ -1360,11 +1360,11 @@ describe('Flower final thread cache and workspace transport', () => {
             activityItem({
               item_id: 'okf-search',
               tool_id: 'okf-search',
-              tool_name: 'okf.search',
+              tool_name: 'okf_search',
               renderer: 'structured',
               label: 'OKF search results',
               payload: {
-                operation: 'okf.search',
+                operation: 'okf_search',
                 rows: [{
                   title: 'Flower runtime',
                   meta: 'Architecture · Summary',
@@ -1376,10 +1376,10 @@ describe('Flower final thread cache and workspace transport', () => {
             activityItem({
               item_id: 'skill-success',
               tool_id: 'skill-success',
-              tool_name: 'use_skill',
+              tool_name: 'skill_use',
               renderer: 'structured',
               label: 'redeven-environment',
-              payload: { operation: 'use_skill', status: 'success' },
+              payload: { operation: 'skill_use', status: 'success' },
             }),
           ],
         })],
@@ -1572,7 +1572,7 @@ describe('Flower final thread cache and workspace transport', () => {
       messages: [{
         id: 'failed-tool-message', turn_id: 'turn-failed-tool', role: 'assistant', content: '', status: 'complete', created_at_ms: 10,
         blocks: [activityTimeline({ thread_id: threadID, turn_id: 'turn-failed-tool', run_id: 'run-failed-tool', items: [activityItem({
-          item_id: 'failed-command', tool_id: 'failed-command', tool_name: 'terminal.exec', renderer: 'terminal',
+          item_id: 'failed-command', tool_id: 'failed-command', tool_name: 'terminal_exec', renderer: 'terminal',
           label: 'Inspect environment status', status: 'error', needs_attention: true,
           payload: { operation: 'exec', command: 'redeven env status --json', output: 'command not found', exit_code: 127, error: { message: 'Terminal process exited with code 127' } },
         })] })],
@@ -1603,7 +1603,7 @@ describe('Flower final thread cache and workspace transport', () => {
       items: [{
         id: 'tool-live-command', ordinal: 1, turn_id: 'turn-live-command', run_id: 'run-live-command', kind: 'tool', live: status === 'running',
         activity: {
-          item_id: 'tool-live-command', tool_id: 'command-call', tool_name: 'terminal.exec', kind: 'tool', status, severity: 'normal', requires_approval: false,
+          item_id: 'tool-live-command', tool_id: 'command-call', tool_name: 'terminal_exec', kind: 'tool', status, severity: 'normal', requires_approval: false,
           needs_attention: status === 'error',
           presentation: { label: 'Inspect environment status', renderer: 'terminal', payload: { operation: 'exec', command: 'printf READY', output, ...(status === 'error' ? { exit_code: 1, error: { message: 'Diagnostic failed' } } : {}) } },
         },
@@ -1668,18 +1668,18 @@ describe('Flower final thread cache and workspace transport', () => {
             activityItem({
               item_id: 'terminal-exec-semantic',
               tool_id: 'terminal-exec-semantic',
-              tool_name: 'terminal.exec',
+              tool_name: 'terminal_exec',
               renderer: 'structured',
-              label: 'terminal.exec',
+              label: 'terminal_exec',
               description: 'Fetch official specifications',
               payload: { command: 'curl -s https://example.test/specifications' },
             }),
             activityItem({
               item_id: 'terminal-terminate-semantic',
               tool_id: 'terminal-terminate-semantic',
-              tool_name: 'terminal.terminate',
+              tool_name: 'terminal_terminate',
               renderer: 'structured',
-              label: 'terminal.terminate',
+              label: 'terminal_terminate',
               description: 'Stop the stalled request',
               payload: {},
             }),
@@ -1701,8 +1701,8 @@ describe('Flower final thread cache and workspace transport', () => {
     const terminateRow = runtime.querySelector('[data-flower-activity-item-id="terminal-terminate-semantic"]') as HTMLElement;
     expect(execRow.textContent).toContain('Fetch official specifications');
     expect(terminateRow.textContent).toContain('Stop the stalled request');
-    expect(runtime.textContent).not.toContain('terminal.exec');
-    expect(runtime.textContent).not.toContain('terminal.terminate');
+    expect(runtime.textContent).not.toContain('terminal_exec');
+    expect(runtime.textContent).not.toContain('terminal_terminate');
     expect(execRow.querySelector('button.flower-activity-inline-button')).not.toBeNull();
     const terminateToggle = terminateRow.querySelector<HTMLButtonElement>('button.flower-activity-inline-button')!;
     expect(terminateToggle).not.toBeNull();
@@ -1760,7 +1760,7 @@ describe('Flower final thread cache and workspace transport', () => {
           resolved: false,
           approval: {
             label: 'Run deployment',
-            tool_name: 'terminal.exec',
+            tool_name: 'terminal_exec',
             tool_call_id: 'tool-a',
           },
         }],
@@ -1783,7 +1783,7 @@ describe('Flower final thread cache and workspace transport', () => {
       origin: 'main_tool' as const,
       run_id: 'turn-a',
       tool_id: 'tool-a',
-      tool_name: 'terminal.exec',
+      tool_name: 'terminal_exec',
       state: 'requested' as const,
       status: 'pending' as const,
       requested_at_ms: 4,
@@ -1967,7 +1967,7 @@ describe('Flower final thread cache and workspace transport', () => {
         origin: 'main_tool',
         run_id: runID,
         tool_id: 'approval-gap-tool',
-        tool_name: 'terminal.exec',
+        tool_name: 'terminal_exec',
         state: 'requested',
         status: 'pending',
         requested_at_ms: 4,
@@ -1999,7 +1999,7 @@ describe('Flower final thread cache and workspace transport', () => {
         interactions: [{
           id: 'approval-gap-action', kind: 'approval', turn_id: turnID, run_id: runID,
           tool_call_id: 'approval-gap-tool', resolved: false,
-          approval: { label: 'Run deployment', tool_name: 'terminal.exec', tool_call_id: 'approval-gap-tool' },
+          approval: { label: 'Run deployment', tool_name: 'terminal_exec', tool_call_id: 'approval-gap-tool' },
         }],
       } : {
         thread_id: threadID,

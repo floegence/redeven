@@ -57,7 +57,7 @@ func TestComputerParallelSelectionReturnsPairedFeedbackWithoutEffects(t *testing
 					t.Errorf("batch feedback: %+v", out)
 				}
 			}
-			item := map[string]any{"type": "function_call", "id": "observe", "call_id": "observe", "name": "computer_screenshot", "arguments": `{"description":"Inspect original target"}`}
+			item := map[string]any{"type": "function_call", "id": "observe", "call_id": "observe", "name": "computer_capture_screenshot", "arguments": `{"description":"Inspect original target"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "single")
@@ -108,7 +108,7 @@ func TestComputerParallelSelectionReturnsPairedFeedbackWithoutEffects(t *testing
 		t.Fatalf("target calls=%d, want only sequential screenshot", len(executor.calls))
 	}
 	call := <-executor.calls
-	if call.TargetID != "browser-main" || call.ToolName != "computer.screenshot" {
+	if call.TargetID != "browser-main" || call.ToolName != "computer_capture_screenshot" {
 		t.Fatalf("unexpected effect: %+v", call)
 	}
 	bound, err := svc.snapshotThreadStore().GetComputerTarget(t.Context(), thread.ThreadID)
@@ -123,7 +123,7 @@ func TestComputerMixedBatchPreservesIndependentTools(t *testing.T) {
 		args map[string]any
 	}{
 		{"terminal_exec", map[string]any{"command": "printf independent", "description": "Read independent fixture"}},
-		{"goal", map[string]any{"operation": "set", "expected_version": 0, "text": "Inspect the isolated fixture."}},
+		{"goal_manage", map[string]any{"operation": "set", "expected_version": 0, "text": "Inspect the isolated fixture."}},
 	} {
 		t.Run(sibling.name, func(t *testing.T) {
 
@@ -147,7 +147,7 @@ func TestComputerMixedBatchPreservesIndependentTools(t *testing.T) {
 						args map[string]any
 					}{
 						{sibling.name, sibling.args},
-						{"computer_key", map[string]any{"key": "Escape", "description": "Exercise selected fixture"}},
+						{"computer_press_key", map[string]any{"key": "Escape", "description": "Exercise selected fixture"}},
 					} {
 						args, _ := json.Marshal(call.args)
 						id := call.name
@@ -166,9 +166,9 @@ func TestComputerMixedBatchPreservesIndependentTools(t *testing.T) {
 							t.Errorf("independent batch rejected: %+v", out)
 						}
 					}
-					if sibling.name == "goal" {
+					if sibling.name == "goal_manage" {
 						args, _ := json.Marshal(map[string]any{"operation": "review", "expected_version": 1, "outcome": "completed", "evidence": "The isolated computer action completed."})
-						item := map[string]any{"type": "function_call", "id": "review", "call_id": "review", "name": "goal", "arguments": string(args)}
+						item := map[string]any{"type": "function_call", "id": "review", "call_id": "review", "name": "goal_manage", "arguments": string(args)}
 						writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 						writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 						writeAskUserIntegrationCompletedResponse(w, flusher, "review")
@@ -210,12 +210,12 @@ func TestComputerMixedBatchPreservesIndependentTools(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			terminal, err := runTypedTurnForTest(t, context.Background(), svc, meta, "batch", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Inspect the task page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess, ToolAllowlist: append(legacyComputerFixtureTools(), "terminal.exec")}})
+			terminal, err := runTypedTurnForTest(t, context.Background(), svc, meta, "batch", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Inspect the task page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess, ToolAllowlist: append(legacyComputerFixtureTools(), "terminal_exec")}})
 			if err != nil {
 				t.Fatalf("turn: %v; failure=%+v", err, terminal.Failure)
 			}
 			wantRequests := int32(2)
-			if sibling.name == "goal" {
+			if sibling.name == "goal_manage" {
 				wantRequests = 3
 			}
 			if requests.Load() != wantRequests {
@@ -225,7 +225,7 @@ func TestComputerMixedBatchPreservesIndependentTools(t *testing.T) {
 				t.Fatalf("target calls=%d, want one isolated input dispatch", len(executor.calls))
 			}
 			call := <-executor.calls
-			if call.TargetID != "browser-main" || call.ToolName != "computer.key" {
+			if call.TargetID != "browser-main" || call.ToolName != "computer_press_key" {
 				t.Fatalf("unexpected effect: %+v", call)
 			}
 			bound, err := svc.snapshotThreadStore().GetComputerTarget(t.Context(), thread.ThreadID)

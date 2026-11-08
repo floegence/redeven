@@ -79,7 +79,7 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 		return result, err, false
 	}
 	if code == "NAVIGATION_FAILED" || code == "NAVIGATION_TIMEOUT" {
-		if call.ToolName != "browser.navigate" && call.ToolName != "browser.back" && call.ToolName != "browser.reload" {
+		if call.ToolName != "browser_navigate" && call.ToolName != "browser_go_back" && call.ToolName != "browser_reload" {
 			return invalid()
 		}
 		executed, _ := payload["action_executed"].(bool)
@@ -207,7 +207,7 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 
 func computerCallMutates(call TargetToolCall) bool {
 	switch call.ToolName {
-	case "computer.screenshot", "computer.observe", "computer.wait", "computer.targets", "browser.wait_for_download", "browser.download_cursor", "browser.read_download", "computer.applications":
+	case "computer_capture_screenshot", "computer_observe", "computer_wait", "computer_list_targets", "browser.wait_for_download", "browser.download_cursor", "browser.read_download", "computer.applications":
 		return false
 	case "computer.action":
 		var operation map[string]any

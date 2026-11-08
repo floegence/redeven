@@ -9,7 +9,7 @@ async function fixture(run) {
     await tab.setContent('<section aria-label="Scope"><button id="candidate">Ready</button></section>');
     const session=await tab.context().newCDPSession(tab);controller=new BrowserComputerController(session);await controller.initialize();
     const call=(tool_name,args={})=>controller.execute({tool_name,args,script_operation:true,full_access:true});
-    const initial=await call('computer.observe');assert.ok(initial.result.observation);await run({tab,session,controller,call,initial});
+    const initial=await call('computer_observe');assert.ok(initial.result.observation);await run({tab,session,controller,call,initial});
   }finally{if(controller){await controller.page.releasePage();controller.close();}await browser.close();}
 }
 for(const change of ['name','role','hidden','replacement']) {
@@ -59,7 +59,7 @@ for(const kind of ['ref','root_ref','click','ambiguous','protocol']) {
 test('malformed safety input retains bounded method and reason without retry',async()=>fixture(async({session,call})=>{
   const send=session.send.bind(session);let attempts=0;
   session.send=async(method,params)=>{if(method==='DOMSnapshot.captureSnapshot'){attempts++;return {strings:[]};}return send(method,params);};
-  const result=await call('computer.observe');assert.equal(result.error,'TARGET_OBSERVATION_UNAVAILABLE');
+  const result=await call('computer_observe');assert.equal(result.error,'TARGET_OBSERVATION_UNAVAILABLE');
   assert.deepEqual(result.result.diagnostic,{phase:'adapter',method:'DOMSnapshot.captureSnapshot',reason:'invalid_result'});
   assert.equal(result.result.observation,undefined);assert.equal(attempts,1);
 }));
@@ -101,7 +101,7 @@ test('scoped query resampling cannot select a match outside the original root',a
 
 test('unclassified adapter exceptions carry bounded stage without private details',async()=>fixture(async({controller,call})=>{
   controller.page.safety=async()=>{throw new TypeError('private page payload');};
-  const response=await call('computer.observe');
+  const response=await call('computer_observe');
   assert.deepEqual(response.result.diagnostic,{phase:'adapter',method:'safety_scan',reason:'internal_error'});
   assert.equal(JSON.stringify(response).includes('private page'),false);
 }));
@@ -114,7 +114,7 @@ test('valid empty protocol attributes and optional geometry do not fail safety',
     if(method==='DOMSnapshot.captureSnapshot')for(const doc of result.documents){delete doc.scrollOffsetX;delete doc.scrollOffsetY;}
     return result;
   };
-  const response=await call('computer.observe');assert.equal(response.error,undefined,JSON.stringify(response));
+  const response=await call('computer_observe');assert.equal(response.error,undefined,JSON.stringify(response));
   assert.ok(response.result.observation.nodes.some(n=>n.name==='Ready'));
   assert.ok(response.result.observation.nodes.every(n=>n.bounds===undefined));
 }));

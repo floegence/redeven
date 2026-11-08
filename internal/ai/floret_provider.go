@@ -232,7 +232,7 @@ func estimateGatewayInput(providerType string, req ModelGatewayRequest) (flprovi
 	if err != nil {
 		return flprovider.TokenEstimate{}, err
 	}
-	return flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: req.Model, Format: flprovider.RequestFormatJSON, Payload: payload, Attribution: renderedContextAttribution(flprovider.RequestFormatJSON, payload, req, providerToolAliases{})})
+	return flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: req.Model, Format: flprovider.RequestFormatJSON, Payload: payload, Attribution: renderedContextAttribution(flprovider.RequestFormatJSON, payload, req, providerToolContract{})})
 }
 
 func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, providerReq flprovider.Request, execute func(context.Context, func(StreamEvent)) (ModelGatewayResult, error)) <-chan flprovider.Event {

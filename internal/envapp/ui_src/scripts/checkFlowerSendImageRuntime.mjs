@@ -115,7 +115,7 @@ const provider = http.createServer(async (request, response) => {
       assert(images.some(part => part.image_url === `data:image/png;base64,${nativeImage}`), 'The provider receives exact immutable image bytes');
     }
     if (latestText.includes('QUALIFY_IMAGE') && !toolOutputs.some(item => imageReadCalls.has(item.call_id))) {
-      assert(input.tools.some(tool => tool.name === 'image_read'), 'Direct image.read is available');
+      assert(input.tools.some(tool => tool.name === 'image_read'), 'Direct image_read is available');
       const callID = `image-${id}`;
       imageReadCalls.add(callID);
       const call = { type: 'function_call', id: callID, call_id: callID, name: 'image_read', arguments: JSON.stringify({ file_path: 'source.png' }) };

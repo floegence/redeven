@@ -12,6 +12,7 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/floret/v7/threadquery"
 	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/redeven/internal/ai/toolnames"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -51,7 +52,7 @@ func (s *Service) ReadFlowerToolPreview(ctx context.Context, meta *session.Meta,
 		return FlowerToolPreview{}, ErrFlowerToolPreviewNotFound
 	}
 	result, found, err := reader.LookupToolResult(ctx, flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(req.ThreadID), TurnID: identity.TurnID(req.TurnID), RunID: identity.RunID(req.RunID), ToolCallID: req.ToolCallID})
-	if err != nil || !found || !(isThreadQueryTool(result.ToolName) || result.ToolName == "threads.aggregate") {
+	if err != nil || !found || !(isThreadQueryTool(toolnames.Historical(result.ToolName)) || result.ToolName == "threads.aggregate") {
 		return FlowerToolPreview{}, ErrFlowerToolPreviewNotFound
 	}
 	return threadToolPreview(result)
@@ -59,6 +60,8 @@ func (s *Service) ReadFlowerToolPreview(ctx context.Context, meta *session.Meta,
 
 func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, error) {
 	preview := FlowerToolPreview{ToolName: result.ToolName, Inputs: []fltools.StructuredActivityRow{}, Rows: []fltools.StructuredActivityRow{}}
+	// Select the renderer without changing the returned canonical identity.
+	result.ToolName = toolnames.Historical(result.ToolName)
 	row := func(title, content string) fltools.StructuredActivityRow {
 		return fltools.StructuredActivityRow{Title: title, Content: content, Format: "text"}
 	}
@@ -70,9 +73,9 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		return preview, ErrFlowerToolPreviewNotFound
 	}
 	switch result.ToolName {
-	case "threads.query", "threads.aggregate":
+	case "thread_query", "threads.aggregate":
 		var input threadquery.AggregateInput
-		input.Sort.Descending = result.ToolName == "threads.query"
+		input.Sort.Descending = result.ToolName == "thread_query"
 		if err := json.Unmarshal([]byte(result.Arguments), &input); err != nil {
 			return preview, ErrFlowerToolPreviewNotFound
 		}
@@ -84,8 +87,8 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		}
 		// An object-only saved call is shared by old and current contracts. Do not
 		// invent which default ordering produced its immutable result.
-		ambiguousOrder := result.ToolName == "threads.query" && fields["object"] != nil && fields["thread_id"] == nil && fields["title"] == nil && fields["filter"] == nil && fields["sort"] == nil
-		if result.ToolName == "threads.query" && !ambiguousOrder && fields["filter"] == nil && fields["sort"] == nil {
+		ambiguousOrder := result.ToolName == "thread_query" && fields["object"] != nil && fields["thread_id"] == nil && fields["title"] == nil && fields["filter"] == nil && fields["sort"] == nil
+		if result.ToolName == "thread_query" && !ambiguousOrder && fields["filter"] == nil && fields["sort"] == nil {
 			var browse threadBrowseInput
 			if err := json.Unmarshal([]byte(result.Arguments), &browse); err != nil {
 				return preview, ErrFlowerToolPreviewNotFound
@@ -136,7 +139,7 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		sortKey := input.Sort.Key
 		if sortKey == "" {
 			sortKey = "key"
-			if result.ToolName == "threads.query" {
+			if result.ToolName == "thread_query" {
 				keys := historicalThreadQuerySortKeys(input.Object)
 				if len(keys) == 0 {
 					return preview, ErrFlowerToolPreviewNotFound
@@ -182,7 +185,7 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		if input.GroupBy != "" {
 			preview.Inputs = append(preview.Inputs, row("group_by", input.GroupBy))
 		}
-		if result.ToolName == "threads.query" {
+		if result.ToolName == "thread_query" {
 			var page threadquery.Page
 			if err := json.Unmarshal(envelope.Data, &page); err != nil {
 				return preview, ErrFlowerToolPreviewNotFound
@@ -207,7 +210,7 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 				preview.Rows = append(preview.Rows, fltools.StructuredActivityRow{Title: title, Content: strconv.Itoa(group.Count), Format: "text"})
 			}
 		}
-	case "threads.read":
+	case "thread_read":
 		var page threadquery.ReadPage
 		if err := json.Unmarshal(envelope.Data, &page); err != nil {
 			return preview, ErrFlowerToolPreviewNotFound

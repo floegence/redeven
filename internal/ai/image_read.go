@@ -180,8 +180,8 @@ func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID stri
 	var body []byte
 	var name string
 	var sourcePath string
-	if r.shouldRouteTargetTool("image.read") {
-		result, err := r.execTargetTool(ctx, toolID, "image.read", args)
+	if r.shouldRouteTargetTool("image_read") {
+		result, err := r.execTargetTool(ctx, toolID, "image_read", args)
 		if err != nil {
 			return nil, err
 		}

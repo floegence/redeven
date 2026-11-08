@@ -11,7 +11,7 @@ func TestInMemoryToolRegistry_RejectsMissingPresentationSpec(t *testing.T) {
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	err := reg.Register(ToolDef{Name: "custom.tool", Source: "builtin"})
+	err := reg.Register(ToolDef{Name: "custom_tool", Source: "builtin"})
 	if err == nil {
 		t.Fatalf("Register succeeded without presentation spec")
 	}
@@ -25,9 +25,9 @@ func TestInMemoryToolRegistry_AcceptsDeclaredPresentationSpec(t *testing.T) {
 
 	reg := NewInMemoryToolRegistry()
 	def := ToolDef{
-		Name:         "terminal.exec",
+		Name:         "terminal_exec",
 		Source:       "builtin",
-		Presentation: aitools.MustPresentationSpec("terminal.exec"),
+		Presentation: aitools.MustPresentationSpec("terminal_exec"),
 	}
 	if err := reg.Register(def); err != nil {
 		t.Fatalf("Register with presentation spec: %v", err)
@@ -41,45 +41,22 @@ func TestInMemoryToolRegistry_AcceptsDeclaredPresentationSpec(t *testing.T) {
 	}
 }
 
-func TestInMemoryToolRegistry_ReplacesByPriority(t *testing.T) {
-	t.Parallel()
-
+func TestInMemoryToolRegistry_RejectsOverridesAndReservedNames(t *testing.T) {
+	for _, source := range []string{"mcp", "skill", "subagent"} {
+		reg := NewInMemoryToolRegistry()
+		if err := reg.Register(registryTestTool("file_read", source, 999)); err == nil {
+			t.Fatalf("%s occupied a first-party name", source)
+		}
+	}
 	reg := NewInMemoryToolRegistry()
-	low := registryTestTool("read_file", "skill", 10)
-	high := registryTestTool("read_file", "skill", 20)
-	if err := reg.Register(low); err != nil {
-		t.Fatalf("Register low priority: %v", err)
+	if err := reg.Register(registryTestTool("file_read", "builtin", 10)); err != nil {
+		t.Fatal(err)
 	}
-	if err := reg.Register(high); err != nil {
-		t.Fatalf("Register high priority replacement: %v", err)
+	if err := reg.Register(registryTestTool("file_read", "floret", 999)); err == nil {
+		t.Fatal("priority replaced a registered handler")
 	}
-	snapshot := reg.Snapshot()
-	if len(snapshot) != 1 {
-		t.Fatalf("snapshot len=%d, want 1", len(snapshot))
-	}
-	if snapshot[0].Priority != 20 {
-		t.Fatalf("priority=%d, want 20", snapshot[0].Priority)
-	}
-}
-
-func TestInMemoryToolRegistry_ReplacesBySourceRank(t *testing.T) {
-	t.Parallel()
-
-	reg := NewInMemoryToolRegistry()
-	skill := registryTestTool("read_file", "skill", 10)
-	builtin := registryTestTool("read_file", "builtin", 10)
-	if err := reg.Register(skill); err != nil {
-		t.Fatalf("Register skill tool: %v", err)
-	}
-	if err := reg.Register(builtin); err != nil {
-		t.Fatalf("Register builtin replacement: %v", err)
-	}
-	snapshot := reg.Snapshot()
-	if len(snapshot) != 1 {
-		t.Fatalf("snapshot len=%d, want 1", len(snapshot))
-	}
-	if snapshot[0].Source != "builtin" {
-		t.Fatalf("source=%q, want builtin", snapshot[0].Source)
+	if reg.Snapshot()[0].Source != "builtin" {
+		t.Fatal("failed registration changed handler")
 	}
 }
 
@@ -87,8 +64,8 @@ func TestInMemoryToolRegistry_RejectsDuplicateWithSamePriorityAndSource(t *testi
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	first := registryTestTool("read_file", "builtin", 10)
-	second := registryTestTool("read_file", "builtin", 10)
+	first := registryTestTool("file_read", "builtin", 10)
+	second := registryTestTool("file_read", "builtin", 10)
 	if err := reg.Register(first); err != nil {
 		t.Fatalf("Register first tool: %v", err)
 	}
@@ -105,10 +82,10 @@ func TestInMemoryToolRegistry_UnregisterRemovesTool(t *testing.T) {
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	if err := reg.Register(registryTestTool("read_file", "builtin", 10)); err != nil {
+	if err := reg.Register(registryTestTool("file_read", "builtin", 10)); err != nil {
 		t.Fatalf("Register tool: %v", err)
 	}
-	if err := reg.Unregister(" read_file "); err != nil {
+	if err := reg.Unregister(" file_read "); err != nil {
 		t.Fatalf("Unregister: %v", err)
 	}
 	if snapshot := reg.Snapshot(); len(snapshot) != 0 {
@@ -121,9 +98,9 @@ func TestInMemoryToolRegistry_SnapshotSortsByPriorityThenName(t *testing.T) {
 
 	reg := NewInMemoryToolRegistry()
 	for _, def := range []ToolDef{
-		registryTestTool("web.search", "builtin", 10),
-		registryTestTool("write_todos", "builtin", 30),
-		registryTestTool("read_file", "builtin", 10),
+		registryTestTool("web_search_pages", "builtin", 10),
+		registryTestTool("todo_write", "builtin", 30),
+		registryTestTool("file_read", "builtin", 10),
 	} {
 		if err := reg.Register(def); err != nil {
 			t.Fatalf("Register %s: %v", def.Name, err)
@@ -134,7 +111,7 @@ func TestInMemoryToolRegistry_SnapshotSortsByPriorityThenName(t *testing.T) {
 	for _, def := range snapshot {
 		got = append(got, def.Name)
 	}
-	want := []string{"write_todos", "read_file", "web.search"}
+	want := []string{"todo_write", "file_read", "web_search_pages"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("snapshot order=%v, want %v", got, want)
 	}

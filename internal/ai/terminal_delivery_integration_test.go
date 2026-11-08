@@ -96,7 +96,7 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "terminal-auto", Input: RunInput{Text: "Run the command and report its completion."}, Options: RunOptions{ToolAllowlist: []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate"}, PermissionType: config.AIPermissionFullAccess, MaxOutputTokens: 8192}})
+	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "terminal-auto", Input: RunInput{Text: "Run the command and report its completion."}, Options: RunOptions{ToolAllowlist: []string{"terminal_exec", "terminal_read", "terminal_write", "terminal_terminate"}, PermissionType: config.AIPermissionFullAccess, MaxOutputTokens: 8192}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 		t.Fatalf("restart replayed work: %d", calls.Load())
 	}
 	if mode == "shutdown" {
-		_, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "after-restart", Input: RunInput{Text: "Report retained command state."}, Options: RunOptions{ToolAllowlist: []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate"}, PermissionType: config.AIPermissionFullAccess, MaxOutputTokens: 8192}})
+		_, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "after-restart", Input: RunInput{Text: "Report retained command state."}, Options: RunOptions{ToolAllowlist: []string{"terminal_exec", "terminal_read", "terminal_write", "terminal_terminate"}, PermissionType: config.AIPermissionFullAccess, MaxOutputTokens: 8192}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -248,7 +248,7 @@ func TestTerminalAbnormalExitWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "kill-test", Input: RunInput{Text: "Start fixture once."}, Options: RunOptions{ToolAllowlist: []string{"terminal.exec", "terminal.read"}, PermissionType: config.AIPermissionFullAccess}})
+	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "kill-test", Input: RunInput{Text: "Start fixture once."}, Options: RunOptions{ToolAllowlist: []string{"terminal_exec", "terminal_read"}, PermissionType: config.AIPermissionFullAccess}})
 	if err != nil {
 		t.Fatal(err)
 	}

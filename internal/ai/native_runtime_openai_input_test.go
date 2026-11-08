@@ -29,7 +29,7 @@ func TestBuildAssistantHistoryMessage_MixedTurn(t *testing.T) {
 	msg, ok := buildAssistantHistoryMessage("checked file", "verify cwd before command execution", []ToolCall{
 		{
 			ID:   "call_1",
-			Name: "terminal.exec",
+			Name: "terminal_exec",
 			Args: map[string]any{"command": "pwd", "cwd": "/tmp"},
 		},
 	})
@@ -59,7 +59,7 @@ func TestBuildToolCallMessages(t *testing.T) {
 	calls := []ToolCall{
 		{
 			ID:   "call_1",
-			Name: "terminal.exec",
+			Name: "terminal_exec",
 			Args: map[string]any{"command": "pwd", "cwd": "/tmp"},
 		},
 	}
@@ -88,8 +88,8 @@ func TestBuildToolCallMessages(t *testing.T) {
 	if part.ToolCallID != "call_1" {
 		t.Fatalf("tool_call_id=%q, want call_1", part.ToolCallID)
 	}
-	if part.ToolName != "terminal.exec" {
-		t.Fatalf("tool_name=%q, want terminal.exec", part.ToolName)
+	if part.ToolName != "terminal_exec" {
+		t.Fatalf("tool_name=%q, want terminal_exec", part.ToolName)
 	}
 	if part.ArgsJSON == "" {
 		t.Fatalf("args_json must not be empty")
@@ -105,7 +105,7 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 			Content: []ContentPart{{
 				Type:       "tool_call",
 				ToolCallID: "call_1",
-				ToolName:   "terminal.read",
+				ToolName:   "terminal_read",
 				ArgsJSON:   `{"process_id":"proc-1","description":"Read command output","after_seq":0}`,
 			}},
 		},
@@ -119,9 +119,9 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 		},
 	}
 
-	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.read"}})
+	aliases, err := newProviderToolContract([]ToolDef{{Name: "terminal_read"}})
 	if err != nil {
-		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+		t.Fatalf("newProviderToolContract: %v", err)
 	}
 	items, instructions, err := buildOpenAIInput(msgs, aliases)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestBuildOpenAIInput_AssistantHistoryUsesOutputText(t *testing.T) {
 		},
 	}
 
-	items, _, err := buildOpenAIInput(msgs, providerToolAliases{})
+	items, _, err := buildOpenAIInput(msgs, providerToolContract{})
 	if err != nil {
 		t.Fatalf("buildOpenAIInput: %v", err)
 	}
@@ -194,14 +194,14 @@ func TestBuildOpenAIInput_AssistantMixedTurnPreservesTextAndFunctionCall(t *test
 			Content: []ContentPart{
 				{Type: "text", Text: "checked file"},
 				{Type: "reasoning", Text: "verify cwd before command execution"},
-				{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal.exec", ArgsJSON: `{"command":"pwd","cwd":"/tmp"}`},
+				{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal_exec", ArgsJSON: `{"command":"pwd","cwd":"/tmp"}`},
 			},
 		},
 	}
 
-	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	aliases, err := newProviderToolContract([]ToolDef{{Name: "terminal_exec"}})
 	if err != nil {
-		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+		t.Fatalf("newProviderToolContract: %v", err)
 	}
 	items, _, err := buildOpenAIInput(msgs, aliases)
 	if err != nil {

@@ -773,7 +773,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 
 	switch anyToString(operation["action"]) {
 	case "observe", "snapshot":
-		call.ToolName = "computer.observe"
+		call.ToolName = "computer_observe"
 		delete(args, "action")
 
 		for _, option := range []string{"emit", "full"} {
@@ -785,20 +785,26 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 			}
 		}
 	case "screenshot":
-		call.ToolName = "computer.screenshot"
+		call.ToolName = "computer_capture_screenshot"
 		delete(args, "action")
-	case "navigate", "back", "reload", "wait_for_download", "download_cursor", "read_download", "save_download":
+	case "back":
+		call.ToolName = "browser_go_back"
+		delete(args, "action")
+	case "navigate", "reload":
+		call.ToolName = "browser_" + anyToString(operation["action"])
+		delete(args, "action")
+	case "wait_for_download", "download_cursor", "read_download", "save_download":
 		call.ToolName = "browser." + anyToString(operation["action"])
 		delete(args, "action")
 	case "type":
-		call.ToolName = "computer.type"
+		call.ToolName = "computer_type_text"
 		delete(args, "action")
 	case "double_click":
-		call.ToolName = "computer.double_click"
+		call.ToolName = "computer_double_click"
 		delete(args, "action")
 	case "scroll":
 		if operation["selector"] == nil {
-			call.ToolName = "computer.scroll"
+			call.ToolName = "computer_scroll"
 			delete(args, "action")
 		}
 	case "geometry", "capabilities", "source", "selection", "hover", "select_text", "select_range", "select_all", "replace_selection", "copy", "cut", "paste", "set_files", "set_value", "perform_action", "clipboard", "input_sequence", "read", "text", "query", "table", "attribute", "click", "fill", "key", "wait", "pointer_click", "drag":
@@ -863,7 +869,7 @@ func (e *computerScriptExecutionError) Error() string {
 
 func computerScriptTargetResolutionFailure(err error, target string) error {
 	if errors.Is(err, errTargetNotRegistered) || errors.Is(err, errTargetAmbiguous) {
-		return &targetToolPolicyError{code: "target_unavailable", tool: "computer.exec", target: target, targetState: "unavailable"}
+		return &targetToolPolicyError{code: "target_unavailable", tool: "computer_exec", target: target, targetState: "unavailable"}
 	}
 	return err
 }

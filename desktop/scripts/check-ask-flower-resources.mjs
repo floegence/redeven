@@ -497,7 +497,7 @@ await session.run(async () => {
           'A manual address must not be substituted with a same-name managed resource',
         );
       for (const call of scenarioCalls.filter((call) =>
-        ['find', 'read_file', 'list_files', 'grep'].includes(call.name),
+        ['find', 'file_read', 'list_files', 'grep'].includes(call.name),
       )) {
         const target = call.arguments.root ?? call.arguments.path;
         const expected = path.join(workspace, scenario === 'host-live' ? 'host' : scenario);

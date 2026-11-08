@@ -26,9 +26,9 @@ func TestFlowerDecisionCurrentFixtures(t *testing.T) {
 		{"ask_long", "ask_user", `{"reason_code":"user_decision_required","required_from_user":["channel"],"evidence_refs":[],"questions":[{"id":"channel","header":"Choose how to continue","question":"The current deployment has completed its checks. Before I prepare the next step, which release channel should Flower use for this workspace, considering whether you need the version tested for production or want to evaluate the upcoming features?","response_mode":"select_or_write","is_secret":false,"choices_exhaustive":false,"choices":[{"choice_id":"stable","label":"Stable","kind":"select"},{"choice_id":"beta","label":"Beta","kind":"select"}]}]}`},
 		// Chinese content intentionally verifies language-sensitive tool presentation.
 		{"ask_zh", "ask_user", `{"reason_code":"user_decision_required","required_from_user":["channel"],"evidence_refs":[],"questions":[{"id":"channel","header":"选择发布渠道","question":"Flower 应使用哪个发布渠道？","response_mode":"select_or_write","is_secret":false,"choices_exhaustive":false,"write_label":"使用其他渠道","write_placeholder":"描述你希望使用的渠道","choices":[{"choice_id":"stable","label":"稳定版","description":"使用已完成生产验证的版本。","kind":"select"},{"choice_id":"beta","label":"测试版","kind":"select"}]}]}`},
-		{"approval_date", "terminal.exec", `{"command":"date","description":"Check the current system time","yield_ms":10000}`},
-		{"approval_date_zh", "terminal.exec", `{"command":"date","description":"执行 date 命令查看当前系统时间","yield_ms":10000}`},
-		{"approval_multiline", "terminal.exec", `{"command":"printf 'Current time:\\n'\ndate\nprintf 'Working directory:\\n'\npwd","description":"Inspect the system time and working directory","yield_ms":10000}`},
+		{"approval_date", "terminal_exec", `{"command":"date","description":"Check the current system time","yield_ms":10000}`},
+		{"approval_date_zh", "terminal_exec", `{"command":"date","description":"执行 date 命令查看当前系统时间","yield_ms":10000}`},
+		{"approval_multiline", "terminal_exec", `{"command":"printf 'Current time:\\n'\ndate\nprintf 'Working directory:\\n'\npwd","description":"Inspect the system time and working directory","yield_ms":10000}`},
 	}
 	fixtures := make(map[string]flruntime.ThreadView)
 	for _, tc := range cases {

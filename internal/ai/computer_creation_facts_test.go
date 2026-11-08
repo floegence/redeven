@@ -89,20 +89,20 @@ func TestBrowserCreatedIdentitySurvivesSelectionFailure(t *testing.T) {
 					connection = ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}
 					expected = "managed-" + tab.ID
 				}
-				candidate, err := rt.rememberComputerCandidate("thread-first", ComputerCandidate{Kind: "browser." + map[string]string{"managed": "managed", "cdp": "connected"}[kind]}, &connection)
+				candidate, err := rt.rememberComputerCandidate("thread-first", ComputerCandidate{Kind: "browser_" + map[string]string{"managed": "managed", "cdp": "connected"}[kind]}, &connection)
 				if err != nil {
 					t.Fatal(err)
 				}
 				owner := &run{threadID: "thread-first", targetResolver: rt, targetToolExecutor: rt}
 				bindTargetTestRun(t, owner)
-				value, failure := owner.execComputerManagement(computerAuthorizedTestContext(t, owner, "select", "computer.select_target"), "select", "computer.select_target", map[string]any{"candidate_ref": candidate.CandidateRef})
+				value, failure := owner.execComputerManagement(computerAuthorizedTestContext(t, owner, "select", "computer_select_target"), "select", "computer_select_target", map[string]any{"candidate_ref": candidate.CandidateRef})
 				output, ok := value.(toolExecutionOutput)
 				var created *computerTabCreatedError
 				if !ok || failure == nil || errors.As(failure, &created) != (phase != "unknown") {
 					t.Fatalf("creation certainty lost: %#v %v", value, failure)
 				}
 				payload := output.Payload.(map[string]any)
-				published, err := floretToolResultFromFlower(nil, ToolResult{ToolName: "computer.select_target", Status: toolResultStatusError, Data: payload})
+				published, err := floretToolResultFromFlower(nil, ToolResult{ToolName: "computer_select_target", Status: toolResultStatusError, Data: payload})
 				if err != nil {
 					t.Fatal(err)
 				}

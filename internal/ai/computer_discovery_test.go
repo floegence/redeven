@@ -19,7 +19,7 @@ func TestComputerDiscoveryToolsDoNotRequireAPreselectedTarget(t *testing.T) {
 	for _, definition := range builtInComputerToolDefinitions() {
 		definitions[definition.Name] = definition
 	}
-	for _, name := range []string{"computer.targets", "computer.select_target"} {
+	for _, name := range []string{"computer_list_targets", "computer_select_target"} {
 		definition, exists := definitions[name]
 		if !exists {
 			t.Fatalf("agent cannot discover and choose its own target: missing %s", name)
@@ -33,7 +33,7 @@ func TestComputerDiscoveryToolsDoNotRequireAPreselectedTarget(t *testing.T) {
 		if _, exists := schema.Properties["target"]; exists {
 			t.Fatalf("%s depends on a selected target", name)
 		}
-		if name == "computer.select_target" && schema.Properties["candidate_ref"] == nil {
+		if name == "computer_select_target" && schema.Properties["candidate_ref"] == nil {
 			t.Fatal("selection must use a Runtime-issued candidate reference")
 		}
 	}
@@ -43,7 +43,7 @@ func TestComputerCandidateIsNotAnExecutableTarget(t *testing.T) {
 	host, executor, store, _ := computerBindingFixture(t)
 	_, err := host.ResolveTargetForThread(t.Context(), "thread-first", "candidate-discovered")
 	var failure *targetToolPolicyError
-	if !errors.As(err, &failure) || failure.code != "invalid_computer_arguments" || !strings.Contains(err.Error(), "computer.select_target") {
+	if !errors.As(err, &failure) || failure.code != "invalid_computer_arguments" || !strings.Contains(err.Error(), "computer_select_target") {
 		t.Fatalf("candidate misuse lost its repair guidance: %v", err)
 	}
 	bound, err := store.GetComputerTarget(t.Context(), "thread-first")
@@ -67,7 +67,7 @@ func TestComputerCandidateSelectionPreservesBindingWhenBusyOrStale(t *testing.T)
 	}
 	control := host.controlForTarget(target.ID)
 	control.threadID, control.runID = "thread-second", "other-run"
-	call := TargetToolCall{ThreadID: "thread-first", RunID: "run", TurnID: "turn", ToolCallID: "select", ToolName: "computer.select_target"}
+	call := TargetToolCall{ThreadID: "thread-first", RunID: "run", TurnID: "turn", ToolCallID: "select", ToolName: "computer_select_target"}
 	if _, err := host.SelectComputerCandidate(t.Context(), call, candidate.CandidateRef, ToolTargetPolicy{}); err == nil {
 		t.Fatal("selection stole an occupied target")
 	}
@@ -146,7 +146,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 		r := &run{threadID: thread, targetResolver: host, targetToolExecutor: host}
 		bindTargetTestRun(t, r)
 		runs = append(runs, r)
-		result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "start", "browser.navigate"), "start", "browser.navigate", map[string]any{"url": server.URL})
+		result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "start", "browser_navigate"), "start", "browser_navigate", map[string]any{"url": server.URL})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	r := runs[0]
 	runID, threadID, turnID := r.floretCanonicalIdentity()
 	args, _ := json.Marshal(map[string]string{"description": "Open task details", "code": `await ui.getByRole('button',{name:'Open details'}).click(); await ui.getByRole('button',{name:'Open details'}).click();`})
-	completed, err := host.ExecuteTargetTool(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, TargetID: first, ToolCallID: "popup", ToolName: "computer.exec", Arguments: args, revalidate: func(ctx context.Context) error { return ctx.Err() }})
+	completed, err := host.ExecuteTargetTool(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, TargetID: first, ToolCallID: "popup", ToolName: "computer_exec", Arguments: args, revalidate: func(ctx context.Context) error { return ctx.Err() }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	}
 	// Inventory includes the real opener identity, so same-URL tabs do not
 	// establish a relationship by title or URL alone.
-	selection := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: "select", ToolName: "computer.select_target"}
+	selection := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: "select", ToolName: "computer_select_target"}
 	inventory, err := host.ComputerTargets(computerPermissionContext(t, "full_access"), selection, ToolTargetPolicy{})
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	if _, err = host.SelectComputerCandidate(computerPermissionContext(t, "full_access"), selection, child.CandidateRef, ToolTargetPolicy{}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "verify", "computer.observe"), "verify", "computer.observe", nil)
+	result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "verify", "computer_observe"), "verify", "computer_observe", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	if !strings.Contains(string(body), "Child result") || !strings.Contains(string(body), "unsaved") {
 		t.Fatalf("selected page lost state: %s", body)
 	}
-	if _, err = r.execTargetTool(computerAuthorizedTestContext(t, r, "occupied", "computer.observe"), "occupied", "computer.observe", map[string]any{"target": second}); err == nil {
+	if _, err = r.execTargetTool(computerAuthorizedTestContext(t, r, "occupied", "computer_observe"), "occupied", "computer_observe", map[string]any{"target": second}); err == nil {
 		t.Fatal("another task page was stolen")
 	}
 	selected, _ := store.GetComputerTarget(t.Context(), "thread-first")
@@ -222,7 +222,7 @@ func TestComputerSelectionRechecksQueuedAuthorityAndCannotBypassPrivateControl(t
 			var calls atomic.Int32
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.select_target", revalidate: func(ctx context.Context) error {
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer_select_target", revalidate: func(ctx context.Context) error {
 				if calls.Add(1) == 1 {
 					close(entered)
 					return ctx.Err()
@@ -308,7 +308,7 @@ func TestComputerAutonomousCDPPagesPreserveExistingTab(t *testing.T) {
 		if planned.Kind != "browser.connected" {
 			t.Fatalf("explicit personal CDP connection changed: %+v", planned)
 		}
-		target, err := host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, TurnID: "turn", RunID: thread, ToolName: "computer.select_target"}, planned)
+		target, err := host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, TurnID: "turn", RunID: thread, ToolName: "computer_select_target"}, planned)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -340,7 +340,7 @@ func TestComputerSelectionRejectsUnavailableReadinessWithoutBinding(t *testing.T
 	host, executor, store, _ := computerBindingFixture(t)
 	executor.readinessErr = &TargetStartupError{Code: "TARGET_PERMISSION_REQUIRED", Reason: "accessibility_required"}
 	target, _ := host.ResolveTarget(t.Context(), "desktop-main")
-	_, err := host.selectComputerTarget(t.Context(), TargetToolCall{ThreadID: "thread-first", RunID: "run", ToolName: "computer.select_target"}, target)
+	_, err := host.selectComputerTarget(t.Context(), TargetToolCall{ThreadID: "thread-first", RunID: "run", ToolName: "computer_select_target"}, target)
 	if err == nil || ComputerSelectionErrorCode(err) != "target_permission_required" {
 		t.Fatalf("unavailable readiness: %v", err)
 	}

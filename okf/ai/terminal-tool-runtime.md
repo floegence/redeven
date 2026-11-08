@@ -12,7 +12,7 @@ Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, inter
 # Contract
 
 Cleanup waits for owned processes to be reaped. PTYs use Floret execution/effect
-identities. `terminal.exec` defaults to a 5-second initial wait (omitted/zero
+identities. `terminal_exec` defaults to a 5-second initial wait (omitted/zero
 `yield_ms`); positive waits cap at 30 seconds. Yield returns a live process ID,
 not termination. Commands have a disclosed 30-minute lifetime. Terminate/Service
 shutdown stop owned processes; cancellation during initial exec wait stops the
@@ -38,7 +38,7 @@ returned ID. Backgrounding/nohup cannot transfer ownership; escaping PTY group o
 session is unsupported. Independent services need managed lifecycle. Names, CPU
 and age never prove ownership.
 
-`terminal.read` returns bounded incremental output after `after_seq`, up to 60
+`terminal_read` returns bounded incremental output after `after_seq`, up to 60
 seconds or earlier on output/exit. Normal expiry reports `wait_expired`/`wait_ms`
 and retains ID/cursor; `timed_out` means command timeout. Continue with returned
 `last_seq`, without sleeps/restarts. Published Floret BoundedWait measures handler
@@ -46,7 +46,7 @@ time and owns repeat protection; immediate/failed/canceled/early reads and nearb
 effects get no exemption. No extra retry counters, clocks, wakes or durable ledger.
 
 Read cancellation preserves process/cursor and confirms cancellation after
-observation returns. Execution/input retain uncertain-effect rules. `terminal.write`
+observation returns. Execution/input retain uncertain-effect rules. `terminal_write`
 bounds stdin; terminate kills the group and waits for reap/drain. Thread Stop owns
 cleanup policy. Model output carries output/status/cursor/wait/exit facts, without
 repeating command/cwd/timing from canonical Activity. Browser payloads exclude

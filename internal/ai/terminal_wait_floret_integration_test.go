@@ -38,7 +38,7 @@ func TestTerminalReadPublishedFloretRepeatSafety(t *testing.T) {
 			r := &run{host: runHostCapabilities{terminal: terminalReadWaitTestHost{process: process}}, endpointID: process.endpointID, threadID: process.threadID, sessionMeta: testSendTurnMeta()}
 			var terminalDef ToolDef
 			for _, candidate := range builtInToolDefinitions() {
-				if candidate.Name == "terminal.read" {
+				if candidate.Name == "terminal_read" {
 					terminalDef = candidate
 					break
 				}
@@ -95,7 +95,7 @@ func TestTerminalReadPublishedFloretRepeatSafety(t *testing.T) {
 				if tc.descriptionChanges {
 					args = fmt.Sprintf("{\"process_id\":%q,\"description\":%q,\"after_seq\":4}", process.id, fmt.Sprintf("Inspect state %d", i))
 				}
-				calls := []flprovider.ToolCall{{ID: fmt.Sprintf("read-%d", i), Name: "terminal.read", Args: args}}
+				calls := []flprovider.ToolCall{{ID: fmt.Sprintf("read-%d", i), Name: "terminal_read", Args: args}}
 				if tc.mixed {
 					calls = append(calls, flprovider.ToolCall{ID: fmt.Sprintf("write-%d", i), Name: "write_fixture", Args: "{}"})
 				}

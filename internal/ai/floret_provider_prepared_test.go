@@ -209,8 +209,8 @@ func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T
 		return ContentPart{Type: "image", FileURI: dataURL, MimeType: "image/png"}, nil
 	}
 	request := flprovider.Request{RunID: "run", PromptScopeID: "scope", Messages: []flprovider.Message{
-		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "screen", Name: "computer.screenshot", Args: "{}"}}},
-		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "screen", ToolName: "computer.screenshot", Text: "captured", Attachments: []flprovider.Attachment{{ResourceRef: "computer://desktop-main/" + strings.Repeat("a", 64), MIMEType: "image/png", SizeBytes: int64(len(data))}}}},
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "screen", Name: "computer_capture_screenshot", Args: "{}"}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "screen", ToolName: "computer_capture_screenshot", Text: "captured", Attachments: []flprovider.Attachment{{ResourceRef: "computer://desktop-main/" + strings.Repeat("a", 64), MIMEType: "image/png", SizeBytes: int64(len(data))}}}},
 	}}
 	for _, tool := range builtInToolDefinitions() {
 		var schema map[string]any

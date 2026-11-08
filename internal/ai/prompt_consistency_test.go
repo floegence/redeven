@@ -35,7 +35,7 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 						r.allowSubagentDelegate = false
 					}
 					if restricted {
-						r.toolAllowlist = map[string]struct{}{"image.read": {}}
+						r.toolAllowlist = map[string]struct{}{"image_read": {}}
 					}
 					surface, err := r.buildRunToolSurface(runToolSurfaceConfig{}, permission)
 					if err != nil {
@@ -72,7 +72,7 @@ func promptBoundaryToolDefinitions(surface runToolSurface) ([]byte, error) {
 	for _, tool := range surface.FloretToolItems {
 		definition := tool.Definition
 		// Preserve the pre-delivery tool contract independently of the new tool.
-		if definition.Name == "file.present" {
+		if definition.Name == "file_present" {
 			continue
 		}
 		definitions = append(definitions, map[string]any{"name": definition.Name, "description": definition.Description, "input_schema": definition.InputSchema, "output_schema": definition.OutputSchema})

@@ -39,8 +39,8 @@ func TestFlowerForkContinuesToolHistoryAfterRestart(t *testing.T) {
 			output := []any{
 				map[string]any{"type": "reasoning", "content": []any{map[string]any{"type": "reasoning_text", "text": "Before tools;"}}},
 				map[string]any{"type": "reasoning", "content": []any{map[string]any{"type": "reasoning_text", "text": "Calling index;"}}},
-				map[string]any{"type": "function_call", "id": "item1", "call_id": "index1", "name": "okf_index", "arguments": "{}"},
-				map[string]any{"type": "function_call", "id": "item2", "call_id": "index2", "name": "okf_index", "arguments": "{}"},
+				map[string]any{"type": "function_call", "id": "item1", "call_id": "index1", "name": "okf_get_index", "arguments": "{}"},
+				map[string]any{"type": "function_call", "id": "item2", "call_id": "index2", "name": "okf_get_index", "arguments": "{}"},
 			}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "tools", "status": "completed", "output": output}})
 			return

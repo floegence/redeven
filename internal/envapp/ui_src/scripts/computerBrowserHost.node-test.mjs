@@ -52,7 +52,7 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   await assert.rejects(host.admit({ ...descriptors[2], id: 'source-0' }), /BROWSER_SOURCE_IDENTITY_CHANGED/u);
   await assert.rejects(host.admit({ ...descriptors[0], id: 'endpoint-alias', endpoint: endpoint.replace('127.0.0.1', 'localhost') }), /BROWSER_SOURCE_ALREADY_ADMITTED/u);
   const tool = (target, tool_name, args = {}, extra = {}) => host.tool(target, { tool_name, args, allowed_origins: [origin], script_operation: true, ...extra });
-  const pending = tool('source-0', 'browser.navigate', { url: origin + '/pending' });
+  const pending = tool('source-0', 'browser_navigate', { url: origin + '/pending' });
   await started;
   const busy = await tool('source-0', 'computer.action', {action:'type',text:'must not run'});
   assert.equal(busy.error, 'TARGET_IN_USE');
@@ -60,7 +60,7 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   const wrongIdentity = await tool('source-1', 'computer.action', {action:'type',text:'must not run'}, {target_id:'source-0'});
   assert.equal(wrongIdentity.error, 'INVALID_REQUEST');
   assert.deepEqual(wrongIdentity.result, {action_executed:false});
-  const healthy = await tool('source-1', 'computer.observe');
+  const healthy = await tool('source-1', 'computer_observe');
   assert.equal(healthy.error, undefined);
   assert.ok(healthy.result.observation.nodes.some(node => node.name === 'Name'));
   finishNavigation();
@@ -69,7 +69,7 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   await host.cancel('source-1');
   await cancelled;
   assert.equal(await pages[1].getByRole('textbox', { name: 'Name' }).inputValue(), '', 'Cancellation before dispatch cannot run the later input');
-  const afterCancel = await tool('source-1', 'computer.observe');
+  const afterCancel = await tool('source-1', 'computer_observe');
   assert.equal(afterCancel.error, undefined);
   assert.equal(afterCancel.safety.level, 'routine', 'Internal cancellation is not a user takeover');
   const waiting = tool('source-1', 'computer.action', {action:'wait', selector:{role:'button', name:'Absent'}, state:'visible', timeout_ms:20000});
@@ -77,8 +77,8 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   await host.cancel('source-1');
   const interrupted = await waiting;
   assert.notEqual(interrupted.safety?.reason_codes?.includes('user_control'), true);
-  assert.equal((await tool('source-1', 'computer.observe')).safety.level, 'routine');
-  const navigation = tool('source-1', 'browser.navigate', {url:origin+'/pending'});
+  assert.equal((await tool('source-1', 'computer_observe')).safety.level, 'routine');
+  const navigation = tool('source-1', 'browser_navigate', {url:origin+'/pending'});
   await new Promise(resolve => setTimeout(resolve, 100));
   const cancellation = host.cancel('source-1');
   finishNavigation();
@@ -89,25 +89,25 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   // commits. Synchronize the fixture with its exact destination, not that
   // previous load state; the tool itself must not retry navigation.
   await pages[1].waitForURL(origin + '/pending', { waitUntil: 'load' });
-  assert.equal((await tool('source-1', 'computer.observe')).safety.level, 'routine', 'Drained navigation keeps same-target observation available');
-  const recoveredScreenshot = await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true });
+  assert.equal((await tool('source-1', 'computer_observe')).safety.level, 'routine', 'Drained navigation keeps same-target observation available');
+  const recoveredScreenshot = await tool('source-1', 'computer_capture_screenshot', {}, { recovery_observation: true });
   assert.equal(recoveredScreenshot.error, undefined, JSON.stringify(recoveredScreenshot));
 
   host.privacy('source-0', true);
-  const privateResult = await tool('source-0', 'computer.observe');
+  const privateResult = await tool('source-0', 'computer_observe');
   assert.equal(privateResult.error, 'TARGET_IN_USE');
   assert.deepEqual(privateResult.result, {action_executed:false});
-  assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
+  assert.equal((await tool('source-1', 'computer_observe')).error, undefined);
   host.privacy('source-0', false);
-  const returned = await tool('source-0', 'computer.screenshot', {}, { recovery_observation: true });
+  const returned = await tool('source-0', 'computer_capture_screenshot', {}, { recovery_observation: true });
   assert.equal(returned.error, undefined);
   assert.equal(returned.safety.safe_to_send_to_model, true);
   await host.remove('source-0');
   assert.equal(pages[0].isClosed(), false, 'Removing an observation source never closes the personal page');
-  const removed = await tool('source-0', 'browser.navigate', {url:origin});
+  const removed = await tool('source-0', 'browser_navigate', {url:origin});
   assert.equal(removed.error, 'TARGET_CONNECTION_REQUIRED');
   assert.deepEqual(removed.result, {action_executed:false});
-  assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
+  assert.equal((await tool('source-1', 'computer_observe')).error, undefined);
   host.privacy('source-1', true);
   const aliasedEndpoint = endpoint.replace('127.0.0.1', 'localhost');
   const aliasInventory = await host.publicInventory(aliasedEndpoint, [{ id: descriptors[1].tab, title: 'Private title', url: origin }]);
@@ -117,24 +117,24 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   const extensionInventory = await host.publicInventory('extension:fixture', [{ id: '7', native_target_id: descriptors[1].tab, title: 'Private title', url: origin }]);
   assert.equal(extensionInventory[0].private, true, 'Extension inventory shares the native CDP privacy identity');
   assert.equal(extensionInventory[0].title, '');
-  assert.equal((await tool('source-1', 'computer.observe')).error, 'TARGET_IN_USE');
-  assert.ok((await tool('source-1', 'computer.screenshot', {}, { user_control: true })).screenshot);
-  assert.equal((await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true })).safety.safe_to_send_to_model, true);
-  assert.equal((await tool('source-1', 'computer.observe')).error, 'TARGET_IN_USE', 'Only Runtime may release privacy after validating handback');
+  assert.equal((await tool('source-1', 'computer_observe')).error, 'TARGET_IN_USE');
+  assert.ok((await tool('source-1', 'computer_capture_screenshot', {}, { user_control: true })).screenshot);
+  assert.equal((await tool('source-1', 'computer_capture_screenshot', {}, { recovery_observation: true })).safety.safe_to_send_to_model, true);
+  assert.equal((await tool('source-1', 'computer_observe')).error, 'TARGET_IN_USE', 'Only Runtime may release privacy after validating handback');
   host.privacy('source-1', false);
-  assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
+  assert.equal((await tool('source-1', 'computer_observe')).error, undefined);
   const directoryOwner = await context.browser().newBrowserCDPSession();
   const { targetId } = await directoryOwner.send('Target.createTarget', { url: 'about:blank', background: true });
   const { targetInfo } = await directoryOwner.send('Target.getTargetInfo', { targetId });
   await host.admit({ id: 'created-later', endpoint, tab: targetId, context: targetInfo.browserContextId || 'default' });
-  assert.equal((await tool('created-later', 'computer.observe')).error, undefined, 'A Runtime-created tab can be admitted after the shared connection has started');
+  assert.equal((await tool('created-later', 'computer_observe')).error, undefined, 'A Runtime-created tab can be admitted after the shared connection has started');
   await directoryOwner.detach();
 });
 
 test('missing sources return a confirmed pre-dispatch rejection', async () => {
   const host = await createComputerBrowserHost({});
   try {
-    for (const tool_name of ['browser.navigate', 'computer.action', 'computer.observe']) {
+    for (const tool_name of ['browser_navigate', 'computer.action', 'computer_observe']) {
       const result = await host.tool('missing-source', {id:'request',target_id:'missing-source',tool_name});
       assert.equal(result.error, 'TARGET_CONNECTION_REQUIRED');
       assert.deepEqual(result.result, {action_executed:false});

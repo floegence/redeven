@@ -214,7 +214,7 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 			return nil, fmt.Errorf("%w: repository rule source %q: %s", flruntime.ErrModelContextUnavailable, file.Path, file.ReadError)
 		}
 	}
-	runtimeLines := []string{"Tool execution environment: terminal.exec runs on the AI runtime host. A user-selected device may be different; selection does not route a command.", "- Working directory: " + workspace.Environment.WorkingDir}
+	runtimeLines := []string{"Tool execution environment: terminal_exec runs on the AI runtime host. A user-selected device may be different; selection does not route a command.", "- Working directory: " + workspace.Environment.WorkingDir}
 	if threadID := strings.TrimSpace(r.threadID); threadID != "" {
 		runtimeLines = append(runtimeLines, "Current thread ID: "+threadID)
 	}
@@ -260,7 +260,7 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 	if r.hasPluginDraft() {
 		snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{
 			Key: "plugin_authoring", Title: "Plugin creation workspace",
-			Text: "This is a dedicated plugin creation conversation. Read the redeven-plugin-authoring skill and plugin_author.status before editing. Discuss requirements or implement as requested. Use the managed source directory and plugin_author.build; the workspace shows retained artifacts and handles preview and installation review.",
+			Text: "This is a dedicated plugin creation conversation. Read the redeven-plugin-authoring skill and plugin_author_get_status before editing. Discuss requirements or implement as requested. Use the managed source directory and plugin_author_build; the workspace shows retained artifacts and handles preview and installation review.",
 		})
 	}
 	if err := ctx.Err(); err != nil {

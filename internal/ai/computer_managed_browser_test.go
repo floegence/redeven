@@ -71,14 +71,14 @@ func TestManagedBrowserProfilesShareOnlyTheirOwnLogin(t *testing.T) {
 	navigate := func(targetID, url string) {
 		t.Helper()
 		args, _ := json.Marshal(map[string]string{"url": url})
-		result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: targetID, ToolName: "browser.navigate", Arguments: args, allowedOrigins: []string{server.URL}, scriptOperation: true})
+		result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: targetID, ToolName: "browser_navigate", Arguments: args, allowedOrigins: []string{server.URL}, scriptOperation: true})
 		if err != nil || result.Safety.Level != "routine" {
 			t.Fatalf("navigate: %+v %v", result, err)
 		}
 	}
 	observe := func(targetID string) string {
 		t.Helper()
-		result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: targetID, ToolName: "computer.observe", allowedOrigins: []string{server.URL}, scriptOperation: true})
+		result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: targetID, ToolName: "computer_observe", allowedOrigins: []string{server.URL}, scriptOperation: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +250,7 @@ if (process.argv[3] === 'closed_tab') {
 				t.Fatalf("fixture failure injection: %s %v", output, err)
 			}
 			for range 2 {
-				result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: target.ID, ToolName: "computer.observe"})
+				result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: target.ID, ToolName: "computer_observe"})
 				if err == nil || result.Result != nil || len(result.Attachments) != 0 {
 					t.Fatalf("lost target produced an observation: %+v %v", result, err)
 				}
@@ -296,11 +296,11 @@ func TestManagedBrowserDiscoveryRecoversLostPagesWithoutDesktopSetup(t *testing.
 				t.Fatal(err)
 			}
 			restricted := ToolTargetPolicy{AllowedTargetIDs: []string{target.ID}}
-			permitted, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, restricted)
+			permitted, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_list_targets"}, restricted)
 			if err != nil || len(permitted.Candidates) != 1 || permitted.Candidates[0].TargetID != target.ID {
 				t.Fatalf("restricted discovery: %+v %v", permitted, err)
 			}
-			if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, permitted.Candidates[0].CandidateRef, restricted); err != nil {
+			if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_select_target"}, permitted.Candidates[0].CandidateRef, restricted); err != nil {
 				t.Fatalf("permitted page could not be selected: %v", err)
 			}
 			executor := host.executors[target.ID].(*PlaywrightTargetExecutor)
@@ -319,7 +319,7 @@ await browser.close();`, executor.CDPURL, executor.TabID, loss)
 			if output, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("loss injection: %s %v", output, err)
 			}
-			inventory, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, ToolTargetPolicy{})
+			inventory, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_list_targets"}, ToolTargetPolicy{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -347,11 +347,11 @@ await browser.close();`, executor.CDPURL, executor.TabID, loss)
 			if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
 				t.Fatal("discovery replaced the selected page")
 			}
-			remaining, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, restricted)
+			remaining, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_list_targets"}, restricted)
 			if err != nil || len(remaining.Candidates) != 0 || remaining.DefaultCandidateRef != "" {
 				t.Fatalf("restricted discovery offered a closed or replacement page: %+v %v", remaining, err)
 			}
-			if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, fresh.CandidateRef, restricted); err == nil {
+			if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_select_target"}, fresh.CandidateRef, restricted); err == nil {
 				t.Fatal("restricted selection created an unapproved replacement page")
 			}
 			if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
@@ -361,7 +361,7 @@ await browser.close();`, executor.CDPURL, executor.TabID, loss)
 				if len(host.managedProfiles) != 0 {
 					t.Fatal("discovery retained or restarted a dead browser")
 				}
-				if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, fresh.CandidateRef, ToolTargetPolicy{}); err == nil {
+				if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_select_target"}, fresh.CandidateRef, ToolTargetPolicy{}); err == nil {
 					t.Fatal("selection restarted a failed service without explicit recovery")
 				}
 				meta := &session.Meta{ChannelID: "recovery-channel", UserPublicID: "user", EndpointID: "environment", CanRead: true, CanWrite: true, CanExecute: true}
@@ -371,7 +371,7 @@ await browser.close();`, executor.CDPURL, executor.TabID, loss)
 				if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
 					t.Fatal("recovery rebound the selected page")
 				}
-				inventory, err = host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, ToolTargetPolicy{})
+				inventory, err = host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_list_targets"}, ToolTargetPolicy{})
 				if err != nil || inventory.DefaultCandidateRef == "" {
 					t.Fatalf("recovered browser has no new selection: %+v %v", inventory, err)
 				}
@@ -385,14 +385,14 @@ await browser.close();`, executor.CDPURL, executor.TabID, loss)
 					t.Fatalf("recovery did not restore explicit new page selection: %+v", inventory)
 				}
 			}
-			replacement, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, fresh.CandidateRef, ToolTargetPolicy{})
+			replacement, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer_select_target"}, fresh.CandidateRef, ToolTargetPolicy{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if replacement.ID == target.ID || !replacement.Ready {
 				t.Fatalf("fresh page not prepared: %+v", replacement)
 			}
-			result, err := host.ExecuteTargetTool(ctx, TargetToolCall{ThreadID: "thread-first", TargetID: replacement.ID, ToolName: "computer.observe"})
+			result, err := host.ExecuteTargetTool(ctx, TargetToolCall{ThreadID: "thread-first", TargetID: replacement.ID, ToolName: "computer_observe"})
 			if err != nil || result.Result == nil {
 				t.Fatalf("fresh page could not be observed: %+v %v", result, err)
 			}
@@ -457,7 +457,7 @@ func TestManagedBrowserPrivateRecoverySharesProfileOwner(t *testing.T) {
 	}
 	call.interactionID = "resolved-input"
 	runtime.resumeComputerControl(call, call.RunID)
-	call.ToolName = "computer.screenshot"
+	call.ToolName = "computer_capture_screenshot"
 	if _, err := runtime.ExecuteTargetTool(ctx, call); err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +465,7 @@ func TestManagedBrowserPrivateRecoverySharesProfileOwner(t *testing.T) {
 	if err != nil || !target.Ready {
 		t.Fatalf("subsequent task could not reuse profile: %+v %v", target, err)
 	}
-	call.ToolName = "computer.observe"
+	call.ToolName = "computer_observe"
 	if _, err := runtime.ExecuteTargetTool(ctx, call); err != nil {
 		t.Fatal(err)
 	}
@@ -497,7 +497,7 @@ func TestComputerFullAccessManagedBrowserUsesTaskPermission(t *testing.T) {
 	}))
 	defer server.Close()
 	args, _ := json.Marshal(map[string]string{"url": server.URL})
-	result, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolCallID: "navigate", TargetID: "browser-main", ToolName: "browser.navigate", Arguments: args, scriptOperation: true})
+	result, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolCallID: "navigate", TargetID: "browser-main", ToolName: "browser_navigate", Arguments: args, scriptOperation: true})
 	if err != nil || result.Safety == nil || result.Safety.Level != "routine" {
 		t.Fatalf("full access navigation failed: %+v %v", result, err)
 	}

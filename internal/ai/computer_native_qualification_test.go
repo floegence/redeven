@@ -114,7 +114,7 @@ func TestComputerNativeApplicationEntryQualification(t *testing.T) {
 			host, _, _, _ := computerBindingFixture(t)
 			native := NewNativeDesktopTargetExecutor(helper)
 			host.executors["desktop-main"] = native
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.targets"}
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer_list_targets"}
 			call.Arguments, _ = json.Marshal(map[string]any{"application": name})
 			ctx := computerPermissionContext(t, "full_access")
 			inventory, err := host.ComputerTargets(ctx, call, ToolTargetPolicy{})
@@ -124,7 +124,7 @@ func TestComputerNativeApplicationEntryQualification(t *testing.T) {
 			if len(inventory.Candidates) != 1 || inventory.Candidates[0].Kind != "desktop.application" || read() != nil {
 				t.Fatalf("discovery changed app or returned wrong candidates: %+v", inventory)
 			}
-			call.ToolName = "computer.select_target"
+			call.ToolName = "computer_select_target"
 			target, err := host.SelectComputerCandidate(ctx, call, inventory.Candidates[0].CandidateRef, ToolTargetPolicy{})
 			if mode == "no_window" || mode == "multiple" {
 				var selection *computerApplicationSelection
@@ -142,7 +142,7 @@ func TestComputerNativeApplicationEntryQualification(t *testing.T) {
 				if err != nil || target.Kind != "desktop.window" {
 					t.Fatalf("application was not selected: %+v %v", target, err)
 				}
-				call.TargetID, call.ToolName, call.Arguments = target.ID, "computer.observe", json.RawMessage(`{"limit":80}`)
+				call.TargetID, call.ToolName, call.Arguments = target.ID, "computer_observe", json.RawMessage(`{"limit":80}`)
 				result, err := host.ExecuteTargetTool(ctx, call)
 				if err != nil || result.Result == nil {
 					t.Fatalf("opened window unavailable: %+v %v", result, err)
@@ -246,7 +246,7 @@ func TestComputerNativeScriptQualification(t *testing.T) {
 	geometry := initial["geometry"].(map[string]any)
 	x := geometry["scrollX"].(float64) - geometry["x"].(float64)
 	y := geometry["scrollY"].(float64) - geometry["y"].(float64)
-	call := TargetToolCall{ThreadID: "native-fixture", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "script", ToolName: "computer.exec", fullAccess: true, revalidate: func(ctx context.Context) error { return ctx.Err() }}
+	call := TargetToolCall{ThreadID: "native-fixture", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "script", ToolName: "computer_exec", fullAccess: true, revalidate: func(ctx context.Context) error { return ctx.Err() }}
 	contract := "const tree=await ui.snapshot({emit:false}); const parent=tree.nodes.find(n=>n.child_refs.length>0); if(!parent) throw new Error('missing fixture container'); const limited=await ui.ref(parent.ref).snapshot({limit:1,emit:false}); if(!limited.truncated || !limited.nodes[0].children_truncated) throw new Error('missing subtree truncation'); const single=await ui.ref(parent.ref).node(); if(single.child_refs.length!==0 || !single.children_truncated) throw new Error('missing single-node truncation'); const leaf=tree.nodes.find(n=>n.child_refs.length===0 && !n.children_truncated); if(!leaf) throw new Error('missing fixture leaf'); if((await ui.ref(leaf.ref).node()).children_truncated) throw new Error('leaf misreported as truncated');"
 	if result, err := executeTestScript(t.Context(), host, call, contract); err != nil {
 		t.Fatalf("native tree completeness: %v %#v", err, result.Result)
@@ -308,19 +308,19 @@ func TestComputerNativeDragQualification(t *testing.T) {
 			native := NewNativeDesktopTargetExecutor(helper)
 			host.executors["desktop-main"] = native
 			t.Cleanup(func() { _ = native.Close() })
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.targets"}
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer_list_targets"}
 			call.Arguments, _ = json.Marshal(map[string]any{"application": name})
 			ctx := computerPermissionContext(t, "full_access")
 			inventory, err := host.ComputerTargets(ctx, call, ToolTargetPolicy{})
 			if err != nil || len(inventory.Candidates) != 1 {
 				t.Fatalf("discovery: %+v %v", inventory, err)
 			}
-			call.ToolName = "computer.select_target"
+			call.ToolName = "computer_select_target"
 			target, err := host.SelectComputerCandidate(ctx, call, inventory.Candidates[0].CandidateRef, ToolTargetPolicy{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			call.TargetID, call.ToolName, call.fullAccess, call.allowForeground, call.scriptOperation = target.ID, "computer.drag", true, true, true
+			call.TargetID, call.ToolName, call.fullAccess, call.allowForeground, call.scriptOperation = target.ID, "computer_drag", true, true, true
 			call.Arguments, _ = json.Marshal(map[string]any{"from_x": 50, "from_y": 100, "to_x": 300, "to_y": 150, "duration_ms": item.duration})
 			actionCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
@@ -419,19 +419,19 @@ func TestComputerNativeFocusChangeQualification(t *testing.T) {
 	native := NewNativeDesktopTargetExecutor(helper)
 	host.executors["desktop-main"] = native
 	t.Cleanup(func() { _ = native.Close() })
-	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.targets"}
+	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer_list_targets"}
 	call.Arguments, _ = json.Marshal(map[string]any{"application": name})
 	ctx := computerPermissionContext(t, "full_access")
 	inventory, err := host.ComputerTargets(ctx, call, ToolTargetPolicy{})
 	if err != nil || len(inventory.Candidates) != 1 {
 		t.Fatalf("discovery: %+v %v", inventory, err)
 	}
-	call.ToolName = "computer.select_target"
+	call.ToolName = "computer_select_target"
 	target, err := host.SelectComputerCandidate(ctx, call, inventory.Candidates[0].CandidateRef, ToolTargetPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	call.TargetID, call.ToolName, call.fullAccess, call.allowForeground, call.scriptOperation = target.ID, "computer.drag", true, true, true
+	call.TargetID, call.ToolName, call.fullAccess, call.allowForeground, call.scriptOperation = target.ID, "computer_drag", true, true, true
 	call.Arguments, _ = json.Marshal(map[string]any{"from_x": 50, "from_y": 100, "to_x": 300, "to_y": 150, "duration_ms": 5000})
 	result, err := native.ExecuteTargetTool(ctx, call)
 	if result.Safety == nil || !slices.Contains(result.Safety.ReasonCodes, "target_focus_changed") || slices.Contains(result.Safety.ReasonCodes, "user_control") {
@@ -462,7 +462,7 @@ func TestComputerNativeFocusChangeQualification(t *testing.T) {
 	if downs != 1 || ups != 1 {
 		t.Fatalf("unbalanced stopped input: %+v", events)
 	}
-	call.ToolName, call.Arguments = "computer.observe", json.RawMessage("{}")
+	call.ToolName, call.Arguments = "computer_observe", json.RawMessage("{}")
 	blocked, err := native.ExecuteTargetTool(ctx, call)
 	if err != nil || blocked.Safety == nil || !slices.Contains(blocked.Safety.ReasonCodes, "target_focus_changed") {
 		t.Fatalf("pause did not survive next observation: %+v %v", blocked, err)

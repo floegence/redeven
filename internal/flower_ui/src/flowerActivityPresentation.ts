@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import { computerObservationInterruption } from './computerActivityOutcome';
 import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import type {
@@ -427,7 +428,7 @@ function todoItemsFromPayload(payload: Readonly<Record<string, unknown>> | undef
 }
 
 function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
-  if (trimString(item.tool_name).startsWith('terminal.')) return 'terminal';
+  if (trimString(item.tool_name).startsWith('terminal_')) return 'terminal';
   return item.renderer ?? 'structured';
 }
 
@@ -1020,7 +1021,7 @@ function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActiv
     return { kind: 'file', verb: 'Edit', display_name: previewName };
   }
   const fallbackName = trimString(item.label);
-  return { kind: 'file', verb: 'Edit', display_name: (fallbackName && fallbackName !== 'apply_patch' ? fallbackName : 'files') };
+  return { kind: 'file', verb: 'Edit', display_name: (fallbackName && fallbackName !== 'file_apply_patch' ? fallbackName : 'files') };
 }
 
 function patchFileCount(item: FlowerActivityItem): number {
@@ -1034,8 +1035,8 @@ function presentationForFile(item: FlowerActivityItem): FlowerActivityPresentati
   const verb = fileVerbForOperation(operation);
   const action = actionFromPayload({ ...payload, target: item.target_refs?.find(target => target.path && (target.kind === 'file' || target.kind === 'directory')) }, verb, trimString(item.label));
   let displayName = action.display_name || trimString(item.label) || defaultLabelForItem(item);
-  if (displayName === 'read_files') displayName = 'files';
-  if (displayName === 'apply_patch') displayName = 'files';
+  if (displayName === 'file_read_many') displayName = 'files';
+  if (displayName === 'file_apply_patch') displayName = 'files';
   const title: FlowerActivityTitle = { kind: 'file', verb, display_name: displayName };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   let files: readonly FlowerActivityDiffFile[] = [];
@@ -1137,11 +1138,11 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
 function terminalOperationLabel(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): string {
   const terminalCopy = copy?.terminal ?? DEFAULT_TERMINAL_ACTIVITY_COPY;
   switch (payloadValue(item.payload, 'operation') || trimString(item.tool_name)) {
-    case 'terminal.read':
+    case 'terminal_read':
     case 'read': return terminalCopy.readCommandOutput;
-    case 'terminal.write':
+    case 'terminal_write':
     case 'write': return terminalCopy.writeCommandInput;
-    case 'terminal.terminate':
+    case 'terminal_terminate':
     case 'terminate': return terminalCopy.terminateCommand;
     default: return terminalCopy.runCommand;
   }
@@ -1264,7 +1265,7 @@ function presentationForKnowledgeSearch(item: FlowerActivityItem): FlowerActivit
 }
 
 function presentationForWebSearch(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
-  if (item.tool_name?.startsWith('okf.') || item.tool_name === 'sources') return presentationForKnowledgeSearch(item);
+  if (item.tool_name?.startsWith('okf_') || item.tool_name === 'source_list') return presentationForKnowledgeSearch(item);
   const words = copy?.webSearch ?? DEFAULT_FLOWER_SURFACE_COPY.chat.webSearch;
   const payload = item.payload ?? {};
   const query = payloadValue(payload, 'query');
@@ -1424,17 +1425,17 @@ function titleWithToolContext(toolName: string, explicit: string, fallback: stri
   const meaningful = explicit && explicit !== toolName && !isApprovalLifecycleText(explicit) ? explicit : '';
   const label = meaningful || fallback;
   switch (toolName) {
-    case 'okf.search': return meaningful ? `OKF search "${meaningful}"` : 'OKF search';
-    case 'okf.open': return meaningful ? `OKF concept "${meaningful}"` : 'OKF concept';
-    case 'okf.index': return meaningful ? `OKF index · ${meaningful}` : 'OKF index';
-    case 'rgrep': return meaningful ? `rgrep "${meaningful}"` : 'rgrep';
+    case 'okf_search': return meaningful ? `OKF search "${meaningful}"` : 'OKF search';
+    case 'okf_open': return meaningful ? `OKF concept "${meaningful}"` : 'OKF concept';
+    case 'okf_get_index': return meaningful ? `OKF index · ${meaningful}` : 'OKF index';
+    case 'file_search': return meaningful ? `file_search "${meaningful}"` : 'file_search';
     case 'find': return meaningful ? `find ${meaningful}` : 'find';
-    case 'web.search': return meaningful ? `Web search "${meaningful}"` : 'Web search';
+    case 'web_search_pages': return meaningful ? `Web search "${meaningful}"` : 'Web search';
     case 'web_fetch': return meaningful ? `Web fetch ${meaningful}` : 'Web fetch';
-    case 'use_skill': return meaningful ? `Skill ${meaningful}` : 'Skill';
+    case 'skill_use': return meaningful ? `Skill ${meaningful}` : 'Skill';
     default: {
       if (meaningful) return label;
-      if (toolName === 'terminal.exec') return fallback;
+      if (toolName === 'terminal_exec') return fallback;
       const semantic = toolName.replace(/[._:-]+/g, ' ').trim();
       return semantic ? `Called ${semantic}` : 'Called tool';
     }
@@ -1465,19 +1466,19 @@ type FlowerActivityRendererHandler = (
 ) => FlowerActivityPresentation;
 
 const TOOL_ACTIONS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
-  'tessiven.schema': 'canvasSchema', 'tessiven.list': 'canvasList', 'tessiven.read': 'canvasRead',
-  'tessiven.search': 'canvasSearch', 'tessiven.edit': 'canvasEdit', 'tessiven.validate': 'canvasValidate',
-  'tessiven.save': 'canvasSave', 'tessiven.versions': 'canvasVersions',
-  'tessiven.inspect': 'serviceInspect', 'tessiven.action': 'serviceAction',
-  'computer.targets': 'discoverTargets', 'computer.select_target': 'selectTarget',
-  'computer.exec': 'execute', 'computer.observe': 'observe', 'computer.screenshot': 'screenshot',
-  'computer.click': 'click', 'computer.double_click': 'doubleClick', 'computer.type': 'type',
-  'computer.key': 'key', 'computer.scroll': 'scroll', 'computer.drag': 'drag', 'computer.wait': 'wait',
-  'browser.navigate': 'navigate', 'browser.back': 'back', 'browser.reload': 'reload',
-  'image.read': 'viewImage',
-  rgrep: 'searchFiles', find: 'findFiles', read_files: 'readFiles', use_skill: 'skill',
-  'okf.index': 'knowledgeIndex', 'okf.search': 'knowledgeSearch', 'okf.open': 'knowledgeOpen',
-  sources: 'sources', ask_user: 'question', write_todos: 'todos', web_fetch: 'fetch',
+  'tessiven_read_schema': 'canvasSchema', 'tessiven_list_canvases': 'canvasList', 'tessiven_read_canvas': 'canvasRead',
+  'tessiven_search_canvas': 'canvasSearch', 'tessiven_edit_canvas': 'canvasEdit', 'tessiven_validate_canvas': 'canvasValidate',
+  'tessiven_save_canvas': 'canvasSave', 'tessiven_list_versions': 'canvasVersions',
+  'tessiven_inspect_resource': 'serviceInspect', 'tessiven_manage_instance': 'serviceAction',
+  'computer_list_targets': 'discoverTargets', 'computer_select_target': 'selectTarget',
+  'computer_exec': 'execute', 'computer_observe': 'observe', 'computer_capture_screenshot': 'screenshot',
+  'computer_click': 'click', 'computer_double_click': 'doubleClick', 'computer_type_text': 'type',
+  'computer_press_key': 'key', 'computer_scroll': 'scroll', 'computer_drag': 'drag', 'computer_wait': 'wait',
+  'browser_navigate': 'navigate', 'browser_go_back': 'back', 'browser_reload': 'reload',
+  'image_read': 'viewImage',
+  file_search: 'searchFiles', path_find: 'findFiles', file_read_many: 'readFiles', skill_use: 'skill',
+  'okf_get_index': 'knowledgeIndex', 'okf_search': 'knowledgeSearch', 'okf_open': 'knowledgeOpen',
+  source_list: 'sources', user_ask: 'question', todo_write: 'todos', web_fetch: 'fetch',
 };
 
 const TOOL_INPUT_LABELS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
@@ -1496,21 +1497,21 @@ function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy
   const action = TOOL_ACTIONS[tool];
   const target = item.target_refs?.find(ref => ref.kind === 'computer_target' || ref.kind === 'computer_control' || ref.kind === 'computer_frame');
   const label = trimString(item.label);
-  if (tool === 'threads.query' || tool === 'threads.read') {
-    const prefix = tool === 'threads.query' ? 'Thread Query' : 'Thread Read';
+  if (tool === 'thread_query' || tool === 'thread_read') {
+    const prefix = tool === 'thread_query' ? 'Thread Query' : 'Thread Read';
     const intent = label && label !== tool && !isApprovalLifecycleText(label) ? label : '';
     return { kind: 'plain', text: intent ? `${prefix}: ${intent}` : prefix };
   }
-  if (tool.startsWith('computer.') || tool.startsWith('browser.')) {
+  if (tool.startsWith('computer_') || tool.startsWith('browser_')) {
     const intent = label && label !== tool && label !== target?.label && label !== target?.resource_ref
       && label !== payloadValue(item.payload, 'operation') && !isApprovalLifecycleText(label) ? label : '';
     const input = structuredRowsFromPayload(item.payload, 'inputs');
     const object = input.find(row => row.title === 'url' || row.title === 'key')?.content;
-    const browser = tool.startsWith('browser.') || item.renderer === 'browser'
+    const browser = tool.startsWith('browser_') || item.renderer === 'browser'
       || item.chips?.some(chip => chip.kind === 'browser_source' && ['browser.connected', 'browser.managed'].includes(chip.value ?? ''));
     return { kind: 'plain', text: `${browser ? 'BrowserUse' : 'ComputerUse'}: ${intent || [words[action ?? 'called'], object].filter(Boolean).join(' ')}` };
   }
-  if (tool.startsWith('tessiven.') && action) {
+  if (tool.startsWith('tessiven_') && action) {
     const canvasID = payloadValue(item.payload, 'canvas_id');
     const object = label && label !== tool && label !== canvasID && !/^[a-f0-9]{8}-[a-f0-9-]{27}$/iu.test(label)
       && !isApprovalLifecycleText(label) ? label : '';
@@ -1525,7 +1526,7 @@ function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy
 
 function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const words = copy?.tools ?? toolActivityEnUS;
-  if (item.tool_name === 'report_to_parent') {
+  if (item.tool_name === 'subagent_report') {
     const label = words.parentReportSubmit;
     const receipt = item.target_refs?.find(ref => ref.kind === 'parent_event');
     const message = structuredRowsFromPayload(item.payload, 'inputs').find(row => row.title === 'message')?.content ?? '';
@@ -1533,7 +1534,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     return { label, title: { kind: 'plain', text: label }, meta: receipt ? words.parentReportAccepted : '', detailLines: [], suppressEmptyDisclosure: true,
       detailBlocks: [...(receipt || message ? [{ kind: 'parent_report' as const, message, accepted: Boolean(receipt), parentThreadID: receipt?.label ?? '', eventID: receipt?.resource_ref ?? '' }] : []), ...(error ? [error] : [])] };
   }
-  if (item.tool_name === 'subagent_events') {
+  if (item.tool_name === 'subagent_read_events') {
     const savedAction = payloadValue(item.payload, 'operation');
     const action = ['list', 'read'].includes(savedAction) ? savedAction
       : structuredRowsFromPayload(item.payload, 'inputs').find(row => row.title === 'action')?.content || trimString(item.label);
@@ -1546,7 +1547,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
       detailBlocks: error ? [error] : [], suppressEmptyDisclosure: true, subagentThreadIDs };
   }
   const title = structuredTitle(item, words);
-  const computer = trimString(item.tool_name).startsWith('computer.') || trimString(item.tool_name).startsWith('browser.');
+  const computer = trimString(item.tool_name).startsWith('computer_') || trimString(item.tool_name).startsWith('browser_');
   const uncertain = item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain');
   const outcome = item.chips?.find(chip => chip.kind === 'computer_result')?.value;
   const rowMeta = (meta: string) => meta.split(' ').map(token => ({
@@ -1559,7 +1560,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const errorBlock = errorDetailBlockForItem(item, item.payload);
   const savedScreenshot = isSavedComputerScreenshot(item);
   const rows = structuredRowsFromPayload(item.payload).filter(row => (!savedScreenshot || row.content.trim()) && (!errorBlock || row.title || row.meta || !repeatsItemError(item, row.content))).map(row =>
-    item.tool_name === 'use_skill' && row.format === 'markdown' ? { ...row, title: '', meta: '' } : computer ? { ...row, meta: rowMeta(row.meta) } : row);
+    item.tool_name === 'skill_use' && row.format === 'markdown' ? { ...row, title: '', meta: '' } : computer ? { ...row, meta: rowMeta(row.meta) } : row);
   const inputs = structuredRowsFromPayload(item.payload, 'inputs').map(row => ({
     ...row, title: TOOL_INPUT_LABELS[row.title] ? words[TOOL_INPUT_LABELS[row.title]] : row.title,
   }));
@@ -1568,9 +1569,9 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   if (uncertain) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.effectUncertain });
   if (inputs.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: inputs });
-  else if (item.tool_name === 'computer.exec' && !active && !item.field_summary?.fields.some(field => field.path === '/payload/inputs' && (field.count ?? 0) > 0)) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
+  else if (item.tool_name === 'computer_exec' && !active && !item.field_summary?.fields.some(field => field.path === '/payload/inputs' && (field.count ?? 0) > 0)) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
   if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows, ...(!errorBlock && (item.status === 'error' || item.status === 'canceled') ? { notice: words.partialOutput } : {}) });
-  else if (item.tool_name === 'computer.exec' && active && !item.field_summary?.fields.some(field => field.path === '/payload/rows' && (field.count ?? 0) > 0)) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.waitingResult });
+  else if (item.tool_name === 'computer_exec' && active && !item.field_summary?.fields.some(field => field.path === '/payload/rows' && (field.count ?? 0) > 0)) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.waitingResult });
   else if (!active && !item.field_summary?.fields.some(field => field.path === '/payload/rows' && (field.count ?? 0) > 0) && (!computer || item.payload?.rows_provided !== true) && (!errorBlock || item.chips?.some(chip => chip.kind === 'partial_execution'))) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   const image = item.target_refs?.find(ref => ref.kind === 'tool_image' && (/^media:v1:[a-f0-9]{64}$/u.test(ref.resource_ref ?? '') || /^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(ref.resource_ref ?? '')));
@@ -1580,7 +1581,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     const { frame } = computerActivityResource(item);
     meta = !active && item.status === 'success' ? outcome === 'empty_page' ? words.computerBlankPage : outcome === 'no_targets' ? words.computerNoTargets : '' : '';
     if (frame) detailBlocks.push({ kind: 'image', resource_ref: frame, name: '' });
-    if (item.tool_name === 'computer.screenshot' && !active && !frame && !errorBlock) {
+    if (item.tool_name === 'computer_capture_screenshot' && !active && !frame && !errorBlock) {
       const index = detailBlocks.findIndex(block => block.kind === 'structured_rows' && block.section === 'results');
       const notice = { kind: 'structured_rows' as const, section: 'results' as const, rows, notice: words.screenshotUnavailable };
       if (index >= 0) detailBlocks[index] = notice;
@@ -1603,8 +1604,8 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const interruption = computerObservationInterruption(item);
   if (interruption) meta = {not_dispatched:words.computerNotDispatched,output:words.computerOutputLimitReached,budget:words.computerBudgetExhausted,read_failed:words.computerActionReadFailed,effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
   if (uncertain) meta = words.effectUncertain;
-  const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
-    'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');
+  const missingPresenter = ['thread_query', 'thread_read', 'threads.aggregate', 'computer_list_targets',
+    'tessiven_list_runtimes', 'tessiven_inspect_runtime', 'tessiven_manage_runtime', 'tessiven_inspect_resource', 'tessiven_manage_instance'].includes(item.tool_name ?? '');
   if (missingPresenter) {
     const secondaryInputs = new Set(['object', 'limit', 'group_by', 'roles', 'statuses', 'version', 'expected_version', 'before']);
     for (let index = detailBlocks.length - 1; index >= 0; index--) {
@@ -1634,7 +1635,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
 }
 
 export function isSavedComputerScreenshot(item: FlowerActivityItem): boolean {
-  return item.tool_name === 'computer.screenshot' && Boolean(computerActivityResource(item).frame);
+  return item.tool_name === 'computer_capture_screenshot' && Boolean(computerActivityResource(item).frame);
 }
 
 export function computerActivityResource(item: FlowerActivityItem) {
@@ -1686,7 +1687,9 @@ function presentationForGoal(item: FlowerActivityItem, copy?: FlowerActivityPres
 }
 
 export function presentFlowerActivityItem(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
-  if (item.tool_name === 'goal') return presentationForGoal(item, copy);
+  const name = historicalToolName(item.tool_name ?? "");
+  if (name !== item.tool_name) item = { ...item, tool_name: name };
+  if (item.tool_name === 'goal_manage') return presentationForGoal(item, copy);
   const renderer = rendererForItem(item);
   let result = FLOWER_ACTIVITY_RENDERERS[renderer](item, { copy });
   if (item.status === 'unknown') result = { ...result, meta: (copy?.statuses ?? DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses).unknown };
@@ -1698,8 +1701,8 @@ export function presentFlowerActivityItem(item: FlowerActivityItem, copy?: Flowe
     const name = count && count > 1 ? words.fileCount.replace('{count}', String(count)) : result.title.display_name === 'files' ? words.files : result.title.display_name;
     return { ...result, title: { ...result.title, display_name: name }, label: [verb, name].filter(Boolean).join(' ') };
   }
-  if (renderer === 'todos' || renderer === 'question' || renderer === 'web_fetch' || item.tool_name === 'sources') {
-    const action = renderer === 'todos' ? words.todos : renderer === 'question' ? words.question : item.tool_name === 'sources' ? words.sources : words.fetch;
+  if (renderer === 'todos' || renderer === 'question' || renderer === 'web_fetch' || item.tool_name === 'source_list') {
+    const action = renderer === 'todos' ? words.todos : renderer === 'question' ? words.question : item.tool_name === 'source_list' ? words.sources : words.fetch;
     const label = result.title.kind === 'web_fetch' ? `${action} ${result.title.url}` : action;
     return { ...result, label, title: result.title.kind === 'web_fetch' ? result.title : { kind: 'plain', text: label } };
   }

@@ -12,8 +12,8 @@ ComputerUseRuntime owns targets, resources, control and script processes; Floret
 # Contract
 
 ## Execution
-`computer.observe` reads bounded semantic information, with an optional image.
-Inside `computer.exec`, `await ui.observe({emit:false})` returns a local object with
+`computer_observe` reads bounded semantic information, with an optional image.
+Inside `computer_exec`, `await ui.observe({emit:false})` returns a local object with
 `observation.nodes`; script reads receive the full observation. The `full:true`
 option controls the emitted snapshot instead of the default diff.
 

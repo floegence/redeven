@@ -178,7 +178,7 @@ func TestComputerRunCompletionRetiresSamplerWithoutFailure(t *testing.T) {
 			t.Fatalf("normal completion was reported as %s", frame.ErrorCode)
 		}
 	}
-	_, release, err := runtime.acquireComputerControl(t.Context(), TargetToolCall{ThreadID: "thread", RunID: "next-run", TargetID: "target", ToolName: "computer.screenshot"})
+	_, release, err := runtime.acquireComputerControl(t.Context(), TargetToolCall{ThreadID: "thread", RunID: "next-run", TargetID: "target", ToolName: "computer_capture_screenshot"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestComputerLiveFrameRequiresMatchingThreadAndStaysEphemeral(t *testing.T) 
 // keyframe, so ephemeral-storage assertions cannot pass against durable bytes.
 func acquireLiveFrameTestTarget(t *testing.T, runtime *ComputerUseRuntime, threadID string) {
 	t.Helper()
-	_, release, err := runtime.acquireComputerControl(t.Context(), TargetToolCall{ThreadID: threadID, RunID: "run", TargetID: "target", ToolName: "computer.screenshot"})
+	_, release, err := runtime.acquireComputerControl(t.Context(), TargetToolCall{ThreadID: threadID, RunID: "run", TargetID: "target", ToolName: "computer_capture_screenshot"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestPrivateComputerFramesContinueWithoutInputAndRemainObserverScoped(t *tes
 	executor := &takeoverObservationExecutor{body: body, attachment: attachment}
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
-	call := TargetToolCall{ThreadID: "thread", TurnID: "turn", RunID: "run", TargetID: "target", ToolName: "browser.navigate"}
+	call := TargetToolCall{ThreadID: "thread", TurnID: "turn", RunID: "run", TargetID: "target", ToolName: "browser_navigate"}
 	if _, err := runtime.ExecuteTargetTool(t.Context(), call); err != nil {
 		t.Fatal(err)
 	}

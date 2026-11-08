@@ -179,8 +179,8 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.6" {
 			t.Fatalf("model=%q, want kimi-k2.6", reqString(req, "model"))
 		}
-		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != "ask_user" {
-			t.Fatalf("tool_names=%v, want [ask_user]", got)
+		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != "user_ask" {
+			t.Fatalf("tool_names=%v, want [user_ask]", got)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -199,10 +199,10 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 						"reasoning_content": "Ask the user for the next decision.",
 						"tool_calls": []any{
 							map[string]any{
-								"id":   "ask_user:0",
+								"id":   "user_ask:0",
 								"type": "function",
 								"function": map[string]any{
-									"name":      "ask_user",
+									"name":      "user_ask",
 									"arguments": `{"questions":[{"id":"direction","header":"Direction","question":"Which direction should I take?","is_secret":false,"response_mode":"select_or_write","choices_exhaustive":false,"choices":[{"choice_id":"a","label":"Option A","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose the next direction."],"evidence_refs":[]}`,
 								},
 							},
@@ -236,7 +236,7 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "ask the user"}}},
 		},
-		Tools: []ToolDef{{Name: "ask_user"}},
+		Tools: []ToolDef{{Name: "user_ask"}},
 	})
 	if err != nil {
 		t.Fatalf("Turn: %v", err)
@@ -250,8 +250,8 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 	if len(result.ToolCalls) != 1 {
 		t.Fatalf("tool_calls=%d, want 1", len(result.ToolCalls))
 	}
-	if result.ToolCalls[0].Name != "ask_user" {
-		t.Fatalf("tool_name=%q, want ask_user", result.ToolCalls[0].Name)
+	if result.ToolCalls[0].Name != "user_ask" {
+		t.Fatalf("tool_name=%q, want user_ask", result.ToolCalls[0].Name)
 	}
 	if got := strings.TrimSpace(anyString(result.ToolCalls[0].Args["reason_code"])); got != AskUserReasonUserDecisionRequired {
 		t.Fatalf("tool_args=%v, want reason_code=%s", result.ToolCalls[0].Args, AskUserReasonUserDecisionRequired)
@@ -310,7 +310,7 @@ func TestMoonshotProvider_PreservesUnknownToolNamesInStreamAndDirectResponses(t 
 	request := ModelGatewayRequest{
 		Model:    "kimi-k2.6",
 		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
-		Tools:    []ToolDef{{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)}},
+		Tools:    []ToolDef{{Name: "terminal_exec", InputSchema: json.RawMessage(`{"type":"object"}`)}},
 	}
 	streamResult, err := provider.StreamTurn(context.Background(), request, nil)
 	if err != nil {
@@ -590,7 +590,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 		},
 		Tools: []ToolDef{
 			{
-				Name:        "terminal.exec",
+				Name:        "terminal_exec",
 				Description: "Run shell command",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"cmd":{"type":"string"}},"required":["cmd"]}`),
 			},
@@ -612,8 +612,8 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 	if call.ID != "call_1" {
 		t.Fatalf("tool_call.id=%q, want call_1", call.ID)
 	}
-	if call.Name != "terminal.exec" {
-		t.Fatalf("tool_call.name=%q, want terminal.exec", call.Name)
+	if call.Name != "terminal_exec" {
+		t.Fatalf("tool_call.name=%q, want terminal_exec", call.Name)
 	}
 	if got := strings.TrimSpace(anyString(call.Args["cmd"])); got != "pwd" {
 		t.Fatalf("tool_call.args.cmd=%q, want pwd", got)
@@ -797,7 +797,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 		},
 		Tools: []ToolDef{
 			{
-				Name:        "terminal.exec",
+				Name:        "terminal_exec",
 				Description: "Run shell command",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"cmd":{"type":"string"}},"required":["cmd"]}`),
 			},

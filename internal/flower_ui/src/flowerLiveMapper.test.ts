@@ -406,7 +406,7 @@ describe('mapFlowerActivityItem web fetch contract', () => {
 describe('mapFlowerActivityItem Subagent operation contract', () => {
   const activity = (payload: unknown) => ({
     item_id: 'activity-subagents-wait',
-    tool_name: 'subagents',
+    tool_name: 'subagent_manage',
     kind: 'tool',
     status: 'running',
     severity: 'normal',
@@ -565,7 +565,7 @@ describe('request byte capacity contract', () => {
 
 it('preserves the published unknown outcome and attention contract', () => {
   const item = mapFlowerActivityItem({
-    item_id: 'host-work-final', tool_id: 'exec-one', tool_name: 'terminal.exec', kind: 'tool',
+    item_id: 'host-work-final', tool_id: 'exec-one', tool_name: 'terminal_exec', kind: 'tool',
     status: 'unknown', severity: 'warning', needs_attention: true, attention_reasons: ['unknown'],
     requires_approval: false, ended_at_unix_ms: 123,
     presentation: { renderer: 'terminal', payload: { operation: 'exec', status: 'unknown', process_id: 'process-1' } },

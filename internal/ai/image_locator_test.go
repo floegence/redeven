@@ -82,7 +82,7 @@ func TestUploadedImageLocatorReusesCanonicalBytesAndTypedAttachment(t *testing.T
 			if len(output.Attachments) != 1 || output.Attachments[0].ResourceRef != descriptor.ResourceRef || output.Attachments[0].SHA256 != digest {
 				t.Fatalf("reread copied or changed resource: %+v", output)
 			}
-			converted, err := floretToolResultFromFlower(r, ToolResult{ToolID: "reread", ToolName: "image.read", Status: toolResultStatusSuccess, Data: map[string]any{"display_name": name}, Attachments: output.Attachments})
+			converted, err := floretToolResultFromFlower(r, ToolResult{ToolID: "reread", ToolName: "image_read", Status: toolResultStatusSuccess, Data: map[string]any{"display_name": name}, Attachments: output.Attachments})
 			if err != nil || len(converted.Attachments) != 1 || converted.Attachments[0].ID != descriptor.ResourceRef {
 				t.Fatalf("typed upload lost at gateway: %+v %v", converted, err)
 			}

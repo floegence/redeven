@@ -18,7 +18,7 @@ const maxFlowerArgumentPreviewBytes = 1 << 20
 
 func flowerArgumentPreviewFactory(name string) func() fltools.ArgumentPreviewer {
 	switch name {
-	case "file.write", "apply_patch":
+	case "file_write", "file_apply_patch":
 		return func() fltools.ArgumentPreviewer {
 			p := &flowerArgumentPreview{tool: name, fields: map[string]*previewString{}}
 			return p.append
@@ -104,11 +104,11 @@ func (p *flowerArgumentPreview) append(delta string, complete bool) (*fltools.Ar
 	}
 	integer := func(n int) *int { return &n }
 	switch p.tool {
-	case "file.write":
+	case "file_write":
 		if field := p.fields["content"]; field != nil {
 			out.Additions = integer(field.count())
 		}
-	case "apply_patch":
+	case "file_apply_patch":
 		if p.fields["input"] != nil {
 			if p.patch.invalidUTF8 {
 				return nil, errors.New("invalid patch utf8")
@@ -221,11 +221,11 @@ func (p *flowerArgumentPreview) byte(b byte) error {
 func (p *flowerArgumentPreview) wants(key string) bool {
 	switch key {
 	case "file_path":
-		return p.tool != "apply_patch"
+		return p.tool != "file_apply_patch"
 	case "content":
-		return p.tool == "file.write"
+		return p.tool == "file_write"
 	case "input":
-		return p.tool == "apply_patch"
+		return p.tool == "file_apply_patch"
 	}
 	return false
 }
@@ -251,7 +251,7 @@ func (p *flowerArgumentPreview) decoded(text string) {
 	if p.isKey {
 		p.key.WriteString(text)
 	} else if p.field != nil {
-		if p.tool == "apply_patch" {
+		if p.tool == "file_apply_patch" {
 			p.patch.append(text)
 		} else {
 			p.field.append(text)
@@ -333,7 +333,7 @@ func (p *flowerArgumentPreview) stringByte(b byte) error {
 			frame.phase = ':'
 		} else {
 			if p.field != nil {
-				if !utf8.ValidString(p.field.text.String()) || p.tool == "apply_patch" && !utf8.ValidString(p.patch.line.String()) {
+				if !utf8.ValidString(p.field.text.String()) || p.tool == "file_apply_patch" && !utf8.ValidString(p.patch.line.String()) {
 					return errors.New("invalid argument utf8")
 				}
 				p.field.complete = true

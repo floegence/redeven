@@ -31,8 +31,8 @@ while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
   target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
   case "$line" in
-    *computer.wait*) IFS= read -r ignored; exit 0 ;;
-    *computer.double_click*) id=wrong ;;
+    *computer_wait*) IFS= read -r ignored; exit 0 ;;
+    *computer_double_click*) id=wrong ;;
   esac
   printf '{"id":"%s","target_id":"%s","result":{"summary":"fixture"}}\n' "$id" "$target"
 done
@@ -69,7 +69,7 @@ func TestPlaywrightTargetExecutorInterruptedSessionIsReaped(t *testing.T) {
 	for _, cause := range []string{"cancel", "timeout"} {
 		t.Run(cause, func(t *testing.T) {
 			executor := newPlaywrightProtocolFixture(t)
-			call := TargetToolCall{TargetID: "fixture", ToolName: "computer.screenshot"}
+			call := TargetToolCall{TargetID: "fixture", ToolName: "computer_capture_screenshot"}
 			if _, err := executor.ExecuteTargetTool(t.Context(), call); err != nil {
 				t.Fatal(err)
 			}
@@ -82,7 +82,7 @@ func TestPlaywrightTargetExecutorInterruptedSessionIsReaped(t *testing.T) {
 			} else {
 				executor.Timeout = 100 * time.Millisecond
 			}
-			call.ToolName = "computer.wait"
+			call.ToolName = "computer_wait"
 			if _, err := executor.ExecuteTargetTool(ctx, call); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("interruption error = %v", err)
 			}
@@ -90,7 +90,7 @@ func TestPlaywrightTargetExecutorInterruptedSessionIsReaped(t *testing.T) {
 				t.Fatal("interrupted session was retained or its helper was not reaped")
 			}
 			executor.Timeout = time.Second
-			call.ToolName = "computer.screenshot"
+			call.ToolName = "computer_capture_screenshot"
 			if _, err := executor.ExecuteTargetTool(t.Context(), call); err != nil {
 				t.Fatalf("fresh observation after interruption: %v", err)
 			}
@@ -110,7 +110,7 @@ func TestPlaywrightHelperCannotOwnTurnControl(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, identity := range [][3]string{{"thread", "turn", "first-run"}, {"thread", "turn", "resumed-run"}, {"thread", "next-turn", "next-run"}, {"other-thread", "next-turn", "next-run"}} {
-		_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: identity[0], TurnID: identity[1], RunID: identity[2], TargetID: "fixture", ToolName: "computer.screenshot", Arguments: json.RawMessage(`{"session_id":"model-chosen"}`)})
+		_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: identity[0], TurnID: identity[1], RunID: identity[2], TargetID: "fixture", ToolName: "computer_capture_screenshot", Arguments: json.RawMessage(`{"session_id":"model-chosen"}`)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +140,7 @@ func TestPlaywrightHelperCannotOwnTurnControl(t *testing.T) {
 
 func TestPlaywrightTargetExecutorRejectsMismatchedResponse(t *testing.T) {
 	executor := newPlaywrightProtocolFixture(t)
-	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "computer.double_click"})
+	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "computer_double_click"})
 	if !errors.Is(err, errComputerEffectUnknown) {
 		t.Fatalf("mismatched helper response accepted: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestPlaywrightTargetExecutorRejectsMismatchedResponse(t *testing.T) {
 
 func TestPlaywrightTargetExecutorCloseReapsAndPreventsRestart(t *testing.T) {
 	executor := newPlaywrightProtocolFixture(t)
-	call := TargetToolCall{TargetID: "fixture", ToolName: "computer.screenshot"}
+	call := TargetToolCall{TargetID: "fixture", ToolName: "computer_capture_screenshot"}
 	if _, err := executor.ExecuteTargetTool(t.Context(), call); err != nil {
 		t.Fatal(err)
 	}
@@ -240,38 +240,38 @@ func TestPlaywrightTargetExecutorFixture(t *testing.T) {
 			}
 		}
 	}
-	execute("browser.navigate", map[string]any{"url": server.URL})
+	execute("browser_navigate", map[string]any{"url": server.URL})
 	awaitEvent("load:/")
-	execute("computer.screenshot", nil)
-	execute("computer.click", map[string]any{"x": 80, "y": 55})
+	execute("computer_capture_screenshot", nil)
+	execute("computer_click", map[string]any{"x": 80, "y": 55})
 	awaitEvent("click")
-	execute("computer.double_click", map[string]any{"x": 270, "y": 55})
+	execute("computer_double_click", map[string]any{"x": 270, "y": 55})
 	awaitEvent("double")
-	execute("computer.click", map[string]any{"x": 80, "y": 155})
-	execute("computer.type", map[string]any{"text": "Flower"})
+	execute("computer_click", map[string]any{"x": 80, "y": 155})
+	execute("computer_type_text", map[string]any{"text": "Flower"})
 	awaitEvent("text:Flower")
-	execute("computer.key", map[string]any{"key": "Enter"})
+	execute("computer_press_key", map[string]any{"key": "Enter"})
 	awaitEvent("enter:Flower")
-	execute("computer.scroll", map[string]any{"delta_y": 600})
+	execute("computer_scroll", map[string]any{"delta_y": 600})
 	awaitEvent("scroll")
-	execute("computer.wait", map[string]any{"milliseconds": 10})
-	execute("browser.reload", nil)
+	execute("computer_wait", map[string]any{"milliseconds": 10})
+	execute("browser_reload", nil)
 	awaitEvent("load:/")
-	execute("browser.navigate", map[string]any{"url": server.URL + "/second"})
+	execute("browser_navigate", map[string]any{"url": server.URL + "/second"})
 	awaitEvent("load:/second")
-	back := execute("browser.back", nil)
+	back := execute("browser_go_back", nil)
 	if back.Result.(map[string]any)["url"] != server.URL+"/" {
-		t.Fatal("browser.back did not restore the previous page")
+		t.Fatal("browser_go_back did not restore the previous page")
 	}
 	// Cancelling an action must release the real Chromium profile lock, allowing
 	// the next observation to establish a fresh session without manual cleanup.
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	_, err = executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "fixture", ToolName: "computer.wait", Arguments: json.RawMessage(`{"milliseconds":30000}`), fullAccess: true})
+	_, err = executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "fixture", ToolName: "computer_wait", Arguments: json.RawMessage(`{"milliseconds":30000}`), fullAccess: true})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("cancel actual helper: %v", err)
 	}
-	execute("computer.screenshot", nil)
+	execute("computer_capture_screenshot", nil)
 }
 
 func TestTargetToolResultPayloadCarriesAttachmentFrame(t *testing.T) {
@@ -299,7 +299,7 @@ done
 	if err := os.WriteFile(executor.HelperPath, []byte(helper), 0600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "browser.navigate"})
+	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "browser_navigate"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func TestPlaywrightObservationFailurePreservesOnlyConfirmedProgress(t *testing.T
 			if err := os.WriteFile(executor.HelperPath, []byte(script), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "computer.click"})
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "computer_click"})
 			if _, ok := executed.(bool); !ok {
 				if !errors.Is(err, errComputerEffectUnknown) || len(executor.clients) != 0 {
 					t.Fatalf("malformed progress weakened effect barrier: %v", err)

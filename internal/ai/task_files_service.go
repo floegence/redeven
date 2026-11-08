@@ -49,7 +49,7 @@ func (s *Service) GetTaskFiles(ctx context.Context, meta *session.Meta, threadID
 	if !ok {
 		return out, errors.New("canonical file results unavailable")
 	}
-	page, err := reader.Query(ctx, scope, threadquery.QueryInput{Object: threadquery.ToolCalls, Filter: threadquery.Filter{ThreadIDs: []identity.ThreadID{identity.ThreadID(threadID)}, ToolNames: []string{"file.present"}, Statuses: []string{"success"}, ToolKinds: []string{"local"}}, Sort: threadquery.Sort{Key: "time", Descending: true}, Limit: 50, Cursor: cursor})
+	page, err := reader.Query(ctx, scope, threadquery.QueryInput{Object: threadquery.ToolCalls, Filter: threadquery.Filter{ThreadIDs: []identity.ThreadID{identity.ThreadID(threadID)}, ToolNames: []string{"file_present"}, Statuses: []string{"success"}, ToolKinds: []string{"local"}}, Sort: threadquery.Sort{Key: "time", Descending: true}, Limit: 50, Cursor: cursor})
 	if err != nil {
 		return out, err
 	}

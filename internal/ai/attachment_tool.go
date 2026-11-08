@@ -222,7 +222,7 @@ func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args a
 	attachmentID := info.AttachmentID
 	canonicalRunID, canonicalThreadID, _ := r.floretCanonicalIdentity()
 	if info.UnicodeCodePoints == nil || info.LogicalLineCount == nil || normalizeMediaType(info.DetectedMediaType) != "text/plain; charset=utf-8" {
-		return nil, errors.New("attachment.read supports only strict UTF-8 text attachments")
+		return nil, errors.New("attachment_read supports only strict UTF-8 text attachments")
 	}
 	body, err := readAttachmentSnapshot(ctx, opened.Upload.FilePath, info.SizeBytes)
 	if err != nil || !utf8.Valid(body) || strings.IndexByte(string(body), 0) >= 0 {

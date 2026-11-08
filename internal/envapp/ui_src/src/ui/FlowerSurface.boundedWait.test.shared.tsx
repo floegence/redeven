@@ -140,7 +140,7 @@ it.each(['input', 'approval'] as const)('handles child %s in the shared composer
   const childThread = thread({ thread_id: child.thread_id, parent_thread_id: parent.thread_id,
     status: kind === 'input' ? 'waiting_user' : 'waiting_approval',
     ...(kind === 'input' ? { input_request: inputRequest({ prompt_id: 'child-input' }) } : { approval_actions: [{
-      action_id: 'child-approval', turn_id: 'turn-fixture', run_id: 'run-fixture', origin: 'main_tool', tool_id: 'child-tool', tool_name: 'terminal.exec',
+      action_id: 'child-approval', turn_id: 'turn-fixture', run_id: 'run-fixture', origin: 'main_tool', tool_id: 'child-tool', tool_name: 'terminal_exec',
       state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, queue_order: 0, summary: { label: 'Inspect child workspace' },
     }] }),
   });

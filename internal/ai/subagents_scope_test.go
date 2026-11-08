@@ -149,12 +149,12 @@ func TestFlowerSubagentStaleTargetResultContinuesProviderTurn(t *testing.T) {
 	for _, action := range []string{subagentActionSendInput, subagentActionClose} {
 		t.Run(action, func(t *testing.T) {
 			adapter, _ := newSubagentHandoffTestAdapter(t, nil, nil)
-			tool := fltools.Define[map[string]any](fltools.Definition{Name: "subagents", InputSchema: fltools.StrictObject(map[string]any{"action": map[string]any{"type": "string"}}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
+			tool := fltools.Define[map[string]any](fltools.Definition{Name: "subagent_manage", InputSchema: fltools.StrictObject(map[string]any{"action": map[string]any{"type": "string"}}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 				data, err := adapter.manage(ctx, inv.CallID, map[string]any{"action": action, "target": "source-child", "message": "guidance"})
 				if err != nil {
 					return fltools.Result{}, err
 				}
-				return floretToolResultFromFlower(nil, ToolResult{ToolID: inv.CallID, ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+				return floretToolResultFromFlower(nil, ToolResult{ToolID: inv.CallID, ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data})
 			})
 			args, _ := json.Marshal(map[string]any{"action": action})
 			gateway := delegationContextGateway(delegationContextCall("stale-target", string(args)), delegationContextDone())

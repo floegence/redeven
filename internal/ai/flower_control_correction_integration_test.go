@@ -55,7 +55,7 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 				count := calls.Add(1)
 				if count >= 2 {
 					raw, _ := json.Marshal(request["input"])
-					if !requestContainsPairedToolHistory(request, "ask_user") || !strings.Contains(string(raw), correction) {
+					if !requestContainsPairedToolHistory(request, "user_ask") || !strings.Contains(string(raw), correction) {
 						t.Errorf("request %d lost rejected call or validation result: %s", count, raw)
 					}
 				}
@@ -80,7 +80,7 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 					output = append(output, map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "I need one device detail."}}})
 				}
 				callID := fmt.Sprintf("ask-%d", count)
-				output = append(output, map[string]any{"type": "function_call", "id": "item-" + callID, "call_id": callID, "name": "ask_user", "arguments": args})
+				output = append(output, map[string]any{"type": "function_call", "id": "item-" + callID, "call_id": callID, "name": "user_ask", "arguments": args})
 				if mode == "mixed" && count == 1 {
 					arguments, _ := json.Marshal(map[string]any{"command": "printf action >> '" + effectFile + "'"})
 					output = append(output, map[string]any{"type": "function_call", "id": "ordinary-item", "call_id": "ordinary-call", "name": "terminal_exec", "arguments": string(arguments)})

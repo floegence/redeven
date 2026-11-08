@@ -15,6 +15,8 @@ import (
 	"github.com/floegence/floret/v7/threadquery"
 	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/session"
+
+	"github.com/floegence/redeven/internal/ai/toolnames"
 )
 
 // fileActivityTarget is a historical navigation fact, never read authority.
@@ -67,11 +69,12 @@ func mutationActivityTarget(data map[string]any) *fltools.ActivityTargetRef {
 }
 
 func localFileActivityTool(name string, activity *fltools.ActivityPresentation) bool {
+	name = toolnames.Historical(name)
 	if activity != nil && (activity.Renderer == fltools.ActivityRendererFile || activity.Renderer == fltools.ActivityRendererPatch) {
 		return true
 	}
 	switch name {
-	case "read_file", "file.read", "read_files", "file.write", "file.present", "apply_patch", "image.read":
+	case "file_read", "file.read", "file_read_many", "file_write", "file_present", "file_apply_patch", "image_read":
 		return true
 	}
 	return false
@@ -93,14 +96,14 @@ func applyFileActivityTargets(activity *fltools.ActivityPresentation, name strin
 		return
 	}
 	switch name {
-	case "read_files":
+	case "file_read_many":
 		structured, ok := activity.Payload.(fltools.StructuredActivityPayload)
 		if !ok {
 			return
 		}
 		structured.Rows = structuredToolResults(name, data, nil, true)
 		activity.Payload = structured
-	case "apply_patch":
+	case "file_apply_patch":
 		patch, ok := activity.Payload.(fltools.PatchActivityPayload)
 		if !ok {
 			return
@@ -163,7 +166,7 @@ func (s *Service) hydrateActivityTargets(ctx context.Context, meta *session.Meta
 	}
 	pending := map[key]int{}
 	for i, item := range items {
-		if item.Activity == nil || item.Activity.Status != observation.ActivityStatusSuccess || (!localFileActivityTool(item.Activity.ToolName, item.Activity.Presentation) && item.Activity.ToolName != "subagent_events" && item.Activity.ToolName != "report_to_parent") {
+		if item.Activity == nil || item.Activity.Status != observation.ActivityStatusSuccess || (!localFileActivityTool(item.Activity.ToolName, item.Activity.Presentation) && item.Activity.ToolName != "subagent_read_events" && item.Activity.ToolName != "subagent_report") {
 			continue
 		}
 		activity := item.Activity.Presentation
@@ -269,7 +272,7 @@ func (s *Service) hydrateActivityTargets(ctx context.Context, meta *session.Meta
 					}
 				}
 				item.Presentation.TargetRefs = kept
-				if record.ToolName == "subagent_events" || record.ToolName == "report_to_parent" {
+				if record.ToolName == "subagent_read_events" || record.ToolName == "subagent_report" {
 					applyParentEventActivity(item.Presentation, record.ToolName, data)
 				} else {
 					mergeHistoricalFileActivityTargets(item.Presentation, record.ToolName, data)

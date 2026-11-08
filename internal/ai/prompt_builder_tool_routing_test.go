@@ -52,12 +52,12 @@ func TestFlowerPromptFileDeliveryContract(t *testing.T) {
 
 func TestToolDefinitionsRetainTheirOperationContracts(t *testing.T) {
 	contracts := map[string][]string{
-		"okf.index":        {"Redeven repository knowledge"},
-		"okf.search":       {"candidate summaries"},
-		"okf.open":         {"Summary and the section catalog"},
-		"image.read":       {"exactly one of file_path or a media:v1 locator", "reject target_id"},
-		"subagents":        {"direct child threads", "inherited history does not transfer ownership"},
-		"report_to_parent": {"child task managed by your direct parent", "question, blocker", "automatically notifies the parent", "subagents inspect/wait"},
+		"okf_get_index":   {"Redeven repository knowledge"},
+		"okf_search":      {"candidate summaries"},
+		"okf_open":        {"Summary and the section catalog"},
+		"image_read":      {"exactly one of file_path or a media:v1 locator", "reject target_id"},
+		"subagent_manage": {"direct child threads", "inherited history does not transfer ownership"},
+		"subagent_report": {"child task managed by your direct parent", "question, blocker", "automatically notifies the parent", "subagent_manage inspect/wait"},
 	}
 	for _, def := range builtInToolDefinitions() {
 		required, ok := contracts[def.Name]
@@ -69,7 +69,7 @@ func TestToolDefinitionsRetainTheirOperationContracts(t *testing.T) {
 				t.Errorf("%s definition omits %q", def.Name, want)
 			}
 		}
-		if def.Name == "subagents" {
+		if def.Name == "subagent_manage" {
 			assertPromptContains(t, string(def.InputSchema), "1-5 English Title Case words")
 		}
 		delete(contracts, def.Name)

@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import type { createActivityFieldReader } from './activityFieldReader';
 import { readActivityRowSnapshot, readActivityValue } from './activityFieldValue';
@@ -75,7 +76,7 @@ export function ActivityFieldRows(props: {
     // Parent reports use a dedicated receipt block. The receipt remains owned
     // by the activity; its deferred message still belongs to the selected input
     // row and must not disappear because it is not a structured_rows block.
-    if (item.tool_name === 'report_to_parent' && props.section === 'inputs') {
+    if (historicalToolName(item.tool_name ?? '') === 'subagent_report' && props.section === 'inputs') {
       const report = presentation.detailBlocks.find(block => block.kind === 'parent_report');
       return { index, revision, content: snapshot?.content, value: report?.kind === 'parent_report' && report.message
         ? { title: props.copy.toolActivity.parentReportContent, meta: '', content: report.message, format: 'text' } : undefined };

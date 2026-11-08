@@ -166,7 +166,7 @@ func TestThreadQueryToolsAuthorizeBeforeSearchAndPagination(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := map[string]any{"object": "threads", "limit": 1}
-	result, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", input)
+	result, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestThreadQueryToolsAuthorizeBeforeSearchAndPagination(t *testing.T) {
 	if page.Total != 2 || page.NextCursor == "" {
 		t.Fatalf("authorized root/child count: %+v", page)
 	}
-	read, err := svc.execThreadQueryTool(t.Context(), meta, "threads.read", map[string]any{"ref": page.Records[0].Ref})
+	read, err := svc.execThreadQueryTool(t.Context(), meta, "thread_read", map[string]any{"ref": page.Records[0].Ref})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestThreadQueryToolsAuthorizeBeforeSearchAndPagination(t *testing.T) {
 		t.Fatal("read exposed foreign namespace")
 	}
 	input["cursor"] = page.NextCursor
-	next, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", input)
+	next, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,21 +190,21 @@ func TestThreadQueryToolsAuthorizeBeforeSearchAndPagination(t *testing.T) {
 	if !seen[parent.ThreadID] || !seen[child.ThreadID.String()] {
 		t.Fatalf("missing readable child: %v", seen)
 	}
-	if _, err := svc.execThreadQueryTool(t.Context(), &foreign, "threads.query", input); !errors.Is(err, threadquery.ErrCursorInvalid) {
+	if _, err := svc.execThreadQueryTool(t.Context(), &foreign, "thread_query", input); !errors.Is(err, threadquery.ErrCursorInvalid) {
 		t.Fatalf("changed authority cursor: %v", err)
 	}
 	denied := *meta
 	denied.CanRead = false
-	for _, name := range []string{"threads.query", "threads.read"} {
+	for _, name := range []string{"thread_query", "thread_read"} {
 		if _, err := svc.execThreadQueryTool(t.Context(), &denied, name, map[string]any{}); err == nil {
 			t.Fatalf("%s ignored revoked permission", name)
 		}
 	}
-	counted, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"thread_id": hidden.ThreadID})
+	counted, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", map[string]any{"thread_id": hidden.ThreadID})
 	if err != nil || counted.(threadquery.Page).Total != 0 {
 		t.Fatalf("foreign filter count: %+v %v", counted, err)
 	}
-	if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"object": "threads", "authority": "forged"}); err == nil {
+	if _, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", map[string]any{"object": "threads", "authority": "forged"}); err == nil {
 		t.Fatal("accepted model-authored authority")
 	}
 	// Removing product ownership alone must invalidate canonical refs and pages,
@@ -212,10 +212,10 @@ func TestThreadQueryToolsAuthorizeBeforeSearchAndPagination(t *testing.T) {
 	if err := svc.threadsDB.DeleteThreadProductData(t.Context(), meta.EndpointID, parent.ThreadID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", input); !errors.Is(err, threadquery.ErrCursorInvalid) {
+	if _, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", input); !errors.Is(err, threadquery.ErrCursorInvalid) {
 		t.Fatalf("withdrawn product ownership retained cursor: %v", err)
 	}
-	if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.read", map[string]any{"ref": page.Records[0].Ref}); !errors.Is(err, threadquery.ErrCursorInvalid) {
+	if _, err := svc.execThreadQueryTool(t.Context(), meta, "thread_read", map[string]any{"ref": page.Records[0].Ref}); !errors.Is(err, threadquery.ErrCursorInvalid) {
 		t.Fatalf("withdrawn product ownership retained record ref: %v", err)
 	}
 

@@ -47,11 +47,11 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 		}
 		seenSignals[name] = struct{}{}
 	}
-	for _, signal := range []string{"ask_user"} {
+	for _, signal := range []string{"user_ask"} {
 		if _, ok := seenSignals[signal]; !ok {
 			continue
 		}
-		if signal == "ask_user" && !allowUserInteraction {
+		if signal == "user_ask" && !allowUserInteraction {
 			continue
 		}
 		allowedSignals = append(allowedSignals, signal)

@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { flowerToolGlyphs } from './flowerToolGlyphs';
@@ -67,8 +68,9 @@ const webOperationMotion: Readonly<Record<string, FlowerToolMotionRecipe>> = {
 };
 
 export const FlowerToolIcon: Component<{ toolName?: string; source?: string; webOperation?: string; running: boolean; reducedMotion?: boolean }> = (props) => {
-  const runningCommand = () => props.running && (props.toolName === 'terminal.exec' || props.toolName === 'terminal.read');
-  const recipe = createMemo(() => (props.webOperation ? webOperationMotion[props.webOperation] ?? flowerToolMotion.web_search : undefined) ?? flowerToolMotion[props.toolName ?? '']
+  const toolName = () => historicalToolName(props.toolName ?? '');
+  const runningCommand = () => props.running && (toolName() === 'terminal_exec' || toolName() === 'terminal_read');
+  const recipe = createMemo(() => (props.webOperation ? webOperationMotion[props.webOperation] ?? flowerToolMotion.web_search : undefined) ?? flowerToolMotion[toolName()]
     ?? flowerToolMotion[props.source === 'mcp' || props.toolName?.startsWith('mcp_') ? 'mcp' : 'unknown']);
   return <Show when={runningCommand()} fallback={
     <Show when={recipe()} keyed>{value => <AnimatedGlyph recipe={value} running={props.running} reducedMotion={props.reducedMotion} />}</Show>

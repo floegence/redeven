@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import { computerObservationInterruption } from './computerActivityOutcome';
 import { Sparkles } from 'lucide-solid';
 import { historyItemNeedsObservation } from './historyWindowRetention';
@@ -10299,7 +10300,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const focusComposerIfConnected = () => { if (composerRef?.isConnected) composerRef.focus({ preventScroll: true }); };
 
-  const isSubagentAttention = (request: FlowerInputRequest) => request.tool_name === 'subagents' && request.questions.some(question => question.id === 'subagent_attention');
+  const isSubagentAttention = (request: FlowerInputRequest) => historicalToolName(request.tool_name ?? '') === 'subagent_manage' && request.questions.some(question => question.id === 'subagent_attention');
   const subagentAttentionChoice = (label: string) => label === 'Continue after handling the child thread' ? copy().chat.subagentWaitAfterHandling : label === 'Continue using available results' ? copy().chat.subagentWaitAvailable : label;
 
   const inputRequestPrompt = (
@@ -10713,7 +10714,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activityItemVisible = (item: FlowerActivityItem): boolean => {
     if (
       item.kind === 'control'
-      && trimString(item.tool_name) === 'ask_user'
+      && historicalToolName(trimString(item.tool_name) ?? '') === 'user_ask'
       && (item.status === 'pending' || item.status === 'running' || item.status === 'waiting')
     ) return false;
     if (activityItemAwaitingApproval(item) && !activityItemHasVisiblePayload(item)) return false;
@@ -10770,7 +10771,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     timeline: FlowerActivityTimelineBlock,
     displayName: string,
   ): FlowerMessageAttachmentPreviewTarget | null => {
-    if (trimString(item.tool_name) !== 'attachment.read') return null;
+    if (historicalToolName(trimString(item.tool_name) ?? '') !== 'attachment_read') return null;
     const turnID = trimString(timeline.turn_id);
     const expectedName = trimString(displayName) || trimString(item.label);
     const candidates: FlowerMessageAttachmentPreviewTarget[] = [];
@@ -11700,7 +11701,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         statuses: copy().chat.toolStatuses, subagents: subagentsCopy(), goal: copy().chat, subagentSummaries: fieldProps.subagentSummaries });
       const kind = key === 'mutations' ? 'file_diff' : key === 'targets' ? 'subagents'
         : key === 'items' && item.renderer === 'todos' ? 'todos' : key === 'questions' ? 'question'
-        : key === 'results' && item.renderer === 'web_search' ? item.tool_name?.startsWith('okf.') ? 'web_search' : 'web_operation' : '';
+        : key === 'results' && item.renderer === 'web_search' ? historicalToolName(item.tool_name ?? '').startsWith('okf_') ? 'web_search' : 'web_operation' : '';
       return presented.detailBlocks.filter(block => block.kind === kind) as FlowerNonTerminalDetailBlock[];
     });
     return <For each={blocks()}>{block => <ActivityDetailBlock block={block} media={fieldProps.media} />}</For>;
@@ -11725,10 +11726,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} reducedMotion={reducedMotionPreferred()} /></span>
             <span class="flower-activity-inline-copy">
               <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && !revealTitle.revealing() ? 'text' : undefined}>
-                <span class="flower-activity-inline-title-verb">{block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}</span>
+                <span class="flower-activity-inline-title-verb">{historicalToolName(block().call.name ?? '') === 'goal_manage' ? copy().chat.goalTitle : historicalToolName(block().call.name ?? '') === 'file_apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}</span>
                 <Show when={block().call.preview?.display_name}>{(name) => <span class="flower-activity-inline-title-target" title={name()}>{name()}</span>}</Show>
               </span>
-              <Show when={block().call.name !== 'goal'}><span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span></Show>
+              <Show when={historicalToolName(block().call.name ?? '') !== 'goal_manage'}><span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span></Show>
               {changeStats(() => block().call.preview ?? undefined, () => true)}
             </span>
           </div>
@@ -11766,7 +11767,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       threadID: () => timeline().thread_id ?? '',
       execution: () => [timeline().run_id ?? '', timeline().turn_id ?? ''],
       active: () => visible() && ((openActivityRuns()[disclosureKey()] ?? isSavedComputerScreenshot(item()))
-        || item().renderer === 'subagent' || item().renderer === 'subagent_operation' || item().tool_name === 'subagent_events'),
+        || item().renderer === 'subagent' || item().renderer === 'subagent_operation' || historicalToolName(item().tool_name ?? '') === 'subagent_read_events'),
       connection: () => liveSyncState().connectionEpoch,
     });
     const presentation = createMemo<FlowerActivityPresentation>((previous) => retainEqualValue(previous, presentFlowerActivityItem(fieldPresentation.item(), {
@@ -11811,7 +11812,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const otherFieldCollections = createMemo(() => item().field_summary?.fields.filter(field => field.kind === 'array'
       && ['/payload/results', '/payload/mutations', '/payload/items', '/payload/questions', '/payload/targets'].includes(field.path)
       && (field.count ?? 0) > 0) ?? []);
-    const fieldGoal = createMemo(() => item().tool_name === 'goal'
+    const fieldGoal = createMemo(() => historicalToolName(item().tool_name ?? '') === 'goal_manage'
       && Boolean(item().field_summary?.fields.some(field => field.path === '/payload/goal' && field.kind === 'object')));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0 || fieldCollections().length > 0 || otherFieldCollections().length > 0 || fieldGoal());
     const subagentOperation = () => item().renderer === 'subagent' || item().renderer === 'subagent_operation';
@@ -11832,14 +11833,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const inlineSubagent = createMemo(() => presentation().detailBlocks.find((block) => (
       block.kind === 'subagents' && block.subagents.items.length === 1
     )));
-    const compactReports = () => item().tool_name === 'subagent_events';
+    const compactReports = () => historicalToolName(item().tool_name ?? '') === 'subagent_read_events';
     const subagentReadHint = () => {
       const rawAction = item().payload?.action;
       const action = typeof rawAction === 'string' ? rawAction : '';
       return subagentOperation() && (action === 'status' || action === 'inspect') ? subagentsCopy().activity.hints[action] : undefined;
     };
     const expandable = createMemo(() => item().body_pending || !compactReports() && !subagentOperation() && ((presentation().suppressEmptyDisclosure
-      || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
+      || item().renderer === 'web_search' && !historicalToolName(item().tool_name ?? '').startsWith('okf_')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
     const open = () => expandable() && disclosureControl.open();
     createEffect(() => {
       void liveSyncState().connectionEpoch;
@@ -11850,7 +11851,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       untrack(() => loadHistoryItem(tid, id, controller.signal, viewportScope));
       onCleanup(() => controller.abort());
     });
-    const threadPreviewTool = () => item().status === 'success' && ['threads.query', 'threads.read', 'threads.aggregate'].includes(item().tool_name ?? '') && Boolean(props.adapter.loadToolPreview);
+    const threadPreviewTool = () => item().status === 'success' && ['thread_query', 'thread_read', 'threads.aggregate'].includes(historicalToolName(item().tool_name ?? '')) && Boolean(props.adapter.loadToolPreview);
     const [previewRequest, setPreviewRequest] = createSignal<FlowerToolPreviewRequest>();
     const [retainedToolPreview, setRetainedToolPreview] = createSignal<{ request: FlowerToolPreviewRequest; value: FlowerToolPreview }>();
     let previewLoad = 0;
@@ -11917,7 +11918,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const duration = createMemo(() => {
       const value = item();
-      if (value.tool_name === 'goal') return '';
+      if (historicalToolName(value.tool_name ?? '') === 'goal_manage') return '';
       const start = value.started_at_unix_ms;
       if (!start) return '';
       const end = value.ended_at_unix_ms;
@@ -11966,7 +11967,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (
       <div
         ref={activityNode}
-        class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${computerObservationInterruption(item()) ? 'interrupted' : displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', (inlineSubagent() || inlineSubagentField()) && 'flower-activity-inline-row-single-subagent')}
+        class={cn('flower-activity-inline-row', historicalToolName(item().tool_name ?? '') === 'goal_manage' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${computerObservationInterruption(item()) ? 'interrupted' : displayStatus()}`, historicalToolName(item().tool_name ?? '') === 'subagent_read_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', (inlineSubagent() || inlineSubagentField()) && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
         title={subagentReadHint()}
         aria-description={subagentReadHint()}
@@ -11976,7 +11977,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
-        aria-label={subagentOperation() ? presentation().label : item().tool_name === 'goal' ? presentation().label + (presentation().meta ? ': ' + presentation().meta : '') : compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
+        aria-label={subagentOperation() ? presentation().label : historicalToolName(item().tool_name ?? '') === 'goal_manage' ? presentation().label + (presentation().meta ? ': ' + presentation().meta : '') : compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
       >
         <div class="flower-activity-inline-line">
           <Show
@@ -12139,7 +12140,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? [flowerToolCallPreviewIdentity(preview()!.call)] : [...visibleItemsByKey().keys()]);
     return (
       <Show when={visibleItemKeys().length > 0}>
-        <div class={cn("flower-activity-inline", visibleItems().length > 0 && visibleItems().every(item => item.tool_name === "goal") && "flower-activity-inline-goal")} data-flower-activity-run-id={block()?.run_id ?? preview()?.call.run_id}>
+        <div class={cn("flower-activity-inline", visibleItems().length > 0 && visibleItems().every(item => historicalToolName(item.tool_name ?? "") === "goal_manage") && "flower-activity-inline-goal")} data-flower-activity-run-id={block()?.run_id ?? preview()?.call.run_id}>
           <For each={visibleItemKeys()}>
             {(itemKey) => {
               const visibleItem = createMemo(() => visibleItemsByKey().get(itemKey) ?? null);

@@ -4,9 +4,9 @@ import type { FlowerApprovalAction, FlowerThreadSnapshot } from './contracts/flo
 import { flowerDisplayApprovalAction, flowerPendingApprovalActions } from './approvalAction';
 
 const action = (overrides: Partial<FlowerApprovalAction> = {}): FlowerApprovalAction => ({
-  action_id: 'approval-1', origin: 'main_tool', run_id: 'turn-1', tool_id: 'tool-1', tool_name: 'terminal.exec',
+  action_id: 'approval-1', origin: 'main_tool', run_id: 'turn-1', tool_id: 'tool-1', tool_name: 'terminal_exec',
   state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true,
-  surface_role: 'primary_action', summary: { label: 'terminal.exec' }, ...overrides,
+  surface_role: 'primary_action', summary: { label: 'terminal_exec' }, ...overrides,
 } as FlowerApprovalAction);
 
 const thread = (actions: readonly FlowerApprovalAction[]): FlowerThreadSnapshot => ({

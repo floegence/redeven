@@ -25,7 +25,7 @@ Malformed process output stops its local poll and exposes a localized read-only 
 Inactive output caches have 200-entry / 8 MiB estimated-byte limits. Mounted outputs remain retained until release; frame metadata coalesces after 128 records without changing sequence checks. These cache limits do not truncate an active process output or its canonical history.
 
 ## Output, completion and restart
-The model keeps four tools: terminal.exec/read/write/terminate. Read/write/terminate
+The model keeps four tools: terminal_exec/read/write/terminate. Read/write/terminate
 descriptions are optional; read uses the last returned sequence. Each page is
 bounded without an outer second truncation, and chunk boundaries preserve UTF-8.
 The process retains at most 1 MB; gaps and invalid source encoding remain explicit.

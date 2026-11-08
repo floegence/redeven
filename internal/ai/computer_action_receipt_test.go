@@ -54,7 +54,7 @@ func TestComputerNavigationTimeoutDataKeepsNamespaceAndExplicitRead(t *testing.T
 	var calls []string
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
 		calls = append(calls, c.ToolName)
-		if c.ToolName == "browser.navigate" {
+		if c.ToolName == "browser_navigate" {
 			var args map[string]any
 			if err := json.Unmarshal(c.Arguments, &args); err != nil {
 				t.Fatal(err)
@@ -79,7 +79,7 @@ func TestComputerNavigationTimeoutDataKeepsNamespaceAndExplicitRead(t *testing.T
 		t.Fatal(err)
 	}
 	facts := result.Result.(map[string]any)
-	if facts["context_reset"] != false || facts["completed"] != true || !reflect.DeepEqual(calls, []string{"browser.navigate", "computer.observe"}) {
+	if facts["context_reset"] != false || facts["completed"] != true || !reflect.DeepEqual(calls, []string{"browser_navigate", "computer_observe"}) {
 		t.Fatalf("sealed timeout data: %+v %v", facts, calls)
 	}
 	result, err = executeTestScript(t.Context(), runtime, call, `log(saved);`)

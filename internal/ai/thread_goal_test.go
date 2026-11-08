@@ -103,7 +103,7 @@ func TestThreadGoalConflictDeleteAndAuthority(t *testing.T) {
 
 func TestDefaultFlowerToolsExcludeTodo(t *testing.T) {
 	for _, tool := range builtInToolDefinitions() {
-		if tool.Name == "write_todos" {
+		if tool.Name == "todo_write" {
 			t.Fatal("default tool registry re-enabled Todo")
 		}
 	}
@@ -132,7 +132,7 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 		mu.Unlock()
 		if index == 1 {
 			args := `{"operation":"review","expected_version":1,"outcome":"completed","evidence":"The requested result is present in the preceding response."}`
-			item := map[string]any{"type": "function_call", "id": "goal-review", "call_id": "goal-review", "name": "goal", "arguments": args}
+			item := map[string]any{"type": "function_call", "id": "goal-review", "call_id": "goal-review", "name": "goal_manage", "arguments": args}
 			for _, event := range []string{"response.output_item.added", "response.output_item.done"} {
 				writeOpenAISSEJSON(w, flusher, map[string]any{"type": event, "output_index": 0, "item": item})
 			}
@@ -178,7 +178,7 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 			continue
 		}
 		for _, detail := range category.Details {
-			if detail.Key == "goal" {
+			if detail.Key == "goal_manage" {
 				if detail.Source != "floret" || detail.Characters <= 0 {
 					t.Fatalf("Goal must retain its published system tool source: %+v", detail)
 				}
@@ -199,7 +199,7 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 	}
 	foundReview := false
 	for _, item := range publicCurrent.Items {
-		if item.Activity == nil || item.Activity.ToolName != "goal" {
+		if item.Activity == nil || item.Activity.ToolName != "goal_manage" {
 			continue
 		}
 		raw, err := json.Marshal(item.Activity.Presentation)
@@ -231,16 +231,16 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 		foundGoal := false
 		for _, raw := range request["tools"].([]any) {
 			tool := raw.(map[string]any)
-			if tool["name"] == "write_todos" {
+			if tool["name"] == "todo_write" {
 				t.Fatal("Todo re-enabled in actual provider request")
 			}
-			if tool["name"] == "ask_user" {
+			if tool["name"] == "user_ask" {
 				description, _ := tool["description"].(string)
 				if !strings.Contains(description, "Ordinary discussion and optional feedback may use prose") {
 					t.Fatalf("final question definition contradicts interaction policy: %s", description)
 				}
 			}
-			foundGoal = foundGoal || tool["name"] == "goal"
+			foundGoal = foundGoal || tool["name"] == "goal_manage"
 		}
 		if !foundGoal {
 			t.Fatalf("request %d missing Goal", i)
@@ -267,7 +267,7 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 				t.Errorf("final tool definitions=%d bytes; budget=37500", len(definitions))
 			}
 		}
-		if strings.Contains(prompt, "write_todos") || strings.Contains(prompt, "Todo Discipline") {
+		if strings.Contains(prompt, "todo_write") || strings.Contains(prompt, "Todo Discipline") {
 			t.Fatal("Todo instructions remain")
 		}
 		if i > 0 && request["instructions"] != requests[0]["instructions"] {

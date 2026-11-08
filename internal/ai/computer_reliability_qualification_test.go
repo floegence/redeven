@@ -64,7 +64,7 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 	// Route only the diagnostic request to an isolated real helper with no
 	// admitted source. This tests its actual response without racing the
 	// production owner's independent source-closed cancellation signal.
-	if f.scenario == "host_rejection" && command.Method == "source.tool" && call.ToolName == "browser.navigate" && f.ready.Load() && f.injected.CompareAndSwap(0, 1) {
+	if f.scenario == "host_rejection" && command.Method == "source.tool" && call.ToolName == "browser_navigate" && f.ready.Load() && f.injected.CompareAndSwap(0, 1) {
 		return f.rejectionCarrier.RoundTrip(request)
 	}
 	response, err := f.RoundTripper.RoundTrip(request)
@@ -94,8 +94,8 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 				f.ready.Store(true)
 			}
 		}
-		wanted := f.scenario == "read_failure_recovery" && action == "text" || f.scenario == "missing_snapshot" && call.ToolName == "computer.observe" || f.scenario == "missing_text" && action == "text" || f.scenario == "missing_wait" && action == "wait"
-		wanted = wanted || f.scenario == "read_output_prefix" && call.ToolName == "computer.observe" || f.scenario == "navigation_output_prefix" && call.ToolName == "browser.navigate" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" || f.scenario == "adapter_invalid_result") && action == "text" && f.reads.Load() == 2
+		wanted := f.scenario == "read_failure_recovery" && action == "text" || f.scenario == "missing_snapshot" && call.ToolName == "computer_observe" || f.scenario == "missing_text" && action == "text" || f.scenario == "missing_wait" && action == "wait"
+		wanted = wanted || f.scenario == "read_output_prefix" && call.ToolName == "computer_observe" || f.scenario == "navigation_output_prefix" && call.ToolName == "browser_navigate" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" || f.scenario == "adapter_invalid_result") && action == "text" && f.reads.Load() == 2
 		if (f.ready.Load() || f.scenario == "read_failure_recovery" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" || f.scenario == "adapter_invalid_result")) && wanted && f.injected.CompareAndSwap(0, 1) {
 			reply.Result.Result = map[string]any{"action_executed": false, "observation_invalidated": true}
 			reply.Result.Safety = &InteractionSafetyDecision{Level: "routine", SafeToCapture: false, SafeToSendToModel: false}
@@ -495,7 +495,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					return result
 				}
-				direct("browser.navigate", map[string]any{"url": site.URL + "/unrelated"})
+				direct("browser_navigate", map[string]any{"url": site.URL + "/unrelated"})
 				state := t.TempDir()
 				project := t.TempDir()
 				modelID := selected.ID + "/" + model.ModelName
@@ -521,17 +521,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if e = svc.SelectComputerTarget(t.Context(), meta, thread.ThreadID, target.ID); e != nil {
 						t.Fatal(e)
 					}
-					direct("browser.navigate", map[string]any{"url": site.URL + "/dashboard"})
+					direct("browser_navigate", map[string]any{"url": site.URL + "/dashboard"})
 				}
 				if scenario == "current_download" {
 					cursor := direct("browser.download_cursor", map[string]any{}).Result.(map[string]any)["cursor"]
-					direct("browser.navigate", map[string]any{"url": site.URL + "/old"})
+					direct("browser_navigate", map[string]any{"url": site.URL + "/old"})
 					direct("browser.wait_for_download", map[string]any{"after": cursor, "timeout_ms": 5000})
-					direct("browser.navigate", map[string]any{"url": site.URL + "/dashboard"})
+					direct("browser_navigate", map[string]any{"url": site.URL + "/dashboard"})
 					prompt = "In the selected Orchid account page, export domains exactly once, wait for this new download, and report its unique download ID, filename and saved path. An older download with the same filename exists; it must not be reported as this export. Do not switch accounts."
 				}
 				if scenario == "partial_effect" {
-					prompt = "On the selected page, perform this diagnostic script exactly once: await ui.getByRole('button',{name:'Save once',exact:true}).click(); await new Promise(r=>setTimeout(r,1)); . The unavailable timer is intentional: submit the two statements verbatim as one computer.exec call, without try/catch, wrappers or replacements. Inspect the returned progress and verify Save status afterward. Do not repeat the completed click. Report the diagnostic code and verified save status. Do not switch accounts."
+					prompt = "On the selected page, perform this diagnostic script exactly once: await ui.getByRole('button',{name:'Save once',exact:true}).click(); await new Promise(r=>setTimeout(r,1)); . The unavailable timer is intentional: submit the two statements verbatim as one computer_exec call, without try/catch, wrappers or replacements. Inspect the returned progress and verify Save status afterward. Do not repeat the completed click. Report the diagnostic code and verified save status. Do not switch accounts."
 				}
 
 				publicURL := map[string]string{
@@ -544,7 +544,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				switch scenario {
 				case "dynamic_wait_contract", "semantic_wait":
-					prompt = "Exercise the condition contract once: use one computer.exec to click Prepare report exactly once, call requireState({state:'enabled',timeout_ms:5000}) on Confirm report, click Confirm report exactly once and read Report state and Receipt. Choose observed locators and use documented APIs. Never replay either click. Report the results. Use Computer Use only."
+					prompt = "Exercise the condition contract once: use one computer_exec to click Prepare report exactly once, call requireState({state:'enabled',timeout_ms:5000}) on Confirm report, click Confirm report exactly once and read Report state and Receipt. Choose observed locators and use documented APIs. Never replay either click. Report the results. Use Computer Use only."
 				case "dynamic_wait":
 					prompt = "Prepare this live report once, wait for Confirm report to become enabled, then confirm it exactly once. Read and report both Report state and Receipt. Use Computer Use only. Do not repeat preparation or confirmation."
 				case "spa_read":
@@ -568,39 +568,39 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "timed_drag":
 					prompt = "Read the selected Pointer exercise page and complete its drag exactly once using Computer Use. Inspect and report the actual Pointer telemetry afterwards. Do not use terminal/network tools or navigate."
 				case "drag_validation":
-					prompt = "Run this intentional diagnostic once, unchanged: await ui.drag(20,30,180,100,5001); . Report its diagnostic. Then in a separate computer.exec follow the selected page's drag instructions exactly once and inspect Pointer telemetry. Do not retry the invalid duration or use terminal/network tools."
+					prompt = "Run this intentional diagnostic once, unchanged: await ui.drag(20,30,180,100,5001); . Report its diagnostic. Then in a separate computer_exec follow the selected page's drag instructions exactly once and inspect Pointer telemetry. Do not retry the invalid duration or use terminal/network tools."
 				case "optional_probe":
 					prompt = "On this disposable page, determine whether a button named Optional banner exists. If present, dismiss it. If absent, continue without clicking it. Wait at most 100ms for a button named Optional offer to become visible; if that wait times out, continue. Then click Save once exactly once and verify Save status. Use the documented browser API and conditional script logic, without exceptions as optional-element probing. Do not navigate or use terminal/network tools."
 				case "caught_lookup":
-					prompt = "Execute this intentional boundary diagnostic exactly once in one computer.exec: try { await ui.getByRole('button',{name:'Missing probe',exact:true}).node(); } catch {} await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual tool outcome. Then inspect Save status in a separate call. Never save again or use terminal/network tools."
+					prompt = "Execute this intentional boundary diagnostic exactly once in one computer_exec: try { await ui.getByRole('button',{name:'Missing probe',exact:true}).node(); } catch {} await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual tool outcome. Then inspect Save status in a separate call. Never save again or use terminal/network tools."
 				case "field_integrity":
 					prompt = "Inspect the Bounded fields region. Read its textbox through node() and query(), log the returned field completeness flags and lengths, then capture a detailed subtree with ui.snapshot({root_ref,full:true}). Report whether name, description and value are complete. Do not modify any field or click."
 				case "long_text_natural":
 					prompt = "Read the entire visible Long report section. Report its exact Unicode code-point count and final verification code. Do not infer completeness from a snapshot prefix. Do not click, input, navigate or use shell/network tools."
 				case "attribute_overflow":
-					prompt = "Run this intentional diagnostic once as one computer.exec, verbatim without catching: const root=await ui.getByRole('region',{name:'Bounded fields',exact:true}).node(); log(await ui.getByRole('textbox',{root_ref:root.ref}).attribute('title')); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure and whether a partial scalar was returned. Then inspect the textbox with node() in a separate call. Do not retry the attribute or save."
+					prompt = "Run this intentional diagnostic once as one computer_exec, verbatim without catching: const root=await ui.getByRole('region',{name:'Bounded fields',exact:true}).node(); log(await ui.getByRole('textbox',{root_ref:root.ref}).attribute('title')); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure and whether a partial scalar was returned. Then inspect the textbox with node() in a separate call. Do not retry the attribute or save."
 				case "name_tail_stale":
-					prompt = "Run this diagnostic once as one computer.exec without catching: const root=await ui.getByRole('region',{name:'Mutable items',exact:true}).node(); const q=await ui.getByRole('button',{root_ref:root.ref}).query(); const ref=q.items.find(n=>n.name_truncated).ref; await ui.getByRole('button',{name:'Change label',exact:true}).click(); log(await ui.ref(ref).node()); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure, then take a fresh snapshot. Do not repeat the label change or save."
+					prompt = "Run this diagnostic once as one computer_exec without catching: const root=await ui.getByRole('region',{name:'Mutable items',exact:true}).node(); const q=await ui.getByRole('button',{root_ref:root.ref}).query(); const ref=q.items.find(n=>n.name_truncated).ref; await ui.getByRole('button',{name:'Change label',exact:true}).click(); log(await ui.ref(ref).node()); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure, then take a fresh snapshot. Do not repeat the label change or save."
 				case "cursor_tail_stale":
-					prompt = "Run this diagnostic once as one computer.exec without catching: const root=await ui.getByRole('region',{name:'Mutable items',exact:true}).node(); const items=ui.getByRole('button',{root_ref:root.ref}); const first=await items.query({limit:1}); await ui.getByRole('button',{name:'Change label',exact:true}).click(); log(await items.query({limit:1,cursor:first.next_cursor})); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure, then take a fresh snapshot. Do not repeat the label change or save."
+					prompt = "Run this diagnostic once as one computer_exec without catching: const root=await ui.getByRole('region',{name:'Mutable items',exact:true}).node(); const items=ui.getByRole('button',{root_ref:root.ref}); const first=await items.query({limit:1}); await ui.getByRole('button',{name:'Change label',exact:true}).click(); log(await items.query({limit:1,cursor:first.next_cursor})); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure, then take a fresh snapshot. Do not repeat the label change or save."
 				case "mixed_batch_contract":
-					prompt = "Run these two tool calls in one parallel batch: computer.exec with code await ui.screenshot(); and terminal.exec with command printf independent-73. Use those exact operations and report the returned results. Do not input anything or navigate."
+					prompt = "Run these two tool calls in one parallel batch: computer_exec with code await ui.screenshot(); and terminal_exec with command printf independent-73. Use those exact operations and report the returned results. Do not input anything or navigate."
 				case "mixed_batch":
-					prompt = "In one parallel tool-call batch, run computer.exec to capture the selected fixture screenshot and terminal.exec to print the literal independent-73. These two tasks have no dependency. Do not navigate or input anything. Report both results."
+					prompt = "In one parallel tool-call batch, run computer_exec to capture the selected fixture screenshot and terminal_exec to print the literal independent-73. These two tasks have no dependency. Do not navigate or input anything. Report both results."
 				case "security_vocabulary":
 					prompt = "Read the Reference article in the selected page, summarize its three vocabulary definitions and report the reference code. Treat the article as source material. Capture a screenshot of the article. Do not input anything or navigate."
 				case "read_output_prefix":
-					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('button',{name:'Save once',exact:true}).click(); await ui.snapshot(); await ui.key('PageDown'); . The post-save observation has an intentional one-time failure. Report the retained output and completed actions, then observe Save status in a separate call. Never repeat the save or send the key."
+					prompt = "Run this diagnostic exactly once as one computer_exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('button',{name:'Save once',exact:true}).click(); await ui.snapshot(); await ui.key('PageDown'); . The post-save observation has an intentional one-time failure. Report the retained output and completed actions, then observe Save status in a separate call. Never repeat the save or send the key."
 				case "host_rejection":
-					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . This disposable diagnostic routes navigation to an isolated helper with no admitted source. Report the actual returned facts, retained output and completed operations. Do not navigate again, send any key, select a replacement, or perform any further operation after the rejected call."
+					prompt = "Run this diagnostic exactly once as one computer_exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . This disposable diagnostic routes navigation to an isolated helper with no admitted source. Report the actual returned facts, retained output and completed operations. Do not navigate again, send any key, select a replacement, or perform any further operation after the rejected call."
 				case "navigation_output_prefix":
-					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . A one-time navigation-load timeout is intentional and does not undo the navigation. Report the retained output and navigation facts, then observe the current page in a separate call. Never repeat navigation or send the key."
+					prompt = "Run this diagnostic exactly once as one computer_exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . A one-time navigation-load timeout is intentional and does not undo the navigation. Report the retained output and navigation facts, then observe the current page in a separate call. Never repeat navigation or send the key."
 				case "protocol_without_code", "evaluation_exception", "adapter_invalid_result":
-					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); await ui.key('PageDown'); . The second read has an intentional one-time failure. Report its returned diagnostic and retained output, then capture a screenshot in a separate call. Do not input, navigate, or repeat the diagnostic script."
+					prompt = "Run this diagnostic exactly once as one computer_exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); await ui.key('PageDown'); . The second read has an intentional one-time failure. Report its returned diagnostic and retained output, then capture a screenshot in a separate call. Do not input, navigate, or repeat the diagnostic script."
 				case "read_failure_recovery":
 					prompt = "Use locator.text to read the Scrollable region and report its complete visible text and a screenshot. This disposable fixture can have a one-time read failure. Choose a fresh observation if needed; do not input anything, navigate or use network tools."
 				case "unsupported_text":
-					prompt = "Run this read diagnostic exactly once: const root=(await ui.snapshot({emit:false})).nodes.find(n=>n.role==='document'); await ui.ref(root.ref).text(); . A document root is not a rendered element. Do not catch or replace the read. Report its actual error, then in a separate computer.exec read the region named Scrollable with locator.text and capture a screenshot. Do not click, key, navigate, or use terminal/network tools."
+					prompt = "Run this read diagnostic exactly once: const root=(await ui.snapshot({emit:false})).nodes.find(n=>n.role==='document'); await ui.ref(root.ref).text(); . A document root is not a rendered element. Do not catch or replace the read. Report its actual error, then in a separate computer_exec read the region named Scrollable with locator.text and capture a screenshot. Do not click, key, navigate, or use terminal/network tools."
 				case "excess_click":
 					prompt = "Run this intentional unsupported-argument diagnostic exactly once: await ui.getByRole('button',{name:'Save once',exact:true}).click({force:true}); . Do not remove the option or catch the failure. Report the returned diagnostic, then observe Save status in a separate call. Do not save or click again."
 				case "excess_screenshot":
@@ -617,15 +617,15 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if scenario == "missing_wait" {
 						read = "await ui.getByRole('button',{name:'Save once',exact:true}).requireState({state:'visible',timeout_ms:0});"
 					}
-					prompt = "Run this fixture diagnostic exactly once as one computer.exec without changing statements or catching errors: await ui.getByRole('button',{name:'Save once',exact:true}).click(); " + read + " await ui.key('PageDown'); . Report actual completed_actions and failure. Then inspect Save status in a separate call. Never repeat the save or key."
+					prompt = "Run this fixture diagnostic exactly once as one computer_exec without changing statements or catching errors: await ui.getByRole('button',{name:'Save once',exact:true}).click(); " + read + " await ui.key('PageDown'); . Report actual completed_actions and failure. Then inspect Save status in a separate call. Never repeat the save or key."
 				case "empty_values":
 					prompt = "Run this read-only contract diagnostic: const empty=ui.getByRole('button',{name:'Absent fixture button',exact:true}); log({empty_items:(await empty.query()).items,empty_count:await empty.count(),null_attribute:await ui.getByRole('button',{name:'Save once',exact:true}).attribute('title'),empty_text:await ui.getByRole('status',{name:'Save status',exact:true}).text()}); . Report the returned values. Do not click or input anything."
 				case "observation_capture":
-					prompt = "Run exactly one computer.exec containing: for(let i=0;i<4;i++) await ui.key('PageDown'); await ui.screenshot(); . Do not add waits or repeat any key. Report the tool's observation_status and needs_observation."
+					prompt = "Run exactly one computer_exec containing: for(let i=0;i<4;i++) await ui.key('PageDown'); await ui.screenshot(); . Do not add waits or repeat any key. Report the tool's observation_status and needs_observation."
 				case "frame_refs":
-					prompt = "Execute this diagnostic as one computer.exec: const parent=await ui.getByRole('button',{name:'Save once',exact:true}).node(); await ui.getByRole('button',{name:'Refresh child',exact:true}).click(); await ui.getByRole('button',{name:'/child2',exact:true}).requireState({state:'visible',timeout_ms:3000}); await ui.ref(parent.ref).click(); await ui.snapshot({emit:false}); . Use the saved parent ref; do not reacquire it or repeat Save once. Report the tool facts."
+					prompt = "Execute this diagnostic as one computer_exec: const parent=await ui.getByRole('button',{name:'Save once',exact:true}).node(); await ui.getByRole('button',{name:'Refresh child',exact:true}).click(); await ui.getByRole('button',{name:'/child2',exact:true}).requireState({state:'visible',timeout_ms:3000}); await ui.ref(parent.ref).click(); await ui.snapshot({emit:false}); . Use the saved parent ref; do not reacquire it or repeat Save once. Report the tool facts."
 				case "option_field":
-					prompt = "Run this intentional diagnostic exactly once as one computer.exec: await ui.getByRole('button',{name:'Save once',exact:true}).snapshot({full:true}); . Do not remove the unsupported option. Report the returned method, field and expected form, then use a separate ui.snapshot() call. Do not click or save."
+					prompt = "Run this intentional diagnostic exactly once as one computer_exec: await ui.getByRole('button',{name:'Save once',exact:true}).snapshot({full:true}); . Do not remove the unsupported option. Report the returned method, field and expected form, then use a separate ui.snapshot() call. Do not click or save."
 				case "script_batch":
 					prompt = "Open " + site.URL + "/batch?page=1 in this task's page, read all three scores and calculate their total. Once the page structure is known, process the remaining pages in one computer script using a loop and return a screenshot of the last page. Keep the original browser page available; do not use network scraping."
 				case "native_drag_focus_change":
@@ -636,7 +636,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						prompt += " Override only the duration: use 0 milliseconds instead of 1000. Keep the same endpoints and perform one drag."
 					}
 					if scenario == "native_drag_validation" {
-						prompt += " Before the requested valid drag, run this intentional diagnostic once unchanged: await ui.drag(50,100,300,150,5001); . Report the rejection, then use a separate computer.exec for the requested valid drag. Never retry the invalid duration."
+						prompt += " Before the requested valid drag, run this intentional diagnostic once unchanged: await ui.drag(50,100,300,150,5001); . Report the rejection, then use a separate computer_exec for the requested valid drag. Never retry the invalid duration."
 					}
 				case "native_entry", "native_tree":
 					prompt = "Open the installed native application named " + nativeName + " using Computer Use discovery and selection. Enter exactly Flash 1017 in Acceptance code, click Confirm exactly once, read the resulting confirmation and capture a screenshot. This is a disposable acceptance app; do not touch any other application."
@@ -654,7 +654,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "repair_limit":
 					prompt = "Run await ui.snapshot({limit:1200}) exactly once as an intentional diagnostic. Report its method, field and expected range. Correct the limit in a separate call, observe the page, and report its title. Do not click or use shell/network tools."
 				case "budget_prefix":
-					prompt = "Submit all four statements verbatim as one computer.exec call exactly once: log(ui.budget()); log('completed-safe-read'); await ui.getByRole('button',{name:'Save once',exact:true}).click(); setTimeout(()=>{},1); . The unavailable timer is intentional and must not be removed, replaced or caught. Report the returned diagnostic, retained logs and context_reset, then observe Save status. Never repeat the click."
+					prompt = "Submit all four statements verbatim as one computer_exec call exactly once: log(ui.budget()); log('completed-safe-read'); await ui.getByRole('button',{name:'Save once',exact:true}).click(); setTimeout(()=>{},1); . The unavailable timer is intentional and must not be removed, replaced or caught. Report the returned diagnostic, retained logs and context_reset, then observe Save status. Never repeat the click."
 				case "scrolled_click":
 					prompt = "On the selected page, find Save once (below the fold), click it exactly once, and verify Save status. Do not click any other control or use shell/network tools."
 				case "content_wait":
@@ -662,7 +662,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "canonical_navigation":
 					prompt = "Inspect the selected page and find its Pagination navigation landmark by canonical role. Report the number and names of buttons scoped to that landmark. Do not click anything or use shell/network tools."
 				case "namespace_reset":
-					prompt = "Run this intentional diagnostic once as one computer.exec: globalThis.collected=[7,11,13]; await ui.getByRole('button',{name:'Save once',exact:true}).click(); setTimeout(()=>{},1); . After its error, inspect context_reset, use a separate call to log(typeof collected), and verify Save status. Report the diagnostic location and reset. Never repeat the click or rebuild collected."
+					prompt = "Run this intentional diagnostic once as one computer_exec: globalThis.collected=[7,11,13]; await ui.getByRole('button',{name:'Save once',exact:true}).click(); setTimeout(()=>{},1); . After its error, inspect context_reset, use a separate call to log(typeof collected), and verify Save status. Report the diagnostic location and reset. Never repeat the click or rebuild collected."
 				case "natural_input":
 					prompt = "On the selected page, enter exactly Orchid acceptance 1017 in Probe, then press Enter once. Verify the field's exact contents and report them. Do not save, switch accounts or use shell/network tools."
 				case "natural_read":
@@ -670,17 +670,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "strict_wait":
 					prompt = "Run this diagnostic once: await ui.getByRole('textbox',{name:'Probe',exact:true}).fill('first'); await ui.getByRole('button',{name:'Never exists',exact:true}).requireState({state:'visible',timeout_ms:0}); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . The timeout is intentional. Report its diagnostic, observe the page, and do not retry the save."
 				case "key_validation":
-					prompt = "This fixture test requires TWO separate computer.exec calls. First run await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Meta+Equal') exactly once. Its validation rejection is intentional. You must then make a second call: await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Enter'); . Complete both steps before reporting their results. Do not retry Meta+Equal. Never click Save once or switch accounts."
+					prompt = "This fixture test requires TWO separate computer_exec calls. First run await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Meta+Equal') exactly once. Its validation rejection is intentional. You must then make a second call: await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Enter'); . Complete both steps before reporting their results. Do not retry Meta+Equal. Never click Save once or switch accounts."
 				case "scoped_query":
-					prompt = "Exercise pagination with this exact computer.exec script: const loc=ui.getByRole('button',{name:'Query item'}); let cursor; do { const page=await loc.query({limit:3,cursor}); log(JSON.stringify(page)); cursor=page.next_cursor; } while(cursor); log(JSON.stringify(await ui.getByRole('link',{name:'Safe reference',exact:true}).getAttribute('href'))); . Do not change the page size. Report the exact count and names, including Query item 6, and the safe href. Do not open that link."
+					prompt = "Exercise pagination with this exact computer_exec script: const loc=ui.getByRole('button',{name:'Query item'}); let cursor; do { const page=await loc.query({limit:3,cursor}); log(JSON.stringify(page)); cursor=page.next_cursor; } while(cursor); log(JSON.stringify(await ui.getByRole('link',{name:'Safe reference',exact:true}).getAttribute('href'))); . Do not change the page size. Report the exact count and names, including Query item 6, and the safe href. Do not open that link."
 				case "image_input":
-					prompt = "Exercise image coordinates by running this exact computer.exec script ONCE: const g=(await ui.screenshot()).frame_geometry; log(JSON.stringify(g)); const result=await ui.click(4,4,{coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id}); log(JSON.stringify(result)); . The point is the blank top-left margin. Exactly one click is permitted, with no second verification click and no unbound coordinate click. Report the returned action_executed and completion."
+					prompt = "Exercise image coordinates by running this exact computer_exec script ONCE: const g=(await ui.screenshot()).frame_geometry; log(JSON.stringify(g)); const result=await ui.click(4,4,{coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id}); log(JSON.stringify(result)); . The point is the blank top-left margin. Exactly one click is permitted, with no second verification click and no unbound coordinate click. Report the returned action_executed and completion."
 				case "wait_default":
-					prompt = "Call computer.wait on the selected fixture with milliseconds omitted, then observe and report the exact current title. Do not input anything."
+					prompt = "Call computer_wait on the selected fixture with milliseconds omitted, then observe and report the exact current title. Do not input anything."
 				case "title_freshness":
 					prompt = "Navigate the selected browser to " + site.URL + "/dashboard?fresh=1, then use await ui.observe({emit:false}) and log its title and url. Finally run log('identity-check') with no UI operations. Report the observed current title without treating an old discovery label as current."
 				case "stale_frame":
-					prompt = "Exercise the stale-frame boundary by running this exact script once through computer.exec, without wrappers or try/catch: const old = (await ui.screenshot()).frame_geometry; await browser.navigate('" + site.URL + "/dashboard?new=1'); await ui.click(4,4,{coordinate_space:'image_pixels',frame:old.frame,document_id:old.document_id}); . Report the returned diagnostic and observe the current page. Do not retry the click."
+					prompt = "Exercise the stale-frame boundary by running this exact script once through computer_exec, without wrappers or try/catch: const old = (await ui.screenshot()).frame_geometry; await browser.navigate('" + site.URL + "/dashboard?new=1'); await ui.click(4,4,{coordinate_space:'image_pixels',frame:old.frame,document_id:old.document_id}); . Report the returned diagnostic and observe the current page. Do not retry the click."
 				case "invalid_options":
 					prompt = "Run await ui.getByRole('button',{name:'Save once',exact:true}).waitFor({timeout_ms:-1}) exactly once without wrappers or try/catch. Report the returned SCRIPT_ARGUMENT_ERROR, then observe the page. Do not click or save."
 				case "scroll_progress":
@@ -741,7 +741,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				// Only the legacy primitive contract case explicitly retains its tool.
 				var allowlist []string
 				if scenario == "wait_default" {
-					allowlist = []string{"computer.targets", "computer.select_target", "computer.exec", "computer.wait"}
+					allowlist = []string{"computer_list_targets", "computer_select_target", "computer_exec", "computer_wait"}
 				}
 				response, e := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "acceptance", Model: modelID, Input: RunInput{Text: prompt}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess, NoUserInteraction: true, MaxOutputTokens: 8000, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, ToolAllowlist: allowlist}})
 				if e != nil {
@@ -776,7 +776,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				reader := svc.threadRuntime.(flruntime.ThreadToolResultReader)
 				for _, item := range history.Items {
 					if item.Activity != nil {
-						if item.Activity.ToolName == "terminal.exec" {
+						if item.Activity.ToolName == "terminal_exec" {
 							confirmed, found, err := reader.LookupToolResult(ctx, flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(thread.ThreadID), TurnID: item.TurnID, RunID: item.RunID, ToolCallID: item.Activity.ToolID})
 							if err != nil || !found {
 								t.Fatalf("canonical terminal result unavailable: %v", err)
@@ -907,8 +907,8 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if scenario != "wait_default" {
 						for _, name := range request.DefinitionToolNames {
 							normalized := strings.ReplaceAll(name, "_", ".")
-							if strings.HasPrefix(normalized, "computer.") || strings.HasPrefix(normalized, "browser.") {
-								if normalized != "computer.targets" && normalized != "computer.select.target" && normalized != "computer.exec" {
+							if strings.HasPrefix(normalized, "computer_") || strings.HasPrefix(normalized, "browser_") {
+								if normalized != "computer_list_targets" && normalized != "computer.select.target" && normalized != "computer_exec" {
 									t.Errorf("noncompact default tool: %s", name)
 								}
 							}
@@ -1310,7 +1310,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "observation_capture", "frame_refs":
 					verified := false
 					for _, fact := range confirmedToolFacts {
-						if fact["tool"] != "computer.exec" || fact["status"] != "success" {
+						if fact["tool"] != "computer_exec" || fact["status"] != "success" {
 							continue
 						}
 						keys, clicks := 0, 0
@@ -1386,7 +1386,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							saved = saved || action == "save_download"
 						}
 					}
-					if !saved || exports.Load() != 1 || readErr != nil || !strings.Contains(string(file), "20.5") || !strings.Contains(text, "terminal.exec") {
+					if !saved || exports.Load() != 1 || readErr != nil || !strings.Contains(string(file), "20.5") || !strings.Contains(text, "terminal_exec") {
 						t.Errorf("mixed tool handoff failed: exports=%d file=%v", exports.Load(), readErr)
 					}
 				case "native_drag_focus_change":
@@ -1485,8 +1485,8 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					report["native_facts"] = facts
 					discovered, selected, captured := false, false, false
 					for _, fact := range confirmedToolFacts {
-						discovered = discovered || fact["tool"] == "computer.targets"
-						selected = selected || fact["tool"] == "computer.select_target" && fact["status"] == "success" && fact["action_executed"] == true
+						discovered = discovered || fact["tool"] == "computer_list_targets"
+						selected = selected || fact["tool"] == "computer_select_target" && fact["status"] == "success" && fact["action_executed"] == true
 						for _, action := range toAnySlice(fact["completed_actions"]) {
 							captured = captured || action == "screenshot"
 						}
@@ -1560,7 +1560,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						t.Error("image input contract not exercised")
 					}
 				case "wait_default":
-					if !strings.Contains(text, "computer.wait") || !strings.Contains(finalText, "Orchid domain console") {
+					if !strings.Contains(text, "computer_wait") || !strings.Contains(finalText, "Orchid domain console") {
 						t.Error("default wait did not observe current page")
 					}
 				case "title_freshness":
@@ -1603,7 +1603,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if e != nil || binding == target.ID {
 						t.Error("new task reused unrelated tab")
 					}
-					unchanged := direct("computer.observe", map[string]any{}).Result.(map[string]any)
+					unchanged := direct("computer_observe", map[string]any{}).Result.(map[string]any)
 					if unchanged["url"] != site.URL+"/unrelated" {
 						t.Error("unrelated tab changed")
 					}

@@ -23,7 +23,7 @@ func cloneMessageAttribution(a *flprovider.MessageAttribution) *flprovider.Messa
 // The protocol adapter owns source paths; Floret alone extracts and counts input.
 // Match by ordered canonical roles, validating the rendered value before using a
 // source. A mismatch suppresses optional distribution without changing the budget.
-func renderedContextAttribution(format flprovider.RequestFormat, raw []byte, req ModelGatewayRequest, aliases providerToolAliases) []flprovider.RenderedContentAttribution {
+func renderedContextAttribution(format flprovider.RequestFormat, raw []byte, req ModelGatewayRequest, aliases providerToolContract) []flprovider.RenderedContentAttribution {
 	var body map[string]any
 	if json.Unmarshal(raw, &body) != nil {
 		return nil
@@ -176,9 +176,7 @@ func renderedContextAttribution(format flprovider.RequestFormat, raw []byte, req
 	definitions := map[string]ToolDef{}
 	for _, t := range req.Tools {
 		name := t.Name
-		if aliases.canonicalToWire != nil {
-			name = aliases.wireName(t.Name)
-		}
+
 		definitions[name] = t
 	}
 	var tools func(string, []any)

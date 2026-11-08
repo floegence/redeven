@@ -17,7 +17,7 @@ func TestComputerRecoveryRejectsWritesUntilFreshObservation(t *testing.T) {
 		targetToolExecutor: executor, computerContinuation: continuation,
 		floretEventIdentity: floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: "recovery-run", threadID: "thread", turnID: "turn"},
 	}
-	_, err := r.execTargetTool(t.Context(), "write", "computer.click", map[string]any{"target": "target"})
+	_, err := r.execTargetTool(t.Context(), "write", "computer_click", map[string]any{"target": "target"})
 	var policy *targetToolPolicyError
 	if !errors.As(err, &policy) || policy.code != "recovery_observation_required" {
 		t.Fatalf("write before observation returned %v", err)
@@ -25,7 +25,7 @@ func TestComputerRecoveryRejectsWritesUntilFreshObservation(t *testing.T) {
 	if !strings.Contains(err.Error(), "paused pending a current authorized observation") {
 		t.Fatalf("model feedback omitted the pause fact: %v", err)
 	}
-	if strings.Contains(err.Error(), "computer.targets") || strings.Contains(err.Error(), "computer.select_target") {
+	if strings.Contains(err.Error(), "computer_list_targets") || strings.Contains(err.Error(), "computer_select_target") {
 		t.Fatalf("recovery gate prescribed a tool route: %v", err)
 	}
 	if len(executor.calls) != 0 {
@@ -53,7 +53,7 @@ func TestComputerRecoverySelectionRequiresCanonicalInteraction(t *testing.T) {
 			control.threadID, control.turnID, control.runID = "thread-first", "recovery-turn", "recovery-run"
 			control.pause = &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}
 			control.recheckInteractionID = "tool-input:resolved"
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: test.turnID, RunID: test.runID, interactionID: test.interactionID, recoverySelection: true, ToolName: "computer.targets"}
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: test.turnID, RunID: test.runID, interactionID: test.interactionID, recoverySelection: true, ToolName: "computer_list_targets"}
 			err := host.requireComputerSelectionOpen(call)
 			if test.allowed && err != nil {
 				t.Fatalf("canonical recovery could not inspect targets: %v", err)
@@ -84,7 +84,7 @@ func TestComputerRecoveryCanSelectDiscoveredReplacement(t *testing.T) {
 		targetResolver: host, targetToolExecutor: host, computerContinuation: &continuation,
 		floretEventIdentity: floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: "recovery-run", threadID: "thread-first", turnID: "recovery-turn"},
 	}
-	inventoryValue, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "discover", "computer.targets"), "discover", "computer.targets", map[string]any{})
+	inventoryValue, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "discover", "computer_list_targets"), "discover", "computer_list_targets", map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestComputerRecoveryCanSelectDiscoveredReplacement(t *testing.T) {
 	if candidate == "" {
 		t.Fatalf("replacement was not discovered: %+v", inventory)
 	}
-	if _, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer.select_target"), "select", "computer.select_target", map[string]any{"candidate_ref": candidate}); err != nil {
+	if _, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer_select_target"), "select", "computer_select_target", map[string]any{"candidate_ref": candidate}); err != nil {
 		t.Fatalf("Flower could not select discovered replacement: %v", err)
 	}
 	selected, err := store.GetComputerTarget(t.Context(), "thread-first")
@@ -121,7 +121,7 @@ func TestComputerControlRejectsOtherThreadsAndRequiresExplicitReturn(t *testing.
 	executor := &takeoverObservationExecutor{body: body, attachment: attachment}
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
-	owner := TargetToolCall{ThreadID: "owner", TurnID: "turn", RunID: "run", TargetID: "target", ToolName: "browser.navigate"}
+	owner := TargetToolCall{ThreadID: "owner", TurnID: "turn", RunID: "run", TargetID: "target", ToolName: "browser_navigate"}
 	if _, err := runtime.ExecuteTargetTool(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestComputerControlRejectsOtherThreadsAndRequiresExplicitReturn(t *testing.
 	for _, caller := range []string{"other", "owner"} {
 		call := owner
 		call.ThreadID = caller
-		call.ToolName = "computer.screenshot"
+		call.ToolName = "computer_capture_screenshot"
 		if _, err := runtime.ExecuteTargetTool(t.Context(), call); err == nil {
 			t.Fatal("capture proceeded during user takeover")
 		}
@@ -139,14 +139,14 @@ func TestComputerControlRejectsOtherThreadsAndRequiresExplicitReturn(t *testing.
 	}
 	owner.interactionID = "resolved-input"
 	runtime.resumeComputerControl(owner, "resumed")
-	owner.RunID, owner.ToolName = "resumed", "computer.screenshot"
+	owner.RunID, owner.ToolName = "resumed", "computer_capture_screenshot"
 	if _, err := runtime.ExecuteTargetTool(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	if executor.observations.Load() != 1 {
 		t.Fatal("return did not observe")
 	}
-	owner.ToolName = "computer.screenshot"
+	owner.ToolName = "computer_capture_screenshot"
 	if _, err := runtime.ExecuteTargetTool(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestComputerControlSerializesAndCancelsBeforeDispatch(t *testing.T) {
 	executor := &serialComputerExecutor{entered: make(chan struct{}, 2), leave: make(chan struct{})}
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
-	call := TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "computer.click"}
+	call := TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "computer_click"}
 	first := make(chan error, 1)
 	go func() { _, err := runtime.ExecuteTargetTool(t.Context(), call); first <- err }()
 	<-executor.entered
@@ -210,12 +210,12 @@ func TestComputerControlContinuationKeepsTurnAndUserBoundaries(t *testing.T) {
 	executor := &takeoverObservationExecutor{body: body, attachment: attachment}
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
-	owner := TargetToolCall{ThreadID: "owner", TurnID: "turn", RunID: "waiting", TargetID: "target", ToolName: "browser.navigate"}
+	owner := TargetToolCall{ThreadID: "owner", TurnID: "turn", RunID: "waiting", TargetID: "target", ToolName: "browser_navigate"}
 	if _, err := runtime.ExecuteTargetTool(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	resumed := owner
-	resumed.RunID, resumed.ToolName = "resumed", "computer.screenshot"
+	resumed.RunID, resumed.ToolName = "resumed", "computer_capture_screenshot"
 	runtime.continueComputerControl(owner.ThreadID, owner.TurnID, resumed.RunID)
 	if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err == nil {
 		t.Fatal("continuation cleared safety without resolved evidence")
@@ -261,7 +261,7 @@ func TestComputerLiveCaptureCannotClaimOrReuseReleasedTarget(t *testing.T) {
 	executor.safe.Store(true)
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
-	owner := TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "computer.screenshot"}
+	owner := TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "computer_capture_screenshot"}
 	live := owner
 	live.liveFrame = true
 	for _, phase := range []string{"before_action", "after_release"} {

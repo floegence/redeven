@@ -64,9 +64,9 @@ await session.run(async () => {
       const results = (input.input ?? []).filter(item => item.type === 'function_call_output' && toolCalls.has(item.call_id));
       providerRequests.push({ marker, model: input.model, referencesExact: true, imageParts: imageParts.length, toolResults: results.length });
       if (!results.length) {
-        assert.ok(input.tools.some(tool => tool.name === 'read_file'));
+        assert.ok(input.tools.some(tool => tool.name === 'file_read'));
         const id = `read-${sequence}`; toolCalls.add(id);
-        const item = { type: 'function_call', id, call_id: id, name: 'read_file', arguments: JSON.stringify({ path: proofPath }) };
+        const item = { type: 'function_call', id, call_id: id, name: 'file_read', arguments: JSON.stringify({ path: proofPath }) };
         event({ type: 'response.output_item.added', output_index: 0, item }); event({ type: 'response.output_item.done', output_index: 0, item }); complete([item]); return;
       }
       assert.ok(results.some(item => String(item.output).includes('Ask Flower preview acceptance')), 'A real read tool returns the isolated fixture');

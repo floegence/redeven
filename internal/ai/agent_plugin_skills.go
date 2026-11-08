@@ -14,7 +14,7 @@ func (m *skillManager) discoverPluginSkillsLocked(grouped map[string][]SkillMeta
 	installs, _ := m.plugins.List()
 	for _, in := range installs {
 		for _, skill := range in.Package.Skills {
-			// The qualified discovery name is also the existing use_skill selector.
+			// The qualified discovery name is also the existing skill_use selector.
 			// It cannot collide with a standalone skill or a second installation.
 			selector := in.Package.Manifest.Name + "@" + in.ID + "/" + skill.Name
 			meta := SkillMeta{Name: selector, Description: skill.Description, Path: filepath.Join(m.plugins.Root(in), filepath.FromSlash(skill.Path)), Scope: "agent_plugin", AllowImplicitInvocation: true, PluginID: in.ID, PluginName: in.Package.Manifest.Name, PluginRevision: in.Revision, ComponentKey: skill.Key, PluginEnabled: in.Enabled && in.Components[skill.Key].Enabled}

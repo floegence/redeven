@@ -13,7 +13,7 @@ import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, rende
 async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'installation' | 'desktop_setup' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required', draftCoordinator?: FlowerComposerDraftCoordinator) {
   await page.viewport(1280, 900);
   const threadID = 'assistance-fixture';
-  const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: kind === 'connection' ? 'computer.targets' : 'browser.navigate', renderer: 'structured', status: 'success',
+  const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: kind === 'connection' ? 'computer_list_targets' : 'browser_navigate', renderer: 'structured', status: 'success',
     target_refs: [{ kind: kind === 'connection' ? 'computer_browser_source' : 'computer_control', label: 'Task browser', resource_ref: kind === 'connection' ? 'system' : 'browser-main' },
       ...(kind === 'site' ? [{ kind: 'computer_origin', label: 'https://www.google.com', resource_ref: 'https://www.google.com' }] : [])],
     chips: kind === 'site' ? [] : [{ kind: 'computer_assistance', label: 'Required step', value: kind === 'connection' ? 'connection' : kind === 'captcha' ? 'captcha' : 'inspection' }],

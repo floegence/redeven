@@ -15,7 +15,7 @@ it('recovers from the read deadline, late responses, forbidden, missing, and cor
   const loadToolImage = vi.fn(({ signal }: { signal: AbortSignal }) => new Promise<Blob>((accept, reject) => requests.push({ signal, accept, reject })));
   fixture.replace({ ...current, items: [...current.items!, {
     id: 'deadline-image', ordinal: 4, kind: 'tool', turn_id: current.turn_id!, run_id: current.run_id!,
-    activity: { item_id: 'deadline-image', tool_id: 'deadline-image', tool_name: 'image.read', kind: 'tool', status: 'success',
+    activity: { item_id: 'deadline-image', tool_id: 'deadline-image', tool_name: 'image_read', kind: 'tool', status: 'success',
       presentation: { renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'deadline.png', resource_ref: 'image://' + 'd'.repeat(64) + '/png' }] } },
   }] });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), ...fixture.adapter, loadToolImage }, {
@@ -74,7 +74,7 @@ it('authorizes parent and child images independently and releases child media on
   const loadMessageFile = vi.fn(async () => blob);
   const children = ['child-one', 'child-two'].map(thread_id => subagentSummary({ parent_thread_id: 'media-parent', thread_id, task_name: thread_id }));
   const resourceRef = 'image://' + 'c'.repeat(64) + '/png';
-  const imageActivity = (id: string) => activityItem({ item_id: id, tool_id: id, tool_name: 'image.read', renderer: 'structured',
+  const imageActivity = (id: string) => activityItem({ item_id: id, tool_id: id, tool_name: 'image_read', renderer: 'structured',
     target_refs: [{ kind: 'tool_image', label: 'chart.png', resource_ref: resourceRef }] });
   const parent = thread({ thread_id: 'media-parent', working_dir: '/parent-private', subagents: children, messages: [
     { id: 'parent-media', role: 'assistant', content: '', status: 'complete', created_at_ms: 1, turn_id: 'parent-turn', run_id: 'parent-run', blocks: [
@@ -88,7 +88,7 @@ it('authorizes parent and child images independently and releases child media on
     const base = subagentDetail({ summary });
     return { ...base, current: { ...base.current, activity: 'idle' as const, last_outcome: 'completed', items: [
       { id: child + '-image', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 1, kind: 'tool' as const,
-        activity: { item_id: child + '-image', tool_id: child + '-image', tool_name: 'image.read', kind: 'tool', status: 'success',
+        activity: { item_id: child + '-image', tool_id: child + '-image', tool_name: 'image_read', kind: 'tool', status: 'success',
           presentation: { renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'child.png', resource_ref: resourceRef }] } } },
       { id: child + '-relative', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 2, kind: 'assistant' as const, text: '![relative](./secret.png)' },
     ] } };
@@ -131,7 +131,7 @@ it.each([false, true])('retains a tool image and open preview through 300 comple
   const resourceRef = 'image://' + 'b'.repeat(64) + '/png';
   const initial = fixture.current();
   const imageItem = { id: 'stable-image', ordinal: 2, kind: 'tool' as const, turn_id: initial.turn_id!, run_id: initial.run_id!,
-    activity: { item_id: 'stable-image', tool_id: 'stable-image', tool_name: 'image.read', kind: 'tool', status: 'success',
+    activity: { item_id: 'stable-image', tool_id: 'stable-image', tool_name: 'image_read', kind: 'tool', status: 'success',
       presentation: { renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'chart.png', resource_ref: resourceRef }] } } };
   fixture.replace({ ...initial, items: [...initial.items!.filter(item => item.id !== 'streaming-tail'), imageItem,
     { ...initial.items!.at(-1)!, ordinal: 3, kind: 'thinking', text: 'Thinking 0' }] });
@@ -194,7 +194,7 @@ it.each([
     return blob;
   });
   const loadMessageFile = vi.fn();
-  const item = activityItem({ item_id: 'read-image', tool_id: 'read-image', tool_name: 'image.read', label: 'chart.png', renderer: 'structured',
+  const item = activityItem({ item_id: 'read-image', tool_id: 'read-image', tool_name: 'image_read', label: 'chart.png', renderer: 'structured',
     target_refs: [{ kind: 'tool_image', label: 'chart.png', resource_ref: resourceRef }] });
   const seed = thread({ thread_id: 'image-thread', messages: [{ id: 'image-result', turn_id: 'image-turn', role: 'assistant', status: 'complete', content: '', created_at_ms: 2,
     blocks: [activityTimeline({ thread_id: 'image-thread', turn_id: 'image-turn', run_id: 'image-run', status: 'success', items: [item] })] }] });

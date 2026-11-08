@@ -13,9 +13,9 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 	_ = json.Unmarshal(call.Arguments, &args)
 	operation := ""
 	switch call.ToolName {
-	case "computer.observe":
+	case "computer_observe":
 		operation = "observe"
-	case "computer.screenshot":
+	case "computer_capture_screenshot":
 		operation = "screenshot"
 	case "computer.action":
 		switch action, _ := args["action"].(string); action {

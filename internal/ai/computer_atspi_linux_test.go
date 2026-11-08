@@ -199,7 +199,7 @@ Gtk.main()
 		body, _ := json.Marshal(args)
 		return e.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "xvfb-main", ToolName: tool, Arguments: body, scriptOperation: true})
 	}
-	observed, err := call("computer.observe", nil)
+	observed, err := call("computer_observe", nil)
 	if err != nil || len(observed.Attachments) != 0 {
 		t.Fatalf("observation: %+v %v", observed, err)
 	}
@@ -287,7 +287,7 @@ Gtk.main()
 	if _, err := call("computer.action", map[string]any{"action": "click", "selector": map[string]any{"role": "button", "name": "Private"}}); err != nil {
 		t.Fatalf("%#v", err)
 	}
-	private, err := call("computer.observe", map[string]any{"screenshot": true})
+	private, err := call("computer_observe", map[string]any{"screenshot": true})
 	if err != nil || private.Safety == nil || private.Safety.Level != "takeover" || len(private.Attachments) != 0 {
 		t.Fatalf("private screen leaked: %+v %v", private, err)
 	}

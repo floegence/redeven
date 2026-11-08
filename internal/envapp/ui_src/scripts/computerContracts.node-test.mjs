@@ -33,13 +33,13 @@ test('image coordinates bind target, document and observed viewport at real devi
     await tab.setContent(`<button style="position:fixed;left:100px;top:100px;width:100px;height:50px" onclick="document.title='hit'">Hit</button>`);
     const session=await context.newCDPSession(tab), controller=new BrowserComputerController(session); await controller.initialize();
     const request=(tool_name,args={})=>controller.execute({target_id:'fixture',tool_name,args,script_operation:true});
-    const shot=await request('computer.screenshot'); const g=shot.result.frame_geometry;
+    const shot=await request('computer_capture_screenshot'); const g=shot.result.frame_geometry;
     assert.equal(g.image.width/g.viewport.width,2);
     const point={x:150/g.transform.scale_x,y:125/g.transform.scale_y,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id};
-    const clicked=await request('computer.click',point); assert.equal(clicked.error,undefined,JSON.stringify(clicked)); assert.equal(await tab.title(),'hit');
-    const wrong=await request('computer.click',{...point,frame:g.frame.replace('fixture','other')}); assert.equal(wrong.error,'STALE_REFERENCE'); assert.equal(wrong.result.action_executed,false);
+    const clicked=await request('computer_click',point); assert.equal(clicked.error,undefined,JSON.stringify(clicked)); assert.equal(await tab.title(),'hit');
+    const wrong=await request('computer_click',{...point,frame:g.frame.replace('fixture','other')}); assert.equal(wrong.error,'STALE_REFERENCE'); assert.equal(wrong.result.action_executed,false);
     await session.send('Emulation.setDeviceMetricsOverride',{width:600,height:500,deviceScaleFactor:2,mobile:false});
-    const resized=await request('computer.click',point); assert.equal(resized.error,'STALE_REFERENCE'); assert.equal(resized.result.action_executed,false);
+    const resized=await request('computer_click',point); assert.equal(resized.error,'STALE_REFERENCE'); assert.equal(resized.result.action_executed,false);
     controller.close();
   } finally { await browser.close(); }
 });
@@ -69,7 +69,7 @@ test('omitted wait duration means no extra delay and still returns an observatio
     await tab.setContent('<title>Wait fixture</title>');
     const controller = new BrowserComputerController(await tab.context().newCDPSession(tab));
     await controller.initialize();
-    const result = await controller.execute({tool_name:'computer.wait', args:{}});
+    const result = await controller.execute({tool_name:'computer_wait', args:{}});
     assert.equal(result.error, undefined, JSON.stringify(result));
     assert.equal(result.result.title, 'Wait fixture');
     assert.ok(result.screenshot);
@@ -121,23 +121,23 @@ for (const scale of [1,1.25,1.5,2]) test('image input follows captured pixels at
   const call=(tool_name,args={},extra={})=>controller.execute({target_id:'matrix',tool_name,args,script_operation:true,...extra});
   for (const zoom of [0.8,1,1.25,1.5]) {
    await session.send('Emulation.setPageScaleFactor',{pageScaleFactor:zoom});
-   const shot=await call('computer.screenshot');assert.equal(shot.error,undefined,JSON.stringify(shot.result));
+   const shot=await call('computer_capture_screenshot');assert.equal(shot.error,undefined,JSON.stringify(shot.result));
    const png=PNG.sync.read(Buffer.from(shot.screenshot.data,'base64'));let sumX=0,sumY=0,n=0;
    for(let y=0;y<png.height;y++)for(let x=0;x<png.width;x++){const i=(y*png.width+x)*4;if(png.data[i]>245&&png.data[i+1]<10&&png.data[i+2]<10){sumX+=x;sumY+=y;n++;}}
    assert.ok(n>0);const g=shot.result.frame_geometry;
    const point={x:sumX/n,y:sumY/n,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id};
    const before=Number(await tab.title()||0);
-   await tab.evaluate("document.body.style.background='lightblue'");await call('computer.screenshot',{}, {live_frame:true});
-   const clicked=await call('computer.click',point);assert.equal(clicked.error,undefined,JSON.stringify(clicked));assert.equal(Number(await tab.title()),before+1,'scale='+scale+' zoom='+zoom+' geometry='+JSON.stringify(g));
-   const bad=await call('computer.click',{...point,document_id:'other'});assert.equal(bad.error,'STALE_REFERENCE');assert.equal(bad.result.action_executed,false);
+   await tab.evaluate("document.body.style.background='lightblue'");await call('computer_capture_screenshot',{}, {live_frame:true});
+   const clicked=await call('computer_click',point);assert.equal(clicked.error,undefined,JSON.stringify(clicked));assert.equal(Number(await tab.title()),before+1,'scale='+scale+' zoom='+zoom+' geometry='+JSON.stringify(g));
+   const bad=await call('computer_click',{...point,document_id:'other'});assert.equal(bad.error,'STALE_REFERENCE');assert.equal(bad.result.action_executed,false);
   }
   await session.send('Emulation.setPageScaleFactor',{pageScaleFactor:1});
-  const beforeScroll=await call('computer.screenshot');
+  const beforeScroll=await call('computer_capture_screenshot');
   await tab.evaluate("scrollTo(0,500)");
-  const moved=await call('computer.click',{x:1,y:1,coordinate_space:'image_pixels',frame:beforeScroll.result.frame_geometry.frame,document_id:beforeScroll.result.frame_geometry.document_id});
+  const moved=await call('computer_click',{x:1,y:1,coordinate_space:'image_pixels',frame:beforeScroll.result.frame_geometry.frame,document_id:beforeScroll.result.frame_geometry.document_id});
   assert.equal(moved.error,'STALE_REFERENCE');assert.equal(moved.result.action_executed,false);
-  const shot=await call('computer.screenshot');await tab.goto('about:blank');
-  const stale=await call('computer.click',{x:1,y:1,coordinate_space:'image_pixels',frame:shot.result.frame_geometry.frame,document_id:shot.result.frame_geometry.document_id});assert.equal(stale.error,'STALE_REFERENCE');
+  const shot=await call('computer_capture_screenshot');await tab.goto('about:blank');
+  const stale=await call('computer_click',{x:1,y:1,coordinate_space:'image_pixels',frame:shot.result.frame_geometry.frame,document_id:shot.result.frame_geometry.document_id});assert.equal(stale.error,'STALE_REFERENCE');
   controller.close();
  }finally{await browser.close();}
 });
@@ -159,10 +159,10 @@ test('image transform excludes scrollbar width and maps an edge target exactly',
   const context=await browser.newContext({viewport:null});const tab=await context.newPage();
   await tab.setContent('<style>html{overflow-y:scroll}::-webkit-scrollbar{width:30px}body{height:3000px}button{position:fixed;right:5px;top:100px;width:8px;height:30px;padding:0;border:0;background:rgb(255,0,0)}</style><button onclick="document.title=\'hit\'"></button>');
   const controller=new BrowserComputerController(await context.newCDPSession(tab));await controller.initialize();
-  const shot=await controller.execute({target_id:'scrollbar',tool_name:'computer.screenshot',args:{},script_operation:true});
+  const shot=await controller.execute({target_id:'scrollbar',tool_name:'computer_capture_screenshot',args:{},script_operation:true});
   const g=shot.result.frame_geometry,png=PNG.sync.read(Buffer.from(shot.screenshot.data,'base64'));let sx=0,sy=0,n=0;
   for(let y=0;y<png.height;y++)for(let x=0;x<png.width;x++){const i=(y*png.width+x)*4;if(png.data[i]>245&&png.data[i+1]<10&&png.data[i+2]<10){sx+=x;sy+=y;n++;}}
-  assert.ok(n);const result=await controller.execute({target_id:'scrollbar',tool_name:'computer.click',args:{x:sx/n,y:sy/n,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id},script_operation:true});
+  assert.ok(n);const result=await controller.execute({target_id:'scrollbar',tool_name:'computer_click',args:{x:sx/n,y:sy/n,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id},script_operation:true});
   assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(await tab.title(),'hit',JSON.stringify(g));controller.close();
  }finally{await browser.close();}
 });

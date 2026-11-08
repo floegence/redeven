@@ -29,8 +29,8 @@ func TestHistoricalFileTargetsSurviveCanonicalCompactionForkAndRestart(t *testin
 		return florettest.Step{Events: []provider.Event{{Type: provider.EventDelta, Text: text}, {Type: provider.EventDone, Reason: "stop"}}}
 	}
 	gateway := florettest.NewScriptedGateway(provider.Identity{Provider: "test", Model: "files", StateCompatibilityKey: "files:v1"}, provider.Capabilities{Reasoning: provider.ReasoningUnsupported},
-		florettest.Step{Events: []provider.Event{{Type: provider.EventToolCalls, ToolCalls: []provider.ToolCall{{ID: "read-confirmed", Name: "read_file", Args: "{}"}}}, {Type: provider.EventDone, Reason: "tool_calls"}}}, answer("Historical file read."), answer("Acknowledged."), answer("Acknowledged."), answer("The missing file was read. Preserve its historical snapshot."))
-	tool := fltools.Define[map[string]any](fltools.Definition{Name: "read_file", InputSchema: fltools.StrictObject(nil, nil), ReadOnly: true, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
+		florettest.Step{Events: []provider.Event{{Type: provider.EventToolCalls, ToolCalls: []provider.ToolCall{{ID: "read-confirmed", Name: "file_read", Args: "{}"}}}, {Type: provider.EventDone, Reason: "tool_calls"}}}, answer("Historical file read."), answer("Acknowledged."), answer("Acknowledged."), answer("The missing file was read. Preserve its historical snapshot."))
+	tool := fltools.Define[map[string]any](fltools.Definition{Name: "file_read", InputSchema: fltools.StrictObject(nil, nil), ReadOnly: true, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
 		executions.Add(1)
 		return fltools.Result{Text: "{\"status\":\"success\",\"data\":{\"file_path\":\"/unmounted/历史/a.txt\"}}", Activity: &fltools.ActivityPresentation{Label: "a.txt", Renderer: fltools.ActivityRendererFile, Payload: fltools.FileActivityPayload{Content: "immutable historical snapshot"}}}, nil
 	})

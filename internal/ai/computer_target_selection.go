@@ -97,7 +97,7 @@ func (s *Service) SelectComputerTarget(ctx context.Context, meta *session.Meta, 
 	if !targetAllowedByPolicy(s.ToolTargetPolicy(), target.ID) {
 		return computerTargetFailure(TargetToolCall{ThreadID: threadID, TargetID: target.ID}, "TARGET_NOT_ALLOWED")
 	}
-	_, err = host.selectComputerTarget(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer.select_target"}, target)
+	_, err = host.selectComputerTarget(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer_select_target"}, target)
 	return err
 }
 
@@ -122,7 +122,7 @@ func (s *Service) ComputerCandidates(ctx context.Context, meta *session.Meta, th
 	if !ok {
 		return ComputerTargetInventory{}, errors.New("computer runtime is unavailable")
 	}
-	return host.ComputerTargets(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer.targets"}, s.ToolTargetPolicy())
+	return host.ComputerTargets(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer_list_targets"}, s.ToolTargetPolicy())
 }
 
 func (s *Service) SelectComputerCandidate(ctx context.Context, meta *session.Meta, threadID, ref string) (TargetDescriptor, error) {
@@ -136,5 +136,5 @@ func (s *Service) SelectComputerCandidate(ctx context.Context, meta *session.Met
 	if !ok {
 		return TargetDescriptor{}, errors.New("computer runtime is unavailable")
 	}
-	return host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer.select_target"}, ref, s.ToolTargetPolicy())
+	return host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer_select_target"}, ref, s.ToolTargetPolicy())
 }

@@ -102,7 +102,7 @@ func TestRunReplay_RejectsActivityOnlyAssistantOutput(t *testing.T) {
               {
                 "item_id": "tool_ask",
                 "tool_id": "tool_ask",
-                "tool_name": "ask_user",
+                "tool_name": "user_ask",
                 "kind": "control",
                 "status": "waiting",
                 "severity": "blocking",

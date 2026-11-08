@@ -26,8 +26,8 @@ function currentFor(items: readonly FlowerActivityItem[], version: number) {
   }) };
 }
 
-const write = () => activityItem({ item_id: 'write', tool_id: 'write', tool_name: 'terminal.write', renderer: 'terminal', label: '向 SSH 登录会话提交密码', status: 'success', payload: { operation: 'write', command: 'ssh udesk26', process_id: 'process-1', input_bytes: 12 } });
-const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal.read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', last_seq: 2, latest_seq: 2 } });
+const write = () => activityItem({ item_id: 'write', tool_id: 'write', tool_name: 'terminal_write', renderer: 'terminal', label: '向 SSH 登录会话提交密码', status: 'success', payload: { operation: 'write', command: 'ssh udesk26', process_id: 'process-1', input_bytes: 12 } });
+const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal_read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', last_seq: 2, latest_seq: 2 } });
 
 function stream(summary: ReturnType<typeof thread>) {
   const queue: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [summary] }];
@@ -233,8 +233,8 @@ describe('Activity disclosure interaction', () => {
   });
 
   it('keeps an early tool button and manual choice as safe details and file errors arrive', async () => {
-    const early = activityItem({ item_id: 'early', tool_id: 'early', tool_name: 'use_skill', renderer: 'structured', label: 'diagnostic-guide', status: 'running', payload: {} });
-    const file = activityItem({ item_id: 'file', tool_id: 'file', tool_name: 'read_file', renderer: 'file', label: 'Read project guide', status: 'error', payload: { operation: 'read', display_name: 'README.md', error: { message: 'Access denied' } } });
+    const early = activityItem({ item_id: 'early', tool_id: 'early', tool_name: 'skill_use', renderer: 'structured', label: 'diagnostic-guide', status: 'running', payload: {} });
+    const file = activityItem({ item_id: 'file', tool_id: 'file', tool_name: 'file_read', renderer: 'file', label: 'Read project guide', status: 'error', payload: { operation: 'read', display_name: 'README.md', error: { message: 'Access denied' } } });
     const { runtime, live } = await mount([write(), early, file]);
     live.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), early, file], 2) });
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -248,7 +248,7 @@ describe('Activity disclosure interaction', () => {
     await userEvent.click(toggleFor(runtime, 'file'));
     await waitFor(() => rowFor(runtime, 'file').textContent?.includes('Access denied') === true);
     await userEvent.click(toggleFor(runtime, 'file'));
-    const ready = { ...early, status: 'success' as const, payload: { operation: 'use_skill', rows: [{ title: 'Guide loaded', content: 'Ready for diagnostics', format: 'text' }] } };
+    const ready = { ...early, status: 'success' as const, payload: { operation: 'skill_use', rows: [{ title: 'Guide loaded', content: 'Ready for diagnostics', format: 'text' }] } };
     live.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), ready, file], 3) });
     await waitFor(() => rowFor(runtime, 'early').textContent?.includes('Ready for diagnostics') === true);
     expect(toggleFor(runtime, 'early')).toBe(button);
@@ -267,7 +267,7 @@ describe('Activity disclosure interaction', () => {
 
   it.each(['pending', 'waiting', 'running'] as const)('keeps %s tools with attention facts collapsed and shows the running title sweep', async (status) => {
     const tool = activityItem({
-      item_id: 'active-command', tool_id: 'active-command', tool_name: 'terminal.exec',
+      item_id: 'active-command', tool_id: 'active-command', tool_name: 'terminal_exec',
       renderer: 'terminal', label: 'Inspect environment status', status, needs_attention: true,
       payload: { operation: 'exec', command: 'printf READY', output: '' },
     });

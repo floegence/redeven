@@ -173,16 +173,16 @@ type TargetToolAttachment struct {
 func toolRequiresTarget(toolName string) bool {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
-	case "image.read", "read_file", "file.write", "apply_patch",
-		"computer.observe", "computer.exec", "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
-		"browser.navigate", "browser.back", "browser.reload":
+	case "image_read", "file_read", "file_write", "file_apply_patch",
+		"computer_observe", "computer_exec", "computer_capture_screenshot", "computer_click", "computer_double_click", "computer_type_text", "computer_press_key", "computer_scroll", "computer_drag", "computer_wait",
+		"browser_navigate", "browser_go_back", "browser_reload":
 		return true
 	}
 	return false
 }
 
 func isComputerManagementTool(toolName string) bool {
-	return toolName == "computer.targets" || toolName == "computer.select_target"
+	return toolName == "computer_list_targets" || toolName == "computer_select_target"
 }
 
 func isComputerUseTool(toolName string) bool {
@@ -190,7 +190,7 @@ func isComputerUseTool(toolName string) bool {
 		return true
 	}
 	switch strings.TrimSpace(toolName) {
-	case "computer.observe", "computer.exec", "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait", "browser.navigate", "browser.back", "browser.reload":
+	case "computer_observe", "computer_exec", "computer_capture_screenshot", "computer_click", "computer_double_click", "computer_type_text", "computer_press_key", "computer_scroll", "computer_drag", "computer_wait", "browser_navigate", "browser_go_back", "browser_reload":
 		return true
 	default:
 		return false
@@ -199,14 +199,14 @@ func isComputerUseTool(toolName string) bool {
 
 func requiredTargetCapabilities(toolName string) []string {
 	switch strings.TrimSpace(toolName) {
-	case "read_file":
+	case "file_read":
 		return []string{"read"}
-	case "file.write", "apply_patch":
+	case "file_write", "file_apply_patch":
 		return []string{"write"}
-	case "computer.screenshot", "computer.observe", "browser.wait_for_download", "browser.download_cursor", "browser.read_download", "computer.applications":
+	case "computer_capture_screenshot", "computer_observe", "browser.wait_for_download", "browser.download_cursor", "browser.read_download", "computer.applications":
 		return []string{"observe"}
-	case "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
-		"browser.navigate", "browser.back", "browser.reload", "browser.save_download":
+	case "computer_exec", "computer_click", "computer_double_click", "computer_type_text", "computer_press_key", "computer_scroll", "computer_drag", "computer_wait",
+		"browser_navigate", "browser_go_back", "browser_reload", "browser.save_download":
 		return []string{"interaction"}
 	default:
 		return nil

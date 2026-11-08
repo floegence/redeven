@@ -304,7 +304,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	return prepared, nil
 }
 
-func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent), native responsesStreamContext) (result ModelGatewayResult, resultErr error) {
+func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolContract, payload []byte, onEvent func(StreamEvent), native responsesStreamContext) (result ModelGatewayResult, resultErr error) {
 	var bearer string
 	if p.chatGPTWatch != nil {
 		watchCtx, cancel := context.WithCancelCause(ctx)
@@ -814,7 +814,7 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 	})
 }
 
-func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model string, capability config.AIReasoningCapability, aliases providerToolAliases, signatures map[string]geminiToolSignature, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model string, capability config.AIReasoningCapability, aliases providerToolContract, signatures map[string]geminiToolSignature, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	var httpResponse *http.Response
 	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse), ooption.WithMiddleware(func(r *http.Request, next ooption.MiddlewareNext) (*http.Response, error) {
 		res, err := next(r)
@@ -1096,7 +1096,7 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 	})
 }
 
-func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases providerToolContract, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	var httpResponse *http.Response
 	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse), ooption.WithMiddleware(func(r *http.Request, next ooption.MiddlewareNext) (*http.Response, error) {
 		res, err := next(r)
@@ -1407,7 +1407,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	return result, validateModelGatewayResult(result)
 }
 
-func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAliases) []openai.ChatCompletionToolUnionParam {
+func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolContract) []openai.ChatCompletionToolUnionParam {
 	out := make([]openai.ChatCompletionToolUnionParam, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
@@ -1418,10 +1418,10 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAlias
 		if len(def.InputSchema) > 0 {
 			_ = json.Unmarshal(def.InputSchema, &schema)
 		}
-		alias := aliases.wireName(name)
+		alias := name
 		fn := oshared.FunctionDefinitionParam{
 			Name:        alias,
-			Description: openai.String(strings.TrimSpace(aliases.wireDescription(name, def.Description))),
+			Description: openai.String(strings.TrimSpace(def.Description)),
 			Strict:      openai.Bool(strict && def.Strict),
 		}
 		if len(schema) > 0 {
@@ -1587,7 +1587,7 @@ func openAIResponsesToolOverride(v map[string]any) oresponses.ToolUnionParam {
 	return param.Override[oresponses.ToolUnionParam](json.RawMessage(b))
 }
 
-func buildOpenAIChatMessagesWithCapability(messages []Message, capability config.AIReasoningCapability, aliases providerToolAliases) ([]openai.ChatCompletionMessageParamUnion, error) {
+func buildOpenAIChatMessagesWithCapability(messages []Message, capability config.AIReasoningCapability, aliases providerToolContract) ([]openai.ChatCompletionMessageParamUnion, error) {
 	capability = capability.Normalize()
 	replayField := ""
 	for _, field := range []string{"reasoning_content", "reasoning"} {
@@ -1874,7 +1874,7 @@ func emitProviderEvent(onEvent func(StreamEvent), event StreamEvent) {
 	}
 }
 
-func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolAliases) []oresponses.ToolUnionParam {
+func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolContract) []oresponses.ToolUnionParam {
 	out := make([]oresponses.ToolUnionParam, 0, len(defs))
 	for _, def := range defs {
 		if strings.TrimSpace(def.Name) == "" {
@@ -1884,19 +1884,19 @@ func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolAliases) 
 		if len(def.InputSchema) > 0 {
 			_ = json.Unmarshal(def.InputSchema, &schema)
 		}
-		alias := aliases.wireName(def.Name)
+		alias := def.Name
 		tool := oresponses.ToolParamOfFunction(alias, schema, strict && def.Strict)
-		tool.OfFunction.Description = openai.String(strings.TrimSpace(aliases.wireDescription(def.Name, def.Description)))
+		tool.OfFunction.Description = openai.String(strings.TrimSpace(def.Description))
 		out = append(out, tool)
 	}
 	return out
 }
 
-func buildOpenAIInput(messages []Message, aliases providerToolAliases) (oresponses.ResponseInputParam, string, error) {
+func buildOpenAIInput(messages []Message, aliases providerToolContract) (oresponses.ResponseInputParam, string, error) {
 	return buildOpenAIResponsesInput(messages, aliases, false)
 }
 
-func buildOpenAIResponsesInput(messages []Message, aliases providerToolAliases, replayReasoning bool) (oresponses.ResponseInputParam, string, error) {
+func buildOpenAIResponsesInput(messages []Message, aliases providerToolContract, replayReasoning bool) (oresponses.ResponseInputParam, string, error) {
 	items := make(oresponses.ResponseInputParam, 0, len(messages)+2)
 	instructions := ""
 	for _, msg := range messages {
@@ -2886,40 +2886,24 @@ func mapOpenAIStatus(status oresponses.ResponseStatus) string {
 	}
 }
 
-type providerToolAliases struct {
-	canonicalToWire map[string]string
-	wireToCanonical map[string]string
-	argumentRules   map[string]*strictArgumentRule
+// Strict argument rules belong to one frozen provider request. Callable names
+// are already canonical and are identical across transports.
+type providerToolContract struct {
+	argumentRules map[string]*strictArgumentRule
 }
 
-func newOpenAIProviderToolAliases(defs []ToolDef) (providerToolAliases, error) {
-	aliases := providerToolAliases{
-		canonicalToWire: make(map[string]string, len(defs)),
-		wireToCanonical: make(map[string]string, len(defs)),
-	}
-	register := func(canonical string) error {
-		canonical = strings.TrimSpace(canonical)
-		if canonical == "" {
-			return nil
-		}
-		switch canonical {
-		case "terminal_exec", "terminal_read", "terminal_write", "terminal_terminate":
-			return fmt.Errorf("tool name %q is not canonical; use the dotted terminal name", canonical)
-		}
-		wire := openAIWireToolName(canonical)
-		if existing, ok := aliases.wireToCanonical[wire]; ok && existing != canonical {
-			return fmt.Errorf("OpenAI tool alias %q collides for %q and %q", wire, existing, canonical)
-		}
-		aliases.canonicalToWire[canonical] = wire
-		aliases.wireToCanonical[wire] = canonical
-		return nil
-	}
+func newProviderToolContract(defs []ToolDef) (providerToolContract, error) {
+	seen := map[string]bool{}
 	for _, def := range defs {
-		if err := register(def.Name); err != nil {
-			return providerToolAliases{}, err
+		if err := validateCallableToolName(def.Name); err != nil {
+			return providerToolContract{}, err
 		}
+		if seen[def.Name] {
+			return providerToolContract{}, fmt.Errorf("duplicate tool name %q", def.Name)
+		}
+		seen[def.Name] = true
 	}
-	return aliases, nil
+	return providerToolContract{}, nil
 }
 
 func contentPartToolName(part ContentPart) string {
@@ -2927,36 +2911,6 @@ func contentPartToolName(part ContentPart) string {
 		return name
 	}
 	return strings.TrimSpace(part.Text)
-}
-
-func (a providerToolAliases) wireName(canonical string) string {
-	return a.canonicalToWire[strings.TrimSpace(canonical)]
-}
-
-// Explain canonical references without rewriting prompts, scripts, or history.
-// Only the detached provider definition receives this request-local mapping.
-func (a providerToolAliases) wireDescription(canonical, description string) string {
-	canonical = strings.TrimSpace(canonical)
-	wire := a.wireName(canonical)
-	if wire == "" || wire == canonical {
-		return description
-	}
-	guidance := fmt.Sprintf("Documentation name: `%s`. Call `%s`.", canonical, wire)
-	if strings.TrimSpace(description) == "" {
-		return guidance
-	}
-	return description + "\n\n" + guidance
-}
-
-func (a providerToolAliases) canonicalName(wire string) string {
-	wire = strings.TrimSpace(wire)
-	if canonical := a.wireToCanonical[wire]; canonical != "" {
-		return canonical
-	}
-	if _, ok := a.canonicalToWire[wire]; ok {
-		return wire
-	}
-	return ""
 }
 
 func openAIWireToolName(name string) string {
@@ -2992,25 +2946,13 @@ func openAIWireToolName(name string) string {
 	return out
 }
 
-func canonicalProviderToolName(name string, aliases providerToolAliases) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	if canonical := aliases.canonicalName(name); canonical != "" {
-		return canonical
-	}
-	return name
+func canonicalProviderToolName(name string, _ providerToolContract) string {
+	return strings.TrimSpace(name)
 }
 
-func providerHistoryToolWireName(name string, aliases providerToolAliases) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	if wire := aliases.wireName(name); wire != "" {
-		return wire
-	}
+// Historical OpenAI exchanges retain their released wire spelling. This only
+// renders past facts; it neither registers aliases nor changes stored records.
+func providerHistoryToolWireName(name string, _ providerToolContract) string {
 	return openAIWireToolName(name)
 }
 

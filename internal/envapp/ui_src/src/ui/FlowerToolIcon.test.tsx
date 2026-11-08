@@ -11,7 +11,7 @@ const disposers: (() => void)[] = [];
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); document.body.replaceChildren(); });
 
 describe('semantic tool icons', () => {
- it.each(['file.write', 'apply_patch', 'tessiven.edit'])('gives %s a pencil and synchronized writing stroke', name => {
+ it.each(['file_write', 'file_apply_patch', 'tessiven_edit_canvas'])('gives %s a pencil and synchronized writing stroke', name => {
   const host = document.createElement('div');
   disposers.push(render(() => <FlowerToolIcon toolName={name} running={false} />, host));
   expect(host.querySelector('[data-flower-writing-part="pencil"]'), name).not.toBeNull();
@@ -33,11 +33,11 @@ describe('semantic tool icons', () => {
  });
  it('uses the same terminal glyph for starting a command and reading its output', () => {
   const host = document.createElement('div');
-  disposers.push(render(() => <><FlowerToolIcon toolName="terminal.exec" running={false} /><FlowerToolIcon toolName="terminal.read" running={false} /></>, host));
+  disposers.push(render(() => <><FlowerToolIcon toolName="terminal_exec" running={false} /><FlowerToolIcon toolName="terminal_read" running={false} /></>, host));
   const [exec, read] = host.querySelectorAll('svg');
   expect(exec.outerHTML).toBe(read.outerHTML);
  });
- it.each(['terminal.exec', 'terminal.read'])('restores the four-square loader only while %s is running', name => {
+ it.each(['terminal_exec', 'terminal_read'])('restores the four-square loader only while %s is running', name => {
   const animate = vi.spyOn(SVGElement.prototype, 'animate');
   const [running, setRunning] = createSignal(false);
   const host = document.createElement('div');
@@ -60,7 +60,7 @@ describe('semantic tool icons', () => {
    expect(host.querySelector('svg'),name).not.toBeNull(); dispose();
   }
  });
- it.each(['file.write', 'apply_patch', 'tessiven.edit'])('keeps the %s pencil and removes all running effects on completion', name => {
+ it.each(['file_write', 'file_apply_patch', 'tessiven_edit_canvas'])('keeps the %s pencil and removes all running effects on completion', name => {
   const cancel = vi.fn();
   const animate = vi.spyOn(SVGElement.prototype, 'animate').mockReturnValue({ cancel, finished: Promise.resolve() } as unknown as Animation);
   const [running, setRunning] = createSignal(true);
@@ -80,7 +80,7 @@ describe('semantic tool icons', () => {
   let reduce = false; let change = () => {};
   vi.spyOn(window, 'matchMedia').mockImplementation(() => ({get matches(){return reduce;},addEventListener: (_: string, listener: () => void) => { change=listener; }, removeEventListener: vi.fn()}) as unknown as MediaQueryList);
   const host=document.createElement('div'); document.body.append(host);
-  const dispose=render(() => <FlowerToolIcon toolName="file.write" running />,host);
+  const dispose=render(() => <FlowerToolIcon toolName="file_write" running />,host);
   expect(animate).toHaveBeenCalled(); reduce=true; change(); expect(cancel).toHaveBeenCalled();
   const count=animate.mock.calls.length; change(); expect(animate).toHaveBeenCalledTimes(count);
   dispose();

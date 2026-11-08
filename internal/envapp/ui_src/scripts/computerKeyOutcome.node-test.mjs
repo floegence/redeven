@@ -18,7 +18,7 @@ test('document and nonfocusable keys reject without input or disconnect; page ke
     try {
       await controller.initialize();
       const execute = (tool_name, args = {}) => controller.execute({ tool_name, args, full_access: true, script_operation: true });
-      const observed = await execute('computer.observe');
+      const observed = await execute('computer_observe');
       const root = observed.result.observation.nodes.find(node => node.role === 'RootWebArea');
       for (const selector of [{ ref: root.ref }, { role: 'heading' }]) {
         const response = await execute('computer.action', { action: 'key', selector, key: 'PageDown' });
@@ -30,7 +30,7 @@ test('document and nonfocusable keys reject without input or disconnect; page ke
         assert.equal(controller.page.uncertainEffect, false);
         assert.equal(inputs.length, 0);
       }
-      const pageKey = await execute('computer.key', { key: 'PageDown' });
+      const pageKey = await execute('computer_press_key', { key: 'PageDown' });
       assert.equal(pageKey.error, undefined, JSON.stringify(pageKey));
       await tab.waitForFunction(() => globalThis.scrollY > 0);
       assert.deepEqual(inputs.map(input => input.type), ['keyDown', 'keyUp']);

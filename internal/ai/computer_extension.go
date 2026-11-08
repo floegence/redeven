@@ -941,7 +941,7 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 	if !private && response.Safety != nil && !response.Safety.SafeToSendToModel {
 		return out, nil
 	}
-	if private && call.ToolName != "computer.screenshot" {
+	if private && call.ToolName != "computer_capture_screenshot" {
 		if !response.Acknowledged || response.Screenshot != nil {
 			return failedExchange(errors.New("invalid private input acknowledgement"))
 		}

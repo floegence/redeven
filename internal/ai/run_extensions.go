@@ -81,7 +81,7 @@ func (r *run) manageSubagentsForTool(ctx context.Context, toolCallID string, arg
 		return nil, errors.New("nil run")
 	}
 	if !r.allowSubagentDelegate {
-		return nil, fmt.Errorf("subagents is disabled in this run")
+		return nil, fmt.Errorf("subagent_manage is disabled in this run")
 	}
 	action := strings.ToLower(strings.TrimSpace(anyToString(args["action"])))
 	contractVariant := subagentValidationContractVariant(action, args)
@@ -114,7 +114,7 @@ type subagentArgumentsError struct {
 func (e subagentArgumentsError) Error() string {
 	msg := strings.TrimSpace(e.msg)
 	if msg == "" {
-		msg = "invalid subagents arguments"
+		msg = "invalid subagent_manage arguments"
 	}
 	return "invalid arguments: " + msg
 }
@@ -178,7 +178,7 @@ func validateSubagentsArgsByAction(action string, args map[string]any) error {
 	}
 	switch action {
 	case "":
-		return invalidSubagentArguments("invalid_arguments.subagents.missing_action", "subagents action is required", nil)
+		return invalidSubagentArguments("invalid_arguments.subagents.missing_action", "subagent_manage action is required", nil)
 	case subagentActionSpawn:
 		if _, exists := args["title"]; exists {
 			return invalidSubagentArguments("invalid_arguments.subagents.spawn_title_unsupported", "spawn does not accept title; use task_name", nil)

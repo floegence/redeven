@@ -2462,7 +2462,7 @@ it.each([
 });
 
 it('loads saved tool previews through the exact scoped Env App route', async () => {
-  const preview = { tool_name: 'threads.query', inputs: [], rows: [], total: 0, has_more: false };
+  const preview = { tool_name: 'thread_query', inputs: [], rows: [], total: 0, has_more: false };
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     expect(url).toBe('/_redeven_proxy/api/ai/threads/thread-1/tool-preview');
     expect(init?.method).toBe('POST');

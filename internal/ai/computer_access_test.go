@@ -13,20 +13,20 @@ func TestComputerApprovedFileURLIsTemporaryAndBoundToTargetLease(t *testing.T) {
 	var calls []TargetToolCall
 	runtime.executors["browser-main"] = scriptTestExecutor{func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 		calls = append(calls, call)
-		result := map[string]any{"action_executed": call.ToolName == "browser.navigate"}
-		if call.ToolName == "computer.observe" {
+		result := map[string]any{"action_executed": call.ToolName == "browser_navigate"}
+		if call.ToolName == "computer_observe" {
 			result["observation"] = semanticTestTree()
 		}
 		return TargetToolResult{Result: result}, nil
 	}}
 	url := "file:///tmp/animation.html"
 	args, _ := json.Marshal(map[string]any{"url": url})
-	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "browser.navigate", Arguments: args}
+	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "browser_navigate", Arguments: args}
 	ctx := context.WithValue(computerPermissionContext(t, "approval_required"), computerAuthorizedNavigationKey{}, url)
 	if _, err := runtime.ExecuteTargetTool(ctx, call); err != nil {
 		t.Fatal(err)
 	}
-	call.ToolName, call.Arguments = "computer.observe", nil
+	call.ToolName, call.Arguments = "computer_observe", nil
 	if _, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "approval_required"), call); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestComputerApprovedFileURLIsTemporaryAndBoundToTargetLease(t *testing.T) {
 
 func TestComputerFullAccessIncludesForegroundWithoutSeparateGrants(t *testing.T) {
 	runtime, executor, store, _ := computerBindingFixture(t)
-	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}
+	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer_observe"}
 	if _, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "full_access"), call); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestComputerAccessUsesInvocationSnapshotAndRechecksResourceGrants(t *testin
 	for _, invocationMode := range []string{"full_access", "approval_required", "readonly"} {
 		t.Run(invocationMode, func(t *testing.T) {
 			runtime, executor, store, _ := computerBindingFixture(t)
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer_observe"}
 			grants := ComputerAccess{Origins: []string{"https://example.test"}, Apps: []string{"dev.Notes"}}
 			for _, mode := range []string{"full_access", "approval_required", "readonly"} {
 				if err := store.UpdateThreadPermissionType(t.Context(), "env", call.ThreadID, mode); err != nil {
@@ -94,7 +94,7 @@ func TestComputerAccessUsesInvocationSnapshotAndRechecksResourceGrants(t *testin
 
 func TestComputerAccessRejectsMissingInvocationSnapshot(t *testing.T) {
 	runtime, executor, _, _ := computerBindingFixture(t)
-	if _, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "thread-first", TurnID: "missing", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}); err == nil {
+	if _, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "thread-first", TurnID: "missing", RunID: "run", TargetID: "browser-main", ToolName: "computer_observe"}); err == nil {
 		t.Fatal("missing invocation snapshot accepted")
 	}
 	if len(executor.calls) != 0 {
@@ -104,7 +104,7 @@ func TestComputerAccessRejectsMissingInvocationSnapshot(t *testing.T) {
 
 func TestComputerFullAccessKeepsExecutionAndAuthorityChecks(t *testing.T) {
 	runtime, executor, store, _ := computerBindingFixture(t)
-	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}
+	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer_observe"}
 	denied := errors.New("invocation denied")
 	call.revalidate = func(context.Context) error { return denied }
 	if _, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "full_access"), call); !errors.Is(err, denied) {
@@ -137,7 +137,7 @@ func TestComputerFullAccessRechecksAnExistingPermissionPause(t *testing.T) {
 			control.threadID, control.turnID, control.runID = "thread-first", turn, "run"
 			control.pauseForUser()
 			control.pause = &InteractionSafetyDecision{Level: "takeover", RequiredOrigin: "https://example.test", RequiredApp: "dev.Notes", ReasonCodes: []string{"foreground_permission"}}
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: turn, RunID: "run", TargetID: "browser-main", ToolName: "computer.screenshot", interactionID: "resolved-input"}
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: turn, RunID: "run", TargetID: "browser-main", ToolName: "computer_capture_screenshot", interactionID: "resolved-input"}
 			runtime.resumeComputerControl(call, call.RunID)
 			permissionType := "full_access"
 			if !full {
@@ -162,5 +162,5 @@ func computerPermissionContext(t *testing.T, mode string) context.Context {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return contextWithToolAuthorizationSnapshot(t.Context(), buildPermissionSnapshot(permission, []ToolDef{{Name: "computer.observe", Visibility: ToolVisibilitySharedReadonly}}, nil))
+	return contextWithToolAuthorizationSnapshot(t.Context(), buildPermissionSnapshot(permission, []ToolDef{{Name: "computer_observe", Visibility: ToolVisibilitySharedReadonly}}, nil))
 }

@@ -44,7 +44,7 @@ func TestBuildToolResultMessagesUsesJSONSafeErrorPayload(t *testing.T) {
 
 	messages := buildToolResultMessages([]ToolResult{{
 		ToolID:   "call_timeout",
-		ToolName: "terminal.exec",
+		ToolName: "terminal_exec",
 		Status:   toolResultStatusTimeout,
 		Data: map[string]any{
 			"todos": []TodoItem{{
@@ -58,7 +58,7 @@ func TestBuildToolResultMessagesUsesJSONSafeErrorPayload(t *testing.T) {
 			Message:   "Tool execution timed out after 30000 ms",
 			Retryable: true,
 		},
-	}}, []ToolCall{{ID: "call_timeout", Name: "terminal.exec"}})
+	}}, []ToolCall{{ID: "call_timeout", Name: "terminal_exec"}})
 	if len(messages) != 1 || len(messages[0].Content) != 1 {
 		t.Fatalf("messages=%+v, want one tool result", messages)
 	}
@@ -105,7 +105,7 @@ func TestEnforceToolReferenceIntegrity_DropsOutOfOrderToolResultPart(t *testing.
 			Role: "assistant",
 			Content: []ContentPart{
 				{Type: "tool_result", ToolCallID: "call_1", Text: `{"status":"early"}`},
-				{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal.exec", ArgsJSON: `{"command":"pwd"}`},
+				{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal_exec", ArgsJSON: `{"command":"pwd"}`},
 			},
 		},
 		{

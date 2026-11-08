@@ -78,7 +78,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		saveCompactionQualificationJSON(t, filepath.Join(root, "report.json"), report)
 	}()
 	send := func(id, text string) *FlowerThreadDetail {
-		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: id, Input: RunInput{Text: text}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.write", "apply_patch"}}})
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: id, Input: RunInput{Text: text}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "file_write", "file_apply_patch"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,7 +114,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		start := len(recorder.snapshot())
-		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: consultation.ThreadID, ClientRequestID: tc.name, Input: RunInput{Text: tc.input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.write", "apply_patch"}}})
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: consultation.ThreadID, ClientRequestID: tc.name, Input: RunInput{Text: tc.input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "file_write", "file_apply_patch"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +164,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		report[tc.name] = detail
 		report[tc.name+"_observations"] = map[string]any{"main_requests": mainRequests, "tool_calls": calls, "canonical_results": results, "explicit_no_inspection": tc.noTools}
 	}
-	detail := send("repair", "Fix Add in this fixture project. Follow its repository rules and verify the existing tests. Work only inside this workspace; no subagents. Reply concisely in Chinese with the result.")
+	detail := send("repair", "Fix Add in this fixture project. Follow its repository rules and verify the existing tests. Work only inside this workspace; no subagent_manage. Reply concisely in Chinese with the result.")
 	code, err := os.ReadFile(filepath.Join(workspace, "calc.py"))
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		var args map[string]any
 		_ = json.Unmarshal([]byte(result.Arguments), &args)
 		command, _ := args["command"].(string)
-		if result.ToolName == "terminal.read" || strings.Contains(command, "time.sleep(2)") {
+		if result.ToolName == "terminal_read" || strings.Contains(command, "time.sleep(2)") {
 			currentResults = append(currentResults, result)
 		}
 	}
@@ -240,7 +240,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		t.Error("restart lost prior tool evidence")
 	}
 	report["restart"] = detail
-	response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "question", Input: RunInput{Text: "请只问我一个问题，在甲区和乙区中选择一个，用可点击的选项。这两个选项就是全部候选。收到答案后，只回复所选区域，不要继续提问或调用其他工具。"}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, ToolAllowlist: []string{"ask_user"}}})
+	response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "question", Input: RunInput{Text: "请只问我一个问题，在甲区和乙区中选择一个，用可点击的选项。这两个选项就是全部候选。收到答案后，只回复所选区域，不要继续提问或调用其他工具。"}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, ToolAllowlist: []string{"user_ask"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	readonlyStart := len(recorder.snapshot())
-	response, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: readonly.ThreadID, ClientRequestID: "readonly", Input: RunInput{Text: "Read readonly.txt and report its qualification marker. Do not change any files."}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"read_file", "read_files"}}})
+	response, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: readonly.ThreadID, ClientRequestID: "readonly", Input: RunInput{Text: "Read readonly.txt and report its qualification marker. Do not change any files."}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"file_read", "file_read_many"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 	readonlyCalls := 0
 	for _, request := range recorder.snapshot()[readonlyStart:] {
 		for _, name := range request.ResponseToolNames {
-			if name != "read_file" && name != "read_files" {
+			if name != "file_read" && name != "file_read_many" {
 				t.Errorf("unexpected readonly tool: %s", name)
 			}
 			readonlyCalls++
@@ -363,7 +363,7 @@ func checkQualificationTerminalContinuation(results []flruntime.ThreadToolResult
 			return err
 		}
 		data := envelope.Data
-		if result.ToolName == "terminal.exec" {
+		if result.ToolName == "terminal_exec" {
 			if process != "" {
 				return fmt.Errorf("finite command was relaunched")
 			}
@@ -371,7 +371,7 @@ func checkQualificationTerminalContinuation(results []flruntime.ThreadToolResult
 			if process == "" {
 				return fmt.Errorf("missing process identity")
 			}
-		} else if result.ToolName == "terminal.read" {
+		} else if result.ToolName == "terminal_read" {
 			if process == "" || args["process_id"] != process || args["after_seq"] != cursor {
 				return fmt.Errorf("process identity or returned cursor changed")
 			}
@@ -391,12 +391,12 @@ func checkQualificationTerminalContinuation(results []flruntime.ThreadToolResult
 }
 
 func TestQualificationTerminalContinuationOracle(t *testing.T) {
-	start := flruntime.ThreadToolResult{ToolName: "terminal.exec", Arguments: `{"command":"build"}`, Content: `{"data":{"process_id":"build","status":"running","last_seq":19}}`}
-	read := flruntime.ThreadToolResult{ToolName: "terminal.read", Arguments: `{"process_id":"build","after_seq":19}`, Content: `{"data":{"process_id":"build","status":"success","last_seq":20}}`}
+	start := flruntime.ThreadToolResult{ToolName: "terminal_exec", Arguments: `{"command":"build"}`, Content: `{"data":{"process_id":"build","status":"running","last_seq":19}}`}
+	read := flruntime.ThreadToolResult{ToolName: "terminal_read", Arguments: `{"process_id":"build","after_seq":19}`, Content: `{"data":{"process_id":"build","status":"success","last_seq":20}}`}
 	if err := checkQualificationTerminalContinuation([]flruntime.ThreadToolResult{start, read}); err != nil {
 		t.Fatal(err)
 	}
-	for _, results := range [][]flruntime.ThreadToolResult{{start}, {start, start}, {start, {ToolName: "terminal.read", Arguments: `{"process_id":"other","after_seq":19}`, Content: read.Content}}, {start, {ToolName: "terminal.read", Arguments: `{"process_id":"build","after_seq":0}`, Content: read.Content}}} {
+	for _, results := range [][]flruntime.ThreadToolResult{{start}, {start, start}, {start, {ToolName: "terminal_read", Arguments: `{"process_id":"other","after_seq":19}`, Content: read.Content}}, {start, {ToolName: "terminal_read", Arguments: `{"process_id":"build","after_seq":0}`, Content: read.Content}}} {
 		if err := checkQualificationTerminalContinuation(results); err == nil {
 			t.Fatal("accepted incomplete/relaunched/wrong-cursor execution")
 		}
@@ -426,7 +426,7 @@ func checkQualificationFixtureRules(results []flruntime.ThreadToolResult, fixtur
 				return fmt.Errorf("dependent content read before complete rules: %s", name)
 			}
 		}
-		if result.ToolName == "file.write" || result.ToolName == "apply_patch" {
+		if result.ToolName == "file_write" || result.ToolName == "file_apply_patch" {
 			if !rules || !spec {
 				return fmt.Errorf("code changed before complete applicable rules/specification")
 			}
@@ -442,10 +442,10 @@ func TestQualificationFixtureRuleOracle(t *testing.T) {
 	fixtures := map[string]string{"AGENTS.md": "rules complete\n", "SPEC.md": "spec complete\n", "WORKFLOW.md": "workflow complete\n", "calc.py": "source complete\n", "test_calc.py": "tests complete\n"}
 	receipt := func(output string) flruntime.ThreadToolResult {
 		b, _ := json.Marshal(map[string]any{"data": map[string]any{"output": output}})
-		return flruntime.ThreadToolResult{ToolName: "terminal.exec", Content: string(b)}
+		return flruntime.ThreadToolResult{ToolName: "terminal_exec", Content: string(b)}
 	}
 	rules, spec, source := receipt(fixtures["AGENTS.md"]), receipt(fixtures["SPEC.md"]), receipt(fixtures["calc.py"])
-	write := flruntime.ThreadToolResult{ToolName: "file.write", Content: `{"data":{}}`}
+	write := flruntime.ThreadToolResult{ToolName: "file_write", Content: `{"data":{}}`}
 	for _, valid := range [][]flruntime.ThreadToolResult{{rules, source, {Status: "error", Content: "ERROR: rejected before execution"}}, {rules, {Status: "error", Content: "ERROR: " + spec.Content}, write}, {rules, source}, {rules, spec, write}, {receipt("calc.py\nAGENTS.md\n"), rules}, {receipt("rules "), receipt("complete\n"), source}} {
 		if err := checkQualificationFixtureRules(valid, fixtures); err != nil {
 			t.Fatal(err)
@@ -487,7 +487,7 @@ func TestQualificationWorkflowEvidenceOracle(t *testing.T) {
 
 func qualificationRuntimeFixtures() map[string]string {
 	return map[string]string{
-		"AGENTS.md":    "# Fixture rules\nDo not use subagents. Preserve the exported Add function. For workflow assessment, consult WORKFLOW.md. Before changing code, read SPEC.md completely and follow its requirements. Run the existing unittest after the change.\n",
+		"AGENTS.md":    "# Fixture rules\nDo not use subagent_manage. Preserve the exported Add function. For workflow assessment, consult WORKFLOW.md. Before changing code, read SPEC.md completely and follow its requirements. Run the existing unittest after the change.\n",
 		"WORKFLOW.md":  "Release target: staging-only. Production deployment requires a separate operator request. Verify with python3 -m unittest. No automatic commit or push is required.\n",
 		"SPEC.md":      strings.Repeat("Disposable fixture background.\n", 80) + "\nRequired: Add returns the sum. Keep the marker FIXTURE_RULE_READ_7319 as a comment next to Add.\n",
 		"calc.py":      "def Add(a, b):\n    return a - b\n",

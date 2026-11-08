@@ -29,7 +29,7 @@ function current(terminal = false, changes: Partial<FlowerRuntimeCurrentView> = 
       { id: 'thinking', turn_id: 'turn', run_id: 'run', ordinal: 2, kind: 'thinking', text: 'Inspecting the evidence.', live: !terminal },
       { id: 'progress', turn_id: 'turn', run_id: 'run', ordinal: 3, kind: 'assistant', text: 'Intermediate progress report.' },
       { id: 'tool', turn_id: 'turn', run_id: 'run', ordinal: 4, kind: 'tool', activity: {
-        item_id: 'tool', tool_id: 'tool', tool_name: 'terminal.exec', kind: 'tool', status: 'error', severity: 'error', needs_attention: false,
+        item_id: 'tool', tool_id: 'tool', tool_name: 'terminal_exec', kind: 'tool', status: 'error', severity: 'error', needs_attention: false,
         requires_approval: false, presentation: { label: 'Inspect files', renderer: 'terminal', payload: { operation: 'exec', command: 'ls', output: 'Command failed' } },
       } },
       { id: 'final-a', turn_id: 'turn', run_id: 'run', ordinal: 5, kind: 'assistant', text: 'Final conclusion with a stable node.', live: !terminal },
@@ -218,7 +218,7 @@ describe('completed turn process disclosure', () => {
     expect(header.querySelector('button')).toBeNull();
     expect(header.getBoundingClientRect().height).toBe(height);
     live.push({ ...source, view_version: 3, sampled_at_ms: undefined, interactions: [
-      { id: 'approval', turn_id: 'turn', run_id: 'run', kind: 'approval', approval: { label: 'Inspect', tool_name: 'read_file', tool_call_id: 'call' } },
+      { id: 'approval', turn_id: 'turn', run_id: 'run', kind: 'approval', approval: { label: 'Inspect', tool_name: 'file_read', tool_call_id: 'call' } },
     ] });
     await waitFor(() => Boolean(header.textContent?.includes('Waiting for approval')));
     expect(header.getBoundingClientRect().height).toBe(height);

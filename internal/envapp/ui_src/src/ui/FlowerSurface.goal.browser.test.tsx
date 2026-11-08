@@ -769,7 +769,7 @@ it('keeps pasted Goal text intact without long-text conversion or IME submission
 it.each(['question', 'approval'] as const)('submits Goal during %s without resolving the original interaction', async kind => {
   const base = adapter(true);
   let snapshot = kind === 'question' ? thread({ status: 'waiting_user', input_request: inputRequest() }) : thread({
-    status: 'waiting_approval', approval_actions: [{ action_id: 'approve-goal', turn_id: 'turn-1', origin: 'main_tool', run_id: 'run:thread-1', tool_id: 'write', tool_name: 'terminal.exec', state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, summary: { label: 'Write result', command: 'touch result' } }],
+    status: 'waiting_approval', approval_actions: [{ action_id: 'approve-goal', turn_id: 'turn-1', origin: 'main_tool', run_id: 'run:thread-1', tool_id: 'write', tool_name: 'terminal_exec', state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, summary: { label: 'Write result', command: 'touch result' } }],
   });
   let version = 20;
   const manageGoal = vi.fn(async (input: FlowerGoalInput) => {

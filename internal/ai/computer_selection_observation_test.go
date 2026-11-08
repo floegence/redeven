@@ -47,11 +47,11 @@ func TestComputerSelectionKeepsBindingWhenInitialObservationFails(t *testing.T) 
 				}
 				reads := 0
 				host.executors[target.ID] = selectionObservationExecutor{scriptTestExecutor{fn: func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
-					if call.ToolName == "computer.select_target" {
+					if call.ToolName == "computer_select_target" {
 						return TargetToolResult{Result: map[string]any{"selected": true, "action_executed": false}}, nil
 					}
 					reads++
-					if call.ToolName != "computer.observe" {
+					if call.ToolName != "computer_observe" {
 						t.Fatalf("unexpected operation %s", call.ToolName)
 					}
 					if mode == "unavailable" {
@@ -68,7 +68,7 @@ func TestComputerSelectionKeepsBindingWhenInitialObservationFails(t *testing.T) 
 				}
 				r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 				bindTargetTestRun(t, r)
-				value, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer.select_target"), "select", "computer.select_target", map[string]any{"candidate_ref": candidate.CandidateRef})
+				value, err := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer_select_target"), "select", "computer_select_target", map[string]any{"candidate_ref": candidate.CandidateRef})
 				output, ok := value.(toolExecutionOutput)
 				if !ok {
 					t.Fatalf("missing selection result: %v %v", value, err)

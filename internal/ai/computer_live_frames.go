@@ -48,13 +48,13 @@ func (r *ComputerUseRuntime) startComputerLiveFrames(ctx context.Context, reques
 		return nil, err
 	}
 	private := request.InteractionID != ""
-	call := TargetToolCall{liveFrame: true, ThreadID: request.ThreadID, TargetID: request.TargetID, ToolName: "computer.screenshot"}
+	call := TargetToolCall{liveFrame: true, ThreadID: request.ThreadID, TargetID: request.TargetID, ToolName: "computer_capture_screenshot"}
 	if private {
 		if request.validate == nil {
 			return nil, errors.New("missing private viewer authority")
 		}
 		call = request.privateCall
-		call.ToolName, call.Arguments, call.userInput, call.liveFrame = "computer.screenshot", nil, true, true
+		call.ToolName, call.Arguments, call.userInput, call.liveFrame = "computer_capture_screenshot", nil, true, true
 	}
 	control, release, err := r.acquireComputerControl(ctx, call)
 	if err != nil {

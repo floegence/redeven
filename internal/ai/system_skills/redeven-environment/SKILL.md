@@ -17,7 +17,7 @@ or invoke the CLI to create or repair a browser or desktop executor.
   bundled CLI that matches the running Runtime. Invoke that path directly; do
   not call a bare `redeven` command or search the system PATH. If the variable
   is missing or unusable, report `CLI_UNAVAILABLE` and stop the diagnostic.
-- `terminal.exec` runs in the local AI runtime unless a tool result explicitly reports a target execution location. Never infer remote execution from `execution_context`, target IDs, thread title, or environment card context alone.
+- `terminal_exec` runs in the local AI runtime unless a tool result explicitly reports a target execution location. Never infer remote execution from `execution_context`, target IDs, thread title, or environment card context alone.
 - Use `"$REDEVEN_CLI_PATH" env ... --json` for environment status and lifecycle requests: list, resolve, status, diagnose, start, stop, restart, and update.
 - Use `"$REDEVEN_CLI_PATH" targets exec ... --json` for arbitrary OS-level diagnostics on a Redeven target. Choose the OS command from the target facts and command output; do not expect Redeven to provide a dedicated subcommand for every diagnostic.
 - If a Redeven command returns unsupported, unavailable, or blocked, explain the structured result and next product action. Do not invent lower-level Docker, SSH, systemd, launchctl, or process-manager workarounds.
@@ -50,4 +50,4 @@ For target OS facts such as current time, uptime, kernel, disk, process, package
 
 Only claim that a command ran remotely when the JSON result contains a target execution location such as `execution_location=ssh_target` and the expected `target_id`.
 
-If `redeven targets exec` is unavailable in the installed CLI, say that the current Redeven CLI cannot verify the target OS fact through the product command surface. Do not substitute plain `terminal.exec` and label it remote.
+If `redeven targets exec` is unavailable in the installed CLI, say that the current Redeven CLI cannot verify the target OS fact through the product command surface. Do not substitute plain `terminal_exec` and label it remote.

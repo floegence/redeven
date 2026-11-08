@@ -64,7 +64,7 @@ func TestComputerResultFlowerUI(t *testing.T) {
 			}
 			if requireInput.Load() && !answered {
 				args := "{\"reason_code\":\"missing_external_input\",\"required_from_user\":[\"Choose a destination.\"],\"evidence_refs\":[],\"questions\":[{\"id\":\"destination\",\"header\":\"Destination\",\"question\":\"Which destination should I use?\",\"response_mode\":\"select_or_write\",\"is_secret\":false,\"choices_exhaustive\":false,\"choices\":[{\"choice_id\":\"fixture\",\"label\":\"Fixture destination\",\"kind\":\"select\"}]}]}"
-				writeEncodingIntegrationCall(w, "ask_user", "choose-target", args)
+				writeEncodingIntegrationCall(w, "user_ask", "choose-target", args)
 				return
 			}
 		}

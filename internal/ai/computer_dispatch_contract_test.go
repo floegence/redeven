@@ -21,7 +21,7 @@ func TestComputerQueryPreservesSourceRoleAndCanonicalLocatorVocabulary(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result})
+	encoded, err := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: result.Result})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestComputerScreenshotOriginalLocatorReachesGuestAndModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result, Attachments: []ToolAttachment{{ResourceRef: attachment.ResourceRef, Name: attachment.Name, MIMEType: attachment.MIMEType, SizeBytes: attachment.SizeBytes, SHA256: attachment.SHA256}}})
+	encoded, err := encodeModelToolResult(ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: result.Result, Attachments: []ToolAttachment{{ResourceRef: attachment.ResourceRef, Name: attachment.Name, MIMEType: attachment.MIMEType, SizeBytes: attachment.SizeBytes, SHA256: attachment.SHA256}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestComputerClipboardRejectionKeepsTypedReasonAtScriptBoundary(t *testing.T
 }
 
 func TestComputerReadInterruptionDoesNotClaimAnUndispatchedAction(t *testing.T) {
-	call := TargetToolCall{ToolName: "computer.observe"}
+	call := TargetToolCall{ToolName: "computer_observe"}
 	result, _ := computerObservationFailure(call, map[string]any{"action_executed": false, "observation_invalidated": true, "reason": "document_changed", "observation_stage": "semantic_read"}, "fixture")
 	if phase := computerActivityFailurePhase(result.Result.(map[string]any)); phase != "" {
 		t.Fatalf("read mistaken for action: %s", phase)
@@ -131,7 +131,7 @@ func TestComputerIncompleteInvalidatedInputKeepsPreparationAndPartialProgress(t 
 
 func TestComputerExplicitDelayReceiptIsCompletedWithoutInventingInput(t *testing.T) {
 	rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
-		if c.ToolName == "computer.observe" {
+		if c.ToolName == "computer_observe" {
 			return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"observation": semanticTestTree()}}, nil
 		}
 		return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"action_executed": false, "observation_invalidated": true, "needs_observation": true, "mechanism": "browser_input_sequence", "completed_events": 1}, Safety: &InteractionSafetyDecision{Level: "routine"}}, nil

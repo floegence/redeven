@@ -18,8 +18,8 @@ func TestBrowserLeaseBlocksAIAndSharesTheTargetInputGate(t *testing.T) {
 		t.Fatal("private control did not isolate observation")
 	}
 	for _, call := range []TargetToolCall{
-		{TargetID: "page", ThreadID: "thread", RunID: "run", ToolName: "computer.click"},
-		{TargetID: "page", ThreadID: "thread", RunID: "run", ToolName: "computer.observe", liveFrame: true},
+		{TargetID: "page", ThreadID: "thread", RunID: "run", ToolName: "computer_click"},
+		{TargetID: "page", ThreadID: "thread", RunID: "run", ToolName: "computer_observe", liveFrame: true},
 	} {
 		if _, unlock, err := host.acquireComputerControl(t.Context(), call); err == nil {
 			unlock()

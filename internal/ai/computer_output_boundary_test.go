@@ -40,7 +40,7 @@ func TestComputerScriptConfirmedLogsSurviveLaterReadFailure(t *testing.T) {
 }
 
 func TestComputerBrowserExchangeFailureRetainsOnlyKnownBoundary(t *testing.T) {
-	for _, tool := range []string{"browser.navigate", "computer.click", "computer.observe"} {
+	for _, tool := range []string{"browser_navigate", "computer_click", "computer_observe"} {
 		for _, private := range []bool{false, true} {
 			call := TargetToolCall{TargetID: "target", ToolName: tool}
 			result, err, valid := computerBrowserFailure(call, private, "untrusted reply", map[string]any{"observation": "private content"}, "fixture")
@@ -180,7 +180,7 @@ func TestComputerAdapterDiagnosticSurvivesScriptFailure(t *testing.T) {
 
 func TestComputerAdapterReasonAppearsInActivityWithoutPrivateData(t *testing.T) {
 	payload := map[string]any{"diagnostic": map[string]any{"phase": "adapter", "method": "safety_scan", "reason": "internal_error", "message": "private page"}}
-	body, err := json.Marshal(computerActivityResultRows("computer.exec", payload))
+	body, err := json.Marshal(computerActivityResultRows("computer_exec", payload))
 	if err != nil || !strings.Contains(string(body), "internal_error") || strings.Contains(string(body), "private page") {
 		t.Fatalf("activity diagnostic changed: %s %v", body, err)
 	}

@@ -351,7 +351,7 @@ describe('continuous history navigation', () => {
       })),
       { id: 'short-user', kind: 'user', text: 'Please fix the documentation.', turn_id: 'tail', run_id: 'tail-run', ordinal: count + 1 },
       { id: 'short-tool', kind: 'tool', turn_id: 'tail', run_id: 'tail-run', ordinal: count + 2,
-        activity: { item_id: 'short-tool', tool_id: 'short-tool', kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+        activity: { item_id: 'short-tool', tool_id: 'short-tool', kind: 'tool', tool_name: 'terminal_exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: { label: 'Check documentation', renderer: 'terminal', payload: { command: 'check-docs', output: 'Done' } } } },
     ] satisfies FlowerRuntimeCurrentItem[];
     for (const item of items) Object.assign(item, { canonical_ordinal: item.ordinal });
@@ -449,7 +449,7 @@ describe('continuous history navigation', () => {
     const items: FlowerRuntimeCurrentItem[] = [
       { id: 'request', kind: 'user' as const, text: 'Inspect files', turn_id: 'work', run_id: 'run', ordinal: 1 },
       ...Array.from({ length: 100 }, (_, i): FlowerRuntimeCurrentItem => ({ id: `island-${i}`, kind: 'tool', turn_id: 'work', run_id: 'run', ordinal: i + 2,
-        activity: { item_id: `island-${i}`, tool_id: `island-${i}`, kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+        activity: { item_id: `island-${i}`, tool_id: `island-${i}`, kind: 'tool', tool_name: 'terminal_exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: { label: `Inspect ${i}`, renderer: 'terminal', payload: { command: 'pwd', output: 'Done' } } } })),
       { id: 'answer', kind: 'assistant' as const, text: 'Complete', turn_id: 'work', run_id: 'run', ordinal: 102 },
     ].map(item => ({ ...item, canonical_ordinal: item.ordinal * 2 }));
@@ -532,7 +532,7 @@ describe('continuous history navigation', () => {
     const items: FlowerRuntimeCurrentItem[] = [
       { id: 'start', kind: 'user', text: 'Inspect files', turn_id: 'large', run_id: 'large-run', ordinal: 1 },
       ...Array.from({ length: 180 }, (_, i): FlowerRuntimeCurrentItem => ({ id: `call-${i}`, kind: 'tool', turn_id: 'large', run_id: 'large-run', ordinal: i + 2,
-        activity: { item_id: `call-${i}`, tool_id: `call-${i}`, kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+        activity: { item_id: `call-${i}`, tool_id: `call-${i}`, kind: 'tool', tool_name: 'terminal_exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: { label: `Inspect file ${i}`, renderer: 'terminal', payload: { command: `echo ${i}`, output: 'Done' } } } })),
       { id: 'done', kind: 'assistant', text: 'Complete', turn_id: 'large', run_id: 'large-run', ordinal: 182 },
       { id: 'tail-user', kind: 'user', text: 'Another request', turn_id: 'tail', run_id: 'tail-run', ordinal: 183 },
@@ -595,7 +595,7 @@ describe('continuous history navigation', () => {
     const items: FlowerRuntimeCurrentItem[] = [
       { id: 'large-user', kind: 'user', text: 'Inspect the complete sequence.', turn_id: 'large', run_id: 'large-run', ordinal: 1 },
       ...Array.from({ length: 680 }, (_, i): FlowerRuntimeCurrentItem => ({ id: `tool-${i}`, kind: 'tool', turn_id: 'large', run_id: 'large-run', ordinal: i + 2,
-        activity: { item_id: `tool-${i}`, tool_id: `tool-${i}`, kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+        activity: { item_id: `tool-${i}`, tool_id: `tool-${i}`, kind: 'tool', tool_name: 'terminal_exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: { label: `Inspect file ${i}`, renderer: 'terminal', payload: { command: `echo ${i}`, output: 'Complete result' } } } })),
       { id: 'pending-thought', kind: 'thinking', turn_id: 'large', run_id: 'large-run', ordinal: 682, text: 'Preview',
         body: { field: 'content', source_id: 'pending-thought', bytes: 8000, preview_bytes: 7 } },
@@ -718,7 +718,7 @@ describe('continuous history navigation', () => {
     const items: FlowerRuntimeCurrentItem[] = [
       { id: 'request', kind: 'user' as const, ordinal: 1, text: 'Inspect files', turn_id: 'work', run_id: 'run' },
       ...Array.from({ length: 200 }, (_, i): FlowerRuntimeCurrentItem => ({ id: 'call-' + i, kind: 'tool', turn_id: 'work', run_id: 'run', ordinal: i + 2,
-        activity: { item_id: 'call-' + i, tool_id: 'call-' + i, kind: 'tool', tool_name: 'terminal.exec', status: i === 45 ? 'running' : 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+        activity: { item_id: 'call-' + i, tool_id: 'call-' + i, kind: 'tool', tool_name: 'terminal_exec', status: i === 45 ? 'running' : 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: { label: 'Inspect file ' + i, renderer: 'terminal', payload: { command: 'echo ' + i } } } })),
     ].map(item => ({ ...item, canonical_ordinal: item.ordinal * 2 }));
     const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
@@ -795,7 +795,7 @@ describe('continuous history navigation', () => {
       { id: 'earliest-user', kind: 'user' as const, text: 'The original request', turn_id: 'work', run_id: 'work', ordinal: 1 },
       ...Array.from({ length: 100 }, (_, i): FlowerRuntimeCurrentItem => ({
         id: `folded-${i}`, kind: 'tool', turn_id: 'work', run_id: 'work', ordinal: i + 2,
-        activity: { item_id: `folded-${i}`, tool_id: `folded-${i}`, kind: 'tool', tool_name: 'terminal.exec',
+        activity: { item_id: `folded-${i}`, tool_id: `folded-${i}`, kind: 'tool', tool_name: 'terminal_exec',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: { label: `Inspect ${i}`, renderer: 'terminal', payload: { command: 'pwd', output: 'Done' } } },
       })),
@@ -935,7 +935,7 @@ describe('continuous history navigation', () => {
       for (let i = 0; i < 120; i++) {
         const id = 'work-' + index + '-tool-' + i;
         items.push({ id, kind: 'tool', turn_id: 'work-' + index, run_id: 'run-' + index, ordinal: items.length + 1, canonical_ordinal: items.length + 1,
-          activity: { item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal.exec', status: 'success',
+          activity: { item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal_exec', status: 'success',
             severity: 'quiet', needs_attention: false, requires_approval: false } });
       }
       return { turn_id: 'work-' + index, run_id: 'run-' + index, started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:01:00Z',
@@ -1004,7 +1004,7 @@ describe('continuous history navigation', () => {
       for (let i = 0; i < 120; i++) {
         const id = 'work-' + index + '-tool-' + i;
         items.push({ id, kind: 'tool', turn_id: 'work-' + index, run_id: 'run-' + index, ordinal: items.length + 1, canonical_ordinal: items.length + 1,
-          activity: { item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal.exec', status: 'success',
+          activity: { item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal_exec', status: 'success',
             severity: 'quiet', needs_attention: false, requires_approval: false } });
       }
       return { turn_id: 'work-' + index, run_id: 'run-' + index, started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:01:00Z',

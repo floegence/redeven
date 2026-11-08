@@ -102,7 +102,7 @@ func TestFlowerResponsesSearchSurvivesGoalReviewRestartAndFork(t *testing.T) {
 				map[string]any{"type": "message", "id": "commentary", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Checking sources.\n\n"}}},
 				map[string]any{"type": "web_search_call", "id": "search", "status": "completed", "opaque_results": "durable-search-receipt", "action": map[string]any{"type": "search", "query": "product films"}},
 				map[string]any{"type": "message", "id": "after-search", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Now inspecting."}}},
-				map[string]any{"type": "function_call", "id": "review", "call_id": "review", "name": "goal", "arguments": `{"operation":"review","expected_version":1,"outcome":"completed","evidence":"Verified official product films."}`},
+				map[string]any{"type": "function_call", "id": "review", "call_id": "review", "name": "goal_manage", "arguments": `{"operation":"review","expected_version":1,"outcome":"completed","evidence":"Verified official product films."}`},
 			}
 			fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Checking sources.\\n\\n\"}\n\n")
 			first, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": output[0]})

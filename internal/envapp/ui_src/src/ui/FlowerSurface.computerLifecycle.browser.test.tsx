@@ -15,7 +15,7 @@ function current(outcome?: FlowerRuntimeCurrentView['last_outcome']): FlowerRunt
   return { thread_id: threadID, view_version: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: outcome ? 'idle' : 'active',
     ...(outcome ? { last_outcome: outcome } : { run_progress: { phase: 'tool_execution' as const } }),
     items: [{ id: 'observed', kind: 'tool', ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
-      item_id: 'observed', tool_id: 'observe', tool_name: 'browser.navigate', status: 'success',
+      item_id: 'observed', tool_id: 'observe', tool_name: 'browser_navigate', status: 'success',
       presentation: { label: 'Observed page', renderer: 'structured', payload: { operation: 'navigate', status: 'success' }, target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: frameRef }] },
     } }], interactions: [],
   };
@@ -65,7 +65,7 @@ async function openStage(surface: HTMLElement) {
   await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
 }
 
-it.each(['browser.navigate', 'computer.exec'])('shows one animated task label for %s and stops it on settlement', async (toolName) => {
+it.each(['browser_navigate', 'computer_exec'])('shows one animated task label for %s and stops it on settlement', async (toolName) => {
   const running = current();
   const initial = { ...running, items: running.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: toolName } })) };
   const f = fixture(initial);
@@ -153,7 +153,7 @@ it('preserves script intent, disclosure, selection and copy through a live failu
   const scriptView = (failed: boolean): FlowerRuntimeCurrentView => ({
     ...current(failed ? 'completed' : undefined), view_version: failed ? 2 : 1,
     items: [{ id: 'script', kind: 'tool', ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
-      item_id: 'script', tool_id: 'script', tool_name: 'computer.exec', status: failed ? 'error' : 'running',
+      item_id: 'script', tool_id: 'script', tool_name: 'computer_exec', status: failed ? 'error' : 'running',
       presentation: { label: 'Locate the search field and verify the page', renderer: 'structured', target_refs: [
         { kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' },
         ...(failed ? [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: frameRef }] : []),
@@ -224,7 +224,7 @@ it('preserves script intent, disclosure, selection and copy through a live failu
 it('explains absent historical script details without reconstructing them', async () => {
   const history = current('completed');
   const f = fixture({ ...history, items: [{ id: 'old-script', kind: 'tool', ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
-    item_id: 'old-script', tool_id: 'old-script', tool_name: 'computer.exec', status: 'success', presentation: { renderer: 'structured', label: 'Managed browser',
+    item_id: 'old-script', tool_id: 'old-script', tool_name: 'computer_exec', status: 'success', presentation: { renderer: 'structured', label: 'Managed browser',
       target_refs: [{ kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' }], payload: { operation: 'execute' } },
   } }] });
   await waitFor(() => Boolean(f.surface.querySelector('[data-flower-activity-item-id="old-script"]')));
@@ -430,13 +430,13 @@ it('shows concrete candidates and page content without repeated confirmation det
     },
   });
   const f = fixture({ ...current('completed'), items: [
-    item('discover', 'computer.targets', 'Find a browser for the weather preview', { rows_provided: true, rows: [
+    item('discover', 'computer_list_targets', 'Find a browser for the weather preview', { rows_provided: true, rows: [
       { title: 'Chrome', meta: 'default new_tab', content: '', format: 'text' },
       ...Array.from({ length: 4 }, (_, i) => ({ title: 'Project ' + (i + 1) + ' — Chrome', content: 'https://example.test/project/' + (i + 1), format: 'text' })),
     ] }, []),
-    item('select', 'computer.select_target', 'Use a new Chrome tab', { rows_provided: true, rows: [] }, [browserChip, { kind: 'computer_result', label: 'result', value: 'selected' }]),
-    item('blank', 'computer.observe', 'Inspect the new Chrome tab', { rows_provided: true, rows: [] }, [browserChip, { kind: 'computer_result', label: 'result', value: 'empty_page' }]),
-    item('weather', 'computer.exec', 'Open and inspect the weather preview', {
+    item('select', 'computer_select_target', 'Use a new Chrome tab', { rows_provided: true, rows: [] }, [browserChip, { kind: 'computer_result', label: 'result', value: 'selected' }]),
+    item('blank', 'computer_observe', 'Inspect the new Chrome tab', { rows_provided: true, rows: [] }, [browserChip, { kind: 'computer_result', label: 'result', value: 'empty_page' }]),
+    item('weather', 'computer_exec', 'Open and inspect the weather preview', {
       rows_provided: true, inputs: [{ content: script, format: 'code', language: 'javascript' }], rows: [
         { title: 'Weather preview', meta: 'page', content: 'weather.html\n\nBeijing 23°C\nPartly cloudy\nSample data — not live weather', format: 'text' },
         { title: 'City', meta: 'searchbox', content: 'Beijing', format: 'text' },
@@ -489,7 +489,7 @@ it('shows concrete candidates and page content without repeated confirmation det
 it('retains keyboard focus when a confirmed empty observation no longer has details', async () => {
   const makeCurrent = (done: boolean): FlowerRuntimeCurrentView => ({ ...current(done ? 'completed' : undefined), view_version: done ? 2 : 1, items: [{
     id: 'empty', kind: 'tool', ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
-      item_id: 'empty', tool_id: 'empty', tool_name: 'computer.observe', status: done ? 'success' : 'running',
+      item_id: 'empty', tool_id: 'empty', tool_name: 'computer_observe', status: done ? 'success' : 'running',
       presentation: { label: 'Inspect Chrome', renderer: 'structured', payload: done ? { rows_provided: true, rows: [] } : {},
         chips: [{ kind: 'browser_source', label: 'Browser', value: 'browser.connected' }],
         target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'browser-main' }],
@@ -512,7 +512,7 @@ it('retains keyboard focus when a confirmed empty observation no longer has deta
 
 it('folds saved screenshot work and retains image retry and manual disclosure across updates', async () => {
   const seed = current('completed');
-  const screenshot = { ...seed, turns: [{ turn_id: 'computer-turn', run_id: 'computer-run', started_at: '2026-10-15T12:00:00Z', ended_at: '2026-10-15T12:00:01Z', outcome: 'completed' as const, elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: [], final_boundary_complete: false }], items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer.screenshot' } })) };
+  const screenshot = { ...seed, turns: [{ turn_id: 'computer-turn', run_id: 'computer-run', started_at: '2026-10-15T12:00:00Z', ended_at: '2026-10-15T12:00:01Z', outcome: 'completed' as const, elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: [], final_boundary_complete: false }], items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer_capture_screenshot' } })) };
   const f = fixture(screenshot);
   f.loadComputerFrame.mockRejectedValueOnce(new Error('Missing saved image'));
   const row = () => f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="observed"]')!;
@@ -546,7 +546,7 @@ it('folds saved screenshot work and retains image retry and manual disclosure ac
 
 it.each([false, true])('protects saved screenshot completion only for deliberate expansion=%s', async deliberate => {
   const seed = current();
-  const initial = { ...seed, turns: [{ turn_id: 'computer-turn', run_id: 'computer-run', started_at: '2026-10-15T12:00:00Z', elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, final_item_ids: [], final_boundary_complete: false }], items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer.screenshot' } })) };
+  const initial = { ...seed, turns: [{ turn_id: 'computer-turn', run_id: 'computer-run', started_at: '2026-10-15T12:00:00Z', elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, final_item_ids: [], final_boundary_complete: false }], items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer_capture_screenshot' } })) };
   const f = fixture(initial);
   const row = () => f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="observed"]')!;
   await waitFor(() => row()?.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
@@ -590,7 +590,7 @@ it.each([true, false])('keeps independent questions answerable with computer evi
 it('aborts an inline screenshot read when switching conversations without reading another thread', async () => {
   await page.viewport(1280, 900);
   const seed = current('completed');
-  const f = fixture({ ...seed, items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer.screenshot' } })) });
+  const f = fixture({ ...seed, items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer_capture_screenshot' } })) });
   f.loadComputerFrame.mockImplementationOnce(async ({ signal }) => new Promise<Blob>((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), {once:true})));
   await waitFor(() => f.loadComputerFrame.mock.calls.length === 1);
   const request = f.loadComputerFrame.mock.calls[0][0];
@@ -605,7 +605,7 @@ it('aborts an inline screenshot read when switching conversations without readin
 it.each(['unavailable','effect_confirmed','prepared','partial_input'])('shows a neutral observation interruption with accessible diagnostics (phase=%s)', async phase => {
   const view = (status: 'running' | 'error'): FlowerRuntimeCurrentView => ({...current(status === 'error' ? 'completed' : undefined), view_version: status === 'error' ? 2 : 1,
     items:[{id:'read-interrupted',kind:'tool',ordinal:1,turn_id:'computer-turn',run_id:'computer-run',activity:{
-      item_id:'read-interrupted',tool_id:'read-interrupted',tool_name:'computer.exec',status,
+      item_id:'read-interrupted',tool_id:'read-interrupted',tool_name:'computer_exec',status,
       presentation:{label:'Inspect the current page',renderer:'structured',chips:status === 'error' ? [
         {kind:'computer_observation',label:'observation',value:'unavailable'},
         ...(phase !== 'unavailable' ? [{kind:'computer_failure_phase',label:'phase',value:phase}] : []),
@@ -639,7 +639,7 @@ it.each(['unavailable','effect_confirmed','prepared','partial_input'])('shows a 
 
 it('classifies a bounded canonical observation summary without fetching hidden details', async () => {
   const f = fixture({...current('completed'),items:[{id:'saved-read',kind:'tool',ordinal:1,turn_id:'computer-turn',run_id:'computer-run',
-    activity:{item_id:'saved-read',tool_id:'saved-read',tool_name:'computer.exec',status:'error'},
+    activity:{item_id:'saved-read',tool_id:'saved-read',tool_name:'computer_exec',status:'error'},
     activity_summary:{version:'saved-v1',label:'Inspect the page',renderer:'structured',has_error:true,
       values:{'/chips':[{kind:'computer_observation',label:'observation',value:'unavailable'},{kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'}]},
       fields:[{path:'/payload/error',kind:'object'},{path:'/chips',kind:'array',count:2}]},
@@ -655,7 +655,7 @@ it('classifies a bounded canonical observation summary without fetching hidden d
 
 it('shows a bounded script budget as retained partial work without changing canonical status', async () => {
   const f=fixture({...current('completed'),items:[{id:'budget-stop',kind:'tool',ordinal:1,turn_id:'computer-turn',run_id:'computer-run',activity:{
-    item_id:'budget-stop',tool_id:'budget-stop',tool_name:'computer.exec',status:'error',
+    item_id:'budget-stop',tool_id:'budget-stop',tool_name:'computer_exec',status:'error',
     presentation:{label:'Read the next report',renderer:'structured',chips:[{kind:'computer_budget',label:'budget',value:'operations'}],payload:{rows_provided:true,error:{code:'SCRIPT_FAILED',message:'Computer script stopped before completion (SCRIPT_OPERATION_LIMIT)'}}},
   }}]});
   const selector='[data-flower-activity-item-id="budget-stop"]';

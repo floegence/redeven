@@ -100,7 +100,7 @@ func TestThreadPermissionAppliesToNextToolAndQueuedWork(t *testing.T) {
 				case n <= lastEffectStep:
 					name, args := "terminal_exec", `{"command":"printf live-permission"}`
 					if n < effectStep {
-						name, args = "read_file", `{"path":"README.md"}`
+						name, args = "file_read", `{"path":"README.md"}`
 					}
 					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("effect-%d", n), "call_id": fmt.Sprintf("effect-%d", n), "name": name, "arguments": args}
 					for _, event := range []string{"response.output_item.added", "response.output_item.done"} {
@@ -319,7 +319,7 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 			names[anyToString(tool["name"])] = true
 		}
 	}
-	if names["terminal_exec"] != (mode != "readonly") || !names["read_file"] {
+	if names["terminal_exec"] != (mode != "readonly") || !names["file_read"] {
 		t.Errorf("provider tool surface does not match %s: %v", mode, names)
 	}
 	prompt, _ := request["instructions"].(string)
@@ -351,7 +351,7 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 	if strings.Contains(prompt, "Available tools for this request:") {
 		t.Error("host tool enumeration duplicates final provider definitions")
 	}
-	for _, name := range []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "file.write", "apply_patch", "read_file", "read_files", "rgrep"} {
+	for _, name := range []string{"terminal_exec", "terminal_read", "terminal_write", "terminal_terminate", "file_write", "file_apply_patch", "file_read", "file_read_many", "file_search"} {
 		if strings.Contains(prompt, "- Use "+name+" ") && !names[strings.ReplaceAll(name, ".", "_")] {
 			t.Errorf("provider prompt recommends unavailable %s", name)
 		}

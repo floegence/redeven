@@ -30,15 +30,15 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 		braveKey                                                              bool
 	}{
 		{name: "openai", provider: "openai", model: "gpt-5.5", toolType: "web_search", path: "/responses"},
-		{name: "vision", provider: "deepseek", model: "deepseek-v4-flash-vision-exp", functionName: "web_search_tool", path: "/responses"},
+		{name: "vision", provider: "deepseek", model: "deepseek-v4-flash-vision-exp", functionName: "web_search_pages", path: "/responses"},
 		{name: "fetch_only", provider: "openai_compatible", model: "custom", searchMode: "openai_builtin", path: "/responses"},
-		{name: "flash", provider: "deepseek", model: "deepseek-v4-flash", functionName: "web_search_tool", path: "/responses"},
+		{name: "flash", provider: "deepseek", model: "deepseek-v4-flash", functionName: "web_search_pages", path: "/responses"},
 		{name: "pro_alias", provider: "deepseek", model: "my-pro", wire: "deepseek-v4-pro", toolType: "web_search", path: "/responses"},
 		{name: "kimi", provider: "moonshot", model: "kimi-k2.6", toolType: "builtin_function", path: "/chat/completions"},
 		{name: "glm", provider: "chatglm", model: "glm-5.1", toolType: "web_search", path: "/chat/completions"},
 		{name: "qwen", provider: "qwen", model: "qwen3.6-plus", toolType: "web_search", path: "/responses"},
 		{name: "responses_builtin", provider: "openai_compatible", model: "custom", searchMode: "openai_builtin", toolType: "web_search", path: "/responses"},
-		{name: "brave", provider: "openai_compatible", model: "custom", searchMode: "brave", functionName: "web_search_tool", braveKey: true, path: "/responses"},
+		{name: "brave", provider: "openai_compatible", model: "custom", searchMode: "brave", functionName: "web_search_pages", braveKey: true, path: "/responses"},
 		{name: "brave_missing_key", provider: "openai_compatible", model: "custom", searchMode: "brave", path: "/responses"},
 		{name: "disabled", provider: "openai_compatible", model: "custom", searchMode: "disabled", path: "/chat/completions"},
 		{name: "not_integrated", provider: "qwen", model: "qwen3.6-max-preview", path: "/chat/completions"},
@@ -150,14 +150,14 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 				if tool["type"] == "web_search" || tool["type"] == "builtin_function" {
 					hosted++
 				}
-				if tool["name"] == "web_search_tool" {
+				if tool["name"] == "web_search_pages" {
 					local++
 				}
 				if tool["name"] == "web_fetch" {
 					fetch++
 				}
 				if function, ok := tool["function"].(map[string]any); ok {
-					if function["name"] == "web_search_tool" {
+					if function["name"] == "web_search_pages" {
 						local++
 					}
 					if function["name"] == "web_fetch" {
@@ -257,7 +257,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		if call == 1 {
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "search-first", "status": "completed", "output": []any{
-				map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "ask_user", "arguments": args},
+				map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "user_ask", "arguments": args},
 			}}})
 			return
 		}

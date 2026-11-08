@@ -18,7 +18,7 @@ import (
 func TestToolArgumentCorrectionFailureUsesSafeTypedReason(t *testing.T) {
 	for _, failure := range []*flruntime.ThreadTurnFailure{
 		{Code: flruntime.ThreadTurnFailureToolDispatch, Message: "tool argument correction exhausted", Reason: "tool_argument_correction_exhausted"},
-		{Code: flruntime.ThreadTurnFailureControlError, Message: "control argument correction exhausted: Tool ask_user was called with invalid arguments: PRIVATE_COMMAND secret=PRIVATE_KEY. Rewrite the input to match the schema.", Reason: "tool_argument_correction_exhausted"},
+		{Code: flruntime.ThreadTurnFailureControlError, Message: "control argument correction exhausted: Tool user_ask was called with invalid arguments: PRIVATE_COMMAND secret=PRIVATE_KEY. Rewrite the input to match the schema.", Reason: "tool_argument_correction_exhausted"},
 	} {
 		code, message := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
 		if code != "floret_tool_argument_correction_exhausted" || !strings.Contains(message, "Rejected calls did not execute") {

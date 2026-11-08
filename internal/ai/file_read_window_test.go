@@ -28,7 +28,7 @@ func TestFileReadWindowLargeFileAndFinalModelPages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "read", ToolName: "read_file", Status: toolResultStatusSuccess, Data: page})
+		result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "read", ToolName: "file_read", Status: toolResultStatusSuccess, Data: page})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestFileReadToolsAvailableWithReadOnlySessionCaps(t *testing.T) {
 	meta := testSendTurnMeta()
 	meta.CanWrite, meta.CanExecute = false, false
 	for _, mode := range []FlowerPermissionType{FlowerPermissionReadonly, FlowerPermissionApprovalRequired, FlowerPermissionFullAccess} {
-		for name, args := range map[string]map[string]any{"read_file": {"path": "note.txt"}, "read_files": {"paths": []string{"note.txt"}}, "find": {"root": ".", "name": "*.txt"}} {
+		for name, args := range map[string]map[string]any{"file_read": {"path": "note.txt"}, "file_read_many": {"paths": []string{"note.txt"}}, "path_find": {"root": ".", "name": "*.txt"}} {
 			t.Run(string(mode)+"/"+name, func(t *testing.T) {
 				defs := newPermissionToolFilter(true).FilterTools(mode, builtInToolDefinitions())
 				snapshot := buildPermissionSnapshot(mode, defs, nil)
@@ -160,7 +160,7 @@ func TestFileReadBatchCompleteFinalModelResults(t *testing.T) {
 		if len(batch.Files) == 0 {
 			t.Fatal("batch did not progress")
 		}
-		result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "batch", ToolName: "read_files", Status: toolResultStatusSuccess, Data: batch})
+		result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "batch", ToolName: "file_read_many", Status: toolResultStatusSuccess, Data: batch})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -198,7 +198,7 @@ func TestFileFindBoundedModelResultsAndPatterns(t *testing.T) {
 	if !out.Truncated || out.Stats["limit_reason"] != "max_output_bytes" {
 		t.Fatalf("missing output limit: %+v", out.Stats)
 	}
-	result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "find", ToolName: "find", Status: toolResultStatusSuccess, Data: out})
+	result, err := floretToolResultFromFlower(r, ToolResult{ToolID: "path_find", ToolName: "path_find", Status: toolResultStatusSuccess, Data: out})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestFileReadScopeSymlinkAndUnknownAuthorization(t *testing.T) {
 	if err != nil || batch.Files[0].Result == nil || batch.Files[1].Result != nil || batch.Files[1].Error == "" {
 		t.Fatalf("batch bypassed scope: %+v %v", batch, err)
 	}
-	for _, name := range []string{"read_file", "read_files", "find"} {
+	for _, name := range []string{"file_read", "file_read_many", "path_find"} {
 		if _, err := r.execTool(t.Context(), testSendTurnMeta(), "no-proof", name, map[string]any{"path": "inside.txt"}); err == nil {
 			t.Fatalf("%s bypassed authorization snapshot", name)
 		}

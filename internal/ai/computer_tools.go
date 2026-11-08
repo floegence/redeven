@@ -13,11 +13,11 @@ var computerFrameResourcePattern = regexp.MustCompile(`^computer://[A-Za-z0-9_-]
 
 func isComputerUseToolName(name string) bool {
 	name = strings.TrimSpace(name)
-	return strings.HasPrefix(name, "computer.") || strings.HasPrefix(name, "browser.")
+	return strings.HasPrefix(name, "computer_") || strings.HasPrefix(name, "browser_")
 }
 
 func builtInComputerToolDefinitions() []ToolDef {
-	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Target ID returned by computer.select_target; omit to use this thread's saved binding. Selection survives later turns and script context_reset. A candidate_ref is not a target ID."}}
+	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Target ID returned by computer_select_target; omit to use this thread's saved binding. Selection survives later turns and script context_reset. A candidate_ref is not a target ID."}}
 	schema := func(properties map[string]any, required []string) json.RawMessage {
 		properties["description"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "User-facing action and target; omit secrets."}
 		if !slices.Contains(required, "description") {
@@ -36,23 +36,23 @@ func builtInComputerToolDefinitions() []ToolDef {
 		return schema(out, required), required
 	}
 	defs := []ToolDef{
-		{Name: "computer.targets", Description: "Discover browser profiles, tabs and application windows. candidates and current_target_id are observed resource facts; candidate_ref values are short-lived references for computer.select_target.", InputSchema: schema(map[string]any{"browser_source": map[string]any{"type": "string", "enum": []string{"auto", "system", "managed"}, "description": "Resource source to inspect."}}, []string{}), Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec("computer.targets")},
-		{Name: "computer.select_target", Description: "Select a computer.targets candidate_ref. New-tab candidates create background tabs. Call this alone and wait for its result before computer.exec.", InputSchema: schema(map[string]any{"candidate_ref": map[string]any{"type": "string", "minLength": 1, "maxLength": 100}}, []string{"candidate_ref"}), Mutating: true, RequiresApproval: true, Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation}, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec("computer.select_target")},
+		{Name: "computer_list_targets", Description: "Discover browser profiles, tabs and application windows. candidates and current_target_id are observed resource facts; candidate_ref values are short-lived references for computer_select_target.", InputSchema: schema(map[string]any{"browser_source": map[string]any{"type": "string", "enum": []string{"auto", "system", "managed"}, "description": "Resource source to inspect."}}, []string{}), Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec("computer_list_targets")},
+		{Name: "computer_select_target", Description: "Select a computer_list_targets candidate_ref. New-tab candidates create background tabs. Call this alone and wait for its result before computer_exec.", InputSchema: schema(map[string]any{"candidate_ref": map[string]any{"type": "string", "minLength": 1, "maxLength": 100}}, []string{"candidate_ref"}), Mutating: true, RequiresApproval: true, Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation}, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec("computer_select_target")},
 	}
 	add := func(name, description string, properties map[string]any, required []string, mutating bool, capabilities []ToolCapabilityClass) {
 		input, _ := withTarget(properties, required...)
 		defs = append(defs, ToolDef{Name: name, Description: description, InputSchema: input, Mutating: mutating, RequiresApproval: mutating, Visibility: ToolVisibilityStandard, Capabilities: capabilities, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec(name)})
 	}
-	add("computer.observe", "Read the semantic accessibility tree; root_ref selects a subtree. screenshot adds an image. Node refs expire after navigation, removal or user takeover.", map[string]any{"root_ref": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "screenshot": map[string]any{"type": "boolean"}}, nil, false, []ToolCapabilityClass{ToolCapabilityReadonlyLocal})
-	add("computer.exec", computerScriptDocumentation, map[string]any{"code": map[string]any{"type": "string", "minLength": 1, "maxLength": 65536}}, []string{"code", "description"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation, ToolCapabilityOpenWorld})
-	add("computer.screenshot", "Capture the selected target viewport.", map[string]any{}, nil, false, []ToolCapabilityClass{ToolCapabilityReadonlyLocal})
-	add("computer.click", "Click using browser CSS viewport pixels or native target coordinates.", map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, []string{"x", "y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
-	add("computer.double_click", "Double click using browser CSS viewport pixels or native target coordinates.", map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, []string{"x", "y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
-	add("computer.type", "Type text into the focused target element.", map[string]any{"text": map[string]any{"type": "string", "maxLength": 20000}}, []string{"text"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
-	add("computer.key", "Press a character or named key joined with Alt, Control, Meta or Shift. Examples: Enter, ArrowDown, Meta+=, Shift+Tab. Physical codes such as Equal are not key names.", map[string]any{"key": map[string]any{"type": "string", "minLength": 1, "maxLength": 80}}, []string{"key"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
-	add("computer.drag", "Drag between browser CSS viewport points or native target coordinates.", map[string]any{"from_x": map[string]any{"type": "number"}, "from_y": map[string]any{"type": "number"}, "to_x": map[string]any{"type": "number"}, "to_y": map[string]any{"type": "number"}, "duration_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 5000}}, []string{"from_x", "from_y", "to_x", "to_y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
-	add("computer.scroll", "Scroll by viewport pixels (positive down/right). Optional x/y selects a region; otherwise uses the default position.", map[string]any{"x": map[string]any{"type": "number", "minimum": 0}, "y": map[string]any{"type": "number", "minimum": 0}, "delta_x": map[string]any{"type": "number"}, "delta_y": map[string]any{"type": "number"}}, []string{"delta_y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
-	add("computer.wait", "Delay for milliseconds (default 0, no extra delay), then return a fresh screenshot. This is not a UI-settled condition; use locator.waitFor for conditions.", map[string]any{"milliseconds": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}}, []string{}, false, []ToolCapabilityClass{ToolCapabilityInteraction})
+	add("computer_observe", "Read the semantic accessibility tree; root_ref selects a subtree. screenshot adds an image. Node refs expire after navigation, removal or user takeover.", map[string]any{"root_ref": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "screenshot": map[string]any{"type": "boolean"}}, nil, false, []ToolCapabilityClass{ToolCapabilityReadonlyLocal})
+	add("computer_exec", computerScriptDocumentation, map[string]any{"code": map[string]any{"type": "string", "minLength": 1, "maxLength": 65536}}, []string{"code", "description"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation, ToolCapabilityOpenWorld})
+	add("computer_capture_screenshot", "Capture the selected target viewport.", map[string]any{}, nil, false, []ToolCapabilityClass{ToolCapabilityReadonlyLocal})
+	add("computer_click", "Click using browser CSS viewport pixels or native target coordinates.", map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, []string{"x", "y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
+	add("computer_double_click", "Double click using browser CSS viewport pixels or native target coordinates.", map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, []string{"x", "y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
+	add("computer_type_text", "Type text into the focused target element.", map[string]any{"text": map[string]any{"type": "string", "maxLength": 20000}}, []string{"text"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
+	add("computer_press_key", "Press a character or named key joined with Alt, Control, Meta or Shift. Examples: Enter, ArrowDown, Meta+=, Shift+Tab. Physical codes such as Equal are not key names.", map[string]any{"key": map[string]any{"type": "string", "minLength": 1, "maxLength": 80}}, []string{"key"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
+	add("computer_drag", "Drag between browser CSS viewport points or native target coordinates.", map[string]any{"from_x": map[string]any{"type": "number"}, "from_y": map[string]any{"type": "number"}, "to_x": map[string]any{"type": "number"}, "to_y": map[string]any{"type": "number"}, "duration_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 5000}}, []string{"from_x", "from_y", "to_x", "to_y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
+	add("computer_scroll", "Scroll by viewport pixels (positive down/right). Optional x/y selects a region; otherwise uses the default position.", map[string]any{"x": map[string]any{"type": "number", "minimum": 0}, "y": map[string]any{"type": "number", "minimum": 0}, "delta_x": map[string]any{"type": "number"}, "delta_y": map[string]any{"type": "number"}}, []string{"delta_y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
+	add("computer_wait", "Delay for milliseconds (default 0, no extra delay), then return a fresh screenshot. This is not a UI-settled condition; use locator.waitFor for conditions.", map[string]any{"milliseconds": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}}, []string{}, false, []ToolCapabilityClass{ToolCapabilityInteraction})
 	navOptions := func() map[string]any {
 		return map[string]any{
 			"wait_until": map[string]any{"type": "string", "enum": []string{"commit", "domcontentloaded", "load"}, "description": "Lifecycle milestone, not application readiness; default load."},
@@ -61,11 +61,11 @@ func builtInComputerToolDefinitions() []ToolDef {
 	}
 	nav := navOptions()
 	nav["url"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 4096}
-	add("browser.navigate", "Navigate to an absolute browser URL, including file://, data:, about: and extension/internal pages. Returns an acknowledged lifecycle receipt.", nav, []string{"url"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
-	add("browser.back", "Navigate the selected browser target one history entry back. Lifecycle timeout returns data.", navOptions(), nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
-	add("browser.reload", "Reload the selected browser target. Lifecycle timeout returns data.", navOptions(), nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
+	add("browser_navigate", "Navigate to an absolute browser URL, including file://, data:, about: and extension/internal pages. Returns an acknowledged lifecycle receipt.", nav, []string{"url"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
+	add("browser_go_back", "Navigate the selected browser target one history entry back. Lifecycle timeout returns data.", navOptions(), nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
+	add("browser_reload", "Reload the selected browser target. Lifecycle timeout returns data.", navOptions(), nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
 	for i := range defs {
-		if slices.Contains([]string{"computer.click", "computer.double_click", "computer.drag", "computer.scroll"}, defs[i].Name) {
+		if slices.Contains([]string{"computer_click", "computer_double_click", "computer_drag", "computer_scroll"}, defs[i].Name) {
 			var schema map[string]any
 			_ = json.Unmarshal(defs[i].InputSchema, &schema)
 			properties := schema["properties"].(map[string]any)
@@ -77,16 +77,16 @@ func builtInComputerToolDefinitions() []ToolDef {
 	}
 	for i := range defs {
 		switch defs[i].Name {
-		case "computer.targets":
+		case "computer_list_targets":
 			defs[i].Description += " Set application to an application name or bundle ID to discover installed native applications, including those not running; omit browser_source for this query."
 			var input map[string]any
 			_ = json.Unmarshal(defs[i].InputSchema, &input)
 			input["properties"].(map[string]any)["application"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 120, "description": "Native application name or bundle ID."}
 			defs[i].InputSchema = toolSchemaRaw(input)
-		case "computer.select_target":
+		case "computer_select_target":
 			defs[i].Description += " Application candidates open or restore the discovered application. Accessible windows are returned as candidates; opening an application does not select a window."
 			defs[i].Description += " Selection consumes candidate_ref and returns a target_id; candidate_ref is not a target ID."
-		case "computer.observe":
+		case "computer_observe":
 			defs[i].Description += " truncated or children_truncated means omitted content, not empty rows or virtualization. root_ref scopes the returned tree."
 		}
 	}

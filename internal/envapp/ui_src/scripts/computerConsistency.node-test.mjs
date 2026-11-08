@@ -9,7 +9,7 @@ async function fixture(run){
   const tab=await browser.newPage();await tab.route('https://sample.test/**',route=>route.fulfill({contentType:'text/html',body:'<title>Resource A</title><main>Resource A facts</main><button>Ready</button><iframe srcdoc="<p>Child</p>"></iframe>'}));await tab.goto('https://sample.test/a');
   const session=await tab.context().newCDPSession(tab);controller=new BrowserComputerController(session);await controller.initialize();
   const call=(tool_name,args={})=>controller.execute({tool_name,args,full_access:true,script_operation:true});
-  const initial=await call('computer.observe');assert.ok(initial.result.observation,JSON.stringify(initial));await run({tab,session,controller,call,initial});
+  const initial=await call('computer_observe');assert.ok(initial.result.observation,JSON.stringify(initial));await run({tab,session,controller,call,initial});
  }finally{if(controller){await controller.page.releasePage();controller.close();}await browser.close();}
 }
 test('text owns contemporaneous source metadata across a same-document route change',async()=>fixture(async({tab,controller,call})=>{
@@ -26,7 +26,7 @@ test('explicit wait includes final publication in its original deadline',async()
 test('detached scan frame reports scoped lifecycle facts and protocol method',async()=>fixture(async({tab,session,call})=>{
  const {frameTree}=await session.send('Page.getFrameTree');const child=frameTree.childFrames[0].frame.id;const send=session.send.bind(session);let context,removed=false;
  session.send=async(method,params)=>{if(method==='Runtime.evaluate'&&params.expression.includes('__flowerPrivacyObserver.secretChanged()')&&params.contextId===context&&!removed){removed=true;await tab.evaluate(()=>document.querySelector('iframe').remove());}const result=await send(method,params);if(method==='Page.createIsolatedWorld'&&params.frameId===child)context=result.executionContextId;return result;};
- const response=await call('computer.observe');assert.equal(response.result.observation_invalidated,true,JSON.stringify(response));assert.equal(response.result.invalidation.frame_id,child);assert.equal(response.result.invalidation.scope,'safety');assert.equal(response.result.invalidation.event,'Page.frameDetached');assert.equal(response.result.diagnostic.method,'Runtime.evaluate');
+ const response=await call('computer_observe');assert.equal(response.result.observation_invalidated,true,JSON.stringify(response));assert.equal(response.result.invalidation.frame_id,child);assert.equal(response.result.invalidation.scope,'safety');assert.equal(response.result.invalidation.event,'Page.frameDetached');assert.equal(response.result.diagnostic.method,'Runtime.evaluate');
 }));
 test('unrelated frame churn cannot reclassify an unknown protocol failure',async()=>fixture(async({tab,session,call})=>{
  const send=session.send.bind(session);let changed=false;
@@ -46,12 +46,12 @@ test('a frame detached before its safety read retains the enumerated document id
   }
   return read(frame,...args);
  };
- const response=await call('computer.observe');
+ const response=await call('computer_observe');
  assert.equal(response.result.reason,'document_changed',JSON.stringify(response));
  assert.equal(response.result.invalidation.frame_id,removed);
  assert.equal(response.result.invalidation.event,'Page.frameDetached');
  assert.equal(response.result.invalidation.scope,'safety');assert.equal(dispatched,false);
- assert.equal((await call('computer.observe')).error,undefined);
+ assert.equal((await call('computer_observe')).error,undefined);
 }));
 
 test('a lifecycle change during frame enumeration cannot install stale documents',async()=>fixture(async({tab,session,controller,call})=>{
@@ -61,11 +61,11 @@ test('a lifecycle change during frame enumeration cannot install stale documents
   if(method==='Page.getFrameTree'&&!removed){removed=true;const detached=new Promise(resolve=>session.once('Page.frameDetached',resolve));await tab.evaluate(()=>document.querySelector('iframe').remove());await detached;}
   return result;
  };
- const response=await call('computer.observe');
+ const response=await call('computer_observe');
  assert.equal(response.result.reason,'document_changed',JSON.stringify(response));
  assert.equal(response.result.invalidation.event,'document_inventory');
  assert.equal(response.result.observation,undefined);
- assert.equal((await call('computer.observe')).error,undefined);
+ assert.equal((await call('computer_observe')).error,undefined);
  assert.equal([...controller.page.observedFrames.values()].some(record=>record.frame.parentId),false);
 }));
 
@@ -82,5 +82,5 @@ test('scoped text distinguishes page-wide safety loss from preserved content ide
 
 test('AX content cannot acquire metadata from a later route',async()=>fixture(async({tab,controller,call})=>{
  const read=controller.page.observe.bind(controller.page);controller.page.observe=async(...args)=>{const result=await read(...args);await tab.evaluate(()=>{history.pushState({},'','/b');document.title='Resource B';});return result;};
- const response=await call('computer.observe');assert.equal(response.result.observation_invalidated,true,JSON.stringify(response));assert.equal(response.result.observation,undefined);assert.equal(response.result.invalidation.event,'Page.navigatedWithinDocument');
+ const response=await call('computer_observe');assert.equal(response.result.observation_invalidated,true,JSON.stringify(response));assert.equal(response.result.observation,undefined);assert.equal(response.result.invalidation.event,'Page.navigatedWithinDocument');
 }));

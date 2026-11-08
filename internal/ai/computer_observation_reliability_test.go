@@ -20,7 +20,7 @@ func TestComputerObservationRecoveryFacts(t *testing.T) {
 				if tc.stale {
 					return computerBrowserStaleFixture(c)
 				}
-				if c.ToolName == "computer.observe" {
+				if c.ToolName == "computer_observe" {
 					return TargetToolResult{Result: map[string]any{"observation": semanticTestTree()}}, nil
 				}
 				return TargetToolResult{Result: map[string]any{"action_executed": computerCallMutates(c), "state": "timeout", "requested_state": "enabled"}}, nil
@@ -59,7 +59,7 @@ func TestComputerObservationIdentityWithoutTitle(t *testing.T) {
 }
 
 func TestComputerObservationFailureReason(t *testing.T) {
-	call := TargetToolCall{TargetID: "browser-test", ToolName: "computer.screenshot"}
+	call := TargetToolCall{TargetID: "browser-test", ToolName: "computer_capture_screenshot"}
 	result, err, valid := computerBrowserFailure(call, false, "TARGET_OBSERVATION_UNAVAILABLE", map[string]any{"action_executed": false, "observation_stage": "capture", "reason": "viewport_unstable"}, "local")
 	if !valid || err == nil || result.Result.(map[string]any)["reason"] != "viewport_unstable" {
 		t.Fatalf("lost reason: %+v %v", result, err)
@@ -75,7 +75,7 @@ func TestComputerObservationFailureReason(t *testing.T) {
 func TestComputerObservationScreenshotClearsRecovery(t *testing.T) {
 	body, attachment := computerFrameFixture(t)
 	host, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
-		if c.ToolName == "computer.screenshot" {
+		if c.ToolName == "computer_capture_screenshot" {
 			attachment.ResourceRef = "computer://" + c.TargetID + "/" + attachment.SHA256
 			return TargetToolResult{TargetID: c.TargetID, frameBytes: body, Attachments: []TargetToolAttachment{attachment}, Result: map[string]any{"frame_geometry": map[string]any{"frame": attachment.ResourceRef, "document_id": "d:1"}}}, nil
 		}

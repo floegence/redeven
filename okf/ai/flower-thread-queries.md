@@ -8,7 +8,7 @@ reviewed_at: "2026-10-22"
 # Summary
 
 Flower exposes two read-only tools for finding another readable conversation
-and reading its content: `threads.query` and `threads.read`. The tool contract
+and reading its content: `thread_query` and `thread_read`. The tool contract
 is intentionally smaller than Floret's published general query API.
 `threads.aggregate` is not registered or dispatched.
 
@@ -16,13 +16,13 @@ is intentionally smaller than Floret's published general query API.
 
 ## Find, browse, read
 
-- `threads.query` defaults to `object: threads`, listing recently updated
+- `thread_query` defaults to `object: threads`, listing recently updated
   conversations first. Optional `title` is one literal, case-insensitive title
   fragment. Optional `thread_id` selects one exact conversation.
 - To browse `messages` or `tool_calls`, provide one `thread_id`. Records are
   chronological; there are no model-controlled sort keys or detailed filters.
 - `limit` defaults to 50, with a maximum of 200. Continue with `next_cursor` and
-  unchanged input. Pass a record's `ref` to `threads.read` for complete content,
+  unchanged input. Pass a record's `ref` to `thread_read` for complete content,
   following its cursor until no continuation remains.
 - Nested `filter`, message-body matching, argument/result matching, keywords,
   phrases, time/role/tool/status predicates, grouping and aggregation are not

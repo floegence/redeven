@@ -27,7 +27,7 @@ func TestComputerCoreExampleEmitsObservationWithoutLoggingRawNodes(t *testing.T)
 		calls := 0
 		rt, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
 			calls++
-			if inner.ToolName != "computer.observe" {
+			if inner.ToolName != "computer_observe" {
 				t.Fatalf("example dispatched %s", inner.ToolName)
 			}
 			return TargetToolResult{Result: map[string]any{"observation": map[string]any{"semantic_schema_version": 2, "document_id": "example:1", "nodes": nodes, "total": len(nodes), "truncated": false}}}, nil
@@ -41,7 +41,7 @@ func TestComputerCoreExampleEmitsObservationWithoutLoggingRawNodes(t *testing.T)
 		if calls != 1 || observation["encoding"] != "tree_text" || !strings.Contains(anyToString(observation["tree"]), "source") || len(toAnySlice(payload["logs"])) != 0 {
 			t.Fatalf("example did not emit bounded observation: calls=%d payload=%#v", calls, payload)
 		}
-		published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: payload})
+		published, err := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: payload})
 		if err != nil || !strings.Contains(published.Text, "tree_text") || !strings.Contains(published.Text, "source") {
 			t.Fatalf("model lost example output: %v", err)
 		}

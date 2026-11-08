@@ -70,7 +70,7 @@ try:
     helper = spawn_helper()
     deadline = time.monotonic() + 10
     while True:
-        inventory = action(helper, 'computer.targets')['payload']['targets']
+        inventory = action(helper, 'computer_list_targets')['payload']['targets']
         targets = [t for t in inventory if t.get('app_bundle_id') == 'dev.floegence.redeven.capture-fixture' and t['display_name'].endswith(' — Flower Background Capture')]
         if targets or time.monotonic() >= deadline: break
         # WindowServer and AX publish a just-launched window independently.
@@ -79,7 +79,7 @@ try:
     assert len(targets) == 1, {'error': 'capture window not uniquely discovered', 'fixture': before,
                             'fixture_targets': [t for t in inventory if t.get('app_bundle_id') == 'dev.floegence.redeven.capture-fixture']}
     target = targets[0]['id']
-    observed = action(helper, 'computer.observe', target)
+    observed = action(helper, 'computer_observe', target)
     assert observed['type'] == 'result' and observed['safety']['level'] == 'routine', observed
     assert any(n.get('value') == 'Background target content' or n.get('name') == 'Background target content' for n in observed['payload']['observation']['nodes'])
     assert 'screenshot_base64' not in observed['payload'], 'AX observation unexpectedly captured pixels'
@@ -94,7 +94,7 @@ try:
         if node.get('parent_ref'): assert node['ref'] in nodes[node['parent_ref']]['child_refs']
         for child in node['child_refs']: assert nodes[child]['parent_ref'] == node['ref']
 
-    captured = action(helper, 'computer.screenshot', target)
+    captured = action(helper, 'computer_capture_screenshot', target)
     assert captured['type'] == 'result' and captured['safety']['level'] == 'routine', {k:v for k,v in captured.items() if k != 'payload'}
     payload = captured['payload']
     assert payload['execution_mode'] == 'background' and not payload['background_interference']
@@ -105,7 +105,7 @@ try:
     assert pixels['width'] == payload['width'] and pixels['height'] == payload['height']
     assert all(abs(actual-expected) < 0.05 for actual, expected in zip(pixels['center_rgb'], [0.2, 0.6, 0.3])), pixels
     excluded = spawn_helper({**os.environ, 'REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID': str(fixture.pid)})
-    assert not any(t.get('app_bundle_id') == 'dev.floegence.redeven.capture-fixture' for t in action(excluded, 'computer.targets')['payload']['targets']), 'excluded owner appeared in target inventory'
+    assert not any(t.get('app_bundle_id') == 'dev.floegence.redeven.capture-fixture' for t in action(excluded, 'computer_list_targets')['payload']['targets']), 'excluded owner appeared in target inventory'
     fixture.stdin.write(b'status\n'); fixture.stdin.flush()
     after = receive(fixture)
     assert after['covered'] and after['frontmost_unchanged'] and after['pointer_unchanged'], after

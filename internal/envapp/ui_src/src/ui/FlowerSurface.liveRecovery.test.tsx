@@ -332,7 +332,7 @@ describe('Flower workspace synchronization recovery', () => {
 
   it('keeps the same workspace recovery entry visible in Companion and an approval surface', async () => {
     const waiting = thread({ thread_id: 'thread-sync-approval', status: 'waiting_approval', approval_actions: [{
-      action_id: 'approval-sync', origin: 'main_tool', run_id: 'run-sync', tool_id: 'tool-sync', tool_name: 'terminal.exec',
+      action_id: 'approval-sync', origin: 'main_tool', run_id: 'run-sync', tool_id: 'tool-sync', tool_name: 'terminal_exec',
       state: 'requested', status: 'pending', requested_at_ms: 20_000, can_approve: true,
       surface_role: 'primary_action', summary: { label: 'Review deployment', command: 'printf approval' },
     }] });

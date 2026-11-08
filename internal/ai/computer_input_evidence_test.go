@@ -16,7 +16,7 @@ import (
 
 func computerEvidenceFixture() (flruntime.ThreadView, flruntime.ThreadInteraction) {
 	source := flruntime.ThreadItem{ID: "result", TurnID: "turn", RunID: "run", Kind: flruntime.ThreadItemTool,
-		Activity: &observation.ActivityItem{ToolID: "blocked", ToolName: "computer.screenshot", Status: observation.ActivityStatusError, Presentation: &fltools.ActivityPresentation{
+		Activity: &observation.ActivityItem{ToolID: "blocked", ToolName: "computer_capture_screenshot", Status: observation.ActivityStatusError, Presentation: &fltools.ActivityPresentation{
 			Renderer: fltools.ActivityRendererStructured, Label: "Capture the page",
 			Chips:      []fltools.ActivityChip{{Kind: "computer_assistance", Value: "login"}},
 			TargetRefs: []fltools.ActivityTargetRef{{Kind: "computer_control", ResourceRef: "target"}, {Kind: "computer_target", ResourceRef: "target"}},
@@ -49,7 +49,7 @@ func TestComputerInputEvidenceUsesOneCanonicalSource(t *testing.T) {
 			case "stale":
 				next := view.Items[0]
 				next.ID = "new"
-				next.Activity = &observation.ActivityItem{ToolID: "next", ToolName: "computer.observe", Presentation: &fltools.ActivityPresentation{TargetRefs: []fltools.ActivityTargetRef{{Kind: "computer_target", ResourceRef: "target"}}}}
+				next.Activity = &observation.ActivityItem{ToolID: "next", ToolName: "computer_observe", Presentation: &fltools.ActivityPresentation{TargetRefs: []fltools.ActivityTargetRef{{Kind: "computer_target", ResourceRef: "target"}}}}
 				view.Items = append(view.Items, next)
 			case "words-only":
 				interaction.Input.EvidenceRefs = nil
@@ -82,7 +82,7 @@ func TestDesktopSetupEvidenceRequiresCurrentExactBlockedCall(t *testing.T) {
 			case "duplicate":
 				presentation.TargetRefs = append(presentation.TargetRefs, presentation.TargetRefs[0])
 			case "stale":
-				view.Items = append(view.Items, flruntime.ThreadItem{TurnID: interaction.TurnID, Activity: &observation.ActivityItem{ToolName: "computer.observe", Presentation: &fltools.ActivityPresentation{TargetRefs: []fltools.ActivityTargetRef{{Kind: "computer_target", ResourceRef: "xvfb-main"}}}}})
+				view.Items = append(view.Items, flruntime.ThreadItem{TurnID: interaction.TurnID, Activity: &observation.ActivityItem{ToolName: "computer_observe", Presentation: &fltools.ActivityPresentation{TargetRefs: []fltools.ActivityTargetRef{{Kind: "computer_target", ResourceRef: "xvfb-main"}}}}})
 			case "wrong-turn":
 				view.Items[0].TurnID = "other"
 			}
@@ -128,7 +128,7 @@ func TestFlowerComputerEvidenceReadsOnlyBoundedSafetyFacts(t *testing.T) {
 			full, interaction := computerEvidenceFixture()
 			blocked := full.Items[0]
 			later := flruntime.ThreadItem{ID: "later", TurnID: interaction.TurnID, Kind: flruntime.ThreadItemTool,
-				Activity: &observation.ActivityItem{ToolName: "computer.observe", Presentation: &fltools.ActivityPresentation{}}}
+				Activity: &observation.ActivityItem{ToolName: "computer_observe", Presentation: &fltools.ActivityPresentation{}}}
 			if variant == "superseded" {
 				later.Activity.Presentation.TargetRefs = []fltools.ActivityTargetRef{{Kind: "computer_target", ResourceRef: "target"}}
 			}

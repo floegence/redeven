@@ -33,15 +33,15 @@ func (r mappedTargetResolver) ResolveTarget(_ context.Context, alias string) (Ta
 }
 
 func TestComputerUseToolsAreTargetScopedAndRoute(t *testing.T) {
-	for _, name := range []string{"computer.screenshot", "computer.click", "computer.type", "browser.navigate", "browser.reload"} {
+	for _, name := range []string{"computer_capture_screenshot", "computer_click", "computer_type_text", "browser_navigate", "browser_reload"} {
 		if !toolRequiresTarget(name) || !isComputerUseTool(name) {
 			t.Fatalf("%s should be target scoped", name)
 		}
 	}
-	if got := requiredTargetCapabilities("computer.screenshot"); len(got) != 1 || got[0] != "observe" {
+	if got := requiredTargetCapabilities("computer_capture_screenshot"); len(got) != 1 || got[0] != "observe" {
 		t.Fatalf("unexpected screenshot capabilities: %#v", got)
 	}
-	if got := requiredTargetCapabilities("browser.navigate"); len(got) != 1 || got[0] != "interaction" {
+	if got := requiredTargetCapabilities("browser_navigate"); len(got) != 1 || got[0] != "interaction" {
 		t.Fatalf("unexpected browser capabilities: %#v", got)
 	}
 	defs := builtInToolDefinitions()
@@ -49,7 +49,7 @@ func TestComputerUseToolsAreTargetScopedAndRoute(t *testing.T) {
 	for _, def := range defs {
 		seen[def.Name] = true
 	}
-	for _, name := range []string{"computer.screenshot", "computer.click", "browser.navigate"} {
+	for _, name := range []string{"computer_capture_screenshot", "computer_click", "browser_navigate"} {
 		if !seen[name] {
 			t.Fatalf("missing builtin definition %s", name)
 		}
@@ -64,7 +64,7 @@ func TestComputerUseUsesCurrentTargetWhenModelOmitsTarget(t *testing.T) {
 		targetResolver:     staticTargetResolver{target: TargetDescriptor{ID: "browser-main", DisplayName: "Managed Browser", Ready: true}},
 	}
 	bindTargetTestRun(t, run)
-	result, err := run.execTargetTool(context.Background(), "call-1", "computer.screenshot", map[string]any{})
+	result, err := run.execTargetTool(context.Background(), "call-1", "computer_capture_screenshot", map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,13 +110,13 @@ func TestBrowserToolsNeverExecuteAgainstDesktopTarget(t *testing.T) {
 		},
 	}
 	bindTargetTestRun(t, run)
-	if _, err := run.execTargetTool(context.Background(), "call-desktop", "browser.navigate", map[string]any{"target": "desktop-main", "url": "https://example.test"}); err == nil {
+	if _, err := run.execTargetTool(context.Background(), "call-desktop", "browser_navigate", map[string]any{"target": "desktop-main", "url": "https://example.test"}); err == nil {
 		t.Fatal("browser operation silently switched away from the selected desktop")
 	}
 	if len(executor.calls) != 0 {
 		t.Fatalf("rejected desktop route dispatched an action: %#v", executor.calls)
 	}
-	if _, err := run.execTargetTool(context.Background(), "call-browser", "browser.navigate", map[string]any{"target": "browser-main", "url": "https://example.test"}); err != nil {
+	if _, err := run.execTargetTool(context.Background(), "call-browser", "browser_navigate", map[string]any{"target": "browser-main", "url": "https://example.test"}); err != nil {
 		t.Fatalf("browser route failed: %T %v", err, err)
 	}
 	if len(executor.calls) != 1 || executor.calls[0].TargetID != "browser-main" {
@@ -214,7 +214,7 @@ func TestTargetToolRequiresCanonicalIdentityBeforeResolution(t *testing.T) {
 	executor := &recordingTargetExecutor{}
 	r := &run{id: "legacy-run", threadID: "legacy-thread", turnID: "legacy-turn", targetToolExecutor: executor,
 		targetResolver: staticTargetResolver{target: TargetDescriptor{ID: "target", Ready: true}}}
-	if _, err := r.execTargetTool(t.Context(), "call", "computer.screenshot", nil); err == nil {
+	if _, err := r.execTargetTool(t.Context(), "call", "computer_capture_screenshot", nil); err == nil {
 		t.Fatal("legacy fields authorized a target action")
 	}
 	if len(executor.calls) != 0 {

@@ -84,7 +84,7 @@ export class BrowserComputerController {
       await this.page.releasePage();
       return this.unknownEffect();
     }
-    if (request.script_operation === true && ['browser.navigate', 'browser.back', 'browser.reload'].includes(request.tool_name)
+    if (request.script_operation === true && ['browser_navigate', 'browser_go_back', 'browser_reload'].includes(request.tool_name)
       && !response.error && response.result?.observation_invalidated) {
       // Receipt-only publication still respects control changes during cleanup.
       // It carries no current-page content and needs no additional page scan.
@@ -162,24 +162,24 @@ export class BrowserComputerController {
     page.fullAccess = request.full_access === true;
     page.allowedOrigins = new Set(Array.isArray(request.allowed_origins) ? request.allowed_origins : []);
     page.allowedNavigationURLs = new Set(Array.isArray(request.allowed_navigation_urls) ? request.allowed_navigation_urls.map(redactedNavigationURL) : []);
-    if (page.fullAccess || (request.tool_name === 'browser.navigate' && page.allowsURL(args.url))) page.requiredURL = undefined;
+    if (page.fullAccess || (request.tool_name === 'browser_navigate' && page.allowsURL(args.url))) page.requiredURL = undefined;
     page.privateInput = privateInput;
     const initialEffects = page.effectCount;
-    const navigationReceipt=request.script_operation===true&&['browser.navigate','browser.back','browser.reload'].includes(request.tool_name);
+    const navigationReceipt=request.script_operation===true&&['browser_navigate','browser_go_back','browser_reload'].includes(request.tool_name);
     const timingOnly=request.script_operation===true&&request.tool_name==='computer.action'&&args.action==='input_sequence'&&Array.isArray(args.events)&&args.events.every(event=>event.type==='wait');
     page.uncertainEffect = false;
     page.effectStage = undefined;
-    const dispatched = () => this.actionCompleted || request.tool_name.startsWith('browser.') && page.effectCount > initialEffects;
+    const dispatched = () => this.actionCompleted || ['browser_navigate', 'browser_go_back', 'browser_reload'].includes(request.tool_name) && page.effectCount > initialEffects;
     try {
-      const navigationOptions = ['browser.navigate','browser.back','browser.reload'].includes(request.tool_name) ? validateNavigationOptions(args) : undefined;
+      const navigationOptions = ['browser_navigate','browser_go_back','browser_reload'].includes(request.tool_name) ? validateNavigationOptions(args) : undefined;
       if (privateInput) {
-        if (!['computer.screenshot', 'computer.click', 'computer.key', 'computer.type', 'computer.scroll'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
+        if (!['computer_capture_screenshot', 'computer_click', 'computer_press_key', 'computer_type_text', 'computer_scroll'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
       } else {
         if (request.recovery_observation) {
-          if (!['computer.observe', 'computer.screenshot'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
+          if (!['computer_observe', 'computer_capture_screenshot'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
           page.handback();
         }
-        if (request.tool_name === 'computer.select_target' && !page.stopped) {
+        if (request.tool_name === 'computer_select_target' && !page.stopped) {
           page.openedPages = [];
           return { result: { selected: true, action_executed: false },
             safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
@@ -195,16 +195,16 @@ export class BrowserComputerController {
         if(timingOnly)validateBrowserAction(args,false);
         if(!navigationReceipt&&!timingOnly){
           await this.readObservation(() => page.beginObservation(), 'frame_inventory');
-          const before = await this.readObservation(() => page.safety({ authorizedNavigation: request.tool_name === 'browser.navigate' && page.allowsURL(args.url) }), 'safety_scan');
+          const before = await this.readObservation(() => page.safety({ authorizedNavigation: request.tool_name === 'browser_navigate' && page.allowsURL(args.url) }), 'safety_scan');
           if (before.level === 'takeover') return this.pause(before, false);
         }
       }
       if (!privateInput && page.openedPages.length) return await this.targetChange(false);
       let result = {}, read;
       const tool = request.tool_name;
-      if (tool === 'computer.observe') read = async () => ({observation:await page.observe(args)});
-      else if (tool === 'computer.screenshot') { /* Capture only at the boundary below. */ }
-      else if (tool === 'computer.wait') {
+      if (tool === 'computer_observe') read = async () => ({observation:await page.observe(args)});
+      else if (tool === 'computer_capture_screenshot') { /* Capture only at the boundary below. */ }
+      else if (tool === 'computer_wait') {
         const milliseconds = args.milliseconds ?? 0;
         if (!Number.isInteger(milliseconds) || milliseconds < 0 || milliseconds > 30000) throw argumentFailure('milliseconds', 'integer_0_30000');
         await page.delay(milliseconds);
@@ -215,20 +215,20 @@ export class BrowserComputerController {
       } else if (tool === 'browser.read_download') {
         if (!page.readDownload) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
         result = await page.readDownload(args);
-      } else if (tool.startsWith('browser.')) {
+      } else if (['browser_navigate', 'browser_go_back', 'browser_reload'].includes(tool)) {
         let url, entryId;
-        if (tool === 'browser.navigate') url = args.url;
-        else if (tool === 'browser.back') {
+        if (tool === 'browser_navigate') url = args.url;
+        else if (tool === 'browser_go_back') {
           const history = await this.transport.send('Page.getNavigationHistory');
           const previous = history.entries[history.currentIndex - 1];
           if (!previous) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
           url = previous.url; entryId = previous.id;
-        } else if (tool === 'browser.reload') url = (await this.transport.send('Page.getFrameTree')).frameTree.frame.url;
+        } else if (tool === 'browser_reload') url = (await this.transport.send('Page.getFrameTree')).frameTree.frame.url;
         else throw new Error('INVALID_REQUEST');
         const parsed = navigationURL(url);
         if (!privateInput && !page.allowsURL(parsed.href)) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: false, required_navigation_url: redactedNavigationURL(parsed.href) } };
-        const command = tool === 'browser.back' ? 'Page.navigateToHistoryEntry' : tool === 'browser.reload' ? 'Page.reload' : 'Page.navigate';
-        result = await page.navigate(command, entryId !== undefined ? { entryId } : tool === 'browser.reload' ? {} : { url }, navigationOptions) || {};
+        const command = tool === 'browser_go_back' ? 'Page.navigateToHistoryEntry' : tool === 'browser_reload' ? 'Page.reload' : 'Page.navigate';
+        result = await page.navigate(command, entryId !== undefined ? { entryId } : tool === 'browser_reload' ? {} : { url }, navigationOptions) || {};
         this.actionCompleted = true;
         if (request.script_operation === true) {
           // Navigation has its own acknowledged effect and load boundary. A
@@ -241,7 +241,7 @@ export class BrowserComputerController {
         }
       } else {
         const operation = tool === 'computer.action' ? args : {
-          ...args, action: { 'computer.click': 'pointer_click', 'computer.double_click': 'double_click', 'computer.type': 'type', 'computer.key': 'key', 'computer.scroll': 'scroll', 'computer.drag': 'drag' }[tool],
+          ...args, action: { 'computer_click': 'pointer_click', 'computer_double_click': 'double_click', 'computer_type_text': 'type', 'computer_press_key': 'key', 'computer_scroll': 'scroll', 'computer_drag': 'drag' }[tool],
         };
         if (!operation.action) throw new Error('INVALID_REQUEST');
         validateBrowserAction(operation, privateInput);
@@ -263,14 +263,14 @@ export class BrowserComputerController {
           }
         }
       }
-      if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
+      if (privateInput) return tool === 'computer_capture_screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
       return await this.observeResult(request, read || (async () => result), dispatched());
     } catch (error) { return await this.operationFailure(error, request, initialEffects); }
   }
 
   async operationFailure(error, request, initialEffects) {
     const page = this.page, args = request.args || {};
-    const dispatched = () => this.actionCompleted || request.tool_name.startsWith('browser.') && page.effectCount > initialEffects;
+    const dispatched = () => this.actionCompleted || ['browser_navigate', 'browser_go_back', 'browser_reload'].includes(request.tool_name) && page.effectCount > initialEffects;
     const affected = () => page.effectCount > initialEffects;
     if (page.uncertainEffect) return this.unknownEffect();
     if (error.focusRejected) return { error: 'ELEMENT_NOT_ACTIONABLE', result: {
@@ -303,7 +303,7 @@ export class BrowserComputerController {
 
   async observeResult(request, read, effectExecuted = false, {metadata: includeMetadata = true} = {}) {
     const page = this.page, tool = request.tool_name, args = request.args || {};
-    const needsFrame = tool === 'computer.screenshot' || (tool === 'computer.observe' ? args.screenshot === true : request.script_operation !== true);
+    const needsFrame = tool === 'computer_capture_screenshot' || (tool === 'computer_observe' ? args.screenshot === true : request.script_operation !== true);
     const identity = page.observationIdentity(needsFrame ? undefined : args.root_ref || args.selector?.ref || args.selector?.root_ref);
     if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: effectExecuted, required_navigation_url: page.requiredURL, needs_observation: true } };
     if (page.openedPages.length) return await this.targetChange(effectExecuted);

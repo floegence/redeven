@@ -83,14 +83,14 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 							name, _ := tool["name"].(string)
 							names = append(names, name)
 							data, _ := json.Marshal(tool)
-							if name == "ask_user" {
+							if name == "user_ask" {
 								askBudget := 1650
 								if strict {
 									askBudget = 1950
 								}
-								t.Logf("ask_user compact_json_bytes=%d budget=%d", len(data), askBudget)
+								t.Logf("user_ask compact_json_bytes=%d budget=%d", len(data), askBudget)
 								if len(data) > askBudget {
-									t.Errorf("ask_user definition budget exceeded: %d > %d", len(data), askBudget)
+									t.Errorf("user_ask definition budget exceeded: %d > %d", len(data), askBudget)
 								}
 								assertCanonicalAskUserWireGuidance(t, tool["parameters"])
 							}
@@ -102,28 +102,28 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 						slices.Sort(names)
 						slices.Sort(sizes)
 						slices.Sort(computerNames)
-						required := []string{"read_file", "read_files", "find", "goal", "subagents", "ask_user", "attachment_read", "file_present", "image_read", "okf_index", "okf_open", "okf_search", "subagent_events", "threads_query", "threads_read", "web_fetch"}
+						required := []string{"file_read", "file_read_many", "path_find", "goal_manage", "subagent_manage", "user_ask", "attachment_read", "file_present", "image_read", "okf_get_index", "okf_open", "okf_search", "subagent_read_events", "thread_query", "thread_read", "web_fetch"}
 						if fixture.permission == config.AIPermissionFullAccess {
-							required = append(required, "use_skill", "attachment_materialize", "terminal_exec", "terminal_read", "terminal_write", "terminal_terminate", "file_write", "apply_patch")
+							required = append(required, "skill_use", "attachment_materialize", "terminal_exec", "terminal_read", "terminal_write", "terminal_terminate", "file_write", "file_apply_patch")
 						}
 						if fixture.canvas {
-							required = append(required, "tessiven_inspect", "tessiven_list", "tessiven_read", "tessiven_runtime_inspect", "tessiven_runtimes", "tessiven_schema", "tessiven_search", "tessiven_validate", "tessiven_versions")
+							required = append(required, "tessiven_inspect_resource", "tessiven_list_canvases", "tessiven_read_canvas", "tessiven_inspect_runtime", "tessiven_list_runtimes", "tessiven_read_schema", "tessiven_search_canvas", "tessiven_validate_canvas", "tessiven_list_versions")
 							if fixture.permission == config.AIPermissionFullAccess {
-								required = append(required, "tessiven_action", "tessiven_edit", "tessiven_runtime_action", "tessiven_save")
+								required = append(required, "tessiven_manage_instance", "tessiven_edit_canvas", "tessiven_manage_runtime", "tessiven_save_canvas")
 							}
 						}
 						if fixture.permission == config.AIPermissionReadonly {
-							required = append(required, "rgrep")
+							required = append(required, "file_search")
 						}
-						if slices.Contains(names, "web_search_tool") {
+						if slices.Contains(names, "web_search_pages") {
 							t.Error("unconfigured search advertised")
 						}
 						wantComputer := []string{}
 						if fixture.computer && fixture.permission == config.AIPermissionFullAccess {
-							wantComputer = []string{"computer_exec", "computer_select_target", "computer_targets"}
+							wantComputer = []string{"computer_exec", "computer_list_targets", "computer_select_target"}
 						}
 						if fixture.authoring {
-							required = append(required, "plugin_author_status", "plugin_author_initialize", "plugin_author_rename", "plugin_author_build", "plugin_author_capture")
+							required = append(required, "plugin_author_get_status", "plugin_author_initialize", "plugin_author_rename", "plugin_author_build", "plugin_author_capture")
 						}
 						expected := append(slices.Clone(required), wantComputer...)
 						slices.Sort(expected)
@@ -134,7 +134,7 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 							t.Errorf("computer tools=%v want=%v", computerNames, wantComputer)
 						}
 						if fixture.permission == config.AIPermissionReadonly {
-							for _, name := range []string{"file_write", "apply_patch", "terminal_exec"} {
+							for _, name := range []string{"file_write", "file_apply_patch", "terminal_exec"} {
 								if slices.Contains(names, name) {
 									t.Errorf("readonly surface gained %s", name)
 								}

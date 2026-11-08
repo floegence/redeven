@@ -1321,7 +1321,7 @@ func toolStartActivityPresentation(toolName string, args map[string]any) *fltool
 		}
 	}
 	activity = cloneActivityPresentation(activity)
-	if toolName == "terminal.exec" && strings.TrimSpace(anyToString(args["command"])) == "" {
+	if toolName == "terminal_exec" && strings.TrimSpace(anyToString(args["command"])) == "" {
 		activity.Label = toolName
 	}
 	activity = fltools.FinalizeActivityPresentation(activity, toolCallStatusRunning)
@@ -1421,7 +1421,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	if args == nil {
 		args = map[string]any{}
 	}
-	if toolName == "terminal.exec" {
+	if toolName == "terminal_exec" {
 		args = normalizeTerminalExecArgs(args)
 	}
 	r.recordRuntimeToolCall()
@@ -1510,7 +1510,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		})
 	}
 
-	if toolName == "terminal.exec" {
+	if toolName == "terminal_exec" {
 		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, activityUpdater)
 		outcome = terminalOutcome
 		if terminalErr != nil {
@@ -1565,7 +1565,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if errors.Is(toolErrRaw, context.Canceled) {
 			// A returned local read only observed bytes; canceling it has no
 			// uncertain process effect. Command execution still requires exit proof.
-			outcome.cancellationConfirmed = toolName == "terminal.read" && !r.shouldRouteTargetTool(toolName)
+			outcome.cancellationConfirmed = toolName == "terminal_read" && !r.shouldRouteTargetTool(toolName)
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, partial)
 			return outcome, nil
 		}
@@ -1596,7 +1596,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		toolErr := aitools.ClassifyError(toolErrRaw)
 		if isComputerUseTool(toolName) && toolErr.Code == aitools.ErrorCodeUnknown {
 			toolErr.Code = aitools.ErrorCodeTargetActionFailed
-			if toolName == "computer.exec" {
+			if toolName == "computer_exec" {
 				toolErr.Code = aitools.ErrorCodeScriptFailed
 			}
 		}
@@ -1866,28 +1866,28 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.callMCPWithImages(ctx, toolName, args)
 	}
-	if strings.HasPrefix(toolName, "threads.") {
+	if strings.HasPrefix(toolName, "thread_") {
 		if r.host.queryThreads == nil {
 			return nil, errors.New("thread query is unavailable")
 		}
 		return r.host.queryThreads(ctx, meta, toolName, args)
 	}
-	if strings.HasPrefix(toolName, "plugin_author.") {
+	if strings.HasPrefix(toolName, "plugin_author_") {
 		return r.execPluginAuthorTool(ctx, meta, toolName, args)
 	}
-	if strings.HasPrefix(toolName, "tessiven.") {
+	if strings.HasPrefix(toolName, "tessiven_") {
 		return r.execTessivenTool(ctx, meta, toolName, args)
 	}
-	if toolName == "image.read" {
+	if toolName == "image_read" {
 		return r.toolImageRead(ctx, meta, toolID, args)
 	}
 	if r.shouldRouteTargetTool(toolName) {
 		return r.execTargetTool(ctx, toolID, toolName, args)
 	}
 	switch toolName {
-	case "attachment.materialize":
+	case "attachment_materialize":
 		return r.toolAttachmentMaterialize(ctx, meta, anyToString(args["locator"]))
-	case "attachment.read":
+	case "attachment_read":
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -1898,7 +1898,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolAttachmentRead(ctx, meta, p)
 
-	case "read_file":
+	case "file_read":
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -1913,7 +1913,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolFileRead(ctx, FileReadArgs{FilePath: p.Path, Offset: p.Offset, Limit: p.Limit})
 
-	case "read_files":
+	case "file_read_many":
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -1927,7 +1927,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolReadFiles(ctx, p.Paths, p.Limit)
 
-	case "find":
+	case "path_find":
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -1945,7 +1945,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolReadonlyFind(ctx, p.Root, p.Name, p.Type, p.MaxResults, p.MaxDepth, p.IncludeHidden)
 
-	case "rgrep":
+	case "file_search":
 		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
@@ -1967,13 +1967,13 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolReadonlyGrep(ctx, p.Query, p.Paths, p.Glob, p.CaseSensitive, p.FixedStrings, p.MaxMatches, p.ContextLines)
 
-	case "file.present":
+	case "file_present":
 		if err := requireRead(meta); err != nil {
 			return nil, err
 		}
 		return r.presentFile(ctx, anyToString(args["file_path"]), anyToString(args["title"]))
 
-	case "file.write":
+	case "file_write":
 		if meta == nil || !meta.CanWrite {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "write permission denied"}
 		}
@@ -1984,7 +1984,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolFileWrite(ctx, p)
 
-	case "apply_patch":
+	case "file_apply_patch":
 		if meta == nil || !meta.CanWrite {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "write permission denied"}
 		}
@@ -1997,10 +1997,10 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolApplyPatch(ctx, p.Input)
 
-	case "terminal.exec":
-		return nil, errors.New("terminal.exec must be executed through the hosted terminal process lifecycle")
+	case "terminal_exec":
+		return nil, errors.New("terminal_exec must be executed through the hosted terminal process lifecycle")
 
-	case "terminal.read":
+	case "terminal_read":
 		if !session.AllowsProcessLaunch(meta) {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required"}
 		}
@@ -2019,7 +2019,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolTerminalRead(ctx, p.ProcessID, p.AfterSeq)
 
-	case "terminal.write":
+	case "terminal_write":
 		if !session.AllowsProcessLaunch(meta) {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required"}
 		}
@@ -2037,7 +2037,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolTerminalWrite(p.ProcessID, p.Input)
 
-	case "terminal.terminate":
+	case "terminal_terminate":
 		if !session.AllowsProcessLaunch(meta) {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required"}
 		}
@@ -2055,7 +2055,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolTerminalTerminate(ctx, p.ProcessID)
 
-	case "okf.index":
+	case "okf_get_index":
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -2068,7 +2068,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return okf.Index(okf.IndexRequest{Section: p.Section})
 
-	case "okf.search":
+	case "okf_search":
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -2093,7 +2093,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			Tags:       p.Tags,
 		})
 
-	case "okf.open":
+	case "okf_open":
 		if meta == nil || !meta.CanRead {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
@@ -2118,7 +2118,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			BodyLimit:       p.BodyLimit,
 		})
 
-	case "use_skill":
+	case "skill_use":
 		if meta == nil || !meta.CanExecute {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "execute permission denied"}
 		}
@@ -2166,9 +2166,9 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return out, nil
 
-	case "subagent_events":
+	case "subagent_read_events":
 		return r.readSubagentEvents(ctx, args)
-	case "subagents":
+	case "subagent_manage":
 		if meta == nil || !meta.CanExecute {
 			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "execute permission denied"}
 		}
@@ -2408,7 +2408,7 @@ func (r *run) toolReadFiles(ctx context.Context, paths []string, limit int) (rea
 		}
 		if len(encoded) > remainingBytes {
 			if len(out.Files) == 0 {
-				return out, errors.New("file result exceeds batch output budget; use read_file for this path")
+				return out, errors.New("file result exceeds batch output budget; use file_read for this path")
 			}
 			out.Truncated = true
 			break
@@ -3008,7 +3008,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if progress, ok := ctx.Value(computerProgressKey{}).(func(TargetDescriptor, string, string)); ok && isComputerUseTool(toolName) {
 		progress(target, "", "")
 	}
-	if strings.HasPrefix(toolName, "browser.") && target.Kind != "browser.managed" && target.Kind != "browser.connected" {
+	if strings.HasPrefix(toolName, "browser_") && target.Kind != "browser.managed" && target.Kind != "browser.connected" {
 		return nil, computerTargetFailure(TargetToolCall{ToolName: toolName, TargetID: target.ID}, "TARGET_CAPABILITY_UNAVAILABLE")
 	}
 	gate := r.interactionSafetyGate
@@ -3019,7 +3019,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if continuation := r.computerContinuation; continuation != nil && continuation.RunID != runID &&
 		continuation.ThreadID == threadID && continuation.TurnID == turnID && continuation.TargetID == targetID && continuation.interactionID != "" {
 		call.interactionID = continuation.interactionID
-		call.recoveryObservation = toolName == "computer.observe" || toolName == "computer.screenshot"
+		call.recoveryObservation = toolName == "computer_observe" || toolName == "computer_capture_screenshot"
 	}
 	if continuation := r.computerContinuation; continuation != nil && isComputerUseTool(toolName) && !computerRecoveryAllowsTool(toolName) {
 		return nil, &targetToolPolicyError{code: "recovery_observation_required", tool: toolName, target: targetID}
@@ -3072,7 +3072,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		return nil, errors.New("invalid args")
 	}
 	call.Arguments = rawArgs
-	if toolName == "computer.exec" {
+	if toolName == "computer_exec" {
 		call.revalidate = r.computerToolRevalidator(toolID, toolName)
 		call.downloadWriter = r.saveComputerDownload
 	}
@@ -3104,7 +3104,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if result.Safety == nil {
 		result.Safety = &decision
 	}
-	if continuation := r.computerContinuation; continuation != nil && (toolName == "computer.observe" || toolName == "computer.screenshot") && result.Safety.Level == "routine" && result.Safety.SafeToSendToModel {
+	if continuation := r.computerContinuation; continuation != nil && (toolName == "computer_observe" || toolName == "computer_capture_screenshot") && result.Safety.Level == "routine" && result.Safety.SafeToSendToModel {
 		r.computerContinuation = nil
 	}
 	if result.TargetName == "" {
@@ -3291,7 +3291,7 @@ func (e *targetToolPolicyError) Error() string {
 		return "The screenshot is unavailable."
 	case "invalid_computer_arguments":
 		if e.repairAction == "select_computer_candidate" {
-			return "candidate_ref is a discovery reference. Pass it to computer.select_target, then use the returned target_id or current."
+			return "candidate_ref is a discovery reference. Pass it to computer_select_target, then use the returned target_id or current."
 		}
 		return "The computer action has invalid arguments."
 	case "element_not_actionable":
@@ -3562,10 +3562,10 @@ func clampTerminalExecYieldMS(value int) int64 {
 func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, activityUpdater toolActivityUpdater) (*toolCallOutcome, *aitools.ToolError) {
 	outcome := &toolCallOutcome{
 		Success:  false,
-		ToolName: "terminal.exec",
+		ToolName: "terminal_exec",
 		Args:     cloneAnyMap(args),
 	}
-	_, _, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec")
+	_, _, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal_exec")
 	if err != nil {
 		return outcome, aitools.ClassifyError(err)
 	}
@@ -3611,7 +3611,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		shell = "/bin/bash"
 	}
 
-	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", "terminal.exec")
+	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", "terminal_exec")
 
 	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
 	if canonicalRunID == "" || canonicalThreadID == "" || canonicalTurnID == "" {
@@ -3628,7 +3628,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		RunID:       canonicalRunID,
 		TurnID:      canonicalTurnID,
 		ToolID:      strings.TrimSpace(toolID),
-		ToolName:    "terminal.exec",
+		ToolName:    "terminal_exec",
 		Command:     parsed.Command,
 		Description: strings.TrimSpace(anyToString(terminalActivityInput(args)["description"])),
 		Stdin:       parsed.Stdin,

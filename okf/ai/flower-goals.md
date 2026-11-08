@@ -32,7 +32,7 @@ A failed binding leaves the draft available for retry; no cross-thread target va
 # Boundaries
 
 ## Todo
-Default Flower tools, capability lists and prompts omit write_todos and current Todo state. Deleting Todo later requires no change to Goal execution or interaction.
+Default Flower tools, capability lists and prompts omit todo_write and current Todo state. Deleting Todo later requires no change to Goal execution or interaction.
 
 # Evidence
 

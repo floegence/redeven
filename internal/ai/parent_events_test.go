@@ -35,7 +35,7 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 		steps := make([]florettest.Step, 0, len(messages)+1)
 		for i, body := range messages {
 			raw, _ := json.Marshal(map[string]any{"message": body})
-			steps = append(steps, florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: fmt.Sprintf("report-%d", i), Name: "report_to_parent", Args: string(raw)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}})
+			steps = append(steps, florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: fmt.Sprintf("report-%d", i), Name: "subagent_report", Args: string(raw)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}})
 		}
 		steps = append(steps, florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: final}, {Type: flprovider.EventDone, Reason: "stop"}}})
 		return delegationContextGateway(steps...)
@@ -121,7 +121,7 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 		t.Fatal("full Unicode report lost")
 	}
 	readArgs, _ := json.Marshal(map[string]any{"action": "read", "event_id": pending.Events[0].ID})
-	parentGateway = delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "read", Name: "subagent_events", Args: string(readArgs)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone(), delegationContextDone())
+	parentGateway = delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "read", Name: "subagent_read_events", Args: string(readArgs)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone(), delegationContextDone())
 	delegationContextSend(t, threads, parentID, "review", nil)
 	fullRequest, err := json.Marshal(parentGateway.Requests()[1])
 	if err != nil {
@@ -135,7 +135,7 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 	if !strings.Contains(string(visible), "Subagent events (runtime facts") || !strings.Contains(string(visible), pending.Events[0].ID) || strings.Contains(string(visible), message) {
 		t.Fatalf("bad event projection: %s", visible)
 	}
-	if strings.Contains(string(visible), "report_to_parent") {
+	if strings.Contains(string(visible), "subagent_report") {
 		t.Fatal("root received child-only report tool")
 	}
 	eventFacts := ""
@@ -163,7 +163,7 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 		}
 	}
 	childRequest, _ := json.Marshal(childGateway.Requests()[0])
-	if !strings.Contains(string(childRequest), "report_to_parent") || strings.Contains(string(childRequest), "Manage parent-owned subagents") {
+	if !strings.Contains(string(childRequest), "subagent_report") || strings.Contains(string(childRequest), "Manage parent-owned subagent_manage") {
 		t.Fatal("child tool boundary changed")
 	}
 	r := &run{threadID: parentID.String(), threadRuntime: threads}
@@ -171,7 +171,7 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalized, truncated, err := normalizeTruncatedToolPayload("subagent_events", result)
+	normalized, truncated, err := normalizeTruncatedToolPayload("subagent_read_events", result)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestFlowerParentReportLimitsAndReadOnlyPermission(t *testing.T) {
 		if permissionDecisionForTool(FlowerPermissionReadonly, def) != ApprovalDecisionAllow {
 			t.Fatalf("readonly cannot use %s", def.Name)
 		}
-		if def.Name == "report_to_parent" && !reflect.DeepEqual(floretToolEffects(def), []fltools.Effect{fltools.EffectWrite}) {
+		if def.Name == "subagent_report" && !reflect.DeepEqual(floretToolEffects(def), []fltools.Effect{fltools.EffectWrite}) {
 			t.Fatal("report effect not declared")
 		}
 	}
@@ -404,7 +404,7 @@ func TestFlowerParentEventProductEffectAndPassiveNaturalRequest(t *testing.T) {
 		}
 		child := false
 		for _, name := range names {
-			if name == "report_to_parent" {
+			if name == "subagent_report" {
 				child = true
 			}
 		}
@@ -415,7 +415,7 @@ func TestFlowerParentEventProductEffectAndPassiveNaturalRequest(t *testing.T) {
 				case <-r.Context().Done():
 					return
 				}
-				writeDeepSeekIntegrationToolCall(w, flusher, "report", "report-call", "report_to_parent", `{"message":"Important verified discovery"}`)
+				writeDeepSeekIntegrationToolCall(w, flusher, "report", "report-call", "subagent_report", `{"message":"Important verified discovery"}`)
 				return
 			}
 			writeDeepSeekIntegrationTextResponse(w, flusher, "child-final", "Full final handoff")
@@ -497,7 +497,7 @@ func TestFlowerParentEventFullPageBypassesPresentationAndGenericOutputCaps(t *te
 	for i := range page.Events {
 		page.Events[i] = flruntime.ParentEvent{ID: fmt.Sprintf("event-%d", i), ParentThreadID: "thread-parent", SourceThreadID: "thread-child", SourceTurnID: "turn-child", SourceRunID: "run-child", SourceEntryID: fmt.Sprintf("entry-%d", i), Kind: flruntime.ParentEventReport, Message: strings.Repeat("x", 8192)}
 	}
-	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "subagent_events", Status: toolResultStatusSuccess, Data: page})
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "subagent_read_events", Status: toolResultStatusSuccess, Data: page})
 	if err != nil {
 		t.Fatal(err)
 	}

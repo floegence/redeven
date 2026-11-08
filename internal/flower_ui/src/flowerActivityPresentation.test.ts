@@ -9,7 +9,7 @@ function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   return {
     item_id: 'tool-1',
     tool_id: 'tool-1',
-    tool_name: 'terminal.exec',
+    tool_name: 'terminal_exec',
     kind: 'tool',
     status: 'success',
     severity: 'quiet',
@@ -27,11 +27,11 @@ describe('subagent read boundaries', () => {
     expect(result.label).not.toContain('Web Search');
   });
   it.each(['running', 'failed', 'timed_out', 'completed'])('keeps a successful status check distinct from child %s', status => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'status', targets: [{ thread_id: 'child', task_name: 'Audit', status }], requested_count: 1 } }));
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_manage', renderer: 'subagent_operation', payload: { action: 'status', targets: [{ thread_id: 'child', task_name: 'Audit', status }], requested_count: 1 } }));
     expect(result.label).toBe('Check subagent status');
   });
   it('shows partial wait progress without inventing a timeout', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'wait', requested_count: 3, completed_count: 2, targets: [{ thread_id: 'child', status: 'running' }] } }));
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_manage', renderer: 'subagent_operation', payload: { action: 'wait', requested_count: 3, completed_count: 2, targets: [{ thread_id: 'child', status: 'running' }] } }));
     expect(result.label).toBe('Wait for subagents · 2/3');
     expect(result.label).not.toContain('timed out');
   });
@@ -39,7 +39,7 @@ describe('subagent read boundaries', () => {
 
 describe('subagent cancellation results', () => {
   it('retains the cancelled sibling and does not label an unconfirmed child as stopped', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'subagents', renderer: 'subagent_operation', status: 'error', payload: {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_manage', renderer: 'subagent_operation', status: 'error', payload: {
       action: 'close_all', status: 'error', requested_count: 2,
       targets: [{ thread_id: 'older', task_name: 'Earlier Task', status: 'canceled' }, { thread_id: 'current', task_name: 'Current Task', status: 'unknown' }],
       error: { message: 'Child cancellation outcome is unconfirmed.' },
@@ -56,7 +56,7 @@ describe('subagent cancellation results', () => {
 
 describe('parent event tool rows', () => {
   it('shows an accepted submission without exposing protocol receipts as rows', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'report_to_parent', renderer: 'structured',
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_report', renderer: 'structured',
       payload: { inputs: [{ title: 'message', content: 'Verified finding', format: 'text' }] },
       target_refs: [{ kind: 'parent_event', label: 'parent', resource_ref: 'event' }],
     }));
@@ -66,17 +66,17 @@ describe('parent event tool rows', () => {
   });
 
   it.each(['running', 'pending', 'success'] as const)('never claims an unconfirmed %s report was accepted', status => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'report_to_parent', renderer: 'structured', status }));
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_report', renderer: 'structured', status }));
     expect(result.meta).toBe('');
     expect(result.detailBlocks).toEqual([]);
   });
 
   it('uses a neutral report title when the historical action is unknown', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured' }));
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_read_events', renderer: 'structured' }));
     expect(result.label).toBe('Subagent events');
   });
   it.each(['list', 'read'])('keeps %s compact with unique returned source identities', action => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: action,
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_read_events', renderer: 'structured', label: action,
       description: 'Technical result summary', payload: { operation: action, rows_provided: true, inputs: [{ title: 'action', content: action, format: 'text' }] },
       target_refs: [{ kind: 'subagent', label: 'child-a', resource_ref: 'child-a' }, { kind: 'subagent', label: 'child-a', resource_ref: 'child-a' }, { kind: 'subagent', label: 'child-b', resource_ref: 'child-b' }],
     }));
@@ -85,27 +85,27 @@ describe('parent event tool rows', () => {
   });
 
   it('uses the saved action for historical titles without inventing source avatars', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: 'read' }), { subagentSummaries: [subagentSummary()] });
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_read_events', renderer: 'structured', label: 'read' }), { subagentSummaries: [subagentSummary()] });
     expect(result.label).toBe('Read subagent events');
     expect(result.subagentThreadIDs).toEqual([]);
     expect(result.detailBlocks).toEqual([]);
   });
 
   it('preserves real errors while hiding routine tool inputs and empty notices', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: 'read', status: 'error', payload: { error: { message: 'Access denied' } } }));
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_read_events', renderer: 'structured', label: 'read', status: 'error', payload: { error: { message: 'Access denied' } } }));
     expect(result.detailBlocks).toEqual([expect.objectContaining({ kind: 'error', error: expect.objectContaining({ message: 'Access denied' }) })]);
   });
 });
 
 it('shows explicit zero for a successful no-op instead of retaining argument preview counts', () => {
-  const presentation = presentFlowerActivityItem(item({ tool_name: 'file.write', renderer: 'file',
+  const presentation = presentFlowerActivityItem(item({ tool_name: 'file_write', renderer: 'file',
     argument_preview: { additions: 99 }, payload: { display_name: 'same.txt', operation: 'write', change_type: 'noop' },
   }));
   expect(presentation.changeStats).toEqual({ additions: 0, deletions: 0 });
 });
 
 it.each(['image://' + 'c'.repeat(64) + '/png', 'media:v1:' + 'c'.repeat(64)])('renders typed tool image %s as authorized media without an unavailable-result notice', resource_ref => {
-  const result = presentFlowerActivityItem(item({ tool_name: 'image.read', label: 'photo.png', renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'photo.png', resource_ref }] }));
+  const result = presentFlowerActivityItem(item({ tool_name: 'image_read', label: 'photo.png', renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'photo.png', resource_ref }] }));
   expect(result.detailBlocks).toContainEqual({ kind: 'image', resource_ref, name: 'photo.png' });
   expect(result.detailBlocks.some(block => block.kind === 'structured_rows' && block.notice)).toBe(false);
 });
@@ -117,7 +117,7 @@ function approvalAction(overrides: Partial<FlowerApprovalAction> = {}): FlowerAp
     origin: 'main_tool',
     run_id: 'run-1',
     tool_id: 'tool-1',
-    tool_name: 'terminal.exec',
+    tool_name: 'terminal_exec',
     state: 'requested',
     status: 'pending',
     requested_at_ms: 1,
@@ -183,7 +183,7 @@ describe('tool failure presentation', () => {
   });
 
   it('does not repeat a question failure in its reason', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'ask_user', renderer: 'question', status: 'error',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'user_ask', renderer: 'question', status: 'error',
       payload: { reason: 'Question validation failed', error: { message: 'Question validation failed' } },
     }));
     expect(presentation.detailBlocks[0]).toMatchObject({ kind: 'question', question: { reason: '' } });
@@ -222,7 +222,7 @@ describe('tool failure presentation', () => {
   it.each(['file', 'patch', 'web_search', 'web_fetch', 'question', 'todos', 'subagent', 'subagent_operation', 'structured', 'computer', 'browser'] as const)(
     'places the %s failure after operation details without repeating the message in the summary', renderer => {
       const message = 'The requested resource is unavailable.';
-      const presentation = presentFlowerActivityItem(item({ tool_name: renderer === 'web_search' ? 'okf.search' : 'inspect', renderer, status: 'error', description: message,
+      const presentation = presentFlowerActivityItem(item({ tool_name: renderer === 'web_search' ? 'okf_search' : 'inspect', renderer, status: 'error', description: message,
         payload: { operation: 'read', display_name: 'report.txt', content: 'partial content',
           query: 'report', url: 'https://example.test', questions: [{ id: 'choice', question: 'Choose a report' }],
           inputs: [{ content: 'report.txt', format: 'text' }], rows: [{ content: 'partial result', format: 'text' }],
@@ -236,7 +236,7 @@ describe('tool failure presentation', () => {
 
   it('does not repeat a structured failure as a result row, summary, or missing-output notice', () => {
     const message = 'Skill package could not be loaded.';
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'use_skill', renderer: 'structured', status: 'error',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'skill_use', renderer: 'structured', status: 'error',
       description: message, payload: { summary: message, rows: [{ content: message, format: 'text' }], error: { message } },
     }));
     expect(presentation.meta).toBe('');
@@ -245,7 +245,7 @@ describe('tool failure presentation', () => {
   });
 
   it('keeps recovery suggestions with a computer failure after partial output', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'computer.exec', renderer: 'computer', status: 'error',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'computer_exec', renderer: 'computer', status: 'error',
       payload: { inputs: [{ content: 'await ui.observe()', format: 'code' }], rows: [{ content: 'Page loaded', format: 'text' }],
         error: { code: 'TARGET_UNAVAILABLE', message: 'The selected page was closed.', meta: { target_state: 'closed', repair_action: 'Select an available page', suggested_targets: ['Browser'] } } },
     }));
@@ -256,7 +256,7 @@ describe('tool failure presentation', () => {
 
 describe('presentFlowerActivityItem', () => {
   it('shows the computer family and keeps concrete results ahead of script details', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'computer.exec', renderer: 'structured', label: 'Read weather',
+    const result = presentFlowerActivityItem(item({ tool_name: 'computer_exec', renderer: 'structured', label: 'Read weather',
       chips: [{ kind: 'browser_source', label: 'Browser', value: 'browser.connected' }],
       target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'browser-page' }],
       payload: { inputs: [{ content: 'await ui.observe()', format: 'code' }], rows_provided: true, rows: [{ title: 'Weather', meta: 'page', content: 'Beijing 23°C', format: 'text' }] } }));
@@ -266,7 +266,7 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it.each(['selected', 'empty_page'])('does not invent expandable detail for a confirmed %s', outcome => {
-    const result = presentFlowerActivityItem(item({ tool_name: outcome === 'selected' ? 'computer.select_target' : 'computer.observe', renderer: 'structured', label: 'Inspect Chrome',
+    const result = presentFlowerActivityItem(item({ tool_name: outcome === 'selected' ? 'computer_select_target' : 'computer_observe', renderer: 'structured', label: 'Inspect Chrome',
       chips: [{ kind: 'computer_result', label: 'result', value: outcome }],
       target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'page' }], payload: { rows_provided: true } }));
     expect(result.detailBlocks).toEqual([]);
@@ -275,8 +275,8 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it.each([
-    ['computer.targets', 'Find pages and applications'],
-    ['computer.select_target', 'Switch page or application'],
+    ['computer_list_targets', 'Find pages and applications'],
+    ['computer_select_target', 'Switch page or application'],
   ])('gives %s a readable action title', (tool, label) => {
     expect(presentFlowerActivityItem(item({ tool_name: tool, label: tool, renderer: 'structured' })).label).toBe(`ComputerUse: ${label}`);
   });
@@ -284,7 +284,7 @@ describe('presentFlowerActivityItem', () => {
   it('keeps script intent and literal inputs alongside results and the exact frame', () => {
     const code = '  await ui.observe();\nlog("Search");\n';
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'computer.exec', renderer: 'structured', label: 'Locate the search field', status: 'error',
+      tool_name: 'computer_exec', renderer: 'structured', label: 'Locate the search field', status: 'error',
       target_refs: [{ kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' }],
       payload: { operation: 'execute', inputs: [{ content: code, format: 'code', language: 'javascript' }], rows_provided: true,
         rows: [{ content: 'Search field found\nClick stopped', format: 'code', language: 'text', truncated: true }], error: { message: 'Script stopped' } },
@@ -299,7 +299,7 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it.each(['success', 'error', 'canceled', 'waiting', 'running'] as const)('distinguishes saved empty output from historical absence while %s', (status) => {
-    const base = item({ tool_name: 'computer.exec', renderer: 'structured', label: 'Inspect search', status });
+    const base = item({ tool_name: 'computer_exec', renderer: 'structured', label: 'Inspect search', status });
     const saved = presentFlowerActivityItem({ ...base, payload: { inputs: [{ content: 'await ui.observe();', format: 'code' }], rows_provided: true } });
     const history = presentFlowerActivityItem(base);
     const active = status === 'waiting' || status === 'running';
@@ -312,7 +312,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('shows a saved dedicated screenshot without its target-only result row', () => {
     const resource_ref = `computer://browser-main/${'a'.repeat(64)}`;
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'computer.screenshot', renderer: 'structured',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'computer_capture_screenshot', renderer: 'structured',
       target_refs: [{ kind: 'computer_frame', label: 'Browser page', resource_ref }],
       payload: { rows_provided: true, rows: [{ title: 'Browser page', content: '', format: 'text' }] },
     }));
@@ -321,7 +321,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('presents confirmed screenshot output without empty-output or platform-code noise', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'computer.click',
+      tool_name: 'computer_click',
       renderer: 'structured',
       target_refs: [{ kind: 'computer_frame', label: 'Redeven Managed Browser', resource_ref: `computer://browser-main/${'a'.repeat(64)}` }],
       chips: [{ kind: 'execution_location', label: 'location', value: 'linux_headless_browser' }],
@@ -338,7 +338,7 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it('localizes input labels while preserving the original query', () => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'rgrep', renderer: 'structured', label: 'useMemo',
+    const result = presentFlowerActivityItem(item({ tool_name: 'file_search', renderer: 'structured', label: 'useMemo',
       payload: { inputs: [{ title: 'query', content: 'useMemo', format: 'text' }], rows_provided: true },
     }), { tools: { ...toolActivityEnUS, searchFiles: '搜索文件内容', inputQuery: '搜索条件', noOutput: '没有输出' } });
     expect(result.label).toBe('搜索文件内容 useMemo');
@@ -364,7 +364,7 @@ describe('presentFlowerActivityItem', () => {
   it('joins a Subagent operation target to the exact thread summary', () => {
     const presentation = presentFlowerActivityItem(item({
       item_id: 'subagent:review-api',
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       status: 'running',
       label: 'Review API boundary',
@@ -390,7 +390,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('does not use unrelated thread subagent summaries for an activity item', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       label: 'Unrelated task',
       payload: { action: 'list', targets: [] },
@@ -403,7 +403,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('keeps inherited task facts without offering navigation to an unowned child', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents', renderer: 'subagent_operation',
+      tool_name: 'subagent_manage', renderer: 'subagent_operation',
       payload: { action: 'spawn', targets: [{ thread_id: 'source-child', task_name: 'Source research', status: 'completed' }] },
     }), { subagentSummaries: [] });
     const detail = presentation.detailBlocks.find(block => block.kind === 'subagents');
@@ -413,7 +413,7 @@ describe('presentFlowerActivityItem', () => {
 
   it.each(['send_input', 'close', 'inspect', 'wait'])('shows an unavailable %s target without claiming completion or timeout', action => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents', renderer: 'subagent_operation',
+      tool_name: 'subagent_manage', renderer: 'subagent_operation',
       payload: { action, targets: [{ thread_id: 'source-child' }], requested_count: 1, missing_count: 1 },
     }), { subagentSummaries: [] });
     expect(presentation.label).toContain(DEFAULT_FLOWER_SURFACE_COPY.subagents!.activity.labels.missing);
@@ -423,7 +423,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('keeps distinct inherited children that share a task name', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'list',
+      tool_name: 'subagent_manage', renderer: 'subagent_operation', payload: { action: 'list',
         targets: ['source-child-a', 'source-child-b'].map(thread_id => ({ thread_id, task_name: 'Research' })) },
     }), { subagentSummaries: [] });
     expect(presentation.detailBlocks).toMatchObject([{ subagents: { items: [
@@ -432,7 +432,7 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it('keeps historical operation results independent of later child completion and reruns', () => {
-    const operation = item({ tool_name: 'subagents', renderer: 'subagent_operation',
+    const operation = item({ tool_name: 'subagent_manage', renderer: 'subagent_operation',
       payload: { action: 'wait', targets: [{ thread_id: 'child-thread-1' }], requested_count: 1, completed_count: 0, timed_out: true },
     });
     const completed = presentFlowerActivityItem(operation, {
@@ -447,7 +447,7 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it('preserves saved target status while current inventory only supplies missing task identity', () => {
-    const operation = item({ tool_name: 'subagents', renderer: 'subagent_operation',
+    const operation = item({ tool_name: 'subagent_manage', renderer: 'subagent_operation',
       payload: { action: 'spawn', targets: [{ thread_id: 'child-thread-1', status: 'running' }] },
     });
     const presentation = presentFlowerActivityItem(operation, {
@@ -519,7 +519,7 @@ describe('presentFlowerActivityItem', () => {
     { name: 'web_search', renderer: 'web_search' },
     { name: 'web_fetch', renderer: 'web_fetch' },
     { name: 'question', renderer: 'question' },
-    { name: 'subagents', renderer: undefined, toolName: 'subagents' },
+    { name: 'subagents', renderer: undefined, toolName: 'subagent_manage' },
   ] as const)('does not expose approved lifecycle state in $name presentation', ({ renderer, toolName }) => {
     const presentation = presentFlowerActivityItem(item({
       renderer,
@@ -618,7 +618,7 @@ describe('presentFlowerActivityItem', () => {
   it('does not expose an internal terminal label when only a command is available', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
-      label: 'terminal.exec',
+      label: 'terminal_exec',
       payload: {
         command: 'pnpm run test:browser -- src/ui/FlowerSurface.activityDisclosure.browser.test.tsx',
       },
@@ -633,7 +633,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('presents terminal read intent and preserves the real command in detail', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'terminal.read',
+      tool_name: 'terminal_read',
       renderer: 'terminal',
       label: 'Check the latest Docker build output again',
       description: 'Check the latest Docker build output again',
@@ -754,7 +754,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('presents terminal termination without exposing the internal tool name', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'terminal.terminate',
+      tool_name: 'terminal_terminate',
       renderer: 'terminal',
       description: '停止挂起的维基百科搜索请求',
       payload: {},
@@ -768,7 +768,7 @@ describe('presentFlowerActivityItem', () => {
     });
 
     expect(presentation.label).toBe('停止挂起的维基百科搜索请求');
-    expect(JSON.stringify(presentation)).not.toContain('terminal.terminate');
+    expect(JSON.stringify(presentation)).not.toContain('terminal_terminate');
     expect(presentation.detailBlocks[0]?.kind).toBe('terminal_output');
   });
 
@@ -776,7 +776,7 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       label: 'Resolve workspace status',
-      tool_name: 'terminal.exec',
+      tool_name: 'terminal_exec',
     }));
 
     expect(presentation.label).toBe('Resolve workspace status');
@@ -784,7 +784,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('renders subagent tool activity as delegation instead of raw structured payload', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       label: 'subagents',
       payload: {
@@ -839,13 +839,13 @@ describe('presentFlowerActivityItem', () => {
       { task_name: 'Two', status: action === 'wait' ? 'running' : 'completed' },
     ];
     const running = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       status: 'running',
       payload: { action, targets, requested_count: 2 },
     }));
     const success = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       status: 'success',
       payload: {
@@ -856,7 +856,7 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
     const failed = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       status: 'error',
       payload: { action, error: { code: 'failed', message: 'failed' } },
@@ -869,7 +869,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('retains name-only targets for capsules without duplicating the name in creation titles', () => {
     const present = (status: 'running' | 'success' | 'error') => presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       status,
       payload: {
@@ -893,7 +893,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('uses a neutral title for an unknown Subagent operation without guessing from its label', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       label: 'Wait for reviewer',
       payload: { action: 'unknown_action' },
@@ -905,7 +905,7 @@ describe('presentFlowerActivityItem', () => {
   it('renders subagent timeline activity from visible payload routing ids', () => {
     const presentation = presentFlowerActivityItem(item({
       item_id: 'subagent:review-api',
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent',
       label: 'Review API boundary',
       payload: {
@@ -938,7 +938,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('renders subagent wait details as concise task rows without handoff diagnostics', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       label: 'subagents',
       payload: {
@@ -974,7 +974,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('does not render unknown subagent diagnostics or control flags', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       label: 'subagents',
       payload: {
@@ -996,7 +996,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('names every target in a three-Subagent wait without exposing ids', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       status: 'running',
       payload: {
@@ -1030,7 +1030,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('uses terminal wait outcomes instead of the generic Subagents title', () => {
     const completed = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       payload: {
         action: 'wait',
@@ -1042,7 +1042,7 @@ describe('presentFlowerActivityItem', () => {
     expect(completed.label).toBe('2 subagents completed');
 
     const timedOut = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       payload: {
         action: 'wait',
@@ -1055,7 +1055,7 @@ describe('presentFlowerActivityItem', () => {
     expect(timedOut.label).toBe('Wait timed out · 1/2 completed');
 
     const partial = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
+      tool_name: 'subagent_manage',
       renderer: 'subagent_operation',
       payload: {
         action: 'wait',
@@ -1069,7 +1069,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('does not render unrelated nested result ids as delegation', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'web.search',
+      tool_name: 'web_search_pages',
       renderer: 'structured',
       label: 'Search docs',
       payload: {
@@ -1085,7 +1085,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('renders web search errors as a semantic failure reason', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'web.search',
+      tool_name: 'web_search_pages',
       renderer: 'web_search',
       status: 'error',
       label: 'latest release',
@@ -1122,7 +1122,7 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it('does not invent query text or expandable details for an opaque search', () => {
-    for (const tool_name of ['web_search','web.search']) {
+    for (const tool_name of ['web_search','web_search_pages']) {
       const p = presentFlowerActivityItem(item({tool_name,renderer:'web_search',label:'Web search',payload:{status:'success'}}));
       expect(p.label).toBe('Search');
       expect(p.meta).toBe('');
@@ -1258,7 +1258,7 @@ Go Runtime`}}));
 
   it('renders question payloads as prompts and choices', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'ask_user',
+      tool_name: 'user_ask',
       renderer: 'question',
       label: 'Choose target',
       payload: {
@@ -1293,7 +1293,7 @@ Go Runtime`}}));
 
   it('renders safe answered question summaries and redacts secret answers', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'ask_user',
+      tool_name: 'user_ask',
       renderer: 'question',
       status: 'success',
       label: 'Choose target',
@@ -1323,7 +1323,7 @@ Go Runtime`}}));
 
   it('renders the published Floret v7 todo items payload', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'write_todos',
+      tool_name: 'todo_write',
       renderer: 'todos',
       label: 'Update todos',
       payload: {
@@ -1408,7 +1408,7 @@ Go Runtime`}}));
 
   it('renders file writes as Edit with unified patch data only', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'file.write',
+      tool_name: 'file_write',
       renderer: 'file',
       target_refs: [{ kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts' }],
       payload: {
@@ -1449,7 +1449,7 @@ Go Runtime`}}));
 
   it('does not repeat file protocol fields beside the user-facing title', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'file.write',
+      tool_name: 'file_write',
       renderer: 'file',
       label: 'weather_gd.py',
       chips: [
@@ -1503,8 +1503,8 @@ Go Runtime`}}));
   });
 
   it.each(['pending', 'waiting', 'running'] as const)('retains candidate patch names while %s without creating file actions', status => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', renderer: 'patch', status,
-      argument_preview: { display_name: 'example.ts, second.ts', additions: 8 }, payload: { operation: 'apply_patch' },
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file_apply_patch', renderer: 'patch', status,
+      argument_preview: { display_name: 'example.ts, second.ts', additions: 8 }, payload: { operation: 'file_apply_patch' },
     }));
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'example.ts, second.ts' });
     expect(presentation.primaryAction).toBeUndefined();
@@ -1512,15 +1512,15 @@ Go Runtime`}}));
   });
 
   it('uses the actual patch result instead of a stale preview name', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', renderer: 'patch', status: 'success',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file_apply_patch', renderer: 'patch', status: 'success',
       argument_preview: { display_name: 'candidate.ts', additions: 8 },
-      payload: { operation: 'apply_patch', mutations: [{ display_name: 'actual.ts', change_type: 'noop' }] },
+      payload: { operation: 'file_apply_patch', mutations: [{ display_name: 'actual.ts', change_type: 'noop' }] },
     }));
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'actual.ts' });
   });
 
   it('uses a single mutation title from the summary without manufacturing diff details', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file_apply_patch', label: 'file_apply_patch', renderer: 'patch',
       payload: { files_changed: 1, additions: 13, deletions: 11 },
       field_summary: { values: { '/payload/mutations/0/display_name': 'panda-bicycle.html', '/payload/mutations/0/change_type': 'delete' },
         fields: [{ path: '/payload/mutations', kind: 'array', count: 1 }] },
@@ -1532,7 +1532,7 @@ Go Runtime`}}));
   });
 
   it('uses localized summary counts without loading mutation rows', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file_apply_patch', label: 'file_apply_patch', renderer: 'patch',
       payload: { files_changed: 2, additions: 13, deletions: 11 },
       field_summary: { fields: [{ path: '/payload/mutations', kind: 'array', count: 2 }] },
     }), { tools: { ...toolActivityEnUS, edit: '编辑', fileCount: '{count} 个文件' } });
@@ -1541,7 +1541,7 @@ Go Runtime`}}));
   });
 
   it('never treats patch totals as a file when a title is unavailable', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file_apply_patch', label: 'file_apply_patch', renderer: 'patch',
       payload: { files_changed: 1, additions: 13, deletions: 11 },
       field_summary: { fields: [{ path: '/payload/mutations', kind: 'array', count: 1 }] },
     }));
@@ -1552,7 +1552,7 @@ Go Runtime`}}));
   });
 
   it('keeps a confirmed no-op summary at zero without retaining argument counts', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file_apply_patch', label: 'file_apply_patch', renderer: 'patch',
       argument_preview: { display_name: 'candidate.ts', additions: 99 },
       field_summary: { values: { '/payload/mutations/0/display_name': 'same.ts', '/payload/mutations/0/change_type': 'noop' },
         fields: [{ path: '/payload/mutations', kind: 'array', count: 1 }] },
@@ -1563,7 +1563,7 @@ Go Runtime`}}));
   });
 
   it('keeps patch totals stable after mutation details arrive', () => {
-    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', renderer: 'patch',
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file_apply_patch', renderer: 'patch',
       payload: { files_changed: 1, additions: 13, deletions: 11, mutations: [
         { display_name: 'panda-bicycle.html', change_type: 'update', additions: 111, deletions: 109, unified_diff: 'diff' },
       ] },
@@ -1572,16 +1572,16 @@ Go Runtime`}}));
     expect(presentation.detailBlocks[0]).toMatchObject({ kind: 'file_diff', files: [{ additions: 111, deletions: 109 }] });
   });
 
-  it('renders multi-file apply_patch as Edit N files and keeps per-file actions', () => {
+  it('renders multi-file file_apply_patch as Edit N files and keeps per-file actions', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'apply_patch',
+      tool_name: 'file_apply_patch',
       renderer: 'patch',
       target_refs: [
         { kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts' },
         { kind: 'directory', path: '/workspace/src', label: 'old.ts' },
       ],
       payload: {
-        operation: 'apply_patch',
+        operation: 'file_apply_patch',
         mutations: [
           {
             display_name: 'app.ts',
@@ -1626,12 +1626,12 @@ Go Runtime`}}));
 
   it('renders patch error details even when diff details are present', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'apply_patch',
+      tool_name: 'file_apply_patch',
       renderer: 'patch',
       status: 'error',
       target_refs: [{ kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts' }],
       payload: {
-        operation: 'apply_patch',
+        operation: 'file_apply_patch',
         status: 'error',
         mutations: [{
           display_name: 'app.ts',
@@ -1655,13 +1655,13 @@ Go Runtime`}}));
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('INVALID_ARGUMENTS');
   });
 
-  it('renders single-file apply_patch deletion as Delete', () => {
+  it('renders single-file file_apply_patch deletion as Delete', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'apply_patch',
+      tool_name: 'file_apply_patch',
       renderer: 'patch',
       target_refs: [{ kind: 'directory', path: '/workspace/src', label: 'old.ts' }],
       payload: {
-        operation: 'apply_patch',
+        operation: 'file_apply_patch',
         mutations: [{
           display_name: 'old.ts',
           target: {kind:'directory',label:'src',path:'/workspace/src'},
@@ -1716,7 +1716,7 @@ Go Runtime`}}));
 
   it.each([
     {
-      tool_name: 'rgrep',
+      tool_name: 'file_search',
       label: 'activity contract',
       payload: {
         query: 'activity contract',
@@ -1771,7 +1771,7 @@ Go Runtime`}}));
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
   });
 
-  it.each(['use_skill', 'okf.open'])('only omits duplicate skill headings when presenting %s results', (tool_name) => {
+  it.each(['skill_use', 'okf_open'])('only omits duplicate skill headings when presenting %s results', (tool_name) => {
     const name = 'redeven-environment';
     const reason = 'Inspect the selected environment';
     const content = '# Redeven Environment\n\nObserve the selected environment before acting.';
@@ -1797,8 +1797,8 @@ Go Runtime`}}));
         { title: toolActivityEnUS.inputReason, meta: '', content: reason, format: 'text' },
       ] },
       { kind: 'structured_rows', section: 'results', rows: [{
-        title: tool_name === 'use_skill' ? '' : name,
-        meta: tool_name === 'use_skill' ? '' : reason,
+        title: tool_name === 'skill_use' ? '' : name,
+        meta: tool_name === 'skill_use' ? '' : reason,
         content, format: 'markdown', truncated: true,
       }] },
     ]);
@@ -1806,11 +1806,11 @@ Go Runtime`}}));
 
   it('explains missing typed Skill details without inventing content', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'use_skill',
+      tool_name: 'skill_use',
       renderer: 'structured',
       label: 'frontend-design',
       payload: {
-        operation: 'use_skill',
+        operation: 'skill_use',
         name: 'frontend-design',
         content: 'Loaded frontend design guidance.',
         content_ref: 'content_123',
@@ -1827,12 +1827,12 @@ Go Runtime`}}));
 
   it('keeps a failed Skill activity expandable when it has a real error', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'use_skill',
+      tool_name: 'skill_use',
       renderer: 'structured',
       status: 'error',
       label: 'frontend-design',
       payload: {
-        operation: 'use_skill',
+        operation: 'skill_use',
         status: 'error',
         error: { message: 'Skill package could not be loaded.' },
       },
@@ -1847,11 +1847,11 @@ Go Runtime`}}));
 
   it('renders only typed structured rows for OKF details', () => {
     const presentation = presentFlowerActivityItem(item({
-      tool_name: 'okf.search',
+      tool_name: 'okf_search',
       renderer: 'structured',
       label: 'OKF search results',
       payload: {
-        operation: 'okf.search',
+        operation: 'okf_search',
         status: 'success',
         name: 'repeated title',
         query: 'must-not-be-invented',
@@ -1920,7 +1920,7 @@ describe('terminal interaction facts', () => {
 
 describe('canvas activity readability', () => {
   it('names the operation instead of an opaque canvas identifier', () => {
-    const p = presentFlowerActivityItem(item({ tool_name: 'tessiven.save', renderer: 'structured', label: '3629cc98-c6cc-45c3-ab28-c73b68949174' }));
+    const p = presentFlowerActivityItem(item({ tool_name: 'tessiven_save_canvas', renderer: 'structured', label: '3629cc98-c6cc-45c3-ab28-c73b68949174' }));
     expect(p.label).toBe('Save canvas');
     expect(p.label).not.toContain('3629cc98');
   });
@@ -1930,7 +1930,7 @@ describe('canvas activity readability', () => {
   });
 });
 
-it.each(['computer.click', 'mcp_fixture', 'tessiven.action'])('labels returned uncertainty on the completed %s card', tool_name => {
+it.each(['computer_click', 'mcp_fixture', 'tessiven_manage_instance'])('labels returned uncertainty on the completed %s card', tool_name => {
   const result = presentFlowerActivityItem(item({ tool_name, renderer: 'structured', status: 'error',
     chips: [{ kind: 'effect_outcome', value: 'uncertain', label: 'result', tone: 'warning' }],
     payload: { rows_provided: true, rows: [{ title: 'stage', content: 'input_delivery', format: 'text' }] },
@@ -1968,11 +1968,11 @@ describe('Goal activity presentation', () => {
 
 
 describe('thread tool intent titles', () => {
-  it.each([['threads.query', 'Thread Query'], ['threads.read', 'Thread Read']])('shows the %s invocation description', (tool_name, prefix) => {
+  it.each([['thread_query', 'Thread Query'], ['thread_read', 'Thread Read']])('shows the %s invocation description', (tool_name, prefix) => {
     const result = presentFlowerActivityItem(item({ tool_name, renderer: 'structured', label: 'Find recent release discussions' }));
     expect(result.title).toEqual({ kind: 'plain', text: `${prefix}: Find recent release discussions` });
   });
-  it.each([['threads.query', 'Thread Query'], ['threads.read', 'Thread Read']])('keeps historical %s titles readable without an invented intent', (tool_name, prefix) => {
+  it.each([['thread_query', 'Thread Query'], ['thread_read', 'Thread Read']])('keeps historical %s titles readable without an invented intent', (tool_name, prefix) => {
     expect(presentFlowerActivityItem(item({ tool_name, renderer: 'structured', label: tool_name })).title).toEqual({ kind: 'plain', text: prefix });
   });
 });
@@ -1980,12 +1980,12 @@ describe('thread tool intent titles', () => {
 it.each([
  ['validation', 'computerInputRejected'], ['prepared', 'computerPreparedOnly'], ['effect_confirmed', 'computerEffectConfirmed'],
 ] as const)('presents the %s input phase from typed facts', (phase, key) => {
- const result=presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'computer',status:'error',chips:[{kind:'computer_failure_phase',label:'phase',value:phase}],payload:{rows_provided:true}}));
+ const result=presentFlowerActivityItem(item({tool_name:'computer_exec',renderer:'computer',status:'error',chips:[{kind:'computer_failure_phase',label:'phase',value:phase}],payload:{rows_provided:true}}));
  expect(result.meta).toBe(toolActivityEnUS[key]);
 });
 describe('computer observation presentation', () => {
   const observation = { kind: 'computer_observation', label: 'observation', value: 'not_observed' };
-  it.each(['computer.exec', 'browser.navigate'])('omits absent observation noise for %s', tool_name => {
+  it.each(['computer_exec', 'browser_navigate'])('omits absent observation noise for %s', tool_name => {
     const result = presentFlowerActivityItem(item({ tool_name, renderer: 'computer', chips: [observation], payload: { rows_provided: true } }));
     expect(result.meta).toBe('');
     expect(JSON.stringify(result)).not.toContain('No new page observation');
@@ -1999,7 +1999,7 @@ describe('computer observation presentation', () => {
     ['computer_result', 'empty_page', 'computerBlankPage'],
     ['computer_result', 'no_targets', 'computerNoTargets'],
   ] as const)('retains meaningful %s=%s status without a fresh observation', (kind, value, key) => {
-    const result = presentFlowerActivityItem(item({ tool_name: 'computer.exec', renderer: 'computer',
+    const result = presentFlowerActivityItem(item({ tool_name: 'computer_exec', renderer: 'computer',
       status: kind === 'computer_result' ? 'success' : 'error',
       chips: [observation, { kind, label: kind, value }], payload: { rows_provided: true } }));
     expect(result.meta).toBe(toolActivityEnUS[key]);
@@ -2007,7 +2007,7 @@ describe('computer observation presentation', () => {
 });
 
 it.each([false, true])('presents an explicit observation interruption without changing the tool outcome (action=%s)', confirmed => {
-  const source = item({tool_name:'computer.exec', renderer:'structured', status:'error', chips:[
+  const source = item({tool_name:'computer_exec', renderer:'structured', status:'error', chips:[
     {kind:'computer_observation',label:'observation',value:'unavailable'},
     ...(confirmed ? [{kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'}] : []),
   ], payload:{error:{code:'TARGET_OBSERVATION_UNAVAILABLE',message:'Computer script stopped before completion (TARGET_OBSERVATION_UNAVAILABLE)'}}});
@@ -2018,7 +2018,7 @@ it.each([false, true])('presents an explicit observation interruption without ch
 });
 
 it('shows output exhaustion as a budget interruption while preserving canonical details', () => {
-  const source=item({tool_name:'computer.exec',renderer:'structured',status:'error',chips:[{kind:'computer_budget',label:'budget',value:'output'}],payload:{error:{code:'SCRIPT_FAILED',message:'Output limit reached'}}});
+  const source=item({tool_name:'computer_exec',renderer:'structured',status:'error',chips:[{kind:'computer_budget',label:'budget',value:'output'}],payload:{error:{code:'SCRIPT_FAILED',message:'Output limit reached'}}});
   const result=presentFlowerActivityItem(source);
   expect(result.meta).toBe(toolActivityEnUS.computerOutputLimitReached);
   expect(result.detailBlocks.find(block=>block.kind==='error')).toBeUndefined();
@@ -2026,7 +2026,7 @@ it('shows output exhaustion as a budget interruption while preserving canonical 
 });
 
 it('presents the stable output-limit code as retained partial work', () => {
-  const source=item({tool_name:'computer.exec',renderer:'structured',status:'error',payload:{error:{code:'SCRIPT_OUTPUT_LIMIT',message:'Computer script stopped before completion (SCRIPT_OUTPUT_LIMIT)'},rows:[{title:'completed_reads',content:'snapshot',format:'code'}],rows_provided:true}});
+  const source=item({tool_name:'computer_exec',renderer:'structured',status:'error',payload:{error:{code:'SCRIPT_OUTPUT_LIMIT',message:'Computer script stopped before completion (SCRIPT_OUTPUT_LIMIT)'},rows:[{title:'completed_reads',content:'snapshot',format:'code'}],rows_provided:true}});
   const result=presentFlowerActivityItem(source);
   expect(result.meta).toBe(toolActivityEnUS.computerOutputLimitReached);
   expect(result.detailBlocks.find(block=>block.kind==='error')).toBeUndefined();
@@ -2037,7 +2037,7 @@ it.each([
  ['prepared','Preparation completed; input not sent'],
  ['partial_input','Input partially sent; inspect before continuing'],
 ])('never presents %s as a completed click when observation fails', (phase, expected) => {
- const result=presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'structured',status:'error',
+ const result=presentFlowerActivityItem(item({tool_name:'computer_exec',renderer:'structured',status:'error',
  chips:[{kind:'computer_failure_phase',label:'phase',value:phase},{kind:'computer_observation',label:'observation',value:'unavailable'}],
  payload:{error:{code:'TARGET_OBSERVATION_UNAVAILABLE',message:'Interrupted'}}}));
  expect(result.meta).toBe(expected);
@@ -2052,7 +2052,7 @@ it('shows a localized unknown outcome before expanding Activity details', () => 
 });
 
 it('keeps completed reads, interpreter reset and zero-based failure position distinct', () => {
- const result = presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'computer',status:'error',chips:[
+ const result = presentFlowerActivityItem(item({tool_name:'computer_exec',renderer:'computer',status:'error',chips:[
   {kind:'computer_read',label:'read',value:'completed'},
   {kind:'computer_context',label:'context',value:'reset'},
   {kind:'computer_failed_operation',label:'operation',value:'0'},
@@ -2066,7 +2066,7 @@ it('keeps completed reads, interpreter reset and zero-based failure position dis
 });
 
 it('presents a confirmed action followed by a failed content read with its exact diagnostic', () => {
- const source=item({tool_name:'computer.exec',renderer:'structured',status:'error',chips:[
+ const source=item({tool_name:'computer_exec',renderer:'structured',status:'error',chips:[
  {kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'},
  {kind:'computer_failed_read',label:'read',value:'text'},
  ],payload:{error:{code:'ELEMENT_NOT_FOUND',message:'Requested main is missing'}}});

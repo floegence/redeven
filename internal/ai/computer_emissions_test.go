@@ -16,7 +16,7 @@ import (
 func TestComputerScriptEmitsEveryRequestedObservation(t *testing.T) {
 	reads := 0
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
-		if inner.ToolName != "computer.observe" {
+		if inner.ToolName != "computer_observe" {
 			return TargetToolResult{Result: map[string]any{"action_executed": true}}, nil
 		}
 		reads++
@@ -71,7 +71,7 @@ func TestComputerScriptOrderedOutputReachesModelEncoder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := encodeModelToolResult(ToolResult{ToolID: "call", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: result.Result})
+	encoded, err := encodeModelToolResult(ToolResult{ToolID: "call", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: result.Result})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestComputerMultipleObservationsReachProviderRequest(t *testing.T) {
 }
 
 func TestComputerOrderedObservationActivityKeepsBothPages(t *testing.T) {
-	rows := computerActivityResultRows("computer.exec", map[string]any{
+	rows := computerActivityResultRows("computer_exec", map[string]any{
 		"observations": []any{map[string]any{"observation": semanticFixtureText("first observed page")}, map[string]any{"observation": semanticFixtureText("second observed page")}},
 		"logs":         []any{[]any{"between pages"}},
 		"output_order": []any{map[string]any{"kind": "observation", "index": 0}, map[string]any{"kind": "log", "index": 0}, map[string]any{"kind": "observation", "index": 1}},
@@ -210,7 +210,7 @@ func TestComputerOrderedObservationActivityKeepsBothPages(t *testing.T) {
 func TestComputerHistoricalImageSurvivesLaterReadFailure(t *testing.T) {
 	body, attachment := computerFrameFixture(t)
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
-		if c.ToolName == "computer.screenshot" {
+		if c.ToolName == "computer_capture_screenshot" {
 			attachment.ResourceRef = "computer://" + c.TargetID + "/" + attachment.SHA256
 			return TargetToolResult{TargetID: c.TargetID, frameBytes: body, Attachments: []TargetToolAttachment{attachment}, Result: map[string]any{"frame_geometry": map[string]any{"frame": attachment.ResourceRef, "document_id": "fixture:1"}}}, nil
 		}

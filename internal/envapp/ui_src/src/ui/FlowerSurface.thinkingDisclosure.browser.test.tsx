@@ -209,7 +209,7 @@ it.each([
   const next = sealed(initial, { items: [...sealed(initial).items!, kind === 'assistant'
     ? { id: 'next', turn_id: 'turn', run_id: 'run', ordinal: 3, kind, live: true, text: 'Answer begins here.' }
     : { id: 'next', turn_id: 'turn', run_id: 'run', ordinal: 3, kind, activity: {
-      item_id: 'next', tool_id: 'next', tool_name: 'terminal.exec', kind: 'tool', status: 'running', severity: 'info', needs_attention: false,
+      item_id: 'next', tool_id: 'next', tool_name: 'terminal_exec', kind: 'tool', status: 'running', severity: 'info', needs_attention: false,
       requires_approval: false, presentation: { label: 'Inspect files', renderer: 'terminal', payload: { command: 'ls' } },
     } }] });
   live.push(next);

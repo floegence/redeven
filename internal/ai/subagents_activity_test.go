@@ -16,7 +16,7 @@ import (
 func TestFloretSubagentCallActivityPreservesWaitTargets(t *testing.T) {
 	t.Parallel()
 
-	presentation := toolStartActivityPresentation("subagents", map[string]any{
+	presentation := toolStartActivityPresentation("subagent_manage", map[string]any{
 		"action": "wait",
 		"ids":    []any{"thread-big-tech", "thread-models", "thread-policy"},
 	})
@@ -38,7 +38,7 @@ func TestFloretSubagentResultActivityPreservesEveryTargetAndOutcome(t *testing.T
 	t.Parallel()
 
 	presentation, err := floretActivityForToolResult(nil, ToolResult{
-		ToolID: "tool-wait", ToolName: "subagents", Status: toolResultStatusSuccess,
+		ToolID: "tool-wait", ToolName: "subagent_manage", Status: toolResultStatusSuccess,
 		Data: map[string]any{
 			"action":        "wait",
 			"ids":           []any{"thread-big-tech", "thread-models", "thread-policy"},
@@ -70,7 +70,7 @@ func TestFloretSubagentFailureActivityPreservesCallActionAndTargets(t *testing.T
 	t.Parallel()
 
 	presentation, err := floretActivityForToolResult(nil, ToolResult{
-		ToolID: "tool-wait", ToolName: "subagents", Status: toolResultStatusError,
+		ToolID: "tool-wait", ToolName: "subagent_manage", Status: toolResultStatusError,
 		Error: &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "wait failed"},
 		activityInput: map[string]any{
 			"action": "wait",
@@ -109,7 +109,7 @@ func TestTypedThreadItemPreservesSubagentOperationAfterJSONReload(t *testing.T) 
 	t.Parallel()
 
 	presentation, err := floretActivityForToolResult(nil, ToolResult{
-		ToolID: "tool-wait", ToolName: "subagents", Status: toolResultStatusSuccess,
+		ToolID: "tool-wait", ToolName: "subagent_manage", Status: toolResultStatusSuccess,
 		Data: map[string]any{
 			"action":          "wait",
 			"ids":             []any{"thread-big-tech", "thread-models", "thread-policy"},
@@ -129,7 +129,7 @@ func TestTypedThreadItemPreservesSubagentOperationAfterJSONReload(t *testing.T) 
 		ID: "tool:wait", TurnID: "turn:wait", RunID: "run:wait", Ordinal: 1, Kind: flruntime.ThreadItemTool,
 		CreatedAt: time.UnixMilli(1_700_000_000_000),
 		Activity: &observation.ActivityItem{
-			ItemID: "tool-wait", ToolID: "tool-wait", ToolName: "subagents",
+			ItemID: "tool-wait", ToolID: "tool-wait", ToolName: "subagent_manage",
 			Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
 			Severity: observation.ActivitySeverityNormal, Presentation: presentation,
 		},

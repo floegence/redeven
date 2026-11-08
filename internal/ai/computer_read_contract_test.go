@@ -26,7 +26,7 @@ func TestComputerRequiredReadResult(t *testing.T) {
 			rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
 				var args map[string]any
 				_ = json.Unmarshal(c.Arguments, &args)
-				if c.ToolName == "computer.key" || args["action"] == "key" {
+				if c.ToolName == "computer_press_key" || args["action"] == "key" {
 					inputs++
 					return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"action_executed": true}}, nil
 				}
@@ -62,7 +62,7 @@ func TestComputerReadSuccessContracts(t *testing.T) {
 		name, tool    string
 		args, payload map[string]any
 	}{
-		{"snapshot", "computer.observe", nil, map[string]any{"observation": semanticTestTree()}},
+		{"snapshot", "computer_observe", nil, map[string]any{"observation": semanticTestTree()}},
 		{"node", "computer.action", map[string]any{"action": "read"}, map[string]any{"semantic_schema_version": 2, "node": semanticFixtureNode("r", "button", "Button")}},
 		{"empty_text", "computer.action", map[string]any{"action": "text"}, map[string]any{"text": "", "truncated": false, "scope": "rendered_element"}},
 		{"empty_query", "computer.action", map[string]any{"action": "query"}, map[string]any{"items": []any{}, "total": 0, "truncated": false, "scope": "loaded_accessibility_tree", "document_id": "d"}},
@@ -103,7 +103,7 @@ func TestComputerReadSuccessContracts(t *testing.T) {
 func TestComputerActionInvalidationAllowsExplicitFreshRead(t *testing.T) {
 	inputs := 0
 	rt, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
-		if c.ToolName == "computer.observe" {
+		if c.ToolName == "computer_observe" {
 			return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"observation": semanticTestTree()}}, nil
 		}
 		inputs++

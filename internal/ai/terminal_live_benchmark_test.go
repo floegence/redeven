@@ -88,12 +88,12 @@ elif mode=='cancel':
 		"verbose":     "Run python3 fixture.py verbose exactly once. Observe all output through terminal pages and report the final marker. Do not redirect, filter, or rerun it.",
 		"dependency":  "Run python3 fixture.py prepare once; after success run python3 fixture.py aggregate once. Report the aggregate.",
 		"concurrent":  "Run three independent commands, python3 fixture.py a, python3 fixture.py b, python3 fixture.py c, once each. They can run concurrently. Report all three results after completion.",
-		"interactive": "Run python3 fixture.py interactive once. Send 13 and 17 when prompted using terminal.write, then report the result.",
+		"interactive": "Run python3 fixture.py interactive once. Send 13 and 17 when prompted using terminal_write, then report the result.",
 		"failure":     "Run python3 fixture.py failure once. It intentionally fails; report its exact exit code. Do not retry.",
 		"cpu":         "Run python3 fixture.py cpu once; wait for its CPU derivation to finish and report the exact digest.",
 		"sqlite":      "Run python3 fixture.py sqlite once. It creates and queries 120000 database records; report the final aggregate.",
 		"pipeline":    "Run python3 fixture.py pipeline once. It creates 80 files and aggregates 80000 records; report the final checksum.",
-		"cancel":      "Start python3 fixture.py cancel once with yield_ms=100. When READY_TO_CANCEL appears, terminate it using terminal.terminate and confirm the observed result.",
+		"cancel":      "Start python3 fixture.py cancel once with yield_ms=100. When READY_TO_CANCEL appears, terminate it using terminal_terminate and confirm the observed result.",
 	}
 	task, ok := cases[name]
 	if !ok {
@@ -133,7 +133,7 @@ elif mode=='cancel':
 		t.Fatal(err)
 	}
 	start := time.Now()
-	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "bench", Input: RunInput{Text: task + " Work only in this fixture directory. Do not inspect or edit fixture.py. Use terminal tools only, no subagents. Reply concisely."}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh}, MaxOutputTokens: 8192, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate"}}})
+	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "bench", Input: RunInput{Text: task + " Work only in this fixture directory. Do not inspect or edit fixture.py. Use terminal tools only, no subagent_manage. Reply concisely."}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh}, MaxOutputTokens: 8192, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "terminal_write", "terminal_terminate"}}})
 	if err != nil {
 		report["error"] = err.Error()
 		t.Fatal(err)
@@ -273,7 +273,7 @@ elif mode=='cancel':
 		_, e := os.Stat(filepath.Join(workspace, "cancel.done"))
 		observed := false
 		for _, result := range results {
-			if result.ToolName == "terminal.terminate" && result.Status == "success" {
+			if result.ToolName == "terminal_terminate" && result.Status == "success" {
 				var envelope struct{ Data map[string]any }
 				if json.Unmarshal([]byte(result.Content), &envelope) == nil {
 					observed = envelope.Data["status"] == "canceled" || envelope.Data["terminated"] == true

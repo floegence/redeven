@@ -40,7 +40,7 @@ describe('Flower computer stage', () => {
         active_run_id: historical ? undefined : 'surface-run', messages: [{
           id: 'surface-message', turn_id: 'surface-turn', run_id: 'surface-run', role: 'assistant', content: '', status: historical ? 'complete' : 'streaming', created_at_ms: 10,
           blocks: [activityTimeline({ thread_id: threadID, run_id: 'surface-run', turn_id: 'surface-turn', status: historical ? 'success' : 'running',
-            items: [activityItem({ item_id: 'surface-frame', tool_id: 'surface-frame', tool_name: 'computer.screenshot', renderer: 'structured', status: 'success', label: 'Review browser results',
+            items: [activityItem({ item_id: 'surface-frame', tool_id: 'surface-frame', tool_name: 'computer_capture_screenshot', renderer: 'structured', status: 'success', label: 'Review browser results',
               target_refs: [{ kind: 'computer_frame', label: 'Chrome', resource_ref: FRAME_REF }], payload: { operation: 'screenshot', status: 'success' },
             })],
           })],
@@ -151,7 +151,7 @@ describe('Flower computer stage', () => {
         blocks: [activityTimeline({
           thread_id: threadID, run_id: 'computer-run', turn_id: 'computer-turn', status: 'running',
           items: [activityItem({
-            item_id: 'computer-screenshot', tool_id: 'computer-screenshot', tool_name: 'computer.observe',
+            item_id: 'computer-screenshot', tool_id: 'computer-screenshot', tool_name: 'computer_observe',
             renderer: 'structured', status: 'running', label: 'Reading test page',
             target_refs: [{ kind: 'computer_frame', label: 'Redeven Managed Browser', resource_ref: FRAME_REF }],
             payload: { operation: 'screenshot', status: 'success' },
@@ -340,7 +340,7 @@ describe('Flower computer stage', () => {
         blocks: [activityTimeline({
           thread_id: threadID, run_id: 'failed-run', turn_id: 'failed-turn', status: 'error',
           items: [activityItem({
-            item_id: 'failed-frame', tool_id: 'failed-frame', tool_name: 'computer.screenshot',
+            item_id: 'failed-frame', tool_id: 'failed-frame', tool_name: 'computer_capture_screenshot',
             renderer: 'structured', status: 'success', label: 'Observed test page',
             target_refs: [{ kind: 'computer_frame', label: 'Redeven Managed Browser', resource_ref: FRAME_REF }],
             payload: { operation: 'screenshot', status: 'success' },
@@ -372,7 +372,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   const paused = thread({ thread_id: threadID, title: 'Sign in', status: 'waiting_user', active_run_id: 'run-control', messages: [{
     id: 'paused-message', turn_id: 'turn-control', run_id: 'run-control', role: 'assistant', content: '', status: 'complete', created_at_ms: 10,
     blocks: [activityTimeline({ thread_id: threadID, run_id: 'run-control', turn_id: 'turn-control', status: 'success', items: [activityItem({
-      item_id: 'control-item', tool_id: 'control-call', tool_name: 'browser.navigate', renderer: 'structured', status: 'success',
+      item_id: 'control-item', tool_id: 'control-call', tool_name: 'browser_navigate', renderer: 'structured', status: 'success',
       target_refs: [{ kind: 'computer_control', label: 'Managed Browser', resource_ref: 'browser-main' }], payload: { operation: 'navigate', status: 'success' },
     })] })],
   }] });
@@ -519,11 +519,11 @@ it.each([1440, 390])('shows compact historical screenshot thumbnails with saved-
     turn_id: 'history-turn', run_id: 'history-run', blocks: [activityTimeline({
       thread_id: threadID, turn_id: 'history-turn', run_id: 'history-run', status: 'success', items: [
         ...[FRAME_REF, newerFrame].map((frame, index) => activityItem({
-          item_id: `history-frame-${index}`, tool_id: `history-frame-${index}`, tool_name: 'computer.screenshot',
+          item_id: `history-frame-${index}`, tool_id: `history-frame-${index}`, tool_name: 'computer_capture_screenshot',
           status: 'success', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
           target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: frame }],
         })),
-        activityItem({ item_id: 'latest-observation', tool_id: 'latest-observation', tool_name: 'computer.observe',
+        activityItem({ item_id: 'latest-observation', tool_id: 'latest-observation', tool_name: 'computer_observe',
           status: 'success', renderer: 'structured', payload: { operation: 'observe', status: 'success' },
           target_refs: [{ kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' }],
         }),
@@ -585,11 +585,11 @@ it.each([false, true])('retires semantic viewing at completion and reopens only 
     id: 'semantic-message', role: 'assistant', content: '', status: 'streaming', created_at_ms: 10,
     turn_id: 'semantic-turn', run_id: 'semantic-run', blocks: [activityTimeline({
       thread_id: threadID, turn_id: 'semantic-turn', run_id: 'semantic-run', status: 'running', items: [
-        ...(savedCapture ? [activityItem({ item_id: 'earlier-capture', tool_id: 'earlier-capture', tool_name: 'computer.screenshot',
+        ...(savedCapture ? [activityItem({ item_id: 'earlier-capture', tool_id: 'earlier-capture', tool_name: 'computer_capture_screenshot',
           status: 'success', renderer: 'structured', payload: { operation: 'screenshot' },
           target_refs: [{ kind: 'computer_frame', label: 'Work tab', resource_ref: earlierCapture }],
         })] : []), activityItem({
-        item_id: 'semantic-call', tool_id: 'semantic-call', tool_name: 'computer.exec', status: 'success', renderer: 'structured',
+        item_id: 'semantic-call', tool_id: 'semantic-call', tool_name: 'computer_exec', status: 'success', renderer: 'structured',
         label: 'Fill search and verify results', target_refs: [{ kind: 'computer_target', label: 'Work tab', resource_ref: 'browser-main' }],
         chips: [{ kind: 'execution_mode', label: 'Execution mode', value: 'background' }], payload: { operation: 'exec' },
       })],

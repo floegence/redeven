@@ -81,14 +81,14 @@ test('native popup workflows preserve effects and require separate target author
             const childController = new BrowserComputerController(childSession);
             await childController.initialize();
             try {
-              const denied = await childController.execute({ tool_name: 'computer.observe', args: {}, allowed_origins: [origin], script_operation: true });
+              const denied = await childController.execute({ tool_name: 'computer_observe', args: {}, allowed_origins: [origin], script_operation: true });
               assert.equal(denied.safety.level, 'takeover');
               assert.equal(denied.safety.required_origin, `http://localhost:${server.address().port}`);
               assert.equal(denied.result.observation, undefined);
-              const allowed = await childController.execute({ tool_name: 'computer.screenshot', args: {}, full_access: true, recovery_observation: true });
+              const allowed = await childController.execute({ tool_name: 'computer_capture_screenshot', args: {}, full_access: true, recovery_observation: true });
               assert.equal(allowed.safety.level, 'routine');
               assert.ok(allowed.screenshot);
-              assert.ok((await childController.execute({ tool_name: 'computer.observe', args: {}, full_access: true })).result.observation);
+              assert.ok((await childController.execute({ tool_name: 'computer_observe', args: {}, full_access: true })).result.observation);
             } finally { await childController.page.releasePage(); childController.close(); await childSession.detach(); }
           }
           if (scenario === 'proxy') assert.equal(await page.locator('output').textContent(), 'true');

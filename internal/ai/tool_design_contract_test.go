@@ -43,7 +43,7 @@ func TestAllLocalToolErrorsPreserveFactsWithoutWordingInference(t *testing.T) {
 func TestEncodingLossRetainsOnlyCorrelatedExecutionFacts(t *testing.T) {
 	for _, mode := range []string{"partial", "mismatched_call", "mismatched_tool", "empty_prefix", "pending"} {
 		t.Run(mode, func(t *testing.T) {
-			source := ToolResult{ToolID: "effect", ToolName: "computer.exec", Status: toolResultStatusError, effectUncertain: true, Data: map[string]any{"bad": math.NaN(), "target_id": "untrusted"}, executionFacts: toolExecutionFacts{callID: "effect", toolName: "computer.exec", targetID: "observed", completedActions: []string{"snapshot", "click"}, needsObservation: true}}
+			source := ToolResult{ToolID: "effect", ToolName: "computer_exec", Status: toolResultStatusError, effectUncertain: true, Data: map[string]any{"bad": math.NaN(), "target_id": "untrusted"}, executionFacts: toolExecutionFacts{callID: "effect", toolName: "computer_exec", targetID: "observed", completedActions: []string{"snapshot", "click"}, needsObservation: true}}
 			switch mode {
 			case "mismatched_call":
 				source.executionFacts.callID = "different"
@@ -93,7 +93,7 @@ func TestEncodingLossRetainsOnlyCorrelatedExecutionFacts(t *testing.T) {
 }
 
 func TestUndeliverableSafeResultRemainsInfrastructureFailure(t *testing.T) {
-	source := ToolResult{ToolID: "effect", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: math.NaN(), executionFacts: toolExecutionFacts{callID: "effect", toolName: "computer.exec", completed: true, completedActions: []string{strings.Repeat("x", computerResultMaxBytes)}}}
+	source := ToolResult{ToolID: "effect", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: math.NaN(), executionFacts: toolExecutionFacts{callID: "effect", toolName: "computer_exec", completed: true, completedActions: []string{strings.Repeat("x", computerResultMaxBytes)}}}
 	if _, err := floretToolResultFromFlower(nil, source); err == nil {
 		t.Fatal("failed fallback was reported as delivered")
 	}
@@ -102,7 +102,7 @@ func TestUndeliverableSafeResultRemainsInfrastructureFailure(t *testing.T) {
 func TestEncodingLossPreservesExecutionError(t *testing.T) {
 	for _, code := range []aitools.ErrorCode{aitools.ErrorCodePermissionDenied, aitools.ErrorCodeTakeoverRequired, aitools.ErrorCodeUnknown} {
 		t.Run(string(code), func(t *testing.T) {
-			source := ToolResult{ToolID: "failed", ToolName: "computer.exec", Status: toolResultStatusError, Data: math.NaN(), Error: &aitools.ToolError{Code: code, Message: "Execution owner reported a failure.", Meta: map[string]any{"unencodable": math.NaN()}}}
+			source := ToolResult{ToolID: "failed", ToolName: "computer_exec", Status: toolResultStatusError, Data: math.NaN(), Error: &aitools.ToolError{Code: code, Message: "Execution owner reported a failure.", Meta: map[string]any{"unencodable": math.NaN()}}}
 			result, err := floretToolResultFromFlower(nil, source)
 			if err != nil {
 				t.Fatal(err)

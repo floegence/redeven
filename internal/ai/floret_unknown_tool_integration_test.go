@@ -44,7 +44,7 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 			writeDeepSeekIntegrationTextResponse(w, flusher, "chat_title", "Weather research")
 			return
 		}
-		if slices.Contains(toolNames, "web_search") || slices.Contains(toolNames, "web_search_tool") {
+		if slices.Contains(toolNames, "web_search_pages") || slices.Contains(toolNames, "web_search_pages") {
 			t.Fatalf("request unexpectedly registered a search tool: %v", toolNames)
 		}
 		if !slices.Contains(toolNames, "web_fetch") {

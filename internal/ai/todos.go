@@ -11,7 +11,7 @@ const (
 	TodoStatusCompleted  = "completed"
 )
 
-var controlSignalTodoNames = []string{"ask_user"}
+var controlSignalTodoNames = []string{"user_ask"}
 
 type TodoItem struct {
 	ID      string `json:"id"`

@@ -82,7 +82,7 @@ func TestExecutionConfigurationSurvivesRestartAndRejectsConflict(t *testing.T) {
 	if err := store.PutExecutionAuthority(t.Context(), a); err != nil {
 		t.Fatal(err)
 	}
-	a.ExecutionConfigJSON = "{\"Options\":{\"tool_allowlist\":[\"terminal.read\"],\"max_output_tokens\":8192}}"
+	a.ExecutionConfigJSON = "{\"Options\":{\"tool_allowlist\":[\"terminal_read\"],\"max_output_tokens\":8192}}"
 	if err := store.PutExecutionAuthority(t.Context(), a); err != nil {
 		t.Fatal(err)
 	}

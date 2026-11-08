@@ -13,8 +13,8 @@ import (
 func TestComputerActivityPreservesIntentCodeAndOutput(t *testing.T) {
 	code := "  await ui.observe();\n" + strings.Repeat("log('page');\n", 1000)
 	args := map[string]any{"description": "Find the Google search box", "code": code}
-	call := floretActivityForToolCall("computer.exec", args)
-	result, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusSuccess, activityInput: args, Data: map[string]any{
+	call := floretActivityForToolCall("computer_exec", args)
+	result, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusSuccess, activityInput: args, Data: map[string]any{
 		"target_name": "Managed browser", "target_id": "browser-main", "completed": true,
 		"logs": []any{[]any{"Page title", "Google"}}, "observation": map[string]any{"nodes": []any{map[string]any{"role": "textbox", "name": "Search"}}},
 	}})
@@ -35,7 +35,7 @@ func TestComputerActivityPreservesIntentCodeAndOutput(t *testing.T) {
 	body, _ := json.Marshal(payload)
 	var record map[string]any
 	_ = json.Unmarshal(body, &record)
-	public, ok := sanitizeActivityPayloadValue(record, fltools.ActivityRendererStructured, "computer.exec")
+	public, ok := sanitizeActivityPayloadValue(record, fltools.ActivityRendererStructured, "computer_exec")
 	encoded, _ := json.Marshal(public)
 	if !ok || !strings.Contains(string(encoded), "Page title") || !strings.Contains(string(encoded), "Search") || !strings.Contains(string(encoded), "javascript") {
 		t.Fatalf("public details lost: %s", encoded)
@@ -62,7 +62,7 @@ func TestComputerActivityDescriptionsRequiredForEveryInvocation(t *testing.T) {
 }
 
 func TestComputerActivityReturnsConcreteCandidates(t *testing.T) {
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.targets", Status: toolResultStatusSuccess,
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_list_targets", Status: toolResultStatusSuccess,
 		activityInput: map[string]any{"description": "Find a browser for the preview"}, Data: ComputerTargetInventory{DefaultCandidateRef: "candidate-new", Candidates: []ComputerCandidate{
 			{CandidateRef: "candidate-new", Kind: "browser.connected", DisplayName: "Chrome", NewTab: true, State: "ready"},
 			{CandidateRef: "candidate-page", Kind: "browser.connected", DisplayName: "Chrome", Title: "Project", URL: "https://example.test/project", State: "ready"},
@@ -81,7 +81,7 @@ func TestComputerActivityReturnsConcreteCandidates(t *testing.T) {
 }
 
 func TestComputerActivityReadsOuterPageAndSemanticContent(t *testing.T) {
-	rows := structuredToolResults("computer.observe", map[string]any{"title": "Weather", "url": "file:///private/weather.html",
+	rows := structuredToolResults("computer_observe", map[string]any{"title": "Weather", "url": "file:///private/weather.html",
 		"observation": map[string]any{"nodes": []any{
 			map[string]any{"role": "RootWebArea", "canonical_role": "document", "name": ""},
 			map[string]any{"role": "StaticText", "canonical_role": "text", "name": "Beijing 23°C"},
@@ -107,10 +107,10 @@ func TestStructuredToolsPreserveUsefulResults(t *testing.T) {
 		data map[string]any
 		want string
 	}{
-		{"rgrep", map[string]any{"matches": []any{map[string]any{"path": "main.go", "line": 12, "text": "func main()"}}}, "func main()"},
-		{"find", map[string]any{"results": []any{map[string]any{"path": "main.go", "type": "file"}}}, "main.go"},
-		{"read_files", map[string]any{"files": []any{map[string]any{"path": "main.go", "result": map[string]any{"content": "package main"}}}}, "package main"},
-		{"use_skill", map[string]any{"name": "browser", "reason": "Inspect web pages", "content": "Observe before clicking"}, "Inspect web pages"},
+		{"file_search", map[string]any{"matches": []any{map[string]any{"path": "main.go", "line": 12, "text": "func main()"}}}, "func main()"},
+		{"path_find", map[string]any{"results": []any{map[string]any{"path": "main.go", "type": "file"}}}, "main.go"},
+		{"file_read_many", map[string]any{"files": []any{map[string]any{"path": "main.go", "result": map[string]any{"content": "package main"}}}}, "package main"},
+		{"skill_use", map[string]any{"name": "browser", "reason": "Inspect web pages", "content": "Observe before clicking"}, "Inspect web pages"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: tc.name, Status: toolResultStatusSuccess, Data: tc.data})
@@ -127,7 +127,7 @@ func TestStructuredToolsPreserveUsefulResults(t *testing.T) {
 
 func TestToolActivityDetailsKeepBoundedTypedResults(t *testing.T) {
 	code := "  await ui.observe();\n" + strings.Repeat("// detail\n", 4000)
-	for _, name := range []string{"computer.exec", "rgrep", "find", "read_files", "use_skill"} {
+	for _, name := range []string{"computer_exec", "file_search", "path_find", "file_read_many", "skill_use"} {
 		data := map[string]any{"content": code, "logs": []any{[]any{code}}}
 		normalized, truncated, err := normalizeTruncatedToolPayload(name, data)
 		if err != nil {
@@ -141,26 +141,26 @@ func TestToolActivityDetailsKeepBoundedTypedResults(t *testing.T) {
 	if !row.Truncated || len(row.Content) > 65536 || !utf8.ValidString(row.Content) {
 		t.Fatal("output must be bounded on a valid Unicode boundary")
 	}
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusSuccess})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusSuccess})
 	if err != nil || !activity.Payload.(fltools.StructuredActivityPayload).RowsProvided || len(activity.Payload.(fltools.StructuredActivityPayload).Rows) != 0 {
 		t.Fatalf("explicit empty result missing: %v", err)
 	}
 }
 
 func TestToolActivityDoesNotExposeSecretTextOrInventFrameAuthority(t *testing.T) {
-	call := floretActivityForToolCall("computer.type", map[string]any{"text": "private password"})
+	call := floretActivityForToolCall("computer_type_text", map[string]any{"text": "private password"})
 	body, _ := json.Marshal(call)
 	if strings.Contains(string(body), "private password") {
 		t.Fatal("secret text entered presentation")
 	}
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.screenshot", Status: toolResultStatusSuccess, Data: map[string]any{"after_frame": "computer://target/" + strings.Repeat("a", 64)}})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_capture_screenshot", Status: toolResultStatusSuccess, Data: map[string]any{"after_frame": "computer://target/" + strings.Repeat("a", 64)}})
 	if err != nil || len(activity.TargetRefs) != 0 {
 		t.Fatalf("untrusted payload granted frame authority: %+v %v", activity, err)
 	}
 }
 
 func TestSourceActivityPreservesSavedSources(t *testing.T) {
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "sources", Status: toolResultStatusSuccess, Data: map[string]any{
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "source_list", Status: toolResultStatusSuccess, Data: map[string]any{
 		"sources": []any{map[string]any{"title": "Documentation", "url": "https://example.test/docs"}},
 	}})
 	if err != nil {
@@ -173,7 +173,7 @@ func TestSourceActivityPreservesSavedSources(t *testing.T) {
 }
 
 func TestStructuredInputsRespectRegisteredRedactions(t *testing.T) {
-	call := floretActivityForToolCall("browser.navigate", map[string]any{"url": "https://user:private@example.test/?token=private"})
+	call := floretActivityForToolCall("browser_navigate", map[string]any{"url": "https://user:private@example.test/?token=private"})
 	body, _ := json.Marshal(call)
 	if strings.Contains(string(body), "private") {
 		t.Fatalf("redacted navigation input entered activity: %s", body)
@@ -185,15 +185,15 @@ func TestStructuredOutputMarksOnlyActualTruncation(t *testing.T) {
 	for i := range matches {
 		matches[i] = map[string]any{"path": "main.go", "line": i + 1, "text": "match"}
 	}
-	rows := structuredToolResults("rgrep", map[string]any{"matches": matches}, nil)
+	rows := structuredToolResults("file_search", map[string]any{"matches": matches}, nil)
 	if rows[len(rows)-1].Truncated {
 		t.Fatal("exactly full output is not truncated")
 	}
-	rows = structuredToolResults("rgrep", map[string]any{"matches": append(matches, matches[0])}, nil)
+	rows = structuredToolResults("file_search", map[string]any{"matches": append(matches, matches[0])}, nil)
 	if !rows[len(rows)-1].Truncated {
 		t.Fatal("omitted output must be explicit")
 	}
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "okf.open", Status: toolResultStatusSuccess, Data: map[string]any{"body": strings.Repeat("x", 9000), "truncated": true}})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "okf_open", Status: toolResultStatusSuccess, Data: map[string]any{"body": strings.Repeat("x", 9000), "truncated": true}})
 	if err != nil || !activity.Payload.(fltools.StructuredActivityPayload).Rows[0].Truncated {
 		t.Fatalf("knowledge output truncation lost: %v", err)
 	}
@@ -201,14 +201,14 @@ func TestStructuredOutputMarksOnlyActualTruncation(t *testing.T) {
 
 func TestCanvasReadKeepsLiteralTypedResult(t *testing.T) {
 	yaml := "metadata:\n  title: Readable canvas\n" + strings.Repeat("# unchanged context\n", 500)
-	data, truncated, err := normalizeTruncatedToolPayload("tessiven.read", map[string]any{"title": "Readable canvas", "version": int64(3), "document_yaml": yaml})
+	data, truncated, err := normalizeTruncatedToolPayload("tessiven_read_canvas", map[string]any{"title": "Readable canvas", "version": int64(3), "document_yaml": yaml})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if truncated || data.(map[string]any)["document_yaml"] != yaml {
 		t.Fatal("bounded YAML was converted to truncated JSON")
 	}
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "tessiven.read", Status: toolResultStatusSuccess, Data: data})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "tessiven_read_canvas", Status: toolResultStatusSuccess, Data: data})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestCanvasEditDetailsKeepReplacementFragmentsWithinOneCodeRow(t *testing.T)
 	for i := 0; i < 50; i++ {
 		edits = append(edits, map[string]any{"old_string": fmt.Sprintf("name: Before %d\nkind: api", i), "new_string": fmt.Sprintf("name: After %d\nkind: api", i)})
 	}
-	activity := floretActivityForToolCall("tessiven.edit", map[string]any{"summary": "Rename services", "edits": edits})
+	activity := floretActivityForToolCall("tessiven_edit_canvas", map[string]any{"summary": "Rename services", "edits": edits})
 	payload := activity.Payload.(fltools.StructuredActivityPayload)
 	if len(payload.Inputs) != 2 {
 		t.Fatalf("batch exceeded activity input budget: %+v", payload)
@@ -247,9 +247,9 @@ func TestComputerActivityResultFactsAndSafeResources(t *testing.T) {
 		name, tool, outcome string
 		data                map[string]any
 	}{
-		{"empty inventory", "computer.targets", "no_targets", map[string]any{"candidates": []any{}}},
-		{"selected browser", "computer.select_target", "selected", map[string]any{"selected": true, "target_kind": "browser.connected"}},
-		{"blank document", "computer.observe", "empty_page", map[string]any{"url": "about:blank", "nodes": []any{map[string]any{"role": "RootWebArea"}}}},
+		{"empty inventory", "computer_list_targets", "no_targets", map[string]any{"candidates": []any{}}},
+		{"selected browser", "computer_select_target", "selected", map[string]any{"selected": true, "target_kind": "browser.connected"}},
+		{"blank document", "computer_observe", "empty_page", map[string]any{"url": "about:blank", "nodes": []any{map[string]any{"role": "RootWebArea"}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: tc.tool, Status: toolResultStatusSuccess, activityInput: map[string]any{"description": "Inspect the target"}, Data: tc.data})
@@ -271,7 +271,7 @@ func TestComputerActivityResultFactsAndSafeResources(t *testing.T) {
 			}
 		})
 	}
-	rows := computerActivityResultRows("computer.targets", map[string]any{"default_candidate_ref": "default", "candidates": []any{
+	rows := computerActivityResultRows("computer_list_targets", map[string]any{"default_candidate_ref": "default", "candidates": []any{
 		map[string]any{"display_name": "Chrome", "candidate_ref": "other", "url": "https://user:secret@example.test/weather?token=private#fragment"},
 		map[string]any{"display_name": "Chrome", "candidate_ref": "default", "new_tab": true, "state": "ready"},
 	}})
@@ -281,7 +281,7 @@ func TestComputerActivityResultFactsAndSafeResources(t *testing.T) {
 	body, _ := json.Marshal(fltools.StructuredActivityPayload{Rows: rows, RowsProvided: true})
 	var record map[string]any
 	_ = json.Unmarshal(body, &record)
-	public, ok := sanitizeActivityPayloadValue(record, fltools.ActivityRendererStructured, "computer.targets")
+	public, ok := sanitizeActivityPayloadValue(record, fltools.ActivityRendererStructured, "computer_list_targets")
 	encoded, _ := json.Marshal(public)
 	if !ok || !strings.Contains(string(encoded), "https://example.test/weather") || !strings.Contains(string(encoded), "new_tab") {
 		t.Fatalf("public candidate facts lost: %s", encoded)
@@ -297,12 +297,12 @@ func TestComputerActivityResultFactsAndSafeResources(t *testing.T) {
 }
 
 func TestComputerActivityPreservesPartialAndBoundedResults(t *testing.T) {
-	controls := computerActivityResultRows("computer.observe", map[string]any{"nodes": []any{map[string]any{"canonical_role": "textbox", "name": "Notes", "value": strings.Repeat("文", activityPayloadStringLimit+1)}}})
+	controls := computerActivityResultRows("computer_observe", map[string]any{"nodes": []any{map[string]any{"canonical_role": "textbox", "name": "Notes", "value": strings.Repeat("文", activityPayloadStringLimit+1)}}})
 	if len(controls) != 1 || !controls[0].Truncated || !utf8.ValidString(controls[0].Content) {
 		t.Fatalf("bounded control value lost its truncation marker: %+v", controls)
 	}
 	data := map[string]any{"completed": false, "completed_actions": []any{"navigate"}, "observation": map[string]any{"title": "Weather", "format": "diff", "truncated": true, "nodes": []any{map[string]any{"role": "StaticText", "name": "Beijing 23°C"}}}}
-	rows := computerActivityResultRows("computer.exec", data)
+	rows := computerActivityResultRows("computer_exec", data)
 	if len(rows) != 2 || rows[0].Meta != "page_changes" || rows[1].Meta != "completed_actions" || rows[1].Content != "navigate" || !rows[1].Truncated {
 		t.Fatalf("partial result lost: %+v", rows)
 	}
@@ -316,14 +316,14 @@ func TestComputerActivityPreservesPartialAndBoundedResults(t *testing.T) {
 	for i := range candidates {
 		candidates[i] = map[string]any{"display_name": fmt.Sprintf("Window %d", i)}
 	}
-	rows = computerActivityResultRows("computer.targets", map[string]any{"candidates": candidates})
+	rows = computerActivityResultRows("computer_list_targets", map[string]any{"candidates": candidates})
 	if len(rows) != structuredActivityRowLimit || !rows[len(rows)-1].Truncated {
 		t.Fatal("candidate output must stay bounded with explicit truncation")
 	}
 }
 
 func TestComputerActivityKeepsCanonicalSnapshotText(t *testing.T) {
-	rows := computerActivityResultRows("computer.exec", map[string]any{"observation": map[string]any{"nodes": []any{map[string]any{"role": "text", "name": "Static page copy"}}}})
+	rows := computerActivityResultRows("computer_exec", map[string]any{"observation": map[string]any{"nodes": []any{map[string]any{"role": "text", "name": "Static page copy"}}}})
 	if len(rows) != 1 || rows[0].Meta == "textbox" {
 		t.Fatalf("canonical text became a control: %+v", rows)
 	}

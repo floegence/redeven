@@ -17,7 +17,7 @@ func TestSubagentModelPayloadKeepsCompleteEvidenceWithoutDisplayEchoes(t *testin
 		"events":   map[string]any{"thread_id": "parent", "next_after_event_id": "next", "events": []map[string]any{{"id": "event", "source_thread_id": "child", "source_turn_id": "turn", "source_run_id": "run", "kind": "completed", "parent_thread_id": "parent", "admitted": false}}},
 	}
 	before, _ := json.Marshal(data)
-	result, err := modelToolResultPayload(ToolResult{ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+	result, err := modelToolResultPayload(ToolResult{ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestSubagentModelPayloadRetainsExplicitDiscoveryAndMissingTargets(t *testin
 			"action": action, "status": "partial", "requested_ids": []string{"child", "missing"},
 			"items": []map[string]any{{"thread_id": "child", "task_description": "original mission", "last_message_preview": "available preview", "status": "completed"}},
 		}
-		result, err := modelToolResultPayload(ToolResult{ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+		result, err := modelToolResultPayload(ToolResult{ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data})
 		if err != nil {
 			t.Fatal(err)
 		}

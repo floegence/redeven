@@ -81,7 +81,7 @@ func TestSnapshotAssistantMessagePreservesBlockIndexesForAnchors(t *testing.T) {
 					Items: []observation.ActivityItem{{
 						ItemID:           "tool:anchor",
 						ToolID:           "anchor",
-						ToolName:         "terminal.exec",
+						ToolName:         "terminal_exec",
 						Kind:             observation.ActivityKindTool,
 						Status:           observation.ActivityStatusSuccess,
 						Severity:         observation.ActivitySeverityNormal,
@@ -130,7 +130,7 @@ func TestSnapshotAssistantMessagePreservesBlockIndexesForAnchors(t *testing.T) {
 func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) {
 	t.Parallel()
 
-	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{
+	presentation := toolStartActivityPresentation("terminal_exec", map[string]any{
 		"command":  "pwd; sleep 5; ls -1",
 		"yield_ms": int64(2000),
 	})
@@ -155,11 +155,11 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 func TestToolStartActivityPresentationUsesToolNameWithoutCommand(t *testing.T) {
 	t.Parallel()
 
-	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{})
+	presentation := toolStartActivityPresentation("terminal_exec", map[string]any{})
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
-	if presentation.Label != "terminal.exec" || presentation.Description != "" || presentation.Renderer != fltools.ActivityRendererTerminal {
+	if presentation.Label != "terminal_exec" || presentation.Description != "" || presentation.Renderer != fltools.ActivityRendererTerminal {
 		t.Fatalf("presentation=%+v", presentation)
 	}
 	payload := activityPayloadMap(presentation.Payload)
@@ -185,7 +185,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 	}{
 		{
 			name:      "file read",
-			toolName:  "read_file",
+			toolName:  "file_read",
 			args:      map[string]any{"path": "/workspace/app.ts"},
 			label:     "/workspace/app.ts",
 			renderer:  fltools.ActivityRendererFile,
@@ -193,44 +193,44 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 		},
 		{
 			name:     "web search",
-			toolName: "web.search",
+			toolName: "web_search_pages",
 			args:     map[string]any{"query": "latest release"},
 			label:    "latest release",
 			renderer: fltools.ActivityRendererWebSearch,
 		},
 		{
 			name:     "okf search query",
-			toolName: "okf.search",
+			toolName: "okf_search",
 			args:     map[string]any{"query": "Workbench wheel ownership"},
 			label:    "Workbench wheel ownership",
 			renderer: fltools.ActivityRendererStructured,
 		},
 		{
 			name:     "okf search fallback",
-			toolName: "okf.search",
+			toolName: "okf_search",
 			args:     map[string]any{},
-			label:    aitools.MustPresentationSpec("okf.search").CallLabelFallback,
+			label:    aitools.MustPresentationSpec("okf_search").CallLabelFallback,
 			renderer: fltools.ActivityRendererStructured,
 		},
 		{
 			name:     "todos",
-			toolName: "write_todos",
+			toolName: "todo_write",
 			args:     map[string]any{},
 			label:    "Update todos",
 			renderer: fltools.ActivityRendererTodos,
 		},
 		{
 			name:     "skill",
-			toolName: "use_skill",
+			toolName: "skill_use",
 			args:     map[string]any{"name": "frontend-design"},
 			label:    "frontend-design",
 			renderer: fltools.ActivityRendererStructured,
 		},
 		{
 			name:     "unknown",
-			toolName: "custom.tool",
+			toolName: "custom_tool",
 			args:     map[string]any{},
-			label:    "custom.tool",
+			label:    "custom_tool",
 			renderer: fltools.ActivityRendererStructured,
 			rawLabel: true,
 		},
@@ -275,7 +275,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 func TestComputerToolActivityPreservesPublishedRenderer(t *testing.T) {
 	t.Parallel()
 
-	for _, toolName := range []string{"computer.screenshot", "browser.navigate"} {
+	for _, toolName := range []string{"computer_capture_screenshot", "browser_navigate"} {
 		presentation := toolStartActivityPresentation(toolName, map[string]any{"target": "current"})
 		if presentation == nil {
 			t.Fatalf("%s presentation is nil", toolName)
@@ -291,7 +291,7 @@ func TestComputerToolActivityPreservesPublishedRenderer(t *testing.T) {
 
 func TestComputerResultFrameSurvivesActivitySerialization(t *testing.T) {
 	ref := "computer://browser-main/" + strings.Repeat("a", 64)
-	for _, name := range []string{"computer.screenshot", "computer.click", "computer.key", "browser.navigate"} {
+	for _, name := range []string{"computer_capture_screenshot", "computer_click", "computer_press_key", "browser_navigate"} {
 		result, err := floretToolResultFromFlower(nil, ToolResult{
 			ToolID: "frame-call", ToolName: name, Status: toolResultStatusSuccess,
 			Data:        map[string]any{"target_id": "browser-main", "target_name": "Redeven Managed Browser", "after_frame": ref},
@@ -343,7 +343,7 @@ func TestComputerActivityPublicReferencesWithoutScreenshots(t *testing.T) {
 		{"file", "private-reference", false},
 	} {
 		t.Run(tc.kind+"/"+tc.ref, func(t *testing.T) {
-			public := publicActivityItem(observation.ActivityItem{ItemID: "semantic", ToolID: "semantic", ToolName: "computer.observe",
+			public := publicActivityItem(observation.ActivityItem{ItemID: "semantic", ToolID: "semantic", ToolName: "computer_observe",
 				Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
 				Presentation: &fltools.ActivityPresentation{Label: "Inspect target", Renderer: fltools.ActivityRendererStructured,
 					TargetRefs: []fltools.ActivityTargetRef{{Kind: tc.kind, Label: "Selected target", ResourceRef: tc.ref}}}})
@@ -365,7 +365,7 @@ func TestToolStartActivityPresentationTrimsLabelToContract(t *testing.T) {
 	t.Parallel()
 
 	command := "printf " + strings.Repeat("x", 260)
-	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{
+	presentation := toolStartActivityPresentation("terminal_exec", map[string]any{
 		"command": command,
 	})
 	if presentation == nil {
@@ -380,7 +380,7 @@ func TestToolStartActivityPresentationTrimsLabelToContract(t *testing.T) {
 	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_start_label"}, []observation.Event{{
 		Type:     observation.EventTypeToolCall,
 		ToolID:   "tool_start_label",
-		ToolName: "terminal.exec",
+		ToolName: "terminal_exec",
 		Activity: presentation,
 	}}, 1000)
 	if err := observation.ValidateActivityTimeline(timeline); err != nil {
@@ -399,7 +399,7 @@ func TestFloretActivityForOKFResultBuildsSafeStructuredRows(t *testing.T) {
 	}{
 		{
 			name:     "index sections",
-			toolName: "okf.index",
+			toolName: "okf_get_index",
 			data: redevenokf.IndexResult{Sections: []redevenokf.IndexSection{{
 				Title: "AI", Slug: "private-slug", Entries: []redevenokf.IndexEntry{
 					{ConceptSummary: redevenokf.ConceptSummary{ConceptID: "private-1", Path: "/private/one"}},
@@ -410,7 +410,7 @@ func TestFloretActivityForOKFResultBuildsSafeStructuredRows(t *testing.T) {
 		},
 		{
 			name:     "search matches",
-			toolName: "okf.search",
+			toolName: "okf_search",
 			data: redevenokf.SearchResult{Matches: []redevenokf.SearchMatch{{
 				Title: "Flower runtime", Type: "Architecture", SectionTitle: "Summary", Snippet: "The current-view boundary.", ConceptID: "private-id", Path: "/private/path",
 			}}},
@@ -418,7 +418,7 @@ func TestFloretActivityForOKFResultBuildsSafeStructuredRows(t *testing.T) {
 		},
 		{
 			name:     "open markdown body",
-			toolName: "okf.open",
+			toolName: "okf_open",
 			data: redevenokf.OpenResult{
 				Concept:      redevenokf.ConceptSummary{Title: "Flower Runtime", Type: "Architecture", ConceptID: "private-id", Path: "/private/path"},
 				SectionTitle: "Contract",
@@ -460,7 +460,7 @@ func TestFloretActivityForSkillPreservesBodyWithoutInternalReferences(t *testing
 	t.Parallel()
 
 	presentation, err := floretActivityForToolResult(nil, ToolResult{
-		ToolID: "tool-skill", ToolName: "use_skill", Status: toolResultStatusSuccess,
+		ToolID: "tool-skill", ToolName: "skill_use", Status: toolResultStatusSuccess,
 		Data: map[string]any{
 			"name": "redeven-environment", "activation_id": "private-activation", "content": "Skill usage guidance", "content_ref": "private-content-ref",
 		},
@@ -497,7 +497,7 @@ func TestFloretFileActivitiesPreserveTypedReadAndMutationDetails(t *testing.T) {
 	}{
 		{
 			name:     "read",
-			toolName: "read_file",
+			toolName: "file_read",
 			data:     FileReadResult{FilePath: "/workspace/app.ts", DisplayName: "app.ts", Content: "const value = 1;\n", LineOffset: 7, LineCount: 1, TotalLines: 42, Truncated: true},
 			assert: func(t *testing.T, value fltools.ActivityPayload) {
 				payload, ok := value.(fltools.FileActivityPayload)
@@ -508,7 +508,7 @@ func TestFloretFileActivitiesPreserveTypedReadAndMutationDetails(t *testing.T) {
 		},
 		{
 			name:     "write",
-			toolName: "file.write",
+			toolName: "file_write",
 			data:     FileMutationResult{FilePath: "/workspace/weather_gd.py", DisplayName: "weather_gd.py", ChangeType: "create", Additions: 49, UnifiedDiff: "--- /dev/null\n+++ b/weather_gd.py\n@@ -0,0 +1,49 @@\n+line\n"},
 			assert: func(t *testing.T, value fltools.ActivityPayload) {
 				payload, ok := value.(fltools.FileActivityPayload)
@@ -530,7 +530,7 @@ func TestFloretFileActivitiesPreserveTypedReadAndMutationDetails(t *testing.T) {
 			if len(presentation.TargetRefs) != 1 || presentation.TargetRefs[0].Kind != "file" || presentation.TargetRefs[0].Path == "" {
 				t.Fatalf("file target refs = %#v", presentation.TargetRefs)
 			}
-			if test.toolName == "read_file" {
+			if test.toolName == "file_read" {
 				return
 			}
 			for _, chip := range presentation.Chips {
@@ -546,10 +546,10 @@ func TestFloretPatchActivityPreservesAllTypedMutations(t *testing.T) {
 	t.Parallel()
 
 	presentation, err := floretActivityForToolResult(&run{}, ToolResult{
-		ToolID: "tool-patch", ToolName: "apply_patch", Status: toolResultStatusSuccess,
+		ToolID: "tool-patch", ToolName: "file_apply_patch", Status: toolResultStatusSuccess,
 		Data: ApplyPatchResult{
 			FilesChanged: 2, Hunks: 2, Additions: 2, Deletions: 1,
-			InputFormat: "apply_patch", NormalizedFormat: "unified_diff",
+			InputFormat: "file_apply_patch", NormalizedFormat: "unified_diff",
 			Mutations: []FileMutationResult{
 				{FilePath: "/workspace/app.ts", DisplayName: "app.ts", ChangeType: "update", Additions: 1, Deletions: 1, UnifiedDiff: "@@ -1 +1 @@\n-old\n+new\n"},
 				{FilePath: "/workspace/new.ts", DisplayName: "new.ts", ChangeType: "create", Additions: 1, UnifiedDiff: "@@ -0,0 +1 @@\n+new\n"},
@@ -647,7 +647,7 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 		Items: []observation.ActivityItem{{
 			ItemID:         "tool:tool_json",
 			ToolID:         "tool_json",
-			ToolName:       "terminal.exec",
+			ToolName:       "terminal_exec",
 			Kind:           observation.ActivityKindTool,
 			Status:         observation.ActivityStatusSuccess,
 			Severity:       observation.ActivitySeverityNormal,
@@ -714,9 +714,9 @@ func TestPublicActivityTimelinePreservesTodoItems(t *testing.T) {
 			Counts:     observation.ActivityCounts{Success: 1},
 		},
 		Items: []observation.ActivityItem{{
-			ItemID:   "tool:write_todos",
-			ToolID:   "write_todos",
-			ToolName: "write_todos",
+			ItemID:   "tool:todo_write",
+			ToolID:   "todo_write",
+			ToolName: "todo_write",
 			Kind:     observation.ActivityKindTool,
 			Status:   observation.ActivityStatusSuccess,
 			Severity: observation.ActivitySeverityQuiet,
@@ -758,7 +758,7 @@ func TestPublicActivityTimelinePreservesTodoItems(t *testing.T) {
 
 func TestComputerResultNeverInfersImageAuthorityFromPayload(t *testing.T) {
 	ref := "computer://browser-main/" + strings.Repeat("a", 64)
-	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "payload-only", ToolName: "computer.screenshot", Status: toolResultStatusSuccess, Data: map[string]any{"after_frame": ref}})
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "payload-only", ToolName: "computer_capture_screenshot", Status: toolResultStatusSuccess, Data: map[string]any{"after_frame": ref}})
 	if err != nil {
 		t.Fatal(err)
 	}

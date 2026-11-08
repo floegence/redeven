@@ -62,13 +62,13 @@ func ollamaTaskSubagentDirectInstructionCapabilities(f *ollamaTaskFixture) {
 		f.t.Fatal(err)
 	}
 
-	gitMessage := fmt.Sprintf("You are authorized to use terminal.exec for read-only Git investigation in %q. Use GIT_OPTIONAL_LOCKS=0 for git status. Inspect git status, git worktree list, the full hashes and subjects of HEAD, origin/main and their merge base, git rev-list --left-right --count origin/main...HEAD, and git diff --stat origin/main HEAD. Check whether the worktree is clean. Do not modify files or Git refs, delete anything, or run git fetch. Report the exact values you observed.", repository)
+	gitMessage := fmt.Sprintf("You are authorized to use terminal_exec for read-only Git investigation in %q. Use GIT_OPTIONAL_LOCKS=0 for git status. Inspect git status, git worktree list, the full hashes and subjects of HEAD, origin/main and their merge base, git rev-list --left-right --count origin/main...HEAD, and git diff --stat origin/main HEAD. Check whether the worktree is clean. Do not modify files or Git refs, delete anything, or run git fetch. Report the exact values you observed.", repository)
 	childrenBefore := len(f.children())
-	gitParent := f.finish("subagent-git-audit", fmt.Sprintf("Use subagents to spawn exactly one child named Git History Audit with mission_only context and task description Read-only Git audit. Pass this complete task and authorization as the child's message without changing it:\n\n%s\n\nWait for its completed handoff and reply GIT_AUDIT_COMPLETE. Do not perform the Git inspection yourself or spawn another child.", gitMessage), "GIT_AUDIT_COMPLETE")
-	if hasOllamaTaskToolActivity(gitParent.Current, "terminal.exec") {
+	gitParent := f.finish("subagent-git-audit", fmt.Sprintf("Use subagent_manage to spawn exactly one child named Git History Audit with mission_only context and task description Read-only Git audit. Pass this complete task and authorization as the child's message without changing it:\n\n%s\n\nWait for its completed handoff and reply GIT_AUDIT_COMPLETE. Do not perform the Git inspection yourself or spawn another child.", gitMessage), "GIT_AUDIT_COMPLETE")
+	if hasOllamaTaskToolActivity(gitParent.Current, "terminal_exec") {
 		f.t.Fatal("parent performed the delegated Git inspection")
 	}
-	gitChild := ollamaTaskFinishedChild(f, childrenBefore, gitParent.Current.TurnID, gitMessage, "terminal.exec")
+	gitChild := ollamaTaskFinishedChild(f, childrenBefore, gitParent.Current.TurnID, gitMessage, "terminal_exec")
 	gitReport := ollamaTaskText(gitChild.Current)
 	for _, expected := range []string{
 		"BASE_COMMON_SUBJECT", "REMOTE_ONLY_GIT_SUBJECT_7F2A", "LOCAL_ONLY_GIT_SUBJECT_39A1",
@@ -106,18 +106,18 @@ func ollamaTaskSubagentDirectInstructionCapabilities(f *ollamaTaskFixture) {
 		f.t.Fatal("Git audit changed a tracked file")
 	}
 
-	fileMessage := fmt.Sprintf("You are authorized to use terminal.exec to create %s/child-authorized.txt with exactly AUTHORIZED_WRITE followed by a newline. Verify the complete file contents and report them.", f.root)
+	fileMessage := fmt.Sprintf("You are authorized to use terminal_exec to create %s/child-authorized.txt with exactly AUTHORIZED_WRITE followed by a newline. Verify the complete file contents and report them.", f.root)
 	fileChildrenBefore := len(f.children())
-	fileParent := f.finish("subagent-file-write", fmt.Sprintf("Use subagents to spawn exactly one child named File Update with mission_only context and task description Create the requested test artifact. Pass this complete task and authorization as the child's message without changing it:\n\n%s\n\nWait for its completed handoff and reply FILE_WRITE_COMPLETE. Do not create the file yourself or spawn another child.", fileMessage), "FILE_WRITE_COMPLETE")
-	if hasOllamaTaskToolActivity(fileParent.Current, "terminal.exec") {
+	fileParent := f.finish("subagent-file-write", fmt.Sprintf("Use subagent_manage to spawn exactly one child named File Update with mission_only context and task description Create the requested test artifact. Pass this complete task and authorization as the child's message without changing it:\n\n%s\n\nWait for its completed handoff and reply FILE_WRITE_COMPLETE. Do not create the file yourself or spawn another child.", fileMessage), "FILE_WRITE_COMPLETE")
+	if hasOllamaTaskToolActivity(fileParent.Current, "terminal_exec") {
 		f.t.Fatal("parent performed the delegated file update")
 	}
-	ollamaTaskFinishedChild(f, fileChildrenBefore, fileParent.Current.TurnID, fileMessage, "terminal.exec")
+	ollamaTaskFinishedChild(f, fileChildrenBefore, fileParent.Current.TurnID, fileMessage, "terminal_exec")
 	f.file("child-authorized.txt", "AUTHORIZED_WRITE\n")
 
 	networkMessage := "You are authorized to use web_fetch to inspect the public page https://example.com/. Read the returned page title and content, then report the title and whether the page contains the phrase Example Domain."
 	networkChildrenBefore := len(f.children())
-	networkParent := f.finish("subagent-network-research", fmt.Sprintf("Use subagents to spawn exactly one child named Public Page Research with mission_only context and task description Inspect a public reference page. Pass this complete task and authorization as the child's message without changing it:\n\n%s\n\nWait for its completed handoff and reply NETWORK_RESEARCH_COMPLETE. Do not fetch the page yourself or spawn another child.", networkMessage), "NETWORK_RESEARCH_COMPLETE")
+	networkParent := f.finish("subagent-network-research", fmt.Sprintf("Use subagent_manage to spawn exactly one child named Public Page Research with mission_only context and task description Inspect a public reference page. Pass this complete task and authorization as the child's message without changing it:\n\n%s\n\nWait for its completed handoff and reply NETWORK_RESEARCH_COMPLETE. Do not fetch the page yourself or spawn another child.", networkMessage), "NETWORK_RESEARCH_COMPLETE")
 	if hasOllamaTaskToolActivity(networkParent.Current, "web_fetch") {
 		f.t.Fatal("parent performed the delegated network lookup")
 	}

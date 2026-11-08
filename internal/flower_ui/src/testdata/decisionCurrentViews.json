@@ -23,7 +23,7 @@
           "effects": [
             "shell"
           ],
-          "tool_name": "terminal.exec",
+          "tool_name": "terminal_exec",
           "tool_call_id": "decision-call"
         }
       }
@@ -53,7 +53,7 @@
           "effects": [
             "shell"
           ],
-          "tool_name": "terminal.exec",
+          "tool_name": "terminal_exec",
           "tool_call_id": "decision-call"
         }
       }
@@ -83,7 +83,7 @@
           "effects": [
             "shell"
           ],
-          "tool_name": "terminal.exec",
+          "tool_name": "terminal_exec",
           "tool_call_id": "decision-call"
         }
       }

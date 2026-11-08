@@ -15,7 +15,7 @@ func TestWebSearchActivityPreservesCanonicalSources(t *testing.T) {
 		if populated {
 			data.Results = append(data.Results, websearch.Item{Title: "Weather", URL: "https://example.com", Snippet: "Sunny"})
 		}
-		activity, err := floretActivityForToolResult(nil, ToolResult{ToolID: "search", ToolName: "web.search", Status: toolResultStatusSuccess, Data: data})
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolID: "search", ToolName: "web_search_pages", Status: toolResultStatusSuccess, Data: data})
 		if err != nil {
 			t.Fatal(err)
 		}

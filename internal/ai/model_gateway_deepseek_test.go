@@ -26,7 +26,7 @@ func TestDeepSeekResponsesReplaysHistoricalSearchWithoutEnablingIt(t *testing.T)
 		}
 		bodies = append(bodies, body)
 		// Historical response items remain readable even though current tools ignore hosted search.
-		output := `[{"type":"reasoning","content":[{"type":"reasoning_text","text":"checking"}]},{"type":"web_search_call","id":"ws1","status":"completed","opaque_results":"receipt","action":{"type":"search","query":"docs"}},{"type":"function_call","id":"item1","call_id":"call1","name":"okf_index","arguments":"{}"}]`
+		output := `[{"type":"reasoning","content":[{"type":"reasoning_text","text":"checking"}]},{"type":"web_search_call","id":"ws1","status":"completed","opaque_results":"receipt","action":{"type":"search","query":"docs"}},{"type":"function_call","id":"item1","call_id":"call1","name":"okf_get_index","arguments":"{}"}]`
 		if len(bodies) > 1 {
 			output = `[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]`
 		}
@@ -70,7 +70,7 @@ func TestDeepSeekResponsesReplaysHistoricalSearchWithoutEnablingIt(t *testing.T)
 			state = e.ResponseState
 		}
 	}
-	if starts != 1 || results != 1 || state == nil || call.Name != "okf.index" || call.Args != "{}" {
+	if starts != 1 || results != 1 || state == nil || call.Name != "okf_get_index" || call.Args != "{}" {
 		t.Fatalf("search=%d/%d state=%v call=%+v", starts, results, state != nil, call)
 	}
 	req.PreviousState = state
@@ -115,7 +115,7 @@ func TestDeepSeekResponsesReplaysHistoricalSearchWithoutEnablingIt(t *testing.T)
 }
 
 func deepSeekTestTools() []fltools.ToolDefinition {
-	return []fltools.ToolDefinition{{Name: "okf.index", InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}}}
+	return []fltools.ToolDefinition{{Name: "okf_get_index", InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}}}
 }
 
 func TestDeepSeekShortRequestDoesNotEnableSearch(t *testing.T) {
@@ -283,8 +283,8 @@ func TestDeepSeekAdapterPreservesToolResultImages(t *testing.T) {
 		return imagePart, nil
 	}
 	req := flprovider.Request{Messages: []flprovider.Message{
-		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "screen", Name: "computer.screenshot", Args: "{}"}}},
-		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "screen", ToolName: "computer.screenshot", Text: "captured",
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "screen", Name: "computer_capture_screenshot", Args: "{}"}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "screen", ToolName: "computer_capture_screenshot", Text: "captured",
 			Attachments: []flprovider.Attachment{attachment}}},
 	}}
 	prepared, err := adapter.turnRequest(context.Background(), req)
@@ -306,10 +306,10 @@ func TestDeepSeekGatewayPreservesNativeOutputPartsAcrossTerminalSuffix(t *testin
 			`{"type":"response.reasoning_text.delta","item_id":"reason","output_index":0,"content_index":0,"delta":"think"}`,
 			`{"type":"response.output_item.added","output_index":1,"item":{"type":"web_search_call","id":"search","action":{"type":"search","query":"docs"}}}`,
 			`{"type":"response.output_text.delta","item_id":"message","output_index":2,"content_index":0,"delta":"ans"}`,
-			`{"type":"response.output_item.added","output_index":3,"item":{"type":"function_call","id":"function","call_id":"call","name":"okf_index","arguments":""}}`,
+			`{"type":"response.output_item.added","output_index":3,"item":{"type":"function_call","id":"function","call_id":"call","name":"okf_get_index","arguments":""}}`,
 			`{"type":"response.function_call_arguments.delta","item_id":"function","output_index":3,"delta":"{}"}`,
-			`{"type":"response.output_item.done","output_index":3,"item":{"type":"function_call","id":"function","call_id":"call","name":"okf_index","arguments":"{}"}}`,
-			`{"type":"response.completed","response":{"id":"response","status":"completed","output":[{"type":"reasoning","id":"reason","content":[{"type":"reasoning_text","text":"thinking"}]},{"type":"web_search_call","id":"search","status":"completed","action":{"type":"search","query":"docs"}},{"type":"message","id":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]},{"type":"function_call","id":"function","call_id":"call","name":"okf_index","arguments":"{}"}]}}`,
+			`{"type":"response.output_item.done","output_index":3,"item":{"type":"function_call","id":"function","call_id":"call","name":"okf_get_index","arguments":"{}"}}`,
+			`{"type":"response.completed","response":{"id":"response","status":"completed","output":[{"type":"reasoning","id":"reason","content":[{"type":"reasoning_text","text":"thinking"}]},{"type":"web_search_call","id":"search","status":"completed","action":{"type":"search","query":"docs"}},{"type":"message","id":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]},{"type":"function_call","id":"function","call_id":"call","name":"okf_get_index","arguments":"{}"}]}}`,
 		} {
 			fmt.Fprintf(w, "data: %s\n\n", event)
 		}

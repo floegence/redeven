@@ -197,7 +197,7 @@ describe('request source attribution', () => {
         source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: 1159,
         categories: [{ category: 'tool_definition', characters: 1159, details: [
           { key: 'goal', source: 'floret', characters: 859 },
-          { key: 'terminal.exec', source: 'builtin', characters: 200 },
+          { key: 'terminal_exec', source: 'builtin', characters: 200 },
           { key: 'unrecorded', characters: 100 },
         ] }],
       },
@@ -215,7 +215,7 @@ describe('request source attribution', () => {
   it('groups released category values without scaling parents or children', () => {
     const confirmed: FlowerContextSample = { available:true, measured:true, characters_available:true,
       phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:1100,
-      characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (100)+(600)+(240)+(30)+(20)+(10)+(50), categories: [{ category: 'system', characters: 100 },{ category: 'tool_definition', characters: 600, details: [{ key:'opaque',source:'mcp',namespace:'docs',characters:300 },{ key:'terminal.exec',source:'builtin',characters:200 },{ key:'web_search',source:'provider',characters:100 }] },{ category: 'model_context', characters: 240, details: [{ key:'skills',characters:100 },{ key:'repository_rules',characters:70 },{ key:'execution_environment',characters:40 },{ key:'',characters:30 }] },{ category: 'user', characters: 30 },{ category: 'assistant', characters: 20 },{ category: 'tool_call', characters: 10 },{ category: 'tool_result', characters: 50 }] },
+      characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (100)+(600)+(240)+(30)+(20)+(10)+(50), categories: [{ category: 'system', characters: 100 },{ category: 'tool_definition', characters: 600, details: [{ key:'opaque',source:'mcp',namespace:'docs',characters:300 },{ key:'terminal_exec',source:'builtin',characters:200 },{ key:'web_search',source:'provider',characters:100 }] },{ category: 'model_context', characters: 240, details: [{ key:'skills',characters:100 },{ key:'repository_rules',characters:70 },{ key:'execution_environment',characters:40 },{ key:'',characters:30 }] },{ category: 'user', characters: 30 },{ category: 'assistant', characters: 20 },{ category: 'tool_call', characters: 10 },{ category: 'tool_result', characters: 50 }] },
     };
     const result = buildFlowerContextComposition({confirmed})!;
     const rows = new Map(result.rows.map(row => [row.key,row]));

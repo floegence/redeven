@@ -1,7 +1,7 @@
 ---
 type: AI Tool Contract
 title: Flower child runtime and parent event boundary
-tags: [ai, floret, subagents, permissions]
+tags: [ai, floret, subagent_manage, permissions]
 lifecycle: contract
 reviewed_at: "2026-11-06"
 ---
@@ -12,7 +12,7 @@ Floret owns canonical child threads, reports and parent-scoped lifecycle events.
 # Contract
 
 ## Child runtime
-The `subagents` tool supports spawn, send input, wait, list, status, inspect, close, and close all.
+The `subagent_manage` tool supports spawn, send input, wait, list, status, inspect, close, and close all.
 
 Non-null fields belonging to another action are rejected before
 authorization, including empty filters. Strict-provider nulls mean omission. The
@@ -61,7 +61,7 @@ Forks copy conversation facts, never child ownership.
 Missing targets are presented as missing rather than completed or timed out.
 
 ## Parent events
-Flower uses published Floret parent events. subagent_events reads only events
+Flower uses published Floret parent events. subagent_read_events reads only events
 addressed to the current parent thread, including earlier turns; it is not a
 global event stream.
 

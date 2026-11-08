@@ -1851,7 +1851,7 @@ it.each([
 });
 
 it('loads saved tool previews through the exact scoped Desktop route', async () => {
-  const preview = { tool_name: 'threads.query', inputs: [], rows: [], total: 0, has_more: false };
+  const preview = { tool_name: 'thread_query', inputs: [], rows: [], total: 0, has_more: false };
   const bridge = bridgeFor(request => {
     expect(request).toMatchObject({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread-1/tool-preview',
       body: { turn_id: 'turn-1', run_id: 'run-1', tool_call_id: 'call-1' } });

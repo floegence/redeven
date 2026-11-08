@@ -37,7 +37,7 @@ func TestRenderedContextAttributionProtocols(t *testing.T) {
 				{Role: "system", Content: []ContentPart{{Type: "text", Text: "\u3000技能目录\u3000"}}, Attribution: &flprovider.MessageAttribution{Category: "model_context", Parts: []flprovider.ContentAttributionPart{{Start: 0, End: len("\u3000技能目录\u3000"), Key: "skills"}}}},
 				{Role: "user", Content: []ContentPart{{Type: "text", Text: "\u3000规则\u3000"}, {Type: "text", Text: "\n环境\n"}}, Attribution: &flprovider.MessageAttribution{Category: "model_context", Parts: []flprovider.ContentAttributionPart{{Start: 0, End: len("\u3000规则\u3000"), Key: "repository_rules"}, {Start: len("\u3000规则\u3000"), End: len("\u3000规则\u3000\n环境\n"), Key: "execution_environment"}}}},
 				{Role: "user", Content: []ContentPart{{Type: "text", Text: "Hi"}}},
-			}, Tools: []ToolDef{{Name: "docs.search", Source: "mcp", Namespace: "docs", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)}}}
+			}, Tools: []ToolDef{{Name: "docs_search", Source: "mcp", Namespace: "docs", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)}}}
 			prepared, err := gateway.(modelGatewayRequestPreparer).prepareTurn(context.Background(), req)
 			if err != nil {
 				t.Fatal(err)
@@ -51,11 +51,11 @@ func TestRenderedContextAttributionProtocols(t *testing.T) {
 			keys := map[string]bool{}
 			for _, item := range b.Details.Items {
 				keys[item.Key] = true
-				if item.Category == "tool_definition" && (item.Key != "docs.search" || item.Source != "mcp" || item.Namespace != "docs") {
+				if item.Category == "tool_definition" && (item.Key != "docs_search" || item.Source != "mcp" || item.Namespace != "docs") {
 					t.Fatalf("lost tool origin: %+v", item)
 				}
 			}
-			for _, key := range []string{"skills", "repository_rules", "execution_environment", "docs.search"} {
+			for _, key := range []string{"skills", "repository_rules", "execution_environment", "docs_search"} {
 				if !keys[key] {
 					t.Errorf("missing source %q: %+v", key, b.Details)
 				}
@@ -85,7 +85,7 @@ func TestRenderedContextAttributionProtocols(t *testing.T) {
 func TestRenderedContextAttributionMismatchKeepsBudget(t *testing.T) {
 	req := ModelGatewayRequest{Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "expected"}}, Attribution: &flprovider.MessageAttribution{Category: "model_context"}}}}
 	raw := []byte(`{"messages":[{"role":"user","content":"different"}]}`)
-	estimate, err := flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: "openai", Model: "gpt-4o", Format: flprovider.RequestFormatOpenAIChat, Payload: raw, Attribution: renderedContextAttribution(flprovider.RequestFormatOpenAIChat, raw, req, providerToolAliases{})})
+	estimate, err := flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: "openai", Model: "gpt-4o", Format: flprovider.RequestFormatOpenAIChat, Payload: raw, Attribution: renderedContextAttribution(flprovider.RequestFormatOpenAIChat, raw, req, providerToolContract{})})
 	if err != nil || estimate.EstimatedInputTokens <= 0 || estimate.Breakdown.Source != "" || estimate.Breakdown.Diagnostic != "attribution_mismatch" {
 		t.Fatalf("optional attribution affected execution budget: %+v %v", estimate, err)
 	}

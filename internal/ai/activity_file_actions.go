@@ -10,6 +10,8 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
 	fltools "github.com/floegence/floret/v7/tools"
+
+	"github.com/floegence/redeven/internal/ai/toolnames"
 )
 
 func SanitizeActivityTimelineMessageJSON(raw string) (json.RawMessage, error) {
@@ -276,11 +278,12 @@ func sanitizeActivityMetadataValue(value any) map[string]any {
 }
 
 func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, toolName string) (map[string]any, bool) {
+	toolName = toolnames.Historical(toolName)
 	payload, ok := value.(map[string]any)
 	if !ok || len(payload) == 0 {
 		return nil, false
 	}
-	if strings.TrimSpace(toolName) == "subagents" {
+	if strings.TrimSpace(toolName) == "subagent_manage" {
 		return sanitizeSubagentsActivityPayloadValue(payload)
 	}
 	allowed := activityPayloadAllowedKeys(renderer)
@@ -294,7 +297,7 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 			continue
 		}
 		if key == "goal" {
-			if strings.TrimSpace(toolName) == "goal" {
+			if strings.TrimSpace(toolName) == "goal_manage" {
 				if goal := sanitizeGoalActivityValue(item); goal != nil {
 					out[key] = goal
 				}

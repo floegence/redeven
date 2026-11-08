@@ -65,7 +65,7 @@ func TestComputerMissingBrowserReportsSetupAndDisabledBrowserCannotRun(t *testin
 	host.ConfigureManagedBrowser(t.TempDir())
 	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 	bindTargetTestRun(t, r)
-	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "observe", "computer.screenshot"), "observe", "computer.screenshot", map[string]any{"target": "browser-main"})
+	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "observe", "computer_capture_screenshot"), "observe", "computer_capture_screenshot", map[string]any{"target": "browser-main"})
 	if err == nil {
 		t.Fatal("missing installation reported success")
 	}
@@ -85,7 +85,7 @@ func TestComputerMissingBrowserReportsSetupAndDisabledBrowserCannotRun(t *testin
 	if _, err = service.SetComputerBrowserEnabled(t.Context(), meta, false); err != nil {
 		t.Fatal(err)
 	}
-	for _, tool := range []string{"computer.screenshot", "computer.observe", "computer.exec"} {
+	for _, tool := range []string{"computer_capture_screenshot", "computer_observe", "computer_exec"} {
 		_, err = host.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "browser-main", ThreadID: "thread-first", ToolName: tool})
 		if !errors.Is(err, browserinstall.ErrDisabled) {
 			t.Fatalf("disabled %s: %v", tool, err)
@@ -97,7 +97,7 @@ func TestComputerMissingBrowserReportsSetupAndDisabledBrowserCannotRun(t *testin
 	if err := host.registry.Register(TargetDescriptor{ID: "stale-managed-page", Kind: "browser.managed", Ready: true}); err != nil {
 		t.Fatal(err)
 	}
-	discovered, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "discover", "computer.targets"), "discover", "computer.targets", map[string]any{"browser_source": "managed"})
+	discovered, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "discover", "computer_list_targets"), "discover", "computer_list_targets", map[string]any{"browser_source": "managed"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestComputerMissingBrowserReportsSetupAndDisabledBrowserCannotRun(t *testin
 	if !ok || len(inventory.Candidates) != 0 || inventory.DefaultCandidateRef != "" {
 		t.Fatalf("disabled candidate offered: %#v", discovered)
 	}
-	if _, err = host.executeComputerUserInputLocked(t.Context(), TargetToolCall{TargetID: "browser-main", ToolName: "computer.screenshot"}); !errors.Is(err, browserinstall.ErrDisabled) {
+	if _, err = host.executeComputerUserInputLocked(t.Context(), TargetToolCall{TargetID: "browser-main", ToolName: "computer_capture_screenshot"}); !errors.Is(err, browserinstall.ErrDisabled) {
 		t.Fatalf("disabled private viewer: %v", err)
 	}
 

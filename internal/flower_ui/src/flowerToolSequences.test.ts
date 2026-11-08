@@ -16,7 +16,7 @@ const tool = (id: string, overrides: Partial<FlowerActivityItem> = {}): Message 
   type: 'activity', key: id, block_index: 0, block: { type: 'activity-timeline', schema_version: 1,
     thread_id: 'thread', run_id: 'run', turn_id: 'turn',
     summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
-    items: [{ item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false, ...overrides }],
+    items: [{ item_id: id, tool_id: id, tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false, ...overrides }],
   },
 }] });
 const scopedTool = (id: string, runID: string, overrides: Partial<FlowerActivityItem> = {}): Message => {
@@ -190,7 +190,7 @@ describe('consecutive tool presentation', () => {
       expect(partial).toEqual(full);
       expect(partial.groups.size).toBe(0);
     }
-    const wait = { tool_name: 'subagents', renderer: 'subagent_operation' as const, status: 'waiting' as const, severity: 'blocking' as const,
+    const wait = { tool_name: 'subagent_manage', renderer: 'subagent_operation' as const, status: 'waiting' as const, severity: 'blocking' as const,
       needs_attention: true, attention_reasons: ['waiting' as const] };
     expect(projectFlowerToolSequences([tool('a'), tool('wait', { ...wait, field_summary: { action: 'wait', fields: [] } }), tool('b')]))
       .toEqual(projectFlowerToolSequences([tool('a'), tool('wait', { ...wait, payload: { action: 'wait' } }), tool('b')]));
@@ -265,7 +265,7 @@ describe('consecutive tool presentation', () => {
   it('treats goal call previews like ordinary calls while preserving explicit input boundaries', () => {
     const goalPreview = projectFlowerToolSequences([tool('search'), toolPreview('goal-preview', 'goal'), tool('last')]);
     expect([...goalPreview.groups.values()][0]).toMatchObject({ toolCount: 3 });
-    expect(projectFlowerToolSequences([tool('a'), toolPreview('question', 'ask_user'), tool('b')]).groups.size).toBe(0);
+    expect(projectFlowerToolSequences([tool('a'), toolPreview('question', 'user_ask'), tool('b')]).groups.size).toBe(0);
   });
   it('folds older settled sequences while retaining the latest and active calls', () => {
     const result = projectFlowerToolSequences([tool('a'), tool('b'), text('progress'), tool('c'), tool('d', { status: 'running' }), text('update'), tool('e'), tool('f')]);
@@ -299,7 +299,7 @@ describe('consecutive tool presentation', () => {
   it('keeps an active SubAgent wait foldable and counts it as running', () => {
     const result = projectFlowerToolSequences([
       tool('before'),
-      tool('wait', { tool_name: 'subagents', renderer: 'subagent_operation', status: 'waiting', severity: 'blocking',
+      tool('wait', { tool_name: 'subagent_manage', renderer: 'subagent_operation', status: 'waiting', severity: 'blocking',
         needs_attention: true, attention_reasons: ['waiting'], payload: { action: 'wait' } }),
       tool('after'),
     ]);
@@ -309,16 +309,16 @@ describe('consecutive tool presentation', () => {
     { status: 'waiting' }, { requires_approval: true }, { needs_attention: true },
     { status: 'running', severity: 'normal', needs_attention: true, attention_reasons: ['approval'] },
     { status: 'running', severity: 'normal', needs_attention: true, attention_reasons: ['running', 'approval'] },
-    { tool_name: 'ask_user' }, { kind: 'control' },
+    { tool_name: 'user_ask' }, { kind: 'control' },
   ])('keeps attention and interactions as boundaries: %j', overrides => {
     expect(projectFlowerToolSequences([tool('a'), tool('boundary', overrides), tool('b')]).groups.size).toBe(0);
   });
   it('folds SubAgent activity, adjacent thinking, and ordinary tools as one sequence', () => {
     const result = projectFlowerToolSequences([
       text('leading', true),
-      tool('subagent-a', { tool_name: 'subagents', renderer: 'subagent_operation' }),
+      tool('subagent-a', { tool_name: 'subagent_manage', renderer: 'subagent_operation' }),
       text('middle', true),
-      tool('subagent-b', { tool_name: 'subagents', renderer: 'subagent_operation' }),
+      tool('subagent-b', { tool_name: 'subagent_manage', renderer: 'subagent_operation' }),
       text('trailing', true),
     ]);
     expect(result.groups.size).toBe(1);
@@ -331,11 +331,11 @@ describe('consecutive tool presentation', () => {
   it('folds canonical SubAgent reports and completion rows between tools and thinking', () => {
     const entries = [
       text('thinking-before', true),
-      tool('spawn', { tool_name: 'subagents', renderer: 'subagent_operation' }),
+      tool('spawn', { tool_name: 'subagent_manage', renderer: 'subagent_operation' }),
       parentEvent('report', 'report'),
       text('thinking-middle', true),
       parentEvent('completed'),
-      tool('read-result', { tool_name: 'subagent_events', renderer: 'subagent' }),
+      tool('read-result', { tool_name: 'subagent_read_events', renderer: 'subagent' }),
       parentEvent('failed', 'failed'),
     ];
     const result = projectFlowerToolSequences(entries, 'thread', [runtimeTurn()]);
@@ -370,8 +370,8 @@ describe('consecutive tool presentation', () => {
     expect(projectFlowerToolSequences([tool('a'), event, tool('b')], 'thread').groups.size).toBe(0);
     expect(projectFlowerToolSequences([tool('a'), event, tool('b')], 'thread', [runtimeTurn(), runtimeTurn({ run_id: 'other-run' })]).groups.size).toBe(0);
   });
-  it('folds report_to_parent tool results while preserving interaction and uncertainty boundaries', () => {
-    const report = tool('report', { tool_name: 'report_to_parent', target_refs: [{ kind: 'parent_event', label: 'parent' }] });
+  it('folds subagent_report tool results while preserving interaction and uncertainty boundaries', () => {
+    const report = tool('report', { tool_name: 'subagent_report', target_refs: [{ kind: 'parent_event', label: 'parent' }] });
     expect(projectFlowerToolSequences([report, tool('next')]).groups.values().next().value?.toolCount).toBe(2);
     const uncertain = tool('uncertain', { chips: [{ kind: 'effect_outcome', label: 'uncertain', value: 'uncertain' }] });
     expect(projectFlowerToolSequences([tool('a'), uncertain, tool('b')]).groups.size).toBe(0);
@@ -458,7 +458,7 @@ describe('consecutive tool presentation', () => {
 });
 
 it('does not count observation interruptions as failed calls in a tool group', () => {
-  const interrupted = tool('read', {tool_name:'computer.exec',status:'error',severity:'error',needs_attention:true,
+  const interrupted = tool('read', {tool_name:'computer_exec',status:'error',severity:'error',needs_attention:true,
     chips:[{kind:'computer_observation',label:'observation',value:'unavailable'}]});
   const result = projectFlowerToolSequences([interrupted,tool('next')], 'thread');
   expect([...result.groups.values()][0]).toMatchObject({toolCount:2,failedCount:0});

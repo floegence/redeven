@@ -42,7 +42,7 @@ it('retains a detail-only turn clock across sampled requests, waits and continua
 describe('streamed tool argument presentation', () => {
   const call: FlowerToolCallPreview = {
     thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', logical_request_id: 'request-a', attempt_id: 'attempt-a', attempt_epoch: 1,
-    call_id: 'call-a', name: 'file.write', arguments_complete: false, preview: { display_name: 'a.txt', additions: 8 },
+    call_id: 'call-a', name: 'file_write', arguments_complete: false, preview: { display_name: 'a.txt', additions: 8 },
   };
   const current: FlowerRuntimeCurrentView = {
     thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', view_version: 1, activity: 'active',
@@ -50,7 +50,7 @@ describe('streamed tool argument presentation', () => {
   };
   const tool = (status: string) => ({
     id: 'tool:turn-a:call-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'tool' as const,
-    activity: { item_id: 'canonical-entry-a', tool_id: 'call-a', tool_name: 'file.write', kind: 'tool', status, severity: 'normal',
+    activity: { item_id: 'canonical-entry-a', tool_id: 'call-a', tool_name: 'file_write', kind: 'tool', status, severity: 'normal',
       presentation: { renderer: 'file', payload: { display_name: 'a.txt', operation: 'write', change_type: 'noop' } } },
   });
 
@@ -96,7 +96,7 @@ describe('streamed tool argument presentation', () => {
 
 
 describe('historical file navigation during live updates', () => {
-  it.each([['file', 'read_file'], ['file', 'file.edit'], ['structured', 'read_files'], ['patch', 'apply_patch']])('retains only proven targets for equal %s facts from %s', (renderer, name) => {
+  it.each([['file', 'file_read'], ['file', 'file.edit'], ['structured', 'file_read_many'], ['patch', 'file_apply_patch']])('retains only proven targets for equal %s facts from %s', (renderer, name) => {
     const target = { kind: 'file', label: 'a.txt', path: '/unmounted/a.txt' };
     const entry = renderer === 'structured' ? { title: 'a.txt', content: 'historical snapshot', format: 'code', language: 'text' }
       : renderer === 'patch' ? { display_name: 'a.txt', change_type: 'modify', unified_diff: 'historical diff' }
@@ -176,7 +176,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 2, activity: 'active', turn_id: 'turn-a', run_id: 'run-a',
       interactions: [{ id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval',
-        approval: { tool_name: 'terminal.exec', tool_call_id: 'tool-a', label: 'Inspect output', command } }],
+        approval: { tool_name: 'terminal_exec', tool_call_id: 'tool-a', label: 'Inspect output', command } }],
     };
     expect(applyFlowerRuntimeCurrentView(summary(), current).approval_actions?.[0].summary.command).toBe(command);
   });
@@ -362,7 +362,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
           activity: {
             item_id: `tool-${index}`,
             tool_id: `call-${index}`,
-            tool_name: 'terminal.exec',
+            tool_name: 'terminal_exec',
             kind: 'tool',
             status: 'success',
             severity: 'normal',
@@ -513,7 +513,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const tool = (id: string, ordinal: number, status: 'waiting' | 'running' | 'success') => ({
     id: `tool:turn-a:${id}`, turn_id: 'turn-a', run_id: 'run-a', ordinal, kind: 'tool' as const,
       activity: {
-        item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status,
+        item_id: id, tool_id: id, tool_name: 'terminal_exec', kind: 'tool', status,
         severity: status === 'waiting' ? 'blocking' : 'normal', needs_attention: status === 'waiting',
         requires_approval: status === 'waiting',
       },
@@ -650,7 +650,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       items: [{
     id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'tool',
         activity: {
-          item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
+          item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal_exec', kind: 'tool',
           status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
           presentation: {
             label: 'printf hello', description: 'Command completed', renderer: 'terminal',
@@ -667,7 +667,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
     expect(result.messages[0]?.blocks?.[0]).toMatchObject({
       items: [{
-        item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec',
+        item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal_exec',
         label: 'printf hello', description: 'Command completed', renderer: 'terminal',
         chips: [{ kind: 'status', label: 'done', tone: 'positive' }],
         target_refs: [{ kind: 'process', label: 'shell', uri: 'process://shell', line: 0 }],
@@ -685,7 +685,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const interaction = {
     id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval' as const, tool_call_id: 'call-a', resolved: true,
       ...(approved !== undefined ? { approved } : {}),
-      approval: { label: 'Run curl', tool_name: 'terminal.exec', tool_call_id: 'call-a' },
+      approval: { label: 'Run curl', tool_name: 'terminal_exec', tool_call_id: 'call-a' },
       resolution: {
         accepted: outcome !== 'cancelled',
         ...(approved !== undefined ? { approved } : {}),
@@ -699,7 +699,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     { id: 'interaction-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction', interaction },
         {
       id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'tool', activity: {
-            item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
+            item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal_exec', kind: 'tool',
             status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
               label: 'curl -s https://example.test', renderer: 'terminal',
@@ -727,7 +727,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const interaction = {
     id: 'approval-other', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval' as const, tool_call_id: 'call-other', resolved: true,
       approved: false,
-      approval: { label: 'Other command', tool_name: 'terminal.exec', tool_call_id: 'call-other' },
+      approval: { label: 'Other command', tool_name: 'terminal_exec', tool_call_id: 'call-other' },
       resolution: { accepted: true, approved: false },
     };
     const current: FlowerRuntimeCurrentView = {
@@ -737,7 +737,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     { id: 'interaction-other', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction', interaction },
         {
       id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'tool', activity: {
-            item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
+            item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal_exec', kind: 'tool',
             status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
               label: 'curl -s https://example.test', renderer: 'terminal',
@@ -879,17 +879,17 @@ describe('applyFlowerRuntimeCurrentView', () => {
       ...summary(), status: 'waiting_approval', approval_pending: true, approval_pending_count: 2,
       approval_actions: [
         {
-          action_id: 'approval-a', origin: 'main_tool', run_id: 'turn-a', tool_id: 'tool-a', tool_name: 'terminal.exec',
+          action_id: 'approval-a', origin: 'main_tool', run_id: 'turn-a', tool_id: 'tool-a', tool_name: 'terminal_exec',
           state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true,
           queue_order: 1, summary: { label: 'first' },
         },
         {
-          action_id: 'approval-b', origin: 'main_tool', run_id: 'turn-a', tool_id: 'tool-b', tool_name: 'terminal.exec',
+          action_id: 'approval-b', origin: 'main_tool', run_id: 'turn-a', tool_id: 'tool-b', tool_name: 'terminal_exec',
           state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true,
           queue_order: 2, summary: { label: 'second' },
         },
       ],
-      input_request: { prompt_id: 'input-a', message_id: 'message-a', tool_id: 'ask-a', tool_name: 'ask_user', questions: [] },
+      input_request: { prompt_id: 'input-a', message_id: 'message-a', tool_id: 'ask-a', tool_name: 'user_ask', questions: [] },
     };
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 10, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
@@ -897,7 +897,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     { id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-a', resolved: true, approved: false },
         {
       id: 'approval-b', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-b',
-          approval: { label: 'second', tool_name: 'terminal.exec', tool_call_id: 'tool-b' },
+          approval: { label: 'second', tool_name: 'terminal_exec', tool_call_id: 'tool-b' },
         },
     { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', resolved: true },
       ],
@@ -915,7 +915,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       thread_id: 'thread-a', view_version: 11, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       interactions: [{
     id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-a',
-        approval: { label: 'Run command', tool_name: 'terminal.exec', tool_call_id: 'tool-a' },
+        approval: { label: 'Run command', tool_name: 'terminal_exec', tool_call_id: 'tool-a' },
       }],
     });
 
@@ -932,7 +932,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       interactions: [{
     id: 'approval-file', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-file',
         approval: {
-          label: 'Edit file', tool_name: 'file.write', tool_call_id: 'tool-file', effects: ['write'],
+          label: 'Edit file', tool_name: 'file_write', tool_call_id: 'tool-file', effects: ['write'],
           targets: ['file:回声之王.md', 'working_directory:/workspace:with:colons'],
         },
       }],
@@ -1211,7 +1211,7 @@ describe('field-backed activity summaries', () => {
       '/chips': [{ kind: 'effect_outcome', label: 'Outcome', value: 'uncertain' }] });
     expect(values['/chips'][0].value).toBe(' uncertain ');
   });
-  const activity = { item_id: 'entry', tool_id: 'call', tool_name: 'computer.exec', kind: 'tool', status: 'success', severity: 'normal' };
+  const activity = { item_id: 'entry', tool_id: 'call', tool_name: 'computer_exec', kind: 'tool', status: 'success', severity: 'normal' };
   const fields = [
     { path: '/payload/rows', kind: 'array' as const, count: 80, entry_id: 'result', source_sha256: 'source' },
     { path: '/payload/rows_provided', kind: 'scalar' as const, value: true },

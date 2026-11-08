@@ -347,12 +347,12 @@ describe('Flower companion entry with the published shell', () => {
 
   it.each(['secret', 'computer', 'approval'] as const)('retains an accessible generic action for %s requests', async (kind) => {
     const selected = kind === 'approval' ? thread({ status: 'waiting_approval', approval_actions: [{
-      action_id: 'approval-entry', origin: 'main_tool', run_id: 'run-entry', tool_id: 'tool-entry', tool_name: 'terminal.exec',
+      action_id: 'approval-entry', origin: 'main_tool', run_id: 'run-entry', tool_id: 'tool-entry', tool_name: 'terminal_exec',
       state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, surface_role: 'primary_action',
       summary: { label: 'Review command', command: 'pwd' },
     }] }) : thread({ status: 'waiting_user', input_request: inputRequest({
       ...(kind === 'computer' ? { prompt_id: 'tool-input:historical-computer', computer_assistance: { kind: 'inspection', target_id: 'browser-main', tool_call_id: 'historical-capture' } } : {}),
-      tool_name: kind === 'computer' ? 'computer.screenshot' : 'ask_user',
+      tool_name: kind === 'computer' ? 'computer_capture_screenshot' : 'ask_user',
       public_summary: 'This detail should stay inside the drawer',
       questions: [{ id: kind === 'computer' ? 'computer_control' : 'password', header: 'Action', question: 'Private question',
         response_mode: kind === 'computer' ? 'select' : 'write', is_secret: kind === 'secret', choices: [] }],

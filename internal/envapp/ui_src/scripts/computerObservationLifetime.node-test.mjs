@@ -11,7 +11,7 @@ function fixture() {
   const page=controller.page;
   Object.assign(page,{beginObservation:async()=>{},safety:async()=>safe,inFrame:async()=>({url:'https://fixture.test',title:'Original'}),
     observe:async()=>({document_id:'original:0',nodes:[],truncated:false}),releaseInput:async()=>{}});
-  return {controller,page,run:()=>controller.execute({tool_name:'computer.observe',script_operation:true,full_access:true})};
+  return {controller,page,run:()=>controller.execute({tool_name:'computer_observe',script_operation:true,full_access:true})};
 }
 
 for(const boundary of ['frame_inventory','entry_safety']) {
@@ -88,7 +88,7 @@ test('real browser wait samples across child replacement without losing parent i
     const transport=await page.context().newCDPSession(page);
     controller=new BrowserComputerController(transport);
     await controller.initialize();
-    const seed=await controller.execute({tool_name:'computer.observe',full_access:true,script_operation:true});
+    const seed=await controller.execute({tool_name:'computer_observe',full_access:true,script_operation:true});
     assert.equal(seed.error,undefined);
     const button=seed.result.observation.nodes.find(n=>n.role==='button');
     const readState=controller.page.elementState.bind(controller.page);
@@ -182,7 +182,7 @@ for(const mode of ['snapshot','screenshot','semantic_wait','ref_wait']) {
       const transport=await page.context().newCDPSession(page);
       controller=new BrowserComputerController(transport);
       await controller.initialize();
-      const seed=await controller.execute({tool_name:'computer.observe',full_access:true,script_operation:true});
+      const seed=await controller.execute({tool_name:'computer_observe',full_access:true,script_operation:true});
       const original=seed.result.observation.document_id;
       const ref=seed.result.observation.nodes.find(n=>n.role==='button').ref;
       const replace=async()=>{
@@ -209,7 +209,7 @@ for(const mode of ['snapshot','screenshot','semantic_wait','ref_wait']) {
           if(stage==='metadata'&&!replaced){replaced=true;await replace();}
           return read(operation,stage);
         };
-        response=await controller.execute({tool_name:mode==='snapshot'?'computer.observe':'computer.screenshot',target_id:'test',full_access:true,script_operation:true});
+        response=await controller.execute({tool_name:mode==='snapshot'?'computer_observe':'computer_capture_screenshot',target_id:'test',full_access:true,script_operation:true});
         assert.equal(response.result.observation_invalidated,true,JSON.stringify(response));
         assert.equal(response.result.observation,undefined);
         assert.equal(response.screenshot,undefined);

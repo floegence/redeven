@@ -21,13 +21,13 @@ func TestPublishedFloretDynamicRegistryDefinitionsReachProviderAndDispatch(t *te
 
 	var terminalDef ToolDef
 	for _, candidate := range builtInToolDefinitions() {
-		if candidate.Name == "terminal.exec" {
+		if candidate.Name == "terminal_exec" {
 			terminalDef = candidate
 			break
 		}
 	}
 	if terminalDef.Name == "" {
-		t.Fatal("missing Redeven terminal.exec definition")
+		t.Fatal("missing Redeven terminal_exec definition")
 	}
 	presentation, err := floretToolDefinitionForSnapshot(
 		terminalDef,
@@ -46,7 +46,7 @@ func TestPublishedFloretDynamicRegistryDefinitionsReachProviderAndDispatch(t *te
 		flprovider.Identity{Provider: "test", Model: "dynamic-registry", StateCompatibilityKey: "test:dynamic-registry:v1"},
 		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
 		florettest.Step{Events: []flprovider.Event{
-			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "terminal-dynamic", Name: "terminal.exec", Args: arguments}}},
+			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "terminal-dynamic", Name: "terminal_exec", Args: arguments}}},
 			{Type: flprovider.EventDone, Reason: "tool_calls"},
 		}},
 		florettest.Step{Events: []flprovider.Event{
@@ -100,7 +100,7 @@ func TestPublishedFloretDynamicRegistryDefinitionsReachProviderAndDispatch(t *te
 		toolNames = append(toolNames, definition.Name)
 	}
 	slices.Sort(toolNames)
-	if want := []string{"ask_user", "terminal.exec"}; !slices.Equal(toolNames, want) {
+	if want := []string{"ask_user", "terminal_exec"}; !slices.Equal(toolNames, want) {
 		t.Fatalf("provider tool definitions=%v, want %v", toolNames, want)
 	}
 
@@ -157,13 +157,13 @@ func TestPublishedFloretApprovalCurrentPresentsTerminalCommand(t *testing.T) {
 
 	var terminalDef ToolDef
 	for _, candidate := range builtInToolDefinitions() {
-		if candidate.Name == "terminal.exec" {
+		if candidate.Name == "terminal_exec" {
 			terminalDef = candidate
 			break
 		}
 	}
 	if terminalDef.Name == "" {
-		t.Fatal("missing Redeven terminal.exec definition")
+		t.Fatal("missing Redeven terminal_exec definition")
 	}
 	presentation, err := floretToolDefinitionForSnapshot(
 		terminalDef,
@@ -179,7 +179,7 @@ func TestPublishedFloretApprovalCurrentPresentsTerminalCommand(t *testing.T) {
 		flprovider.Identity{Provider: "test", Model: "approval-command", StateCompatibilityKey: "test:approval-command:v1"},
 		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
 		florettest.Step{Events: []flprovider.Event{
-			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "terminal-command", Name: "terminal.exec", Args: arguments}}},
+			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "terminal-command", Name: "terminal_exec", Args: arguments}}},
 			{Type: flprovider.EventDone, Reason: "tool_calls"},
 		}},
 	)
@@ -259,13 +259,13 @@ func TestPublishedFloretApprovalCurrentPresentsTerminalCommand(t *testing.T) {
 func TestPublishedFloretSchemaCorrectionDoesNotCreateToolRow(t *testing.T) {
 	var terminalRead ToolDef
 	for _, candidate := range builtInToolDefinitions() {
-		if candidate.Name == "terminal.read" {
+		if candidate.Name == "terminal_read" {
 			terminalRead = candidate
 			break
 		}
 	}
 	if terminalRead.Name == "" {
-		t.Fatal("missing Redeven terminal.read definition")
+		t.Fatal("missing Redeven terminal_read definition")
 	}
 	presentation, err := floretToolDefinitionForSnapshot(
 		terminalRead,
@@ -284,7 +284,7 @@ func TestPublishedFloretSchemaCorrectionDoesNotCreateToolRow(t *testing.T) {
 		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
 		florettest.Step{Events: []flprovider.Event{
 			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{
-				ID: "terminal-read-invalid", Name: "terminal.read", Args: `{"process_id":"proc-1"}`,
+				ID: "terminal-read-invalid", Name: "terminal_read", Args: `{"process_id":"proc-1"}`,
 			}}},
 			{Type: flprovider.EventDone, Reason: "tool_calls"},
 		}},
@@ -347,7 +347,7 @@ func TestPublishedFloretSchemaCorrectionDoesNotCreateToolRow(t *testing.T) {
 		t.Fatalf("current did not complete: %#v", current)
 	}
 	if called.Load() {
-		t.Fatal("schema-invalid terminal.read handler ran")
+		t.Fatal("schema-invalid terminal_read handler ran")
 	}
 	for _, view := range []flruntime.ThreadView{current, publicFloretThreadView(current)} {
 		for _, item := range view.Items {

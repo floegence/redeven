@@ -137,7 +137,7 @@ func TestComputerBenchmarkMeasuresCompressedProviderUsage(t *testing.T) {
 	metrics := &computerBenchmarkMetrics{}
 	proxy := httptest.NewServer(newComputerBenchmarkProxy(upstream, "fixture", metrics))
 	defer proxy.Close()
-	response, err := http.Post(proxy.URL, "application/json", strings.NewReader(`{"tools":[{"name":"computer.observe"}],"input":[]}`))
+	response, err := http.Post(proxy.URL, "application/json", strings.NewReader(`{"tools":[{"name":"computer_observe"}],"input":[]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func (e *computerBenchmarkHostTransport) RoundTrip(request *http.Request) (*http
 	}
 	elapsed := time.Since(start).Milliseconds()
 	call := command.Params.Request
-	waiting := call.ToolName == "computer.wait" || strings.HasPrefix(call.ToolName, "browser.") || call.Args["action"] == "wait"
+	waiting := call.ToolName == "computer_wait" || strings.HasPrefix(call.ToolName, "browser_") || call.Args["action"] == "wait"
 	e.metrics.mu.Lock()
 	defer e.metrics.mu.Unlock()
 	e.metrics.ToolCalls++
@@ -396,9 +396,9 @@ func TestComputerPairedModelBenchmark(t *testing.T) {
 					if err := svc.SetComputerAccess(t.Context(), meta, thread.ThreadID, ComputerAccess{Origins: []string{fixture.URL}}); err != nil {
 						t.Fatal(err)
 					}
-					allowed := []string{"computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait", "browser.navigate", "browser.back", "browser.reload"}
+					allowed := []string{"computer_capture_screenshot", "computer_click", "computer_double_click", "computer_type_text", "computer_press_key", "computer_scroll", "computer_drag", "computer_wait", "browser_navigate", "browser_go_back", "browser_reload"}
 					if variant == "semantic" {
-						allowed = append(allowed, "computer.observe", "computer.exec")
+						allowed = append(allowed, "computer_observe", "computer_exec")
 					}
 					prompt := "Use the browser interface at " + fixture.URL + ". Open the form if needed. Set Project to Orchid, Team to Design and Note to Ready. Save once. Verify the saved result with a final screenshot, then report completion. Do not use commands or direct HTTP for this GUI verification task."
 					start := time.Now()

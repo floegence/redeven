@@ -113,7 +113,7 @@ describe('current view presentation stability', () => {
 
   it('retains unresolved interactions but does not suppress a changed question or approval', () => {
     const initial = { ...current(1), interactions: [
-      { id: 'approval', turn_id: 'turn', run_id: 'run', kind: 'approval' as const, approval: { label: 'Inspect', tool_name: 'read_file', tool_call_id: 'call' } },
+      { id: 'approval', turn_id: 'turn', run_id: 'run', kind: 'approval' as const, approval: { label: 'Inspect', tool_name: 'file_read', tool_call_id: 'call' } },
       { id: 'input', turn_id: 'turn', run_id: 'run', kind: 'input' as const, input: { summary: 'Choose', questions: [{ id: 'color', prompt: 'Color?', kind: 'select', options: ['Blue', 'Green'] }] } },
     ] };
     const first = applyFlowerRuntimeCurrentView(summary(), initial);

@@ -149,7 +149,7 @@ func responsesInput(items []json.RawMessage) oresponses.ResponseInputParam {
 
 const responsesNativeStateKind = "openai_responses_native_v1"
 
-func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, result ModelGatewayResult, completed oresponses.Response, aliases providerToolAliases) (*ModelGatewayState, error) {
+func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, result ModelGatewayResult, completed oresponses.Response, aliases providerToolContract) (*ModelGatewayState, error) {
 	parts := []ContentPart{}
 	for _, call := range result.ToolCalls {
 		raw, err := json.Marshal(call.Args)

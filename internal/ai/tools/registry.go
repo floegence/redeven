@@ -100,106 +100,106 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
-	"threads.query": {Name: "threads.query", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.query"))},
-	"threads.read":  {Name: "threads.read", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.read"))},
+	"thread_query": {Name: "thread_query", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("thread_query"))},
+	"thread_read":  {Name: "thread_read", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("thread_read"))},
 	// Historical presentation only; this tool is no longer registered for execution.
-	"threads.aggregate":        {Name: "threads.aggregate", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.aggregate"))},
-	"plugin_author.status":     {Name: "plugin_author.status", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "plugin_author", "args", "result"), operation("status"))},
-	"plugin_author.initialize": {Name: "plugin_author.initialize", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("initialize"))},
-	"plugin_author.build":      {Name: "plugin_author.build", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("build"))},
-	"plugin_author.capture":    {Name: "plugin_author.capture", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("capture"))},
-	"plugin_author.rename":     {Name: "plugin_author.rename", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("rename"))},
-	"tessiven.runtimes":        {Name: "tessiven.runtimes", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtimes"))},
-	"tessiven.runtime.inspect": {Name: "tessiven.runtime.inspect", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtime.inspect"))},
-	"tessiven.runtime.action":  {Name: "tessiven.runtime.action", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("runtime.action"))},
-	"tessiven.schema":          {Name: "tessiven.schema", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("schema"), labelFields("title", "summary"))},
-	"tessiven.list":            {Name: "tessiven.list", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("list"), labelFields("title", "summary"))},
-	"tessiven.read":            {Name: "tessiven.read", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("read"), labelFields("title"), resultPayloadFields("title", "version", "start_line", "end_line", "total_lines", "has_more"))},
-	"tessiven.search":          {Name: "tessiven.search", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("search"), labelFields("title"), callPayloadFields("query"), resultPayloadFields("title", "version", "next_line"))},
-	"tessiven.edit":            {Name: "tessiven.edit", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("edit"), labelFields("title", "summary"), callPayloadFields("summary", "edits"), resultPayloadFields("title", "version", "summary", "canvas_url"))},
-	"tessiven.versions":        {Name: "tessiven.versions", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("versions"), labelFields("title", "summary"))},
-	"tessiven.validate":        {Name: "tessiven.validate", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("validate"), resultPayloadFields("valid"))},
-	"tessiven.save":            {Name: "tessiven.save", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("save"), labelFields("title", "summary"), callPayloadFields("summary", "document_yaml"), resultPayloadFields("title", "version", "summary", "canvas_url"))},
-	"tessiven.inspect":         {Name: "tessiven.inspect", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("inspect"), labelFields("title", "summary"))},
-	"tessiven.action":          {Name: "tessiven.action", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("action"), labelFields("title", "summary"))},
-	"computer.targets": {
-		Name: "computer.targets", Mutating: false, RequiresApproval: false,
+	"threads.aggregate":         {Name: "threads.aggregate", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.aggregate"))},
+	"plugin_author_get_status":  {Name: "plugin_author_get_status", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "plugin_author", "args", "result"), operation("status"))},
+	"plugin_author_initialize":  {Name: "plugin_author_initialize", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("initialize"))},
+	"plugin_author_build":       {Name: "plugin_author_build", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("build"))},
+	"plugin_author_capture":     {Name: "plugin_author_capture", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("capture"))},
+	"plugin_author_rename":      {Name: "plugin_author_rename", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "plugin_author", "args", "result"), operation("rename"))},
+	"tessiven_list_runtimes":    {Name: "tessiven_list_runtimes", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtimes"))},
+	"tessiven_inspect_runtime":  {Name: "tessiven_inspect_runtime", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtime.inspect"))},
+	"tessiven_manage_runtime":   {Name: "tessiven_manage_runtime", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("runtime.action"))},
+	"tessiven_read_schema":      {Name: "tessiven_read_schema", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("schema"), labelFields("title", "summary"))},
+	"tessiven_list_canvases":    {Name: "tessiven_list_canvases", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("list"), labelFields("title", "summary"))},
+	"tessiven_read_canvas":      {Name: "tessiven_read_canvas", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("read"), labelFields("title"), resultPayloadFields("title", "version", "start_line", "end_line", "total_lines", "has_more"))},
+	"tessiven_search_canvas":    {Name: "tessiven_search_canvas", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("search"), labelFields("title"), callPayloadFields("query"), resultPayloadFields("title", "version", "next_line"))},
+	"tessiven_edit_canvas":      {Name: "tessiven_edit_canvas", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("edit"), labelFields("title", "summary"), callPayloadFields("summary", "edits"), resultPayloadFields("title", "version", "summary", "canvas_url"))},
+	"tessiven_list_versions":    {Name: "tessiven_list_versions", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("versions"), labelFields("title", "summary"))},
+	"tessiven_validate_canvas":  {Name: "tessiven_validate_canvas", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("validate"), resultPayloadFields("valid"))},
+	"tessiven_save_canvas":      {Name: "tessiven_save_canvas", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("save"), labelFields("title", "summary"), callPayloadFields("summary", "document_yaml"), resultPayloadFields("title", "version", "summary", "canvas_url"))},
+	"tessiven_inspect_resource": {Name: "tessiven_inspect_resource", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("inspect"), labelFields("title", "summary"))},
+	"tessiven_manage_instance":  {Name: "tessiven_manage_instance", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("action"), labelFields("title", "summary"))},
+	"computer_list_targets": {
+		Name: "computer_list_targets", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("discover"), resultPayloadFields("current_target_id", "default_candidate_ref", "candidates")),
 	},
-	"computer.select_target": {
-		Name: "computer.select_target", Mutating: true, RequiresApproval: true,
+	"computer_select_target": {
+		Name: "computer_select_target", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("select"), resultPayloadFields("target_id", "target_name", "target_kind")),
 	},
-	"computer.observe": {
-		Name: "computer.observe", Mutating: false, RequiresApproval: false,
+	"computer_observe": {
+		Name: "computer_observe", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("observe"), labelFields("target_name", "target_id"), callPayloadFields("root_ref", "limit", "screenshot"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"computer.exec": {
-		Name: "computer.exec", Mutating: true, RequiresApproval: true,
+	"computer_exec": {
+		Name: "computer_exec", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("execute"), labelFields("description", "target_name"), callPayloadFields("description", "code"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "completed_actions", "operations", "script_error", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"computer.screenshot": {
-		Name: "computer.screenshot", Mutating: false, RequiresApproval: false,
+	"computer_capture_screenshot": {
+		Name: "computer_capture_screenshot", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("screenshot"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "before_frame", "after_frame", "screenshot"), chipFields("target_name", "execution_location")),
 	},
-	"computer.click": {
-		Name: "computer.click", Mutating: true, RequiresApproval: true,
+	"computer_click": {
+		Name: "computer_click", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("click"), labelFields("target_name", "target_id"), callPayloadFields("x", "y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"computer.double_click": {
-		Name: "computer.double_click", Mutating: true, RequiresApproval: true,
+	"computer_double_click": {
+		Name: "computer_double_click", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("double_click"), labelFields("target_name", "target_id"), callPayloadFields("x", "y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"computer.type": {
-		Name: "computer.type", Mutating: true, RequiresApproval: true,
+	"computer_type_text": {
+		Name: "computer_type_text", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("type"), labelFields("target_name", "target_id"), callPayloadFields("text"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location"), redaction(ToolRedactionSpec{ArgFields: []string{"text"}})),
 	},
-	"computer.key": {
-		Name: "computer.key", Mutating: true, RequiresApproval: true,
+	"computer_press_key": {
+		Name: "computer_press_key", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("key"), labelFields("target_name", "target_id"), callPayloadFields("key"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"computer.scroll": {
-		Name: "computer.scroll", Mutating: true, RequiresApproval: true,
+	"computer_scroll": {
+		Name: "computer_scroll", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("scroll"), labelFields("target_name", "target_id"), callPayloadFields("x", "y", "delta_x", "delta_y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"computer.drag": {
-		Name: "computer.drag", Mutating: true, RequiresApproval: true,
+	"computer_drag": {
+		Name: "computer_drag", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("drag"), labelFields("target_name", "target_id"), callPayloadFields("from_x", "from_y", "to_x", "to_y", "duration_ms"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"computer.wait": {
-		Name: "computer.wait", Mutating: false, RequiresApproval: false,
+	"computer_wait": {
+		Name: "computer_wait", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "readonly", "computer", "computer", "args", "result"), operation("wait"), labelFields("target_name", "target_id"), callPayloadFields("milliseconds"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"browser.navigate": {
-		Name: "browser.navigate", Mutating: true, RequiresApproval: true,
+	"browser_navigate": {
+		Name: "browser_navigate", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("navigate"), labelFields("target_name", "target_id", "url"), callPayloadFields("url"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "url", "after_frame"), chipFields("target_name", "execution_location"), redaction(ToolRedactionSpec{ArgFields: []string{"url"}})),
 	},
-	"browser.back": {
-		Name: "browser.back", Mutating: true, RequiresApproval: true,
+	"browser_go_back": {
+		Name: "browser_go_back", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("back"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"browser.reload": {
-		Name: "browser.reload", Mutating: true, RequiresApproval: true,
+	"browser_reload": {
+		Name: "browser_reload", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("reload"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
-	"image.read": {
-		Name: "image.read", Mutating: false, RequiresApproval: false,
+	"image_read": {
+		Name: "image_read", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationContext, "readonly", "structured", "context", "args", "result"),
 			operation("read"), labelFields("display_name"),
 			resultPayloadFields("display_name", "mime_type", "width", "height", "size_bytes", "first_frame"),
 		),
 	},
-	"attachment.materialize": {
-		Name: "attachment.materialize", Mutating: true, RequiresApproval: true,
+	"attachment_materialize": {
+		Name: "attachment_materialize", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationContext, "write", "file", "context", "args", "result"),
 			operation("write"), labelFields("display_name", "locator"), callPayloadFields("locator"),
 			resultPayloadFields("file_path", "display_name", "mime_type", "size_bytes"),
 		),
 	},
-	"attachment.read": {
-		Name:             "attachment.read",
+	"attachment_read": {
+		Name:             "attachment_read",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -211,8 +211,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("operation", "name", "truncated"),
 		),
 	},
-	"read_file": {
-		Name:             "read_file",
+	"file_read": {
+		Name:             "file_read",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -224,33 +224,33 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("operation", "display_name", "path", "truncated"),
 		),
 	},
-	"read_files": {
-		Name:             "read_files",
+	"file_read_many": {
+		Name:             "file_read_many",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationContext, "readonly", "structured", "context", "args", "result"),
-			operation("read_files"),
+			operation("file_read_many"),
 			callPayloadFields("paths", "limit"),
 			resultPayloadFields("files", "summary", "truncated"),
 			chipFields("operation", "file_count", "truncated"),
 		),
 	},
-	"rgrep": {
-		Name:             "rgrep",
+	"file_search": {
+		Name:             "file_search",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationResearch, "readonly", "structured", "research", "args", "result"),
-			operation("rgrep"),
+			operation("file_search"),
 			labelFields("query"),
 			callPayloadFields("query", "paths", "glob", "max_matches", "context_lines"),
 			resultPayloadFields("query", "matches", "truncated"),
 			chipFields("operation", "match_count", "truncated"),
 		),
 	},
-	"find": {
-		Name:             "find",
+	"path_find": {
+		Name:             "path_find",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -275,12 +275,12 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("operation", "status_code", "content_type", "format", "bytes_read", "truncated"),
 		),
 	},
-	"file.present": {
-		Name:         "file.present",
+	"file_present": {
+		Name:         "file_present",
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "file_delivery", "result", "error"), operation("present"), labelFields("title"), resultPayloadFields("title", "name", "mime", "size", "sha256", "endpoint_id")),
 	},
-	"file.write": {
-		Name:             "file.write",
+	"file_write": {
+		Name:             "file_write",
 		Mutating:         true,
 		RequiresApproval: true,
 		Presentation: withPresentationOptions(
@@ -291,20 +291,20 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("truncated"),
 		),
 	},
-	"apply_patch": {
-		Name:             "apply_patch",
+	"file_apply_patch": {
+		Name:             "file_apply_patch",
 		Mutating:         true,
 		RequiresApproval: true,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationMutation, "approval", "patch", "mutation", "args", "result", "error"),
-			operation("apply_patch"),
+			operation("file_apply_patch"),
 			callPayloadFields("files_changed", "hunks", "additions", "deletions"),
 			resultPayloadFields("files_changed", "hunks", "additions", "deletions", "input_format", "normalized_format", "mutations", "truncated"),
 			chipFields("truncated"),
 		),
 	},
-	"terminal.exec": {
-		Name:             "terminal.exec",
+	"terminal_exec": {
+		Name:             "terminal_exec",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -317,8 +317,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("target_id", "execution_location", "process_id", "exit_code", "duration_ms", "truncated"),
 		),
 	},
-	"terminal.read": {
-		Name:             "terminal.read",
+	"terminal_read": {
+		Name:             "terminal_read",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -330,8 +330,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("target_id", "execution_location", "process_id", "last_seq", "truncated"),
 		),
 	},
-	"terminal.write": {
-		Name:             "terminal.write",
+	"terminal_write": {
+		Name:             "terminal_write",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -343,8 +343,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("target_id", "execution_location", "process_id", "input_bytes"),
 		),
 	},
-	"terminal.terminate": {
-		Name:             "terminal.terminate",
+	"terminal_terminate": {
+		Name:             "terminal_terminate",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -356,8 +356,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("target_id", "execution_location", "process_id", "terminated"),
 		),
 	},
-	"web.search": {
-		Name:             "web.search",
+	"web_search_pages": {
+		Name:             "web_search_pages",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -368,8 +368,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("provider", "results_count", "source_count", "truncated"),
 		),
 	},
-	"sources": {
-		Name:             "sources",
+	"source_list": {
+		Name:             "source_list",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -379,13 +379,13 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("source_count", "truncated"),
 		),
 	},
-	"okf.index": {
-		Name:             "okf.index",
+	"okf_get_index": {
+		Name:             "okf_get_index",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationResearch, "readonly", "structured", "research", "result", "args"),
-			operation("okf.index"),
+			operation("okf_get_index"),
 			labelFields("section"),
 			callFallback("OKF knowledge"),
 			resultFallback("OKF index"),
@@ -394,13 +394,13 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("total_sections", "truncated"),
 		),
 	},
-	"okf.search": {
-		Name:             "okf.search",
+	"okf_search": {
+		Name:             "okf_search",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationResearch, "readonly", "structured", "research", "result", "args"),
-			operation("okf.search"),
+			operation("okf_search"),
 			labelFields("query"),
 			callFallback("OKF knowledge"),
 			resultFallback("OKF knowledge"),
@@ -409,13 +409,13 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("match_count", "total_matches", "has_more", "truncated"),
 		),
 	},
-	"okf.open": {
-		Name:             "okf.open",
+	"okf_open": {
+		Name:             "okf_open",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationResearch, "readonly", "structured", "research", "result", "args"),
-			operation("okf.open"),
+			operation("okf_open"),
 			labelFields("concept_title", "concept_id", "path"),
 			callFallback("OKF concept"),
 			resultFallback("OKF concept"),
@@ -424,8 +424,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("link_count", "backlink_count", "truncated"),
 		),
 	},
-	"write_todos": {
-		Name:             "write_todos",
+	"todo_write": {
+		Name:             "todo_write",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -437,8 +437,8 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("total", "pending", "in_progress", "completed", "cancelled", "truncated"),
 		),
 	},
-	"ask_user": {
-		Name:             "ask_user",
+	"user_ask": {
+		Name:             "user_ask",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -448,29 +448,29 @@ var builtinDefinitions = map[string]Definition{
 			resultPayloadFields("reason_code", "required_from_user", "evidence_refs", "questions", "question"),
 		),
 	},
-	"use_skill": {
-		Name:             "use_skill",
+	"skill_use": {
+		Name:             "skill_use",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationContext, "readonly", "structured", "context", "args", "result"),
-			operation("use_skill"),
+			operation("skill_use"),
 			labelFields("name"),
 			callPayloadFields("name", "reason"),
 			resultPayloadFields("name", "reason", "content", "truncated"),
 			chipFields("truncated"),
 		),
 	},
-	"report_to_parent": {
-		Name: "report_to_parent", Mutating: false, RequiresApproval: false,
-		Presentation: withPresentationOptions(presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"), operation("report_to_parent"), callPayloadFields("message"), resultPayloadFields("accepted", "event_id", "parent_thread_id")),
+	"subagent_report": {
+		Name: "subagent_report", Mutating: false, RequiresApproval: false,
+		Presentation: withPresentationOptions(presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"), operation("subagent_report"), callPayloadFields("message"), resultPayloadFields("accepted", "event_id", "parent_thread_id")),
 	},
-	"subagent_events": {
-		Name: "subagent_events", Mutating: false, RequiresApproval: false,
-		Presentation: withPresentationOptions(presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"), operation("subagent_events"), labelFields("action"), callPayloadFields("action", "event_id", "first_event_id", "last_event_id", "after_event_id", "limit"), resultPayloadFields("events", "first_event_id", "last_event_id", "next_after_event_id")),
+	"subagent_read_events": {
+		Name: "subagent_read_events", Mutating: false, RequiresApproval: false,
+		Presentation: withPresentationOptions(presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"), operation("subagent_read_events"), labelFields("action"), callPayloadFields("action", "event_id", "first_event_id", "last_event_id", "after_event_id", "limit"), resultPayloadFields("events", "first_event_id", "last_event_id", "next_after_event_id")),
 	},
-	"subagents": {
-		Name:             "subagents",
+	"subagent_manage": {
+		Name:             "subagent_manage",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
@@ -544,11 +544,11 @@ func ValidatePresentationSpec(toolName string, spec ToolPresentationSpec) error 
 
 func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {
 	name := strings.TrimSpace(toolName)
-	if name == "terminal.exec" {
+	if name == "terminal_exec" {
 		profile := InvocationCommandProfile(name, args)
 		return profile.Risk != TerminalCommandRiskReadonly
 	}
-	if name == "subagents" {
+	if name == "subagent_manage" {
 		return false
 	}
 	return RequiresApproval(name)
@@ -556,11 +556,11 @@ func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {
 
 func IsMutatingForInvocation(toolName string, args map[string]any) bool {
 	name := strings.TrimSpace(toolName)
-	if name == "terminal.exec" {
+	if name == "terminal_exec" {
 		profile := InvocationCommandProfile(name, args)
 		return profile.Risk != TerminalCommandRiskReadonly
 	}
-	if name == "subagents" {
+	if name == "subagent_manage" {
 		return false
 	}
 	return IsMutating(name)
@@ -568,7 +568,7 @@ func IsMutatingForInvocation(toolName string, args map[string]any) bool {
 
 func IsDangerousInvocation(toolName string, args map[string]any) bool {
 	name := strings.TrimSpace(toolName)
-	if name != "terminal.exec" {
+	if name != "terminal_exec" {
 		return false
 	}
 	profile := InvocationCommandProfile(name, args)
@@ -582,7 +582,7 @@ func InvocationRiskLabel(toolName string, args map[string]any) string {
 
 func InvocationCommandProfile(toolName string, args map[string]any) TerminalCommandProfile {
 	name := strings.TrimSpace(toolName)
-	if name != "terminal.exec" {
+	if name != "terminal_exec" {
 		return TerminalCommandProfile{}
 	}
 	command := commandFromArgs(args)
@@ -590,7 +590,7 @@ func InvocationCommandProfile(toolName string, args map[string]any) TerminalComm
 }
 
 func InvocationRiskInfo(toolName string, args map[string]any) (string, string) {
-	if strings.TrimSpace(toolName) == "subagents" {
+	if strings.TrimSpace(toolName) == "subagent_manage" {
 		return "delegation", subagentInvocationAction(args)
 	}
 	profile := InvocationCommandProfile(toolName, args)

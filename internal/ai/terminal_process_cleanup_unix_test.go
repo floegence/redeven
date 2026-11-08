@@ -224,7 +224,7 @@ func startTerminalCleanupTest(t *testing.T, shell, suffix string) (*terminalProc
 	command := "nohup /bin/sh -c 'printf ready > ready; exec sleep 60' </dev/null >child.log 2>&1 & child=$!; printf '%s\n' \"$child\" > child.pid; while [ ! -f ready ]; do sleep 0.01; done; " + suffix
 	process, err := manager.Start(terminalProcessStartRequest{
 		ProcessID: t.Name(), EndpointID: "env", ThreadID: "thread", RunID: "run", TurnID: "turn",
-		ToolID: "tool", ToolName: "terminal.exec", Command: command, CwdAbs: dir, Shell: shell,
+		ToolID: "tool", ToolName: "terminal_exec", Command: command, CwdAbs: dir, Shell: shell,
 		Env: []string{"HOME=" + dir, "PATH=/usr/bin:/bin"},
 	})
 	if err != nil {

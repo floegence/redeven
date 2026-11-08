@@ -39,7 +39,7 @@ func delegationContextDone() florettest.Step {
 }
 
 func delegationContextCall(id, args string) florettest.Step {
-	return florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: id, Name: "subagents", Args: args}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}
+	return florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: id, Name: "subagent_manage", Args: args}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}
 }
 
 func delegationContextGateway(steps ...florettest.Step) *florettest.ScriptedGateway {
@@ -112,7 +112,7 @@ func TestFlowerProviderContextIgnoresChildInventoryChanges(t *testing.T) {
 	children := &delegationContextThreadService{}
 	// Exercise the real delegation surface across all inventory changes without
 	// repeatedly persisting unrelated Computer, terminal and file tool schemas.
-	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/sh", RunID: "run-context", ThreadID: "thread-parent", ToolAllowlist: []string{"subagents"}})
+	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/sh", RunID: "run-context", ThreadID: "thread-parent", ToolAllowlist: []string{"subagent_manage"}})
 	r.ensureSkillManager().userHome = root
 	r.subagentRuntime = newServiceFloretSubagentRuntime(&Service{threadRuntime: children}, r)
 	r.product.currentSettings = func(context.Context) (*threadstore.ThreadSettings, error) {
@@ -204,12 +204,12 @@ func TestFlowerProviderContextIgnoresChildInventoryChanges(t *testing.T) {
 		}
 		var hasTool bool
 		for _, def := range requests[index].Tools {
-			if def.Name == "subagents" {
+			if def.Name == "subagent_manage" {
 				hasTool = true
 			}
 		}
 		if !hasTool {
-			t.Fatal("subagents tool definition was lost")
+			t.Fatal("subagent_manage tool definition was lost")
 		}
 	}
 	if got := children.reads.Load(); got != 0 {
@@ -362,7 +362,7 @@ func TestFlowerProviderContextKeepsCapabilityAndPermissionRefresh(t *testing.T) 
 		}
 		hasSubagents := false
 		for _, def := range request.Tools {
-			if def.Name == "subagents" {
+			if def.Name == "subagent_manage" {
 				hasSubagents = true
 				if !strings.Contains(def.Description, "handoffs[].content") {
 					t.Fatal("handoff tool contract lost")
@@ -370,7 +370,7 @@ func TestFlowerProviderContextKeepsCapabilityAndPermissionRefresh(t *testing.T) 
 			}
 		}
 		if hasSubagents != (index == 0) {
-			t.Fatalf("request %d: subagents=%t", index, hasSubagents)
+			t.Fatalf("request %d: subagent_manage=%t", index, hasSubagents)
 		}
 		updates := delegationContextUpdates(request)
 		if index == 0 {
@@ -382,8 +382,8 @@ func TestFlowerProviderContextKeepsCapabilityAndPermissionRefresh(t *testing.T) 
 				t.Fatalf("restricted facts=%v", updates)
 			}
 			for _, def := range request.Tools {
-				if def.Name == "file.write" {
-					t.Fatal("readonly request retained file.write")
+				if def.Name == "file_write" {
+					t.Fatal("readonly request retained file_write")
 				}
 			}
 		}
@@ -415,7 +415,7 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			approval.Attention.ApprovalCount = 1
 			approval.PendingInput = nil
 			adapter, _ := newSubagentHandoffTestAdapter(t, []flruntime.ThreadSummary{completed, failed, cancelled, waiting, approval}, map[identity.ThreadID]flruntime.ThreadView{completed.ID: completedSubagentTestView(completed, final)})
-			definition := fltools.Definition{Name: "subagents", InputSchema: fltools.StrictObject(map[string]any{"action": map[string]any{"type": "string"}}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}
+			definition := fltools.Definition{Name: "subagent_manage", InputSchema: fltools.StrictObject(map[string]any{"action": map[string]any{"type": "string"}}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}
 			tool := fltools.Define[map[string]any](definition, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 				args := map[string]any{"action": action}
 				if action != subagentActionList {
@@ -428,7 +428,7 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 				if err != nil {
 					return fltools.Result{}, err
 				}
-				return floretToolResultFromFlower(nil, ToolResult{ToolID: inv.CallID, ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+				return floretToolResultFromFlower(nil, ToolResult{ToolID: inv.CallID, ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data})
 			})
 			root := t.TempDir()
 			r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root})

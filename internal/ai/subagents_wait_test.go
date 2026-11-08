@@ -60,7 +60,7 @@ func TestSubagentWaitMetadataAndAttention(t *testing.T) {
 		{name: "attention", reason: "attention_required", count: 1, input: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "wait", ToolName: "subagents", Status: toolResultStatusSuccess, Data: map[string]any{"action": "wait", "reason": tc.reason, "found_count": tc.count, "missing_count": tc.missing, "timed_out": tc.reason == "wait_timeout", "effective_timeout_ms": 10000}})
+			result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "wait", ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: map[string]any{"action": "wait", "reason": tc.reason, "found_count": tc.count, "missing_count": tc.missing, "timed_out": tc.reason == "wait_timeout", "effective_timeout_ms": 10000}})
 			if err != nil || (result.BoundedWait != nil) != tc.wait || (result.InputRequired != nil) != tc.input {
 				t.Fatalf("result=%#v err=%v", result, err)
 			}
@@ -128,7 +128,7 @@ func TestSubagentRetryPreservesFourCompletedReportsWithoutRedispatch(t *testing.
 	}
 	adapter, children := newSubagentHandoffTestAdapter(t, summaries, views)
 	var dispatches atomic.Int32
-	tool := fltools.Define[map[string]any](fltools.Definition{Name: "subagents", InputSchema: fltools.StrictObject(map[string]any{"action": fltools.String("action")}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil,
+	tool := fltools.Define[map[string]any](fltools.Definition{Name: "subagent_manage", InputSchema: fltools.StrictObject(map[string]any{"action": fltools.String("action")}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil,
 		func(ctx context.Context, invocation fltools.Invocation[map[string]any]) (fltools.Result, error) {
 			dispatches.Add(1)
 			if invocation.Args["action"] != subagentActionWait {
@@ -138,7 +138,7 @@ func TestSubagentRetryPreservesFourCompletedReportsWithoutRedispatch(t *testing.
 			if err != nil {
 				return fltools.Result{}, err
 			}
-			return floretToolResultFromFlower(nil, ToolResult{ToolID: invocation.CallID, ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+			return floretToolResultFromFlower(nil, ToolResult{ToolID: invocation.CallID, ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data})
 		})
 	gateway := delegationContextGateway(delegationContextCall("collect-reports", `{"action":"wait"}`), florettest.Step{ReturnError: errors.New("agent loop repeated identical tool calls")}, delegationContextDone())
 	service := delegationContextThread(t, gateway, func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
@@ -207,12 +207,12 @@ func TestChildAttentionLeavesParentDecisionWithModel(t *testing.T) {
 			child.LastOutcome = nil
 			adapter, children := newSubagentHandoffTestAdapter(t, []flruntime.ThreadSummary{child}, nil)
 			var independent atomic.Int32
-			wait := fltools.Define[map[string]any](fltools.Definition{Name: "subagents", InputSchema: fltools.StrictObject(map[string]any{"action": fltools.String("action")}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
+			wait := fltools.Define[map[string]any](fltools.Definition{Name: "subagent_manage", InputSchema: fltools.StrictObject(map[string]any{"action": fltools.String("action")}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 				data, err := adapter.wait(ctx, map[string]any{"ids": []any{child.ID.String()}, "timeout_ms": 1})
 				if err != nil {
 					return fltools.Result{}, err
 				}
-				result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: inv.CallID, ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+				result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: inv.CallID, ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data})
 				if result.InputRequired != nil || result.BoundedWait != nil || result.Metadata[fltools.ResultMetadataProgressToken] != nil {
 					t.Error("attention manufactured parent control or progress")
 				}
@@ -257,7 +257,7 @@ func TestChildAttentionLeavesParentDecisionWithModel(t *testing.T) {
 }
 
 func TestStrictRepetitionDiagnosticsPreserveValidatedDetails(t *testing.T) {
-	repetition := &fltools.RepetitionDetails{ToolName: "subagents", CallID: "inspect-5", ConsecutiveCalls: 5, RepeatLimit: 3, FeedbackGiven: true, NotExecuted: true}
+	repetition := &fltools.RepetitionDetails{ToolName: "subagent_manage", CallID: "inspect-5", ConsecutiveCalls: 5, RepeatLimit: 3, FeedbackGiven: true, NotExecuted: true}
 	raw, err := json.Marshal(repetition)
 	if err != nil {
 		t.Fatal(err)

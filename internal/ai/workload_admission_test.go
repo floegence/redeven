@@ -86,7 +86,7 @@ func TestHostedTerminalProcessLeaseEndsAfterProcessReap(t *testing.T) {
 	})
 	process, err := manager.Start(terminalProcessStartRequest{
 		ProcessID: "process-leased", EndpointID: "env", ThreadID: "thread", RunID: "run", TurnID: "turn",
-		ToolID: "tool", ToolName: "terminal.exec", Command: "exit 0", CwdAbs: t.TempDir(), Shell: "/bin/sh",
+		ToolID: "tool", ToolName: "terminal_exec", Command: "exit 0", CwdAbs: t.TempDir(), Shell: "/bin/sh",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestHostedTerminalProcessRejectsWorkloadAdmissionBeforeSpawn(t *testing.T) 
 	})
 	_, err := manager.Start(terminalProcessStartRequest{
 		ProcessID: "process-fenced", EndpointID: "env", ThreadID: "thread", RunID: "run", TurnID: "turn",
-		ToolID: "tool", ToolName: "terminal.exec", Command: "exit 0", CwdAbs: t.TempDir(), Shell: "/bin/sh",
+		ToolID: "tool", ToolName: "terminal_exec", Command: "exit 0", CwdAbs: t.TempDir(), Shell: "/bin/sh",
 	})
 	if !errors.Is(err, admissionErr) {
 		t.Fatalf("Start error = %v", err)

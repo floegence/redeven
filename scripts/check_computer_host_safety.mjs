@@ -61,13 +61,13 @@ try {
       const ready = await next('ready');
       assert.equal(ready.type, 'ready');
       assert.equal(ready.error, undefined, 'browser must actually launch');
-      const result = await send(`${name}-nav`, 'browser.navigate', { url: `http://127.0.0.1:${server.address().port}/${name}` });
+      const result = await send(`${name}-nav`, 'browser_navigate', { url: `http://127.0.0.1:${server.address().port}/${name}` });
       assert.equal(Boolean(result.screenshot), false, `${name}: sensitive destination was captured`);
       assert.equal(result.safety?.level, 'takeover', name);
       assert.equal(result.safety.safe_to_send_to_model, false);
       assert.equal(result.result.action_executed, true, 'navigation already happened');
-      for (const action of ['computer.screenshot', 'computer.type', 'browser.navigate']) {
-        const blocked = await send(`${name}-${action}`, action, action === 'browser.navigate' ? {url:'about:blank'} : action === 'computer.type' ? {text:'secret-should-not-be-typed'} : {});
+      for (const action of ['computer_capture_screenshot', 'computer_type_text', 'browser_navigate']) {
+        const blocked = await send(`${name}-${action}`, action, action === 'browser_navigate' ? {url:'about:blank'} : action === 'computer_type_text' ? {text:'secret-should-not-be-typed'} : {});
         assert.equal(blocked.safety?.level, 'takeover', JSON.stringify({name,action,blocked}));
         assert.equal(Boolean(blocked.screenshot), false);
         assert.equal(blocked.result.action_executed, false, 'blocked action must not execute');
@@ -75,58 +75,58 @@ try {
       }
       if (name === 'login') {
         for (const [index, tool, args] of [
-          [0, 'computer.screenshot', {}],
-          [1, 'computer.type', { text: 'fixture user' }],
-          [2, 'computer.key', { key: 'Tab' }],
-          [3, 'computer.type', { text: 'fixture-secret' }],
-          [4, 'computer.key', { key: 'Enter' }],
+          [0, 'computer_capture_screenshot', {}],
+          [1, 'computer_type_text', { text: 'fixture user' }],
+          [2, 'computer_press_key', { key: 'Tab' }],
+          [3, 'computer_type_text', { text: 'fixture-secret' }],
+          [4, 'computer_press_key', { key: 'Enter' }],
         ]) {
           const user = await send(`user-${index}`, tool, args, { user_control: true });
           assert.equal(user.error, undefined);
-          assert.equal(Boolean(user.screenshot), tool === 'computer.screenshot', 'only observation returns private pixels; input acknowledges without capture');
-          if (tool !== 'computer.screenshot') assert.equal(user.acknowledged, true);
+          assert.equal(Boolean(user.screenshot), tool === 'computer_capture_screenshot', 'only observation returns private pixels; input acknowledges without capture');
+          if (tool !== 'computer_capture_screenshot') assert.equal(user.acknowledged, true);
           assert.equal(user.result, undefined, 'user input must not become a tool result');
         }
         let completionTimer;
         try { await Promise.race([loginCompleted, new Promise((_, reject) => { completionTimer = setTimeout(() => reject(new Error('user form navigation did not complete')), 2000); })]); } finally { clearTimeout(completionTimer); }
         assert.equal(completions, 1, 'user did not finish the form');
-        await send('user-after-submit', 'computer.screenshot', {}, { user_control: true });
-        let stillPaused = await send('still-paused', 'computer.screenshot');
+        await send('user-after-submit', 'computer_capture_screenshot', {}, { user_control: true });
+        let stillPaused = await send('still-paused', 'computer_capture_screenshot');
         // Receiving /done does not mean Chromium has committed its document.
         // A discarded transition frame permits a fresh read, never form replay.
         if (stillPaused.result?.observation_invalidated === true) {
           assert.equal(stillPaused.result.action_executed, false);
           assert.equal(stillPaused.screenshot, undefined);
           assert.equal(stillPaused.safety.safe_to_send_to_model, false);
-          stillPaused = await send('after-document-change', 'computer.screenshot');
+          stillPaused = await send('after-document-change', 'computer_capture_screenshot');
         }
         assert.equal(stillPaused.safety?.level, 'routine', 'helper must report current page safety; Runtime controls dispatch');
         assert.equal(Boolean(stillPaused.screenshot), true, JSON.stringify(stillPaused));
-        const returned = await send('return', 'computer.screenshot', {}, { recovery_observation: true });
+        const returned = await send('return', 'computer_capture_screenshot', {}, { recovery_observation: true });
         assert.equal(returned.safety?.level, 'routine');
         assert.equal(Boolean(returned.screenshot), true);
-        const continued = await send('continue', 'computer.screenshot');
+        const continued = await send('continue', 'computer_capture_screenshot');
         assert.equal(continued.error, undefined);
         assert.equal(Boolean(continued.screenshot), true);
       }
       if (name === 'delayed') {
         const hash = (frame) => createHash('sha256').update(Buffer.from(frame.screenshot.data, 'base64')).digest('hex');
-        const before = await send('private-before', 'computer.screenshot', {}, { user_control: true });
-        const input = await send('private-click', 'computer.click', { x: 100, y: 100 }, { user_control: true });
+        const before = await send('private-before', 'computer_capture_screenshot', {}, { user_control: true });
+        const input = await send('private-click', 'computer_click', { x: 100, y: 100 }, { user_control: true });
         assert.equal(input.acknowledged, true);
         assert.equal(input.screenshot, undefined);
         const deadline = Date.now() + 1600;
         let changed = false;
         while (Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, 333));
-          const frame = await send('private-sample', 'computer.screenshot', {}, { user_control: true });
+          const frame = await send('private-sample', 'computer_capture_screenshot', {}, { user_control: true });
           if (hash(frame) !== hash(before)) { changed = true; break; }
         }
         assert(changed, 'delayed page update was not visible at 3 FPS without another input');
       }
       // Changing turns cannot silently navigate away from an unfinished page.
       if (name !== 'login') {
-        const next = await send('next-observation', 'computer.screenshot');
+        const next = await send('next-observation', 'computer_capture_screenshot');
         assert.equal(next.safety?.level, 'takeover');
         assert.equal(Boolean(next.screenshot), false);
         assert.deepEqual(next.safety.reason_codes, result.safety.reason_codes);

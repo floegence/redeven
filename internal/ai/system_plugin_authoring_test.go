@@ -48,7 +48,7 @@ func TestPluginAuthoringSkillUsesPublishedPlatformInModelAndBrowseContent(t *tes
 		"one useful end-to-end interaction",
 		"leave later preview updates to Apply",
 		"never reuse a version for different bytes",
-		"plugin_author.rename",
+		"plugin_author_rename",
 		"ready_for_install",
 		"installation_check",
 		"Never ask the user to retry the same rejected artifact",
@@ -87,7 +87,7 @@ func TestPluginAuthoringSkillUsesPublishedPlatformInModelAndBrowseContent(t *tes
 }
 
 func TestPluginBuildFeedbackRetainsReadinessWhenLogsAreTruncated(t *testing.T) {
-	for _, tool := range []string{"plugin_author.build", "plugin_author.capture"} {
+	for _, tool := range []string{"plugin_author_build", "plugin_author_capture"} {
 		payload := map[string]any{"artifact": map[string]any{"artifact_id": "exact-artifact", "version": "0.1.0"}, "ready_for_install": false,
 			"installation_check": map[string]any{"code": "plugin_author_package_conflict", "message": "same version has different contents"},
 			"build":              map[string]any{"status": "passed", "commands": strings.Repeat("bounded build log\n", 1000)}}

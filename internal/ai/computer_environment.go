@@ -171,7 +171,7 @@ func (s *Service) ComputerBrowserCandidates(ctx context.Context, meta *session.M
 }
 
 func (r *ComputerUseRuntime) computerBrowserCandidates(ctx context.Context, threadID, endpoint string, policy ToolTargetPolicy) (ComputerTargetInventory, error) {
-	call := TargetToolCall{ThreadID: threadID, ToolName: "computer.targets"}
+	call := TargetToolCall{ThreadID: threadID, ToolName: "computer_list_targets"}
 	inventory, err := r.ComputerTargets(ctx, call, policy)
 	if err != nil {
 		return inventory, err

@@ -266,7 +266,7 @@ describe('Flower thread references', () => {
     await page.viewport(1280, 900);
     const source = referenceAdapter();
     const selected = kind === 'readonly' ? thread({ read_only_reason: 'View only' }) : thread({ status: 'waiting_approval', approval_actions: [{
-      action_id: 'approval-entry', origin: 'main_tool', run_id: 'run-entry', tool_id: 'tool-entry', tool_name: 'terminal.exec', state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, surface_role: 'primary_action', summary: { label: 'Review command', command: 'pwd' },
+      action_id: 'approval-entry', origin: 'main_tool', run_id: 'run-entry', tool_id: 'tool-entry', tool_name: 'terminal_exec', state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, surface_role: 'primary_action', summary: { label: 'Review command', command: 'pwd' },
     }] });
     vi.mocked(source.listThreads).mockResolvedValue([selected, thread({ thread_id: 'thread-2', title: 'Review branch', updated_at_ms: 3 })]);
     const surface = renderSurfaceWithAdapter(source);

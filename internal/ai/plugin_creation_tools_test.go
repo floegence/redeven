@@ -9,7 +9,7 @@ import (
 )
 
 func TestPluginAuthorStatusRetainsNamingContextInLargeModelResult(t *testing.T) {
-	encoded, err := encodeModelToolResult(ToolResult{ToolName: "plugin_author.status", Status: toolResultStatusSuccess, Data: map[string]any{
+	encoded, err := encodeModelToolResult(ToolResult{ToolName: "plugin_author_get_status", Status: toolResultStatusSuccess, Data: map[string]any{
 		"project":   map[string]any{"title": "Focus timer", "revision": 17},
 		"workspace": map[string]any{"source_directory": "/managed/project/source"},
 		"artifacts": []any{map[string]any{"artifact_id": "latest-build", "stages": strings.Repeat("build evidence ", 1000)}},
@@ -40,10 +40,10 @@ func TestPluginAuthorToolDefinitionsRespectRuntimeEffects(t *testing.T) {
 		if _, err = fltools.ValidateDefinition(normalized); err != nil {
 			t.Fatal(def.Name, err)
 		}
-		if def.Name == "plugin_author.build" && !def.HasCapability(ToolCapabilityShell) {
+		if def.Name == "plugin_author_build" && !def.HasCapability(ToolCapabilityShell) {
 			t.Fatal("build lost command approval boundary")
 		}
-		if def.Name != "plugin_author.status" && !def.RequiresApproval {
+		if def.Name != "plugin_author_get_status" && !def.RequiresApproval {
 			t.Fatal("mutation bypasses approval", def.Name)
 		}
 	}
@@ -51,7 +51,7 @@ func TestPluginAuthorToolDefinitionsRespectRuntimeEffects(t *testing.T) {
 
 func TestPluginAuthorInitializationUsesOnlyAnAuthorSlug(t *testing.T) {
 	for _, def := range builtInPluginAuthorToolDefinitions() {
-		if def.Name != "plugin_author.initialize" {
+		if def.Name != "plugin_author_initialize" {
 			continue
 		}
 		var schema struct {

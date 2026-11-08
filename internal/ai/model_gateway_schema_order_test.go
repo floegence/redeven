@@ -14,7 +14,7 @@ import (
 func TestStrictToolRequiredOrderPreservesDeclaredProperties(t *testing.T) {
 	for _, strict := range []bool{false, true} {
 		raw := json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"},"z":{"type":["string","null"]},"a":{"type":"boolean"}},"required":["file_path","content"],"additionalProperties":false}`)
-		defs, aliases, err := prepareOpenAIToolSchemas([]ToolDef{{Name: "file.write", InputSchema: raw, Strict: true}}, strict)
+		defs, aliases, err := prepareOpenAIToolSchemas([]ToolDef{{Name: "file_write", InputSchema: raw, Strict: true}}, strict)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -30,7 +30,7 @@ func TestStrictToolRequiredOrderPreservesDeclaredProperties(t *testing.T) {
 			t.Fatalf("strict=%v required=%v want=%v", strict, schema.Required, want)
 		}
 		if strict {
-			restored := aliases.restoreArguments("file.write", map[string]any{"file_path": "a.txt", "content": "body", "a": nil, "z": nil})
+			restored := aliases.restoreArguments("file_write", map[string]any{"file_path": "a.txt", "content": "body", "a": nil, "z": nil})
 			if _, ok := restored["a"]; ok {
 				t.Fatal("adapter-added null did not restore omission")
 			}
@@ -46,7 +46,7 @@ func TestStrictToolRequiredOrderPreservesDeclaredProperties(t *testing.T) {
 
 func TestFileToolSchemasKeepDeclaredOrderAcrossStrictAndFrozenReplay(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
-		if def.Name != "file.write" {
+		if def.Name != "file_write" {
 			continue
 		}
 		// Transport-only target selection is removed by the existing runtime surface.
@@ -79,7 +79,7 @@ func TestFileToolSchemasKeepDeclaredOrderAcrossStrictAndFrozenReplay(t *testing.
 			}
 			var sent []byte
 			params := map[string]any{"input": []any{map[string]any{"role": "user", "content": "edit"}}, "tools": []any{map[string]any{"type": "function", "name": "file_write", "parameters": schema}}}
-			prepared, err := newPreparedModelWire("openai", "gpt-4o", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolAliases{}, func(_ context.Context, _ ModelGatewayRequest, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
+			prepared, err := newPreparedModelWire("openai", "gpt-4o", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolContract{}, func(_ context.Context, _ ModelGatewayRequest, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
 				sent = bytes.Clone(raw)
 				return ModelGatewayResult{}, nil
 			})

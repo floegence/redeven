@@ -51,7 +51,7 @@ func TestTargetRegistryResolvesLogicalKindsWithoutChangingCurrent(t *testing.T) 
 func TestDefaultInteractionSafetyGateLeavesFieldInspectionToAdapter(t *testing.T) {
 	gate := defaultInteractionSafetyGate{}
 	decision, err := gate.AssessInteraction(context.Background(), TargetToolCall{
-		ToolCallID: "call-1", ToolName: "computer.type",
+		ToolCallID: "call-1", ToolName: "computer_type_text",
 		Arguments: []byte(`{"text":"enter password"}`),
 	}, TargetDescriptor{ID: "browser-main", Ready: true})
 	if err != nil {

@@ -162,7 +162,7 @@ func applyOrderedPatchHunks(source []patchSourceLine, lines []string, ending str
 			case '+':
 				output = append(output, patchSourceLine{text: line[1:], ending: ending})
 			case '\\':
-				// Keep the established apply_patch convention: nonempty updates end with
+				// Keep the established file_apply_patch convention: nonempty updates end with
 				// the preferred newline, including originally unterminated final lines.
 			default:
 				return fail(fmt.Sprintf("invalid line %q", line))

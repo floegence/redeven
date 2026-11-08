@@ -53,7 +53,7 @@ func TestFloretSubagentReadsExposeCanonicalFailuresToModel(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := floretToolResultFromFlower(nil, ToolResult{
-				ToolID: "tool-read", ToolName: "subagents", Status: toolResultStatusSuccess, Data: data,
+				ToolID: "tool-read", ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data,
 			})
 			if err != nil {
 				t.Fatal(err)

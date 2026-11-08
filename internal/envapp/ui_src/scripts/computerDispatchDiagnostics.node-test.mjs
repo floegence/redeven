@@ -42,7 +42,7 @@ for(const operation of ['click','key']){
       const send=transport.send.bind(transport);
       transport.send=async(method,params)=>{if(method==='Page.navigate'||method.startsWith('Input.'))commands++;return send(method,params);};
       controller.page.safety=async()=>{throw new BrowserObservationInvalidated('document_changed',{scope:'safety',event:'document_inventory'});};
-      const request={target_id:'fixture',script_operation:true,full_access:true,...(operation==='navigate'?{tool_name:'browser.navigate',args:{url:'https://fixture.test'}}:{tool_name:'computer.action',args:operation==='click'?{action:'click',selector:{role:'button',name:'Action'}}:{action:'key',key:'Enter'}})};
+      const request={target_id:'fixture',script_operation:true,full_access:true,...(operation==='navigate'?{tool_name:'browser_navigate',args:{url:'https://fixture.test'}}:{tool_name:'computer.action',args:operation==='click'?{action:'click',selector:{role:'button',name:'Action'}}:{action:'key',key:'Enter'}})};
       const result=await controller.execute(request);
       assert.equal(result.result.observation_invalidated,true,JSON.stringify(result));
       assert.equal(result.result.action_executed,false);

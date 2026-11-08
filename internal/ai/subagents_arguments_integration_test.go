@@ -38,11 +38,11 @@ func TestFlowerSubagentArgumentsCorrectBeforeActivityAndSurviveRestart(t *testin
 				switch calls.Add(1) {
 				case 1:
 					args := []byte(`{"action":"` + tc.action + `"` + tc.extra + `}`)
-					writeDeepSeekIntegrationToolCall(w, flusher, "invalid-response", "invalid-input", "subagents", string(args))
+					writeDeepSeekIntegrationToolCall(w, flusher, "invalid-response", "invalid-input", "subagent_manage", string(args))
 				case 2:
 					raw, _ := json.Marshal(request["input"])
-					corrected.Store(requestContainsPairedToolHistory(request, "subagents") && strings.Contains(string(raw), "not executed") && strings.Contains(string(raw), tc.field))
-					writeDeepSeekIntegrationToolCall(w, flusher, "valid-response", "valid-list", "subagents", `{"action":"list"}`)
+					corrected.Store(requestContainsPairedToolHistory(request, "subagent_manage") && strings.Contains(string(raw), "not executed") && strings.Contains(string(raw), tc.field))
+					writeDeepSeekIntegrationToolCall(w, flusher, "valid-response", "valid-list", "subagent_manage", `{"action":"list"}`)
 				case 3:
 					raw, _ := json.Marshal(request["input"])
 					if !strings.Contains(string(raw), "valid-list") || !strings.Contains(string(raw), "total") {
@@ -51,7 +51,7 @@ func TestFlowerSubagentArgumentsCorrectBeforeActivityAndSurviveRestart(t *testin
 					writeDeepSeekIntegrationTextResponse(w, flusher, "complete", "Arguments corrected; inventory inspected.")
 				case 4:
 					raw, _ := json.Marshal(request["input"])
-					history.Store(requestContainsPairedToolHistory(request, "subagents") && strings.Contains(string(raw), "invalid-input") && strings.Contains(string(raw), "not executed"))
+					history.Store(requestContainsPairedToolHistory(request, "subagent_manage") && strings.Contains(string(raw), "invalid-input") && strings.Contains(string(raw), "not executed"))
 					writeDeepSeekIntegrationTextResponse(w, flusher, "history", "History remains usable.")
 				default:
 					t.Errorf("unexpected provider call %d", calls.Load())
@@ -73,7 +73,7 @@ func TestFlowerSubagentArgumentsCorrectBeforeActivityAndSurviveRestart(t *testin
 			}
 			send := func(key, text string) {
 				t.Helper()
-				_, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: key, Input: RunInput{Text: text}, Options: RunOptions{ToolAllowlist: []string{"subagents"}}})
+				_, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: key, Input: RunInput{Text: text}, Options: RunOptions{ToolAllowlist: []string{"subagent_manage"}}})
 				if err != nil {
 					t.Fatal(err)
 				}

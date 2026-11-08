@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Flower maps authorized code, configuration and Runtime facts into canvas versions. For tessiven.action, open prepares and returns entrance information for the running bound service and may run its preparation hook. It does not launch a browser or start a stopped service.
+Flower maps authorized code, configuration and Runtime facts into canvas versions. For tessiven_manage_instance, open prepares and returns entrance information for the running bound service and may run its preparation hook. It does not launch a browser or start a stopped service.
 
 # Contract
 
@@ -47,10 +47,10 @@ Canonical runtime facts and tool execution stay owned by Floret.
 Discovery starts no process/business session and path refs grant no authority. Identity/generation changes or revocation stop input.
 
 ### Official surface
-- `tessiven.runtimes` / `GET /_redeven_proxy/api/tessiven/runtimes` returns independent source availability and exact target paths.
-- `tessiven.runtime.inspect` / `POST .../runtimes/inspect` reads status, bounded public diagnostics, or the original Desktop operation.
-- `tessiven.runtime.action` / `POST .../runtimes/actions` requests connection or one supported `start`, `stop`, `restart`, or `update` process operation.
-- `tessiven.inspect/action` retain the canonical canvas version, bound instance, and resource identity checks for Managed Services and containers.
+- `tessiven_list_runtimes` / `GET /_redeven_proxy/api/tessiven/runtimes` returns independent source availability and exact target paths.
+- `tessiven_inspect_runtime` / `POST .../runtimes/inspect` reads status, bounded public diagnostics, or the original Desktop operation.
+- `tessiven_manage_runtime` / `POST .../runtimes/actions` requests connection or one supported `start`, `stop`, `restart`, or `update` process operation.
+- `tessiven_inspect_resource/action` retain the canonical canvas version, bound instance, and resource identity checks for Managed Services and containers.
 
 A returned operation_id can be queried through
 the corresponding inspect action=operation; absence of an ID is not retry authority.

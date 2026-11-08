@@ -30,8 +30,8 @@ function currentFor(items: readonly FlowerActivityItem[], version: number) {
   }) };
 }
 
-const write = () => activityItem({ item_id: 'write', tool_id: 'write', tool_name: 'terminal.write', renderer: 'terminal', label: '向 SSH 登录会话提交密码', status: 'success', payload: { operation: 'write', command: 'ssh udesk26', process_id: 'process-1', input_bytes: 12 } });
-const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal.read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', last_seq: 2, latest_seq: 2 } });
+const write = () => activityItem({ item_id: 'write', tool_id: 'write', tool_name: 'terminal_write', renderer: 'terminal', label: '向 SSH 登录会话提交密码', status: 'success', payload: { operation: 'write', command: 'ssh udesk26', process_id: 'process-1', input_bytes: 12 } });
+const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal_read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', last_seq: 2, latest_seq: 2 } });
 
 function stream(summaries: ReturnType<typeof thread>[]) {
   const queue: FlowerLiveStreamEnvelope[] = [];
@@ -380,7 +380,7 @@ describe('SSH terminal activity', () => {
   it.each(['classic-light', 'classic-dark'])('shows an SSH failure once below the command in %s', async theme => {
     document.documentElement.classList.toggle('dark', theme === 'classic-dark');
     document.documentElement.dataset.floeShellTheme = theme;
-    const failed = activityItem({ item_id: 'ssh-failed', tool_id: 'ssh-failed', tool_name: 'terminal.exec', renderer: 'terminal',
+    const failed = activityItem({ item_id: 'ssh-failed', tool_id: 'ssh-failed', tool_name: 'terminal_exec', renderer: 'terminal',
       label: 'Inspect remote runtime', status: 'error', payload: { operation: 'exec', command: 'ssh -o BatchMode=yes udesk26 hostname',
         output: 'Permission denied (publickey,password).', exit_code: 255,
         error: { code: 'COMMAND_FAILED', message: 'Terminal process exited with code 255' } } });

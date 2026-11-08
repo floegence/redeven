@@ -247,7 +247,7 @@ it('keeps a large approval queue scrollable inside a short narrow window', async
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   runtime.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'canvas-thread', current: interactionBootstrap(interactionThread({
     thread_id: 'canvas-thread', status: 'waiting_approval', approval_actions: Array.from({ length: 10 }, (_, index) => ({
-      action_id: `approval-${index}`, turn_id: 'turn', origin: 'main_tool', run_id: 'run', tool_id: `tool-${index}`, tool_name: 'terminal.exec',
+      action_id: `approval-${index}`, turn_id: 'turn', origin: 'main_tool', run_id: 'run', tool_id: `tool-${index}`, tool_name: 'terminal_exec',
       state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, queue_order: index,
       summary: { label: `Inspect deployment service ${index + 1}`, command: 'systemctl status service' },
     })),
@@ -588,7 +588,7 @@ it('preserves native tool disclosure and live progress in the refined reading su
       { id: `user:${input.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: input.prompt },
       { id: 'reply', turn_id: 'turn', run_id: 'run', ordinal: 2, kind: 'assistant', text: 'I will read the selected canvas and its schema first.' },
       { id: 'canvas-read', turn_id: 'turn', run_id: 'run', ordinal: 3, kind: 'tool', activity: {
-        item_id: 'canvas-read', tool_id: 'canvas-read', tool_name: 'terminal.exec', kind: 'tool', status: 'success',
+        item_id: 'canvas-read', tool_id: 'canvas-read', tool_name: 'terminal_exec', kind: 'tool', status: 'success',
         severity: 'normal', needs_attention: false, requires_approval: false,
         presentation: { label: 'tessiven schema', renderer: 'terminal', payload: {
           operation: 'execute', command: 'tessiven schema', output: 'ServiceCanvas schema loaded', exit_code: 0,
@@ -843,7 +843,7 @@ it('keeps native approval controls inside the same conversation window', async (
   runtime.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
     thread_id: 'canvas-thread', view_version: 3, activity: 'active', turn_id: 'turn', run_id: 'run', queue: [], items: [],
     interactions: [{ id: 'approval-1', turn_id: 'turn', run_id: 'run', kind: 'approval', tool_call_id: 'tool-1',
-      approval: { label: 'Inspect service configuration', command: 'cat /workspace/orders.yaml', tool_name: 'terminal.exec', tool_call_id: 'tool-1' } }],
+      approval: { label: 'Inspect service configuration', command: 'cat /workspace/orders.yaml', tool_name: 'terminal_exec', tool_call_id: 'tool-1' } }],
   } });
   await expect.element(page.getByRole('button', { name: 'Approve Inspect service configuration', exact: true })).toBeVisible();
   const composer = document.querySelector('.tessiven-flower-output .tessiven-flower-composer')!;

@@ -89,7 +89,7 @@ func terminalCompletionNotice(s terminalProcessSnapshot) string {
 	if !s.HasMore && !s.Truncated && len(s.Output) <= 1100 {
 		notice += " Output: " + s.Output
 	} else {
-		notice += " Read retained output with terminal.read using this process_id and after_seq=0."
+		notice += " Read retained output with terminal_read using this process_id and after_seq=0."
 	}
 	if s.outputUTF8Repaired {
 		notice += " Invalid source UTF-8 bytes were replaced."
@@ -128,7 +128,7 @@ func readSealedTerminal(ctx context.Context, service flruntime.ThreadService, th
 		if w.WorkID != id {
 			continue
 		}
-		snapshot := terminalProcessSnapshot{ProcessID: id, ThreadID: thread.String(), TurnID: w.TurnID.String(), RunID: w.RunID.String(), ToolID: w.ToolCallID, ToolName: "terminal.exec", Status: "unknown", ExecutionLocation: ToolTargetModeLocalRuntime, Observation: "unavailable", OutputAvailability: "unavailable"}
+		snapshot := terminalProcessSnapshot{ProcessID: id, ThreadID: thread.String(), TurnID: w.TurnID.String(), RunID: w.RunID.String(), ToolID: w.ToolCallID, ToolName: "terminal_exec", Status: "unknown", ExecutionLocation: ToolTargetModeLocalRuntime, Observation: "unavailable", OutputAvailability: "unavailable"}
 		if len(w.Result) > 0 {
 			if json.Unmarshal(w.Result, &snapshot) != nil || snapshot.ProcessID != id || snapshot.TurnID != w.TurnID.String() || snapshot.RunID != w.RunID.String() || snapshot.ToolID != w.ToolCallID || snapshot.Status == terminalProcessStatusRunning {
 				return snapshot, errors.New("terminal result facts are invalid")

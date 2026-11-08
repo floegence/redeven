@@ -34,7 +34,7 @@ for (const deviceScaleFactor of [1, 2]) test('real browser zoom preserves semant
       const session=await context.newCDPSession(tab), controller=new BrowserComputerController(session); await controller.initialize();
       const call=(tool_name,args={})=>controller.execute({target_id:'geometry',tool_name,args,full_access:true,script_operation:true});
       try {
-        const shot=await call('computer.screenshot'); assert.equal(shot.error,undefined,JSON.stringify(shot));
+        const shot=await call('computer_capture_screenshot'); assert.equal(shot.error,undefined,JSON.stringify(shot));
         const png=PNG.sync.read(Buffer.from(shot.screenshot.data,'base64'));
         const dimensions=await tab.evaluate(()=>({width:window.innerWidth,height:window.innerHeight,dpr:window.devicePixelRatio}));
         assert.ok(Math.abs(png.width-dimensions.width*dimensions.dpr)<3);
@@ -43,7 +43,7 @@ for (const deviceScaleFactor of [1, 2]) test('real browser zoom preserves semant
         for(let py=0;py<png.height;py++)for(let px=0;px<png.width;px++){const i=(py*png.width+px)*4;if(png.data[i]>240&&png.data[i+1]<20&&png.data[i+2]>240){x+=px;y+=py;n++;}}
         assert.ok(n>0,'visible button must exist in screenshot');
         const g=shot.result.frame_geometry;
-        const clicked=await call('computer.click',{x:x/n,y:y/n,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id});
+        const clicked=await call('computer_click',{x:x/n,y:y/n,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id});
         assert.equal(clicked.error,undefined,JSON.stringify(clicked)); assert.equal(await tab.evaluate(()=>window.hits),1,'pixel input must hit the rendered button');
         const semantic=await call('computer.action',{action:'click',selector:{role:'button',name:'Probe',exact:true}});
         assert.equal(semantic.error,undefined,JSON.stringify(semantic)); assert.equal(await tab.evaluate(()=>window.hits),2,'semantic input must hit after scrolling');

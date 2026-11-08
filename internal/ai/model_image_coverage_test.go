@@ -23,11 +23,11 @@ import (
 
 func TestAllModelImageSourcesUseDefaultPreparation(t *testing.T) {
 	_, a, part := screenshotPreparationFixture(t)
-	for _, source := range []string{"upload", "image.read", "computer.exec", "computer.screenshot", "computer.observe", "mcp_fixture", "summary", "history"} {
+	for _, source := range []string{"upload", "image_read", "computer_exec", "computer_capture_screenshot", "computer_observe", "mcp_fixture", "summary", "history"} {
 		t.Run(source, func(t *testing.T) {
 			adapter := &floretProviderAdapter{supportsImageInput: true, providerType: "deepseek", modelName: "deepseek-flash"}
 			ref := a
-			if source != "computer.exec" {
+			if source != "computer_exec" {
 				ref.ResourceRef = "image://" + strings.Repeat("a", 64) + "/png"
 			}
 			msg := flprovider.Message{Role: flprovider.RoleUser, Attachments: []flprovider.Attachment{ref}}

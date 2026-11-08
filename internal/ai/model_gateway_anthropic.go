@@ -35,6 +35,9 @@ func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayReq
 	if p == nil {
 		return nil, errors.New("nil Anthropic provider")
 	}
+	if _, err := newProviderToolContract(req.Tools); err != nil {
+		return nil, err
+	}
 	req, err := prepareModelGatewayImages(ctx, req)
 	if err != nil {
 		return nil, err

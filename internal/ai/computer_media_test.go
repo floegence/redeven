@@ -78,7 +78,7 @@ func TestComputerRuntimePersistsOnlyActionKeyframes(t *testing.T) {
 	executor := newLiveFrameExecutor(t)
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, dir)
 	installBrowserStub(t, runtime)
-	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.screenshot"})
+	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer_capture_screenshot"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestComputerRuntimeDropsUnsafeFramesBeforeStorageOrViewing(t *testing.T) {
 			runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 			t.Cleanup(func() { _ = runtime.Close() })
 			acquireLiveFrameTestTarget(t, runtime, "owner")
-			result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "browser.navigate", liveFrame: live})
+			result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "browser_navigate", liveFrame: live})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -155,7 +155,7 @@ func TestComputerScreenshotRequiresSavedImageForExactTarget(t *testing.T) {
 			executor := &unsafeComputerFrameExecutor{result: result}
 			runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, dir)
 			t.Cleanup(func() { _ = runtime.Close() })
-			got, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.screenshot"})
+			got, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer_capture_screenshot"})
 			if err == nil || len(got.Attachments) != 0 {
 				t.Fatalf("unsaved screenshot accepted: %+v %v", got, err)
 			}
@@ -178,7 +178,7 @@ func TestComputerMediaSaveFailurePreservesCompletedAction(t *testing.T) {
 	}
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, dir)
 	t.Cleanup(func() { _ = runtime.Close() })
-	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.click"})
+	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer_click"})
 	if err == nil || takeoverResult(result, err) || result.Result.(map[string]any)["action_executed"] != true || len(result.Attachments) != 0 || !executor.released {
 		t.Fatalf("lost confirmed progress or leaked media: %+v %v", result, err)
 	}

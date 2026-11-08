@@ -133,11 +133,11 @@ func TestPublishedFloretV7MigratesTargetThreadCopyAndAcceptsNewTurn(t *testing.T
 		results := 0
 		for _, message := range requests[0].Messages {
 			for _, call := range message.ToolCalls {
-				if call.Name == "ask_user" {
+				if call.Name == "user_ask" {
 					calls++
 				}
 			}
-			if message.ToolResult != nil && message.ToolResult.ToolName == "ask_user" {
+			if message.ToolResult != nil && message.ToolResult.ToolName == "user_ask" {
 				results++
 			}
 			if message.Role == flprovider.RoleUser && (strings.Contains(message.Text, "Agent requested user input") || strings.Contains(message.Text, `"interaction_response"`)) {
@@ -145,7 +145,7 @@ func TestPublishedFloretV7MigratesTargetThreadCopyAndAcceptsNewTurn(t *testing.T
 			}
 		}
 		if calls != wantAskUserPairs || results != wantAskUserPairs {
-			t.Fatalf("target thread ask_user pairs=(calls:%d results:%d), want %d", calls, results, wantAskUserPairs)
+			t.Fatalf("target thread user_ask pairs=(calls:%d results:%d), want %d", calls, results, wantAskUserPairs)
 		}
 	}
 }

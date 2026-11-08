@@ -189,7 +189,7 @@ func TestExtensionDrainedReadCancellationDoesNotClaimUserControl(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() { <-entered; cancel() }()
-	call := TargetToolCall{TargetID: "chrome-task", ToolName: "computer.observe"}
+	call := TargetToolCall{TargetID: "chrome-task", ToolName: "computer_observe"}
 	result, err := executor.ExecuteTargetTool(ctx, call)
 	if err == nil || takeoverResult(result, err) || errors.Is(err, errComputerEffectUnknown) || result.Result.(map[string]any)["connection_diagnostic"] != nil || cancellations.Load() != 1 {
 		t.Fatalf("drained read claimed ownership or unknown effect: %#v %v", result, err)
@@ -216,7 +216,7 @@ func TestExtensionLostEffectIsTerminalAndNeverReplayed(t *testing.T) {
 		}
 	})
 	executor := &extensionTargetExecutor{sourceHost: host, targetID: "chrome-task"}
-	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer.click", Arguments: json.RawMessage(`{"x":1,"y":2}`)})
+	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer_click", Arguments: json.RawMessage(`{"x":1,"y":2}`)})
 	if !errors.Is(err, errComputerEffectUnknown) || result.Result.(map[string]any)["connection_diagnostic"] != nil || calls.Load() != 1 {
 		t.Fatalf("effect result: %v, calls: %d", err, calls.Load())
 	}
@@ -499,7 +499,7 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 		go func() {
 			planned, err := host.ConnectBrowser(t.Context(), ComputerBrowserConnection{ExtensionProfileID: client.profile.ID, NewTab: true})
 			if err == nil {
-				planned, err = host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, RunID: thread, TurnID: "turn", ToolName: "computer.select_target"}, planned)
+				planned, err = host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, RunID: thread, TurnID: "turn", ToolName: "computer_select_target"}, planned)
 			}
 			results <- planned
 			failures <- err
@@ -570,7 +570,7 @@ func TestExtensionNewTabSelectionFailurePreservesCreationFacts(t *testing.T) {
 			}()
 			r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 			bindTargetTestRun(t, r)
-			value, failure := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer.select_target"), "select", "computer.select_target", map[string]any{"candidate_ref": candidate.CandidateRef})
+			value, failure := r.execComputerManagement(computerAuthorizedTestContext(t, r, "select", "computer_select_target"), "select", "computer_select_target", map[string]any{"candidate_ref": candidate.CandidateRef})
 			output, ok := value.(toolExecutionOutput)
 			if !ok || failure == nil {
 				t.Fatalf("missing failure facts: %#v %v", value, failure)
@@ -593,7 +593,7 @@ func TestExtensionNewTabSelectionFailurePreservesCreationFacts(t *testing.T) {
 			if mode == "unknown" && (payload["effect_outcome_unknown"] != true || payload["action_executed"] != nil || !errors.Is(failure, errBrowserOutcomeUnknown)) {
 				t.Fatalf("unknown creation misrepresented: %#v %v", payload, failure)
 			}
-			published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: "select", ToolName: "computer.select_target", Status: toolResultStatusError, Data: payload})
+			published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: "select", ToolName: "computer_select_target", Status: toolResultStatusError, Data: payload})
 			if publishErr != nil {
 				t.Fatal(publishErr)
 			}
@@ -619,7 +619,7 @@ func TestExtensionObservationFailurePreservesOnlyConfirmedProgress(t *testing.T)
 				_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": map[string]any{"error": "TARGET_OBSERVATION_UNAVAILABLE", "result": map[string]any{"action_executed": executed, "observation_stage": "safety_scan", "observation": "private"}, "screenshot": map[string]any{"mime": "image/png", "data": "private"}}})
 			})
 			executor := &extensionTargetExecutor{sourceHost: host, targetID: "chrome-task"}
-			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer.click"})
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer_click"})
 			if _, ok := executed.(bool); !ok {
 				if !errors.Is(err, errComputerEffectUnknown) {
 					t.Fatalf("malformed progress weakened effect barrier: %v", err)
@@ -793,7 +793,7 @@ func TestExtensionDetachFactsReachScriptAndModelWithoutReplay(t *testing.T) {
 				if errors.Is(err, errComputerEffectUnknown) != unknown {
 					t.Fatalf("changed effect certainty: %v", err)
 				}
-				published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer.exec", Status: toolResultStatusError, effectUncertain: unknown, Data: result.Result})
+				published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: call.ToolCallID, ToolName: "computer_exec", Status: toolResultStatusError, effectUncertain: unknown, Data: result.Result})
 				if publishErr != nil {
 					t.Fatal(publishErr)
 				}
@@ -834,11 +834,11 @@ func TestExtensionDetachDoesNotEraseConfirmedReply(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": map[string]any{"result": map[string]any{"action_executed": true}}})
 	})
 	executor := &extensionTargetExecutor{sourceHost: source, targetID: "confirmed", pipe: &extensionSourcePipe{ctx: lifetime}}
-	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "confirmed", ToolName: "computer.key", Arguments: json.RawMessage(`{"key":"Enter"}`)})
+	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "confirmed", ToolName: "computer_press_key", Arguments: json.RawMessage(`{"key":"Enter"}`)})
 	if err != nil || result.Result.(map[string]any)["action_executed"] != true || result.Result.(map[string]any)["connection_diagnostic"] != nil {
 		t.Fatalf("confirmed response reclassified: %#v %v", result, err)
 	}
-	result, err = executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "another", ToolName: "computer.key"})
+	result, err = executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "another", ToolName: "computer_press_key"})
 	if err == nil || result.Result != nil {
 		t.Fatalf("diagnostic crossed target identity: %#v %v", result, err)
 	}

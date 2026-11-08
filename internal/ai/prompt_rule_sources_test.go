@@ -138,7 +138,7 @@ func TestFlowerReadFilePreservesCompleteRulePages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		data, truncated, err := normalizeTruncatedToolPayload("read_file", page)
+		data, truncated, err := normalizeTruncatedToolPayload("file_read", page)
 		if err != nil {
 			t.Fatal(err)
 		}

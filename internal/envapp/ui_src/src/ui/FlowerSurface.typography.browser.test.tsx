@@ -46,10 +46,10 @@ async function mount() {
     })),
   }, messages: [{ id: 'type-answer', turn_id: 'type-turn', run_id: 'type-run', role: 'assistant', status: 'complete', content: markdown, created_at_ms: 1,
     blocks: [{ type: 'markdown', content: markdown }, activityTimeline({ thread_id: 'type-parent', turn_id: 'type-turn', run_id: 'type-run', items: [
-      activityItem({ item_id: 'query', tool_id: 'query', tool_name: 'threads.query', renderer: 'structured', label: 'Search conversations', started_at_unix_ms: 1000, ended_at_unix_ms: 3500,
+      activityItem({ item_id: 'query', tool_id: 'query', tool_name: 'thread_query', renderer: 'structured', label: 'Search conversations', started_at_unix_ms: 1000, ended_at_unix_ms: 3500,
         payload: { inputs: [{ title: 'query', content: 'release', format: 'text' }], rows_provided: true,
           rows: [{ title: 'Original release notes', meta: 'assistant', content: '已核对版本、时间和完整上下文。', format: 'text' }] } }),
-      ...(['error', 'pending', 'waiting', 'running', 'canceled'] as const).map(status => activityItem({ item_id: status, tool_id: status, tool_name: 'threads.query', renderer: 'structured', label: status + ' search', status, ...(status === 'error' ? { payload: { error: { message: 'The requested source is unavailable.', code: 'source_unavailable' } } } : {}) })),
+      ...(['error', 'pending', 'waiting', 'running', 'canceled'] as const).map(status => activityItem({ item_id: status, tool_id: status, tool_name: 'thread_query', renderer: 'structured', label: status + ' search', status, ...(status === 'error' ? { payload: { error: { message: 'The requested source is unavailable.', code: 'source_unavailable' } } } : {}) })),
       activityItem({ item_id: 'subagents', tool_id: 'subagents', tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'status', targets: [{ thread_id: child.thread_id, task_name: child.task_name, status: 'completed' }] } }),
     ] })] }] });
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [source], loadThread: async () => liveBootstrap(source), loadSubagentDetail: async () => detail },
@@ -123,7 +123,7 @@ it('emphasizes only confirmed running tools and quiets them when the canonical r
   await page.viewport(1100, 1000); theme('porcelain-light');
   const fixture = streamingFixture(1, 0);
   const current = fixture.current();
-  const activity = activityItem({ item_id: 'live-tool', tool_id: 'live-tool', tool_name: 'threads.query', status: 'running' });
+  const activity = activityItem({ item_id: 'live-tool', tool_id: 'live-tool', tool_name: 'thread_query', status: 'running' });
   fixture.replace({ ...current, view_version: current.view_version + 1, items: [
     { id: 'live-answer', ordinal: 1, kind: 'assistant', turn_id: current.turn_id, run_id: current.run_id, text: 'The answer remains the primary reading surface.' },
     { id: 'live-tool', ordinal: 2, kind: 'tool', turn_id: current.turn_id, run_id: current.run_id, activity },

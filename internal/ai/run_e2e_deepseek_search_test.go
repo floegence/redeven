@@ -53,7 +53,7 @@ func TestE2E_FlowerDeepSeekV4WebResearchBoundary(t *testing.T) {
 					if observation.NativeSearchTools != wantHosted || observation.Model != model || observation.SearchUnavailablePrompt {
 						t.Errorf("wire boundary: native tools=%d model=%s unavailable prompt=%v", observation.NativeSearchTools, observation.Model, observation.SearchUnavailablePrompt)
 					}
-					if !slices.Contains(observation.DefinitionToolNames, "web_fetch") || slices.Contains(observation.DefinitionToolNames, "web_search") || slices.Contains(observation.DefinitionToolNames, "web_search_tool") != wantLocal {
+					if !slices.Contains(observation.DefinitionToolNames, "web_fetch") || slices.Contains(observation.DefinitionToolNames, "web_search_pages") || slices.Contains(observation.DefinitionToolNames, "web_search_pages") != wantLocal {
 						t.Errorf("unexpected tool definitions: %v", observation.DefinitionToolNames)
 					}
 					if strings.Contains(model, "vision") && !observation.HasImageInput {

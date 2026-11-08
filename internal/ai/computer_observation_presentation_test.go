@@ -13,7 +13,7 @@ import (
 func TestComputerObservationPresentationPreservesDiagnosis(t *testing.T) {
 	for _, code := range []string{"TARGET_OBSERVATION_UNAVAILABLE", "SCRIPT_ARGUMENT_ERROR", "EFFECT_OUTCOME_UNKNOWN"} {
 		t.Run(code, func(t *testing.T) {
-			activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError,
+			activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusError,
 				Error: &aitools.ToolError{Code: aitools.ErrorCode(code), Message: "Computer script stopped before completion"}, Data: map[string]any{"action_executed": true, "observation_status": "not_observed"}})
 			if err != nil {
 				t.Fatal(err)
@@ -40,7 +40,7 @@ func TestComputerObservationPresentationPreservesDiagnosis(t *testing.T) {
 }
 
 func TestComputerOutputLimitUsesStablePresentationCode(t *testing.T) {
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError,
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusError,
 		Error: &aitools.ToolError{Code: aitools.ErrorCodeScriptOutputLimit, Message: "Computer script stopped before completion (SCRIPT_OUTPUT_LIMIT)"},
 		Data:  map[string]any{"budget_exhausted": "output", "completed_reads": []any{map[string]any{"action": "snapshot", "status": "completed"}}, "output_limit": map[string]any{"stage": "log", "limit_bytes": int64(65536)}}})
 	if err != nil {
@@ -59,11 +59,11 @@ func TestComputerScriptNavigationReceiptAndReadFailureKeepIndependentOutcomes(t 
 		t.Run(fmt.Sprint(failedRead), func(t *testing.T) {
 			navigations, reads, inputs := 0, 0, 0
 			runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
-				if c.ToolName == "browser.navigate" {
+				if c.ToolName == "browser_navigate" {
 					navigations++
 					return TargetToolResult{TargetID: c.TargetID, Result: map[string]any{"navigation_stage": "load", "action_executed": true, "needs_observation": true, "observation_invalidated": true}, Safety: &InteractionSafetyDecision{Level: "routine"}}, nil
 				}
-				if c.ToolName == "computer.observe" {
+				if c.ToolName == "computer_observe" {
 					reads++
 					return computerObservationFailure(c, map[string]any{"action_executed": false, "observation_stage": "safety_scan"}, "fixture")
 				}
@@ -102,7 +102,7 @@ func TestComputerScriptInputReceiptRetainsFactsAndIndependentRead(t *testing.T) 
 		t.Run(mode, func(t *testing.T) {
 			inputs, reads := 0, 0
 			runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
-				if c.ToolName == "computer.observe" {
+				if c.ToolName == "computer_observe" {
 					reads++
 					if mode == "failed_read" {
 						return computerObservationFailure(c, map[string]any{"action_executed": false, "observation_stage": "safety_scan"}, "fixture")
@@ -146,7 +146,7 @@ func TestComputerScriptInputReceiptRetainsFactsAndIndependentRead(t *testing.T) 
 }
 
 func TestComputerBudgetPresentationRetainsCanonicalFailure(t *testing.T) {
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolID: "budget", ToolName: "computer.exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "TIMEOUT", Message: "Time limit reached"}, Data: map[string]any{"budget_exhausted": "time", "completed_actions": []string{"snapshot"}}})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolID: "budget", ToolName: "computer_exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "TIMEOUT", Message: "Time limit reached"}, Data: map[string]any{"budget_exhausted": "time", "completed_actions": []string{"snapshot"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestComputerBudgetPresentationRetainsCanonicalFailure(t *testing.T) {
 
 func TestComputerOutputBudgetPresentationPreservesDeliveryFacts(t *testing.T) {
 	for _, uncertain := range []bool{false, true} {
-		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError, effectUncertain: uncertain, Error: &aitools.ToolError{Code: "SCRIPT_FAILED", Message: "Output limit reached"}, Data: map[string]any{"budget_exhausted": "output", "output_limit": map[string]any{"stage": "log", "limit_bytes": 65536, "emitted_logs": 1, "content": "must not pass"}, "read_outcomes": []any{map[string]any{"action": "observe", "status": "completed", "operation_index": 0}}}})
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusError, effectUncertain: uncertain, Error: &aitools.ToolError{Code: "SCRIPT_FAILED", Message: "Output limit reached"}, Data: map[string]any{"budget_exhausted": "output", "output_limit": map[string]any{"stage": "log", "limit_bytes": 65536, "emitted_logs": 1, "content": "must not pass"}, "read_outcomes": []any{map[string]any{"action": "observe", "status": "completed", "operation_index": 0}}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -214,7 +214,7 @@ func TestComputerNarrowReadHasSeparatePresentationFacts(t *testing.T) {
 	if payload["observation_status"] != "not_observed" || len(toAnySlice(payload["completed_reads"])) != 1 || payload["frame_geometry"] != nil {
 		t.Fatalf("read invented snapshot: %+v", payload)
 	}
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: payload})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: payload})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestComputerObservationPresentationKeepsLifecycleAndReadFacts(t *testing.T)
 		"wait":            map[string]any{"requested_state": "visible", "timeout_ms": float64(12000), "elapsed_ms": float64(417), "samples": float64(2), "page_text": "not a diagnostic"},
 		"completed_reads": []any{map[string]any{"operation_index": 0, "action": "text", "scope": "element", "source": "browser_dom", "document_id": "document", "frame_id": "main", "ref": "ref"}},
 	}
-	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "TARGET_OBSERVATION_UNAVAILABLE", Message: "Read interrupted"}, Data: payload})
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "TARGET_OBSERVATION_UNAVAILABLE", Message: "Read interrupted"}, Data: payload})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestComputerCreationAndDetachFactsReachActivity(t *testing.T) {
 			"connection_diagnostic": map[string]any{"phase": "source_disconnected", "reason": "replaced_with_devtools"},
 			"read_outcomes":         []any{map[string]any{"action": "snapshot", "status": "completed", "total": 3, "returned_count": 1, "source_truncated": true, "root_ref": "a", "limit": 1}},
 		}
-		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.select_target", Status: toolResultStatusError, Data: map[string]any{key: values[key], "selected": false}})
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer_select_target", Status: toolResultStatusError, Data: map[string]any{key: values[key], "selected": false}})
 		if err != nil {
 			t.Fatal(err)
 		}

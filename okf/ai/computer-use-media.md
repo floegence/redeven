@@ -18,7 +18,7 @@ lifetimes; tool success does not prove delivery. Each controller holds one model
 - Safe results include target, location, summary and safety. Semantic/script
   operations include images only when requested.
 - All authorized model images use published Floret PrepareModelImage: JPEG quality
-  85 and a 2560-pixel longest side, without upscaling. Uploads, image.read/crops,
+  85 and a 2560-pixel longest side, without upscaling. Uploads, image_read/crops,
   browser/native screenshots, MCP images, summaries and historical replay share
   this policy. Alpha remains PNG; EXIF orientation is applied and ICC retained.
   An animation stays byte-identical when it fits; oversized animation fails

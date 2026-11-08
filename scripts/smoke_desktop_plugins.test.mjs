@@ -240,7 +240,7 @@ test('v9 I/O smoke keeps 64 MiB transfer verification bounded to streaming chunk
   ));
   assert.match(source, /file\.read\(CHUNK\.min/u);
   assert.match(source, /download_body\.read\(CHUNK\)/u);
-  assert.doesNotMatch(source, /fs::read_file/u);
+  assert.doesNotMatch(source, /fs::file_read/u);
   assert.doesNotMatch(source, /\.read_all\(\)/u);
   assert.match(source, /file_hash\.update\(&chunk\)/u);
   assert.match(source, /HTTP_SEGMENT: usize = 1024 \* 1024/u);

@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import { untrack } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
@@ -442,7 +443,7 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
     }
     if (entry.blocks.length !== 1) continue;
     const block = entry.blocks[0];
-    if (block.type !== 'activity' || readPresentationValue(block.block).items.length !== 1 || readPresentationValue(block.block).items[0].tool_name !== 'goal') continue;
+    if (block.type !== 'activity' || readPresentationValue(block.block).items.length !== 1 || historicalToolName(readPresentationValue(block.block).items[0].tool_name ?? '') !== 'goal_manage') continue;
     const execution = JSON.stringify([message.turn_id, message.run_id]);
     const candidates = pending.get(execution) ?? [];
     candidates.push(entry);
@@ -531,7 +532,7 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
         : new Proxy(message, { get: (target, key, receiver) => key === 'active_cursor' ? activeCursor : Reflect.get(target, key, receiver) });
       messageEntries = messageTimelineEntries(threadID, projectedMessage, decorations);
       const hasGoalActivity = Boolean(facts.goal) || messageEntries.some(entry => entry.type === 'message'
-        && entry.blocks.some(block => block.type === 'activity' && readPresentationValue(block.block).items.some(item => item.tool_name === 'goal')));
+        && entry.blocks.some(block => block.type === 'activity' && readPresentationValue(block.block).items.some(item => historicalToolName(item.tool_name ?? '') === 'goal_manage')));
       goalActivity ||= hasGoalActivity;
       projections.set(source, { facts, messageID, threadID, activeCursor, decorations: localDecorations, entries: messageEntries, goalActivity: hasGoalActivity });
     }

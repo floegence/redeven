@@ -338,9 +338,9 @@ func TestPatchTargetRoutingRetainsTargetPolicy(t *testing.T) {
 	snapshot := buildPermissionSnapshot(FlowerPermissionFullAccess, builtInToolDefinitions(), nil)
 	snapshot.SnapshotID = "patch-route"
 	ctx := contextWithToolAuthorizationSnapshot(t.Context(), snapshot)
-	ctx = contextWithFloretToolExecutionAuthorization(ctx, "patch", "apply_patch", "attempt", snapshot, ApprovalDecisionAllow, true, nil)
+	ctx = contextWithFloretToolExecutionAuthorization(ctx, "patch", "file_apply_patch", "attempt", snapshot, ApprovalDecisionAllow, true, nil)
 	patch := "*** Begin Patch\n*** Add File: /remote/only/file.txt\n+remote\n*** End Patch"
-	result, err := r.execTool(ctx, testSendTurnMeta(), "patch", "apply_patch", map[string]any{"input": patch})
+	result, err := r.execTool(ctx, testSendTurnMeta(), "patch", "file_apply_patch", map[string]any{"input": patch})
 	if err != nil || len(executor.calls) != 1 {
 		t.Fatalf("result=%+v err=%v calls=%+v", result, err, executor.calls)
 	}

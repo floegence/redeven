@@ -24,7 +24,7 @@ func TestRegisterBuiltInToolsRespectsComputerUseSetting(t *testing.T) {
 			if err := registerBuiltInTools(registry, r); err != nil {
 				t.Fatal(err)
 			}
-			for _, name := range []string{"computer.screenshot", "browser.navigate"} {
+			for _, name := range []string{"computer_capture_screenshot", "browser_navigate"} {
 				found := false
 				for _, def := range registry.Snapshot() {
 					found = found || def.Name == name

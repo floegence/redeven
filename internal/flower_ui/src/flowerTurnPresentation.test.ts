@@ -22,7 +22,7 @@ const toolEntry = (id: string, status: FlowerActivityItem['status'] = 'success')
   ...entry(id), blocks: [{ type: 'activity', key: `${id}:0`, block_index: 0,
     block: { type: 'activity-timeline', schema_version: 1, thread_id: 'thread', turn_id: 'turn', run_id: 'run',
       summary: { status, severity: status === 'error' ? 'error' : 'quiet', needs_attention: status === 'error', total_items: 1, counts: { [status]: 1 } },
-      items: [{ item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status,
+      items: [{ item_id: id, tool_id: id, tool_name: 'terminal_exec', kind: 'tool', status,
         severity: status === 'error' ? 'error' : 'quiet', needs_attention: status === 'error', requires_approval: false }],
     },
   }],
@@ -180,10 +180,10 @@ describe('canonical turn process presentation', () => {
     expect(projectFlowerTurnProcess([resolved], [turn()]).groups.get('turn')?.processKeys).toEqual(['pending']);
   });
   it.each([
-    ['computer.screenshot', `computer://browser/${'a'.repeat(64)}`, 'automatic'],
-    ['computer.screenshot', 'computer://browser/invalid', 'automatic'],
-    ['computer.screenshot', undefined, 'automatic'],
-    ['computer.observe', `computer://browser/${'a'.repeat(64)}`, 'automatic'],
+    ['computer_capture_screenshot', `computer://browser/${'a'.repeat(64)}`, 'automatic'],
+    ['computer_capture_screenshot', 'computer://browser/invalid', 'automatic'],
+    ['computer_capture_screenshot', undefined, 'automatic'],
+    ['computer_observe', `computer://browser/${'a'.repeat(64)}`, 'automatic'],
   ] as const)('collapses successful work including %s with %s', (tool_name, resource_ref, disclosure) => {
     const item: FlowerActivityItem = { item_id: 'capture', tool_id: 'capture', tool_name, kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
       target_refs: resource_ref ? [{ kind: 'computer_frame', label: 'Saved screenshot', resource_ref }] : [],
@@ -419,7 +419,7 @@ it('excludes structured observation interruptions from turn failure totals', () 
   const observed = toolEntry('read', 'error');
   const block = observed.blocks[0];
   if (block.type !== 'activity') throw new Error('activity fixture required');
-  const interrupted = {...observed, blocks:[{...block,block:{...block.block,items:block.block.items.map(item => ({...item,tool_name:'computer.exec',chips:[{kind:'computer_observation',label:'observation',value:'unavailable'}]}))}}]};
+  const interrupted = {...observed, blocks:[{...block,block:{...block.block,items:block.block.items.map(item => ({...item,tool_name:'computer_exec',chips:[{kind:'computer_observation',label:'observation',value:'unavailable'}]}))}}]};
   const result = projectFlowerTurnProcess([entry('user','user'),interrupted,toolEntry('failure','error')], [turn({intermediate_item_ids:['read','failure'],final_item_ids:[]})]);
   expect(result.groups.get('turn')).toMatchObject({toolCallCount:2,failedCallCount:1});
 });

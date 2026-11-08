@@ -135,8 +135,8 @@ func TestAttachmentReadToolRejectsNonTextAndRegistrationWithoutAuthority(t *test
 		t.Fatal(err)
 	}
 	for _, def := range registry.Snapshot() {
-		if def.Name == "attachment.read" {
-			t.Fatal("attachment.read registered without canonical authority")
+		if def.Name == "attachment_read" {
+			t.Fatal("attachment_read registered without canonical authority")
 		}
 	}
 
@@ -147,8 +147,8 @@ func TestAttachmentReadToolRejectsNonTextAndRegistrationWithoutAuthority(t *test
 		t.Fatal(err)
 	}
 	for _, def := range registry.Snapshot() {
-		if def.Name == "attachment.read" {
-			t.Fatal("attachment.read registered for a model without tool fallback support")
+		if def.Name == "attachment_read" {
+			t.Fatal("attachment_read registered for a model without tool fallback support")
 		}
 	}
 
@@ -159,10 +159,10 @@ func TestAttachmentReadToolRejectsNonTextAndRegistrationWithoutAuthority(t *test
 	}
 	found := false
 	for _, def := range registry.Snapshot() {
-		found = found || def.Name == "attachment.read"
+		found = found || def.Name == "attachment_read"
 	}
 	if !found {
-		t.Fatal("attachment.read was not registered with canonical authority and model tool support")
+		t.Fatal("attachment_read was not registered with canonical authority and model tool support")
 	}
 }
 

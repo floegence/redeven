@@ -24,7 +24,7 @@ Unadmitted copies stay invisible; canonical replay finishes preparation without 
 Startup/periodic recovery scans 50 names/batch, skips in-flight gates and removes private stages/marked forks lacking settings. Explicit orphan operations share the target gate. Retry keeps canonical identity but copies afresh. Context maps ancestor suffixes, including nested forks; request inspection/repair of hardcoded paths without rewriting history. Ancestor cleanup cannot delete descendants.
 
 ## Delivery and discovery
-file.present validates/hashes an authorized regular file outside application state, cancellably checking identity/size/mtime. Return path/title/MIME/size/SHA-256/mtime/endpoint and thread/turn/run IDs; never relocate originals.
+file_present validates/hashes an authorized regular file outside application state, cancellably checking identity/size/mtime. Return path/title/MIME/size/SHA-256/mtime/endpoint and thread/turn/run IDs; never relocate originals.
 
 Files discovers successful authorized Floret results (50 records/page,32 KiB/record), preserving Fork/restart provenance without crawling or another ledger. Available means accessible with unchanged size/mtime; history does not rehash. Changed/missing/unavailable are observations.
 
@@ -39,7 +39,7 @@ Enqueue before destination selection in Shell Downloads: Env top bar, one Deskto
 
 The manager owns progress/destination/cancel/failure/retry/completion. List/thread changes stop previews, not admitted downloads. Reopened lists consult active downloads before cleanup. Late settlement cannot revive cancellation; finalization cannot cancel. Native destinations offer Reveal/Open; identify browser handoff. Retain records until Shell exit/Clear finished, never import OS history.
 
-Use published Floe controls/icons/tokens. Title/close in header, search/refresh in body; filters only for multiple known kinds, vanished selection resets All. No ambiguous totals, empty headings, collapsed images or manual paging. Delivered means file.present. Keep same-name image names/timestamps. Rows offer keyboard preview, origin/size, lazy thumbnails and exceptional availability; hide success badges/MIME parameters/IDs/absolute paths even in tooltips. Paths remain action inputs. Phone names wrap beside accessible download/folder/source actions.
+Use published Floe controls/icons/tokens. Title/close in header, search/refresh in body; filters only for multiple known kinds, vanished selection resets All. No ambiguous totals, empty headings, collapsed images or manual paging. Delivered means file_present. Keep same-name image names/timestamps. Rows offer keyboard preview, origin/size, lazy thumbnails and exceptional availability; hide success badges/MIME parameters/IDs/absolute paths even in tooltips. Paths remain action inputs. Phone names wrap beside accessible download/folder/source actions.
 
 Temporary files appears only when present, with Back/preview/confirmed cleanup; Process files has no blanket cleanup. Restore focus/scroll; active work/downloads disable cleanup. Failed pages expose Retry beside retained content. Only body scrolls in a stable responsive viewport; explicit locales and [loading continuity](../ui/page-loading-continuity.md#page-continuity) apply.
 

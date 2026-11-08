@@ -29,7 +29,7 @@ func TestLocalToolFeedbackThroughProviderAndRestart(t *testing.T) {
 			if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			tool, code := "apply_patch", "PATCH_VALIDATION_FAILED"
+			tool, code := "file_apply_patch", "PATCH_VALIDATION_FAILED"
 			failed := map[string]any{"input": "*** Begin Patch\n*** Update File: edit.txt\n@@\n-missing\n+omega\n*** End Patch"}
 			corrected := map[string]any{"input": "*** Begin Patch\n*** Update File: edit.txt\n@@\n-alpha\n+omega\n beta\n*** End Patch"}
 			wantMeta := map[string]any{"effect": "none", "reason": "context_not_found", "chunk": float64(1), "patch_body_line": float64(1), "search_from_line": float64(1), "suggested_fixes": []any{"read the current file and regenerate the patch using its current text"}}
@@ -38,7 +38,7 @@ func TestLocalToolFeedbackThroughProviderAndRestart(t *testing.T) {
 				wantMeta["reason"], wantMeta["search_from_line"], wantMeta["source_line"] = "eof_context_mismatch", float64(2), float64(1)
 				wantMeta["suggested_fixes"] = []any{"read the file tail and correct the *** End of File marker or its context"}
 			} else if scenario == "directory conflict" {
-				tool, code = "terminal.exec", "INVALID_PATH"
+				tool, code = "terminal_exec", "INVALID_PATH"
 				command := "printf accepted >> marker.txt; pwd -P"
 				failed = map[string]any{"command": command, "cwd": ".", "workdir": "sub"}
 				corrected = map[string]any{"command": command, "cwd": "./sub", "workdir": sub}
@@ -83,7 +83,7 @@ func TestLocalToolFeedbackThroughProviderAndRestart(t *testing.T) {
 						if output["status"] != "success" {
 							t.Errorf("explicit correction failed: %+v", output)
 						}
-						if tool == "terminal.exec" {
+						if tool == "terminal_exec" {
 							data, _ := output["data"].(map[string]any)
 							want, _ := filepath.EvalSymlinks(sub)
 							if data["completed"] != true || data["exit_code"] != float64(0) || strings.TrimSpace(anyToString(data["output"])) != want {
@@ -156,7 +156,7 @@ func TestLocalToolFeedbackThroughProviderAndRestart(t *testing.T) {
 					t.Fatal("restart lost Activity or dispatched the provider")
 				}
 			}
-			if tool == "apply_patch" {
+			if tool == "file_apply_patch" {
 				if got, err := os.ReadFile(path); err != nil || string(got) != "omega\nbeta\nalpha\n" {
 					t.Fatalf("correction widened replacement scope: %q, %v", got, err)
 				}

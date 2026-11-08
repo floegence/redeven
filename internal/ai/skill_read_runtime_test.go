@@ -56,7 +56,7 @@ func skillReadOutputs(t *testing.T, request map[string]any) []map[string]any {
 
 func writeSkillReadCall(w http.ResponseWriter, flusher http.Flusher, call int) {
 	id := fmt.Sprintf("skill_read_%d", call)
-	item := map[string]any{"type": "function_call", "id": "fc_" + id, "call_id": "call_" + id, "name": "use_skill", "arguments": `{"name":"complete-context"}`}
+	item := map[string]any{"type": "function_call", "id": "fc_" + id, "call_id": "call_" + id, "name": "skill_use", "arguments": `{"name":"complete-context"}`}
 	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 	writeAskUserIntegrationCompletedResponse(w, flusher, "resp_"+id)
@@ -421,8 +421,8 @@ func TestSkillRereadCannotRewritePreparedRequestOrTransportRetry(t *testing.T) {
 	gateway := &recordingPreparedGateway{}
 	adapter := newFloretProviderAdapter(gateway, "openai", "gpt-test", ProviderControls{}, TurnBudgets{}, "")
 	request := flprovider.Request{RunID: "skill-run", PromptScopeID: "skill-scope", Messages: []flprovider.Message{
-		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "skill-read", Name: "use_skill", Args: `{"name":"complete-context"}`}}},
-		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "skill-read", ToolName: "use_skill", Text: first.Content}},
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "skill-read", Name: "skill_use", Args: `{"name":"complete-context"}`}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "skill-read", ToolName: "skill_use", Text: first.Content}},
 	}}
 	prepared, err := adapter.Prepare(t.Context(), request)
 	if err != nil {

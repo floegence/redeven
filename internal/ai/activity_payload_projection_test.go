@@ -50,7 +50,7 @@ func TestActivityPayloadProjectionMatchesPublishedJSONPolicy(t *testing.T) {
 					if err := json.Unmarshal(raw, &old); err != nil {
 						t.Fatal(err)
 					}
-					for _, tool := range []string{"tool", "goal", "subagents"} {
+					for _, tool := range []string{"tool", "goal", "subagent_manage"} {
 						expected, expectedOK := sanitizeActivityPayloadValue(old, renderers[index], tool)
 						actual, actualOK := sanitizeActivityPayloadValue(activityPayloadMap(input), renderers[index], tool)
 						a, _ := json.Marshal(actual)

@@ -62,7 +62,7 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			request := ModelGatewayRequest{Model: tc.model, Protocol: tc.protocol, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: strings.Repeat("Review the source code and explain the changes.\n", 100)}}}}, Tools: []ToolDef{{Name: "file.write", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}}
+			request := ModelGatewayRequest{Model: tc.model, Protocol: tc.protocol, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: strings.Repeat("Review the source code and explain the changes.\n", 100)}}}}, Tools: []ToolDef{{Name: "file_write", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}}
 			request.ProviderControls.ReasoningCapability.Kind = "toggle"
 			request.ProviderControls.ReasoningCapability.ResponseReasoningFields = []string{"reasoning_content"}
 			prepared, err := gateway.(modelGatewayRequestPreparer).prepareTurn(context.Background(), request)
@@ -155,7 +155,7 @@ func TestPreparedOpaqueReasoningKeepsWireWithoutInflatingBudget(t *testing.T) {
 		encrypted := strings.Repeat("A", size)
 		params := map[string]any{"instructions": "System.", "input": []any{map[string]any{"type": "reasoning", "encrypted_content": encrypted}, map[string]any{"role": "user", "content": "Continue."}}}
 		var sent []byte
-		prepared, err := newPreparedModelWire("openai", "gpt-6.1-sol", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolAliases{}, func(_ context.Context, _ ModelGatewayRequest, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
+		prepared, err := newPreparedModelWire("openai", "gpt-6.1-sol", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolContract{}, func(_ context.Context, _ ModelGatewayRequest, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
 			sent = bytes.Clone(raw)
 			return ModelGatewayResult{Text: "done"}, nil
 		})

@@ -41,7 +41,7 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				p.chatGPT = true
 				p.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 			}
-			wanted := map[string]bool{"read_file": true, "read_files": true, "find": true, "terminal.exec": true, "computer.exec": true, "tessiven.action": true, "tessiven.inspect": true, "tessiven.runtime.action": true, "image.read": true, "web_fetch": true, "subagents": true, "subagent_events": true}
+			wanted := map[string]bool{"file_read": true, "file_read_many": true, "path_find": true, "terminal_exec": true, "computer_exec": true, "tessiven_manage_instance": true, "tessiven_inspect_resource": true, "tessiven_manage_runtime": true, "image_read": true, "web_fetch": true, "subagent_manage": true, "subagent_read_events": true}
 			var defs []ToolDef
 			for _, def := range builtInModelCapabilityDefinitions() {
 				if wanted[def.Name] {
@@ -73,21 +73,21 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				}
 			}
 			collect(wire["tools"].([]any))
-			if functions["web_search_tool"] != nil || strings.Contains(fmt.Sprint(functions["web_fetch"]["description"]), "Use web search") {
+			if functions["web_search_pages"] != nil || strings.Contains(fmt.Sprint(functions["web_fetch"]["description"]), "Use web search") {
 				t.Error("standalone fetch implies an absent search capability")
 			}
 			for name, phrases := range map[string][]string{
-				"read_file":        {"1-based", "next_offset", "EOF", "default 200"},
-				"read_files":       {"next_index", "0-based", "default 120"},
-				"find":             {"basenames", "symlinks", "gitignore", "Default 8"},
-				"terminal_exec":    {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal.terminate", "Service shutdown", "read_file/read_files", "find for file discovery", "computer.targets"},
-				"computer_exec":    {"SCRIPT_OPERATION_LIMIT", "completed effects", "thread/turn/target", "without clearing"},
-				"image_read":       {"width", "height", "10 MiB", "32 megapixels"},
-				"web_fetch":        {"known URL"},
-				"subagents":        {"direct child", "including earlier turns", "deduplicated union", "starts a new turn", "Neither deletes threads or history", "not rollback of child effects", "accepted/accepted_count", "stopped/stopped_count", "Already-terminal", "handoffs[].content", "items[].failure"},
-				"subagent_events":  {"current parent thread", "earlier turns"},
-				"tessiven_inspect": {"binding", "managed_service", "service_id", "not a canvas instance ID", "port_forward", "Names/ports do not prove identity", "complete=false", "issues", "omit canvas fields", "logs/operation reuse", "authorized connection", "never substitute targets"},
-				"tessiven_action":  {"open prepares", "neither launches a browser nor starts a stopped service", "operation_id"},
+				"file_read":                 {"1-based", "next_offset", "EOF", "default 200"},
+				"file_read_many":            {"next_index", "0-based", "default 120"},
+				"path_find":                 {"basenames", "symlinks", "gitignore", "Default 8"},
+				"terminal_exec":             {fmt.Sprintf("%d-minute runtime limit", int(terminalProcessMaxRuntime/time.Minute)), "terminal_terminate", "Service shutdown", "file_read/file_read_many", "find for file discovery", "computer_list_targets"},
+				"computer_exec":             {"SCRIPT_OPERATION_LIMIT", "completed effects", "thread/turn/target", "without clearing"},
+				"image_read":                {"width", "height", "10 MiB", "32 megapixels"},
+				"web_fetch":                 {"known URL"},
+				"subagent_manage":           {"direct child", "including earlier turns", "deduplicated union", "starts a new turn", "Neither deletes threads or history", "not rollback of child effects", "accepted/accepted_count", "stopped/stopped_count", "Already-terminal", "handoffs[].content", "items[].failure"},
+				"subagent_read_events":      {"current parent thread", "earlier turns"},
+				"tessiven_inspect_resource": {"binding", "managed_service", "service_id", "not a canvas instance ID", "port_forward", "Names/ports do not prove identity", "complete=false", "issues", "omit canvas fields", "logs/operation reuse", "authorized connection", "never substitute targets"},
+				"tessiven_manage_instance":  {"open prepares", "neither launches a browser nor starts a stopped service", "operation_id"},
 			} {
 				for _, phrase := range phrases {
 					if !strings.Contains(strings.ToLower(toolGuidanceText(functions[name])), strings.ToLower(phrase)) {
@@ -95,16 +95,16 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 					}
 				}
 			}
-			subagentsSchema := functions["subagents"]["parameters"].(map[string]any)
+			subagentsSchema := functions["subagent_manage"]["parameters"].(map[string]any)
 			for _, keyword := range []string{"oneOf", "anyOf", "if", "then"} {
 				if _, exists := subagentsSchema[keyword]; exists {
-					t.Errorf("subagents gained provider-dependent root %s", keyword)
+					t.Errorf("subagent_manage gained provider-dependent root %s", keyword)
 				}
 			}
 			for field, phrase := range map[string]string{"task_name": "Required for spawn", "task_description": "Required for spawn", "message": "4000 UTF-8 bytes", "target": "Required for send_input and close", "ids": "required for wait", "scope": "Optional for close_all only", "limit": "Optional for list only", "running_only": "Optional for list only", "timeout_ms": "Optional for wait only"} {
 				property := subagentsSchema["properties"].(map[string]any)[field].(map[string]any)
 				if !strings.Contains(fmt.Sprint(property["description"]), phrase) {
-					t.Errorf("subagents.%s omits %q", field, phrase)
+					t.Errorf("subagent_manage.%s omits %q", field, phrase)
 				}
 			}
 			scope := subagentsSchema["properties"].(map[string]any)["scope"].(map[string]any)
@@ -119,7 +119,7 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 			if !strings.Contains(fmt.Sprint(target["description"]), "this thread's saved binding") {
 				t.Fatalf("target scope omitted: %#v", target)
 			}
-			for _, tc := range []struct{ name, field string }{{"computer_exec", "target"}, {"tessiven_action", "generation"}, {"tessiven_runtime_action", "identity"}} {
+			for _, tc := range []struct{ name, field string }{{"computer_exec", "target"}, {"tessiven_manage_instance", "generation"}, {"tessiven_manage_runtime", "identity"}} {
 				schema := functions[tc.name]["parameters"].(map[string]any)
 				property := schema["properties"].(map[string]any)[tc.field].(map[string]any)
 				required := false
@@ -176,7 +176,7 @@ func TestSearchDisabledGuidanceThroughFlowerRuntime(t *testing.T) {
 					}
 				}
 			}
-			if found["web_search_tool"] || !found["web_fetch"] || !found["terminal_exec"] || !found["computer_exec"] {
+			if found["web_search_pages"] || !found["web_fetch"] || !found["terminal_exec"] || !found["computer_exec"] {
 				t.Errorf("incorrect configured tool surface: %#v", found)
 			}
 		}

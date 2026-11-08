@@ -125,12 +125,12 @@ func TestSubagentCancellationPartialFactsReachModelAndPublicActivity(t *testing.
 			snapshot := buildPermissionSnapshot(FlowerPermissionFullAccess, builtInToolDefinitions(), nil)
 			snapshot.SnapshotID = "cancellation-fixture"
 			ctx := contextWithToolAuthorizationSnapshot(t.Context(), snapshot)
-			ctx = contextWithFloretToolExecutionAuthorization(ctx, "call", "subagents", "attempt", snapshot, ApprovalDecisionAllow, true, nil)
+			ctx = contextWithFloretToolExecutionAuthorization(ctx, "call", "subagent_manage", "attempt", snapshot, ApprovalDecisionAllow, true, nil)
 			args := map[string]any{"action": action}
 			if action == subagentActionClose {
 				args["target"] = "current"
 			}
-			result, err := (&builtInToolHandler{r: r, toolName: "subagents"}).Execute(ctx, ToolCall{ID: "call", Name: "subagents", Args: args})
+			result, err := (&builtInToolHandler{r: r, toolName: "subagent_manage"}).Execute(ctx, ToolCall{ID: "call", Name: "subagent_manage", Args: args})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -167,7 +167,7 @@ func TestSubagentCancellationPartialFactsReachModelAndPublicActivity(t *testing.
 			if action == subagentActionCloseAll && payload.Targets[0].Status != subagentStatusCanceled {
 				t.Fatalf("activity lost stopped sibling: %+v", payload)
 			}
-			original := flruntime.ThreadItem{ID: "tool:call", TurnID: "turn-parent", RunID: "run-parent", Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ItemID: "call", ToolID: "call", ToolName: "subagents", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusError, Presentation: encoded.Activity}}
+			original := flruntime.ThreadItem{ID: "tool:call", TurnID: "turn-parent", RunID: "run-parent", Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ItemID: "call", ToolID: "call", ToolName: "subagent_manage", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusError, Presentation: encoded.Activity}}
 			saved, err := json.Marshal(original)
 			if err != nil {
 				t.Fatal(err)
@@ -302,7 +302,7 @@ func TestSubagentCloseAllLargeInventoryKeepsCompleteCountsAndBoundedActivity(t *
 	if err != nil || data["stopped_count"] != 205 || len(data["affected_ids"].([]string)) != 205 || len(runtime.calls) != 205 {
 		t.Fatalf("large batch lost effects: %#v %v", data, err)
 	}
-	encoded, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "large", ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+	encoded, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "large", ToolName: "subagent_manage", Status: toolResultStatusSuccess, Data: data})
 	if err != nil {
 		t.Fatal(err)
 	}

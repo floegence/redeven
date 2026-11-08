@@ -36,12 +36,12 @@ test('real high-resolution screenshots map model coordinates to the intended con
   await page.setContent('<button style="position:absolute;left:400px;top:300px;width:120px;height:80px" onclick="this.textContent=\'Clicked\'">Target</button>');
   owner=await createComputerBrowserSource(page,'scaled');
   const call=(tool_name,args={})=>owner.controller.execute({target_id:'scaled',tool_name,args,full_access:true,script_operation:true});
-  const shot=await call('computer.screenshot'); assert.equal(shot.error,undefined);
+  const shot=await call('computer_capture_screenshot'); assert.equal(shot.error,undefined);
   const g=shot.result.frame_geometry;
   assert.equal(g.image.width,3000);assert.equal(g.model_image.width,2560);
   const coordinates={x:460/3000*g.model_image.width,y:340/1600*g.model_image.height,coordinate_space:'model_pixels',frame:g.frame,document_id:g.document_id};
-  const clicked=await call('computer.click',coordinates);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
+  const clicked=await call('computer_click',coordinates);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
   assert.equal(await page.getByRole('button').textContent(),'Clicked');
-  const stale=await call('computer.click',coordinates);assert.equal(stale.error,'STALE_REFERENCE');
+  const stale=await call('computer_click',coordinates);assert.equal(stale.error,'STALE_REFERENCE');
  } finally {await owner?.dispose();await browser.close();}
 });

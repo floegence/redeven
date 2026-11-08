@@ -22,9 +22,9 @@ export type FlowerApprovalPresentation = Readonly<{
   description?: string;
 }>;
 
-const fileMutationTools = new Set(['file.write', 'apply_patch']);
-const commandTools = new Set(['terminal.exec']);
-const networkTools = new Set(['web_fetch', 'web.search']);
+const fileMutationTools = new Set(['file_write', 'file_apply_patch']);
+const commandTools = new Set(['terminal_exec']);
+const networkTools = new Set(['web_fetch', 'web_search_pages']);
 
 function targetsOfKind(targets: readonly FlowerSafeTarget[], ...kinds: readonly string[]): readonly FlowerSafeTarget[] {
   const accepted = new Set(kinds);

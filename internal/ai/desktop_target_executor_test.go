@@ -30,7 +30,7 @@ done
 		t.Fatal(err)
 	}
 	executor := NewNativeDesktopTargetExecutor(helper)
-	result, err := executor.ExecuteTargetTool(context.Background(), TargetToolCall{ToolCallID: "call-1", TargetID: "desktop-main", ToolName: "computer.click", Arguments: []byte(`{"x":1,"y":2}`)})
+	result, err := executor.ExecuteTargetTool(context.Background(), TargetToolCall{ToolCallID: "call-1", TargetID: "desktop-main", ToolName: "computer_click", Arguments: []byte(`{"x":1,"y":2}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ done
 	}
 	executor := NewNativeDesktopTargetExecutor(helper)
 	defer executor.Close()
-	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.screenshot"})
+	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer_capture_screenshot"})
 	if err == nil || !strings.Contains(err.Error(), "provenance") {
 		t.Fatalf("mismatched response accepted: %v", err)
 	}
@@ -79,7 +79,7 @@ done
 	t.Cleanup(func() { _ = executor.Close() })
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	call := TargetToolCall{TargetID: "desktop-main", ToolName: "computer.screenshot"}
+	call := TargetToolCall{TargetID: "desktop-main", ToolName: "computer_capture_screenshot"}
 	first, err := executor.ExecuteTargetTool(ctx, call)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestNativeDesktopTargetExecutorRetiresInterruptedProtocol(t *testing.T) {
 while IFS= read -r line; do
   request_id=$(printf '%s' "$line" | sed -n 's/.*"request_id":"\([^"]*\)".*/\1/p')
   target_id=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
-  case "$line" in *computer.wait*) sleep 0.2 ;; esac
+  case "$line" in *computer_wait*) sleep 0.2 ;; esac
   printf '{"type":"result","request_id":"%s","target_id":"%s","payload":{}}\n' "$request_id" "$target_id"
 done
 `), 0o700); err != nil {
@@ -118,12 +118,12 @@ done
 	t.Cleanup(func() { _ = executor.Close() })
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
 	defer cancel()
-	_, err := executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "desktop-main", ToolName: "computer.wait"})
+	_, err := executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "desktop-main", ToolName: "computer_wait"})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("interrupted call: %v", err)
 	}
 	executor.Timeout = time.Second
-	_, err = executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "desktop-main", ToolName: "computer.screenshot"})
+	_, err = executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "desktop-main", ToolName: "computer_capture_screenshot"})
 	if err != nil {
 		t.Fatalf("fresh observation inherited interrupted protocol: %v", err)
 	}
@@ -142,7 +142,7 @@ done
 	}
 	executor := NewNativeDesktopTargetExecutor(helper)
 	t.Cleanup(func() { _ = executor.Close() })
-	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.screenshot"})
+	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer_capture_screenshot"})
 	classified := aitools.ClassifyError(err)
 	if classified == nil || classified.Code != "FRAME_UNAVAILABLE" || strings.Contains(classified.Message, "private-fixture-secret") || classified.Retryable {
 		t.Fatalf("unsafe or untyped failure: %+v", classified)
@@ -162,7 +162,7 @@ done
 	}
 	executor := NewNativeDesktopTargetExecutor(helper)
 	t.Cleanup(func() { _ = executor.Close() })
-	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.click"})
+	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer_click"})
 	classified := aitools.ClassifyError(err)
 	payload, _ := result.Result.(map[string]any)
 	if classified == nil || classified.Code != "TARGET_OBSERVATION_UNAVAILABLE" || takeoverResult(result, err) || payload["action_executed"] != true || payload["observation_stage"] != "safety_scan" || payload["needs_observation"] != true || len(payload) != 3 {
@@ -189,7 +189,7 @@ func TestNativeDesktopReturnedResultClassification(t *testing.T) {
 			}
 			executor := NewNativeDesktopTargetExecutor(helper)
 			defer executor.Close()
-			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "input", TargetID: "desktop-main", ToolName: "computer.click"})
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "input", TargetID: "desktop-main", ToolName: "computer_click"})
 			if err == nil || errors.Is(err, errComputerEffectUnknown) != test.uncertain {
 				t.Fatalf("classification=%v", err)
 			}
@@ -208,7 +208,7 @@ func TestNativeDesktopReturnedResultClassification(t *testing.T) {
 }
 
 func TestComputerDiagnosticsAreClosedAndNonSecret(t *testing.T) {
-	rows := computerActivityResultRows("computer.click", map[string]any{"reason": "private exception", "stage": "typed password", "target_state": "private", "input_progress": map[string]any{"posted": -1, "observed": "secret", "expected": 1.5, "stage": "private"}})
+	rows := computerActivityResultRows("computer_click", map[string]any{"reason": "private exception", "stage": "typed password", "target_state": "private", "input_progress": map[string]any{"posted": -1, "observed": "secret", "expected": 1.5, "stage": "private"}})
 	for _, row := range rows {
 		if strings.Contains(row.Content, "private") || strings.Contains(row.Content, "secret") {
 			t.Fatalf("unsafe diagnostics: %+v", rows)

@@ -17,7 +17,7 @@ import (
 func TestParentEventActivityPreservesReturnedSources(t *testing.T) {
 	for _, action := range []string{"list", "read"} {
 		t.Run(action, func(t *testing.T) {
-			activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "subagent_events", Status: "success", activityInput: map[string]any{"action": action}, Data: flruntime.ParentEventPage{ThreadID: "parent", Events: []flruntime.ParentEvent{
+			activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "subagent_read_events", Status: "success", activityInput: map[string]any{"action": action}, Data: flruntime.ParentEventPage{ThreadID: "parent", Events: []flruntime.ParentEvent{
 				{ID: "one", ParentThreadID: "parent", SourceTurnID: "turn", SourceRunID: "run", SourceThreadID: "child-a", Message: "Private report body"}, {ID: "two", ParentThreadID: "parent", SourceTurnID: "turn", SourceRunID: "run", SourceThreadID: "child-a"}, {ID: "three", ParentThreadID: "parent", SourceTurnID: "turn", SourceRunID: "run", SourceThreadID: "child-b"},
 			}}})
 			if err != nil {
@@ -42,7 +42,7 @@ func TestParentEventActivityPreservesReturnedSources(t *testing.T) {
 			if !reflect.DeepEqual(restored.TargetRefs, want) {
 				t.Fatalf("persisted sources=%+v", restored.TargetRefs)
 			}
-			public := publicActivityItem(observation.ActivityItem{ItemID: "activity", ToolID: "call", ToolName: "subagent_events", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: activity})
+			public := publicActivityItem(observation.ActivityItem{ItemID: "activity", ToolID: "call", ToolName: "subagent_read_events", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: activity})
 			if public.Presentation == nil || !reflect.DeepEqual(public.Presentation.TargetRefs, want) {
 				t.Fatalf("public sources=%+v", public.Presentation)
 			}
@@ -57,10 +57,10 @@ func TestParentEventActivityHistoricalCanonicalSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"subagent_events", "report_to_parent"} {
+	for _, name := range []string{"subagent_read_events", "subagent_report"} {
 		t.Run(name, func(t *testing.T) {
 			data := map[string]any{"events": []any{map[string]any{"id": "event", "parent_thread_id": thread.ThreadID, "source_thread_id": "historical-child", "source_turn_id": "child-turn", "source_run_id": "child-run"}}}
-			if name == "report_to_parent" {
+			if name == "subagent_report" {
 				data = map[string]any{"accepted": true, "event_id": "event", "parent_thread_id": thread.ThreadID}
 			}
 			body, _ := json.Marshal(map[string]any{"status": "success", "data": data})
@@ -90,12 +90,12 @@ func TestParentEventActivityHistoricalCanonicalSources(t *testing.T) {
 
 func TestParentReportActivityRequiresAcceptedReceipt(t *testing.T) {
 	for _, accepted := range []bool{false, true} {
-		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "report_to_parent", Status: "success", Data: flruntime.ParentEventReceipt{Accepted: accepted, EventID: "parent-event:0123456789abcdef0123456789abcdef", ParentThreadID: "parent"}})
+		activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "subagent_report", Status: "success", Data: flruntime.ParentEventReceipt{Accepted: accepted, EventID: "parent-event:0123456789abcdef0123456789abcdef", ParentThreadID: "parent"}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if accepted {
-			public := publicActivityItem(observation.ActivityItem{ItemID: "activity", ToolID: "call", ToolName: "report_to_parent", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: activity})
+			public := publicActivityItem(observation.ActivityItem{ItemID: "activity", ToolID: "call", ToolName: "subagent_report", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: activity})
 			if public.Presentation == nil || len(public.Presentation.TargetRefs) != 1 || public.Presentation.TargetRefs[0].ResourceRef != "parent-event:0123456789abcdef0123456789abcdef" {
 				t.Fatalf("receipt lost in public projection: %+v", public)
 			}
@@ -109,10 +109,10 @@ func TestParentReportActivityRequiresAcceptedReceipt(t *testing.T) {
 func TestParentReportActivityPreservesCompleteInput(t *testing.T) {
 	message := "  " + strings.Repeat("x", 8190)
 	for _, result := range []bool{false, true} {
-		activity := floretActivityForToolCall("report_to_parent", map[string]any{"message": message})
+		activity := floretActivityForToolCall("subagent_report", map[string]any{"message": message})
 		if result {
 			var err error
-			activity, err = floretActivityForToolResult(nil, ToolResult{ToolName: "report_to_parent", Status: "success", activityInput: map[string]any{"message": message}})
+			activity, err = floretActivityForToolResult(nil, ToolResult{ToolName: "subagent_report", Status: "success", activityInput: map[string]any{"message": message}})
 			if err != nil {
 				t.Fatal(err)
 			}

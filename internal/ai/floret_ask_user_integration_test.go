@@ -55,24 +55,24 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			args := `{"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target should I deploy?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			writeOpenAISSEJSON(w, flusher, map[string]any{
 				"type": "response.output_item.added", "output_index": 0,
-				"item": map[string]any{"type": "function_call", "id": "fc_ask_user", "call_id": "call_ask_user", "name": "ask_user", "arguments": args},
+				"item": map[string]any{"type": "function_call", "id": "fc_ask_user", "call_id": "call_ask_user", "name": "user_ask", "arguments": args},
 			})
 			writeOpenAISSEJSON(w, flusher, map[string]any{
 				"type": "response.output_item.done", "output_index": 0,
-				"item": map[string]any{"type": "function_call", "id": "fc_ask_user", "call_id": "call_ask_user", "name": "ask_user", "arguments": args},
+				"item": map[string]any{"type": "function_call", "id": "fc_ask_user", "call_id": "call_ask_user", "name": "user_ask", "arguments": args},
 			})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting")
 			return
 		case 2:
 			assertPermissionProviderSurface(t, request, "readonly")
-			if requestContainsPairedToolHistory(request, "ask_user") && !requestContainsLegacyInteractionText(request) {
+			if requestContainsPairedToolHistory(request, "user_ask") && !requestContainsLegacyInteractionText(request) {
 				sawStructuredContinuation.Store(true)
 			}
 			writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
 			return
 		case 3:
 			assertPermissionProviderSurface(t, request, "readonly")
-			pair := requestContainsPairedToolHistory(request, "ask_user")
+			pair := requestContainsPairedToolHistory(request, "user_ask")
 			sawHistoricalAskUserPair.Store(pair)
 			writeAskUserIntegrationTextResponse(w, flusher, "resp_history", "Historical interaction remains available.")
 			return
@@ -135,13 +135,13 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	assertPromptContains(t, systemContent, flowerIdentityIntroduction)
 	hasAskUser := false
 	for _, raw := range request["tools"].([]any) {
-		if tool, ok := raw.(map[string]any); ok && tool["name"] == "ask_user" {
+		if tool, ok := raw.(map[string]any); ok && tool["name"] == "user_ask" {
 			hasAskUser = true
 			assertCanonicalAskUserWireGuidance(t, tool["parameters"])
 		}
 	}
 	if !hasAskUser {
-		t.Fatal("provider request omitted the ask_user tool")
+		t.Fatal("provider request omitted the user_ask tool")
 	}
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "openai/gpt-5-nano"); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("SetThreadModel while waiting error=%v, want ErrThreadBusy", err)
@@ -261,7 +261,12 @@ func assertCanonicalAskUserWireGuidance(t *testing.T, raw any) {
 		{properties, "evidence_refs", "[]"},
 		{questions, "response_mode", "custom-text answer"},
 	} {
-		description, _ := field.properties[field.name].(map[string]any)["description"].(string)
+		definition, ok := field.properties[field.name].(map[string]any)
+		if !ok {
+			t.Errorf("missing schema field %s", field.name)
+			continue
+		}
+		description, _ := definition["description"].(string)
 		if !strings.Contains(description, field.meaning) {
 			t.Errorf("provider wire lacks %s guidance: %q", field.name, description)
 		}
@@ -444,7 +449,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		}
 		if mainCalls.Add(1) == 1 {
 			args := `{"evidence_refs":[],"questions":[{"id":"receipt","header":"Receipt","question":"What value should continue the run?","response_mode":"write","is_secret":false,"write_label":"Value","write_placeholder":"Type a value"}]}`
-			writeDeepSeekIntegrationToolCall(w, flusher, "chat_waiting_receipt", "call_receipt", "ask_user", args)
+			writeDeepSeekIntegrationToolCall(w, flusher, "chat_waiting_receipt", "call_receipt", "user_ask", args)
 			return
 		}
 		if deepSeekRequestHasStableSystemPrompt(request, "Ask for a receipt value.", "accepted") {

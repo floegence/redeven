@@ -14,7 +14,7 @@ func TestTerminalExecYieldReturnsRunningProcessThenFinalStatus(t *testing.T) {
 
 	process, err := manager.Start(terminalProcessStartRequest{
 		ProcessID: "terminal-exec-yield-test", EndpointID: "endpoint-test", ThreadID: "thread-test",
-		RunID: "run-test", TurnID: "turn-test", ToolID: "tool-test", ToolName: "terminal.exec",
+		RunID: "run-test", TurnID: "turn-test", ToolID: "tool-test", ToolName: "terminal_exec",
 		Command: "read input; printf 'finished:%s\\n' \"$input\"", CwdAbs: t.TempDir(), Shell: "/bin/sh",
 		Env: []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"},
 	})
@@ -30,7 +30,7 @@ func TestTerminalExecYieldReturnsRunningProcessThenFinalStatus(t *testing.T) {
 		t.Fatalf("yield did not return the live process: %+v", snapshot)
 	}
 	if terminalProcessResultPayload(snapshot)["completed"] != false {
-		t.Fatal("running terminal.exec result was marked completed")
+		t.Fatal("running terminal_exec result was marked completed")
 	}
 	process.mu.Lock()
 	terminationRequested := process.terminationRequested
@@ -52,7 +52,7 @@ func TestTerminalExecYieldReturnsRunningProcessThenFinalStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	if snapshot.Status != terminalProcessStatusSuccess || terminalProcessResultPayload(snapshot)["completed"] != true {
-		t.Fatalf("completed terminal.exec result not returned: %+v", snapshot)
+		t.Fatalf("completed terminal_exec result not returned: %+v", snapshot)
 	}
 	if snapshot.ProcessID != "terminal-exec-yield-test" || snapshot.ExitCode != 0 {
 		t.Fatalf("completed process identity or exit code lost: %+v", snapshot)

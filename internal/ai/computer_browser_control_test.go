@@ -19,7 +19,7 @@ func TestSystemBrowserDiscoveryRequestsConnectionWithoutManagedFallback(t *testi
 	host, executor, store, _ := computerBindingFixture(t)
 	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 	bindTargetTestRun(t, r)
-	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "discover", "computer.targets"), "discover", "computer.targets", map[string]any{"browser_source": "system"})
+	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "discover", "computer_list_targets"), "discover", "computer_list_targets", map[string]any{"browser_source": "system"})
 	if err == nil {
 		t.Fatal("missing connection reported success")
 	}
@@ -34,7 +34,7 @@ func TestSystemBrowserDiscoveryRequestsConnectionWithoutManagedFallback(t *testi
 }
 
 func TestSampledSafetyPauseReturnsFailureWithOriginalTarget(t *testing.T) {
-	for _, nextTool := range []string{"computer.observe", "computer.exec", "computer.select_target", "computer.targets"} {
+	for _, nextTool := range []string{"computer_observe", "computer_exec", "computer_select_target", "computer_list_targets"} {
 		t.Run(nextTool, func(t *testing.T) {
 			host, _, store, _ := computerBindingFixture(t)
 			target := TargetDescriptor{ID: "browser-main", Kind: "browser.managed", Ready: true, DisplayName: "Flower browser"}
@@ -54,7 +54,7 @@ func TestSampledSafetyPauseReturnsFailureWithOriginalTarget(t *testing.T) {
 			runID, threadID, turnID := r.floretCanonicalIdentity()
 			control := host.controlForTarget(target.ID)
 			control.threadID, control.runID, control.turnID = threadID, runID, turnID
-			_, err := host.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: threadID, TargetID: target.ID, ToolName: "computer.screenshot", liveFrame: true})
+			_, err := host.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: threadID, TargetID: target.ID, ToolName: "computer_capture_screenshot", liveFrame: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -107,7 +107,7 @@ func TestComputerSamplerPreservesClassificationAndDiscardsPixels(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("sampler did not publish a classified stop")
 	}
-	_, err = host.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "thread-first", RunID: "run", TargetID: target.ID, ToolName: "computer.observe"})
+	_, err = host.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "thread-first", RunID: "run", TargetID: target.ID, ToolName: "computer_observe"})
 	if !takeoverResult(TargetToolResult{}, err) || computerAssistanceKind(computerPauseSafety(TargetToolResult{}, err)) != "captcha" {
 		t.Fatalf("sampler pause lost: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestComputerSamplingReadFailureDoesNotAcquireUserControl(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("missing failed frame")
 	}
-	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "fresh", "computer.observe"), "fresh", "computer.observe", map[string]any{})
+	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "fresh", "computer_observe"), "fresh", "computer_observe", map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}

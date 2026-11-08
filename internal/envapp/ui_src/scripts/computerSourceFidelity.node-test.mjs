@@ -11,7 +11,7 @@ async function fixture(html, run) {
     const session=await tab.context().newCDPSession(tab);
     controller=new BrowserComputerController(session);await controller.initialize();
     const call=(tool_name,args={})=>controller.execute({tool_name,args,full_access:true,script_operation:true});
-    const initial=await call('computer.observe',{limit:1000});
+    const initial=await call('computer_observe',{limit:1000});
     const source=(ref,field,kind='ax')=>call('computer.action',{action:'source',selector:{ref},source:kind,field});
     const domTarget=async()=>{
       const pending=[initial.result.observation.nodes[0].ref];

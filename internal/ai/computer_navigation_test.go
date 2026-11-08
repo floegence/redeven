@@ -18,7 +18,7 @@ func TestComputerScriptNavigationFailurePreservesPrefixAndTarget(t *testing.T) {
 			var calls []string
 			runtime, call := scriptRuntimeFixture(t, func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 				calls = append(calls, call.ToolName)
-				if call.ToolName == "browser.navigate" {
+				if call.ToolName == "browser_navigate" {
 					payload := map[string]any{"action_executed": true, "navigation_stage": "load"}
 					if code == "NAVIGATION_FAILED" {
 						payload["navigation_stage"], payload["network_error"] = "response", "ERR_TUNNEL_CONNECTION_FAILED"
@@ -39,7 +39,7 @@ func TestComputerScriptNavigationFailurePreservesPrefixAndTarget(t *testing.T) {
 				t.Fatalf("lost navigation error: %v", err)
 			}
 			payload := result.Result.(map[string]any)
-			if !reflect.DeepEqual(calls, []string{"computer.action", "computer.observe", "browser.navigate"}) || !reflect.DeepEqual(payload["completed_actions"], []string{"pointer_click", "observe"}) {
+			if !reflect.DeepEqual(calls, []string{"computer.action", "computer_observe", "browser_navigate"}) || !reflect.DeepEqual(payload["completed_actions"], []string{"pointer_click", "observe"}) {
 				t.Fatalf("incorrect prefix or replay: calls=%v result=%+v", calls, payload)
 			}
 			if payload["completed"] != false || payload["action_executed"] != true || payload["script_error"] != code || payload["observation"] != nil || !reflect.DeepEqual(payload["logs"], []any{[]any{"old observation"}}) || len(result.Attachments) != 0 {
@@ -64,16 +64,16 @@ func TestBrowserNavigationOutcomeMapping(t *testing.T) {
 			payload          map[string]any
 			unknown          bool
 		}{
-			{"tunnel", "NAVIGATION_FAILED", "browser.navigate", map[string]any{"action_executed": true, "navigation_stage": "response", "network_error": "ERR_TUNNEL_CONNECTION_FAILED"}, false},
-			{"timeout", "NAVIGATION_TIMEOUT", "browser.reload", map[string]any{"action_executed": true, "navigation_stage": "load"}, false},
-			{"back", "NAVIGATION_TIMEOUT", "browser.back", map[string]any{"action_executed": true, "navigation_stage": "load"}, false},
-			{"missing", "NAVIGATION_FAILED", "browser.navigate", nil, true},
-			{"wrong_type", "NAVIGATION_FAILED", "browser.navigate", map[string]any{"action_executed": "true", "navigation_stage": "response", "network_error": "ERR_CONNECTION_FAILED"}, true},
-			{"unconfirmed", "NAVIGATION_FAILED", "browser.navigate", map[string]any{"action_executed": false, "navigation_stage": "response", "network_error": "ERR_CONNECTION_FAILED"}, true},
-			{"wrong_stage", "NAVIGATION_TIMEOUT", "browser.navigate", map[string]any{"action_executed": true, "navigation_stage": "response"}, true},
-			{"unsafe_reason", "NAVIGATION_FAILED", "browser.navigate", map[string]any{"action_executed": true, "navigation_stage": "response", "network_error": "private credentials"}, true},
-			{"wrong_tool", "NAVIGATION_FAILED", "computer.click", map[string]any{"action_executed": true, "navigation_stage": "response", "network_error": "ERR_CONNECTION_FAILED"}, true},
-			{"lost_ack", "EFFECT_OUTCOME_UNKNOWN", "browser.navigate", nil, true},
+			{"tunnel", "NAVIGATION_FAILED", "browser_navigate", map[string]any{"action_executed": true, "navigation_stage": "response", "network_error": "ERR_TUNNEL_CONNECTION_FAILED"}, false},
+			{"timeout", "NAVIGATION_TIMEOUT", "browser_reload", map[string]any{"action_executed": true, "navigation_stage": "load"}, false},
+			{"back", "NAVIGATION_TIMEOUT", "browser_go_back", map[string]any{"action_executed": true, "navigation_stage": "load"}, false},
+			{"missing", "NAVIGATION_FAILED", "browser_navigate", nil, true},
+			{"wrong_type", "NAVIGATION_FAILED", "browser_navigate", map[string]any{"action_executed": "true", "navigation_stage": "response", "network_error": "ERR_CONNECTION_FAILED"}, true},
+			{"unconfirmed", "NAVIGATION_FAILED", "browser_navigate", map[string]any{"action_executed": false, "navigation_stage": "response", "network_error": "ERR_CONNECTION_FAILED"}, true},
+			{"wrong_stage", "NAVIGATION_TIMEOUT", "browser_navigate", map[string]any{"action_executed": true, "navigation_stage": "response"}, true},
+			{"unsafe_reason", "NAVIGATION_FAILED", "browser_navigate", map[string]any{"action_executed": true, "navigation_stage": "response", "network_error": "private credentials"}, true},
+			{"wrong_tool", "NAVIGATION_FAILED", "computer_click", map[string]any{"action_executed": true, "navigation_stage": "response", "network_error": "ERR_CONNECTION_FAILED"}, true},
+			{"lost_ack", "EFFECT_OUTCOME_UNKNOWN", "browser_navigate", nil, true},
 		} {
 			t.Run(transport+"/"+tc.name, func(t *testing.T) {
 				payload := cloneAnyMap(tc.payload)
@@ -174,7 +174,7 @@ func TestBrowserNavigationReplyMustMatchInvocation(t *testing.T) {
 					}
 					executor = playwright
 				}
-				result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "browser.navigate"})
+				result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "browser_navigate"})
 				want := map[string]any{"stage": "helper_exchange", "reason": "response_unavailable", "needs_observation": true}
 				if channel == "extension" && damage == "identity" {
 					want["reason"] = "invalid_response"

@@ -221,7 +221,7 @@
         "activity": {
           "item_id": "source-5",
           "tool_id": "call-3",
-          "tool_name": "terminal.exec",
+          "tool_name": "terminal_exec",
           "kind": "tool",
           "status": "success",
           "severity": "normal",
@@ -332,7 +332,7 @@
         "activity": {
           "item_id": "source-5",
           "tool_id": "call-3",
-          "tool_name": "terminal.exec",
+          "tool_name": "terminal_exec",
           "kind": "tool",
           "status": "success",
           "severity": "",
@@ -383,7 +383,7 @@
         "activity": {
           "item_id": "source-7",
           "tool_id": "call-4",
-          "tool_name": "terminal.exec",
+          "tool_name": "terminal_exec",
           "kind": "tool",
           "status": "success",
           "severity": "",

@@ -65,7 +65,7 @@ func TestDeepSeekNativeWebToolsExecuteAndKeepErrorsRecoverable(t *testing.T) {
 		return key, true, nil
 	}, webSearch: config.ResolveAIWebSearch(p, "deepseek-flash", true)}
 	r.bindWebTools(p)
-	result := dispatchNativeWeb(t, r, "web.search", `{"query":"news"}`)
+	result := dispatchNativeWeb(t, r, "web_search_pages", `{"query":"news"}`)
 	if result.IsError || !strings.Contains(result.Text, "Detailed model text") || strings.Contains(result.Text, "Short UI text") {
 		t.Fatalf("search=%+v", result)
 	}
@@ -83,7 +83,7 @@ func TestDeepSeekNativeWebToolsExecuteAndKeepErrorsRecoverable(t *testing.T) {
 	}
 	for _, code := range []int{401, 402, 403, 429, 500} {
 		status = code
-		result = dispatchNativeWeb(t, r, "web.search", `{"query":"news"}`)
+		result = dispatchNativeWeb(t, r, "web_search_pages", `{"query":"news"}`)
 		if !result.IsError {
 			t.Fatalf("status %d accepted", code)
 		}
@@ -107,32 +107,32 @@ func TestDeepSeekNativeWebToolsExecuteAndKeepErrorsRecoverable(t *testing.T) {
 			changed.Type = "openai_compatible"
 		}
 		r.host.webProvider = func(string) (config.AIProvider, bool) { return changed, true }
-		result = dispatchNativeWeb(t, r, "web.search", `{"query":"news"}`)
+		result = dispatchNativeWeb(t, r, "web_search_pages", `{"query":"news"}`)
 		if !result.IsError || calls != before {
 			t.Fatalf("changed %s dispatched: %+v", change, result)
 		}
 	}
 	r.host.webProvider = nil
-	tool, err := r.buildBoundNativeTool(nativeWebToolDefinition("web.search", r.webToolBindings["web.search"]), PermissionSnapshot{}, r.webToolBindings)
+	tool, err := r.buildBoundNativeTool(nativeWebToolDefinition("web_search_pages", r.webToolBindings["web_search_pages"]), PermissionSnapshot{}, r.webToolBindings)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	result = fltools.NewRegistry(tool).Dispatch(ctx, fltools.ToolCall{ID: "cancel", Name: "web.search", Args: `{"query":"news"}`}, fltools.DispatchOptions{EffectDispatcher: func(ctx context.Context, _ fltools.EffectDispatchRequest, execute func(context.Context) fltools.Result) fltools.Result {
+	result = fltools.NewRegistry(tool).Dispatch(ctx, fltools.ToolCall{ID: "cancel", Name: "web_search_pages", Args: `{"query":"news"}`}, fltools.DispatchOptions{EffectDispatcher: func(ctx context.Context, _ fltools.EffectDispatchRequest, execute func(context.Context) fltools.Result) fltools.Result {
 		return execute(ctx)
 	}})
 	if !result.IsError || calls != before {
 		t.Fatalf("canceled search dispatched: %+v", result)
 	}
 	r.resolveProviderKey = func(string) (string, bool, error) { return "", false, nil }
-	result = dispatchNativeWeb(t, r, "web.search", `{"query":"news"}`)
+	result = dispatchNativeWeb(t, r, "web_search_pages", `{"query":"news"}`)
 	if !result.IsError || calls != before || !strings.Contains(result.Text, "Settings") {
 		t.Fatalf("revocation=%+v calls=%d", result, calls)
 	}
 	// Deletion is checked at execution and settles as an ordinary tool error.
 	r.host.webProvider = func(string) (config.AIProvider, bool) { return config.AIProvider{}, false }
-	result = dispatchNativeWeb(t, r, "web.search", `{"query":"news"}`)
+	result = dispatchNativeWeb(t, r, "web_search_pages", `{"query":"news"}`)
 	if !result.IsError || calls != before {
 		t.Fatalf("deleted connection=%+v", result)
 	}
@@ -160,7 +160,7 @@ func TestDeepSeekWebBindingsFollowSearchDefaultsAndExplicitReader(t *testing.T) 
 				if got := r.webToolBindings["web_fetch"]; got.Source != tc.wantFetch || got.Source == "deepseek" && (got.ProviderID != p.ID || got.EndpointFingerprint != webEndpointFingerprint(p.BaseURL)) {
 					t.Fatalf("fetch binding=%+v, want %s", got, tc.wantFetch)
 				}
-				_, localSearch := r.webToolBindings["web.search"]
+				_, localSearch := r.webToolBindings["web_search_pages"]
 				if localSearch != (tc.wantSearch && model == "deepseek-flash") || r.webSearch.HostedTool() != (tc.wantSearch && model == "deepseek-v4-pro") {
 					t.Fatalf("search binding=%+v, resolution=%+v", r.webToolBindings, r.webSearch)
 				}
@@ -196,7 +196,7 @@ func TestDeepSeekWebBindingsSurviveCheckpointAndRespectAbsence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bindings["web_fetch"].Source != "deepseek" || bindings["web.search"].Source != "deepseek" {
+	if bindings["web_fetch"].Source != "deepseek" || bindings["web_search_pages"].Source != "deepseek" {
 		t.Fatalf("changed frozen sources=%+v", bindings)
 	}
 	empty, err := r.frozenWebToolBindings(&flruntime.ProviderToolSurface{})
@@ -208,10 +208,10 @@ func TestDeepSeekWebBindingsSurviveCheckpointAndRespectAbsence(t *testing.T) {
 	if r.webToolBindings["web_fetch"].Source != "direct" {
 		t.Fatal("new Turn failed to adopt Direct")
 	}
-	if _, ok := r.webToolBindings["web.search"]; ok {
+	if _, ok := r.webToolBindings["web_search_pages"]; ok {
 		t.Fatal("new Turn ignored search off")
 	}
-	malformed := flruntime.ProviderToolSurface{ToolDefinitions: []fltools.ToolDefinition{{Name: "web.search", Annotations: map[string]any{webToolBindingAnnotation: map[string]any{"source": "unknown"}}}}}
+	malformed := flruntime.ProviderToolSurface{ToolDefinitions: []fltools.ToolDefinition{{Name: "web_search_pages", Annotations: map[string]any{webToolBindingAnnotation: map[string]any{"source": "unknown"}}}}}
 	if _, err := r.frozenWebToolBindings(&malformed); err == nil {
 		t.Fatal("unknown source accepted")
 	}
@@ -221,8 +221,8 @@ func TestDeepSeekWebToolAnnotationsKeepCanonicalBytesAfterRestart(t *testing.T) 
 	p := config.AIProvider{ID: "ds", Type: "deepseek", BaseURL: "https://api.deepseek.com"}
 	r := &run{cfg: &config.AIConfig{Providers: []config.AIProvider{p}}, webSearch: config.ResolveAIWebSearch(p, "deepseek-flash", true)}
 	r.bindWebTools(p)
-	binding := r.webToolBindings["web.search"]
-	tool, err := r.buildBoundNativeTool(nativeWebToolDefinition("web.search", binding), PermissionSnapshot{}, r.webToolBindings)
+	binding := r.webToolBindings["web_search_pages"]
+	tool, err := r.buildBoundNativeTool(nativeWebToolDefinition("web_search_pages", binding), PermissionSnapshot{}, r.webToolBindings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +280,7 @@ func TestDeepSeekWebServicesKeepSourceAcrossWaitingRestart(t *testing.T) {
 			if def["type"] != "function" {
 				t.Error("local search also exposed hosted search")
 			}
-			if def["name"] == "web_search_tool" {
+			if def["name"] == "web_search_pages" {
 				localSearch = true
 			}
 		}
@@ -290,10 +290,10 @@ func TestDeepSeekWebServicesKeepSourceAcrossWaitingRestart(t *testing.T) {
 		switch n {
 		case 1:
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
-			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "waiting", "status": "completed", "output": []any{map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "ask_user", "arguments": args}}}})
+			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "waiting", "status": "completed", "output": []any{map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "user_ask", "arguments": args}}}})
 		case 2:
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "web", "status": "completed", "output": []any{
-				map[string]any{"type": "function_call", "id": "search", "call_id": "search", "name": "web_search_tool", "arguments": `{"query":"docs"}`},
+				map[string]any{"type": "function_call", "id": "search", "call_id": "search", "name": "web_search_pages", "arguments": `{"query":"docs"}`},
 				map[string]any{"type": "function_call", "id": "fetch", "call_id": "fetch", "name": "web_fetch", "arguments": `{"url":"https://8.8.8.8/docs","format":"markdown"}`},
 			}}})
 		default:
@@ -350,10 +350,10 @@ func TestReleasedBravePendingCallRetainsSchemaAndBoundProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bindings["web.search"].ProviderID != "proxy" || bindings["web.search"].Source != "brave" {
+	if bindings["web_search_pages"].ProviderID != "proxy" || bindings["web_search_pages"].Source != "brave" {
 		t.Fatalf("binding=%+v", bindings)
 	}
-	def := nativeWebToolDefinition("web.search", bindings["web.search"])
+	def := nativeWebToolDefinition("web_search_pages", bindings["web_search_pages"])
 	def.InputSchema = toolSchemaRaw(schema)
 	tool, err := r.buildBoundNativeTool(def, PermissionSnapshot{PermissionType: FlowerPermissionFullAccess}, bindings)
 	if err != nil {
@@ -361,7 +361,7 @@ func TestReleasedBravePendingCallRetainsSchemaAndBoundProvider(t *testing.T) {
 	}
 	for _, provider := range []string{"brave", "deepseek"} {
 		dispatched := false
-		result := fltools.NewRegistry(tool).Dispatch(t.Context(), fltools.ToolCall{ID: "saved", Name: "web.search", Args: fmt.Sprintf(`{"query":"docs","provider":%q,"count":5,"timeout_ms":15000}`, provider)}, fltools.DispatchOptions{EffectDispatcher: func(context.Context, fltools.EffectDispatchRequest, func(context.Context) fltools.Result) fltools.Result {
+		result := fltools.NewRegistry(tool).Dispatch(t.Context(), fltools.ToolCall{ID: "saved", Name: "web_search_pages", Args: fmt.Sprintf(`{"query":"docs","provider":%q,"count":5,"timeout_ms":15000}`, provider)}, fltools.DispatchOptions{EffectDispatcher: func(context.Context, fltools.EffectDispatchRequest, func(context.Context) fltools.Result) fltools.Result {
 			dispatched = true
 			return fltools.Result{Text: "authorized"}
 		}})

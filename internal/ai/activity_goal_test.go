@@ -26,9 +26,9 @@ func TestFlowerGoalReviewRemainsReadableWhileWaitingForUser(t *testing.T) {
 				t.Fatal(err)
 			}
 			gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "goal-review", StateCompatibilityKey: "goal-review:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
-				goalInteractionCall("review", "goal", string(args)),
-				goalInteractionCall("question", "ask_user", `{"reason_code":"user_decision_required","required_from_user":["target"],"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target should be used?","response_mode":"write","is_secret":false}]}`))
-			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "goal-review", Name: "Goal review"}, SystemPrompt: "Verify the Goal before completion.", Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}}, gateway, flruntime.WithAgentGoals())
+				goalInteractionCall("review", "goal_manage", string(args)),
+				goalInteractionCall("question", "user_ask", `{"reason_code":"user_decision_required","required_from_user":["target"],"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target should be used?","response_mode":"write","is_secret":false}]}`))
+			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "goal-review", Name: "Goal review"}, SystemPrompt: "Verify the Goal before completion.", Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}}, gateway, flruntime.WithAgentGoals(), flruntime.WithAgentBuiltinToolNames(flruntime.BuiltinToolNames{AskUser: "user_ask", Goal: "goal_manage"}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -65,7 +65,7 @@ func TestFlowerGoalReviewRemainsReadableWhileWaitingForUser(t *testing.T) {
 			}
 			found := false
 			for _, item := range response.Current.Items {
-				if item.Activity == nil || item.Activity.ToolName != "goal" {
+				if item.Activity == nil || item.Activity.ToolName != "goal_manage" {
 					continue
 				}
 				goal := item.Activity.Presentation.Payload.(fltools.StructuredActivityPayload).Goal
@@ -95,7 +95,7 @@ func TestPublicGoalActivityPreservesCanonicalFactsAcrossProjections(t *testing.T
 	} {
 		t.Run(goal.Operation+"/"+goal.Outcome, func(t *testing.T) {
 			activity := observation.ActivityItem{
-				ItemID: "activity:goal", ToolID: "call:goal", ToolName: "goal",
+				ItemID: "activity:goal", ToolID: "call:goal", ToolName: "goal_manage",
 				Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
 				Presentation: &fltools.ActivityPresentation{Label: "Goal", Renderer: fltools.ActivityRendererStructured,
 					Payload: fltools.StructuredActivityPayload{Operation: goal.Operation, Status: "success", Goal: &goal}},
@@ -173,7 +173,7 @@ func TestPublicGoalActivityFiltersUnknownFieldsAndRejectsInvalidFacts(t *testing
 	}
 	record["private_state"] = map[string]any{"secret": "private"}
 	record["path"] = "/private/runtime"
-	payload, ok := sanitizeActivityPayloadValue(map[string]any{"operation": "review", "goal": record}, fltools.ActivityRendererStructured, "goal")
+	payload, ok := sanitizeActivityPayloadValue(map[string]any{"operation": "review", "goal": record}, fltools.ActivityRendererStructured, "goal_manage")
 	if !ok {
 		t.Fatal("public payload dropped")
 	}
@@ -207,7 +207,7 @@ func TestPublicGoalActivityFiltersUnknownFieldsAndRejectsInvalidFacts(t *testing
 			if err := json.Unmarshal([]byte(invalid), &value); err != nil {
 				t.Fatal(err)
 			}
-			payload, _ := sanitizeActivityPayloadValue(map[string]any{"operation": "review", "goal": value}, fltools.ActivityRendererStructured, "goal")
+			payload, _ := sanitizeActivityPayloadValue(map[string]any{"operation": "review", "goal": value}, fltools.ActivityRendererStructured, "goal_manage")
 			if _, found := payload["goal"]; found {
 				t.Fatalf("invalid Goal became a public fact: %+v", payload)
 			}
@@ -225,7 +225,7 @@ func TestPublicGoalActivityFiltersUnknownFieldsAndRejectsInvalidFacts(t *testing
 			t.Fatalf("Goal exposed outside its public tool contract: %+v", scope)
 		}
 	}
-	payload, _ = sanitizeActivityPayloadValue(map[string]any{"operation": "review", "status": "success"}, fltools.ActivityRendererStructured, "goal")
+	payload, _ = sanitizeActivityPayloadValue(map[string]any{"operation": "review", "status": "success"}, fltools.ActivityRendererStructured, "goal_manage")
 	if _, found := payload["goal"]; found {
 		t.Fatal("missing historical Goal facts were fabricated")
 	}

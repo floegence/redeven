@@ -2,6 +2,7 @@ package ai
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -12,22 +13,22 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 
 	filter := newPermissionToolFilter(true)
 	all := []ToolDef{
-		{Name: "read_file", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "read_files", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "rgrep", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "find", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "file_read", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "file_read_many", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "file_search", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "path_find", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "web_fetch", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "web.search", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "okf.index", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "okf.search", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "okf.open", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "write_todos", Visibility: ToolVisibilityInteraction},
-		{Name: "ask_user", Visibility: ToolVisibilityControl},
-		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
-		{Name: "terminal.exec", Visibility: ToolVisibilityStandard},
-		{Name: "file.write", Visibility: ToolVisibilityStandard, Mutating: true},
-		{Name: "apply_patch", Visibility: ToolVisibilityStandard, Mutating: true},
-		{Name: "use_skill", Visibility: ToolVisibilityStandard},
+		{Name: "web_search_pages", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "okf_get_index", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "okf_search", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "okf_open", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "todo_write", Visibility: ToolVisibilityInteraction},
+		{Name: "user_ask", Visibility: ToolVisibilityControl},
+		{Name: "subagent_manage", Visibility: ToolVisibilityDelegationControl},
+		{Name: "terminal_exec", Visibility: ToolVisibilityStandard},
+		{Name: "file_write", Visibility: ToolVisibilityStandard, Mutating: true},
+		{Name: "file_apply_patch", Visibility: ToolVisibilityStandard, Mutating: true},
+		{Name: "skill_use", Visibility: ToolVisibilityStandard},
 	}
 
 	tests := []struct {
@@ -39,60 +40,60 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 			name:           "readonly",
 			permissionType: FlowerPermissionReadonly,
 			want: []string{
-				"ask_user",
-				"find",
-				"okf.index",
-				"okf.open",
-				"okf.search",
-				"read_file",
-				"read_files",
-				"rgrep",
-				"subagents",
-				"web.search",
+				"user_ask",
+				"path_find",
+				"okf_get_index",
+				"okf_open",
+				"okf_search",
+				"file_read",
+				"file_read_many",
+				"file_search",
+				"subagent_manage",
+				"web_search_pages",
 				"web_fetch",
-				"write_todos",
+				"todo_write",
 			},
 		},
 		{
 			name:           "approval required",
 			permissionType: FlowerPermissionApprovalRequired,
 			want: []string{
-				"apply_patch",
-				"ask_user",
-				"file.write",
-				"find",
-				"okf.index",
-				"okf.open",
-				"okf.search",
-				"read_file",
-				"read_files",
-				"subagents",
-				"terminal.exec",
-				"use_skill",
-				"web.search",
+				"file_apply_patch",
+				"user_ask",
+				"file_write",
+				"path_find",
+				"okf_get_index",
+				"okf_open",
+				"okf_search",
+				"file_read",
+				"file_read_many",
+				"subagent_manage",
+				"terminal_exec",
+				"skill_use",
+				"web_search_pages",
 				"web_fetch",
-				"write_todos",
+				"todo_write",
 			},
 		},
 		{
 			name:           "full access",
 			permissionType: FlowerPermissionFullAccess,
 			want: []string{
-				"apply_patch",
-				"ask_user",
-				"file.write",
-				"find",
-				"okf.index",
-				"okf.open",
-				"okf.search",
-				"read_file",
-				"read_files",
-				"subagents",
-				"terminal.exec",
-				"use_skill",
-				"web.search",
+				"file_apply_patch",
+				"user_ask",
+				"file_write",
+				"path_find",
+				"okf_get_index",
+				"okf_open",
+				"okf_search",
+				"file_read",
+				"file_read_many",
+				"subagent_manage",
+				"terminal_exec",
+				"skill_use",
+				"web_search_pages",
 				"web_fetch",
-				"write_todos",
+				"todo_write",
 			},
 		},
 	}
@@ -102,6 +103,7 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := toolNames(filter.FilterTools(tc.permissionType, all))
+			sort.Strings(tc.want)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("tools=%v, want %v", got, tc.want)
 			}
@@ -114,13 +116,13 @@ func TestPermissionToolFilter_HidesUserInteractionWhenDisabled(t *testing.T) {
 
 	filter := newPermissionToolFilter(false)
 	all := []ToolDef{
-		{Name: "ask_user", Visibility: ToolVisibilityControl},
-		{Name: "write_todos", Visibility: ToolVisibilityInteraction},
-		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
+		{Name: "user_ask", Visibility: ToolVisibilityControl},
+		{Name: "todo_write", Visibility: ToolVisibilityInteraction},
+		{Name: "subagent_manage", Visibility: ToolVisibilityDelegationControl},
 	}
 
 	got := toolNames(filter.FilterTools(FlowerPermissionReadonly, all))
-	want := []string{"subagents", "write_todos"}
+	want := []string{"subagent_manage", "todo_write"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("tools=%v, want %v", got, want)
 	}
@@ -150,29 +152,29 @@ func TestPermissionSnapshotConsistencyForBuiltinMatrix(t *testing.T) {
 			}
 			names := toolNames(activeTools)
 			if permissionType == FlowerPermissionReadonly {
-				for _, blocked := range []string{"terminal.exec", "file.write", "apply_patch", "use_skill"} {
+				for _, blocked := range []string{"terminal_exec", "file_write", "file_apply_patch", "skill_use"} {
 					if containsString(names, blocked) {
 						t.Fatalf("readonly tool set includes %q: %v", blocked, names)
 					}
 				}
-				for _, required := range []string{"read_file", "read_files", "rgrep", "find", "web_fetch", "subagents"} {
+				for _, required := range []string{"file_read", "file_read_many", "file_search", "path_find", "web_fetch", "subagent_manage"} {
 					if !containsString(names, required) {
 						t.Fatalf("readonly tool set missing %q: %v", required, names)
 					}
 				}
 				return
 			}
-			for _, blocked := range []string{"rgrep"} {
+			for _, blocked := range []string{"file_search"} {
 				if containsString(names, blocked) {
 					t.Fatalf("%s tool set includes readonly-exclusive %q: %v", permissionType, blocked, names)
 				}
 			}
-			for _, required := range []string{"read_file", "read_files", "find"} {
+			for _, required := range []string{"file_read", "file_read_many", "path_find"} {
 				if !containsString(names, required) {
 					t.Fatalf("%s missing shared file tool %s", permissionType, required)
 				}
 			}
-			if !containsString(names, "terminal.exec") || !containsString(names, "subagents") || !containsString(names, "web_fetch") {
+			if !containsString(names, "terminal_exec") || !containsString(names, "subagent_manage") || !containsString(names, "web_fetch") {
 				t.Fatalf("%s tool set missing standard delegation surface: %v", permissionType, names)
 			}
 		})
@@ -182,8 +184,8 @@ func TestPermissionSnapshotConsistencyForBuiltinMatrix(t *testing.T) {
 func TestBuiltInControlSignalDefinitionsExposeOnlyAskUser(t *testing.T) {
 	t.Parallel()
 
-	if got := toolNames(builtInControlSignalDefinitions()); !reflect.DeepEqual(got, []string{"ask_user"}) {
-		t.Fatalf("control signals=%v, want [ask_user]", got)
+	if got := toolNames(builtInControlSignalDefinitions()); !reflect.DeepEqual(got, []string{"user_ask"}) {
+		t.Fatalf("control signals=%v, want [user_ask]", got)
 	}
 	for i, def := range builtInControlSignalDefinitions() {
 		if def.Description != flruntime.CoreControlDefinitions()[i].Description {
@@ -196,9 +198,9 @@ func TestRunCapabilityContractKeepsOnlyAvailableInteractionSignal(t *testing.T) 
 	t.Parallel()
 
 	contract := resolveRunCapabilityContract(nil, nil, []ToolDef{
-		{Name: "ask_user"},
+		{Name: "user_ask"},
 	}, false)
-	if !reflect.DeepEqual(contract.AllowedSignals, []string{"ask_user"}) {
-		t.Fatalf("allowed signals=%v, want [ask_user]", contract.AllowedSignals)
+	if !reflect.DeepEqual(contract.AllowedSignals, []string{"user_ask"}) {
+		t.Fatalf("allowed signals=%v, want [user_ask]", contract.AllowedSignals)
 	}
 }

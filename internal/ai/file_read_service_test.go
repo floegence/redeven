@@ -29,10 +29,10 @@ func TestFileReadServiceProviderActivityAndRestart(t *testing.T) {
 			}
 			var requests atomic.Int32
 			calls := []struct{ name, id, args string }{
-				{"find", "discover", `{"root":".","name":"*.txt","type":"file"}`},
-				{"read_file", "page", `{"path":"note.txt","offset":2,"limit":400}`},
-				{"read_files", "batch", `{"paths":["note.txt","missing.txt"],"limit":2}`},
-				{"read_file", "tail", `{"path":"note.txt","offset":1200,"limit":400}`},
+				{"path_find", "discover", `{"root":".","name":"*.txt","type":"file"}`},
+				{"file_read", "page", `{"path":"note.txt","offset":2,"limit":400}`},
+				{"file_read_many", "batch", `{"paths":["note.txt","missing.txt"],"limit":2}`},
+				{"file_read", "tail", `{"path":"note.txt","offset":1200,"limit":400}`},
 			}
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				var request map[string]any
@@ -48,7 +48,7 @@ func TestFileReadServiceProviderActivityAndRestart(t *testing.T) {
 						def, _ := raw.(map[string]any)
 						seen[anyToString(def["name"])] = true
 					}
-					for _, name := range []string{"read_file", "read_files", "find"} {
+					for _, name := range []string{"file_read", "file_read_many", "path_find"} {
 						if !seen[name] {
 							t.Errorf("final provider definitions omit %s", name)
 						}

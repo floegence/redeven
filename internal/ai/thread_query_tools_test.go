@@ -35,7 +35,7 @@ func (r *threadQueryRecordingRuntime) Aggregate(context.Context, threadquery.Sco
 
 func TestThreadBrowseSchemasExcludeAdvancedQueries(t *testing.T) {
 	defs := builtInThreadQueryToolDefinitions()
-	if len(defs) != 2 || defs[0].Name != "threads.query" || defs[1].Name != "threads.read" || isThreadQueryTool("threads.aggregate") {
+	if len(defs) != 2 || defs[0].Name != "thread_query" || defs[1].Name != "thread_read" || isThreadQueryTool("threads.aggregate") {
 		t.Fatalf("unexpected tools: %+v", defs)
 	}
 	var schema map[string]any
@@ -73,7 +73,7 @@ func TestThreadBrowseMapsOnlyNecessaryInputs(t *testing.T) {
 		{map[string]any{"object": "tool_calls", "thread_id": "thread"}, threadquery.QueryInput{Object: threadquery.ToolCalls, Filter: threadquery.Filter{ThreadIDs: []identity.ThreadID{"thread"}}, Sort: threadquery.Sort{Key: "time"}}},
 	} {
 		before, _ := json.Marshal(tc.args)
-		if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", tc.args); err != nil {
+		if _, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", tc.args); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(runtime.query, tc.want) {
@@ -94,7 +94,7 @@ func TestThreadBrowseRejectsAdvancedAndUnscopedInputs(t *testing.T) {
 		{"filter": map[string]any{"text": map[string]any{"contains": "needle"}}}, {"sort": map[string]any{"key": "time"}},
 		{"object": "unknown"}, {"limit": 201}, {"authority": "forged"},
 	} {
-		_, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", args)
+		_, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", args)
 		if err == nil {
 			t.Fatalf("accepted invalid browse: %v", args)
 		}
@@ -126,7 +126,7 @@ func TestThreadBrowseListsRecentThreadsAndPages(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	args := map[string]any{"limit": 2}
-	result, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", args)
+	result, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestThreadBrowseListsRecentThreadsAndPages(t *testing.T) {
 		t.Fatalf("first page=%+v", first)
 	}
 	args["cursor"] = first.NextCursor
-	result, err = svc.execThreadQueryTool(t.Context(), meta, "threads.query", args)
+	result, err = svc.execThreadQueryTool(t.Context(), meta, "thread_query", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestThreadBrowseListsRecentThreadsAndPages(t *testing.T) {
 	if len(last.Records) != 1 || last.Records[0].ThreadID.String() != ids[0] || last.NextCursor != "" {
 		t.Fatalf("last page=%+v", last)
 	}
-	result, err = svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"title": "IDDLE"})
+	result, err = svc.execThreadQueryTool(t.Context(), meta, "thread_query", map[string]any{"title": "IDDLE"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,10 +176,10 @@ func TestThreadQueryToolPreservesRuntimeFailures(t *testing.T) {
 	base := svc.threadRuntime
 	defer func() { svc.threadRuntime = base }()
 	for _, failure := range []error{threadquery.ErrCursorInvalid, threadquery.ErrSnapshotLimit, threadquery.ErrRecordUnavailable, context.Canceled, context.DeadlineExceeded, errors.New("storage unavailable")} {
-		for _, tool := range []string{"threads.query", "threads.read"} {
+		for _, tool := range []string{"thread_query", "thread_read"} {
 			svc.threadRuntime = threadQueryFailureRuntime{ThreadService: base, failure: failure}
 			args := map[string]any{"object": "messages", "thread_id": "thread"}
-			if tool == "threads.read" {
+			if tool == "thread_read" {
 				args = map[string]any{"ref": "opaque"}
 			}
 			_, err := svc.execThreadQueryTool(t.Context(), meta, tool, args)
@@ -198,10 +198,10 @@ func TestThreadQueryIndexNotReadyIsRetryableAndNeverLooksPartial(t *testing.T) {
 	meta := testSendTurnMeta()
 	base := svc.threadRuntime
 	defer func() { svc.threadRuntime = base }()
-	for _, tool := range []string{"threads.query", "threads.read"} {
+	for _, tool := range []string{"thread_query", "thread_read"} {
 		svc.threadRuntime = threadQueryFailureRuntime{ThreadService: base, failure: threadquery.ErrThreadQueryIndexNotReady}
 		args := map[string]any{"object": "messages", "thread_id": "thread"}
-		if tool == "threads.read" {
+		if tool == "thread_read" {
 			args = map[string]any{"ref": "opaque"}
 		}
 		_, err := svc.execThreadQueryTool(t.Context(), meta, tool, args)
@@ -222,9 +222,9 @@ func TestThreadQueryInvocationDescription(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()
 	svc.threadRuntime = &threadQueryRecordingRuntime{ThreadService: svc.threadRuntime}
-	for _, name := range []string{"threads.query", "threads.read"} {
+	for _, name := range []string{"thread_query", "thread_read"} {
 		args := map[string]any{"description": "Find recent release discussions", "object": "threads"}
-		if name == "threads.read" {
+		if name == "thread_read" {
 			args = map[string]any{"description": "Read the release plan", "ref": "expired"}
 		}
 		_, err := svc.execThreadQueryTool(t.Context(), meta, name, args)
@@ -259,7 +259,7 @@ func TestThreadQueryDescriptionSchemas(t *testing.T) {
 			t.Fatal(err)
 		}
 		args := map[string]any{"object": "threads"}
-		if def.Name == "threads.read" {
+		if def.Name == "thread_read" {
 			args = map[string]any{"ref": "opaque"}
 		}
 		if err := validator.Validate(args); err != nil {
@@ -297,7 +297,7 @@ func TestThreadBrowseReadsReferencedConversationContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"object": "messages", "thread_id": source.ThreadID, "limit": 1})
+	result, err := svc.execThreadQueryTool(t.Context(), meta, "thread_query", map[string]any{"object": "messages", "thread_id": source.ThreadID, "limit": 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestThreadBrowseReadsReferencedConversationContent(t *testing.T) {
 	input := map[string]any{"ref": page.Records[0].Ref}
 	var body strings.Builder
 	for {
-		result, err = svc.execThreadQueryTool(t.Context(), meta, "threads.read", input)
+		result, err = svc.execThreadQueryTool(t.Context(), meta, "thread_read", input)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -328,7 +328,7 @@ func TestThreadBrowseReadsReferencedConversationContent(t *testing.T) {
 	}
 	foreign := *meta
 	foreign.NamespacePublicID = "unrelated"
-	result, err = svc.execThreadQueryTool(t.Context(), &foreign, "threads.query", map[string]any{"object": "messages", "thread_id": source.ThreadID})
+	result, err = svc.execThreadQueryTool(t.Context(), &foreign, "thread_query", map[string]any{"object": "messages", "thread_id": source.ThreadID})
 	if err != nil || result.(threadquery.Page).Total != 0 {
 		t.Fatalf("foreign content visible: %v %v", result, err)
 	}

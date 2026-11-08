@@ -375,7 +375,7 @@ func TestE2E_FlowerDeepSeekV4AskUserStructuredContinuation(t *testing.T) {
 	threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, modelID, "Structured Ask User continuation")
 	response, err := svc.SendUserTurn(ctx, &meta, SendUserTurnRequest{
 		ClientRequestID: "deepseek-ask-user", ThreadID: threadID, Model: modelID,
-		Input:   RunInput{Text: "Qualification marker " + marker + ". Another user answer is required before you can continue. Call ask_user exactly once now with one non-secret write question whose id is target and asks for the deployment target. Do not end with a prose question. After the answer, acknowledge it briefly and stop naturally without another tool call."},
+		Input:   RunInput{Text: "Qualification marker " + marker + ". Another user answer is required before you can continue. Call user_ask exactly once now with one non-secret write question whose id is target and asks for the deployment target. Do not end with a prose question. After the answer, acknowledge it briefly and stop naturally without another tool call."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}},
 	})
 	if err != nil || response.Kind == "" {
@@ -439,10 +439,10 @@ func assertDeepSeekAskUserObservations(t *testing.T, recorder *deepSeekContextRe
 	var initial, resumed *deepSeekContextObservation
 	for i := range observations {
 		observation := &observations[i]
-		if containsString(observation.ResponseToolNames, "ask_user") {
+		if containsString(observation.ResponseToolNames, "user_ask") {
 			initial = observation
 		}
-		if containsString(observation.MessageToolCallNames, "ask_user") && containsString(observation.MessageToolResultNames, "ask_user") {
+		if containsString(observation.MessageToolCallNames, "user_ask") && containsString(observation.MessageToolResultNames, "user_ask") {
 			resumed = observation
 		}
 	}
@@ -452,7 +452,7 @@ func assertDeepSeekAskUserObservations(t *testing.T, recorder *deepSeekContextRe
 	if initial.Model != "deepseek-v4-flash" || resumed.Model != initial.Model {
 		t.Fatalf("Ask User model drifted: initial=%q resumed=%q", initial.Model, resumed.Model)
 	}
-	if !containsString(initial.DefinitionToolNames, "ask_user") || !containsString(resumed.DefinitionToolNames, "ask_user") {
+	if !containsString(initial.DefinitionToolNames, "user_ask") || !containsString(resumed.DefinitionToolNames, "user_ask") {
 		t.Fatal("current Ask User definition was omitted from the frozen Turn surface")
 	}
 	if initial.SystemHash == "" || initial.SystemHash != resumed.SystemHash || initial.ToolsHash == "" || initial.ToolsHash != resumed.ToolsHash {

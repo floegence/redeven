@@ -128,7 +128,7 @@ it('supports keyboard resynchronization at narrow widths and preserves draft ref
 
 it('keeps Companion approval recovery visible and allows keyboard Stop while live synchronization is failed', async () => {
   const approvalThread = thread({ thread_id: 'thread-companion-sync', status: 'waiting_approval', approval_actions: [{
-    action_id: 'approval-companion-sync', origin: 'main_tool', run_id: 'run-companion-sync', tool_id: 'tool-companion-sync', tool_name: 'terminal.exec',
+    action_id: 'approval-companion-sync', origin: 'main_tool', run_id: 'run-companion-sync', tool_id: 'tool-companion-sync', tool_name: 'terminal_exec',
     state: 'requested', status: 'pending', requested_at_ms: 20_000, can_approve: true,
     surface_role: 'primary_action', summary: { label: 'Review deployment', command: 'printf approval' },
   }] });

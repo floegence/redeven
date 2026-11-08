@@ -75,25 +75,25 @@ func (s *Service) InputComputerControl(ctx context.Context, meta *session.Meta, 
 		if request.X < 0 || request.Y < 0 || math.IsInf(request.X, 0) || math.IsInf(request.Y, 0) || math.IsNaN(request.X) || math.IsNaN(request.Y) {
 			return errors.New("invalid control coordinates")
 		}
-		call.ToolName = "computer.click"
+		call.ToolName = "computer_click"
 		args["x"], args["y"] = request.X, request.Y
 	case "type":
 		if !utf8.ValidString(request.Text) || len(request.Text) > 20000 {
 			return errors.New("invalid control input")
 		}
-		call.ToolName = "computer.type"
+		call.ToolName = "computer_type_text"
 		args["text"] = request.Text
 	case "key":
 		if !utf8.ValidString(request.Key) || len(request.Key) == 0 || len(request.Key) > 80 {
 			return errors.New("invalid control key")
 		}
-		call.ToolName = "computer.key"
+		call.ToolName = "computer_press_key"
 		args["key"] = request.Key
 	case "scroll":
 		if math.IsInf(request.DeltaX, 0) || math.IsInf(request.DeltaY, 0) || math.IsNaN(request.DeltaX) || math.IsNaN(request.DeltaY) || math.Abs(request.DeltaX) > 10000 || math.Abs(request.DeltaY) > 10000 {
 			return errors.New("invalid control scroll")
 		}
-		call.ToolName = "computer.scroll"
+		call.ToolName = "computer_scroll"
 		args["delta_x"], args["delta_y"] = request.DeltaX, request.DeltaY
 	default:
 		return errors.New("unsupported computer control input")
@@ -143,7 +143,7 @@ func (r *ComputerUseRuntime) executeComputerUserInputLocked(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if call.ToolName == "computer.screenshot" {
+	if call.ToolName == "computer_capture_screenshot" {
 		if err := validateComputerPixels(body); err != nil {
 			return nil, computerTargetFailure(call, "FRAME_UNAVAILABLE")
 		}

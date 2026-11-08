@@ -136,8 +136,8 @@ func TestTerminalExecDirectoryArgumentsAtDispatch(t *testing.T) {
 			work := &terminalFeedbackWork{}
 			r := &run{agentHomeDir: workspace, workingDir: workspace, sessionMeta: testSendTurnMeta(), host: runHostCapabilities{terminal: host}, threadRuntime: work}
 			bindTargetTestRun(t, r)
-			handler := &builtInToolHandler{r: r, toolName: "terminal.exec"}
-			result, err := handler.Execute(localToolFeedbackContext(t, "terminal.exec"), ToolCall{ID: "call", Name: "terminal.exec", Args: args})
+			handler := &builtInToolHandler{r: r, toolName: "terminal_exec"}
+			result, err := handler.Execute(localToolFeedbackContext(t, "terminal_exec"), ToolCall{ID: "call", Name: "terminal_exec", Args: args})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,7 +158,7 @@ func TestTerminalExecDirectoryArgumentsAtDispatch(t *testing.T) {
 
 func TestTerminalExecSchemaExplainsDirectoryArguments(t *testing.T) {
 	for _, definition := range builtInToolDefinitions() {
-		if definition.Name != "terminal.exec" {
+		if definition.Name != "terminal_exec" {
 			continue
 		}
 		var schema struct {
@@ -178,5 +178,5 @@ func TestTerminalExecSchemaExplainsDirectoryArguments(t *testing.T) {
 		}
 		return
 	}
-	t.Fatal("missing terminal.exec definition")
+	t.Fatal("missing terminal_exec definition")
 }

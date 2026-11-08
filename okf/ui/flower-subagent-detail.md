@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Flower child task navigation and detail window
-tags: [ai, flower, subagents, ui]
+tags: [ai, flower, subagent_manage, ui]
 lifecycle: contract
 reviewed_at: "2026-11-04"
 ---

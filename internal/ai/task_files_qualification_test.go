@@ -124,7 +124,7 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 	}
 	send := func(id, threadID, input string) {
 		t.Helper()
-		request := SendUserTurnRequest{StorageGeneration: svc.storageGeneration, ThreadID: threadID, ClientRequestID: id, Input: RunInput{Text: input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 6000, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.write", "apply_patch", "file.present", "attachment.read", "attachment.materialize"}}}
+		request := SendUserTurnRequest{StorageGeneration: svc.storageGeneration, ThreadID: threadID, ClientRequestID: id, Input: RunInput{Text: input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 6000, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "file_write", "file_apply_patch", "file_present", "attachment_read", "attachment_materialize"}}}
 		if id == "report" {
 			request.StagingScopeID = uploadScope.StagingScopeID
 			request.StagingCapability = uploadScope.Capability
@@ -143,7 +143,7 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 		}
 		saveCompactionQualificationJSON(t, filepath.Join(root, "turn-"+id+".json"), detail)
 	}
-	send("report", thread.ThreadID, "Create a self-contained HTML report named report.html in the selected project directory. Use attachment.materialize to obtain a working copy of the attached source.csv, then use a short helper script to calculate its sum. Include the computed total in the final report. Keep the helper and intermediate data for a follow-up. Present the report and provide its link.")
+	send("report", thread.ThreadID, "Create a self-contained HTML report named report.html in the selected project directory. Use attachment_materialize to obtain a working copy of the attached source.csv, then use a short helper script to calculate its sum. Include the computed total in the final report. Keep the helper and intermediate data for a follow-up. Present the report and provide its link.")
 	files, err := svc.GetTaskFiles(ctx, meta, thread.ThreadID, "")
 	if err != nil {
 		t.Fatal(err)
@@ -293,7 +293,7 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 		t.Fatal("nested delivery history is not pinned to fork", e)
 	}
 	report["nested_final_files"] = nestedFiles
-	send("recover-input", fork.ThreadID, "Your working files have been cleaned. Use attachment.materialize to obtain a fresh working copy of the original uploaded source.csv from the inherited conversation. Calculate its sum from that file and save recovered.txt in the project. Do not recreate the input from remembered numbers. Present the result and keep earlier outputs unchanged.")
+	send("recover-input", fork.ThreadID, "Your working files have been cleaned. Use attachment_materialize to obtain a fresh working copy of the original uploaded source.csv from the inherited conversation. Calculate its sum from that file and save recovered.txt in the project. Do not recreate the input from remembered numbers. Present the result and keep earlier outputs unchanged.")
 	if body, e := os.ReadFile(filepath.Join(work, "recovered.txt")); e != nil || !strings.Contains(string(body), "27") {
 		t.Fatal("failed to reprocess retained input", e)
 	}
@@ -321,7 +321,7 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 			t.Fatal(e)
 		}
 		for _, item := range detail.Current.Items {
-			if item.TurnID == detail.Current.TurnID && item.Activity != nil && item.Activity.ToolName == "attachment.materialize" {
+			if item.TurnID == detail.Current.TurnID && item.Activity != nil && item.Activity.ToolName == "attachment_materialize" {
 				toolCalls[id]++
 			}
 		}
@@ -331,7 +331,7 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 	}
 	report["materialize_calls_by_turn"] = toolCalls
 
-	report["assertions"] = []string{"project contains final files only", "explicit docs destination survives scratch command cwd", "scratch helper retained across turns", "final file.present provenance", "fork isolated scratch and retained history", "restart retained delivery references", "user changes visible", "scratch cleanup preserves deliverables", "thread deletion preserves deliverables", "model continues from inherited files after fork", "fork writes preserve source files", "model continues after restart and parent deletion", "nested fork continues after ancestor cleanup"}
+	report["assertions"] = []string{"project contains final files only", "explicit docs destination survives scratch command cwd", "scratch helper retained across turns", "final file_present provenance", "fork isolated scratch and retained history", "restart retained delivery references", "user changes visible", "scratch cleanup preserves deliverables", "thread deletion preserves deliverables", "model continues from inherited files after fork", "fork writes preserve source files", "model continues after restart and parent deletion", "nested fork continues after ancestor cleanup"}
 	report["final_files"] = forkFiles
 	for _, request := range recorder.snapshot() {
 		if request.Model != "" && !strings.Contains(request.Model, "deepseek-flash") {

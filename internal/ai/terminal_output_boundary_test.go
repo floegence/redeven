@@ -25,7 +25,7 @@ func TestTerminalInitialResultAndReadCoverOutputExactly(t *testing.T) {
 		if i > 20 {
 			t.Fatal("pagination did not terminate")
 		}
-		encoded, err := encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "terminal.exec", Status: toolResultStatusSuccess, Data: terminalProcessResultPayload(page)})
+		encoded, err := encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "terminal_exec", Status: toolResultStatusSuccess, Data: terminalProcessResultPayload(page)})
 		if err != nil {
 			t.Fatal(err)
 		}

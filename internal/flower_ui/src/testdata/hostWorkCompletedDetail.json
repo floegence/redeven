@@ -32,7 +32,7 @@
           "started_at_unix_ms": 2000,
           "status": "success",
           "tool_id": "exec-one",
-          "tool_name": "terminal.exec"
+          "tool_name": "terminal_exec"
         },
         "activity_summary": {
           "fields": [

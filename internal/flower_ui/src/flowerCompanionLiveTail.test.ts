@@ -35,7 +35,7 @@ function message(overrides: Partial<FlowerChatMessage> = {}): FlowerChatMessage 
 function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
   return {
     item_id: 'tool-live',
-    tool_name: 'terminal.exec',
+    tool_name: 'terminal_exec',
     kind: 'tool',
     status: 'running',
     severity: 'normal',

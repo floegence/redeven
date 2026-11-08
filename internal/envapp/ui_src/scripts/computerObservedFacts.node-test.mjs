@@ -15,7 +15,7 @@ async function fixture(html, run) {
     controller = new BrowserComputerController(session);
     await controller.initialize();
     const call = (tool_name, args = {}) => controller.execute({tool_name,args,full_access:true,script_operation:true});
-    const initial = await call('computer.observe', {limit:1000});
+    const initial = await call('computer_observe', {limit:1000});
     assert.ok(initial.result.observation, JSON.stringify(initial));
     await run({tab,session,controller,call,initial});
   } finally {
@@ -94,7 +94,7 @@ for (const scope of ['main','whole','target']) test('observation lifetime tracks
       }
       return result;
     };
-    const result = await call('computer.observe',scope==='whole'?{}:{root_ref:root.ref});
+    const result = await call('computer_observe',scope==='whole'?{}:{root_ref:root.ref});
     assert.equal(injected,true);
     if (scope==='main') assert.ok(result.result.observation,JSON.stringify(result));
     else { assert.equal(result.result.observation_invalidated,true,JSON.stringify(result)); assert.equal(result.result.observation,undefined); }
@@ -112,7 +112,7 @@ for (const boundary of ['privacy','screenshot']) test('scoped read preserves '+b
       if (boundary==='privacy') controller.page.safety = async () => ({level:'takeover',reason_codes:['secret_input'],safe_to_capture:false,safe_to_send_to_model:false});
       return result;
     };
-    const result = await call('computer.observe',{root_ref:root.ref,...(boundary==='screenshot'?{screenshot:true}:{})});
+    const result = await call('computer_observe',{root_ref:root.ref,...(boundary==='screenshot'?{screenshot:true}:{})});
     assert.equal(result.result.observation,undefined,JSON.stringify(result));
     if (boundary==='privacy') assert.equal(result.safety.level,'takeover');
     else assert.equal(result.result.observation_invalidated,true);

@@ -12,7 +12,7 @@ import (
 // floretPreparedTurn maps public provider events without interpreting native state.
 type floretPreparedTurn struct {
 	flprovider.PreparedRequest
-	aliases      providerToolAliases
+	aliases      providerToolContract
 	providerName string
 }
 

@@ -60,7 +60,7 @@ describe('Flower detail history recovery', () => {
       { id: 'user', ordinal: 1, kind: 'user', text: 'Inspect eighty tools', turn_id: 'turn', run_id: 'run' },
       ...Array.from({ length: 80 }, (_, index): FlowerRuntimeCurrentItem => ({
         id: 'tool-' + index, ordinal: index + 2, kind: 'tool', turn_id: 'turn', run_id: 'run',
-        activity: { item_id: 'tool-' + index, tool_id: 'tool-' + index, kind: 'tool', tool_name: 'terminal.exec',
+        activity: { item_id: 'tool-' + index, tool_id: 'tool-' + index, kind: 'tool', tool_name: 'terminal_exec',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: { label: 'Inspect file ' + index, renderer: 'terminal', payload: { command: 'inspect', output: 'Done' } } },
       })),

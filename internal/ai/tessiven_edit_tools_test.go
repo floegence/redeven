@@ -22,7 +22,7 @@ func TestTessivenBoundedReadAndExactEdit(t *testing.T) {
 	}
 	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
-	read, err := r.execTessivenTool(t.Context(), meta, "tessiven.read", map[string]any{"canvas_id": saved.Canvas.ID, "start_line": 1, "line_count": 2})
+	read, err := r.execTessivenTool(t.Context(), meta, "tessiven_read_canvas", map[string]any{"canvas_id": saved.Canvas.ID, "start_line": 1, "line_count": 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestTessivenBoundedReadAndExactEdit(t *testing.T) {
 		t.Fatalf("unbounded read: %s", raw)
 	}
 	args := map[string]any{"request_id": "edit-title", "canvas_id": saved.Canvas.ID, "expected_version": 1, "summary": "Rename canvas", "edits": []any{map[string]any{"old_string": "Original", "new_string": "Updated"}}}
-	result, err := r.execTessivenTool(t.Context(), meta, "tessiven.edit", args)
+	result, err := r.execTessivenTool(t.Context(), meta, "tessiven_edit_canvas", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,10 +49,10 @@ func TestTessivenBoundedReadAndExactEdit(t *testing.T) {
 	if result.(map[string]any)["version"] != int64(2) {
 		t.Fatal(result)
 	}
-	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven.edit", args); err != nil {
+	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven_edit_canvas", args); err != nil {
 		t.Fatalf("exact retry: %v", err)
 	}
-	if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven.edit", args); err == nil {
+	if _, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_edit_canvas", args); err == nil {
 		t.Fatal("read-only edit admitted")
 	}
 	versions, _ := library.Versions(t.Context(), saved.Canvas.ID, 0)

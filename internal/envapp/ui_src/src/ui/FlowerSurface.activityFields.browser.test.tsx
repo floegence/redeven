@@ -21,7 +21,7 @@ describe('field-backed activity in the product surface', () => {
     const seed = thread({ thread_id: 'atomic-terminal', messages: [] });
     let value = { operation: 'read', command: 'inspect', output: initial, first_seq: initial ? 1 : 0, last_seq: initial ? 2 : 0, latest_seq: initial ? 2 : 0 };
     const item = (version: number) => ({ id: 'tool:turn:atomic', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool' as const,
-      activity: { item_id: 'atomic', tool_id: 'atomic', tool_name: 'terminal.read', kind: 'tool', status: 'success', severity: 'normal' },
+      activity: { item_id: 'atomic', tool_id: 'atomic', tool_name: 'terminal_read', kind: 'tool', status: 'success', severity: 'normal' },
       activity_summary: { version: 'v' + version, label: 'Inspect output', renderer: 'terminal' as const,
         fields: Object.entries(value).map(([key, val]) => typeof val === 'string'
           ? { path: '/payload/' + key, kind: 'string' as const, bytes: val.length }
@@ -81,8 +81,8 @@ describe('field-backed activity in the product surface', () => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'patch-fields', title: 'Patch summary', messages: [] });
     const patchItem = (version: string) => ({ id: 'tool:turn:patch', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool' as const,
-      activity: { item_id: 'patch', tool_id: 'patch', tool_name: 'apply_patch', kind: 'tool', status: 'success', severity: 'normal' },
-      activity_summary: { version, label: 'apply_patch', renderer: 'patch' as const,
+      activity: { item_id: 'patch', tool_id: 'patch', tool_name: 'file_apply_patch', kind: 'tool', status: 'success', severity: 'normal' },
+      activity_summary: { version, label: 'file_apply_patch', renderer: 'patch' as const,
         values: count === 1 ? { '/payload/mutations/0/display_name': 'panda-bicycle.html', '/payload/mutations/0/change_type': changeType } : {},
         fields: [{ path: '/payload/mutations', kind: 'array' as const, count },
           { path: '/payload/files_changed', kind: 'scalar' as const, value: count },
@@ -278,7 +278,7 @@ describe('field-backed activity in the product surface', () => {
     const fields = [{ path: '/payload/command', kind: 'string' as const, bytes: 11 },
       { path: '/payload/output', kind: 'string' as const, bytes: 6 }];
     const item = (version: string) => ({ id: 'tool:turn:call', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool' as const,
-      activity: { item_id: 'call', tool_id: 'call', tool_name: 'terminal.exec', kind: 'tool', status: 'running', severity: 'normal' },
+      activity: { item_id: 'call', tool_id: 'call', tool_name: 'terminal_exec', kind: 'tool', status: 'running', severity: 'normal' },
       activity_summary: { version, label: 'Inspect output', renderer: 'terminal' as const, fields } });
     const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, turn_id: 'turn', run_id: 'run', activity: 'active', run_progress: { phase: 'tool_execution' }, view_version: 1, items: [item('v1')] };
     const events: FlowerLiveStreamEnvelope[] = [];
@@ -349,7 +349,7 @@ describe('field-backed activity in the product surface', () => {
     const seed = thread({ thread_id: 'pending-terminal', title: 'Pending terminal body', messages: [] });
     const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: [{
       id: 'tool:turn:small', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool',
-      activity: { item_id: 'small', tool_id: 'small', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'normal' },
+      activity: { item_id: 'small', tool_id: 'small', tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'normal' },
       activity_summary: { version: 'v1', label: 'Read small output', renderer: 'terminal', fields: [
         { path: '/payload/output', kind: 'string', bytes: 6 },
         { path: '/payload/command', kind: 'string', bytes: 7 },
@@ -392,7 +392,7 @@ describe('field-backed activity in the product surface', () => {
     const field = { path: '/payload/output', kind: 'string' as const, bytes: bytes.length, source_id: 'output-v1', run_id: 'run' };
     const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: [{
       id: 'tool:turn:long', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool',
-      activity: { item_id: 'long', tool_id: 'long', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'normal' },
+      activity: { item_id: 'long', tool_id: 'long', tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'normal' },
       activity_summary: { version: 'v1', label: 'Read long output', renderer: 'terminal', fields: [{ path: field.path, kind: field.kind, bytes: field.bytes },
         { path: '/payload/command', kind: 'string', bytes: 7 }, { path: '/payload/exit_code', kind: 'scalar', value: 0 },
         { path: '/payload/first_seq', kind: 'scalar', value: 1 }, { path: '/payload/last_seq', kind: 'scalar', value: 300 }] },
@@ -448,7 +448,7 @@ describe('field-backed activity in the product surface', () => {
     const field = { path: '/payload/output', kind: 'string' as const, bytes: bytes.length, source_id: 'process-output', run_id: 'run' };
     const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'active', turn_id: 'turn', run_id: 'run',
       run_progress: { phase: 'tool_execution' }, view_version: 1, items: [{ id: 'tool:turn:live', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool',
-        activity: { item_id: 'live', tool_id: 'live', tool_name: 'terminal.exec', kind: 'tool', status: 'running', severity: 'normal' },
+        activity: { item_id: 'live', tool_id: 'live', tool_name: 'terminal_exec', kind: 'tool', status: 'running', severity: 'normal' },
         activity_summary: { version: 'v1', label: 'Read live output', renderer: 'terminal', fields: [
           { path: field.path, kind: field.kind, bytes: field.bytes }, { path: '/payload/command', kind: 'string', bytes: 7 },
           { path: '/payload/process_id', kind: 'string', bytes: 7 }, { path: '/payload/operation', kind: 'string', bytes: 4 }, { path: '/payload/first_seq', kind: 'scalar', value: 1 },
@@ -508,7 +508,7 @@ describe('field-backed activity in the product surface', () => {
     const field = { path: '/payload/output', kind: 'string' as const, bytes: bytes.length, source_id: 'process-output', run_id: 'run' };
     const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'active', turn_id: 'turn', run_id: 'run',
       run_progress: { phase: 'tool_execution' }, view_version: 1, items: [{ id: 'tool:turn:live', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool',
-        activity: { item_id: 'live', tool_id: 'live', tool_name: 'terminal.exec', kind: 'tool', status: 'running', severity: 'normal' },
+        activity: { item_id: 'live', tool_id: 'live', tool_name: 'terminal_exec', kind: 'tool', status: 'running', severity: 'normal' },
         activity_summary: { version: 'v1', label: 'Read live output', renderer: 'terminal', fields: [
           { path: field.path, kind: field.kind, bytes: field.bytes }, { path: '/payload/command', kind: 'string', bytes: 7 },
           { path: '/payload/process_id', kind: 'string', bytes: 7 }, { path: '/payload/operation', kind: 'string', bytes: 4 }, { path: '/payload/first_seq', kind: 'scalar', value: 1 },

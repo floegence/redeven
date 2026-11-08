@@ -26,11 +26,11 @@ func TestComputerBlockingFactsDoNotCreateQuestionsOrSuccess(t *testing.T) {
 			if data["action_executed"] != true || len(data["completed_actions"].([]string)) != 1 {
 				t.Fatal("completed effect lost")
 			}
-			presentation, err := floretActivityForToolResult(nil, ToolResult{ToolID: "inspect", ToolName: "computer.observe", Status: toolResultStatusError, Data: execution.Payload})
+			presentation, err := floretActivityForToolResult(nil, ToolResult{ToolID: "inspect", ToolName: "computer_observe", Status: toolResultStatusError, Data: execution.Payload})
 			if err != nil {
 				t.Fatal(err)
 			}
-			public := publicActivityItem(observation.ActivityItem{ItemID: "step", ToolID: "inspect", ToolName: "computer.observe", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusError, Presentation: presentation})
+			public := publicActivityItem(observation.ActivityItem{ItemID: "step", ToolID: "inspect", ToolName: "computer_observe", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusError, Presentation: presentation})
 			if public.Presentation == nil {
 				t.Fatal("facts lost")
 			}
@@ -51,7 +51,7 @@ func TestDesktopSetupAssistanceRequiresConfirmedUndispatchedPrivateTarget(t *tes
 	for _, variant := range []string{"confirmed", "executed", "unknown", "other-target", "other-kind", "success", "uncertain", "no-error", "other-error"} {
 		t.Run(variant, func(t *testing.T) {
 			data := map[string]any{"desktop_setup_required": true, "action_executed": false, "target_id": "xvfb-main", "target_kind": "xvfb.desktop"}
-			result := ToolResult{ToolID: "blocked", ToolName: "computer.exec", Status: toolResultStatusError, Data: data, Error: &aitools.ToolError{Code: aitools.ErrorCodeTargetSetupRequired}}
+			result := ToolResult{ToolID: "blocked", ToolName: "computer_exec", Status: toolResultStatusError, Data: data, Error: &aitools.ToolError{Code: aitools.ErrorCodeTargetSetupRequired}}
 			switch variant {
 			case "executed":
 				data["action_executed"] = true
@@ -102,7 +102,7 @@ func TestDesktopSetupFailurePreservesEvidenceWithoutDispatch(t *testing.T) {
 	host.executors["xvfb-main"] = executor
 	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 	bindTargetTestRun(t, r)
-	result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "blocked", "computer.exec"), "blocked", "computer.exec", map[string]any{"target": "xvfb-main", "code": "await ui.click(1,1)"})
+	result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "blocked", "computer_exec"), "blocked", "computer_exec", map[string]any{"target": "xvfb-main", "code": "await ui.click(1,1)"})
 	if err == nil {
 		t.Fatal("missing desktop reported success")
 	}
@@ -126,7 +126,7 @@ func TestDesktopSetupFailurePreservesEvidenceWithoutDispatch(t *testing.T) {
 func TestComputerAssistanceUsesObservedControlsNotWords(t *testing.T) {
 	for _, url := range []string{"https://example.test/docs/login", "https://example.test/search?q=captcha"} {
 		decision, err := (defaultInteractionSafetyGate{}).AssessInteraction(context.Background(), TargetToolCall{
-			ToolName: "computer.type", Arguments: json.RawMessage(`{"text":"password manager comparison"}`),
+			ToolName: "computer_type_text", Arguments: json.RawMessage(`{"text":"password manager comparison"}`),
 		}, TargetDescriptor{ID: "browser-main", Ready: true, CurrentURL: url})
 		if err != nil || decision.Level != "routine" {
 			t.Fatalf("ordinary page/text requested manual input: %+v %v", decision, err)

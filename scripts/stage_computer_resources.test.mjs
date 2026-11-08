@@ -44,7 +44,7 @@ test('immutable helpers exclude Chromium and use an explicitly installed browser
           const line = JSON.parse(pending.slice(0, end)); pending = pending.slice(end + 1);
           if (!ready) {
             if (line.type !== 'ready' || line.error) { reject(new Error(`Helper startup failed: ${line.error ?? line.type}/${line.reason ?? ''}`)); return; } ready = true;
-            child.stdin.write(JSON.stringify({ id: 'observe', target_id: 'fixture', tool_name: 'computer.screenshot', args: {} }) + '\n');
+            child.stdin.write(JSON.stringify({ id: 'observe', target_id: 'fixture', tool_name: 'computer_capture_screenshot', args: {} }) + '\n');
           } else { resolve(line); }
         }
       });

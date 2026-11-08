@@ -11,7 +11,7 @@ const thinking = (id: string): FlowerRuntimeCurrentItem => ({ id, kind: 'thinkin
   text: text.slice(0, 1024), body: { source_id: id, field: 'reasoning', bytes: text.length, preview_bytes: 1024 } });
 const tool = (id: string): FlowerRuntimeCurrentItem => ({ id, kind: 'tool', ordinal: 0, turn_id: 'turn', run_id: 'run',
   activity_bodies: [{ entry_id: id, bytes: 10000, sha256: 'synthetic' }],
-  activity: { item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet',
+  activity: { item_id: id, tool_id: id, tool_name: 'terminal_exec', kind: 'tool', status: 'success', severity: 'quiet',
     needs_attention: false, requires_approval: false, presentation: { label: 'Inspect ' + id, renderer: 'terminal', payload: { command: 'inspect ' + id } } } });
 const frames = async (count = 3) => { for (let i = 0; i < count; i++) await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); };
 afterEach(() => vi.restoreAllMocks());

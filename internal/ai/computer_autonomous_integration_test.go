@@ -108,7 +108,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 		case 0:
 			name, args = "computer_exec", map[string]any{"code": "await ui.snapshot();", "description": "Inspect the selected task page"}
 		case 1:
-			name = "computer_targets"
+			name = "computer_list_targets"
 		case 2:
 			if defaultRef == "" {
 				t.Error("provider received no default page candidate")
@@ -122,7 +122,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 			if !popup {
 				t.Error("provider did not receive successful popup progress")
 			}
-			name = "computer_targets"
+			name = "computer_list_targets"
 		case 6:
 			if childRef == "" {
 				t.Error("provider received no child candidate")
@@ -139,7 +139,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 		}
 		if args["description"] == nil {
 			args["description"] = map[string]string{
-				"computer_targets":       "Find available task browser pages",
+				"computer_list_targets":  "Find available task browser pages",
 				"computer_select_target": "Select the discovered task page",
 				"browser_navigate":       "Open the local browser fixture",
 				"computer_observe":       "Inspect the selected task page",

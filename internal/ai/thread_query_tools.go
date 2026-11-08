@@ -31,13 +31,13 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 		return ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(schema), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.threads", Priority: 100}
 	}
 	return []ToolDef{
-		add("threads.query", "Find a readable conversation, then browse its content. Omit object or use threads to list conversations, most recently updated first; title optionally matches a literal part of the title. For messages or tool_calls, supply one thread_id: records are listed chronologically. Default limit 50. Follow next_cursor with unchanged input. Pass a returned ref to threads.read for complete content. Excludes reasoning and secrets.", map[string]any{
+		add("thread_query", "Find a readable conversation, then browse its content. Omit object or use threads to list conversations, most recently updated first; title optionally matches a literal part of the title. For messages or tool_calls, supply one thread_id: records are listed chronologically. Default limit 50. Follow next_cursor with unchanged input. Pass a returned ref to thread_read for complete content. Excludes reasoning and secrets.", map[string]any{
 			"object":    map[string]any{"type": "string", "enum": []string{"threads", "messages", "tool_calls"}, "default": "threads"},
 			"thread_id": map[string]any{"type": "string", "minLength": 1, "description": "One conversation to browse. Required for messages or tool_calls."},
 			"title":     map[string]any{"type": "string", "description": "Optional literal, case-insensitive title fragment; only for threads."},
 			"limit":     map[string]any{"type": "integer", "minimum": 1, "maximum": 200}, "cursor": str,
 		}, []string{}),
-		add("threads.read", "Read complete content from a threads.query ref in bounded UTF-8 chunks. Follow next_cursor with unchanged ref until complete; query again if the ref expires or access changes.", map[string]any{"ref": str, "cursor": str}, []string{"ref"}),
+		add("thread_read", "Read complete content from a thread_query ref in bounded UTF-8 chunks. Follow next_cursor with unchanged ref until complete; query again if the ref expires or access changes.", map[string]any{"ref": str, "cursor": str}, []string{"ref"}),
 	}
 }
 
@@ -91,7 +91,7 @@ func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, n
 	}
 	decode := func(out any) error {
 		queryArgs := args
-		if name == "threads.query" || name == "threads.read" {
+		if name == "thread_query" || name == "thread_read" {
 			queryArgs = cloneAnyMap(args)
 			delete(queryArgs, "description")
 		}
@@ -107,7 +107,7 @@ func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, n
 		return nil
 	}
 	switch name {
-	case "threads.query":
+	case "thread_query":
 		var browse threadBrowseInput
 		if err := decode(&browse); err != nil {
 			return nil, err
@@ -136,7 +136,7 @@ func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, n
 		}
 		page, err := reader.Query(ctx, scope, input)
 		return page, threadQueryToolError(err)
-	case "threads.read":
+	case "thread_read":
 		var input threadquery.ReadInput
 		if err := decode(&input); err != nil {
 			return nil, err
@@ -194,7 +194,7 @@ func (threadQueryIndexNotReadyFailure) ThreadQueryIndexNotReady() bool { return 
 
 func isThreadQueryTool(name string) bool {
 	switch name {
-	case "threads.query", "threads.read":
+	case "thread_query", "thread_read":
 		return true
 	}
 	return false

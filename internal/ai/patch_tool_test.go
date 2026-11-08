@@ -152,7 +152,7 @@ func TestPatchCommitFailureRetainsCompletedFacts(t *testing.T) {
 	if partial.FilesChanged != 1 || partial.Additions != 1 || partial.Hunks != 1 || partial.Files[0].Path != plans[0].newAbs {
 		t.Fatalf("confirmed result=%+v", partial)
 	}
-	result, err := floretToolResultFromFlower(&run{}, ToolResult{ToolID: "patch", ToolName: "apply_patch", Status: toolResultStatusError, Data: partial, Error: classified, effectUncertain: true})
+	result, err := floretToolResultFromFlower(&run{}, ToolResult{ToolID: "patch", ToolName: "file_apply_patch", Status: toolResultStatusError, Data: partial, Error: classified, effectUncertain: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestPatchValidationAndCancellationHaveNoEffects(t *testing.T) {
 
 func TestPatchModelOutputKeepsDiffInActivity(t *testing.T) {
 	t.Parallel()
-	result, err := floretToolResultFromFlower(&run{}, ToolResult{ToolID: "patch", ToolName: "apply_patch", Status: toolResultStatusSuccess, Data: ApplyPatchResult{
+	result, err := floretToolResultFromFlower(&run{}, ToolResult{ToolID: "patch", ToolName: "file_apply_patch", Status: toolResultStatusSuccess, Data: ApplyPatchResult{
 		FilesChanged: 1, InputFormat: "begin_patch", NormalizedFormat: "begin_patch", Files: []patchFileSummary{{Path: "/workspace/f.txt", Change: "modified"}},
 		Mutations: []FileMutationResult{{FilePath: "/workspace/f.txt", DisplayName: "f.txt", ChangeType: "update", UnifiedDiff: "@@ -1 +1 @@\n-old\n+new\n"}},
 	}})
@@ -238,7 +238,7 @@ func TestPatchToolSchemaHasOneInput(t *testing.T) {
 	t.Parallel()
 	var definition ToolDef
 	for _, candidate := range builtInToolDefinitions() {
-		if candidate.Name == "apply_patch" {
+		if candidate.Name == "file_apply_patch" {
 			definition = candidate
 			break
 		}
@@ -269,7 +269,7 @@ func TestPatchInputResourcesAndActivity(t *testing.T) {
 	t.Parallel()
 	text := "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch"
 	args := map[string]any{"input": text}
-	refs, err := floretToolResources(fltools.Invocation[map[string]any]{Name: "apply_patch", Args: args})
+	refs, err := floretToolResources(fltools.Invocation[map[string]any]{Name: "file_apply_patch", Args: args})
 	if err != nil || len(refs) != 2 || refs[0].Value != "old.txt" || refs[1].Value != "new.txt" {
 		t.Fatalf("patch resources=%+v err=%v", refs, err)
 	}

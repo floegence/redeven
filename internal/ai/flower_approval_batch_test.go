@@ -35,7 +35,7 @@ func TestFlowerApprovalBatchUsesExactAtomicSet(t *testing.T) {
 					return
 				}
 				for i := range 3 {
-					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_%d", i), "call_id": fmt.Sprintf("call_%d", i), "name": "terminal.exec", "arguments": `{"command":"printf batch","yield_ms":10000}`}
+					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_%d", i), "call_id": fmt.Sprintf("call_%d", i), "name": "terminal_exec", "arguments": `{"command":"printf batch","yield_ms":10000}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": i, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": i, "item": item})
 				}

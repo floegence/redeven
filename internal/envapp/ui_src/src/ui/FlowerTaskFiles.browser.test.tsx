@@ -191,7 +191,7 @@ it('opens an image source in its historical turn even when tool steps were folde
       turns:[{turn_id:'source-turn',run_id:'source-run',started_at:'2026-10-28T12:00:00Z',ended_at:'2026-10-28T12:01:00Z',outcome:'completed',elapsed_ms:60000,waiting_ms:0,work_duration_ms:60000,final_item_ids:['final'],final_boundary_complete:true}],
       items:[{id:'source-user',kind:'user',text:'Review screenshot',turn_id:'source-turn',run_id:'source-run',ordinal:1},
         {id:'source-image',kind:'tool',turn_id:'source-turn',run_id:'source-run',ordinal:2,
-          activity:{item_id:'source-image',tool_id:'image-call',tool_name:'image.read',kind:'tool',status:'success',severity:'quiet',needs_attention:false,requires_approval:false}},
+          activity:{item_id:'source-image',tool_id:'image-call',tool_name:'image_read',kind:'tool',status:'success',severity:'quiet',needs_attention:false,requires_approval:false}},
         {id:'final',kind:'assistant',text:'Image reviewed',turn_id:'source-turn',run_id:'source-run',ordinal:3}],
       window:{first_item_id:'source-user',last_item_id:'final',has_before:false,has_after:false}};
     return {current,thread:applyFlowerRuntimeCurrentView(seed,current)};

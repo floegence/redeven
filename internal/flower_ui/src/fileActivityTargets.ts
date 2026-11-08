@@ -1,3 +1,4 @@
+import { historicalToolName } from './historicalToolName';
 import type { FlowerActivityItem, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { readPresentationValue, retainEqualValue } from './presentationIdentity';
 
@@ -6,7 +7,7 @@ import { readPresentationValue, retainEqualValue } from './presentationIdentity'
 // arrives, without querying canonical history on every streaming update.
 export function retainFileActivityTargets(previous: FlowerActivityItem | undefined, incoming: FlowerActivityItem): FlowerActivityItem {
   if (!previous || previous.status !== 'success' || incoming.status !== 'success') return incoming;
-  if (incoming.renderer !== 'file' && incoming.renderer !== 'patch' && !['read_file', 'file.read', 'read_files', 'file.write', 'apply_patch', 'image.read'].includes(incoming.tool_name ?? '')) return incoming;
+  if (incoming.renderer !== 'file' && incoming.renderer !== 'patch' && !['file_read', 'file.read', 'file_read_many', 'file_write', 'file_apply_patch', 'image_read'].includes(historicalToolName(incoming.tool_name ?? ''))) return incoming;
   const hasTargets = (activity: FlowerActivityItem) =>
     activity.target_refs?.some(ref => !!ref.path)
     || ['rows', 'mutations'].some(field => Array.isArray(activity.payload?.[field])

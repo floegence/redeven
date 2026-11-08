@@ -43,9 +43,9 @@ func waitGoalInteraction(t *testing.T, service flruntime.ThreadService, id strin
 func TestPublishedGoalUpdatesDuringQuestionAndApprovalUseNextModelRequest(t *testing.T) {
 	for _, interaction := range []string{"question", "approval"} {
 		t.Run(interaction, func(t *testing.T) {
-			first := goalInteractionCall("question", "ask_user", `{"reason_code":"missing_external_input","required_from_user":["target"],"evidence_refs":[],"questions":[{"id":"q","header":"Target","question":"Which target?","response_mode":"write","is_secret":false}]}`)
+			first := goalInteractionCall("question", "user_ask", `{"reason_code":"missing_external_input","required_from_user":["target"],"evidence_refs":[],"questions":[{"id":"q","header":"Target","question":"Which target?","response_mode":"write","is_secret":false}]}`)
 			var dispatched atomic.Int32
-			options := []flruntime.AgentOption{flruntime.WithAgentGoals()}
+			options := []flruntime.AgentOption{flruntime.WithAgentGoals(), flruntime.WithAgentBuiltinToolNames(flruntime.BuiltinToolNames{AskUser: "user_ask", Goal: "goal_manage"})}
 			if interaction == "approval" {
 				first = goalInteractionCall("write", "verified_write", `{}`)
 				tool := fltools.Define[map[string]any](fltools.Definition{Name: "verified_write", Description: "Write the verified result", InputSchema: map[string]any{"type": "object", "additionalProperties": false}, Effects: []fltools.Effect{fltools.EffectShell}, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAsk}}, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
@@ -54,7 +54,7 @@ func TestPublishedGoalUpdatesDuringQuestionAndApprovalUseNextModelRequest(t *tes
 				})
 				options = append(options, flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect))
 			}
-			gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "goal-interaction", StateCompatibilityKey: "goal-interaction:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported}, first, goalInteractionCall("review", "goal", `{"operation":"review","expected_version":2,"outcome":"completed","evidence":"The updated result and resolved interaction are verified."}`), goalInteractionDone())
+			gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "goal-interaction", StateCompatibilityKey: "goal-interaction:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported}, first, goalInteractionCall("review", "goal_manage", `{"operation":"review","expected_version":2,"outcome":"completed","evidence":"The updated result and resolved interaction are verified."}`), goalInteractionDone())
 			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "goal-interaction", Name: "Goal interaction"}, SystemPrompt: "Verify Goal interaction recovery.", Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}}, gateway, options...)
 			if err != nil {
 				t.Fatal(err)
@@ -124,9 +124,9 @@ func TestPublishedGoalUpdatesDuringQuestionAndApprovalUseNextModelRequest(t *tes
 func TestPublishedGoalIgnoresHistoricalTodoState(t *testing.T) {
 	historic := true
 	gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "historical-todo", StateCompatibilityKey: "historical-todo:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
-		goalInteractionCall("old-todo", "write_todos", `{}`), goalInteractionDone(),
-		goalInteractionCall("review", "goal", `{"operation":"review","expected_version":1,"outcome":"completed","evidence":"The requested result is verified; the old task list is historical."}`), goalInteractionDone())
-	todo := fltools.Define[map[string]any](fltools.Definition{Name: "write_todos", Description: "Historical task list", InputSchema: map[string]any{"type": "object", "additionalProperties": false}, ReadOnly: true}, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
+		goalInteractionCall("old-todo", "todo_write", `{}`), goalInteractionDone(),
+		goalInteractionCall("review", "goal_manage", `{"operation":"review","expected_version":1,"outcome":"completed","evidence":"The requested result is verified; the old task list is historical."}`), goalInteractionDone())
+	todo := fltools.Define[map[string]any](fltools.Definition{Name: "todo_write", Description: "Historical task list", InputSchema: map[string]any{"type": "object", "additionalProperties": false}, ReadOnly: true}, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
 		return fltools.Result{Text: `{"todos":[{"content":"Old unfinished work","status":"pending"}]}`}, nil
 	})
 	host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: storage.Memory()})
@@ -135,7 +135,7 @@ func TestPublishedGoalIgnoresHistoricalTodoState(t *testing.T) {
 	}
 	defer host.Shutdown(context.Background())
 	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) {
-		options := []flruntime.AgentOption{flruntime.WithAgentGoals()}
+		options := []flruntime.AgentOption{flruntime.WithAgentGoals(), flruntime.WithAgentBuiltinToolNames(flruntime.BuiltinToolNames{AskUser: "user_ask", Goal: "goal_manage"})}
 		if historic {
 			options = []flruntime.AgentOption{flruntime.WithAgentTools(todo), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect)}
 		}
@@ -176,7 +176,7 @@ func TestPublishedGoalIgnoresHistoricalTodoState(t *testing.T) {
 	}
 	for _, request := range requests[2:] {
 		for _, tool := range request.Tools {
-			if tool.Name == "write_todos" {
+			if tool.Name == "todo_write" {
 				t.Fatal("historical Todo re-enabled its tool")
 			}
 		}

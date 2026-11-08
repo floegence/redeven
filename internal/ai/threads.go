@@ -380,7 +380,7 @@ func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUse
 			})
 			containsSecret = containsSecret || source.Secret
 		}
-		toolName := "ask_user"
+		toolName := "user_ask"
 		for _, item := range current.Items {
 			if item.TurnID == interaction.TurnID && item.RunID == interaction.RunID && item.Activity != nil && item.Activity.ToolID == interaction.ToolCallID {
 				toolName = item.Activity.ToolName

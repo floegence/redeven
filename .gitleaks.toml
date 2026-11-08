@@ -21,3 +21,17 @@ regexTarget = "secret"
 regexes = [
   '''^MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn6ezkRohxhDEcQW/H3jEFNSrbkhCo8oY7UxIIwq/pIGPxt4eLylAjudw8UjX/Y\+FlbAwqTzjt09Ny0rxZ7J8zjewljVP0kH6P4KZ7Tg5BXYBlnkIt0iMKLhbSmhpiAH\+hVhQFhwfxNWk\+Nl15R5yocbGXQ13Zlc2n5uhCgFh4YXTSGwA8\+Zfxg3dsxOtOL5K3OOGYDrq\+nx5B0YhFZv3QQtAwNMi7vBOQHnh0lzAj/VBK\+Jz9CQVmIW0M2kmQKVgggZ9RuUq7Ug3aQVdLud5VLJFJAsFDVlbmdGNZEuJvgaAJ8ARwgFaflgl/4FBi2SCSASzcjwLsV9n4WMAF8PDjwIDAQAB$''',
 ]
+
+# Immutable released-writer dependency checksums, not credentials. Keep scanning
+# the fixture: both the exact file and one exact public module line must match.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "published Go checksums in the released tool-name fixture"
+condition = "AND"
+paths = ['''^internal/ai/testdata/tool-names-v7\.107\.9/producer/go\.sum\.txt$''']
+regexTarget = "line"
+regexes = [
+  '''github\.com/pkoukk/tiktoken-go v0\.1\.8 h1:85ENo\+3FpWgAACBaEUVp\+lctuTcYUO7BtmfhlN/QTRo=''',
+  '''modernc\.org/token v1\.1\.0 h1:Xl7Ap9dKaEs5kLoOQeQmPWevfnk/DM5qcLcYlA8ys6Y=''',
+]

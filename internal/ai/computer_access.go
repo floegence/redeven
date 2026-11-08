@@ -104,7 +104,7 @@ func (r *ComputerUseRuntime) authorizeComputerCall(ctx context.Context, call *Ta
 	// one-shot URL separate from persistent origin grants (especially file/data
 	// and opaque-origin targets).
 	call.allowedNavigationURLs = nil
-	if approvedURL, ok := ctx.Value(computerAuthorizedNavigationKey{}).(string); ok && !call.scriptOperation && call.ToolName == "browser.navigate" {
+	if approvedURL, ok := ctx.Value(computerAuthorizedNavigationKey{}).(string); ok && !call.scriptOperation && call.ToolName == "browser_navigate" {
 		call.allowedNavigationURLs = []string{approvedURL}
 	}
 	return ctx.Err()

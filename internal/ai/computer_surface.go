@@ -15,10 +15,10 @@ import (
 // admitted provider surfaces retain their tools, including restart/retry.
 // This changes discovery, never grants authority or replays historical input.
 func compactComputerToolSurface(all []ToolDef, explicit map[string]struct{}, initial *flruntime.ProviderToolSurface, historical ...map[string]struct{}) []ToolDef {
-	if !slices.ContainsFunc(all, func(d ToolDef) bool { return d.Name == "computer.exec" }) {
+	if !slices.ContainsFunc(all, func(d ToolDef) bool { return d.Name == "computer_exec" }) {
 		return all
 	}
-	retained := map[string]bool{"computer.targets": true, "computer.select_target": true, "computer.exec": true}
+	retained := map[string]bool{"computer_list_targets": true, "computer_select_target": true, "computer_exec": true}
 	for name := range explicit {
 		retained[name] = true
 	}
@@ -49,7 +49,7 @@ func (s *Service) retryComputerToolNames(ctx context.Context, meta *session.Meta
 	}
 	var primitives []string
 	for _, def := range builtInComputerToolDefinitions() {
-		if def.Name != "computer.targets" && def.Name != "computer.select_target" && def.Name != "computer.exec" {
+		if def.Name != "computer_list_targets" && def.Name != "computer_select_target" && def.Name != "computer_exec" {
 			primitives = append(primitives, def.Name)
 		}
 	}

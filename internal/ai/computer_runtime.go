@@ -300,7 +300,7 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 	return target, nil
 }
 func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
-	if !call.liveFrame && !call.userInput && (call.ToolName == "computer.observe" || call.ToolName == "computer.screenshot") {
+	if !call.liveFrame && !call.userInput && (call.ToolName == "computer_observe" || call.ToolName == "computer_capture_screenshot") {
 		control := r.controlForTarget(call.TargetID)
 		control.mu.Lock()
 		call.recoveryObservation = control.pause != nil && control.threadID == call.ThreadID && control.turnID == call.TurnID && control.runID == call.RunID && control.recheckInteractionID != "" && call.interactionID == control.recheckInteractionID
@@ -337,7 +337,7 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 		call.bindSelection = false
 	}
 
-	if call.ToolName == "computer.exec" {
+	if call.ToolName == "computer_exec" {
 		r.releasePreviousComputerTarget(call)
 		unlock()
 		return r.executeComputerScript(ctx, call)
@@ -398,7 +398,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	}
 	r.releasePreviousComputerTarget(call)
 	captureCtx := ctx
-	if call.liveFrame && call.ToolName == "computer.screenshot" && !call.userInput && !call.recoveryObservation {
+	if call.liveFrame && call.ToolName == "computer_capture_screenshot" && !call.userInput && !call.recoveryObservation {
 		// Hiding a viewer must not interrupt JSONL and retire a healthy browser.
 		// Cancel lock acquisition normally, then drain only the admitted passive
 		// capture within a deadline. The sampler discards it after viewer close.
@@ -520,7 +520,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		if known := computerObservationStage(anyToString(payload["observation_stage"])); known != "unknown" {
 			stage = known
 		}
-		if call.ToolName == "computer.screenshot" && computerObservationStage(anyToString(payload["observation_stage"])) == "unknown" {
+		if call.ToolName == "computer_capture_screenshot" && computerObservationStage(anyToString(payload["observation_stage"])) == "unknown" {
 			stage = "capture"
 		}
 		facts := map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": stage}
@@ -541,7 +541,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			return computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": "semantic_read"}, result.ExecutionLocation)
 		}
 	}
-	if err == nil && !takeoverResult(result, err) && call.ToolName == "computer.screenshot" && payload["target_changed"] != true && (result.TargetID != call.TargetID || len(result.Attachments) != 1 || !strings.HasPrefix(result.Attachments[0].ResourceRef, "computer://"+call.TargetID+"/") || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
+	if err == nil && !takeoverResult(result, err) && call.ToolName == "computer_capture_screenshot" && payload["target_changed"] != true && (result.TargetID != call.TargetID || len(result.Attachments) != 1 || !strings.HasPrefix(result.Attachments[0].ResourceRef, "computer://"+call.TargetID+"/") || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
 		return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
 	}
 	if err == nil && len(result.Attachments) > 0 {
@@ -554,7 +554,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			}
 		}
 	}
-	if err == nil && !call.liveFrame && call.ToolName == "computer.screenshot" && len(result.Attachments) == 1 {
+	if err == nil && !call.liveFrame && call.ToolName == "computer_capture_screenshot" && len(result.Attachments) == 1 {
 		attachment := result.Attachments[0]
 		descriptor := flruntime.MessageAttachment{ResourceRef: attachment.ResourceRef, Name: attachment.Name, MIMEType: attachment.MIMEType, SizeBytes: attachment.SizeBytes}
 		locator, locatorErr := descriptor.Locator()

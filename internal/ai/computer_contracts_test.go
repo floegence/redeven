@@ -60,7 +60,7 @@ func TestComputerScriptErrorClassifications(t *testing.T) {
 
 func TestComputerNavigationDefinitionMatchesRuntime(t *testing.T) {
 	for _, definition := range builtInComputerToolDefinitions() {
-		if definition.Name != "browser.navigate" {
+		if definition.Name != "browser_navigate" {
 			continue
 		}
 		var schema map[string]any

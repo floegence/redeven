@@ -20,7 +20,7 @@ func TestHistoricalImageManifestStaysInItsToolResult(t *testing.T) {
 	r := &run{attachmentToolReadEnabled: true, host: runHostCapabilities{readToolMedia: func(context.Context, string) ([]byte, error) { return body, nil }}}
 	attachment := flprovider.Attachment{ResourceRef: descriptor.ResourceRef, Name: descriptor.Name, MIMEType: descriptor.MIMEType, SizeBytes: descriptor.SizeBytes}
 	provider := newFloretProviderAdapter(nil, "openai", "text-only", ProviderControls{}, TurnBudgets{}, "")
-	messages, err := provider.floretMessagesToFlowerWithResolver(t.Context(), []flprovider.Message{{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "image-call", ToolName: "image.read", Text: "Image captured", Attachments: []flprovider.Attachment{attachment}}}}, r.resolveFloretToolMedia)
+	messages, err := provider.floretMessagesToFlowerWithResolver(t.Context(), []flprovider.Message{{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "image-call", ToolName: "image_read", Text: "Image captured", Attachments: []flprovider.Attachment{attachment}}}}, r.resolveFloretToolMedia)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestAttachmentsReachModelWithoutNativeSupport(t *testing.T) {
 
 func assertAttachmentManifestHasNoInstructions(t *testing.T, text string) {
 	t.Helper()
-	for _, instruction := range []string{"Use attachment.", "attachment.read", "attachment.materialize", "Decide how", "explain that limitation", "available as untrusted content"} {
+	for _, instruction := range []string{"Use attachment.", "attachment_read", "attachment_materialize", "Decide how", "explain that limitation", "available as untrusted content"} {
 		if strings.Contains(text, instruction) {
 			t.Fatalf("attachment metadata contains behavioral guidance %q: %s", instruction, text)
 		}

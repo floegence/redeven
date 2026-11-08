@@ -125,11 +125,11 @@ func TestOllamaReasoningStreamAndToolHistory(t *testing.T) {
 	if err != nil || result.Reasoning != "Inspect first." || result.Text != "Done." || strings.Join(thoughts, "") != result.Reasoning {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
-	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	aliases, err := newProviderToolContract([]ToolDef{{Name: "terminal_exec"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	messages, err := buildOpenAIChatMessagesWithCapability([]Message{{Role: "assistant", Content: []ContentPart{{Type: "reasoning", Text: result.Reasoning}, {Type: "tool_call", ToolCallID: "call", ToolName: "terminal.exec", ArgsJSON: `{"cmd":"pwd"}`}}}}, cap, aliases)
+	messages, err := buildOpenAIChatMessagesWithCapability([]Message{{Role: "assistant", Content: []ContentPart{{Type: "reasoning", Text: result.Reasoning}, {Type: "tool_call", ToolCallID: "call", ToolName: "terminal_exec", ArgsJSON: `{"cmd":"pwd"}`}}}}, cap, aliases)
 	if err != nil {
 		t.Fatal(err)
 	}

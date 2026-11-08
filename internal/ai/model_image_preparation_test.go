@@ -53,7 +53,7 @@ func TestModelScreenshotPreparationAndOriginalRead(t *testing.T) {
 	}
 	adapter := &floretProviderAdapter{supportsImageInput: true, providerType: "deepseek", modelName: "deepseek-flash"}
 	resolver := func(context.Context, flprovider.Attachment) (ContentPart, error) { return part, nil }
-	messages := []flprovider.Message{{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "capture", ToolName: "computer.exec", Attachments: []flprovider.Attachment{a, a, a, a, a, a}}}}
+	messages := []flprovider.Message{{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "capture", ToolName: "computer_exec", Attachments: []flprovider.Attachment{a, a, a, a, a, a}}}}
 	mapped, err := adapter.floretMessagesToFlowerWithResolver(t.Context(), messages, resolver)
 	if err != nil {
 		t.Fatal(err)
@@ -70,14 +70,14 @@ func TestModelScreenshotPreparationAndOriginalRead(t *testing.T) {
 	if count != 6 {
 		t.Fatal("image lost", count)
 	}
-	messages[0].ToolResult.ToolName = "image.read"
+	messages[0].ToolResult.ToolName = "image_read"
 	mapped, err = adapter.floretMessagesToFlowerWithResolver(t.Context(), messages, resolver)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range mapped[0].Content {
 		if p.Type == "image" && p.FileURI == part.FileURI {
-			t.Fatal("image.read bypassed default preparation")
+			t.Fatal("image_read bypassed default preparation")
 		}
 	}
 }
@@ -179,8 +179,8 @@ func TestModelScreenshotFrozenTransportPreservesSixFrames(t *testing.T) {
 	resolutions := 0
 	adapter.attachmentResolver = func(context.Context, flprovider.Attachment) (ContentPart, error) { resolutions++; return original, nil }
 	request := flprovider.Request{RunID: "screenshots", PromptScopeID: "screenshots", Messages: []flprovider.Message{
-		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "capture", Name: "computer.exec", Args: "{}"}}},
-		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "capture", ToolName: "computer.exec", Text: "six frames", Attachments: []flprovider.Attachment{attachment, attachment, attachment, attachment, attachment, attachment}}},
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "capture", Name: "computer_exec", Args: "{}"}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "capture", ToolName: "computer_exec", Text: "six frames", Attachments: []flprovider.Attachment{attachment, attachment, attachment, attachment, attachment, attachment}}},
 	}}
 	prepared, err := adapter.Prepare(t.Context(), request)
 	if err != nil {

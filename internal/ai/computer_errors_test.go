@@ -13,7 +13,7 @@ import (
 )
 
 func TestComputerClosedFailureFactsDoNotBecomeUnknownEffects(t *testing.T) {
-	call := TargetToolCall{ToolName: "browser.navigate", TargetID: "browser-main"}
+	call := TargetToolCall{ToolName: "browser_navigate", TargetID: "browser-main"}
 	for _, code := range []string{"TARGET_ACTION_FAILED", "TARGET_CONNECTION_REQUIRED", "TARGET_CAPABILITY_UNAVAILABLE"} {
 		result, err, valid := computerBrowserFailure(call, false, code, map[string]any{"action_executed": false}, "local")
 		if !valid || errors.Is(err, errComputerEffectUnknown) || result.Result.(map[string]any)["action_executed"] != false {
@@ -56,7 +56,7 @@ func TestComputerFailurePreservesLayerAndReadiness(t *testing.T) {
 			}
 			runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": failingComputerExecutor{code: test.wire}}, t.TempDir())
 			t.Cleanup(func() { _ = runtime.Close() })
-			_, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.screenshot"})
+			_, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer_capture_screenshot"})
 			failure := aitools.ClassifyError(err)
 			if failure == nil || string(failure.Code) != test.code || failure.Retryable || strings.Contains(failure.Message, "private-fixture-secret") {
 				t.Fatalf("failure boundary: %+v", failure)
@@ -73,7 +73,7 @@ func TestComputerProtocolDiagnosticRetainsOnlyCorrelatedFacts(t *testing.T) {
 	for _, code := range []float64{-32000, -32601, 0, math.MinInt32, math.MaxInt32} {
 		want := map[string]any{"phase": "protocol", "method": "Page.captureScreenshot", "code": code}
 		raw := map[string]any{"phase": "protocol", "method": "Page.captureScreenshot", "code": code, "message": "private content", "url": "https://private.test/secret"}
-		result, err := computerObservationFailure(TargetToolCall{ToolName: "computer.screenshot"}, map[string]any{"action_executed": false, "observation_stage": "capture", "diagnostic": raw}, "fixture")
+		result, err := computerObservationFailure(TargetToolCall{ToolName: "computer_capture_screenshot"}, map[string]any{"action_executed": false, "observation_stage": "capture", "diagnostic": raw}, "fixture")
 		if err == nil || !reflect.DeepEqual(result.Result.(map[string]any)["diagnostic"], want) {
 			t.Fatalf("lost facts: %+v %v", result, err)
 		}
@@ -109,7 +109,7 @@ func TestComputerProtocolFailureIsNotArgumentValidation(t *testing.T) {
 	if computerActivityFailurePhase(payload) == "validation" {
 		t.Fatal("protocol failure attributed to model arguments")
 	}
-	rows := computerActivityResultRows("computer.screenshot", payload)
+	rows := computerActivityResultRows("computer_capture_screenshot", payload)
 	encoded, _ := json.Marshal(rows)
 	if !strings.Contains(string(encoded), "-32000") || !strings.Contains(string(encoded), "Page.captureScreenshot") {
 		t.Fatal("visible diagnostic dropped protocol facts")

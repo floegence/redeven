@@ -44,7 +44,7 @@ func TestXvfbTargetExecutorRealDisplay(t *testing.T) {
 	if _, err := e.command(ctx, e.paths.input, nil, 4096, "windowactivate", "--sync", strings.TrimSpace(string(window))); err != nil {
 		t.Fatal(err)
 	}
-	result, err := e.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "xvfb-main", ToolName: "computer.screenshot", Arguments: json.RawMessage(`{}`)})
+	result, err := e.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "xvfb-main", ToolName: "computer_capture_screenshot", Arguments: json.RawMessage(`{}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,10 +52,10 @@ func TestXvfbTargetExecutorRealDisplay(t *testing.T) {
 		t.Fatalf("invalid screenshot result: %+v", result)
 	}
 	for _, action := range []struct{ tool, args string }{
-		{"computer.click", `{"x":150,"y":150}`},
-		{"computer.type", `{"text":"Flower X11 complete"}`},
-		{"computer.key", `{"key":"Enter"}`},
-		{"computer.wait", `{"milliseconds":100}`},
+		{"computer_click", `{"x":150,"y":150}`},
+		{"computer_type_text", `{"text":"Flower X11 complete"}`},
+		{"computer_press_key", `{"key":"Enter"}`},
+		{"computer_wait", `{"milliseconds":100}`},
 	} {
 		if _, err := e.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "xvfb-main", ToolName: action.tool, Arguments: json.RawMessage(action.args)}); err != nil {
 			t.Fatalf("%s: %v", action.tool, err)
@@ -65,7 +65,7 @@ func TestXvfbTargetExecutorRealDisplay(t *testing.T) {
 	if err != nil || string(entered) != "Flower X11 complete" {
 		t.Fatalf("GUI input did not reach the fixture: %q, %v", entered, err)
 	}
-	if _, err := e.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "xvfb-main", ToolName: "computer.scroll", Arguments: json.RawMessage(`{"x":200,"y":220,"delta_y":120}`)}); err != nil {
+	if _, err := e.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "xvfb-main", ToolName: "computer_scroll", Arguments: json.RawMessage(`{"x":200,"y":220,"delta_y":120}`)}); err != nil {
 		t.Fatal(err)
 	}
 	pointer, err := e.command(ctx, e.paths.input, nil, 4096, "getmouselocation", "--shell")

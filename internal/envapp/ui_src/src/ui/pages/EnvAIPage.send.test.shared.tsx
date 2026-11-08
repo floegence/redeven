@@ -935,7 +935,7 @@ export function registerEnvAIPageSendTests() {
         {
           id: 'tool-read', turn_id: 'turn-inline', kind: 'tool',
           activity: {
-            item_id: 'tool-read', tool_id: 'tool-read', tool_name: 'terminal.exec', kind: 'tool',
+            item_id: 'tool-read', tool_id: 'tool-read', tool_name: 'terminal_exec', kind: 'tool',
             status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
             started_at_unix_ms: 10, ended_at_unix_ms: 1260,
             presentation: { label: 'pwd', renderer: 'terminal', payload: { command: 'pwd', exit_code: 0 } },
@@ -945,7 +945,7 @@ export function registerEnvAIPageSendTests() {
         {
           id: 'tool-search', turn_id: 'turn-search', kind: 'tool',
           activity: {
-            item_id: 'tool-search', tool_id: 'tool-search', tool_name: 'web.search', kind: 'hosted_tool',
+            item_id: 'tool-search', tool_id: 'tool-search', tool_name: 'web_search_pages', kind: 'hosted_tool',
             status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
             presentation: { label: 'Flower inline transcript', renderer: 'web_search', payload: { query: 'Flower inline transcript', sources: [] } },
           },
@@ -1002,7 +1002,7 @@ export function registerEnvAIPageSendTests() {
       mockCurrentItems([{
         id: 'tool-invalid', turn_id: 'turn-invalid', kind: 'tool',
         activity: {
-          item_id: 'tool-invalid', tool_id: 'tool-invalid', tool_name: 'terminal.exec', kind: 'tool',
+          item_id: 'tool-invalid', tool_id: 'tool-invalid', tool_name: 'terminal_exec', kind: 'tool',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: {
             label: 'pwd', renderer: 'terminal',
@@ -1028,7 +1028,7 @@ export function registerEnvAIPageSendTests() {
       mockCurrentItems([{
         id: 'tool-invalid-target-ref', turn_id: `turn-invalid-target-ref-${field}`, kind: 'tool',
         activity: {
-          item_id: 'tool-invalid-target-ref', tool_id: 'tool-invalid-target-ref', tool_name: 'terminal.exec', kind: 'tool',
+          item_id: 'tool-invalid-target-ref', tool_id: 'tool-invalid-target-ref', tool_name: 'terminal_exec', kind: 'tool',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: {
             label: 'pwd', renderer: 'terminal',
@@ -1107,16 +1107,16 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('renders sanitized use_skill activity payloads', async () => {
+    it('renders sanitized skill_use activity payloads', async () => {
       mockCurrentItems([{
         id: 'msg-use-skill', turn_id: 'turn-use-skill', kind: 'tool',
         activity: {
-          item_id: 'tool-use-skill', tool_id: 'tool-use-skill', tool_name: 'use_skill', kind: 'tool',
+          item_id: 'tool-use-skill', tool_id: 'tool-use-skill', tool_name: 'skill_use', kind: 'tool',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: {
             label: 'frontend-design', renderer: 'structured',
             payload: {
-              operation: 'use_skill', name: 'frontend-design', content: 'Loaded frontend design guidance.',
+              operation: 'skill_use', name: 'frontend-design', content: 'Loaded frontend design guidance.',
               content_ref: 'content_123', activation_id: 'act_123',
             },
           },
@@ -1138,17 +1138,17 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('opens Env file browser and preview from relative apply_patch diff details', async () => {
+    it('opens Env file browser and preview from relative file_apply_patch diff details', async () => {
       mockCurrentItems([{
         id: 'msg-patch', turn_id: 'turn-patch', kind: 'tool',
         activity: {
-          item_id: 'tool-patch', tool_id: 'tool-patch', tool_name: 'apply_patch', kind: 'tool',
+          item_id: 'tool-patch', tool_id: 'tool-patch', tool_name: 'file_apply_patch', kind: 'tool',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: {
-            label: 'apply_patch', renderer: 'patch',
+            label: 'file_apply_patch', renderer: 'patch',
             target_refs: [{ kind: 'file', label: 'src/app.ts', path: '/workspace/src/app.ts' }],
             payload: {
-              operation: 'apply_patch',
+              operation: 'file_apply_patch',
               mutations: [{
                 display_name: 'src/app.ts', target: {kind:'file',label:'app.ts',path:'/workspace/src/app.ts'}, change_type: 'update', additions: 1, deletions: 1,
                 unified_diff: [

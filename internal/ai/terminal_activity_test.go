@@ -13,7 +13,7 @@ import (
 
 func TestTerminalWriteSchemaAllowsOptionalSafeDescription(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
-		if def.Name != "terminal.write" {
+		if def.Name != "terminal_write" {
 			continue
 		}
 		var schema map[string]any
@@ -35,7 +35,7 @@ func TestTerminalWriteSchemaAllowsOptionalSafeDescription(t *testing.T) {
 
 func TestTerminalInteractionPresentationPreservesPurposeAndSafeFacts(t *testing.T) {
 	for _, op := range []string{"exec", "read", "write", "terminate"} {
-		name := "terminal." + op
+		name := "terminal_" + op
 		args := map[string]any{"process_id": "proc-1", "description": "检查 GPU/LM Studio 诊断输出", "command": "ssh host", "input": "private-password\n", "stdin": "private-stdin"}
 		call := floretActivityForToolCall(name, args)
 		data := map[string]any{"command": "ssh host", "process_id": "proc-1", "input_bytes": 12, "output": "ok", "first_seq": 1, "last_seq": 2, "latest_seq": 3, "has_more": true, "total_bytes": 128, "execution_location": "local", "timed_out": true, "terminated": op == "terminate"}
@@ -85,7 +85,7 @@ func TestTerminalInteractionPresentationPreservesPurposeAndSafeFacts(t *testing.
 
 func TestTerminalActivityRedactsInputRepeatedInDescription(t *testing.T) {
 	args := map[string]any{"description": "Submit hunter2 to SSH", "input": "hunter2\n", "process_id": "proc-1"}
-	for _, v := range []any{terminalActivityInput(args), floretActivityForToolCall("terminal.write", args)} {
+	for _, v := range []any{terminalActivityInput(args), floretActivityForToolCall("terminal_write", args)} {
 		raw, _ := json.Marshal(v)
 		if strings.Contains(string(raw), "hunter2") || strings.Contains(string(raw), `"input"`) {
 			t.Fatalf("input retained: %s", raw)
@@ -97,7 +97,7 @@ func TestTerminalActivityUsesActualResultTargetAndLocation(t *testing.T) {
 	for _, op := range []string{"exec", "read", "write", "terminate"} {
 		t.Run(op, func(t *testing.T) {
 			activity, err := floretActivityForToolResult(nil, ToolResult{
-				ToolName: "terminal." + op, Status: toolResultStatusSuccess,
+				ToolName: "terminal_" + op, Status: toolResultStatusSuccess,
 				Data:          map[string]any{"target_id": "ssh:host:actual", "execution_location": "ssh_target", "process_id": "proc-1"},
 				activityInput: map[string]any{"target_id": "ssh:host:requested", "description": "Inspect memory"},
 			})
@@ -114,7 +114,7 @@ func TestTerminalActivityUsesActualResultTargetAndLocation(t *testing.T) {
 		})
 	}
 	activity, err := floretActivityForToolResult(nil, ToolResult{
-		ToolName: "terminal.exec", Status: toolResultStatusSuccess,
+		ToolName: "terminal_exec", Status: toolResultStatusSuccess,
 		Data: map[string]any{"command": "redeven targets exec --target ssh:host:remote --json -- uname", "execution_location": "local_runtime"},
 	})
 	if err != nil {
@@ -129,13 +129,13 @@ func TestTerminalActivityUsesActualResultTargetAndLocation(t *testing.T) {
 
 func TestTerminalActivityFallbackAndEmptyRead(t *testing.T) {
 	for _, desc := range []string{"", "View command output", "Terminal output"} {
-		call := floretActivityForToolCall("terminal.read", map[string]any{"description": desc, "command": "GPU diagnostic", "process_id": "proc-1"})
+		call := floretActivityForToolCall("terminal_read", map[string]any{"description": desc, "command": "GPU diagnostic", "process_id": "proc-1"})
 		if !strings.Contains(call.Label, "GPU diagnostic") {
 			t.Fatalf("missing target: %#v", call)
 		}
 	}
-	call := floretActivityForToolCall("terminal.read", map[string]any{"description": "再次检查诊断输出", "process_id": "gone"})
-	result, err := floretActivityForToolResult(nil, ToolResult{ToolName: "terminal.read", Status: toolResultStatusError, Error: &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process not found"}})
+	call := floretActivityForToolCall("terminal_read", map[string]any{"description": "再次检查诊断输出", "process_id": "gone"})
+	result, err := floretActivityForToolResult(nil, ToolResult{ToolName: "terminal_read", Status: toolResultStatusError, Error: &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process not found"}})
 	if err != nil {
 		t.Fatal(err)
 	}

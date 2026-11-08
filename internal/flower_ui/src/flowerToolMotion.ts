@@ -64,13 +64,18 @@ const writingPencilMotion: FlowerToolMotionRecipe = {
 const terminalCommandIcon: FlowerToolMotionRecipe = { icon: 'square-terminal', cycle: 1350, tracks: [] };
 
 export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> = {
-  goal: { icon: 'flower-goal', cycle: 2400, tracks: [{ parts: 'all', keyframes: [{ offset: 0, opacity: 0.55 }, { offset: 0.5, opacity: 1 }, { offset: 1, opacity: 0.55 }] }] },
-  "report_to_parent": { icon: 'message-square-text', cycle: 2300, tracks: [] },
-  "subagent_events": { icon: 'list-tree', cycle: 2300, tracks: [] },
-  "file.present": { icon: "file-text", cycle: 2400, tracks: [] },
-  "file.write": writingPencilMotion,
-  "attachment.materialize": writingPencilMotion,
-  "apply_patch": writingPencilMotion,
+  plugin_author_get_status: { icon: 'file-text', cycle: 2400, tracks: [] },
+  plugin_author_initialize: writingPencilMotion,
+  plugin_author_rename: writingPencilMotion,
+  plugin_author_build: { icon: 'square-terminal', cycle: 2400, tracks: [] },
+  plugin_author_capture: { icon: 'image', cycle: 2400, tracks: [] },
+  goal_manage: { icon: 'flower-goal', cycle: 2400, tracks: [{ parts: 'all', keyframes: [{ offset: 0, opacity: 0.55 }, { offset: 0.5, opacity: 1 }, { offset: 1, opacity: 0.55 }] }] },
+  "subagent_report": { icon: 'message-square-text', cycle: 2300, tracks: [] },
+  "subagent_read_events": { icon: 'list-tree', cycle: 2300, tracks: [] },
+  "file_present": { icon: "file-text", cycle: 2400, tracks: [] },
+  "file_write": writingPencilMotion,
+  "attachment_materialize": writingPencilMotion,
+  "file_apply_patch": writingPencilMotion,
   "file.read": {
     "icon": "file-text",
     "cycle": 2700,
@@ -242,7 +247,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "read_file": {
+  "file_read": {
     "icon": "file-output",
     "cycle": 2200,
     "tracks": [
@@ -306,7 +311,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "read_files": {
+  "file_read_many": {
     "icon": "files",
     "cycle": 2900,
     "tracks": [
@@ -403,7 +408,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "rgrep": {
+  "file_search": {
     "icon": "text-search",
     "cycle": 3100,
     "tracks": [
@@ -473,7 +478,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "find": {
+  "path_find": {
     "icon": "folder-search-2",
     "cycle": 3000,
     "tracks": [
@@ -534,7 +539,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "attachment.read": {
+  "attachment_read": {
     "icon": "file-input",
     "cycle": 2600,
     "tracks": [
@@ -580,7 +585,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "image.read": {
+  "image_read": {
     "icon": "image",
     "cycle": 3000,
     "tracks": [
@@ -672,9 +677,9 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "terminal.exec": terminalCommandIcon,
-  "terminal.read": terminalCommandIcon,
-  "terminal.write": {
+  "terminal_exec": terminalCommandIcon,
+  "terminal_read": terminalCommandIcon,
+  "terminal_write": {
     "icon": "text-cursor-input",
     "cycle": 2500,
     "tracks": [
@@ -747,7 +752,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "terminal.terminate": {
+  "terminal_terminate": {
     "icon": "circle-stop",
     "cycle": 2800,
     "tracks": [
@@ -839,7 +844,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "threads.query": {
+  "thread_query": {
     "icon": "messages-square",
     "cycle": 2900,
     "tracks": [
@@ -900,7 +905,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "threads.read": {
+  "thread_read": {
     "icon": "message-square-text",
     "cycle": 2700,
     "tracks": [
@@ -1128,7 +1133,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "web.search": {
+  "web_search_pages": {
     "icon": "search",
     "cycle": 3200,
     "tracks": [
@@ -1387,7 +1392,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "sources": {
+  "source_list": {
     "icon": "link",
     "cycle": 2600,
     "tracks": [
@@ -1471,7 +1476,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.targets": {
+  "computer_list_targets": {
     "icon": "layout-grid",
     "cycle": 2200,
     "tracks": [
@@ -1709,7 +1714,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.select_target": {
+  "computer_select_target": {
     "icon": "square-mouse-pointer",
     "cycle": 1700,
     "tracks": [
@@ -1758,7 +1763,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.observe": {
+  "computer_observe": {
     "icon": "scan-eye",
     "cycle": 2200,
     "tracks": [
@@ -1850,7 +1855,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.exec": {
+  "computer_exec": {
     "icon": "code-2",
     "cycle": 1900,
     "tracks": [
@@ -1952,7 +1957,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.screenshot": {
+  "computer_capture_screenshot": {
     "icon": "camera",
     "cycle": 1800,
     "tracks": [
@@ -2008,7 +2013,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.click": {
+  "computer_click": {
     "icon": "mouse-pointer-2",
     "cycle": 1700,
     "tracks": [
@@ -2057,7 +2062,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.double_click": {
+  "computer_double_click": {
     "icon": "mouse-pointer-click",
     "cycle": 2000,
     "tracks": [
@@ -2170,7 +2175,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.type": {
+  "computer_type_text": {
     "icon": "keyboard",
     "cycle": 2200,
     "tracks": [
@@ -2431,7 +2436,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.key": {
+  "computer_press_key": {
     "icon": "command",
     "cycle": 1700,
     "tracks": [
@@ -2480,7 +2485,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.scroll": {
+  "computer_scroll": {
     "icon": "mouse",
     "cycle": 1450,
     "tracks": [
@@ -2535,7 +2540,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.drag": {
+  "computer_drag": {
     "icon": "move",
     "cycle": 1900,
     "tracks": [
@@ -2588,7 +2593,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "computer.wait": {
+  "computer_wait": {
     "icon": "timer",
     "cycle": 2400,
     "tracks": [
@@ -2611,7 +2616,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "browser.navigate": {
+  "browser_navigate": {
     "icon": "compass",
     "cycle": 2300,
     "tracks": [
@@ -2673,7 +2678,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "browser.back": {
+  "browser_go_back": {
     "icon": "arrow-left",
     "cycle": 1700,
     "tracks": [
@@ -2723,7 +2728,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "browser.reload": {
+  "browser_reload": {
     "icon": "rotate-cw",
     "cycle": 1900,
     "tracks": [
@@ -2753,7 +2758,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "write_todos": {
+  "todo_write": {
     "icon": "list-todo",
     "cycle": 2100,
     "tracks": [
@@ -2883,7 +2888,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "ask_user": {
+  "user_ask": {
     "icon": "message-circle-question-mark",
     "cycle": 2600,
     "tracks": [
@@ -2965,7 +2970,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "subagents": {
+  "subagent_manage": {
     "icon": "git-fork",
     "cycle": 2300,
     "tracks": [
@@ -3159,7 +3164,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.runtimes": {
+  "tessiven_list_runtimes": {
     "icon": "server",
     "cycle": 2200,
     "tracks": [
@@ -3343,7 +3348,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.runtime.inspect": {
+  "tessiven_inspect_runtime": {
     "icon": "scan-line",
     "cycle": 1900,
     "tracks": [
@@ -3400,7 +3405,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.runtime.action": {
+  "tessiven_manage_runtime": {
     "icon": "cog",
     "cycle": 2100,
     "tracks": [
@@ -3434,7 +3439,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.schema": {
+  "tessiven_read_schema": {
     "icon": "network",
     "cycle": 2100,
     "tracks": [
@@ -3550,7 +3555,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.list": {
+  "tessiven_list_canvases": {
     "icon": "list-tree",
     "cycle": 2100,
     "tracks": [
@@ -3721,7 +3726,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.read": {
+  "tessiven_read_canvas": {
     "icon": "database",
     "cycle": 1900,
     "tracks": [
@@ -3778,7 +3783,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.search": {
+  "tessiven_search_canvas": {
     "icon": "search",
     "cycle": 2400,
     "tracks": [
@@ -3846,8 +3851,8 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.edit": writingPencilMotion,
-  "tessiven.versions": {
+  "tessiven_edit_canvas": writingPencilMotion,
+  "tessiven_list_versions": {
     "icon": "history",
     "cycle": 2400,
     "tracks": [
@@ -3907,7 +3912,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.validate": {
+  "tessiven_validate_canvas": {
     "icon": "list-checks",
     "cycle": 2200,
     "tracks": [
@@ -4023,7 +4028,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.save": {
+  "tessiven_save_canvas": {
     "icon": "hard-drive-download",
     "cycle": 1900,
     "tracks": [
@@ -4151,7 +4156,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.inspect": {
+  "tessiven_inspect_resource": {
     "icon": "scan-search",
     "cycle": 2250,
     "tracks": [
@@ -4212,7 +4217,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.action": {
+  "tessiven_manage_instance": {
     "icon": "square-play",
     "cycle": 1600,
     "tracks": [
@@ -4275,7 +4280,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "okf.index": {
+  "okf_get_index": {
     "icon": "book-marked",
     "cycle": 1850,
     "tracks": [
@@ -4338,7 +4343,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "okf.search": {
+  "okf_search": {
     "icon": "book-search",
     "cycle": 2200,
     "tracks": [
@@ -4389,7 +4394,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "okf.open": {
+  "okf_open": {
     "icon": "book-open-text",
     "cycle": 2400,
     "tracks": [
@@ -4511,7 +4516,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "use_skill": {
+  "skill_use": {
     "icon": "wand-sparkles",
     "cycle": 1900,
     "tracks": [

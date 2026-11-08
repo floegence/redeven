@@ -41,8 +41,8 @@ func (control *computerTargetControl) pauseError(call TargetToolCall) error {
 }
 
 func (control *computerTargetControl) permitsRecoveryContinuation(call TargetToolCall) bool {
-	allowedTool := call.recoveryObservation && (call.ToolName == "computer.observe" || call.ToolName == "computer.screenshot") ||
-		call.recoverySelection && (call.ToolName == "computer.targets" || call.ToolName == "computer.select_target")
+	allowedTool := call.recoveryObservation && (call.ToolName == "computer_observe" || call.ToolName == "computer_capture_screenshot") ||
+		call.recoverySelection && (call.ToolName == "computer_list_targets" || call.ToolName == "computer_select_target")
 	return control.pause != nil && allowedTool && call.interactionID != "" &&
 		control.threadID == call.ThreadID && control.turnID == call.TurnID && control.runID == call.RunID &&
 		control.recheckInteractionID == call.interactionID

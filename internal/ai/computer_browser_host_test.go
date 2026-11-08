@@ -165,7 +165,7 @@ func TestBrowserHostSourceRejectionPreservesConfirmedNonExecution(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = host.Close() })
 	executor := &extensionTargetExecutor{sourceHost: host, targetID: "missing-source"}
-	result, err := executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "missing-source", ToolName: "browser.navigate"})
+	result, err := executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "missing-source", ToolName: "browser_navigate"})
 	var failure *targetToolPolicyError
 	if !errors.As(err, &failure) || failure.code != "target_connection_required" {
 		t.Fatalf("pre-dispatch rejection became unknown: %+v %v", result, err)
@@ -174,7 +174,7 @@ func TestBrowserHostSourceRejectionPreservesConfirmedNonExecution(t *testing.T) 
 		t.Fatalf("missing non-execution fact: %+v", result)
 	}
 	var response playwrightTargetResponse
-	err = host.call(ctx, "source.tool", map[string]any{"target": "missing-source", "request": playwrightTargetRequest{ID: "request", TargetID: "missing-source", ToolName: "browser.navigate"}}, &response)
+	err = host.call(ctx, "source.tool", map[string]any{"target": "missing-source", "request": playwrightTargetRequest{ID: "request", TargetID: "missing-source", ToolName: "browser_navigate"}}, &response)
 	if err != nil || response.ID != "request" || response.TargetID != "missing-source" || response.Error != "TARGET_CONNECTION_REQUIRED" || response.Result["action_executed"] != false {
 		t.Fatalf("managed wire shape lost source rejection: %+v %v", response, err)
 	}
@@ -196,7 +196,7 @@ func TestBrowserHostFailureReasonsNeverInventNonExecution(t *testing.T) {
 				}
 			})
 			executor := &extensionTargetExecutor{sourceHost: host, targetID: "target"}
-			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "browser.navigate"})
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "browser_navigate"})
 			if !errors.Is(err, errComputerEffectUnknown) {
 				t.Fatalf("carrier failure invented a result: %+v %v", result, err)
 			}
@@ -204,7 +204,7 @@ func TestBrowserHostFailureReasonsNeverInventNonExecution(t *testing.T) {
 			if payload["reason"] != variant || payload["action_executed"] != nil {
 				t.Fatalf("lost bounded facts: %+v", payload)
 			}
-			rows, _ := json.Marshal(computerActivityResultRows("computer.exec", payload))
+			rows, _ := json.Marshal(computerActivityResultRows("computer_exec", payload))
 			if !strings.Contains(string(rows), variant) || strings.Contains(string(rows), "private") {
 				t.Fatalf("unsafe or missing visible diagnostic: %s", rows)
 			}

@@ -106,7 +106,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	searchStatus, searchReason := webSearchCapability.Status, webSearchCapability.Reason
 	localSearch, hostedSearch := false, len(initialSurface.HostedTools) > 0
 	for _, name := range initialSurface.CapabilityContract.AllowedTools {
-		if name == "web.search" {
+		if name == "web_search_pages" {
 			localSearch = true
 		}
 	}
@@ -221,6 +221,7 @@ func buildFloretThreadAgent(
 	}
 	agentOptions := []flruntime.AgentOption{
 		flruntime.WithAgentGoals(),
+		flruntime.WithAgentBuiltinToolNames(flruntime.BuiltinToolNames{AskUser: "user_ask", Goal: "goal_manage"}),
 		flruntime.WithAgentProviderRequestTimeoutPolicy(r.providerRequestTimeoutPolicy),
 		flruntime.WithAgentDynamicToolSurface(r.liveFloretToolSurface(surfaceConfig)),
 		flruntime.WithAgentRunLabels(labels),

@@ -25,11 +25,11 @@ function action(input: Partial<FlowerApprovalAction> & Pick<FlowerApprovalAction
 describe('presentFlowerApproval', () => {
   it('preserves command whitespace for exact inspection and copying', () => {
     const command = '  printf "first line"\n\nprintf "second line"\n';
-    expect(presentFlowerApproval(action({ tool_name: 'terminal.exec', summary: { label: command.trim(), command } }), copy)).toMatchObject({
+    expect(presentFlowerApproval(action({ tool_name: 'terminal_exec', summary: { label: command.trim(), command } }), copy)).toMatchObject({
       command, operationLabel: 'Run command',
     });
   });
-  it.each(['file.write', 'apply_patch'])('presents %s as a file edit', (toolName) => {
+  it.each(['file_write', 'file_apply_patch'])('presents %s as a file edit', (toolName) => {
     const presentation = presentFlowerApproval(action({
       tool_name: toolName,
       summary: { label: toolName, targets: [{ kind: 'file', label: '回声之王.md' }] },
@@ -43,9 +43,9 @@ describe('presentFlowerApproval', () => {
     expect(JSON.stringify(presentation)).not.toContain(toolName);
   });
 
-  it('preserves every apply_patch file in order', () => {
+  it('preserves every file_apply_patch file in order', () => {
     const presentation = presentFlowerApproval(action({
-      tool_name: 'apply_patch',
+      tool_name: 'file_apply_patch',
       summary: {
         label: 'Apply patch', effects: ['write'],
         targets: [{ kind: 'file', label: 'a.ts' }, { kind: 'file', label: 'b.ts' }],
@@ -60,7 +60,7 @@ describe('presentFlowerApproval', () => {
 
   it('presents commands and their working directory separately', () => {
     const presentation = presentFlowerApproval(action({
-      tool_name: 'terminal.exec',
+      tool_name: 'terminal_exec',
       summary: {
         label: 'Run shell command', command: 'pnpm test', description: 'Run the focused test suite',
         targets: [
@@ -113,16 +113,16 @@ describe('presentFlowerApproval', () => {
 });
 
 it('owns tool classification and uses only declared risk facts', () => {
-  expect(presentFlowerApproval(action({ tool_name: 'computer.click', summary: { label: 'Click', effects: ['write'] } }), copy))
+  expect(presentFlowerApproval(action({ tool_name: 'computer_click', summary: { label: 'Click', effects: ['write'] } }), copy))
     .toMatchObject({ operationKind: 'other' });
-  expect(presentFlowerApproval(action({ tool_name: 'computer.click', summary: { label: 'Click', effects: ['write'] } }), copy).risk).toBeUndefined();
-  expect(presentFlowerApproval(action({ tool_name: 'file.write', summary: { label: '', effects: ['write'], flags: ['open_world'] } }), copy))
+  expect(presentFlowerApproval(action({ tool_name: 'computer_click', summary: { label: 'Click', effects: ['write'] } }), copy).risk).toBeUndefined();
+  expect(presentFlowerApproval(action({ tool_name: 'file_write', summary: { label: '', effects: ['write'], flags: ['open_world'] } }), copy))
     .toMatchObject({ operationKind: 'file', operationLabel: 'Edit file', risk: 'Outside workspace Changes files' });
-  expect(presentFlowerApproval(action({ tool_name: 'terminal.exec', summary: { label: '', command: 'rm file', risk: 'Declared risk' } }), copy).risk).toBe('Declared risk');
+  expect(presentFlowerApproval(action({ tool_name: 'terminal_exec', summary: { label: '', command: 'rm file', risk: 'Declared risk' } }), copy).risk).toBe('Declared risk');
 });
 
 it('uses standalone operation copy independently of target position in a locale', () => {
-  const presentation = presentFlowerApproval(action({ tool_name: 'file.write', summary: { label: '', targets: [{ kind: 'file', label: 'a.ts' }] } }),
+  const presentation = presentFlowerApproval(action({ tool_name: 'file_write', summary: { label: '', targets: [{ kind: 'file', label: 'a.ts' }] } }),
     { ...copy, editFile: 'ファイルを編集' });
   expect(presentation.operationLabel).toBe('ファイルを編集');
   expect(presentation.targets).toEqual(['a.ts']);

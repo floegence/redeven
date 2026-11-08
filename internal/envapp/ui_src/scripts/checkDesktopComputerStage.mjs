@@ -365,8 +365,8 @@ try {
     console.log('Isolated browser prepared through the built-in installation consent UI.');
     const composer = page.locator('.flower-surface textarea').first();
     for (const [index, prompt] of [
-      `Open the local HTML ${fileURL} directly with browser.navigate using file://. Use only computer/browser tools. Do not start a server or proxy. Observe the SVG image with canonical role image and its actual name. Pause the animation, read the status to verify Animation paused, then emit a full ui.observe and ui.screenshot in the same computer.exec script. Use ui.assert on the read status. Report completion only after the structured result proves the paused state. Leave it paused.`,
-      `On the current local file page, resume the animation. Use computer.exec to click Resume animation, read the status and assert it is Animation running, then ui.observe({full:true}) and ui.screenshot in that same script. Use only computer/browser tools, and report verification only after the structured result proves it is running.`,
+      `Open the local HTML ${fileURL} directly with browser_navigate using file://. Use only computer/browser tools. Do not start a server or proxy. Observe the SVG image with canonical role image and its actual name. Pause the animation, read the status to verify Animation paused, then emit a full ui.observe and ui.screenshot in the same computer_exec script. Use ui.assert on the read status. Report completion only after the structured result proves the paused state. Leave it paused.`,
+      `On the current local file page, resume the animation. Use computer_exec to click Resume animation, read the status and assert it is Animation running, then ui.observe({full:true}) and ui.screenshot in that same script. Use only computer/browser tools, and report verification only after the structured result proves it is running.`,
     ].entries()) {
       await composer.fill(prompt); await composer.press('Enter');
       await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
@@ -402,8 +402,8 @@ try {
   threadID = await createComputerTask({ page, request, ownedThreads, origin: fixtureURL });
   for (const [index, prompt] of (nativeOnly ? [] : [
     `Open ${fixtureURL} in a browser, click Complete step once, and tell me the completed number shown on the page. Let me watch what you are doing.`,
-    'On the current page, use computer.screenshot and computer.click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
-    `Open ${fixtureURL}/controls using browser.navigate. Inspect it with computer.screenshot. Use computer.double_click on Double click me. Click the text input, use computer.type to enter Flower, and computer.key to press Enter. Use computer.scroll to scroll down and computer.wait to wait for the page. Use browser.reload to reload it. Navigate to ${fixtureURL}/second, then use browser.back to return to /controls. Take a final screenshot and report the result. Use only browser and computer tools; do not use terminal or HTTP fetch.`,
+    'On the current page, use computer_capture_screenshot and computer_click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
+    `Open ${fixtureURL}/controls using browser_navigate. Inspect it with computer_capture_screenshot. Use computer_double_click on Double click me. Click the text input, use computer_type_text to enter Flower, and computer_press_key to press Enter. Use computer_scroll to scroll down and computer_wait to wait for the page. Use browser_reload to reload it. Navigate to ${fixtureURL}/second, then use browser_go_back to return to /controls. Take a final screenshot and report the result. Use only browser and computer tools; do not use terminal or HTTP fetch.`,
   ]).entries()) {
     const startedAt = Date.now();
     const composer = page.locator('.flower-surface textarea').first();
@@ -587,7 +587,7 @@ try {
   viewerInteraction = {};
   await page.locator('[data-floe-floating-window-control="close"]').click();
   const minimizedComposer = page.locator('.flower-surface textarea').first();
-  await minimizedComposer.fill('Take one screenshot of the current target using computer.screenshot and briefly describe it. Do not use other tools.');
+  await minimizedComposer.fill('Take one screenshot of the current target using computer_capture_screenshot and briefly describe it. Do not use other tools.');
   await minimizedComposer.press('Enter');
   await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'screenshot while minimized');
@@ -645,7 +645,7 @@ try {
   await page.locator('.flower-settings-back-button').click();
   await createComputerTask({ page, request, ownedThreads, origin: fixtureURL });
   const enabledRequestStart = protocol.length;
-  await composer.fill(`Open ${fixtureURL} using browser.navigate, inspect it with computer.screenshot, and report the button label. Do not click it or use terminal or HTTP fetch.`);
+  await composer.fill(`Open ${fixtureURL} using browser_navigate, inspect it with computer_capture_screenshot, and report the button label. Do not click it or use terminal or HTTP fetch.`);
   await composer.press('Enter');
   await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
   ownedThreads.add(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id'));
@@ -715,7 +715,7 @@ try {
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = collectComputerActivities(detail);
 
-  const expectedTools = ['browser.navigate', 'browser.back', 'browser.reload', 'computer.screenshot', 'computer.click', 'computer.double_click', 'computer.type', 'computer.key', 'computer.scroll', 'computer.wait'];
+  const expectedTools = ['browser_navigate', 'browser_go_back', 'browser_reload', 'computer_capture_screenshot', 'computer_click', 'computer_double_click', 'computer_type_text', 'computer_press_key', 'computer_scroll', 'computer_wait'];
   for (const tool of expectedTools) assert(activities.some((item) => item.tool === tool), `actual thread did not execute ${tool}`);
   assert(activities.some((item) => item.targetRefs?.some((ref) => ref.resource_ref?.startsWith('computer://'))), 'public thread lost media provenance');
   if (nativeRequested) {

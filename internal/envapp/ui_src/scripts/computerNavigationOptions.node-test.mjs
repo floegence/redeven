@@ -50,7 +50,7 @@ test('slow subresource keeps load distinct from commit, DOM content and explicit
     let navigations=0;const send=session.send.bind(session);
     session.send=(method,args)=>{if(method==='Page.navigate')navigations++;return send(method,args);};
     for(const stage of ['commit','domcontentloaded','load']) {
-      const result=await call('browser.navigate',{url:url+'/?stage='+stage,wait_until:stage,timeout_ms:250});
+      const result=await call('browser_navigate',{url:url+'/?stage='+stage,wait_until:stage,timeout_ms:250});
       assert.equal(result.error,undefined,JSON.stringify(result));
       assert.equal(result.result.wait.state,stage==='load'?'timeout':'reached');
       assert.equal(result.result.wait.wait_until,stage);
@@ -58,16 +58,16 @@ test('slow subresource keeps load distinct from commit, DOM content and explicit
       assert.equal(result.result.action_executed,true);
       const ready=await call('computer.action',{action:'wait',selector:{role:'heading',name:'Available report'},state:'visible',timeout_ms:1000});
       assert.equal(ready.result.state,'visible',JSON.stringify(ready));
-      const observation=await call('computer.observe');
+      const observation=await call('computer_observe');
       assert.ok(observation.result.observation.nodes.some(n=>n.name==='Available report'));
     }
     assert.equal(navigations,3);
-    const reload=await call('browser.reload',{wait_until:'domcontentloaded',timeout_ms:1000});
+    const reload=await call('browser_reload',{wait_until:'domcontentloaded',timeout_ms:1000});
     assert.equal(reload.result.wait.state,'reached',JSON.stringify(reload));
-    const back=await call('browser.back',{wait_until:'commit',timeout_ms:1000});
+    const back=await call('browser_go_back',{wait_until:'commit',timeout_ms:1000});
     assert.equal(back.result.wait.state,'reached',JSON.stringify(back));
     await call('computer.action',{action:'wait',selector:{role:'heading',name:'Available report'},state:'visible',timeout_ms:1000});
-    const hash=await call('browser.navigate',{url:tab.url()+'#section',wait_until:'load',timeout_ms:1000});
+    const hash=await call('browser_navigate',{url:tab.url()+'#section',wait_until:'load',timeout_ms:1000});
     assert.equal(hash.result.wait?.state,'reached',JSON.stringify(hash));
     assert.equal(hash.result.navigation_stage,'same_document');
   } finally {

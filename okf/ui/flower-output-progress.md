@@ -31,7 +31,7 @@ The frozen tool definition supplies one optional argument preview parser per cal
 [Confirmed file Activity](#confirmed-file-activity) remains the durable outcome.
 
 ## Edit preparation
-Tool schemas are the single declaration-order authority. For `apply_patch`, Redeven observes complete canonical Add/Update/Delete headers and optional Move headers before the body finishes.
+Tool schemas are the single declaration-order authority. For `file_apply_patch`, Redeven observes complete canonical Add/Update/Delete headers and optional Move headers before the body finishes.
 
 Validation failure shows no completed-edit preview. A partial Move presents the confirmed destination create/update, not a rename. Confirmed local mutation targets support the existing authorized file navigation;
 preview paths and unconfirmed operations never acquire file actions.

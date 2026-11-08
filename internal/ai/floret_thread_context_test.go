@@ -508,7 +508,7 @@ func TestFlowerPublicItemRetainsDeferredActivitySummary(t *testing.T) {
 }
 
 func TestFlowerPublicItemRetainsMutationTitleWithoutDetailOrTarget(t *testing.T) {
-	summary := &flruntime.ThreadActivitySummary{Renderer: "patch", Label: "apply_patch",
+	summary := &flruntime.ThreadActivitySummary{Renderer: "patch", Label: "file_apply_patch",
 		Fields: []flruntime.ThreadActivityField{{Path: "/payload/mutations", Kind: "array", Count: 1}},
 		Values: map[string]json.RawMessage{"/payload/mutations/0/display_name": json.RawMessage(`"panda-bicycle.html"`), "/payload/mutations/0/change_type": json.RawMessage(`"delete"`)},
 	}

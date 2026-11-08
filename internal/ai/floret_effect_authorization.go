@@ -163,7 +163,7 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 		releaseAuthorization()
 		return err
 	}
-	if req.ToolName == "computer.select_target" {
+	if req.ToolName == "computer_select_target" {
 		ref := ""
 		for _, resource := range req.Resources {
 			if resource.Kind == "computer_candidate" {
@@ -196,7 +196,7 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 			return errors.New("computer effect target is missing")
 		}
 		executionContext = context.WithValue(executionContext, computerAuthorizedTargetKey{}, targetID)
-		if req.ToolName == "browser.navigate" {
+		if req.ToolName == "browser_navigate" {
 			for _, resource := range req.Resources {
 				if resource.Kind == "url" {
 					executionContext = context.WithValue(executionContext, computerAuthorizedNavigationKey{}, resource.Value)
@@ -204,7 +204,7 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 			}
 		}
 	}
-	if req.ToolName == "apply_patch" && !r.shouldRouteTargetTool(req.ToolName) {
+	if req.ToolName == "file_apply_patch" && !r.shouldRouteTargetTool(req.ToolName) {
 		executionContext = context.WithValue(executionContext, authorizedPatchResourcesKey{}, append([]fltools.ResourceRef(nil), req.Resources...))
 	}
 	dispatchErr := dispatch(executionContext, proof)

@@ -28,32 +28,32 @@ func builtInTessivenToolDefinitions() []ToolDef {
 		}
 		defs = append(defs, ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}), Mutating: mutating, RequiresApproval: mutating, Visibility: visibility, Capabilities: capabilities, Source: "builtin", Namespace: "builtin.tessiven", Priority: 100})
 	}
-	add("tessiven.runtimes", "Discover registered Runtime paths on the Desktop device and Flower execution machine without starting a process or session.", map[string]any{}, []string{}, false)
+	add("tessiven_list_runtimes", "Discover registered Runtime paths on the Desktop device and Flower execution machine without starting a process or session.", map[string]any{}, []string{}, false)
 	runtimeProperties := map[string]any{"runtime_ref": str("Exact runtime_ref returned by discovery"), "generation": str("Exact observed path generation"), "identity": str("Verified identity returned by discovery; omit when unverified"), "operation_id": str("Original Desktop owner operation ID")}
 	inspectProperties := map[string]any{}
 	for key, value := range runtimeProperties {
 		inspectProperties[key] = value
 	}
 	inspectProperties["action"] = map[string]any{"type": "string", "enum": []string{"status", "diagnose", "operation"}}
-	add("tessiven.runtime.inspect", "Inspect a registered Runtime path or query the original Desktop operation.", inspectProperties, []string{"runtime_ref", "generation", "action"}, false)
+	add("tessiven_inspect_runtime", "Inspect a registered Runtime path or query the original Desktop operation.", inspectProperties, []string{"runtime_ref", "generation", "action"}, false)
 	actionProperties := map[string]any{}
 	for key, value := range runtimeProperties {
 		actionProperties[key] = value
 	}
 	actionProperties["action"] = map[string]any{"type": "string", "enum": []string{"connect", "start", "stop", "restart", "update"}}
 	actionProperties["request_id"] = str("Unique request ID; never replay after unknown outcome")
-	add("tessiven.runtime.action", "Connect/authenticate or manage a Runtime process through Desktop. Gateway paths allow business access only. handoff_required means native confirmation is pending; no lifecycle action has started. Desktop handles workload confirmation, cancellation and release selection. When an operation_id is returned, query tessiven.runtime.inspect with action=operation and that ID; an absent ID does not authorize replay.", actionProperties, []string{"runtime_ref", "generation", "action", "request_id"}, true)
-	add("tessiven.schema", "Read the Tessiven DSL JSON Schema. Omit version for current or supply a supported stored dsl_version.", map[string]any{"version": str("Exact supported DSL version, such as v1.0.0; omit for current")}, []string{}, false)
-	add("tessiven.list", "List business canvases in the local Runtime library. Follow next_cursor for more results.", map[string]any{"query": str("Title or description search"), "cursor": str("Opaque next_cursor"), "archived": map[string]any{"type": "boolean"}}, []string{}, false)
-	add("tessiven.read", "Read immutable canvas YAML. Defaults: latest version, line 1, 200 lines; maximum 64 KiB. Continue at end_line + 1 while has_more. Repair historical placement diagnostics before editing.", map[string]any{"canvas_id": text, "version": integer, "start_line": integer, "line_count": map[string]any{"type": "integer", "minimum": 1, "maximum": 500}}, []string{"canvas_id"}, false)
-	add("tessiven.search", "Search literal text in an immutable canvas version. Continue at next_line; pin the returned version for subsequent reads and edits.", map[string]any{"canvas_id": text, "version": integer, "query": str("Literal single-line text, object ID or name"), "start_line": integer, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50}}, []string{"canvas_id", "query"}, false)
-	add("tessiven.edit", "Apply ordered exact replacements to an existing canvas; each old_string must match once. Validates and saves one version atomically; preserves untouched YAML except reviewed DSL upgrades. expected_version is the version read. Retry uncertain results with identical request_id and arguments; reread on version conflict.", map[string]any{"request_id": str("Unique stable request ID"), "canvas_id": text, "expected_version": map[string]any{"type": "integer", "minimum": 1}, "summary": text, "edits": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "object", "properties": map[string]any{"old_string": str("Exact nonempty text read from the base YAML"), "new_string": str("Replacement text; empty deletes")}, "required": []string{"old_string", "new_string"}, "additionalProperties": false}}}, []string{"request_id", "canvas_id", "expected_version", "summary", "edits"}, true)
-	add("tessiven.versions", "List saved versions newest first; continue with before equal to the last number when 100 results are returned.", map[string]any{"canvas_id": text, "before": integer}, []string{"canvas_id"}, false)
-	add("tessiven.validate", "Validate YAML without saving; returns locations and reasons for invalid fields or references.", map[string]any{"document_yaml": text}, []string{"document_yaml"}, false)
-	add("tessiven.save", "Save a complete new immutable version. Omit canvas_id and use expected_version 0 to create a canvas. Preserve object IDs on updates. Reuse the exact request_id and payload for an uncertain network retry; read again on version conflict.", map[string]any{"request_id": str("Unique stable request ID"), "canvas_id": str("Existing canvas ID; omit to create"), "expected_version": map[string]any{"type": "integer", "minimum": 0}, "document_yaml": text, "summary": text}, []string{"request_id", "expected_version", "document_yaml", "summary"}, true)
+	add("tessiven_manage_runtime", "Connect/authenticate or manage a Runtime process through Desktop. Gateway paths allow business access only. handoff_required means native confirmation is pending; no lifecycle action has started. Desktop handles workload confirmation, cancellation and release selection. When an operation_id is returned, query tessiven_inspect_runtime with action=operation and that ID; an absent ID does not authorize replay.", actionProperties, []string{"runtime_ref", "generation", "action", "request_id"}, true)
+	add("tessiven_read_schema", "Read the Tessiven DSL JSON Schema. Omit version for current or supply a supported stored dsl_version.", map[string]any{"version": str("Exact supported DSL version, such as v1.0.0; omit for current")}, []string{}, false)
+	add("tessiven_list_canvases", "List business canvases in the local Runtime library. Follow next_cursor for more results.", map[string]any{"query": str("Title or description search"), "cursor": str("Opaque next_cursor"), "archived": map[string]any{"type": "boolean"}}, []string{}, false)
+	add("tessiven_read_canvas", "Read immutable canvas YAML. Defaults: latest version, line 1, 200 lines; maximum 64 KiB. Continue at end_line + 1 while has_more. Repair historical placement diagnostics before editing.", map[string]any{"canvas_id": text, "version": integer, "start_line": integer, "line_count": map[string]any{"type": "integer", "minimum": 1, "maximum": 500}}, []string{"canvas_id"}, false)
+	add("tessiven_search_canvas", "Search literal text in an immutable canvas version. Continue at next_line; pin the returned version for subsequent reads and edits.", map[string]any{"canvas_id": text, "version": integer, "query": str("Literal single-line text, object ID or name"), "start_line": integer, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50}}, []string{"canvas_id", "query"}, false)
+	add("tessiven_edit_canvas", "Apply ordered exact replacements to an existing canvas; each old_string must match once. Validates and saves one version atomically; preserves untouched YAML except reviewed DSL upgrades. expected_version is the version read. Retry uncertain results with identical request_id and arguments; reread on version conflict.", map[string]any{"request_id": str("Unique stable request ID"), "canvas_id": text, "expected_version": map[string]any{"type": "integer", "minimum": 1}, "summary": text, "edits": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "object", "properties": map[string]any{"old_string": str("Exact nonempty text read from the base YAML"), "new_string": str("Replacement text; empty deletes")}, "required": []string{"old_string", "new_string"}, "additionalProperties": false}}}, []string{"request_id", "canvas_id", "expected_version", "summary", "edits"}, true)
+	add("tessiven_list_versions", "List saved versions newest first; continue with before equal to the last number when 100 results are returned.", map[string]any{"canvas_id": text, "before": integer}, []string{"canvas_id"}, false)
+	add("tessiven_validate_canvas", "Validate YAML without saving; returns locations and reasons for invalid fields or references.", map[string]any{"document_yaml": text}, []string{"document_yaml"}, false)
+	add("tessiven_save_canvas", "Save a complete new immutable version. Omit canvas_id and use expected_version 0 to create a canvas. Preserve object IDs on updates. Reuse the exact request_id and payload for an uncertain network retry; read again on version conflict.", map[string]any{"request_id": str("Unique stable request ID"), "canvas_id": str("Existing canvas ID; omit to create"), "expected_version": map[string]any{"type": "integer", "minimum": 0}, "document_yaml": text, "summary": text}, []string{"request_id", "expected_version", "document_yaml", "summary"}, true)
 	binding := map[string]any{"type": "object", "properties": map[string]any{"owner": map[string]any{"type": "string", "enum": []string{"managed_service", "container"}}, "resourceId": str("Exact referenced/inspected resource ID; for owner=managed_service use service_id, not a canvas instance ID"), "engine": map[string]any{"type": "string", "enum": []string{"docker", "podman"}}, "endpointId": str("Actual container endpoint"), "identity": str("Stable observed resource identity")}, "required": []string{"owner", "resourceId"}, "additionalProperties": false}
-	add("tessiven.inspect", "Inspect connected Runtime resources, logs or operations. For a referenced resource, use action=inspect with its direct binding; omit canvas fields and do not discover canvases. Canvas fields apply together only to an actual referenced instance. logs/operation reuse the binding. list inventories managed Web Services and containers; port_forward is only an address, not a service identity. Names/ports do not prove identity. complete=false and issues mean unread portions, not absence. inspect returns description, deployment, release, workspace and port; workspace is the configured working directory, not necessarily source/install location. Unavailable targets return structured state; never substitute targets or search private state directories.", map[string]any{"runtime_ref": str("local:local for the current execution Runtime; other refs require an authorized connection."), "action": map[string]any{"type": "string", "enum": []string{"list", "inspect", "logs", "operation"}}, "binding": binding, "canvas_id": text, "version_id": integer, "instance_id": text, "operation_id": str("Original manager operation ID")}, []string{"runtime_ref", "action"}, false)
-	add("tessiven.action", "Act on one bound service instance in the latest nonarchived canvas. Inspect first and use its identity. open prepares and returns entrance information for a running service, possibly executing its preparation hook; it neither launches a browser nor starts a stopped service. When an operation_id is returned, query tessiven.inspect with action=operation and that ID; an absent ID does not authorize replay. Unavailable or unbound Runtime refs, canvas labels, history, groups and logical services are not execution targets.", map[string]any{"canvas_id": text, "version_id": integer, "instance_id": text, "runtime_ref": str("Actual authorized target reference"), "generation": str("Observed connection generation returned by remote inspection; required for remote actions"), "action": map[string]any{"type": "string", "enum": []string{"open", "start", "stop", "restart"}}, "request_id": str("Unique request ID; never repeat an action after an unknown outcome"), "identity": str("Identity returned by current inspection")}, []string{"canvas_id", "version_id", "instance_id", "runtime_ref", "action", "request_id", "identity"}, true)
+	add("tessiven_inspect_resource", "Inspect connected Runtime resources, logs or operations. For a referenced resource, use action=inspect with its direct binding; omit canvas fields and do not discover canvases. Canvas fields apply together only to an actual referenced instance. logs/operation reuse the binding. list inventories managed Web Services and containers; port_forward is only an address, not a service identity. Names/ports do not prove identity. complete=false and issues mean unread portions, not absence. inspect returns description, deployment, release, workspace and port; workspace is the configured working directory, not necessarily source/install location. Unavailable targets return structured state; never substitute targets or search private state directories.", map[string]any{"runtime_ref": str("local:local for the current execution Runtime; other refs require an authorized connection."), "action": map[string]any{"type": "string", "enum": []string{"list", "inspect", "logs", "operation"}}, "binding": binding, "canvas_id": text, "version_id": integer, "instance_id": text, "operation_id": str("Original manager operation ID")}, []string{"runtime_ref", "action"}, false)
+	add("tessiven_manage_instance", "Act on one bound service instance in the latest nonarchived canvas. Inspect first and use its identity. open prepares and returns entrance information for a running service, possibly executing its preparation hook; it neither launches a browser nor starts a stopped service. When an operation_id is returned, query tessiven_inspect_resource with action=operation and that ID; an absent ID does not authorize replay. Unavailable or unbound Runtime refs, canvas labels, history, groups and logical services are not execution targets.", map[string]any{"canvas_id": text, "version_id": integer, "instance_id": text, "runtime_ref": str("Actual authorized target reference"), "generation": str("Observed connection generation returned by remote inspection; required for remote actions"), "action": map[string]any{"type": "string", "enum": []string{"open", "start", "stop", "restart"}}, "request_id": str("Unique request ID; never repeat an action after an unknown outcome"), "identity": str("Identity returned by current inspection")}, []string{"canvas_id", "version_id", "instance_id", "runtime_ref", "action", "request_id", "identity"}, true)
 	return defs
 }
 
@@ -72,13 +72,13 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 	}
 	library := r.host.tessiven
 	switch name {
-	case "tessiven.list", "tessiven.read", "tessiven.search", "tessiven.edit", "tessiven.versions", "tessiven.save":
+	case "tessiven_list_canvases", "tessiven_read_canvas", "tessiven_search_canvas", "tessiven_edit_canvas", "tessiven_list_versions", "tessiven_save_canvas":
 		if library == nil {
 			return nil, errors.New("tessiven is unavailable")
 		}
 	}
 	switch name {
-	case "tessiven.runtimes":
+	case "tessiven_list_runtimes":
 		if len(args) != 0 {
 			return nil, tessiven.ErrInvalidRequest
 		}
@@ -86,20 +86,20 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 			return nil, tessiven.ErrTargetUnavailable
 		}
 		return r.host.tessivenResources.Runtimes(ctx, meta)
-	case "tessiven.runtime.inspect", "tessiven.runtime.action":
+	case "tessiven_inspect_runtime", "tessiven_manage_runtime":
 		var req tessiven.RuntimeRequest
 		if err := decodeTessivenToolArgs(args, &req); err != nil {
 			return nil, err
 		}
 		mutation := req.Action == "connect" || req.Action == "start" || req.Action == "stop" || req.Action == "restart" || req.Action == "update"
-		if mutation != (name == "tessiven.runtime.action") {
+		if mutation != (name == "tessiven_manage_runtime") {
 			return nil, tessiven.ErrInvalidRequest
 		}
 		if r.host.tessivenResources == nil {
 			return nil, tessiven.ErrTargetUnavailable
 		}
 		return r.host.tessivenResources.Runtime(ctx, meta, req)
-	case "tessiven.schema":
+	case "tessiven_read_schema":
 		var p struct {
 			Version string `json:"version"`
 		}
@@ -107,7 +107,7 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 			return nil, err
 		}
 		return tessiven.SchemaForVersion(p.Version)
-	case "tessiven.list":
+	case "tessiven_list_canvases":
 		var p struct {
 			Query    string `json:"query"`
 			Cursor   string `json:"cursor"`
@@ -117,19 +117,19 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 			return nil, err
 		}
 		return library.List(ctx, p.Query, p.Cursor, p.Archived)
-	case "tessiven.read":
+	case "tessiven_read_canvas":
 		var p tessiven.ReadRequest
 		if err := decodeTessivenToolArgs(args, &p); err != nil {
 			return nil, err
 		}
 		return library.Read(ctx, p)
-	case "tessiven.search":
+	case "tessiven_search_canvas":
 		var p tessiven.SearchRequest
 		if err := decodeTessivenToolArgs(args, &p); err != nil {
 			return nil, err
 		}
 		return library.Search(ctx, p)
-	case "tessiven.edit":
+	case "tessiven_edit_canvas":
 		if !meta.CanWrite {
 			return nil, tessiven.ErrPermissionDenied
 		}
@@ -142,7 +142,7 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 			return nil, err
 		}
 		return tessivenToolSaveResult(result), nil
-	case "tessiven.versions":
+	case "tessiven_list_versions":
 		var p struct {
 			CanvasID string `json:"canvas_id"`
 			Before   int64  `json:"before"`
@@ -154,7 +154,7 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 			return nil, tessiven.ErrInvalidRequest
 		}
 		return library.Versions(ctx, p.CanvasID, p.Before)
-	case "tessiven.validate":
+	case "tessiven_validate_canvas":
 		var p struct {
 			DocumentYAML string `json:"document_yaml"`
 		}
@@ -164,7 +164,7 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 		validation := tessiven.Validate(p.DocumentYAML)
 		validation.Document = nil // The model already has the input; do not echo the full graph.
 		return validation, nil
-	case "tessiven.save":
+	case "tessiven_save_canvas":
 		if !meta.CanWrite {
 			return nil, tessiven.ErrPermissionDenied
 		}
@@ -177,13 +177,13 @@ func (r *run) execTessivenTool(ctx context.Context, meta *session.Meta, name str
 			return nil, err
 		}
 		return tessivenToolSaveResult(result), nil
-	case "tessiven.inspect", "tessiven.action":
+	case "tessiven_inspect_resource", "tessiven_manage_instance":
 		var p tessiven.ResourceRequest
 		if err := decodeTessivenToolArgs(args, &p); err != nil {
 			return nil, err
 		}
 		mutation := p.Action == "open" || p.Action == "start" || p.Action == "stop" || p.Action == "restart"
-		if mutation != (name == "tessiven.action") {
+		if mutation != (name == "tessiven_manage_instance") {
 			return nil, tessiven.ErrInvalidRequest
 		}
 		if r.host.tessivenResources == nil {

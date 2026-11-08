@@ -25,7 +25,7 @@ afterEach(() => vi.useRealTimers());
 describe('native live update interaction scheduling', () => {
   it('coalesces active preview growth but flushes a new attempt and completion at the next unthrottled frame', () => {
     const f = fixture();
-    const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1, call_id: 'tool', name: 'apply_patch', arguments_complete: false, preview: { additions: 1 } };
+    const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1, call_id: 'tool', name: 'file_apply_patch', arguments_complete: false, preview: { additions: 1 } };
     const preview = (version: number, patch = {}) => ({ ...envelope(version), update: { ...envelope(version).update!, tool_call_previews: { value: [{ ...call, ...patch }] } } });
     try {
       f.queue.push(preview(1)); f.frame(); f.apply.mockClear(); f.root.setAttribute(attribute, 'drag');

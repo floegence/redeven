@@ -47,7 +47,7 @@ func TestDesktopDeepSeekRetryRetainsInterruptedReasoning(t *testing.T) {
 	}))
 	defer server.Close()
 	gateway := desktopContinuationGateway(t, "deepseek", "deepseek-flash", server.URL, false)
-	tool := fltools.Define[struct{}](fltools.Definition{Name: "file.write", InputSchema: fltools.StrictObject(map[string]any{}, []string{}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[struct{}]) (fltools.Result, error) {
+	tool := fltools.Define[struct{}](fltools.Definition{Name: "file_write", InputSchema: fltools.StrictObject(map[string]any{}, []string{}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[struct{}]) (fltools.Result, error) {
 		effects.Add(1)
 		return fltools.Result{Text: "write confirmed once"}, nil
 	})

@@ -73,7 +73,7 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 	if limit := computerOutputLimitFacts(payload["output_limit"]); limit != nil {
 		add("output_limit", "", toolDetailValue(limit), fltools.StructuredActivityRowFormatCode)
 	}
-	if tool == "computer.targets" {
+	if tool == "computer_list_targets" {
 		candidates := toAnySlice(payload["candidates"])
 		for _, item := range candidates {
 			candidate, _ := item.(map[string]any)

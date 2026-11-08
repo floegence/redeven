@@ -289,7 +289,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 		Activity: flruntime.ThreadActivityActive, Attention: flruntime.AttentionSummary{InputCount: 1},
 		Items: []flruntime.ThreadItem{{
 			ID: callID, TurnID: turnID, RunID: runID, Kind: flruntime.ThreadItemTool,
-			Activity: &observation.ActivityItem{ItemID: callID, ToolID: callID, ToolName: "browser.navigate", Kind: observation.ActivityKindTool,
+			Activity: &observation.ActivityItem{ItemID: callID, ToolID: callID, ToolName: "browser_navigate", Kind: observation.ActivityKindTool,
 				Status: observation.ActivityStatusSuccess, Presentation: &tools.ActivityPresentation{Chips: []tools.ActivityChip{{Kind: "computer_assistance", Value: "login"}}, TargetRefs: []tools.ActivityTargetRef{{Kind: "computer_control", Label: "Browser", ResourceRef: "browser-main"}}}},
 		}},
 		Interactions: []flruntime.ThreadInteraction{{
@@ -349,7 +349,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(public), "computer_assistance") || strings.Contains(string(public), "browser.navigate") {
+	if !strings.Contains(string(public), "computer_assistance") || strings.Contains(string(public), "browser_navigate") {
 		t.Fatalf("bounded page lost assistance or exposed its historical tool: %s", public)
 	}
 	svc.broadcastFlowerRuntimeUpdate(meta.EndpointID, "", flruntime.ThreadUpdate{ThreadID: current.ThreadID, TurnID: current.TurnID, RunID: current.RunID,

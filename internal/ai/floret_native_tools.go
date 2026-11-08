@@ -12,6 +12,7 @@ import (
 	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/floret/v7/tools/webfetch"
 	"github.com/floegence/floret/v7/tools/websearch"
+	"github.com/floegence/redeven/internal/ai/toolnames"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -43,7 +44,7 @@ func (r *run) bindWebTools(p config.AIProvider) {
 		if r.webSearch.Mode == config.AIWebSearchDeepSeek {
 			binding.Source = "deepseek"
 		}
-		r.webToolBindings["web.search"] = binding
+		r.webToolBindings["web_search_pages"] = binding
 	}
 }
 
@@ -56,6 +57,8 @@ func (r *run) frozenWebToolBindings(surface *flruntime.ProviderToolSurface) (map
 	}
 	bindings := map[string]webToolBinding{}
 	for _, def := range surface.ToolDefinitions {
+		// Interpret only the saved capability key; never rewrite its journal or signature.
+		def.Name = toolnames.Historical(def.Name)
 		if !isFloretNativeTool(def.Name) {
 			continue
 		}
@@ -74,7 +77,7 @@ func (r *run) frozenWebToolBindings(surface *flruntime.ProviderToolSurface) (map
 			properties, _ := def.InputSchema["properties"].(map[string]any)
 			if def.Name == webfetch.ToolName && properties["format"] != nil && properties["url"] != nil {
 				binding.Source = "direct"
-			} else if def.Name == "web.search" && properties["provider"] != nil && properties["timeout_ms"] != nil {
+			} else if def.Name == "web_search_pages" && properties["provider"] != nil && properties["timeout_ms"] != nil {
 				binding = r.webToolConnection
 				binding.Source = "brave"
 			} else {
@@ -84,7 +87,7 @@ func (r *run) frozenWebToolBindings(surface *flruntime.ProviderToolSurface) (map
 		if binding.Source != "direct" && binding.Source != "brave" && binding.Source != "deepseek" {
 			return nil, errors.New("invalid saved web tool source")
 		}
-		if def.Name == "web.search" && binding.Source == "direct" || def.Name == webfetch.ToolName && binding.Source == "brave" {
+		if def.Name == "web_search_pages" && binding.Source == "direct" || def.Name == webfetch.ToolName && binding.Source == "brave" {
 			return nil, errors.New("invalid saved web tool binding")
 		}
 		if binding.Source != "direct" && (binding.ProviderID == "" || binding.EndpointFingerprint == "") {
@@ -141,13 +144,13 @@ func (r *run) currentWebProvider(binding webToolBinding) (config.AIProvider, err
 
 func nativeWebTool(r *run, name string, binding webToolBinding, snapshot PermissionSnapshot) (fltools.Tool, error) {
 	permission := fltools.PermissionSpec{Mode: fltools.PermissionAsk, ResourceKinds: []string{"web_url"}}
-	if name == "web.search" {
+	if name == "web_search_pages" {
 		permission.ResourceKinds = []string{"search_query"}
 	}
 	resolve := func(request fltools.PermissionRequest) (fltools.PermissionSpec, error) {
 		// Released pending Brave invocations may still carry their old provider field.
 		// It must never select a different service or be silently ignored.
-		if name == "web.search" {
+		if name == "web_search_pages" {
 			var args struct {
 				Provider string `json:"provider"`
 			}
@@ -188,7 +191,7 @@ func nativeWebTool(r *run, name string, binding webToolBinding, snapshot Permiss
 	if err != nil {
 		return fltools.Tool{}, err
 	}
-	return websearch.NewTool(client, websearch.ToolOptions{Name: "web.search", Permission: permission, PermissionFor: resolve}), nil
+	return websearch.NewTool(client, websearch.ToolOptions{Name: "web_search_pages", Permission: permission, PermissionFor: resolve}), nil
 }
 
 func nativeWebToolDefinition(name string, binding webToolBinding) ToolDef {
@@ -207,7 +210,7 @@ func nativeWebToolDefinition(name string, binding webToolBinding) ToolDef {
 	return ToolDef{Name: definition.Name, Description: definition.Description, InputSchema: toolSchemaRaw(definition.InputSchema), Mutating: definition.Destructive, Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyNetwork, ToolCapabilityOpenWorld}, Presentation: aitools.MustPresentationSpec(definition.Name), Source: "floret", Namespace: "floret.web", Priority: 100}
 }
 func floretNativeToolDefinitions() []ToolDef {
-	return []ToolDef{nativeWebToolDefinition(webfetch.ToolName, webToolBinding{Source: "direct"}), nativeWebToolDefinition("web.search", webToolBinding{Source: "brave"})}
+	return []ToolDef{nativeWebToolDefinition(webfetch.ToolName, webToolBinding{Source: "direct"}), nativeWebToolDefinition("web_search_pages", webToolBinding{Source: "brave"})}
 }
 func (r *run) buildBoundNativeTool(def ToolDef, snapshot PermissionSnapshot, bindings map[string]webToolBinding) (fltools.Tool, error) {
 	binding, ok := bindings[def.Name]
@@ -233,4 +236,6 @@ func (r *run) buildBoundNativeTool(def ToolDef, snapshot PermissionSnapshot, bin
 	tool.Definition.Annotations = map[string]any{"source": def.Source, "namespace": def.Namespace, webToolBindingAnnotation: metadata}
 	return tool, nil
 }
-func isFloretNativeTool(name string) bool { return name == webfetch.ToolName || name == "web.search" }
+func isFloretNativeTool(name string) bool {
+	return name == webfetch.ToolName || name == "web_search_pages"
+}

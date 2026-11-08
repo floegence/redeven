@@ -171,7 +171,7 @@ func (s *Service) persistTimeout() time.Duration {
 func terminalProcessActivity(snapshot terminalProcessSnapshot) *fltools.ActivityPresentation {
 	snapshot.Command, _ = contractSafeString(snapshot.Command, activityPayloadStringLimit)
 	payload := terminalProcessResultPayload(snapshot)
-	return contractSafeActivityPresentationForTool("terminal.exec", &fltools.ActivityPresentation{
+	return contractSafeActivityPresentationForTool("terminal_exec", &fltools.ActivityPresentation{
 		Renderer: fltools.ActivityRendererTerminal,
 		Chips: []fltools.ActivityChip{
 			{Kind: "tool", Label: "shell", Tone: "neutral"},

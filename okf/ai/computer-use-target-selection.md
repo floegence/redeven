@@ -12,7 +12,7 @@ ComputerUseRuntime owns discovery/selection through Flower's computer tools. Sta
 # Contract
 
 ## Discovery and selection
-`computer.targets` lists browser profiles/pages and application windows without a preselected target. Explicit system/personal-browser tasks use `system`, which excludes managed and native window candidates and never starts a managed profile.
+`computer_list_targets` lists browser profiles/pages and application windows without a preselected target. Explicit system/personal-browser tasks use `system`, which excludes managed and native window candidates and never starts a managed profile.
 
 Discovery never launches. Selecting an application
 candidate opens/restores that exact catalog entry; one accessible window is

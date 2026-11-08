@@ -13,7 +13,7 @@ import (
 
 func TestSubagentArgumentsRejectBeforeEffectAuthority(t *testing.T) {
 	root := t.TempDir()
-	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/sh", RunID: "run-arguments", ThreadID: "thread-arguments", ToolAllowlist: []string{"subagents"}})
+	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/sh", RunID: "run-arguments", ThreadID: "thread-arguments", ToolAllowlist: []string{"subagent_manage"}})
 	r.ensureSkillManager().userHome = root
 	surface, err := r.buildRunToolSurface(runToolSurfaceConfig{}, FlowerPermissionFullAccess)
 	if err != nil {
@@ -44,7 +44,7 @@ func TestSubagentArgumentsRejectBeforeEffectAuthority(t *testing.T) {
 		{`{"action":"spawn","task_name":"Review","task_description":"Inspect","message":"Work","ids":[]}`, "unsupported_fields"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
-			call := fltools.ToolCall{ID: "rejected", Name: "subagents", Args: tc.args}
+			call := fltools.ToolCall{ID: "rejected", Name: "subagent_manage", Args: tc.args}
 			_, err := registry.ActivityForCall(call, fltools.DispatchOptions{})
 			var cause subagentArgumentsError
 			if !errors.As(err, &cause) || cause.InvalidArgumentsCode() != "invalid_arguments.subagents."+tc.code {

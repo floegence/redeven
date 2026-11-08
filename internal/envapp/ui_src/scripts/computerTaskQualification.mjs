@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 
 export function collectComputerActivities(detail) {
-  return (detail.current?.items ?? []).filter(item => /^(computer|browser)\./u.test(item.activity?.tool_name ?? '')).map(item => ({
+  return (detail.current?.items ?? []).filter(item => /^(computer|browser)[._]/u.test(item.activity?.tool_name ?? '')).map(item => ({
     tool: item.activity.tool_name, toolID: item.activity.tool_id, status: item.activity.status,
     targetRefs: item.activity_summary?.values?.['/target_refs'] ?? [],
   }));

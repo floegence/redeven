@@ -22,7 +22,7 @@ import (
 
 func writeComputerEvidenceQuestion(w http.ResponseWriter, flush http.Flusher, evidence, questionID, prompt, choice string) {
 	args, _ := json.Marshal(map[string]any{"evidence_refs": []string{evidence}, "questions": []any{map[string]any{"id": questionID, "header": "Continue the task", "question": prompt, "response_mode": "select_or_write", "is_secret": false, "choices": []any{map[string]any{"choice_id": "continue", "label": choice}}}}})
-	item := map[string]any{"type": "function_call", "id": "fc_ask_" + evidence, "call_id": "ask_" + evidence, "name": "ask_user", "arguments": string(args)}
+	item := map[string]any{"type": "function_call", "id": "fc_ask_" + evidence, "call_id": "ask_" + evidence, "name": "user_ask", "arguments": string(args)}
 	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.completed", "response": map[string]any{"id": "question_" + evidence, "status": "completed", "output": []any{item}}})
@@ -44,7 +44,7 @@ func TestComputerTakeoverUsesIndependentAskUser(t *testing.T) {
 		}
 		n := providerCalls.Add(1)
 		if n == 1 {
-			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
+			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_capture_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "requires-input")
@@ -113,7 +113,7 @@ type takeoverObservationExecutor struct {
 }
 
 func (e *takeoverObservationExecutor) ExecuteComputerUserInput(_ context.Context, call TargetToolCall) ([]byte, error) {
-	if call.ToolName == "computer.screenshot" {
+	if call.ToolName == "computer_capture_screenshot" {
 		return e.body, nil
 	}
 	e.userInputs.Add(1)
@@ -124,10 +124,10 @@ func (e *takeoverObservationExecutor) EnsureTargetReady(context.Context, string)
 func (e *takeoverObservationExecutor) ExecuteTargetTool(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 	actionExecuted := false
 	switch call.ToolName {
-	case "browser.navigate":
+	case "browser_navigate":
 		e.effects.Add(1)
 		actionExecuted = true
-	case "computer.screenshot":
+	case "computer_capture_screenshot":
 		e.observations.Add(1)
 	default:
 		return TargetToolResult{}, errors.New("unexpected action")
@@ -174,7 +174,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 					return
 				}
 				if requestNumber == 3 || requestNumber == 5 {
-					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_resumed_%d", requestNumber), "call_id": fmt.Sprintf("resumed-observation-%d", requestNumber), "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
+					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_resumed_%d", requestNumber), "call_id": fmt.Sprintf("resumed-observation-%d", requestNumber), "name": "computer_capture_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": fmt.Sprintf("resumed-observation-%d", requestNumber), "status": "completed", "output": []any{item}}})
@@ -469,7 +469,7 @@ func TestSystemBrowserConnectionAnswerDoesNotGrantOrRequireConnection(t *testing
 		}
 		n := calls.Add(1)
 		if n == 1 {
-			item := map[string]any{"type": "function_call", "id": "fc_discover", "call_id": "discover-system", "name": "computer_targets", "arguments": `{"description":"Find an available browser","browser_source":"system"}`}
+			item := map[string]any{"type": "function_call", "id": "fc_discover", "call_id": "discover-system", "name": "computer_list_targets", "arguments": `{"description":"Find an available browser","browser_source":"system"}`}
 			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flush, "connect")

@@ -41,7 +41,7 @@ func newParentEventForkFixture(t *testing.T) *parentEventForkFixture {
 	t.Helper()
 	f := &parentEventForkFixture{service: newSendTurnTestService(t), path: filepath.Join(t.TempDir(), "events.sqlite"), report: "Inherited research finding\n" + strings.Repeat("Complete source evidence and original formatting.\n", 24)}
 	raw, _ := json.Marshal(map[string]string{"message": f.report})
-	f.childGateway = delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "report", Name: "report_to_parent", Args: string(raw)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone())
+	f.childGateway = delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "report", Name: "subagent_report", Args: string(raw)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone())
 	f.parentGateway = delegationContextGateway(delegationContextDone())
 	f.open(t)
 	t.Cleanup(func() { _ = f.host.Shutdown(context.Background()) })
@@ -67,7 +67,7 @@ func (f *parentEventForkFixture) open(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.host = host
-	report := fltools.Define[struct{ Message string }](fltools.Definition{Name: "report_to_parent", ReadOnly: true, InputSchema: fltools.StrictObject(map[string]any{"message": map[string]any{"type": "string"}}, []string{"message"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, in fltools.Invocation[struct{ Message string }]) (fltools.Result, error) {
+	report := fltools.Define[struct{ Message string }](fltools.Definition{Name: "subagent_report", ReadOnly: true, InputSchema: fltools.StrictObject(map[string]any{"message": map[string]any{"type": "string"}}, []string{"message"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, in fltools.Invocation[struct{ Message string }]) (fltools.Result, error) {
 		hash := sha256.Sum256([]byte(strings.TrimSpace(in.RawArgs)))
 		receipt, err := f.canonical.(flruntime.ThreadParentEventService).ReportToParent(ctx, flruntime.ReportToParentInput{ThreadID: in.ThreadID, TurnID: in.TurnID, RunID: in.RunID, ToolCallID: in.CallID, ToolName: in.Name, ArgumentHash: fmt.Sprintf("%x", hash), RequestKey: flruntime.RequestKey(in.CallID), Message: in.Args.Message})
 		raw, _ := json.Marshal(receipt)

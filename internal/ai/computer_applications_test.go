@@ -30,7 +30,7 @@ func applicationProtocolFixture(t *testing.T, count int) (*ComputerUseRuntime, T
 if(process.argv.includes('--capabilities')){console.log(JSON.stringify({protocol_version:4,screen_recording:true,accessibility:true}));process.exit(0);}
 const windows=` + string(encoded) + `;
 for await(const line of readline.createInterface({input:process.stdin})){const r=JSON.parse(line);let payload={};
- if(r.tool_name==='computer.targets')payload={targets:windows};
+ if(r.tool_name==='computer_list_targets')payload={targets:windows};
  if(r.tool_name==='computer.applications')payload={applications:[{id:'macos-fixture',display_name:'Fixture',app_bundle_id:'dev.fixture',state:'not_running'}]};
  if(r.tool_name==='computer.open_application'){appendFileSync(` + string(pathJSON) + `, 'launch');payload={targets:windows,action_executed:true};}
  console.log(JSON.stringify({type:'result',request_id:r.request_id,target_id:r.target_id,payload}));}
@@ -45,7 +45,7 @@ for await(const line of readline.createInterface({input:process.stdin})){const r
 	if err != nil {
 		t.Fatal(err)
 	}
-	return host, TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.select_target"}, candidate, marker
+	return host, TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer_select_target"}, candidate, marker
 }
 
 func TestComputerApplicationSelectionUsesExactCandidateAndReportsWindows(t *testing.T) {
@@ -112,7 +112,7 @@ func TestComputerApplicationLaunchRequiresGrantsAndDoesNotStealTargets(t *testin
 
 func TestComputerApplicationDiscoveryIsReadOnly(t *testing.T) {
 	host, call, _, marker := applicationProtocolFixture(t, 0)
-	call.ToolName = "computer.targets"
+	call.ToolName = "computer_list_targets"
 	call.Arguments = json.RawMessage(`{"application":"Fixture"}`)
 	result, err := host.ComputerTargets(computerPermissionContext(t, "full_access"), call, ToolTargetPolicy{})
 	if err != nil {

@@ -123,7 +123,7 @@ func TestOpenAIProvider_StreamTurn_MissingCompleted_RejectsUnconfirmedToolCall(t
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}},
 		},
 		Tools: []ToolDef{
-			{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)},
+			{Name: "terminal_exec", InputSchema: json.RawMessage(`{"type":"object"}`)},
 		},
 	}, nil)
 	var adviser flprovider.RetryAdviser

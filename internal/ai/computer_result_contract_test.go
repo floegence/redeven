@@ -52,7 +52,7 @@ func assertComputerResultTypes(t *testing.T, payload map[string]any) {
 }
 func TestComputerResultPreservesJSONTypesAndSnapshot(t *testing.T) {
 	source := computerResultFixture()
-	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "observe", ToolName: "computer.observe", Status: toolResultStatusSuccess, Data: source})
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "observe", ToolName: "computer_observe", Status: toolResultStatusSuccess, Data: source})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestComputerResultPreservesJSONTypesAndSnapshot(t *testing.T) {
 }
 func TestConfirmedCancellationTextMatchesStructured(t *testing.T) {
 	for _, data := range []any{nil, map[string]any{"invalid": math.NaN()}} {
-		result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "cancel", ToolName: "computer.exec", Status: toolResultStatusAborted, cancellationConfirmed: true, Data: data})
+		result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "cancel", ToolName: "computer_exec", Status: toolResultStatusAborted, cancellationConfirmed: true, Data: data})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,13 +93,13 @@ func computerEncodingCode(result fltools.Result) string {
 
 func TestComputerUncertainOutputRetainsWarningAndCompleteFacts(t *testing.T) {
 	calls := 0
-	tool := fltools.Define[map[string]any](fltools.Definition{Name: "computer.exec", InputSchema: fltools.StrictObject(nil, nil), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil,
+	tool := fltools.Define[map[string]any](fltools.Definition{Name: "computer_exec", InputSchema: fltools.StrictObject(nil, nil), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil,
 		func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
 			calls++
-			return floretToolResultFromFlower(nil, ToolResult{ToolID: "key", ToolName: "computer.exec", Status: toolResultStatusError, effectUncertain: true,
+			return floretToolResultFromFlower(nil, ToolResult{ToolID: "key", ToolName: "computer_exec", Status: toolResultStatusError, effectUncertain: true,
 				Data: map[string]any{"completed_actions": []string{"snapshot"}, "failed_action": "key", "stage": "input_delivery", "reason": "response_unavailable", "needs_observation": true}})
 		})
-	gateway := delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "key", Name: "computer.exec", Args: "{}"}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone())
+	gateway := delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "key", Name: "computer_exec", Args: "{}"}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone())
 	service := delegationContextThread(t, gateway, func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
 		return flruntime.ToolSurface{Tools: fltools.NewRegistry(tool)}, nil
 	})
@@ -129,7 +129,7 @@ func TestComputerUncertainOutputRetainsWarningAndCompleteFacts(t *testing.T) {
 
 func TestComputerFinalEnvelopeBoundaryAndIndependentArchive(t *testing.T) {
 	for _, size := range []int{65535, 65536, 65537, 1048575, 1048576, 1048577} {
-		source := ToolResult{ToolID: "observe", ToolName: "computer.observe", Status: toolResultStatusSuccess, Data: map[string]any{"text": ""}}
+		source := ToolResult{ToolID: "observe", ToolName: "computer_observe", Status: toolResultStatusSuccess, Data: map[string]any{"text": ""}}
 		raw, _, err := encodeToolResultEnvelope(source)
 		if err != nil {
 			t.Fatal(err)
@@ -157,10 +157,10 @@ func TestComputerFinalEnvelopeBoundaryAndIndependentArchive(t *testing.T) {
 func TestComputerEncodingFailureRespectsExecutionAuthority(t *testing.T) {
 	for _, name := range []string{"readonly", "completed_action", "unknown", "unconfirmed_cancel", "confirmed_cancel", "declined", "pending"} {
 		t.Run(name, func(t *testing.T) {
-			source := ToolResult{ToolID: "call", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: map[string]any{"bad": math.NaN(), "code": "private script"}, executionFacts: toolExecutionFacts{callID: "call", toolName: "computer.exec", targetID: "authorized", completed: true, completedActions: []string{"click"}, needsObservation: true}}
+			source := ToolResult{ToolID: "call", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: map[string]any{"bad": math.NaN(), "code": "private script"}, executionFacts: toolExecutionFacts{callID: "call", toolName: "computer_exec", targetID: "authorized", completed: true, completedActions: []string{"click"}, needsObservation: true}}
 			switch name {
 			case "readonly":
-				source.ToolName = "computer.observe"
+				source.ToolName = "computer_observe"
 				source.executionFacts.toolName = source.ToolName
 			case "unknown":
 				source.Status = toolResultStatusError
@@ -204,7 +204,7 @@ func TestComputerEncodingFailureRespectsExecutionAuthority(t *testing.T) {
 	}
 }
 func TestExactNumbersProgressAndActivityIsolation(t *testing.T) {
-	source := ToolResult{ToolID: "read", ToolName: "terminal.read", Status: toolResultStatusSuccess, Data: map[string]any{"process_id": "p", "last_seq": int64(9007199254740993), "ended_at_ms": int64(9223372036854775807), "status": "running"}}
+	source := ToolResult{ToolID: "read", ToolName: "terminal_read", Status: toolResultStatusSuccess, Data: map[string]any{"process_id": "p", "last_seq": int64(9007199254740993), "ended_at_ms": int64(9223372036854775807), "status": "running"}}
 	result, err := floretToolResultFromFlower(nil, source)
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +242,7 @@ func TestComputerSemanticBudgetAndSourceTruncation(t *testing.T) {
 		if len(raw) > computerSemanticMaxBytes || len(raw) < 190000 {
 			t.Fatalf("unexpected semantic size %d", len(raw))
 		}
-		result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "semantic", ToolName: "computer.observe", Status: toolResultStatusSuccess, Data: map[string]any{"observation": map[string]any{"semantic": semantic}}})
+		result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "semantic", ToolName: "computer_observe", Status: toolResultStatusSuccess, Data: map[string]any{"observation": map[string]any{"semantic": semantic}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -275,13 +275,13 @@ func TestFileModelOutputRetainsExistingBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, data := range map[string]any{"read_file": single, "read_files": multi} {
+	for name, data := range map[string]any{"file_read": single, "file_read_many": multi} {
 		result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: name, ToolName: name, Status: toolResultStatusSuccess, Data: data})
 		if err != nil {
 			t.Fatal(err)
 		}
 		limit := 11000
-		if name == "read_files" {
+		if name == "file_read_many" {
 			limit = 40000
 		}
 		if len(result.Text) > limit || result.OutputPolicy != nil {
@@ -297,7 +297,7 @@ func TestFileModelOutputRetainsExistingBounds(t *testing.T) {
 func TestComputerFinalEnvelopeDeduplicatesOnlyExactEmittedObservation(t *testing.T) {
 	observation := map[string]any{"tree_text": "unique tree", "document_id": "doc"}
 	source := map[string]any{"observation": observation, "observations": []any{map[string]any{"observation": observation}}, "output_order": []any{map[string]any{"kind": "observation", "index": 0}}, "observation_status": "current"}
-	result, err := encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: source})
+	result, err := encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: source})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestComputerFinalEnvelopeDeduplicatesOnlyExactEmittedObservation(t *testing
 		t.Fatal("mutated compatibility source")
 	}
 	source["observation"] = map[string]any{"tree_text": "different recovery observation"}
-	result, err = encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: source})
+	result, err = encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "computer_exec", Status: toolResultStatusSuccess, Data: source})
 	if err != nil || result.structured["data"].(map[string]any)["observation"] == nil {
 		t.Fatalf("removed distinct observation: %v", err)
 	}

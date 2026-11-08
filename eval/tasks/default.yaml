@@ -5,7 +5,7 @@ tasks:
     stage: screen
     category: readonly
     turns:
-      - "Analyze workspace ${workspace} using readonly tools. Read at least two real files with read_file or read_files, inspect the tree with find or rgrep, then report repository purpose, major directories or modules, and one concrete validation path. Cite at least 2 absolute evidence file paths."
+      - "Analyze workspace ${workspace} using readonly tools. Read at least two real files with file_read or file_read_many, inspect the tree with find or rgrep, then report repository purpose, major directories or modules, and one concrete validation path. Cite at least 2 absolute evidence file paths."
     runtime:
       permission_type: readonly
       timeout_seconds: 40
@@ -31,12 +31,12 @@ tasks:
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "read_file"
+          - "file_read"
         must_succeed:
-          - "read_file"
+          - "file_read"
         must_not_call:
-          - "terminal.exec"
-          - "apply_patch"
+          - "terminal_exec"
+          - "file_apply_patch"
         max_calls: 12
   - id: readonly_review_question
     title: Readonly review question
@@ -66,12 +66,12 @@ tasks:
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "read_file"
+          - "file_read"
         must_succeed:
-          - "read_file"
+          - "file_read"
         must_not_call:
-          - "terminal.exec"
-          - "apply_patch"
+          - "terminal_exec"
+          - "file_apply_patch"
         max_calls: 10
   - id: readonly_edit_request_requires_permission_change
     title: Readonly edit request asks for permission change
@@ -101,14 +101,14 @@ tasks:
         must_succeed:
           - "ask_user"
         must_not_call:
-          - "terminal.exec"
-          - "apply_patch"
+          - "terminal_exec"
+          - "file_apply_patch"
   - id: multi_step_todo_discipline
     title: Multi-step readonly task uses todo discipline
     stage: deep
     category: flower_contract
     turns:
-      - "Perform a 3-step readonly repository audit for ${workspace}: identify entrypoints, name one risky area, and describe one verification command. Use read_file, find, or rgrep for evidence, and keep your todo list updated while you work."
+      - "Perform a 3-step readonly repository audit for ${workspace}: identify entrypoints, name one risky area, and describe one verification command. Use file_read, find, or rgrep for evidence, and keep your todo list updated while you work."
     runtime:
       permission_type: readonly
       timeout_seconds: 50
@@ -133,14 +133,14 @@ tasks:
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "read_file"
+          - "file_read"
           - "write_todos"
         must_succeed:
-          - "read_file"
+          - "file_read"
           - "write_todos"
         must_not_call:
-          - "terminal.exec"
-          - "apply_patch"
+          - "terminal_exec"
+          - "file_apply_patch"
         max_calls: 14
       todos:
         require_snapshot: true
@@ -153,7 +153,7 @@ tasks:
     stage: deep
     category: flower_contract
     turns:
-      - "Run a compact readonly investigation of ${workspace}: inspect the README with read_file, inspect one source directory with find or rgrep, name one harmless verification command you would run, and summarize the result with evidence paths. Keep any tool logs out of the final prose."
+      - "Run a compact readonly investigation of ${workspace}: inspect the README with file_read, inspect one source directory with find or rgrep, name one harmless verification command you would run, and summarize the result with evidence paths. Keep any tool logs out of the final prose."
     runtime:
       permission_type: readonly
       timeout_seconds: 50
@@ -180,12 +180,12 @@ tasks:
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "read_file"
+          - "file_read"
         must_succeed:
-          - "read_file"
+          - "file_read"
         must_not_call:
-          - "terminal.exec"
-          - "apply_patch"
+          - "terminal_exec"
+          - "file_apply_patch"
         max_calls: 14
   - id: continue_context_followup
     title: Continue preserves thread context
@@ -217,12 +217,12 @@ tasks:
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "read_file"
+          - "file_read"
         must_succeed:
-          - "read_file"
+          - "file_read"
         must_not_call:
-          - "terminal.exec"
-          - "apply_patch"
+          - "terminal_exec"
+          - "file_apply_patch"
         max_calls: 14
   - id: readonly_no_user_interaction_closeout
     title: Readonly no-user-interaction run closes with blockers
@@ -253,5 +253,5 @@ tasks:
       tools:
         must_not_call:
           - "ask_user"
-          - "terminal.exec"
-          - "apply_patch"
+          - "terminal_exec"
+          - "file_apply_patch"

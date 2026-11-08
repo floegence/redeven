@@ -76,7 +76,7 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 						}
 					}
 					if !found {
-						t.Error("shared image.read absent from provider tools")
+						t.Error("shared image_read absent from provider tools")
 					}
 					args := map[string]any{"file_path": "source.png"}
 					if index == 3 {

@@ -912,7 +912,7 @@ async function runScenarios(page, config, telemetry) {
   const s02 = await remember('S02', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const token = marker('EXEC');
-    const sent = await sendPrompt(page, `You MUST call terminal.exec exactly once with command "sleep 3; printf ${token}" and a concise description. Do not simulate the result. After the tool succeeds, reply with ${token} as plain text. Do not call any other tool.`, { visibleMarker: token });
+    const sent = await sendPrompt(page, `You MUST call terminal_exec exactly once with command "sleep 3; printf ${token}" and a concise description. Do not simulate the result. After the tool succeeds, reply with ${token} as plain text. Do not call any other tool.`, { visibleMarker: token });
     const tool = surface.locator('[data-flower-activity-item-id]').first();
     await tool.waitFor({ state: 'visible', timeout: 180_000 });
     const contextProgress = surface.locator('.flower-composer-context-progress').last();
@@ -932,7 +932,7 @@ async function runScenarios(page, config, telemetry) {
     await startNewThread(page); await setPermission(page, 'approval_required');
     const token = marker('APPROVE');
     const output = path.join(config.workspace, 'approval-approved.txt');
-    const sent = await sendPrompt(page, `You MUST call terminal.exec exactly once to run "printf ${token} | tee ${output}" with a concise description. Then report success as plain text. Do not call any other tool.`, { visibleMarker: token });
+    const sent = await sendPrompt(page, `You MUST call terminal_exec exactly once to run "printf ${token} | tee ${output}" with a concise description. Then report success as plain text. Do not call any other tool.`, { visibleMarker: token });
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'approval waiting');
     const card = await threadCard(page, sent.threadID);
     if (await card.getAttribute('data-flower-thread-action-required') !== 'true') throw new Error('thread rail did not expose approval attention');
@@ -947,7 +947,7 @@ async function runScenarios(page, config, telemetry) {
   const s04 = await remember('S04', async () => {
     await startNewThread(page); await setPermission(page, 'approval_required');
     const token = marker('REJECT');
-    const sent = await sendPrompt(page, `You MUST call terminal.exec once to run "printf ${token}". If the user rejects it, acknowledge the rejection as plain text without treating it as a failure. Do not call any other tool.`, { visibleMarker: token });
+    const sent = await sendPrompt(page, `You MUST call terminal_exec once to run "printf ${token}". If the user rejects it, acknowledge the rejection as plain text without treating it as a failure. Do not call any other tool.`, { visibleMarker: token });
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'rejection approval waiting');
     await approveCurrent(page, false);
     await waitForThreadTerminal(page, sent.threadID, 180_000, { allowFailed: true, turnID: sent.turnID });
@@ -994,7 +994,7 @@ async function runScenarios(page, config, telemetry) {
   await remember('S06', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const normal = marker('ASK_CHOICE');
-    const sentNormal = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane using response_mode "select_or_write", choices_exhaustive false, and exactly two fixed choices: Alpha and Beta. Leave write_label out. After the answer, reply ${normal}. Call no other tool.`, { visibleMarker: normal });
+    const sentNormal = await sendPrompt(page, `Call user_ask exactly once. Ask for a deployment lane using response_mode "select_or_write", choices_exhaustive false, and exactly two fixed choices: Alpha and Beta. Leave write_label out. After the answer, reply ${normal}. Call no other tool.`, { visibleMarker: normal });
     const prompt = surface.locator('[data-flower-input-request-prompt]');
     await prompt.waitFor({ state: 'visible', timeout: 180_000 });
     await startNewThread(page); await selectThread(page, sentNormal.threadID);
@@ -1006,7 +1006,7 @@ async function runScenarios(page, config, telemetry) {
 
     await startNewThread(page); await setPermission(page, 'full_access');
     const other = marker('ASK_OTHER');
-    const sentOther = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane using response_mode "select_or_write", choices_exhaustive false, exactly two fixed choices Alpha and Beta, and write_label "Other" for custom text. After a custom answer, reply ${other}. Call no other tool.`, { visibleMarker: other });
+    const sentOther = await sendPrompt(page, `Call user_ask exactly once. Ask for a deployment lane using response_mode "select_or_write", choices_exhaustive false, exactly two fixed choices Alpha and Beta, and write_label "Other" for custom text. After a custom answer, reply ${other}. Call no other tool.`, { visibleMarker: other });
     const otherPrompt = surface.locator('[data-flower-input-request-prompt]');
     await otherPrompt.waitFor({ state: 'visible', timeout: 180_000 });
     await otherPrompt.locator('[data-flower-input-answer-kind="custom"]').click();
@@ -1021,7 +1021,7 @@ async function runScenarios(page, config, telemetry) {
   await remember('S07', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const token = marker('TODO');
-    const sent = await sendPrompt(page, `Use write_todos to create exactly three concise actions. Keep at most one in_progress, then update all three to completed. Finally reply ${token} as plain text. Do not call any other tool after write_todos.`, { visibleMarker: token });
+    const sent = await sendPrompt(page, `Use todo_write to create exactly three concise actions. Keep at most one in_progress, then update all three to completed. Finally reply ${token} as plain text. Do not call any other tool after todo_write.`, { visibleMarker: token });
     const finalActivity = surface.locator('[data-flower-activity-item-id]').filter({ hasText: /3\/3 completed/iu }).last();
     await finalActivity.waitFor({ state: 'visible', timeout: 180_000 });
     await finalActivity.locator('.flower-activity-inline-button').click();
@@ -1040,7 +1040,7 @@ async function runScenarios(page, config, telemetry) {
   await remember('S08', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const first = marker('QUEUE_RUN');
-    const sent = await sendPrompt(page, `Call terminal.exec exactly once with command "sleep 12; printf ${first}". After it finishes, reply ${first} as plain text. Do not call any other tool.`, { visibleMarker: first });
+    const sent = await sendPrompt(page, `Call terminal_exec exactly once with command "sleep 12; printf ${first}". After it finishes, reply ${first} as plain text. Do not call any other tool.`, { visibleMarker: first });
     const stopRunning = surface.locator('[data-flower-primary-action="stop"]');
     await stopRunning.waitFor({ state: 'visible', timeout: 10_000 });
     const q1 = marker('QUEUE_ONE'); const q2 = marker('QUEUE_TWO');
@@ -1090,14 +1090,14 @@ async function runScenarios(page, config, telemetry) {
   await remember('S09', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const runToken = marker('PIN_RUNNING');
-    const running = await sendPrompt(page, `Call terminal.exec once with command "sleep 12; printf ${runToken}". After it finishes, reply ${runToken}. Call no other tool.`, { visibleMarker: runToken });
+    const running = await sendPrompt(page, `Call terminal_exec once with command "sleep 12; printf ${runToken}". After it finishes, reply ${runToken}. Call no other tool.`, { visibleMarker: runToken });
     // The model may stream the terminal marker only after the action completes;
     // qualify the running lifecycle state instead of requiring a fixed text order.
     await waitFor(async () => ['running', 'waiting_approval'].includes(await selectedStatus(page)), 180_000, 'pin running state');
     await waitForThreadTerminal(page, running.threadID, 180_000, { turnID: running.turnID });
     await startNewThread(page); await setPermission(page, 'approval_required');
     const approvalToken = marker('PIN_APPROVAL');
-    const waiting = await sendPrompt(page, `Call terminal.exec with "printf ${approvalToken}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: approvalToken });
+    const waiting = await sendPrompt(page, `Call terminal_exec with "printf ${approvalToken}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: approvalToken });
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'pin approval waiting');
     for (const threadID of [running.threadID, waiting.threadID]) {
       const card = await threadCard(page, threadID); await card.hover();
@@ -1191,7 +1191,7 @@ async function runScenarios(page, config, telemetry) {
     await waitFor(async () => await items.count() === 1, 10_000, 'one attachment remains after removal');
     if (!await keepItem.isVisible()) throw new Error('remaining attachment disappeared before send');
     const token = marker('ATTACHMENT');
-    const sent = await sendPrompt(page, `Use attachment.read to read the remaining attachment and reply with its marker plus ${token} as plain text. Do not call any other tool after attachment.read.`, { visibleMarker: token });
+    const sent = await sendPrompt(page, `Use attachment_read to read the remaining attachment and reply with its marker plus ${token} as plain text. Do not call any other tool after attachment_read.`, { visibleMarker: token });
     const sentChips = surface.locator(`[data-flower-message-id="${sent.userID}"] [data-flower-chat-context-chip="true"]`);
     await sentChips.filter({ hasText: 'attachment-keep' }).waitFor({ state: 'visible' });
     if (await sentChips.filter({ hasText: 'attachment-remove.txt' }).count()) throw new Error('removed attachment was sent');
@@ -1202,15 +1202,15 @@ async function runScenarios(page, config, telemetry) {
 
   await remember('S14', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
-    const tokenA = marker('SWITCH_A'); const a = await sendPrompt(page, `Call terminal.exec once with command "sleep 12; printf ${tokenA}". After it finishes, reply ${tokenA}. Call no other tool.`, { visibleMarker: tokenA });
+    const tokenA = marker('SWITCH_A'); const a = await sendPrompt(page, `Call terminal_exec once with command "sleep 12; printf ${tokenA}". After it finishes, reply ${tokenA}. Call no other tool.`, { visibleMarker: tokenA });
     await waitFor(async () => {
       const response = await canonicalThread(page, a.threadID);
       const evidence = canonicalEvidence(response);
       const current = response.body?.data?.current;
-      return evidence.status === 'running' && current?.items?.some((item) => item.kind === 'tool' && item.activity?.tool_name === 'terminal.exec' && item.activity?.status === 'running');
+      return evidence.status === 'running' && current?.items?.some((item) => item.kind === 'tool' && item.activity?.tool_name === 'terminal_exec' && item.activity?.status === 'running');
     }, 180_000, 'switch source executing terminal');
     await startNewThread(page); await setPermission(page, 'approval_required');
-    const tokenB = marker('SWITCH_B'); const b = await sendPrompt(page, `Call terminal.exec exactly once with "printf ${tokenB}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: tokenB });
+    const tokenB = marker('SWITCH_B'); const b = await sendPrompt(page, `Call terminal_exec exactly once with "printf ${tokenB}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: tokenB });
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'recovery companion approval');
     await selectThread(page, a.threadID); await selectThread(page, b.threadID); await selectThread(page, a.threadID);
     const terminal = await waitForThreadTerminal(page, a.threadID, 180_000, {
@@ -1239,8 +1239,8 @@ async function runScenarios(page, config, telemetry) {
     const checkpoints = [];
     const sent = await sendPrompt(page, [
       'Work through exactly two sequential safe terminal steps.',
-      `First reason about the first step, then call terminal.exec exactly once with command "sleep 2; printf ${firstToken}" and wait for its result.`,
-      `Only after the first result, reason about the second step, then call terminal.exec exactly once with command "sleep 2; printf ${secondToken}" and wait for its result.`,
+      `First reason about the first step, then call terminal_exec exactly once with command "sleep 2; printf ${firstToken}" and wait for its result.`,
+      `Only after the first result, reason about the second step, then call terminal_exec exactly once with command "sleep 2; printf ${secondToken}" and wait for its result.`,
       `Only after both results, reply exactly ${firstToken}_${secondToken} as plain text.`,
       'Do not emit assistant text before or between tool calls. Put planning only in reasoning. Emit assistant text only after both tool results.',
       'Do not call both tools together. Do not call any other tool.',
@@ -1257,13 +1257,13 @@ async function runScenarios(page, config, telemetry) {
         const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
         const approval = orderedPendingApprovalForTool(current, tools[0]);
         return tools.length === 1
-          && tools[0]?.activity?.tool_name === 'terminal.exec'
+          && tools[0]?.activity?.tool_name === 'terminal_exec'
           && Boolean(approval)
           && orderedToolCommand(current, tools[0]).includes(`printf ${firstToken}`);
       },
     );
     const firstTool = firstWaiting.canonical_items.find((item) => item.kind === 'tool');
-    if (!firstTool) throw new Error('S15 first terminal.exec evidence is missing');
+    if (!firstTool) throw new Error('S15 first terminal_exec evidence is missing');
     await approveCurrent(page, true);
     await orderedPresentationCheckpoint(
       page, config, sent.threadID, 's15-03-tool-1-complete', checkpoints, scenarioStarted,
@@ -1290,14 +1290,14 @@ async function runScenarios(page, config, telemetry) {
         const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
         const approval = orderedPendingApprovalForTool(current, tools[1]);
         return tools.length === 2
-          && tools.every((item) => item?.activity?.tool_name === 'terminal.exec')
+          && tools.every((item) => item?.activity?.tool_name === 'terminal_exec')
           && tools[0]?.activity?.status === 'success'
           && Boolean(approval)
           && orderedToolCommand(current, tools[1]).includes(`printf ${secondToken}`);
       },
     );
     const secondTool = secondWaiting.canonical_items.filter((item) => item.kind === 'tool')[1];
-    if (!secondTool) throw new Error('S15 second terminal.exec evidence is missing');
+    if (!secondTool) throw new Error('S15 second terminal_exec evidence is missing');
     await approveCurrent(page, true);
     await orderedPresentationCheckpoint(
       page, config, sent.threadID, 's15-06-tool-2-complete', checkpoints, scenarioStarted,

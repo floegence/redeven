@@ -73,7 +73,7 @@ func (f flowerPermissionToolFilter) FilterTools(permissionType FlowerPermissionT
 			continue
 		}
 		switch name {
-		case "ask_user":
+		case "user_ask":
 			if !f.allowUserInteraction {
 				continue
 			}

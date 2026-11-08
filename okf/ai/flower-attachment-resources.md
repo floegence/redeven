@@ -23,7 +23,7 @@ Historical reads revalidate membership and bytes. Upload/image lookup uses curre
 
 Floret v7.51.1 exposes user and confirmed tool descriptors canonically. Retention distinguishes tool media from uploads; never parse image refs as upload rows.
 
-attachment.materialize requires current execution/canonical authorization, RWX and normal write policy. Create a unique regular scratch copy using cancellable 32 KiB streaming with exact size/SHA-256; image locators retain bounded validation. Failure deletes private staging, repeated names never overwrite edited copies, and output exposes only the work path.
+attachment_materialize requires current execution/canonical authorization, RWX and normal write policy. Create a unique regular scratch copy using cancellable 32 KiB streaming with exact size/SHA-256; image locators retain bounded validation. Failure deletes private staging, repeated names never overwrite edited copies, and output exposes only the work path.
 
 ## Lifetime
 Cleanup removes work copies, never original inputs/images. Retained references permit rematerialization after cleanup/restart/compaction/parent deletion. Historical Fork inherits refs only through its canonical cut and separately copies current scratch/staging. Product settings/claims publish transactionally without another admitted-message map.

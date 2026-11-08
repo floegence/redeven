@@ -60,7 +60,7 @@ function environmentMetadataContent(environment: DesktopEnvironmentEntry, label:
     `Kind: ${environment.kind}`,
     `Environment ID: ${environment.id}`,
     `Target ID: ${environmentFlowerPrimaryTargetID(environment)}`,
-    'This selection identifies the device requested by the user; it does not change where terminal.exec runs.',
+    'This selection identifies the device requested by the user; it does not change where terminal_exec runs.',
     trimString(environment.local_ui_url) ? `Local UI URL: ${trimString(environment.local_ui_url)}` : '',
     trimString(environment.cloud_origin) ? `Provider origin: ${trimString(environment.cloud_origin)}` : '',
     trimString(environment.cloud_id) ? `Provider ID: ${trimString(environment.cloud_id)}` : '',

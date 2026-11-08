@@ -29,7 +29,7 @@ type preparedModelWire struct {
 
 // Freeze the SDK-rendered body once. Estimation and dispatch use these exact
 // bytes, including tool aliases, reasoning controls and restored signatures.
-func newPreparedModelWire(providerType, model string, format flprovider.RequestFormat, params any, req ModelGatewayRequest, aliases providerToolAliases, execute func(context.Context, ModelGatewayRequest, []byte, func(StreamEvent)) (ModelGatewayResult, error)) (*preparedModelWire, error) {
+func newPreparedModelWire(providerType, model string, format flprovider.RequestFormat, params any, req ModelGatewayRequest, aliases providerToolContract, execute func(context.Context, ModelGatewayRequest, []byte, func(StreamEvent)) (ModelGatewayResult, error)) (*preparedModelWire, error) {
 	raw, err := json.Marshal(params)
 	if err != nil {
 		return nil, err

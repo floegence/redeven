@@ -9,6 +9,8 @@ import (
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
+
+	"github.com/floegence/redeven/internal/ai/toolnames"
 )
 
 type runToolSurface struct {
@@ -63,7 +65,7 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 				continue
 			}
 			for _, saved := range cfg.InitialProviderSurface.ToolDefinitions {
-				if saved.Name == activeTools[i].Name {
+				if toolnames.Historical(saved.Name) == activeTools[i].Name {
 					activeTools[i].InputSchema = toolSchemaRaw(saved.InputSchema)
 					break
 				}

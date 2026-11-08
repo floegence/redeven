@@ -46,7 +46,7 @@ type Options struct {
 
 	// ToolAllowlist is an internal runtime guard that limits the visible tool surface
 	// for the current run. It is intended for runtime-owned callers such as evals and
-	// subagents rather than general user-facing requests.
+	// subagent_manage rather than general user-facing requests.
 	ToolAllowlist []string `json:"tool_allowlist,omitempty"`
 
 	// PermissionType controls the run tool surface and approval policy.
