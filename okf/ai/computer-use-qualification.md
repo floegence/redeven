@@ -3,7 +3,7 @@ type: Acceptance Contract
 title: Computer use product qualification
 tags: [ai, computer-use, desktop, testing]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -15,7 +15,7 @@ Qualify Computer through built renderer, Runtime, decoder and target adapter. Us
 Retain canonical results,fixture events,frames,hashes,cleanup and original assertion/model/product failures. Never repeat until green. Native/provider/foreground suites remain explicit outside ordinary/exact-main gates. Real Service/public UI verifies result-encoding loss after one counted effect/invalid optional result. Browser/native share pre-input cancel/revoke and terminal unknown-ack behavior.
 
 ## DeepSeek
-TestComputerReliabilityDeepSeek uses production Service/Floret,configured deepseek-flash (local V4.1 Flash1017),catalog Chromium,no substitute. Require REDEVEN_COMPUTER_RELIABILITY_E2E=1,absolute REDEVEN_COMPUTER_CONFIG_ROOT/EVIDENCE_DIR,REDEVEN_BROWSER_TEST_INSTALLATION. Run GOWORK=off go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m. Repeat1..5(default1);browser-only may -parallel3. Native:REDEVEN_COMPUTER_NATIVE_E2E=1,released Swift helper,serialized desktop;absolute REDEVEN_COMPUTER_NATIVE_TEST_HOST may select baseline. Preserve config/secret hashes/user threads.
+TestComputerReliabilityDeepSeek uses production Service/Floret,configured deepseek-flash (local V4.1 Flash1017),catalog Chromium,no substitute. Require REDEVEN_COMPUTER_RELIABILITY_E2E=1,absolute REDEVEN_COMPUTER_CONFIG_ROOT/EVIDENCE_DIR,REDEVEN_BROWSER_TEST_INSTALLATION. Run GOWORK=off go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m. Repeat1..5(default1);browser-only may -parallel3. Native:REDEVEN_COMPUTER_NATIVE_E2E=1,serialized desktop;all native fixture/model tests require absolute REDEVEN_COMPUTER_NATIVE_TEST_HOST selecting the staged relay beside its signed Desktop Access application. Build the released Swift dependency and stage with scripts/stage_desktop_access.mjs plus a stable signing identity; grant that application explicitly before capture/input qualification. A bare build is not a permission carrier. Protocol-only qualification stages a disposable signed application and requests no grants. Preserve config/secret hashes/user threads.
 
 Decode Floret ERROR/host envelope via ThreadToolResultReader. Script diagnostics require data.script_error; pre-dispatch rejection distinct. Prose/logs never replace execution; completed waits survive guest faults.
 

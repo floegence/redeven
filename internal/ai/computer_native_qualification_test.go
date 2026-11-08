@@ -19,6 +19,21 @@ import (
 	"time"
 )
 
+// Native qualification must select the exact signed application carrier whose
+// permissions the operator granted, rather than silently using a bare build.
+func computerNativeQualificationHost(t *testing.T) string {
+	t.Helper()
+	helper := os.Getenv("REDEVEN_COMPUTER_NATIVE_TEST_HOST")
+	if !filepath.IsAbs(helper) {
+		t.Fatal("set REDEVEN_COMPUTER_NATIVE_TEST_HOST to the absolute staged relay path beside its signed Desktop Access application")
+	}
+	info, err := os.Stat(helper)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		t.Fatalf("qualification helper must be an executable file: %s (%v)", helper, err)
+	}
+	return helper
+}
+
 func prepareComputerEntryFixture(t *testing.T, modes ...string) (string, func() map[string]any) {
 	t.Helper()
 	if runtime.GOOS != "darwin" || os.Getenv("REDEVEN_COMPUTER_NATIVE_E2E") != "1" {
@@ -92,15 +107,12 @@ func TestComputerNativeApplicationEntryQualification(t *testing.T) {
 	if runtime.GOOS != "darwin" || os.Getenv("REDEVEN_COMPUTER_NATIVE_E2E") != "1" {
 		t.Skip("explicit native fixture required")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	helper := computerNativeQualificationHost(t)
 	for _, mode := range []string{"single", "no_window", "multiple", "minimized"} {
 		t.Run(mode, func(t *testing.T) {
 			name, read := prepareComputerEntryFixture(t, mode)
 			host, _, _, _ := computerBindingFixture(t)
-			native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
+			native := NewNativeDesktopTargetExecutor(helper)
 			host.executors["desktop-main"] = native
 			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.targets"}
 			call.Arguments, _ = json.Marshal(map[string]any{"application": name})
@@ -148,6 +160,7 @@ func TestComputerNativeScriptQualification(t *testing.T) {
 	if runtime.GOOS != "darwin" || os.Getenv("REDEVEN_COMPUTER_NATIVE_E2E") != "1" {
 		t.Skip("explicit native fixture required")
 	}
+	helper := computerNativeQualificationHost(t)
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +209,7 @@ func TestComputerNativeScriptQualification(t *testing.T) {
 	if initial == nil {
 		t.Fatal("fixture unavailable")
 	}
-	native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
+	native := NewNativeDesktopTargetExecutor(helper)
 	t.Cleanup(func() { _ = native.Close() })
 	var target TargetDescriptor
 	deadline = time.Now().Add(10 * time.Second)
@@ -281,10 +294,7 @@ func TestComputerNativeDragQualification(t *testing.T) {
 	if runtime.GOOS != "darwin" || os.Getenv("REDEVEN_COMPUTER_NATIVE_E2E") != "1" {
 		t.Skip("explicit native fixture required")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	helper := computerNativeQualificationHost(t)
 	for _, item := range []struct {
 		name     string
 		duration int
@@ -295,7 +305,7 @@ func TestComputerNativeDragQualification(t *testing.T) {
 		t.Run(item.name, func(t *testing.T) {
 			name, read := prepareComputerEntryFixture(t, "drag")
 			host, _, _, _ := computerBindingFixture(t)
-			native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
+			native := NewNativeDesktopTargetExecutor(helper)
 			host.executors["desktop-main"] = native
 			t.Cleanup(func() { _ = native.Close() })
 			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.targets"}
@@ -403,19 +413,9 @@ func TestComputerNativeFocusChangeQualification(t *testing.T) {
 	if runtime.GOOS != "darwin" || os.Getenv("REDEVEN_COMPUTER_NATIVE_E2E") != "1" {
 		t.Skip("explicit native fixture required")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	helper := computerNativeQualificationHost(t)
 	name, read := prepareComputerEntryFixture(t, "focus_change")
 	host, _, _, _ := computerBindingFixture(t)
-	helper := filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host")
-	if override := os.Getenv("REDEVEN_COMPUTER_NATIVE_TEST_HOST"); override != "" {
-		if !filepath.IsAbs(override) {
-			t.Fatal("absolute qualification helper required")
-		}
-		helper = override
-	}
 	native := NewNativeDesktopTargetExecutor(helper)
 	host.executors["desktop-main"] = native
 	t.Cleanup(func() { _ = native.Close() })

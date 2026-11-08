@@ -8,7 +8,7 @@ import { SUPPORTED_LOCALES } from '../i18n/localeMeta';
 import { loadEnvAppDictionary } from '../i18n/locales';
 import { writeStoredLanguagePreference } from '../i18n/storage';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
-import { HostAccessFeatureSettings, HostAccessManagement, HostAccessPermissions, HostAccessWelcome } from './HostAccessControls';
+import { HostAccessFeatureSettings, HostAccessManagement, HostAccessPermissions, HostAccessSystemPermissions, HostAccessWelcome } from './HostAccessControls';
 
 const media = commands as unknown as { emulateMediaPreferences: (preferences: { forcedColors?: 'active' | 'none'; reducedMotion?: 'reduce' | 'no-preference' }) => Promise<void> };
 
@@ -288,4 +288,21 @@ it('preserves feature intent and refreshes after explicit helper recovery', asyn
  expect(state.permission).toHaveBeenLastCalledWith('restart_application');
  expect(state.access).toBe('enabled'); expect(state.desktopAccess).toBe('paused');
  expect(state.save).not.toHaveBeenCalled(); expect(state.launch).not.toHaveBeenCalled();
+});
+
+
+it.each([
+ ['screen_recording', 'Allow screen display'],
+ ['accessibility', 'Allow mouse and keyboard'],
+] as const)('offers explicit Settings navigation after an unanswered %s request in management', async (permission, label) => {
+ await page.viewport(640, 850); writeStoredLanguagePreference('en-US');
+ const host = document.createElement('main'); document.body.append(host);
+ const request = vi.fn();
+ dispose = render(() => <I18nProvider><HostAccessSystemPermissions permissionAppName="Redeven Desktop Access Dev" screen={false} input={false} allowed busy={false} onPermission={request} /></I18nProvider>, host);
+ await userEvent.click(page.getByText('Manage system permissions', {exact: true}));
+ await userEvent.click(page.getByRole('button', {name: label, exact: true}));
+ expect(request).toHaveBeenCalledExactlyOnceWith(permission, false);
+ await userEvent.click(page.getByRole('button', {name: 'Open system settings', exact: true}));
+ expect(request).toHaveBeenLastCalledWith(permission, true);
+ expect(host.querySelector('[role=status]')?.textContent).toContain('This page checks automatically');
 });

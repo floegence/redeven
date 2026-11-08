@@ -54,7 +54,9 @@ REDEVEN_COMPUTER_BUNDLE_QUALIFICATION=1 node --test scripts/stage_computer_resou
 if [[ "$(uname -s)" == Darwin ]]; then
   swift test --package-path desktop/native/computer-host
   swift build -c release --package-path desktop/native/computer-host
-  node scripts/check_macos_computer_protocol.mjs desktop/native/computer-host/.build/release/redeven-computer-host
+  cp desktop/native/computer-host/.build/release/redeven-computer-host "$temporary/redeven-computer-host"
+  node scripts/stage_desktop_access.mjs "$temporary/redeven-computer-host" "$temporary/Redeven Desktop Access Dev.app"
+  node scripts/check_macos_computer_protocol.mjs "$temporary/redeven-computer-host"
 fi
 
 # The foreground macOS fixture and paired online benchmark remain explicit

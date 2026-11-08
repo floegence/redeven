@@ -65,12 +65,15 @@ export function HostAccessSystemPermissions(props: {
     onPermission: (permission: 'screen_recording' | 'accessibility', manage?: boolean) => void;
 }) {
     const i18n = useI18n();
+    const [requested, setRequested] = createSignal<Array<'screen_recording' | 'accessibility'>>([]);
+    const granted = (permission: 'screen_recording' | 'accessibility') => permission === 'screen_recording' ? props.screen : props.input;
     return <details class="host-access-system"><summary>{i18n.t('hostAccess.systemSettings')}</summary>
       <HostAccessPermissionDestination name={props.permissionAppName} />
       <For each={['screen_recording', 'accessibility'] as const}>{permission => <div class="host-access-system-row">
-        <div><strong>{i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission')}</strong><span>{i18n.t((permission === 'screen_recording' ? props.screen : props.input) ? 'hostAccess.allowed' : 'hostAccess.required')}</span></div>
-        <Button size="sm" variant="outline" disabled={!props.allowed || props.busy} onClick={() => props.onPermission(permission, permission === 'screen_recording' ? props.screen : props.input)}>{i18n.t((permission === 'screen_recording' ? props.screen : props.input) ? 'hostAccess.openSystemSettings' : permission === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
+        <div><strong>{i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission')}</strong><span>{i18n.t((granted(permission)) ? 'hostAccess.allowed' : 'hostAccess.required')}</span></div>
+        <Button size="sm" variant="outline" disabled={!props.allowed || props.busy} onClick={() => { const manage = granted(permission) || requested().includes(permission); if (!manage) setRequested(previous => [...previous, permission]); props.onPermission(permission, manage); }}>{i18n.t((granted(permission) || requested().includes(permission)) ? 'hostAccess.openSystemSettings' : permission === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
       </div>}</For>
+      <Show when={requested().some(permission => !granted(permission))}><p role="status">{i18n.t('hostAccess.requestPending')}</p></Show>
       <p>{i18n.t('hostAccess.sharedPermissions')}</p>
       <Show when={props.onRecovery}><HostAccessRecovery name={props.permissionAppName} allowed={props.allowed} busy={props.busy} onRecovery={props.onRecovery!} /></Show>
     </details>;

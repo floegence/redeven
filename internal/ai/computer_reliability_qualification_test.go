@@ -465,6 +465,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				var nativeName string
 				var nativeFacts func() map[string]any
 				if scenario == "native_entry" || scenario == "native_tree" || strings.HasPrefix(scenario, "native_drag") {
+					nativeHelper := computerNativeQualificationHost(t)
 					if strings.HasPrefix(scenario, "native_drag") {
 						mode := "drag"
 						if scenario == "native_drag_focus_change" {
@@ -474,8 +475,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					} else {
 						nativeName, nativeFacts = prepareComputerEntryFixture(t)
 					}
-					root, _ := filepath.Abs("../..")
-					native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
+					native := NewNativeDesktopTargetExecutor(nativeHelper)
 					runtime.executors["desktop-main"] = native
 					if err := registry.Register(TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen"}); err != nil {
 						t.Fatal(err)
