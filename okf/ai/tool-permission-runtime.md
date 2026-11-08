@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: AI tool permissions and dispatch
 tags: [ai, tools, permissions, dispatch]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -18,6 +18,22 @@ resolution and effect authorization. Published Floret owns bounded correction an
 paired model feedback; Redeven reuses its existing [child action validator](subagent-runtime.md).
 Projector failures remain contract failures. Stateful permission, storage and
 business failures retain their owner classifications and never imply safe replay.
+
+## Model-visible guidance
+Redeven owns canonical-to-provider name mapping and strict-schema omission
+rendering. Keep one short mapping per renamed tool; do not rewrite prompt/history
+literals. Null-to-omit guidance belongs only to adapter-added nullable fields;
+native nullable values remain values. Frozen transport retries replay identical
+rendered bytes. Product resource identity and action contracts remain local to
+the tool or owning parameter, without repeating them at both levels.
+
+Measure the final permission-filtered HTTP tools array, not the complete registry
+or source lines. [Budget tests](../../internal/ai/tool_definition_budget_test.go)
+cover full-access, readonly and Computer-disabled Service turns, including input
+control, attachments and Goal. They pin tool membership and allow about 3-4%
+growth; they never truncate descriptions at runtime. These fixtures exclude
+configured search, MCP and plugin authoring surfaces. Computer defaults remain
+three tools; explicit/historical primitives retain their separate contract.
 
 ## Diagnostic ownership
 Classify owner-typed/cancel/deadline/filesystem errors; unknown wording stays UNKNOWN/source text. Keywords cannot infer resource, authority, retry or replacement args. Owners resolve authorized relative/home paths. Keep patch diagnostics; removing unused suggested-fix inference proves no model-quality gain.
@@ -52,3 +68,16 @@ Flower must not infer remote execution from thread context alone; it can only cl
 
 - Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.
 - internal/ai/patch_prompt_qualification_test.go uses the isolated live-model lane for multi-chunk, order and duplicate-header recovery. Patches run only in memory; proposed tools never execute. Small samples do not establish production failure rates.
+
+- 2026-11-08 evidence: against `16f0a9854`, compact default tool JSON decreased
+  from 37,465 to 35,293 bytes (DeepSeek) and 45,063 to 40,515 (strict Responses),
+  with all 37 tools retained. Bytes are not tokens, latency or success rates.
+- [Synthetic live probes](../../internal/ai/tool_guidance_qualification_test.go)
+  never execute proposals. Three repeats per case on configured DeepSeek Flash:
+  baseline 9/9; final candidate 8/9, with one cancellation-count misinterpretation.
+  Child inspection and direct service identity each passed 3/3. A proposed
+  subagents description compression was withdrawn after inconsistent cancellation
+  interpretation; its original definition remains intact. No model-quality gain
+  is established. Strict behavior is covered by deterministic provider tests,
+  not a live OpenAI qualification. `REDEVEN_FLOWER_PROMPT_PROVIDER_ID` selects an
+  explicit qualification profile without changing the product selection.

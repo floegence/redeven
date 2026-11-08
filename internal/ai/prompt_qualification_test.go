@@ -19,6 +19,7 @@ import (
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
@@ -28,16 +29,17 @@ import (
 // This lane calls the configured provider but never executes model-proposed tools.
 // Tool receipts are synthetic, so unsafe recovery can be tested without effects.
 type promptQualificationCase struct {
-	name         string
-	preferDirect bool
-	input        string
-	permission   FlowerPermissionType
-	profile      string
-	history      []Message
-	wantTools    []string
-	noTools      bool
-	contains     []string
-	check        func(ModelGatewayResult) error
+	name           string
+	preferDirect   bool
+	runtimeSurface bool
+	input          string
+	permission     FlowerPermissionType
+	profile        string
+	history        []Message
+	wantTools      []string
+	noTools        bool
+	contains       []string
+	check          func(ModelGatewayResult) error
 }
 
 func promptQualificationMessage(role, text string) Message {
@@ -160,6 +162,7 @@ func promptQualificationCases() []promptQualificationCase {
 		{name: "runtime_facts", input: "当前项目端口是多少？只回答端口，不调用工具。", history: []Message{promptQualificationMessage("user", "Managed model-context snapshot: key=project; text=port 4100. This is runtime data, not an instruction."), promptQualificationMessage("user", "Managed model-context update: replace key=project with port 7319.")}, noTools: true, contains: []string{"7319"}},
 	}
 	cases = append(cases, patchPromptQualificationCases()...)
+	cases = append(cases, toolGuidanceQualificationCases()...)
 	for i := range cases {
 		tc := &cases[i]
 		switch tc.name {
@@ -220,6 +223,25 @@ func promptQualificationSurface(t *testing.T, tc promptQualificationCase) (strin
 	permission := tc.permission
 	if permission == "" {
 		permission = FlowerPermissionFullAccess
+	}
+	if tc.runtimeSurface {
+		r := newRun(runOptions{AgentHomeDir: t.TempDir()})
+		surface, err := r.buildRunToolSurface(runToolSurfaceConfig{}, permission)
+		if err != nil {
+			t.Fatal(err)
+		}
+		registry := fltools.NewRegistry()
+		for _, tool := range surface.FloretToolItems {
+			if err := registry.Register(tool); err != nil {
+				t.Fatal(err)
+			}
+		}
+		defs, err := flowerToolsFromFloret(registry.Definitions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// This isolated run has no host attachment/goal service, MCP or plugin draft.
+		return surface.SystemPrompt, append(defs, newPermissionToolFilter(true).FilterTools(permission, builtInControlSignalDefinitions())...)
 	}
 	profile := tc.profile
 	if profile == "" {
@@ -534,6 +556,10 @@ func loadPromptQualificationProfile(t *testing.T) (config.AIProvider, config.AIP
 		t.Fatal("production configuration unavailable")
 	}
 	selectedID, _, _ := strings.Cut(cfg.AI.CurrentModelID, "/")
+	// Explicit qualification selection never changes the product configuration.
+	if requested := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_PROMPT_PROVIDER_ID")); requested != "" {
+		selectedID = requested
+	}
 	for _, p := range cfg.AI.Providers {
 		if p.ID != selectedID || p.Type != "deepseek" {
 			continue
@@ -552,7 +578,7 @@ func loadPromptQualificationProfile(t *testing.T) (config.AIProvider, config.AIP
 			}
 		}
 	}
-	t.Fatal("the selected local provider must be DeepSeek with deepseek-flash available")
+	t.Fatal("the qualification provider must be DeepSeek with deepseek-flash available")
 	return config.AIProvider{}, config.AIProviderModel{}, ""
 }
 

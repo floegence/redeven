@@ -166,7 +166,7 @@ func compileStrictArgumentRule(schema map[string]any, depth int) (*strictArgumen
 				if description != "" {
 					description += " "
 				}
-				description += "Use null to omit this optional argument."
+				description += "Null to omit."
 				delete(child, "description")
 				properties[name] = map[string]any{"anyOf": []any{child, map[string]any{"type": "null"}}, "description": description}
 				childRule.omitNull = true

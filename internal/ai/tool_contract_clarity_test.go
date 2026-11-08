@@ -81,13 +81,13 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 				"computer_exec":    {"SCRIPT_OPERATION_LIMIT", "completed effects", "thread/turn/target", "without clearing"},
 				"image_read":       {"width", "height", "10 MiB", "32 megapixels"},
 				"web_fetch":        {"known URL"},
-				"subagents":        {"send_input requires target and message", "close requires target", "status/inspect require target or ids", "wait requires ids", "including earlier turns", "deduplicated union", "starts a new turn", "Neither deletes threads"},
+				"subagents":        {"direct child", "including earlier turns", "deduplicated union", "starts a new turn", "Neither deletes threads or history", "not rollback of child effects", "accepted/accepted_count", "stopped/stopped_count", "Already-terminal", "handoffs[].content", "items[].failure"},
 				"subagent_events":  {"current parent thread", "earlier turns"},
-				"tessiven_inspect": {"binding", "managed_service", "not canvas instance IDs", "port_forward", "Matching names or ports", "complete", "issues"},
+				"tessiven_inspect": {"binding", "managed_service", "service_id", "not a canvas instance ID", "port_forward", "Names/ports do not prove identity", "complete=false", "issues", "omit canvas fields", "logs/operation reuse", "authorized connection", "never substitute targets"},
 				"tessiven_action":  {"open prepares", "neither launches a browser nor starts a stopped service", "operation_id"},
 			} {
 				for _, phrase := range phrases {
-					if !strings.Contains(strings.ToLower(fmt.Sprint(functions[name]["description"])), strings.ToLower(phrase)) {
+					if !strings.Contains(strings.ToLower(toolGuidanceText(functions[name])), strings.ToLower(phrase)) {
 						t.Errorf("%s omits %q", name, phrase)
 					}
 				}
@@ -128,7 +128,7 @@ func TestToolContractClarityAtProviderBoundary(t *testing.T) {
 					t.Fatal(err)
 				}
 				if strict {
-					if !required || validator.Validate(nil) != nil || !strings.Contains(fmt.Sprint(property["description"]), "Use null to omit this optional argument") {
+					if !required || validator.Validate(nil) != nil || !(strings.Contains(strings.ToLower(fmt.Sprint(property["description"])), "null") && strings.Contains(fmt.Sprint(property["description"]), "omit")) {
 						t.Errorf("%s.%s has no clear strict omission contract: %#v", tc.name, tc.field, property)
 					}
 				} else if required {
@@ -214,4 +214,30 @@ func TestComputerOperationLimitRetainsConfirmedPrefix(t *testing.T) {
 	if err == nil || calls != 50 || p["completed"] != false || p["script_error"] != "SCRIPT_OPERATION_LIMIT" || p["budget_exhausted"] != "operations" || p["context_reset"] != true || len(completed) != 50 {
 		t.Fatalf("operation limit lost confirmed effects: calls=%d result=%#v err=%v", calls, p, err)
 	}
+}
+
+// Facts may live in the tool description or the owning parameter. Do not require
+// the same instructions at both levels merely to preserve their old placement.
+func toolGuidanceText(value any) string {
+	var parts []string
+	var visit func(any)
+	visit = func(value any) {
+		switch node := value.(type) {
+		case map[string]any:
+			if text, ok := node["description"].(string); ok {
+				parts = append(parts, text)
+			}
+			for key, child := range node {
+				if key != "description" {
+					visit(child)
+				}
+			}
+		case []any:
+			for _, child := range node {
+				visit(child)
+			}
+		}
+	}
+	visit(value)
+	return strings.Join(parts, "\n")
 }

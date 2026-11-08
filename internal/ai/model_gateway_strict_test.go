@@ -247,3 +247,35 @@ func TestStrictArgumentsFrozenWithPreparedRequest(t *testing.T) {
 		})
 	}
 }
+
+// Adapter-added omission guidance must stay local to fields that gain nullability.
+// Native nullable values remain values, including nested object fields.
+func TestStrictOmissionGuidanceIsBoundedAndFieldLocal(t *testing.T) {
+	def := strictFixtureTool()
+	wire, _, err := prepareOpenAIToolSchemas([]ToolDef{def}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(wire[0].InputSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	props := schema["properties"].(map[string]any)
+	for _, name := range []string{"optional", "choice", "items", "zero", "empty", "false"} {
+		description, _ := props[name].(map[string]any)["description"].(string)
+		if !strings.Contains(strings.ToLower(description), "null") || !strings.Contains(description, "omit") || len(description) > 16 {
+			t.Errorf("%s needs concise field-local omission guidance: %q", name, description)
+		}
+	}
+	items := props["items"].(map[string]any)["anyOf"].([]any)[0].(map[string]any)["items"].(map[string]any)
+	nested := items["properties"].(map[string]any)
+	flag, _ := nested["flag"].(map[string]any)["description"].(string)
+	if !strings.Contains(strings.ToLower(flag), "null") || !strings.Contains(flag, "omit") || len(flag) > 16 || nested["id"].(map[string]any)["description"] != nil {
+		t.Fatalf("nested omission guidance changed required/optional meaning: %#v", nested)
+	}
+	for _, name := range []string{"required", "nullable"} {
+		if props[name].(map[string]any)["description"] != nil {
+			t.Errorf("%s acquired false omission guidance", name)
+		}
+	}
+}

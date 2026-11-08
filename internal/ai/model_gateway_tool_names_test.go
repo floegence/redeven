@@ -44,8 +44,11 @@ func TestProviderToolNameGuidanceUsesRegisteredAliases(t *testing.T) {
 				}
 				continue
 			}
-			if !strings.HasPrefix(actual.description, definition.Description) || !strings.Contains(actual.description, "`"+definition.Name+"`") || !strings.Contains(actual.description, "Invoke it as `"+wanted[i]+"`") {
+			if !strings.HasPrefix(actual.description, definition.Description) || !strings.Contains(actual.description, "`"+definition.Name+"`") || !strings.Contains(actual.description, "`"+wanted[i]+"`") {
 				t.Errorf("description omits registered mapping: %q", actual.description)
+			}
+			if len(actual.description)-len(definition.Description) > len(definition.Name)+len(actual.name)+40 {
+				t.Errorf("name guidance exceeds its fixed overhead budget: %q", actual.description)
 			}
 		}
 	}

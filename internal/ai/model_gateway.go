@@ -2941,7 +2941,7 @@ func (a providerToolAliases) wireDescription(canonical, description string) stri
 	if wire == "" || wire == canonical {
 		return description
 	}
-	guidance := fmt.Sprintf("Tool name mapping: `%s` in instructions or documentation refers to this tool. Invoke it as `%s`.", canonical, wire)
+	guidance := fmt.Sprintf("Documentation name: `%s`. Call `%s`.", canonical, wire)
 	if strings.TrimSpace(description) == "" {
 		return guidance
 	}
