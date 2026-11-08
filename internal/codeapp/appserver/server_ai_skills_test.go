@@ -25,8 +25,9 @@ func TestServer_AISkills_CRUDAndToggle(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
+	stateDir := t.TempDir()
 	skillName := "appserver-skill"
-	skillDir := filepath.Join(homeDir, ".redeven", "skills", skillName)
+	skillDir := filepath.Join(stateDir, "apps", "skills", "packages", skillName)
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("mkdir skill dir: %v", err)
 	}
@@ -51,7 +52,6 @@ description: test skill
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger:       logger,
 		StateDir:     stateDir,
@@ -172,7 +172,8 @@ func TestServer_AISkills_PermissionModel(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
-	skillDir := filepath.Join(homeDir, ".redeven", "skills", "perm-skill")
+	stateDir := t.TempDir()
+	skillDir := filepath.Join(stateDir, "apps", "skills", "packages", "perm-skill")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("mkdir skill dir: %v", err)
 	}
@@ -181,7 +182,6 @@ func TestServer_AISkills_PermissionModel(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger:       logger,
 		StateDir:     stateDir,
@@ -292,6 +292,7 @@ func TestServer_AISkills_GitHubImportAndBrowse(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
+	stateDir := t.TempDir()
 
 	zipBuf := &bytes.Buffer{}
 	zw := zip.NewWriter(zipBuf)
@@ -336,7 +337,6 @@ description: Install remote skills
 	t.Setenv("REDEVEN_AGENT_AI_SKILLS_GITHUB_REPO_BASE_URL", gh.URL)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger:       logger,
 		StateDir:     stateDir,

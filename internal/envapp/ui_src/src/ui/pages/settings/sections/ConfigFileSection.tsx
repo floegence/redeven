@@ -2,6 +2,7 @@ import { createMemo } from 'solid-js';
 import { FileCode, FileText } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, CopyButton, SettingRow } from '../SettingsPrimitives';
+import { StorageSettings } from '../StorageSettings';
 import { useI18n } from '../../../i18n';
 
 export function ConfigFileSection() {
@@ -28,6 +29,7 @@ export function ConfigFileSection() {
           </div>}
         />
       </SettingsList>
+      <StorageSettings canAdmin={ctx.canAdmin() && ctx.canInteract()} scope={configPath()} openFlower={() => ctx.setActiveSection('ai')} openTooling={() => ctx.setActiveSection('codespaces')} />
     </SettingsSection>
   );
 }

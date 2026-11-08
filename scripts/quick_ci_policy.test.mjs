@@ -63,6 +63,8 @@ test("repository instructions link to existing maintained knowledge", () => {
 });
 
 const allowedQuickGateCommands = new Set([
+  "node scripts/check_storage_ownership.mjs",
+  "python3 -m unittest discover -s scripts/tests -p test_storage_relocation.py",
   "#!/usr/bin/env bash",
   "set -euo pipefail",
   "python3 -m unittest discover -s scripts/tests -p 'test_local_gate*.py'",

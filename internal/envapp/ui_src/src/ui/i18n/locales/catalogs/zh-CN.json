@@ -8242,5 +8242,58 @@
     "openSystemSettings": "打开系统设置",
     "needsAttention": "需要完成设置",
     "controlMode": "鼠标和键盘"
+  },
+  "storage": {
+    "title": "存储管理",
+    "loading": "正在检查…",
+    "inspect": "检查存储",
+    "scope": "此处仅显示环境存储。Desktop 偏好、共享技能、外部项目及容器卷独立管理。容量统计不代表备份已验证。",
+    "failed": "无法检查存储，请重试刷新。",
+    "absent": "尚未创建",
+    "unavailable": "不可用",
+    "partial": "统计未完成，显示的是容量下限。",
+    "flower": "Flower 恢复",
+    "tooling": "编辑器安装包",
+    "cleanup": "请在所属功能中清理数据。会话备份不包含扩展配置及任务工作文件。",
+    "owners": {
+      "configuration": "配置与身份",
+      "credentials": "凭据",
+      "flower": "Flower",
+      "plugins": "应用插件",
+      "skills": "托管技能",
+      "computer": "电脑与浏览器",
+      "task_files": "任务工作文件",
+      "services": "Web 服务",
+      "service_registry": "服务登记",
+      "code": "CodeSpace",
+      "notes": "笔记",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "终端",
+      "favorites": "目录收藏",
+      "read_state": "会话已读状态",
+      "plugin_drafts": "插件草稿",
+      "snapshots": "恢复快照",
+      "cache": "缓存",
+      "runtime": "运行时协调状态",
+      "audit": "审计",
+      "diagnostics": "诊断"
+    },
+    "kinds": {
+      "identity": "身份与设置",
+      "persistent": "持久数据",
+      "mixed": "混合生命周期",
+      "working": "工作文件",
+      "recovery": "恢复数据",
+      "cache": "可重建缓存",
+      "logs": "日志"
+    },
+    "backups": {
+      "environment": "纳入环境备份",
+      "partial_flower": "Flower 恢复仅覆盖部分内容",
+      "flower": "Flower 恢复覆盖",
+      "rebuildable": "可重新生成",
+      "optional": "按需保留诊断"
+    }
   }
 }

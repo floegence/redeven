@@ -8246,5 +8246,58 @@
     "openSystemSettings": "Abrir ajustes del sistema",
     "needsAttention": "Configuración pendiente",
     "controlMode": "Ratón y teclado"
+  },
+  "storage": {
+    "title": "Almacenamiento",
+    "loading": "Inspeccionando…",
+    "inspect": "Inspeccionar almacenamiento",
+    "scope": "Solo almacenamiento del entorno. Las preferencias de Desktop, habilidades compartidas, proyectos externos y volúmenes de contenedores se gestionan aparte. Los tamaños no verifican las copias de seguridad.",
+    "failed": "No se pudo inspeccionar el almacenamiento. Inténtalo de nuevo.",
+    "absent": "Sin crear",
+    "unavailable": "No disponible",
+    "partial": "Medición parcial; el tamaño es un límite inferior.",
+    "flower": "Recuperación de Flower",
+    "tooling": "Paquetes del editor",
+    "cleanup": "Limpia los datos desde la función correspondiente. Las copias de conversaciones no incluyen ajustes de extensiones ni archivos de trabajo.",
+    "owners": {
+      "configuration": "Configuración e identidad",
+      "credentials": "Credenciales",
+      "flower": "Flower",
+      "plugins": "Plugins de aplicaciones",
+      "skills": "Habilidades administradas",
+      "computer": "Ordenador y navegador",
+      "task_files": "Archivos de trabajo",
+      "services": "Servicios web",
+      "service_registry": "Registro de servicios",
+      "code": "CodeSpace",
+      "notes": "Notas",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "Terminal",
+      "favorites": "Directorios favoritos",
+      "read_state": "Estado de lectura",
+      "plugin_drafts": "Borradores de plugins",
+      "snapshots": "Instantáneas de recuperación",
+      "cache": "Caché",
+      "runtime": "Coordinación del motor",
+      "audit": "Auditoría",
+      "diagnostics": "Diagnóstico"
+    },
+    "kinds": {
+      "identity": "Identidad y ajustes",
+      "persistent": "Datos persistentes",
+      "mixed": "Ciclos de vida mixtos",
+      "working": "Archivos de trabajo",
+      "recovery": "Datos de recuperación",
+      "cache": "Caché regenerable",
+      "logs": "Registros"
+    },
+    "backups": {
+      "environment": "Incluir en la copia del entorno",
+      "partial_flower": "Cubierto parcialmente por Flower",
+      "flower": "Cubierto por la recuperación de Flower",
+      "rebuildable": "Se puede regenerar",
+      "optional": "Conservación opcional del diagnóstico"
+    }
   }
 }

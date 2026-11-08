@@ -8,6 +8,8 @@ Repository knowledge derived from current source, generated contracts and releas
 
 ## Architecture
 
+- [Product storage placement and lifecycle](architecture/storage-ownership.md)
+
 - [Applications keyboard, pointer and composition](architecture/host-application-input.md)
 - [Applications viewing, display and resource lifetime](architecture/host-application-viewer.md)
 - [service release discovery and version selection](architecture/managed-service-release-discovery.md)

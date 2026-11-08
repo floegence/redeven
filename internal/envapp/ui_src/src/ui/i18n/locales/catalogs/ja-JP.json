@@ -8242,5 +8242,58 @@
     "openSystemSettings": "システム設定を開く",
     "needsAttention": "設定の確認が必要",
     "controlMode": "マウスとキーボード"
+  },
+  "storage": {
+    "title": "ストレージ",
+    "loading": "確認中…",
+    "inspect": "ストレージを確認",
+    "scope": "環境のストレージのみを表示します。Desktop の設定、共有スキル、外部プロジェクト、コンテナーボリュームは別管理です。容量表示はバックアップ検証ではありません。",
+    "failed": "ストレージを確認できませんでした。再試行してください。",
+    "absent": "未作成",
+    "unavailable": "利用不可",
+    "partial": "計測が未完了のため、容量の下限を表示しています。",
+    "flower": "Flower の復元",
+    "tooling": "エディターパッケージ",
+    "cleanup": "削除は各機能で行ってください。会話のバックアップには拡張機能の設定とタスクの作業ファイルは含まれません。",
+    "owners": {
+      "configuration": "設定と識別情報",
+      "credentials": "認証情報",
+      "flower": "Flower",
+      "plugins": "アプリプラグイン",
+      "skills": "管理対象スキル",
+      "computer": "コンピューターとブラウザー",
+      "task_files": "タスク作業ファイル",
+      "services": "Web サービス",
+      "service_registry": "サービス登録",
+      "code": "CodeSpace",
+      "notes": "ノート",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "ターミナル",
+      "favorites": "フォルダーのお気に入り",
+      "read_state": "会話の既読状態",
+      "plugin_drafts": "プラグインの下書き",
+      "snapshots": "復元スナップショット",
+      "cache": "キャッシュ",
+      "runtime": "ランタイムの調整状態",
+      "audit": "監査",
+      "diagnostics": "診断"
+    },
+    "kinds": {
+      "identity": "識別情報と設定",
+      "persistent": "永続データ",
+      "mixed": "混在した保持期間",
+      "working": "作業ファイル",
+      "recovery": "復元データ",
+      "cache": "再生成可能なキャッシュ",
+      "logs": "ログ"
+    },
+    "backups": {
+      "environment": "環境バックアップに含める",
+      "partial_flower": "Flower 復元の対象は一部のみ",
+      "flower": "Flower 復元の対象",
+      "rebuildable": "再生成可能",
+      "optional": "診断の保持は任意"
+    }
   }
 }

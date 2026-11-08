@@ -26,7 +26,7 @@ func modelContextSnapshotText(snapshot *flruntime.ModelContextSnapshot) string {
 }
 func writeContextTestSkill(t *testing.T, root, description string) {
 	t.Helper()
-	path := filepath.Join(root, ".redeven", "skills", "complete-context")
+	path := filepath.Join(root, "apps", "skills", "packages", "complete-context")
 	if err := os.MkdirAll(path, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestFlowerContextRejectionReleasesAdmissionAndAllowsCorrectedRetry(t *testi
 		return func() { released.Add(1) }, nil
 	})
 	svc.skillManager.userHome = svc.agentHomeDir
-	writeContextTestSkill(t, svc.agentHomeDir, strings.Repeat("界", 65_000))
+	writeContextTestSkill(t, svc.stateDir, strings.Repeat("界", 65_000))
 	req := SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "correctable-context", Input: RunInput{Text: "Analyze the supplied prompt without changing files."}}
 	_, err = svc.SendUserTurn(t.Context(), meta, req)
 	if err == nil || !strings.Contains(err.Error(), "cannot be admitted") {
@@ -88,7 +88,7 @@ func TestFlowerContextRejectionReleasesAdmissionAndAllowsCorrectedRetry(t *testi
 	if err != nil || authority != nil {
 		t.Fatalf("invalid input acquired execution authority: %+v, %v", authority, err)
 	}
-	writeContextTestSkill(t, svc.agentHomeDir, "Corrected context")
+	writeContextTestSkill(t, svc.stateDir, "Corrected context")
 	req.Input.Text = "Analyze the supplied prompt with corrected context."
 	response, err := svc.SendUserTurn(t.Context(), meta, req)
 	if err != nil || response.Kind != "start" {

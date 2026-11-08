@@ -204,6 +204,7 @@ import { canReuseFreshRuntimeOpenPreflight, canAttemptKnownRuntimeBridge, runtim
 import { localHostRuntimeLifecyclePlacement } from './localRuntimePlacement';
 import {
   resolveConfiguredDesktopCacheRoot,
+  desktopProductCacheRoot,
   resolveConfiguredDesktopTempRoot,
   resolveConfiguredDesktopUserDataRoot,
 } from './statePaths';
@@ -1042,11 +1043,11 @@ const hostApplicationPreparations = new HostApplicationPreparationWindows<Deskto
   record => Boolean(liveTrackedBrowserWindow(record)),
   record => liveTrackedBrowserWindow(record)?.close(),
 );
-const browserPackages = new BrowserPackages(bundledRuntimeExecutablePath, () => path.join(app.getPath('userData'), 'browser-package-cache'));
+const browserPackages = new BrowserPackages(bundledRuntimeExecutablePath, () => path.join(desktopProductCacheRoot(), 'browser-package-cache'));
 const browserPackageOwners = new Set<number>();
 const remoteDesktopDeployment = new RemoteDesktopDeployment();
 const remoteDesktopDeploymentOwners = new Set<number>();
-const hostApplicationComponents = new HostApplicationComponents(bundledRuntimeExecutablePath, () => path.join(app.getPath('userData'), 'native-application-components'));
+const hostApplicationComponents = new HostApplicationComponents(bundledRuntimeExecutablePath, () => path.join(desktopProductCacheRoot(), 'native-application-components'));
 const hostApplicationComponentOwners = new Set<number>();
 const observedPreparationWindows = new WeakSet<BrowserWindow>();
 const hostApplicationPreparationObservers = new Set<number>();
@@ -13049,11 +13050,11 @@ function resolveSSHRuntimeReleaseTag(): string {
 }
 
 function desktopRuntimePackageCacheRoot(): string {
-  return runtimePackageCacheRoot(app.getPath('userData'));
+  return runtimePackageCacheRoot(desktopProductCacheRoot());
 }
 
 function desktopCodeWorkspaceEnginePackageCacheRoot(): string {
-  return codeWorkspaceEnginePackageCacheRoot(app.getPath('userData'));
+  return codeWorkspaceEnginePackageCacheRoot(desktopProductCacheRoot());
 }
 
 type DesktopCodeWorkspaceEnginePackagePlatform = Parameters<typeof prepareCodeWorkspaceEnginePackage>[0]['platform'];
@@ -19466,7 +19467,7 @@ if (!app.requestSingleInstanceLock()) {
     queueDesktopDeepLink(url);
   });
 
-  const resourceCache = new DesktopResourceCache(path.join(app.getPath('userData'), 'resource-cache'));
+  const resourceCache = new DesktopResourceCache(path.join(desktopProductCacheRoot(), 'resource-cache'));
   ipcMain.handle(DESKTOP_RESOURCE_CACHE_CHANNEL, async (event, request: unknown) => {
     const record = sessionRecordForWebContentsID(event.sender.id);
     if (!record || record.closing || event.senderFrame !== event.sender.mainFrame || record.root_window.webContentsID !== event.sender.id) {

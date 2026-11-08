@@ -252,8 +252,8 @@ description: Install remote skills
 		Repo:            "openai/skills",
 		Ref:             "main",
 		RepoPath:        "skills/.curated/skill-installer",
-		TargetDir:       filepath.Join(workspace, ".redeven", "skills", "skill-installer"),
-		TargetSkillPath: filepath.Join(workspace, ".redeven", "skills", "skill-installer", "SKILL.md"),
+		TargetDir:       filepath.Join(stateDir, "apps", "skills", "packages", "skill-installer"),
+		TargetSkillPath: filepath.Join(stateDir, "apps", "skills", "packages", "skill-installer", "SKILL.md"),
 	}}
 	input := resolvedGitHubImportInput{
 		scope:     "user",
@@ -279,7 +279,7 @@ func TestSkillManager_BrowsePathEscape(t *testing.T) {
 
 	workspace := t.TempDir()
 	stateDir := t.TempDir()
-	skillDir := filepath.Join(workspace, ".redeven", "skills", "manual")
+	skillDir := filepath.Join(stateDir, "apps", "skills", "packages", "manual")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("mkdir skill dir: %v", err)
 	}

@@ -272,6 +272,10 @@ func (c *RemoteDesktopConfig) RememberApproval() bool {
 	return c == nil || !c.ApprovalPreferenceSet || c.Unattended
 }
 
+// IMPORTANT: Config is one atomic identity/recovery transaction, not a portable
+// preferences document. Do not split cloud binding, outbox or one-shot artifacts
+// across independently written files. Export only sanitized settings, never this
+// envelope. Directory reorganization cannot change these security semantics.
 // Config is the runtime configuration for Redeven. Runtime-managed one-shot
 // artifacts remain opaque but are intentionally persisted here for recovery;
 // user-provided provider keys are loaded separately from secrets.json.

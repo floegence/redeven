@@ -8242,5 +8242,58 @@
     "openSystemSettings": "開啟系統設定",
     "needsAttention": "需要完成設定",
     "controlMode": "滑鼠與鍵盤"
+  },
+  "storage": {
+    "title": "儲存空間管理",
+    "loading": "正在檢查…",
+    "inspect": "檢查儲存空間",
+    "scope": "此處僅顯示環境儲存空間。Desktop 偏好設定、共用技能、外部專案與容器磁碟區分別管理。容量統計不代表備份已通過驗證。",
+    "failed": "無法檢查儲存空間，請重試重新整理。",
+    "absent": "尚未建立",
+    "unavailable": "無法使用",
+    "partial": "統計尚未完成，顯示的是容量下限。",
+    "flower": "Flower 復原",
+    "tooling": "編輯器安裝套件",
+    "cleanup": "請在所屬功能中清理資料。對話備份不包含擴充功能設定與任務工作檔案。",
+    "owners": {
+      "configuration": "設定與身分",
+      "credentials": "憑證",
+      "flower": "Flower",
+      "plugins": "應用程式外掛",
+      "skills": "受管理技能",
+      "computer": "電腦與瀏覽器",
+      "task_files": "任務工作檔案",
+      "services": "Web 服務",
+      "service_registry": "服務登錄",
+      "code": "CodeSpace",
+      "notes": "筆記",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "終端機",
+      "favorites": "目錄收藏",
+      "read_state": "對話已讀狀態",
+      "plugin_drafts": "外掛草稿",
+      "snapshots": "復原快照",
+      "cache": "快取",
+      "runtime": "執行階段協調狀態",
+      "audit": "稽核",
+      "diagnostics": "診斷"
+    },
+    "kinds": {
+      "identity": "身分與設定",
+      "persistent": "持久資料",
+      "mixed": "混合生命週期",
+      "working": "工作檔案",
+      "recovery": "復原資料",
+      "cache": "可重建快取",
+      "logs": "記錄"
+    },
+    "backups": {
+      "environment": "納入環境備份",
+      "partial_flower": "Flower 復原僅涵蓋部分內容",
+      "flower": "Flower 復原涵蓋",
+      "rebuildable": "可重新產生",
+      "optional": "視需要保留診斷"
+    }
   }
 }

@@ -12,6 +12,7 @@ Redeven consumes coordinated released ReDevPlugin Go/npm/Rust/machine artifacts.
 # Contract
 
 ## Ownership
+Product placement is `StateDir/apps/plugins/platform`; [storage ownership](storage-ownership.md) defines the pre-release offline relocation and admission gate.
 Upstream owns validation/hash/source identity, inspection/registry, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secrets, supervision/IPC/WASM, quotas/revocation, control state and releases/contracts. One coordinated release; frontend cannot downgrade independently. Manifests/dependency tests own pins; bootstrap retains bounded credentials before readiness. [Packages](redevplugin-package-lifecycle.md) owns admission/cache, [adapters](redevplugin-redeven-adapters.md) product modules/display.
 
 ## Availability

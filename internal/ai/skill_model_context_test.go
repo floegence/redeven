@@ -163,6 +163,9 @@ func TestSkillCatalogRepeatedDiscoveryKeepsStableOrderAndText(t *testing.T) {
 	for _, source := range []string{".agents", ".redeven"} {
 		for _, name := range []string{"zeta", "alpha", "middle"} {
 			dir := filepath.Join(root, source, "skills", name)
+			if source == ".redeven" {
+				dir = filepath.Join(mgr.managedRoot, name)
+			}
 			if err := os.MkdirAll(dir, 0700); err != nil {
 				t.Fatal(err)
 			}
@@ -285,5 +288,41 @@ func TestRequestCatalogObservesOtherManagerToggleAndSourceChanges(t *testing.T) 
 	}
 	if _, err := running.modelContextCatalog(t.Context(), "full_access"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSkillsManagedPackagesAndDecisionsStayInSelectedEnvironment(t *testing.T) {
+	home, first, second := t.TempDir(), t.TempDir(), t.TempDir()
+	a, b := newSkillManager(home, first), newSkillManager(home, second)
+	a.userHome, b.userHome = home, home
+	if _, err := a.Create("user", "private-skill", "Environment skill", "private body"); err != nil {
+		t.Fatal(err)
+	}
+	privatePath := filepath.Join(a.managedRoot, "private-skill", "SKILL.md")
+	if _, err := a.PatchToggles([]SkillTogglePatch{{Path: privatePath, Enabled: false}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Create("user_agents", "shared-skill", "Shared user skill", "shared body"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.modelContextCatalog(t.Context(), "full_access"); err != nil {
+		t.Fatal(err)
+	}
+	if containsContextTestSkill(b.List("full_access"), "private-skill") || !containsContextTestSkill(b.List("full_access"), "shared-skill") {
+		t.Fatal("Environment boundary or explicit shared scope changed")
+	}
+	if _, err := b.Delete("user", "private-skill"); err == nil {
+		t.Fatal("another Environment managed skill was removable")
+	}
+	if _, err := os.Stat(privatePath); err != nil {
+		t.Fatal("other Environment removed managed source", err)
+	}
+	reopened := newSkillManager(home, first)
+	reopened.userHome = home
+	if _, err := reopened.modelContextCatalog(t.Context(), "full_access"); err != nil {
+		t.Fatal(err)
+	}
+	if containsContextTestSkill(reopened.List("full_access"), "private-skill") {
+		t.Fatal("disabled decision did not survive reopening")
 	}
 }

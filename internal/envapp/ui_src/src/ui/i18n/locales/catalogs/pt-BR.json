@@ -8246,5 +8246,58 @@
     "openSystemSettings": "Abrir configurações do sistema",
     "needsAttention": "Configuração pendente",
     "controlMode": "Mouse e teclado"
+  },
+  "storage": {
+    "title": "Armazenamento",
+    "loading": "Inspecionando…",
+    "inspect": "Inspecionar armazenamento",
+    "scope": "Somente armazenamento do ambiente. Preferências do Desktop, habilidades compartilhadas, projetos externos e volumes de contêineres são gerenciados separadamente. Os tamanhos não validam backups.",
+    "failed": "Não foi possível inspecionar o armazenamento. Tente novamente.",
+    "absent": "Não criado",
+    "unavailable": "Indisponível",
+    "partial": "Medição parcial; o tamanho é um limite inferior.",
+    "flower": "Recuperação do Flower",
+    "tooling": "Pacotes do editor",
+    "cleanup": "Limpe os dados na função responsável. Backups de conversas não incluem configurações de extensões nem arquivos de trabalho.",
+    "owners": {
+      "configuration": "Configuração e identidade",
+      "credentials": "Credenciais",
+      "flower": "Flower",
+      "plugins": "Plugins de aplicativos",
+      "skills": "Habilidades gerenciadas",
+      "computer": "Computador e navegador",
+      "task_files": "Arquivos de trabalho",
+      "services": "Serviços web",
+      "service_registry": "Registro de serviços",
+      "code": "CodeSpace",
+      "notes": "Notas",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "Terminal",
+      "favorites": "Diretórios favoritos",
+      "read_state": "Estado de leitura",
+      "plugin_drafts": "Rascunhos de plugins",
+      "snapshots": "Instantâneos de recuperação",
+      "cache": "Cache",
+      "runtime": "Coordenação do mecanismo",
+      "audit": "Auditoria",
+      "diagnostics": "Diagnóstico"
+    },
+    "kinds": {
+      "identity": "Identidade e ajustes",
+      "persistent": "Dados persistentes",
+      "mixed": "Ciclos de vida mistos",
+      "working": "Arquivos de trabalho",
+      "recovery": "Dados de recuperação",
+      "cache": "Cache recriável",
+      "logs": "Logs"
+    },
+    "backups": {
+      "environment": "Incluir no backup do ambiente",
+      "partial_flower": "Parcialmente coberto pelo Flower",
+      "flower": "Coberto pela recuperação do Flower",
+      "rebuildable": "Pode ser recriado",
+      "optional": "Retenção opcional de diagnóstico"
+    }
   }
 }

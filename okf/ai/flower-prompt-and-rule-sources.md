@@ -55,3 +55,5 @@ Redeven owns Flower's product identity, output guidance and tool adaptation. Pub
 - redeven:internal/ai/prompt_builder.go
 
 - redeven:internal/ai/prompt_builder_tool_routing_test.go
+
+Managed skill placement and offline relocation follow [storage ownership](../architecture/storage-ownership.md); shared `.agents/skills` remains an explicit external scope.

@@ -3028,6 +3028,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/storage":
+		g.handleStorageInventory(w, r)
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/settings":
 		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 		if !ok {

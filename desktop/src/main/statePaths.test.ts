@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defaultLocalEnvironmentStateLayout,
+  desktopProductCacheRoot,
   localEnvironmentStateLayout,
   resolveConfiguredDesktopCacheRoot,
   resolveConfiguredDesktopTempRoot,
@@ -83,4 +84,9 @@ describe('statePaths', () => {
     const paths = await import('./statePaths');
     expect(Object.keys(paths).filter((key) => key.toLowerCase().includes('flower'))).toEqual([]);
   });
+});
+
+it('isolates product caches from user data and honors the cache override', () => {
+  expect(desktopProductCacheRoot({HOME: '/home/test', REDEVEN_STATE_ROOT: '/isolated', REDEVEN_DESKTOP_USER_DATA_ROOT: '/credentials'})).toBe('/isolated/cache/desktop');
+  expect(desktopProductCacheRoot({REDEVEN_DESKTOP_CACHE_ROOT: '/cache-only'})).toBe('/cache-only');
 });

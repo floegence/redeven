@@ -104,6 +104,9 @@ func TestCatalogReturnsDedicatedManagedWorkspaceWithoutCreatingIt(t *testing.T) 
 	}
 	seenWorkspaces := map[string]string{}
 	for _, template := range templates {
+		if template.DataLocation != "" {
+			t.Fatalf("template invents instance path: %q", template.DataLocation)
+		}
 		wantWorkspace := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", template.TemplateID)
 		if template.DefaultWorkspacePath != wantWorkspace || template.DefaultWorkspacePath == canonicalHome {
 			t.Fatalf("template %q workspace = %q, want %q", template.TemplateID, template.DefaultWorkspacePath, wantWorkspace)

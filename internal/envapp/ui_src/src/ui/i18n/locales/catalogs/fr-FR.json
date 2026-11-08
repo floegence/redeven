@@ -8246,5 +8246,58 @@
     "openSystemSettings": "Ouvrir les réglages système",
     "needsAttention": "Configuration à terminer",
     "controlMode": "Souris et clavier"
+  },
+  "storage": {
+    "title": "Stockage",
+    "loading": "Inspection…",
+    "inspect": "Inspecter le stockage",
+    "scope": "Stockage de l’environnement uniquement. Préférences Desktop, compétences partagées, projets externes et volumes de conteneurs sont séparés. Les tailles ne valident pas les sauvegardes.",
+    "failed": "Impossible d’inspecter le stockage. Réessayez.",
+    "absent": "Non créé",
+    "unavailable": "Indisponible",
+    "partial": "Mesure partielle ; la taille est une limite inférieure.",
+    "flower": "Restauration Flower",
+    "tooling": "Paquets de l’éditeur",
+    "cleanup": "Le nettoyage se fait dans la fonction concernée. Les sauvegardes des conversations excluent les réglages des extensions et les fichiers de travail.",
+    "owners": {
+      "configuration": "Configuration et identité",
+      "credentials": "Identifiants",
+      "flower": "Flower",
+      "plugins": "Plugins applicatifs",
+      "skills": "Compétences gérées",
+      "computer": "Ordinateur et navigateur",
+      "task_files": "Fichiers de travail",
+      "services": "Services web",
+      "service_registry": "Registre des services",
+      "code": "CodeSpace",
+      "notes": "Notes",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "Terminal",
+      "favorites": "Dossiers favoris",
+      "read_state": "État de lecture",
+      "plugin_drafts": "Brouillons de plugins",
+      "snapshots": "Instantanés de restauration",
+      "cache": "Cache",
+      "runtime": "Coordination du moteur",
+      "audit": "Audit",
+      "diagnostics": "Diagnostic"
+    },
+    "kinds": {
+      "identity": "Identité et réglages",
+      "persistent": "Données persistantes",
+      "mixed": "Cycles de vie mixtes",
+      "working": "Fichiers de travail",
+      "recovery": "Données de restauration",
+      "cache": "Cache régénérable",
+      "logs": "Journaux"
+    },
+    "backups": {
+      "environment": "Inclure dans la sauvegarde de l’environnement",
+      "partial_flower": "Partiellement couvert par Flower",
+      "flower": "Couvert par la restauration Flower",
+      "rebuildable": "Peut être régénéré",
+      "optional": "Conservation facultative des diagnostics"
+    }
   }
 }

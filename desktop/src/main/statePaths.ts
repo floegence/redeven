@@ -131,3 +131,12 @@ export function localEnvironmentStateLayout(
 ): DesktopLocalEnvironmentStateLayout {
   return defaultLocalEnvironmentStateLayout(env, homedir, override);
 }
+
+// IMPORTANT: Every product cache uses this root. Electron userData contains
+// credentials and preferences and must never be treated as a disposable cache.
+export function desktopProductCacheRoot(
+  env: NodeJS.ProcessEnv = process.env,
+  homedir: () => string = os.homedir,
+): string {
+  return resolveConfiguredDesktopCacheRoot(env) ?? path.join(resolveStateRoot(env, homedir), 'cache', 'desktop');
+}

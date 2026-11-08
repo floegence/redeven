@@ -524,7 +524,7 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		"plugin-data",
 		"assets",
 	} {
-		if _, err := os.Stat(filepath.Join(stateDir, rel)); err != nil {
+		if _, err := os.Stat(filepath.Join(stateDir, "apps", "plugins", "platform", rel)); err != nil {
 			t.Fatalf("expected durable state %s: %v", rel, err)
 		}
 	}
@@ -533,7 +533,7 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		"db/install_stage.sqlite", "db/confirmation_intents.sqlite", "db/session_scopes.sqlite",
 		"external-package-stage", "storage", "closed_sessions.json",
 	} {
-		if _, err := os.Stat(filepath.Join(stateDir, rel)); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(stateDir, "apps", "plugins", "platform", rel)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("obsolete state owner %s exists: %v", rel, err)
 		}
 	}

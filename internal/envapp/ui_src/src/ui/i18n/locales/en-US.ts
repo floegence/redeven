@@ -6,6 +6,59 @@ import { enUSActivityChrome } from './activityChrome';
 import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
+  storage: {
+  "title": "Storage",
+  "loading": "Inspecting…",
+  "inspect": "Inspect storage",
+  "scope": "Environment storage only. Desktop preferences, shared skills, external projects and container volumes are separate. Sizes are observations, not backup verification.",
+  "failed": "Storage could not be inspected. Retry to refresh.",
+  "absent": "Not created",
+  "unavailable": "Unavailable",
+  "partial": "Partial measurement; the size is a lower bound.",
+  "flower": "Flower recovery",
+  "tooling": "Editor packages",
+  "cleanup": "Cleanup stays with the owning feature. Conversation backups exclude extension configuration and task working files.",
+  "owners": {
+    "configuration": "Configuration and identity",
+    "credentials": "Credentials",
+    "flower": "Flower",
+    "plugins": "Application plugins",
+    "skills": "Managed skills",
+    "computer": "Computer and browser",
+    "task_files": "Task working files",
+    "services": "Web Services",
+    "service_registry": "Service registry",
+    "code": "CodeSpace",
+    "notes": "Notes",
+    "tessiven": "Tessiven",
+    "workbench": "Workbench",
+    "terminal": "Terminal",
+    "favorites": "Directory favorites",
+    "read_state": "Conversation read state",
+    "plugin_drafts": "Plugin drafts",
+    "snapshots": "Recovery snapshots",
+    "cache": "Cache",
+    "runtime": "Runtime coordination",
+    "audit": "Audit",
+    "diagnostics": "Diagnostics"
+  },
+  "kinds": {
+    "identity": "Identity and settings",
+    "persistent": "Persistent data",
+    "mixed": "Mixed lifecycle",
+    "working": "Working files",
+    "recovery": "Recovery data",
+    "cache": "Rebuildable cache",
+    "logs": "Logs"
+  },
+  "backups": {
+    "environment": "Include in environment backup",
+    "partial_flower": "Partly covered by Flower recovery",
+    "flower": "Covered by Flower recovery",
+    "rebuildable": "Can be regenerated",
+    "optional": "Optional diagnostic retention"
+  }
+},
   editContextMenu: {
       "undo": "Undo",
       "redo": "Redo",

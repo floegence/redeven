@@ -17,6 +17,7 @@ import (
 	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/storagecontract"
 	"github.com/floegence/redevplugin/v3/pkg/connectivity"
 	"github.com/floegence/redevplugin/v3/pkg/externalsource"
 	"github.com/floegence/redevplugin/v3/pkg/host"
@@ -113,7 +114,13 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 	if err := os.MkdirAll(stateAbs, 0o700); err != nil {
 		return nil, err
 	}
-	root := stateAbs
+	if err := storagecontract.CheckPluginPlacement(stateAbs); err != nil {
+		return nil, err
+	}
+	root := storagecontract.PluginRoot(stateAbs)
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return nil, err
+	}
 
 	var marketSnapshot *pluginmarket.Snapshot
 	if opts.PluginMarket != nil {

@@ -22,7 +22,7 @@ import (
 
 func writeSkillReadFixture(t *testing.T, root, description, body string) string {
 	t.Helper()
-	path := filepath.Join(root, ".redeven", "skills", "complete-context", "SKILL.md")
+	path := filepath.Join(root, "apps", "skills", "packages", "complete-context", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestSkillCatalogChangesInActualProviderRequests(t *testing.T) {
 	path := writeSkillReadFixture(t, root, "CATALOG_ORIGINAL", "BODY_ORIGINAL")
 	for i := range 24 {
 		name := fmt.Sprintf("fixture-%02d", i)
-		dir := filepath.Join(root, ".redeven", "skills", name)
+		dir := filepath.Join(root, "apps", "skills", "packages", name)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}

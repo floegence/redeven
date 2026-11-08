@@ -107,7 +107,7 @@ func TestSkillManager_BrowseLocalSymlinkEscape(t *testing.T) {
 	t.Parallel()
 	mgr := newSkillManager(t.TempDir(), t.TempDir())
 	mgr.userHome = t.TempDir()
-	root := filepath.Join(mgr.userHome, ".redeven", "skills", "manual")
+	root := filepath.Join(mgr.managedRoot, "manual")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}

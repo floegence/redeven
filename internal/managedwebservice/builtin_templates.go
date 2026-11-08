@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -223,16 +222,14 @@ func (m *Manager) builtInTemplates(ctx context.Context, probeRuntime bool) ([]Te
 			name, description = localized.Name, localized.Description
 		}
 		icon := definition.Icon
-		dataLocation := ""
-		if definition.Deployment == DeploymentHost {
-			dataLocation = filepath.Join(m.stateDir, "data", definition.ServiceFamilyID)
-		}
+		// IMPORTANT: A template has no instance identity. Never display a
+		// fabricated family path as the eventual instance data directory.
 		item := Template{
 			TemplateID: definition.TemplateID, ServiceFamilyID: definition.ServiceFamilyID,
 			Name: name, Description: description, Localizations: cloneLocalizations(definition.Localizations), Icon: &icon,
 			Notices:          append([]TemplateNotice(nil), definition.Notices...),
 			DeveloperPreview: definition.DeveloperPreview, DiskBytes: definition.DiskBytes,
-			DataLocation: dataLocation,
+			DataLocation: "",
 			SourceURL:    definition.SourceURL, DockerSourceURL: definition.DockerSourceURL,
 			Source: "builtin", Deployment: definition.Deployment, ContainerMode: definition.ContainerMode,
 			Revision: definition.Revision, Editable: false, Duplicateable: completeBuiltInDuplicateSpec(spec),

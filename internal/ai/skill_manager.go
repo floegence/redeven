@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/ai/agentplugins"
+	"github.com/floegence/redeven/internal/storagecontract"
 	"gopkg.in/yaml.v3"
 )
 
@@ -130,6 +131,7 @@ type skillManager struct {
 	mu               sync.RWMutex
 	workspace        string
 	userHome         string
+	managedRoot      string
 	statePath        string
 	sourcePath       string
 	discovered       map[string]SkillMeta
@@ -169,8 +171,8 @@ func newSkillManager(workspace string, stateDir string) *skillManager {
 	}
 	stateDir = strings.TrimSpace(stateDir)
 	if stateDir != "" {
-		path = filepath.Join(stateDir, "skills_state.json")
-		sourcePath = filepath.Join(stateDir, "skills_sources.json")
+		path = filepath.Join(storagecontract.SkillsRoot(stateDir), "state.json")
+		sourcePath = filepath.Join(storagecontract.SkillsRoot(stateDir), "sources.json")
 	}
 	if path != "" {
 		path = filepath.Clean(path)
@@ -180,6 +182,7 @@ func newSkillManager(workspace string, stateDir string) *skillManager {
 	}
 	return &skillManager{
 		workspace:        strings.TrimSpace(workspace),
+		managedRoot:      filepath.Join(storagecontract.SkillsRoot(stateDir), "packages"),
 		userHome:         strings.TrimSpace(home),
 		statePath:        path,
 		sourcePath:       sourcePath,
@@ -206,10 +209,11 @@ func newSkillManager(workspace string, stateDir string) *skillManager {
 }
 
 func (m *skillManager) roots() []skillDiscoveryRoot {
-	roots := make([]skillDiscoveryRoot, 0, 2)
+	// IMPORTANT: Redeven-managed skills follow the selected Environment.
+	// The explicit user_agents scope remains shared external user content.
+	roots := []skillDiscoveryRoot{{Path: m.managedRoot, Scope: "user"}}
 	if home := strings.TrimSpace(m.userHome); home != "" {
 		roots = append(roots,
-			skillDiscoveryRoot{Path: filepath.Join(home, ".redeven", "skills"), Scope: "user"},
 			skillDiscoveryRoot{Path: filepath.Join(home, ".agents", "skills"), Scope: "user_agents"},
 		)
 	}
@@ -380,10 +384,10 @@ func (m *skillManager) Delete(scope string, name string) (SkillCatalog, error) {
 func (m *skillManager) scopeRootLocked(scope string) (string, error) {
 	switch strings.TrimSpace(strings.ToLower(scope)) {
 	case "user":
-		if strings.TrimSpace(m.userHome) == "" {
+		if strings.TrimSpace(m.managedRoot) == "" {
 			return "", fmt.Errorf("user scope unavailable")
 		}
-		return filepath.Join(m.userHome, ".redeven", "skills"), nil
+		return m.managedRoot, nil
 	case "user_agents":
 		if strings.TrimSpace(m.userHome) == "" {
 			return "", fmt.Errorf("user scope unavailable")

@@ -8246,5 +8246,58 @@
     "openSystemSettings": "Systemeinstellungen öffnen",
     "needsAttention": "Einrichtung erforderlich",
     "controlMode": "Maus und Tastatur"
+  },
+  "storage": {
+    "title": "Speicher",
+    "loading": "Wird geprüft…",
+    "inspect": "Speicher prüfen",
+    "scope": "Nur Umgebungsspeicher. Desktop-Einstellungen, gemeinsame Skills, externe Projekte und Container-Volumes werden separat verwaltet. Größenangaben bestätigen keine Sicherung.",
+    "failed": "Speicher konnte nicht geprüft werden. Bitte erneut versuchen.",
+    "absent": "Nicht erstellt",
+    "unavailable": "Nicht verfügbar",
+    "partial": "Unvollständige Messung; die Größe ist eine Untergrenze.",
+    "flower": "Flower-Wiederherstellung",
+    "tooling": "Editorpakete",
+    "cleanup": "Bereinigung erfolgt in der zuständigen Funktion. Gesprächssicherungen enthalten weder Erweiterungseinstellungen noch Arbeitsdateien.",
+    "owners": {
+      "configuration": "Konfiguration und Identität",
+      "credentials": "Zugangsdaten",
+      "flower": "Flower",
+      "plugins": "Anwendungsplugins",
+      "skills": "Verwaltete Skills",
+      "computer": "Computer und Browser",
+      "task_files": "Arbeitsdateien",
+      "services": "Webdienste",
+      "service_registry": "Dienstregistrierung",
+      "code": "CodeSpace",
+      "notes": "Notizen",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "Terminal",
+      "favorites": "Ordnerfavoriten",
+      "read_state": "Lesestatus",
+      "plugin_drafts": "Pluginentwürfe",
+      "snapshots": "Wiederherstellungssnapshots",
+      "cache": "Cache",
+      "runtime": "Laufzeitkoordination",
+      "audit": "Audit",
+      "diagnostics": "Diagnose"
+    },
+    "kinds": {
+      "identity": "Identität und Einstellungen",
+      "persistent": "Dauerhafte Daten",
+      "mixed": "Gemischte Lebenszyklen",
+      "working": "Arbeitsdateien",
+      "recovery": "Wiederherstellungsdaten",
+      "cache": "Wiederherstellbarer Cache",
+      "logs": "Protokolle"
+    },
+    "backups": {
+      "environment": "In Umgebungssicherung aufnehmen",
+      "partial_flower": "Teilweise durch Flower-Wiederherstellung abgedeckt",
+      "flower": "Durch Flower-Wiederherstellung abgedeckt",
+      "rebuildable": "Neu erzeugbar",
+      "optional": "Optionale Diagnoseaufbewahrung"
+    }
   }
 }

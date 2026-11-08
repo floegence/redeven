@@ -8242,5 +8242,58 @@
     "openSystemSettings": "시스템 설정 열기",
     "needsAttention": "설정을 완료해야 함",
     "controlMode": "마우스와 키보드"
+  },
+  "storage": {
+    "title": "저장 공간",
+    "loading": "확인 중…",
+    "inspect": "저장 공간 확인",
+    "scope": "환경 저장 공간만 표시합니다. Desktop 설정, 공유 스킬, 외부 프로젝트 및 컨테이너 볼륨은 별도로 관리됩니다. 용량 표시는 백업 검증 결과가 아닙니다.",
+    "failed": "저장 공간을 확인하지 못했습니다. 다시 시도하세요.",
+    "absent": "생성되지 않음",
+    "unavailable": "사용 불가",
+    "partial": "측정이 완료되지 않아 용량의 하한값을 표시합니다.",
+    "flower": "Flower 복구",
+    "tooling": "편집기 패키지",
+    "cleanup": "데이터 정리는 해당 기능에서 수행하세요. 대화 백업에는 확장 기능 설정과 작업 파일이 포함되지 않습니다.",
+    "owners": {
+      "configuration": "설정 및 ID",
+      "credentials": "자격 증명",
+      "flower": "Flower",
+      "plugins": "앱 플러그인",
+      "skills": "관리형 스킬",
+      "computer": "컴퓨터 및 브라우저",
+      "task_files": "작업 파일",
+      "services": "웹 서비스",
+      "service_registry": "서비스 등록부",
+      "code": "CodeSpace",
+      "notes": "노트",
+      "tessiven": "Tessiven",
+      "workbench": "Workbench",
+      "terminal": "터미널",
+      "favorites": "디렉터리 즐겨찾기",
+      "read_state": "대화 읽음 상태",
+      "plugin_drafts": "플러그인 초안",
+      "snapshots": "복구 스냅샷",
+      "cache": "캐시",
+      "runtime": "런타임 조정 상태",
+      "audit": "감사",
+      "diagnostics": "진단"
+    },
+    "kinds": {
+      "identity": "ID 및 설정",
+      "persistent": "영구 데이터",
+      "mixed": "혼합 수명 주기",
+      "working": "작업 파일",
+      "recovery": "복구 데이터",
+      "cache": "재생성 가능한 캐시",
+      "logs": "로그"
+    },
+    "backups": {
+      "environment": "환경 백업에 포함",
+      "partial_flower": "Flower 복구가 일부만 포함",
+      "flower": "Flower 복구에 포함",
+      "rebuildable": "재생성 가능",
+      "optional": "진단 보관 선택 가능"
+    }
   }
 }

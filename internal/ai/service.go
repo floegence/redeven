@@ -29,6 +29,7 @@ import (
 	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/storagecontract"
 	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/threadreadstate"
 )
@@ -360,6 +361,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		}
 	}
 	agentHomeDir = scope.HomePathAbs()
+	if err := storagecontract.CheckSkillsPlacement(opts.StateDir); err != nil {
+		return nil, err
+	}
 	mcpManager, err := openMCPManager(opts.StateDir)
 	if err != nil {
 		return nil, err

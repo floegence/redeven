@@ -58,7 +58,7 @@ func TestAuthorWorkspaceRealHostInstallRecoveryAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	scope, err := integration.author.SourceScope(ctx, meta, draft.WorkspaceID)
-	if err != nil || scope.PrivateRoot != filepath.Join(options.StateDir, "author-workspaces") {
+	if err != nil || scope.PrivateRoot != filepath.Join(options.StateDir, "apps", "plugins", "platform", "author-workspaces") {
 		t.Fatalf("author source must not fence the entire product state root: %+v %v", scope, err)
 	}
 	if _, err = integration.author.AuthorOperation(ctx, meta, draft.WorkspaceID, "initialize", map[string]any{"plugin_id": "github.repo.42.created", "display_name": "Created", "template": "web"}); err == nil {
