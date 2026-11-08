@@ -47,6 +47,9 @@ type ManagedTemplateRequest struct {
 }
 
 type ManagedService struct {
+	// TemplateSourceSHA256 is an internal immutable source override for a
+	// journaled target or a passive settings preview; it is never client input.
+	TemplateSourceSHA256  string `json:"-"`
 	ManagementState       string `json:"management_state"`
 	ArchivedForwardJSON   string `json:"-"`
 	ServiceID             string `json:"service_id"`
@@ -482,7 +485,18 @@ func (r *Registry) CreateManagedServiceWithOperation(ctx context.Context, servic
 	return r.createManagedService(ctx, service, forward, &operation)
 }
 
-func (r *Registry) createManagedService(ctx context.Context, service ManagedService, forward Forward, operation *ManagedOperation) error {
+// CreateManagedServiceFromSource commits the reviewed source, instance binding,
+// forward, and operation receipt in the same transaction.
+func (r *Registry) CreateManagedServiceFromSource(ctx context.Context, service ManagedService, forward Forward, operation ManagedOperation, source ManagedTemplateSource, expected string) error {
+	return r.createManagedService(ctx, service, forward, &operation, &sourceInstall{source, expected})
+}
+
+type sourceInstall struct {
+	source   ManagedTemplateSource
+	expected string
+}
+
+func (r *Registry) createManagedService(ctx context.Context, service ManagedService, forward Forward, operation *ManagedOperation, sources ...*sourceInstall) error {
 	if r == nil || r.db == nil {
 		return errors.New("registry not initialized")
 	}
@@ -543,6 +557,15 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if len(sources) > 0 && sources[0] != nil {
+		source := sources[0]
+		if source.source.TemplateID != service.TemplateID {
+			return ErrManagedTemplateSourceChanged
+		}
+		if err := commitTemplateSource(tx, source.source, source.expected); err != nil {
+			return err
+		}
+	}
 	forward.AccessMode, err = normalizedAccessMode(forward.AccessMode)
 	if err != nil {
 		return err
@@ -699,16 +722,31 @@ func (r *Registry) UpdateManagedServiceConfiguration(ctx context.Context, servic
 	return nextRevision, nil
 }
 
-func (r *Registry) CommitManagedServiceReconfiguration(ctx context.Context, serviceID string, expectedRevision int64, configurationJSON, configurationSHA256, runtimeIdentity, runtimeSpecSHA256, artifactReference, runtimeManifestJSON string) (int64, error) {
+func (r *Registry) CommitManagedServiceReconfiguration(ctx context.Context, serviceID string, expectedRevision int64, configurationJSON, configurationSHA256, runtimeIdentity, runtimeSpecSHA256, artifactReference, runtimeManifestJSON string, sourceSHA256 ...string) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, errors.New("registry not initialized")
 	}
 	if expectedRevision <= 0 || len(strings.TrimSpace(configurationSHA256)) != 64 {
 		return 0, errors.New("invalid managed service configuration identity")
 	}
+	tx, err := r.db.BeginTx(nonNilContext(ctx), nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if len(sourceSHA256) > 0 && sourceSHA256[0] != "" {
+		result, err := tx.Exec(`INSERT INTO managed_web_service_source_bindings(service_id,template_id,sha256,verified) SELECT s.service_id,s.template_id,v.sha256,1 FROM managed_web_services s JOIN managed_web_service_source_versions v ON v.template_id=s.template_id WHERE s.service_id=? AND v.sha256=? ON CONFLICT(service_id) DO UPDATE SET sha256=excluded.sha256,verified=1`, serviceID, sourceSHA256[0])
+		if err != nil {
+			return 0, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil || count != 1 {
+			return 0, ErrManagedTemplateSourceChanged
+		}
+	}
 	nextRevision := expectedRevision + 1
 	blank := ""
-	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_services SET configuration_json=?,configuration_revision=?,configuration_sha256=?,runtime_identity=?,runtime_spec_sha256=?,artifact_reference=?,runtime_manifest_json=?,last_error_code=?,last_error_message=?,updated_at_unix_ms=? WHERE service_id=? AND configuration_revision=?`, strings.TrimSpace(configurationJSON), nextRevision, strings.TrimSpace(configurationSHA256), strings.TrimSpace(runtimeIdentity), strings.TrimSpace(runtimeSpecSHA256), strings.TrimSpace(artifactReference), strings.TrimSpace(runtimeManifestJSON), blank, blank, time.Now().UnixMilli(), strings.TrimSpace(serviceID), expectedRevision)
+	result, err := tx.ExecContext(nonNilContext(ctx), `UPDATE managed_web_services SET configuration_json=?,configuration_revision=?,configuration_sha256=?,runtime_identity=?,runtime_spec_sha256=?,artifact_reference=?,runtime_manifest_json=?,last_error_code=?,last_error_message=?,updated_at_unix_ms=? WHERE service_id=? AND configuration_revision=?`, strings.TrimSpace(configurationJSON), nextRevision, strings.TrimSpace(configurationSHA256), strings.TrimSpace(runtimeIdentity), strings.TrimSpace(runtimeSpecSHA256), strings.TrimSpace(artifactReference), strings.TrimSpace(runtimeManifestJSON), blank, blank, time.Now().UnixMilli(), strings.TrimSpace(serviceID), expectedRevision)
 	if err != nil {
 		return 0, err
 	}
@@ -719,7 +757,7 @@ func (r *Registry) CommitManagedServiceReconfiguration(ctx context.Context, serv
 	if count != 1 {
 		return 0, errors.New("managed service configuration revision conflict")
 	}
-	return nextRevision, nil
+	return nextRevision, tx.Commit()
 }
 
 func (r *Registry) ListManagedServiceResources(ctx context.Context, serviceID string) ([]ManagedServiceResource, error) {

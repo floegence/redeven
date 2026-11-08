@@ -23,6 +23,18 @@ func TestTemplateV7MigrationPreservesRecordsAndRollsBack(t *testing.T) {
 			spec.CurrentVersion = 5
 			spec.MinimumVersion = 5
 			spec.Migrations = nil
+			spec.Initialize = func(tx *sql.Tx) error {
+				if err := initializeRegistryV1(tx); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(addDefaultAppPath); err != nil {
+					return err
+				}
+				if err := applyManagementSchema(tx); err != nil {
+					return err
+				}
+				return applyTemplateSourcesSchema(tx)
+			}
 			spec.Verify = func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 5) }
 			db, err := sqliteutil.Open(path, spec)
 			if err != nil {
@@ -66,7 +78,7 @@ func TestTemplateV7MigrationPreservesRecordsAndRollsBack(t *testing.T) {
 			defer upgraded.Close()
 			var version int
 			upgraded.QueryRow(`PRAGMA user_version`).Scan(&version)
-			want := 6
+			want := registryCurrentSchemaVersion
 			if fail {
 				want = 5
 			}

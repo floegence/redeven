@@ -154,7 +154,14 @@ type ComposeTemplateSpec = templatecontract.ComposeTemplateSpec
 
 type TemplateSpec = templatecontract.Spec
 
+type SourceSelection struct {
+	CandidateID    string `json:"candidate_id"`
+	SHA256         string `json:"sha256"`
+	ExpectedSHA256 string `json:"expected_sha256,omitempty"`
+}
 type CreateRequest struct {
+	Source                  *SourceSelection  `json:"source,omitempty"`
+	SourceOwner             string            `json:"-"`
 	PlanDigest              string            `json:"plan_digest,omitempty"`
 	RequestID               string            `json:"request_id"`
 	TemplateID              string            `json:"template_id"`
@@ -240,6 +247,8 @@ type ReleaseCandidate struct {
 }
 
 type ReleaseCandidateRequest struct {
+	Source       *SourceSelection  `json:"source,omitempty"`
+	SourceOwner  string            `json:"-"`
 	Action       string            `json:"action"`
 	Parameters   map[string]string `json:"parameters,omitempty"`
 	CursorID     string            `json:"cursor_id,omitempty"`
@@ -352,28 +361,36 @@ type LockedSetting struct {
 }
 
 type ServiceSettingsView struct {
-	ManagementState            string                 `json:"management_state"`
-	ParameterDefinitions       []TemplateParameter    `json:"parameter_definitions,omitempty"`
-	ConfiguredSecretParameters []string               `json:"configured_secret_parameters,omitempty"`
-	ServiceID                  string                 `json:"service_id"`
-	Name                       string                 `json:"name"`
-	Description                string                 `json:"description,omitempty"`
-	AccessMode                 string                 `json:"access_mode"`
-	Deployment                 Deployment             `json:"deployment"`
-	TemplateSource             string                 `json:"template_source"`
-	ObservedState              string                 `json:"observed_state"`
-	ConfigurationRevision      int64                  `json:"configuration_revision"`
-	ConfigurationSHA256        string                 `json:"configuration_sha256"`
-	Parameters                 map[string]string      `json:"parameters,omitempty"`
-	Runtime                    ServiceRuntimeSettings `json:"runtime"`
-	Locked                     []LockedSetting        `json:"locked,omitempty"`
+	SourceNotices              []TemplateNotice                         `json:"source_notices,omitempty"`
+	SourceLocalizations        map[string]templatecontract.Localization `json:"source_localizations,omitempty"`
+	SourceDefaultLocale        string                                   `json:"source_default_locale,omitempty"`
+	SourceVersion              *pfregistry.ManagedTemplateSource        `json:"source_version,omitempty"`
+	AvailableSourceVersion     *pfregistry.ManagedTemplateSource        `json:"available_source_version,omitempty"`
+	SourceReviewRequired       bool                                     `json:"source_review_required,omitempty"`
+	ManagementState            string                                   `json:"management_state"`
+	ParameterDefinitions       []TemplateParameter                      `json:"parameter_definitions,omitempty"`
+	ConfiguredSecretParameters []string                                 `json:"configured_secret_parameters,omitempty"`
+	ServiceID                  string                                   `json:"service_id"`
+	Name                       string                                   `json:"name"`
+	Description                string                                   `json:"description,omitempty"`
+	AccessMode                 string                                   `json:"access_mode"`
+	Deployment                 Deployment                               `json:"deployment"`
+	TemplateSource             string                                   `json:"template_source"`
+	ObservedState              string                                   `json:"observed_state"`
+	ConfigurationRevision      int64                                    `json:"configuration_revision"`
+	ConfigurationSHA256        string                                   `json:"configuration_sha256"`
+	Parameters                 map[string]string                        `json:"parameters,omitempty"`
+	Runtime                    ServiceRuntimeSettings                   `json:"runtime"`
+	Locked                     []LockedSetting                          `json:"locked,omitempty"`
 }
 
 type ReconfigureDraft struct {
-	SecretParameters      map[string]string      `json:"secret_parameters,omitempty"`
-	ConfigurationRevision int64                  `json:"configuration_revision"`
-	Parameters            map[string]string      `json:"parameters,omitempty"`
-	Runtime               ServiceRuntimeSettings `json:"runtime"`
+	TemplateSourceSHA256    string                 `json:"template_source_sha256,omitempty"`
+	AcceptedNoticeRevisions map[string]int64       `json:"accepted_notice_revisions,omitempty"`
+	SecretParameters        map[string]string      `json:"secret_parameters,omitempty"`
+	ConfigurationRevision   int64                  `json:"configuration_revision"`
+	Parameters              map[string]string      `json:"parameters,omitempty"`
+	Runtime                 ServiceRuntimeSettings `json:"runtime"`
 }
 
 type RiskNotice struct {

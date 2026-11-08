@@ -42,10 +42,13 @@ func (m *Manager) resolveRuntimeDefinition(ctx context.Context, service *pfregis
 	if service == nil {
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
-	template, err := m.template(ctx, service.TemplateID, false)
+	template, err := m.serviceTemplate(ctx, service)
 	if err != nil {
 		return nil, err
 	}
+	return m.resolveRuntimeDefinitionWithTemplate(ctx, service, template)
+}
+func (m *Manager) resolveRuntimeDefinitionWithTemplate(ctx context.Context, service *pfregistry.ManagedService, template *Template) (*resolvedRuntime, error) {
 	if template.Spec == nil {
 		return nil, serviceError("TEMPLATE_UNAVAILABLE", "The current template runtime definition is unavailable.", 409, true, nil)
 	}
@@ -91,6 +94,9 @@ func (m *Manager) resolveCurrentRuntime(ctx context.Context, service *pfregistry
 	if err != nil {
 		return nil, err
 	}
+	return m.resolveRuntimeInputs(ctx, service, resolved)
+}
+func (m *Manager) resolveRuntimeInputs(ctx context.Context, service *pfregistry.ManagedService, resolved *resolvedRuntime) (*resolvedRuntime, error) {
 	template, materialized, savedConfiguration := &resolved.Template, resolved.BaseSpec, resolved.Configuration
 	release, binding := &resolved.Release, &resolved.Binding
 	parameters, err := m.serviceParameters(service)
@@ -193,4 +199,49 @@ func templateSourceRuntimeDigest(digest, sourceDigest string) string {
 		return digest
 	}
 	return requestFingerprint("template-source-v1", digest, sourceDigest)
+}
+
+func (m *Manager) serviceTemplate(ctx context.Context, service *pfregistry.ManagedService) (*Template, error) {
+	if service.TemplateSourceSHA256 != "" {
+		source, err := m.registry.GetTemplateSourceVersion(ctx, service.TemplateID, service.TemplateSourceSHA256)
+		if err != nil {
+			return nil, err
+		}
+		if source == nil {
+			return nil, serviceError("TEMPLATE_SOURCE_REVIEW_STALE", "The reviewed source is unavailable.", 409, true, nil)
+		}
+		result, _, err := m.readSourceTemplateWithAvailability(ctx, *source, false)
+		return result, err
+	}
+	source, verified, err := m.registry.GetServiceTemplateSource(ctx, service.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	if source == nil {
+		if strings.HasPrefix(service.TemplateID, "git_") {
+			return nil, serviceError("TEMPLATE_SOURCE_REVIEW_REQUIRED", "The instance source binding is missing. Restore its verified source binding before running lifecycle actions.", 409, false, nil)
+		}
+		return m.template(ctx, service.TemplateID, false)
+	}
+	template, _, err := m.readSourceTemplateWithAvailability(ctx, *source, false)
+	if err != nil {
+		return nil, err
+	}
+	if !verified {
+		resolved, err := m.resolveRuntimeDefinitionWithTemplate(ctx, service, template)
+		if err != nil {
+			return nil, err
+		}
+		resolved, err = m.resolveRuntimeInputs(ctx, service, resolved)
+		if err != nil {
+			return nil, err
+		}
+		if !resolved.MatchesApplied {
+			return nil, serviceError("TEMPLATE_SOURCE_REVIEW_REQUIRED", "The saved source cannot be verified against this existing instance. Review its source before applying changes.", 409, false, nil)
+		}
+		if err := m.registry.VerifyServiceTemplateSource(ctx, service.ServiceID, source.SHA256); err != nil {
+			return nil, err
+		}
+	}
+	return template, nil
 }

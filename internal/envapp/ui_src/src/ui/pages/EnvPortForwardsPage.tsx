@@ -1,3 +1,5 @@
+import {createServiceTemplateMarket} from './serviceTemplateMarket';
+import type { MarketTemplate } from '@floegence/redeven-service-templates';
 import { managedServiceFlowerContext, portForwardFlowerContext } from './webServiceFlowerContext';
 import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
@@ -27,7 +29,7 @@ export { resolveWebServiceOpenRoute, type WebServiceOpenRoute } from '../service
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { createManagedServiceUpdatePreparation } from './managedServiceUpdatePreparation';
 import { createManagedServiceInstallPreparation } from './managedServiceInstallPreparation';
-import { GitTemplateImport } from './GitTemplateImport';
+import { GitTemplateImport, type SourcePreview } from './GitTemplateImport';
 import type { ManagedWebEntranceContext } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
 import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
@@ -355,6 +357,7 @@ type ManagedInstallReceipt = Readonly<{
   operation: ManagedOperation;
 }>;
 type ManagedInstallSubmission = Readonly<{
+  sourcePreview?: SourcePreview;
   requestID: string;
   serviceID: string;
   template: ManagedCatalogTemplate;
@@ -2362,6 +2365,20 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const [templateDrawerView, setTemplateDrawerView] = createSignal<TemplateDrawerView>('catalog');
   const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('host');
   const [templateSearch, setTemplateSearch] = createSignal('');
+  const [templateCollection, setTemplateCollection] = createSignal<'library' | 'discover'>('library');
+  const [marketFilter, setMarketFilter] = createSignal<'all' | 'official' | 'community'>('all');
+  const market = createServiceTemplateMarket(() => templateDrawerOpen() && templateCollection() === 'discover', () => JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation]), canManageManagedService);
+  const marketItems = market.items, marketLoading = market.loading, marketStale = market.stale, marketError = market.error;
+  const [marketSource, setMarketSource] = createSignal<{source: MarketTemplate['source'];expected:{repository_id:number;commit_sha:string;sha256:string}}>();
+  const [installSourcePreview, setInstallSourcePreview] = createSignal<SourcePreview>();
+  const clearInstallSource = () => {
+    const previous = installSourcePreview(); setInstallSourcePreview(undefined);
+    if (previous) void fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-service-templates/source-previews/${encodeURIComponent(previous.candidate_id)}`, {method:'DELETE'}).catch(() => undefined);
+  };
+  const installSource = () => {
+    const preview = installSourcePreview();
+    return preview ? {candidate_id:preview.candidate_id, sha256:preview.sha256, expected_sha256:preview.expected_sha256} : undefined;
+  };
   const [selectedTemplateID, setSelectedTemplateID] = createSignal<string | null>(null);
   const [catalogTemplateID, setCatalogTemplateID] = createSignal<string | null>(null);
   let templateDrawerElement: HTMLDivElement | undefined;
@@ -2537,7 +2554,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const managedRequestID = () => `envapp-${secureRandomUUID()}`;
 
-  const selectedTemplate = createMemo(() => managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
+  const selectedTemplate = createMemo(() => (installSourcePreview()?.template.template_id === selectedTemplateID() ? installSourcePreview()?.template : undefined) ?? managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
 
 	const requestManagedOpenSession = async (service: ManagedService, refresh = false) => {
     try { return await fetchLocalApiJSON<ManagedOpenSession>(
@@ -2570,6 +2587,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const [installReviewSession, setInstallReviewSession] = createSignal(0);
   const closeTemplateDrawer = () => {
+    clearInstallSource();
     setInstallReviewSession(value => value + 1);
     setManagedInstallSubmitting(false);
 	setInstallParameters({});
@@ -2626,6 +2644,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const reviewInstallSubmission = (submission: ManagedInstallSubmission) => {
     if (submission.phase !== 'failed') return;
+    if (submission.sourcePreview) setInstallSourcePreview(submission.sourcePreview);
     beginTemplateInstall(submission.template);
     setWorkspacePath(submission.workspace);
     setManagedAccessMode(submission.accessMode);
@@ -2649,6 +2668,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     const secretNames = new Set((template.effective_spec?.parameters ?? template.spec?.parameters ?? []).filter(parameter => parameter.type === 'secret').map(parameter => parameter.name));
     const release = selectedTemplateRelease();
     const submission: ManagedInstallSubmission = {
+      sourcePreview: installSourcePreview(),
       requestID, serviceID: review.service_id, template, presentation: templatePresentation(template), workspace: review.workspace_path, accessMode: managedAccessMode(),
       parameters: Object.fromEntries(Object.entries(request.parameters).filter(([name]) => !secretNames.has(name))), notices: {...installNoticeAcceptances()},
       release: release ? {candidate: release.candidate, parameters: {}} : null, phase: 'submitting',
@@ -2657,6 +2677,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       setInstallSubmissions(current => [...current, submission]);
       setSearchQuery('');
       setArchiveView('active');
+      // The submission owns its source candidate until receipt reconciliation.
+      setInstallSourcePreview(undefined);
       closeTemplateDrawer();
     });
     window.requestAnimationFrame(() => {
@@ -2784,6 +2806,12 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
   createEffect(on(() => [managedResource.identity(), ctx.resourceCacheAccess?.().generation, canManageManagedService()], () => {
+    // Review candidates belong to the previous authenticated environment. Let
+    // them expire there instead of sending cleanup through a new connection.
+    setInstallSourcePreview(undefined);
+    setGitImportOpen(false);
+    setMarketSource(undefined);
+    closeTemplateDrawer();
     managedOperations.dispose();
     for (const operationID of managedOperationPresentation.operationIDs()) managedOperations.clear(operationID);
     managedOperationPresentation.pruneServices(new Set());
@@ -2840,7 +2868,17 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       editable: template.editable,
     };
   };
-  const templatePresentations = createMemo(() => managedTemplates().map(templatePresentation));
+  const templatePresentations = createMemo(() => {
+    if (templateCollection() === 'library') return managedTemplates().map(templatePresentation);
+    const official = managedTemplates().filter(template => template.source === 'builtin').map(template => ({...templatePresentation(template), classification:'official' as const}));
+    const community: ServiceTemplatePresentation[] = marketItems().filter(item => item.classification === 'community').map(item => {
+      const locale = item.localizations[i18n.locale()] ?? item.localizations[item.default_locale];
+      const installed = managedTemplates().find(template => template.template_id === item.template_id);
+      const installedPresentation = installed ? templatePresentation(installed) : undefined;
+      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:'community',marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:false,editable:false,sourceURL:`https://github.com/${item.source.repository}`};
+    });
+    return [...official,...community].filter(item => marketFilter() === 'all' || item.classification === marketFilter());
+  });
   const templateCounts = createMemo(() => templatePresentations().reduce(
     (counts, template) => {
       counts[template.kind === 'host' ? 'host' : 'container'] += 1;
@@ -2868,7 +2906,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     if ((template.effective_spec?.parameters ?? template.spec?.parameters ?? []).some(parameter => parameter.required && !(parameters[parameter.name] ?? parameter.default ?? '').trim())) return null;
     return {
       identity: JSON.stringify([installReviewSession(), managedResource.identity(), ctx.resourceCacheAccess?.().generation, template.template_id, template.revision, template.source_sha256]),
-      request: {template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters, accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()), target_release_id: selectedTemplateRelease()?.candidate.candidate_id},
+      request: {source:installSource(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters, accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()), target_release_id: selectedTemplateRelease()?.candidate.candidate_id},
     };
   });
   const installPreparation = createManagedServiceInstallPreparation(installSelection);
@@ -2891,7 +2929,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       return recommended === root.path || recommended.startsWith(`${prefix}/`) || recommended.startsWith(`${prefix}\\`);
     })?.path ?? '/';
   });
-	const templateByID = (templateID: string) => managedTemplates().find((template) => template.template_id === templateID);
+	const templateByID = (templateID: string) => (installSourcePreview()?.template.template_id === templateID ? installSourcePreview()?.template : undefined) ?? managedTemplates().find((template) => template.template_id === templateID);
 	const selectedReleaseCandidate = createMemo(() => releaseCandidates()?.candidates.find((candidate) => candidate.candidate_id === selectedReleaseID()));
 	const selectedReleaseDefaultKind = createMemo<ManagedReleaseDefaultKind>(() => {
 		const target = releasePickerTarget();
@@ -3046,6 +3084,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 				signal: request.controller.signal,
 				body: JSON.stringify({
 					action,
+          source: target.kind === 'template' && installSourcePreview()?.template.template_id === target.id ? installSource() : undefined,
 					parameters: target.kind === 'template' ? releaseSecretParameters() : undefined,
 					cursor_id: options.cursorID,
 					candidate_ids: options.candidateIDs,
@@ -3175,6 +3214,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
   const returnToTemplateCatalog = () => {
+    clearInstallSource();
     setInstallReviewSession(value => value + 1);
     setTemplateDrawerView('catalog');
     setSelectedTemplateID(null);
@@ -4045,20 +4085,38 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         <div ref={templateDrawerElement} class="service-template-drawer-shell h-full min-h-0 space-y-4 p-1" data-view={templateDrawerView()} data-testid="service-template-drawer">
           <Show when={templateDrawerView() === 'catalog'}>
             <ServiceTemplateCatalog
+              toolbar={<div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-1" role="group" aria-label={i18n.t('webServices.managed.serviceTemplates')}>
+                  <For each={['library','discover'] as const}>{collection => <Button size="sm" variant={templateCollection() === collection ? 'secondary':'ghost'} aria-pressed={templateCollection() === collection} onClick={() => setTemplateCollection(collection)}>{i18n.t(`webServices.market.${collection}`)}</Button>}</For>
+                </div>
+                <Show when={templateCollection() === 'discover'}>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <select class="h-8 rounded-md border bg-background px-2 text-xs" aria-label={i18n.t('webServices.market.sourceFilter')} value={marketFilter()} onChange={event => setMarketFilter(event.currentTarget.value as 'all'|'official'|'community')}>
+                      <For each={['all','official','community'] as const}>{filter => <option value={filter}>{i18n.t(`webServices.market.${filter}`)}</option>}</For>
+                    </select>
+                    <Button size="sm" variant="ghost" disabled={marketLoading() || !canManageManagedService()} onClick={() => void market.refresh()}>{i18n.t('webServices.market.refresh')}</Button>
+                  </div>
+                  <Show when={marketError() || marketStale()}><p role="status" class="w-full text-xs text-muted-foreground">{i18n.t(marketError() ? 'webServices.market.refreshFailed':'webServices.market.cached')}</p></Show>
+                </Show>
+              </div>}
               category={templateCategory()}
               query={templateSearch()}
               hostCount={templateCounts().host}
               containerCount={templateCounts().container}
               templates={filteredTemplates()}
-              loading={managedLoading()}
+              loading={managedLoading() || (templateCollection() === 'discover' && marketLoading() && !marketItems().length)}
               canManage={canManageManagedService()}
               selection={{templateID: catalogTemplateID(), onChange: setCatalogTemplateID}}
               onCategoryChange={setTemplateCategory}
               onQueryChange={setTemplateSearch}
               onCreate={beginTemplateCreate}
-              onImport={() => {setGitImportTemplate(undefined);setGitImportOpen(true);}}
-              onCheckSource={(id) => {setGitImportTemplate(templateByID(id));setGitImportOpen(true);}}
-              onDeploy={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }}
+              onImport={() => {setMarketSource(undefined);setGitImportTemplate(undefined);setGitImportOpen(true);}}
+              onCheckSource={(id) => {setMarketSource(undefined);setGitImportTemplate(templateByID(id));setGitImportOpen(true);}}
+              onDeploy={(templateID) => {
+                const item = templateCollection() === 'discover' ? marketItems().find(item => item.template_id === templateID && item.classification === 'community') : undefined;
+                if (item) { setGitImportTemplate(undefined); setMarketSource({source:item.source,expected:{repository_id:item.source.repository_id,commit_sha:item.source.commit_sha,sha256:item.sha256}});setGitImportOpen(true); }
+                else { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }
+              }}
               onOpen={openInstalledTemplate}
 			  onVersions={openTemplateReleasePicker}
               onDuplicate={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateDuplicate(template); }}
@@ -4344,6 +4402,9 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         open={gitImportOpen()}
         environmentName={ctx.env()?.name || ctx.env_id()}
         template={gitImportTemplate()}
+        marketSource={marketSource()}
+        reviewIdentity={JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation])}
+        onReviewed={marketSource() ? (preview) => {clearInstallSource();setInstallSourcePreview(preview);beginTemplateInstall(preview.template);} : undefined}
         onClose={() => setGitImportOpen(false)}
         onImported={() => {
           void loadManaged();

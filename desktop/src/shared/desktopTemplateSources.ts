@@ -1,4 +1,4 @@
-import type { GitSource, Snapshot, SourceCatalog } from '@floegence/redeven-service-templates';
+import type { GitSource, Snapshot, SourceCatalog, SourceExpectation } from '@floegence/redeven-service-templates';
 
 export const TEMPLATE_SOURCE_ACQUIRE_CHANNEL = 'redeven-desktop:template-source-acquire';
 export const TEMPLATE_SOURCE_CANCEL_CHANNEL = 'redeven-desktop:template-source-cancel';
@@ -8,6 +8,7 @@ export type TemplateSourceAcquireRequest = {
   action: 'discover' | 'capture';
   source: GitSource;
   token?: string;
+  expected?: SourceExpectation;
 };
 export type TemplateSourceAcquireResponse = {
   ok: boolean;
@@ -35,7 +36,15 @@ export function normalizeTemplateSourceRequest(value: unknown): TemplateSourceAc
     (typeof input.token !== 'string' || input.token.length > 4096 || /[\r\n\0]/u.test(input.token))
   )
     return null;
+  let expected: SourceExpectation | undefined;
+  if (input.expected !== undefined) {
+    if (input.action !== 'capture' || !input.expected || typeof input.expected !== 'object') return null;
+    const item = input.expected as Record<string, unknown>;
+    if (!Number.isSafeInteger(item.repository_id) || Number(item.repository_id) <= 0 || typeof item.commit_sha !== 'string' || !/^[a-f0-9]{40}$/u.test(item.commit_sha) || typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(item.sha256)) return null;
+    expected = { repository_id: Number(item.repository_id), commit_sha: item.commit_sha, sha256: item.sha256 };
+  }
   return {
+    ...(expected ? { expected } : {}),
     operation_id: input.operation_id,
     action: input.action,
     source: {

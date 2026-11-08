@@ -1,4 +1,4 @@
-import { captureSource, discoverSources, TemplateSourceError } from '@floegence/redeven-service-templates';
+import { captureSource, capturePinnedSource, discoverSources, TemplateSourceError } from '@floegence/redeven-service-templates';
 import { normalizeTemplateSourceRequest, type TemplateSourceAcquireResponse } from '../shared/desktopTemplateSources';
 
 // Only the owning Environment renderer may acquire or cancel a source. Tokens
@@ -19,7 +19,7 @@ export class DesktopTemplateSources {
       const options = { signal: controller.signal };
       if (input.action === 'discover')
         return { ok: true, catalog: await discoverSources(input.source, input.token, options) };
-      return { ok: true, snapshot: await captureSource(input.source, input.token, options) };
+      return { ok: true, snapshot: input.expected ? await capturePinnedSource(input.source, input.expected, input.token, options) : await captureSource(input.source, input.token, options) };
     } catch (error) {
       return {
         ok: false,

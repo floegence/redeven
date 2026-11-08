@@ -307,14 +307,17 @@ func containerOverrideFromSettings(baseline ContainerTemplateSpec, desired Conta
 	if strings.TrimSpace(desired.Entrypoint) != "" {
 		desiredSpec.Entrypoint = []string{strings.TrimSpace(desired.Entrypoint)}
 	}
-	desiredSpec.Command = append([]string(nil), desired.Command...)
+	desiredSpec.Command = append([]string{}, desired.Command...)
 	desiredSpec.Environment = plainEnvironment
 	desiredSpec.Labels = cloneStringMap(desired.Labels)
+	if desiredSpec.Labels == nil {
+		desiredSpec.Labels = map[string]string{}
+	}
 	desiredSpec.RestartPolicy, desiredSpec.NetworkMode, desiredSpec.PIDMode, desiredSpec.IPCMode = desired.RestartPolicy, desired.NetworkMode, desired.PIDMode, desired.IPCMode
-	desiredSpec.Ports, desiredSpec.Mounts = append([]ContainerPortSpec(nil), desired.Ports...), append([]ContainerMountSpec(nil), desired.Mounts...)
+	desiredSpec.Ports, desiredSpec.Mounts = append([]ContainerPortSpec{}, desired.Ports...), append([]ContainerMountSpec{}, desired.Mounts...)
 	desiredSpec.CPUs, desiredSpec.MemoryBytes, desiredSpec.PIDsLimit, desiredSpec.ShmSizeBytes = desired.CPUs, desired.MemoryBytes, desired.PIDsLimit, desired.ShmSizeBytes
-	desiredSpec.CapAdd, desiredSpec.CapDrop, desiredSpec.Devices = append([]string(nil), desired.CapAdd...), append([]string(nil), desired.CapDrop...), append([]ContainerDeviceSpec(nil), desired.Devices...)
-	desiredSpec.Privileged, desiredSpec.ReadOnlyRoot, desiredSpec.SecurityOpts, desiredSpec.User = desired.Privileged, desired.ReadOnlyRoot, append([]string(nil), desired.SecurityOpts...), desired.User
+	desiredSpec.CapAdd, desiredSpec.CapDrop, desiredSpec.Devices = append([]string{}, desired.CapAdd...), append([]string{}, desired.CapDrop...), append([]ContainerDeviceSpec{}, desired.Devices...)
+	desiredSpec.Privileged, desiredSpec.ReadOnlyRoot, desiredSpec.SecurityOpts, desiredSpec.User = desired.Privileged, desired.ReadOnlyRoot, append([]string{}, desired.SecurityOpts...), desired.User
 	if err := validateContainerRuntimeSettings(desiredSpec); err != nil {
 		return containerSettingsOverride{}, nil, nil, err
 	}

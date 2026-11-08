@@ -157,3 +157,34 @@ func TestComposeRuntimeIdentityMatchesNamedVolumesAndDevicesExactly(t *testing.T
 		t.Fatal("default device target and permissions should match")
 	}
 }
+
+func TestClearedContainerCollectionsKeepCanonicalIdentity(t *testing.T) {
+	baseline := ContainerTemplateSpec{Image: "example/app:1", Ports: []ContainerPortSpec{{ContainerPort: 9000}}, Mounts: []ContainerMountSpec{{Type: "bind", Source: "/old", Target: "/old"}}}
+	normalizeContainerTemplateDefaults(&baseline)
+	desired := containerRuntimeSettingsFromSpec(baseline, nil)
+	desired.Ports = nil
+	desired.Mounts = nil
+	desired.Devices = nil
+	override, _, _, err := containerOverrideFromSettings(baseline, desired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := newServiceConfiguration(nil, nil)
+	configuration.Container = &override
+	raw, digest, err := canonicalServiceConfiguration(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeServiceConfiguration(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, next, err := canonicalServiceConfiguration(decoded)
+	if err != nil || raw != again || digest != next {
+		t.Fatal("cleared collections changed identity after reload", raw, again, err)
+	}
+	effective, err := applyServiceConfiguration(TemplateSpec{SchemaVersion: 6, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 8080}, Container: &baseline}, decoded, "git")
+	if err != nil || len(effective.Container.Ports) != 0 || len(effective.Container.Mounts) != 0 {
+		t.Fatal("cleared collections were restored", err)
+	}
+}

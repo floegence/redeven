@@ -150,7 +150,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
   CardHeader: (props: any) => <div class={props.class}>{props.children}</div>,
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
-  Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
+  Dialog: (props: any) => <Show when={props.open}><div><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
   DialogPlacementProvider: (props: any) => <div data-testid="dialog-placement-provider" data-mode={props.mode}>{props.children}</div>,
   DirectoryPicker: (props: any) => <Show when={props.open}><div data-testid="managed-workspace-picker-mock" data-initial-path={props.initialPath}><h2>{props.title}</h2><button type="button" onClick={() => { props.onSelect('/Users/demo/Projects/Focused App'); props.onOpenChange(false); }}>Select focused folder</button></div></Show>,
   Dropdown: (props: any) => (
@@ -1908,6 +1908,60 @@ describe('EnvPortForwardsPage', () => {
       expect(fixture.posts()).toHaveLength(1);
       expect(JSON.parse(String(fixture.posts()[0][1]?.body))).toMatchObject({workspace_path: fixture.receipt.service.workspace_path, plan_digest: 'reviewed-plan'});
       expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
+    } finally { dispose(); }
+  });
+
+  it.each(['submit', 'source-review', 'deployment-review'])('preserves market candidate ownership through %s', async phase => {
+    const [access, setAccess] = createSignal({phase: 'ready' as const, generation: 0, scope: ''});
+    envContextMocks.resourceCacheAccess = access;
+    const fixture = installHandoffFixture();
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const source = {repository:'owner/templates',repository_id:123,ref:'main',path:'templates/handoff',commit_sha:'a'.repeat(40)};
+    const candidate = {candidate_id:'source_candidate_market',sha256:'b'.repeat(64),expected_sha256:'',changed:true,template:{...fixture.template,source:'git',git_source:source,source_sha256:'b'.repeat(64)},files:[],affected_service_ids:[],source_document_version:4,source_spec_version:7};
+    const item = {template_id:fixture.template.template_id,document_template_id:'handoff',service_family_id:'handoff',revision:1,source,sha256:candidate.sha256,deployment:'host',default_locale:'en-US',localizations:{'en-US':{name:'Community handoff',description:'Discovered service'}},classification:'community',status:'available'};
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/market-catalog')) return Promise.resolve({items:[item],stale:false,generation:1,checked_at:Date.now()});
+      if (url.endsWith('/source-previews')) return Promise.resolve(candidate);
+      if (url.endsWith('/catalog')) return Promise.resolve({templates:[]});
+      return normalFetch(url,init);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
+      await flushPage();
+      fixture.findButton('Discover').click();
+      await waitForAssertion(() => expect(host.textContent).toContain('Community handoff'));
+      host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click();
+      await flushPage();
+      fixture.findButton('Review template').click();
+      await waitForAssertion(() => expect(fixture.findButton('Continue to deployment')).toBeDefined());
+      if (phase === 'source-review') {
+        setAccess({phase:'ready',generation:1,scope:''});
+        await flushPage();
+        expect(fixture.findButton('Continue to deployment')).toBeUndefined();
+        expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+        expect(fixture.posts()).toHaveLength(0);
+        return;
+      }
+      fixture.findButton('Continue to deployment').click();
+      await flushPage();
+      if (phase === 'deployment-review') {
+        setAccess({phase:'ready',generation:1,scope:''});
+        await flushPage();
+        expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
+        expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+        expect(fixture.posts()).toHaveLength(0);
+        return;
+      }
+      await fixture.submit();
+      expect(fixture.posts()).toHaveLength(1);
+      expect(JSON.parse(String(fixture.posts()[0][1]?.body))).toMatchObject({source:{candidate_id:candidate.candidate_id,sha256:candidate.sha256,expected_sha256:''}});
+      expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url, init]) => String(url).endsWith('/source-confirmations') || init?.method === 'DELETE')).toBe(false);
+      expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
+      fixture.response.resolve(fixture.receipt);
+      await flushPage();
+      expect(fixture.posts()).toHaveLength(1);
     } finally { dispose(); }
   });
 

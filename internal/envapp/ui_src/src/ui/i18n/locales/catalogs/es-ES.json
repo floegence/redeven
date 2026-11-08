@@ -4694,6 +4694,24 @@
       "missingEnvContext": "Falta el contexto ambiental. Vuelva a abrir desde el plano de control.",
       "desktopWindowFailed": "Desktop no pudo abrir la ventana aislada del servicio web.",
       "desktopLoopbackRequiresDesktop": "Este servicio está configurado en modo de compatibilidad local y solo se puede usar en Redeven Desktop."
+    },
+    "market": {
+      "library": "Mis plantillas",
+      "discover": "Descubrir",
+      "all": "Todas las fuentes",
+      "official": "Oficial",
+      "community": "Comunidad",
+      "sourceFilter": "Fuente de la plantilla",
+      "refresh": "Actualizar",
+      "refreshFailed": "No se pudo actualizar. Las plantillas ya cargadas siguen disponibles.",
+      "cached": "Se muestra el catálogo guardado. Actualiza para buscar cambios.",
+      "unavailable": "Fuente no disponible actualmente",
+      "continueDeploy": "Continuar con el despliegue",
+      "sourceVersion": "Código de la plantilla",
+      "reviewUpdate": "Revisar actualización",
+      "sourceUpdateHelp": "Revisa la revisión {revision}, ejecuta la comprobación previa y aplícala a esta instancia detenida. Se conservan las personalizaciones existentes.",
+      "acceptNotice": "He leído y acepto este aviso",
+      "sourceReviewRequired": "Esta instancia existente requiere revisar explícitamente su código antes de ejecutar operaciones de ciclo de vida."
     }
   },
   "debugConsoleSettings": {

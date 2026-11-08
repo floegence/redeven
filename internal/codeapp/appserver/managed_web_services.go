@@ -73,7 +73,8 @@ func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"receipt": receipt}})
 		return true
 	case r.Method == http.MethodPost && r.URL.Path == managedServicesAPIBase+"/install-plans":
-		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
 			return true
 		}
 		backend, ok := g.managed.(managedwebservice.InstallPlanningBackend)
@@ -86,6 +87,7 @@ func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Requ
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
 			return true
 		}
+		req.SourceOwner = strings.Join([]string{meta.NamespacePublicID, meta.UserPublicID, meta.EndpointID, meta.ChannelID}, "\x00")
 		plan, err := backend.PreflightInstall(r.Context(), req)
 		if err != nil {
 			writeManagedWebServiceError(w, err)
@@ -109,6 +111,7 @@ func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Requ
 			return true
 		}
 		detail := map[string]any{"template_id": truncateString(req.TemplateID, 80), "deployment": truncateString(string(req.Deployment), 20), "workspace_path": truncateString(req.WorkspacePath, 160)}
+		req.SourceOwner = strings.Join([]string{meta.NamespacePublicID, meta.UserPublicID, meta.EndpointID, meta.ChannelID}, "\x00")
 		result, err := g.managed.Create(r.Context(), req)
 		if err != nil {
 			g.appendAudit(meta, "managed_web_service_install", "failure", detail, err)
@@ -169,7 +172,8 @@ func (g *Server) handleManagedTemplateRoute(w http.ResponseWriter, r *http.Reque
 		return true
 	}
 	if r.Method == http.MethodPost && len(parts) == 2 && strings.TrimSpace(parts[0]) != "" && parts[1] == "release-candidates" {
-		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
 			return true
 		}
 		var req managedwebservice.ReleaseCandidateRequest
@@ -177,6 +181,7 @@ func (g *Server) handleManagedTemplateRoute(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
 			return true
 		}
+		req.SourceOwner = strings.Join([]string{meta.NamespacePublicID, meta.UserPublicID, meta.EndpointID, meta.ChannelID}, "\x00")
 		result, err := g.managed.TemplateReleaseCandidates(r.Context(), parts[0], req)
 		if err != nil {
 			writeManagedWebServiceError(w, err)
@@ -451,7 +456,18 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
 			return true
 		}
-		settings, err := g.managed.Settings(r.Context(), serviceID)
+		var settings *managedwebservice.ServiceSettingsView
+		var err error
+		if source := r.URL.Query().Get("template_source_sha256"); source != "" {
+			backend, ok := g.managed.(managedwebservice.TemplateSourceSettingsBackend)
+			if !ok {
+				writeJSON(w, 501, apiResp{OK: false, ErrorCode: "TEMPLATE_SOURCE_UNAVAILABLE"})
+				return true
+			}
+			settings, err = backend.TemplateSourceSettings(r.Context(), serviceID, source)
+		} else {
+			settings, err = g.managed.Settings(r.Context(), serviceID)
+		}
 		if err != nil {
 			writeManagedWebServiceError(w, err)
 			return true

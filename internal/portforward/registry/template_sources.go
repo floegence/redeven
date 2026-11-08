@@ -115,8 +115,21 @@ func (r *Registry) CommitManagedTemplateSource(ctx context.Context, v ManagedTem
 	if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
+	if err := commitTemplateSource(tx, v, expected); err != nil {
+		return err
+	}
+	now := time.Now().UnixMilli()
+	_, err = tx.Exec(`INSERT INTO managed_web_service_template_requests(request_id,request_fingerprint,template_id,action,created_at_unix_ms) VALUES(?,?,?,?,?)`, req.RequestID, req.RequestFingerprint, v.TemplateID, "source-confirm", now)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// commitTemplateSource is shared by source acceptance and atomic market installs.
+func commitTemplateSource(tx *sql.Tx, v ManagedTemplateSource, expected string) error {
 	var old ManagedTemplateSource
-	err = scanTemplateSource(tx.QueryRow(`SELECT `+templateSourceColumns+` FROM managed_web_service_template_sources WHERE template_id=?`, v.TemplateID), &old)
+	err := scanTemplateSource(tx.QueryRow(`SELECT `+templateSourceColumns+` FROM managed_web_service_template_sources WHERE template_id=?`, v.TemplateID), &old)
 	exists := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -140,15 +153,14 @@ func (r *Registry) CommitManagedTemplateSource(ctx context.Context, v ManagedTem
 		v.CreatedAtUnixMs = old.CreatedAtUnixMs
 	}
 	v.UpdatedAtUnixMs = now
+	if err := retainSourceVersion(tx, v); err != nil {
+		return err
+	}
 	_, err = tx.Exec(`INSERT INTO managed_web_service_template_sources (`+templateSourceColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(template_id) DO UPDATE SET repository=excluded.repository,ref=excluded.ref,path=excluded.path,commit_sha=excluded.commit_sha,sha256=excluded.sha256,directory=excluded.directory,revision=excluded.revision,name=excluded.name,description=excluded.description,default_locale=excluded.default_locale,updated_at_unix_ms=excluded.updated_at_unix_ms`, v.TemplateID, v.Repository, v.RepositoryID, v.Ref, v.Path, v.CommitSHA, v.SHA256, v.Directory, v.DocumentTemplateID, v.DocumentFamilyID, v.Deployment, v.Revision, v.Name, v.Description, v.DefaultLocale, v.CreatedAtUnixMs, v.UpdatedAtUnixMs)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO managed_web_service_template_requests(request_id,request_fingerprint,template_id,action,created_at_unix_ms) VALUES(?,?,?,?,?)`, req.RequestID, req.RequestFingerprint, v.TemplateID, "source-confirm", now)
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
+	return nil
 }
 
 func (r *Registry) DeleteManagedTemplateSource(ctx context.Context, id string) error {
@@ -165,6 +177,9 @@ func (r *Registry) DeleteManagedTemplateSource(ctx context.Context, id string) e
 		return ErrManagedTemplateInUse
 	}
 	if _, err := tx.Exec(`DELETE FROM managed_web_service_template_sources WHERE template_id=?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM managed_web_service_source_versions WHERE template_id=?`, id); err != nil {
 		return err
 	}
 	return tx.Commit()

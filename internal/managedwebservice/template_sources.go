@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,10 +19,11 @@ import (
 )
 
 type TemplateSourceInspectRequest struct {
-	TemplateID string                     `json:"template_id,omitempty"`
-	Source     templatecontract.GitSource `json:"source"`
-	Token      string                     `json:"token,omitempty"`
-	Snapshot   *templatecontract.Snapshot `json:"snapshot,omitempty"`
+	Expected   *templatecontract.SourceExpectation `json:"expected,omitempty"`
+	TemplateID string                              `json:"template_id,omitempty"`
+	Source     templatecontract.GitSource          `json:"source"`
+	Token      string                              `json:"token,omitempty"`
+	Snapshot   *templatecontract.Snapshot          `json:"snapshot,omitempty"`
 }
 type TemplateSourceDiscoverRequest struct {
 	Source templatecontract.GitSource `json:"source"`
@@ -81,7 +81,7 @@ type TemplateSourceBackend interface {
 }
 
 func sourceIdentity(repositoryID int64, documentID string) string {
-	return "git_" + requestFingerprint(strconv.FormatInt(repositoryID, 10), documentID)[:48]
+	return templatecontract.SourceIdentity(repositoryID, documentID)
 }
 func (m *Manager) sourceRoot() string { return filepath.Join(m.stateDir, "template-sources") }
 func (m *Manager) sourceDirectory(source pfregistry.ManagedTemplateSource) (string, error) {
@@ -117,13 +117,22 @@ func (m *Manager) InspectTemplateSource(ctx context.Context, owner string, req T
 		snapshot = *req.Snapshot
 	} else {
 		client := templatecontract.GitHubClient{Client: m.templateSourceClient}
-		snapshot, err = client.Capture(ctx, req.Source, req.Token)
+		if req.Expected != nil {
+			snapshot, err = client.CapturePinned(ctx, req.Source, *req.Expected, req.Token)
+		} else {
+			snapshot, err = client.Capture(ctx, req.Source, req.Token)
+		}
 		if err != nil {
 			return nil, templateContractError(err)
 		}
 	}
 	if err := snapshot.Validate(); err != nil {
 		return nil, templateContractError(err)
+	}
+	if req.Expected != nil {
+		if err := req.Expected.Verify(snapshot); err != nil {
+			return nil, templateContractError(err)
+		}
 	}
 	parsed, err := templatecontract.Read(snapshot.Files)
 	if err != nil {
@@ -143,6 +152,7 @@ func (m *Manager) InspectTemplateSource(ctx context.Context, owner string, req T
 	if err != nil {
 		return nil, err
 	}
+	current.SourceRuntimeSHA256 = templateRuntimeFilesDigest(snapshot.Files)
 	preview := TemplateSourcePreview{Template: *current, SHA256: snapshot.SHA256, Changed: old == nil || old.SHA256 != snapshot.SHA256, ExpiresAtUnixMs: time.Now().Add(15 * time.Minute).UnixMilli(), AffectedServiceIDs: []string{}, SourceDocumentVersion: parsed.SourceDocumentVersion, SourceSpecVersion: parsed.SourceSpecVersion}
 	var oldFiles []templatecontract.File
 	if old != nil {
@@ -322,43 +332,36 @@ func (m *Manager) ConfirmTemplateSource(ctx context.Context, owner string, req T
 	if parsed.SHA256 != req.SHA256 {
 		return nil, sourceCommitError(pfregistry.ErrManagedTemplateSourceChanged)
 	}
-	if err := os.MkdirAll(m.sourceRoot(), 0700); err != nil {
-		return nil, err
-	}
-	source.Directory, err = randomID("source")
+	staged, err := m.stageInstallSource(ctx, source.TemplateID, &SourceSelection{CandidateID: req.CandidateID, SHA256: req.SHA256, ExpectedSHA256: req.ExpectedSHA256}, owner)
 	if err != nil {
 		return nil, err
 	}
+	source = *staged
 	directory, err := m.sourceDirectory(source)
 	if err != nil {
 		return nil, err
 	}
-	if err := templatecontract.WriteDirectory(directory, candidate.Snapshot.Files); err != nil {
-		_ = os.RemoveAll(directory)
-		return nil, err
-	}
+
 	m.templateSourceMu.Lock()
 	err = m.registry.CommitManagedTemplateSource(ctx, source, req.ExpectedSHA256, pfregistry.ManagedTemplateRequest{RequestID: req.RequestID, RequestFingerprint: fingerprint, TemplateID: source.TemplateID, Action: "source-confirm"})
 	if err != nil {
 		// A cancelled connection or commit I/O error can make the outcome
 		// uncertain. Never remove a directory that may already be authoritative.
 		// An unclaimed complete directory is collected on the next startup.
-		active, readErr := m.registry.GetManagedTemplateSource(ctx, source.TemplateID)
+		active, readErr := m.registry.GetTemplateSourceVersion(ctx, source.TemplateID, source.SHA256)
 		if readErr == nil && (active == nil || active.Directory != source.Directory) {
 			_ = os.RemoveAll(directory)
 		}
 		m.templateSourceMu.Unlock()
 		return nil, sourceCommitError(err)
 	}
-	if old != nil {
-		if previous, err := m.sourceDirectory(*old); err == nil {
-			_ = os.RemoveAll(previous)
-		}
-	}
 	m.templateSourceMu.Unlock()
 	m.mu.Lock()
 	delete(m.templateSources, req.CandidateID)
 	m.mu.Unlock()
+	if err := m.cleanupTemplateSourceOrphans(ctx); err != nil {
+		return nil, err
+	}
 	return m.Template(ctx, source.TemplateID)
 }
 func sourceCommitError(err error) error {
@@ -449,11 +452,21 @@ func sourceFileChanges(before, after []templatecontract.File) []TemplateSourceFi
 }
 
 func (m *Manager) cleanupTemplateSourceOrphans(ctx context.Context) error {
+	if err := m.registry.CollectUnreferencedTemplateVersions(ctx); err != nil {
+		return err
+	}
 	sources, err := m.registry.ListManagedTemplateSources(ctx)
 	if err != nil {
 		return err
 	}
 	active := map[string]bool{}
+	dirs, err := m.registry.ListRetainedTemplateDirectories(ctx)
+	if err != nil {
+		return err
+	}
+	for _, dir := range dirs {
+		active[dir] = true
+	}
 	for _, source := range sources {
 		active[source.Directory] = true
 	}

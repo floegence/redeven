@@ -17,7 +17,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v2"
-	registryCurrentSchemaVersion = 6
+	registryCurrentSchemaVersion = 7
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -34,8 +34,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryV3ToV4},
 			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryV4ToV5},
 			{FromVersion: 5, ToVersion: 6, Apply: migrateRegistryV5ToV6},
+			{FromVersion: 6, ToVersion: 7, Apply: migrateRegistryV6ToV7},
 		},
-		Verify: func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 6) },
+		Verify: func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 7) },
 	}
 }
 
@@ -75,7 +76,10 @@ func initializeCurrentRegistry(tx *sql.Tx) error {
 	if err := applyManagementSchema(tx); err != nil {
 		return err
 	}
-	return applyTemplateSourcesSchema(tx)
+	if err := applyTemplateSourcesSchema(tx); err != nil {
+		return err
+	}
+	return applyTemplateVersionsSchema(tx)
 }
 
 func initializeRegistryV1(tx *sql.Tx) error {
@@ -247,6 +251,11 @@ func verifyRegistryShape(tx *sql.Tx, version int) error {
 			return err
 		}
 	}
+	if version >= 7 {
+		if err := applyTemplateVersionsSchema(expected); err != nil {
+			return err
+		}
+	}
 	read := func(source *sql.Tx) ([]string, error) {
 		rows, err := source.Query(`SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__redeven_db_meta' ORDER BY type, name`)
 		if err != nil {
@@ -300,6 +309,10 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 		wantTables = append(wantTables, "managed_web_service_template_sources")
 		slices.Sort(wantTables)
 	}
+	if version >= 7 {
+		wantTables = append(wantTables, "managed_web_service_source_versions", "managed_web_service_source_bindings")
+		slices.Sort(wantTables)
+	}
 	if !slices.Equal(tables, wantTables) {
 		return fmt.Errorf("port forward registry v2 table mismatch: got %v, want %v", tables, wantTables)
 	}
@@ -322,6 +335,10 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	if version >= 5 {
 		wantColumns["managed_web_service_template_sources"] = strings.Split(templateSourceColumns, ",")
 	}
+	if version >= 7 {
+		wantColumns["managed_web_service_source_versions"] = []string{"template_id", "sha256", "source_json", "directory"}
+		wantColumns["managed_web_service_source_bindings"] = []string{"service_id", "template_id", "sha256", "verified"}
+	}
 	for table, want := range wantColumns {
 		got, err := sqliteutil.TableColumnNamesTx(tx, table)
 		if err != nil {
@@ -341,6 +358,21 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	if version >= 4 {
 		if err := verifyManagementDocuments(tx); err != nil {
 			return err
+		}
+	}
+	if version >= 7 {
+		var invalid int
+		if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_service_source_versions WHERE json_extract(source_json,'$.template_id') IS NOT template_id OR json_extract(source_json,'$.sha256') IS NOT sha256 OR length(sha256)<>64 OR sha256 GLOB '*[^0-9a-f]*' OR json_type(source_json,'$.repository_id') IS NOT 'integer' OR json_extract(source_json,'$.repository_id')<=0 OR length(json_extract(source_json,'$.commit_sha'))<>40 OR json_extract(source_json,'$.commit_sha') GLOB '*[^0-9a-f]*'`).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid != 0 {
+			return errors.New("managed template source version identity mismatch")
+		}
+		if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_services s JOIN managed_web_service_template_sources t ON t.template_id=s.template_id LEFT JOIN managed_web_service_source_bindings b ON b.service_id=s.service_id WHERE b.service_id IS NULL OR b.template_id<>s.template_id`).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid != 0 {
+			return errors.New("managed template source binding missing or mismatched")
 		}
 	}
 	if err := verifyRegistryDocuments(tx); err != nil {

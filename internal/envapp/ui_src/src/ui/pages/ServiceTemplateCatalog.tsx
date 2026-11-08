@@ -76,6 +76,8 @@ export type ServiceTemplatePresentation = Readonly<{
   name: string;
   description: string;
   source: 'builtin' | 'custom' | 'git';
+  marketplace?: boolean;
+  classification?: 'official' | 'community';
   kind: ServiceTemplateKind;
   icon?: ServiceTemplateIcon;
   deploymentLabel: string;
@@ -354,6 +356,7 @@ function ComposeTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): JS
 }
 
 export type ServiceTemplateCatalogProps = Readonly<{
+  toolbar?: JSX.Element;
   category: ServiceTemplateCategory;
   query: string;
   hostCount: number;
@@ -413,7 +416,7 @@ export function ServiceTemplateIdentity(props: {
           <h3 class={cn('min-w-0 text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground', props.compact && 'truncate')} dir="auto">{props.template.name}</h3>
           <Show when={!props.compact}>
             <span class="service-template-source-badge inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
-              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
+              {props.template.classification === 'community' ? i18n.t('webServices.market.community') : props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
             </span>
           </Show>
         </div>
@@ -423,7 +426,7 @@ export function ServiceTemplateIdentity(props: {
         <Show when={props.metadata !== undefined} fallback={
         <div class={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground', props.compact ? 'mt-0.5 leading-4' : 'mt-2')} data-template-metadata>
           <Show when={props.compact}>
-            <span>{props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}</span>
+            <span>{props.template.classification === 'community' ? i18n.t('webServices.market.community') : props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}</span>
             <span aria-hidden="true">·</span>
           </Show>
           <span>{props.template.deploymentLabel}</span>
@@ -543,7 +546,7 @@ export function ServiceTemplateDetailsPane(props: {
 }): JSX.Element {
   const i18n = useI18n();
   const menuItems = (): DropdownItem[] => [
-    ...(props.template.source === 'git' ? [{id:'check-source',label:i18n.t('webServices.sources.checkUpdates'),disabled:!props.canManage}] : []),
+    ...(props.template.source === 'git' && !props.template.marketplace ? [{id:'check-source',label:i18n.t('webServices.sources.checkUpdates'),disabled:!props.canManage}] : []),
     ...(props.template.installed ? [{
       id: 'open',
       label: props.template.openUnavailableReason
@@ -556,7 +559,7 @@ export function ServiceTemplateDetailsPane(props: {
       label: i18n.t('webServices.managed.duplicate'),
       disabled: !props.template.duplicateable || !props.canManage,
     }] : []),
-    ...(props.template.source === 'git' ? [{id:'delete',label:i18n.t('webServices.managed.deleteTemplate'),disabled:props.template.installed || !props.canManage}] : []),
+    ...(props.template.source === 'git' && !props.template.marketplace ? [{id:'delete',label:i18n.t('webServices.managed.deleteTemplate'),disabled:props.template.installed || !props.canManage}] : []),
     ...(props.template.editable ? [
       {
         id: 'edit',
@@ -594,7 +597,7 @@ export function ServiceTemplateDetailsPane(props: {
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 flex-wrap items-center gap-2">
             <span class="text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
+              {props.template.classification === 'community' ? i18n.t('webServices.market.community') : props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
             </span>
             <Show when={props.template.developerPreview}>
               <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>
@@ -688,11 +691,12 @@ export function ServiceTemplateDetailsPane(props: {
       </div>
 
       <ServiceTemplateActions class="service-template-details__actions" secondary={<>
-        <Show when={props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm)}>
-          <Button size="lg" variant="outline" onClick={() => props.onVersions?.()} disabled={!props.canManage}>
+        <Show when={!props.template.marketplace && (props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm))}>
+          <Button size="lg" variant="outline" onClick={() => props.onVersions?.()} disabled={!props.canManage || props.template.marketplace}>
             <Package class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.versions')}
           </Button>
         </Show>
+        <Show when={menuItems().length > 0}>
         <Dropdown
           align="end"
           items={menuItems()}
@@ -712,6 +716,7 @@ export function ServiceTemplateDetailsPane(props: {
             </span>
           )}
         />
+        </Show>
       </>}>
         <Button
           size="lg"
@@ -775,6 +780,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
   return (
     <section class="service-template-catalog min-h-0" data-testid="service-template-catalog">
       <div class="service-template-toolbar sticky top-0 z-10 -mx-1 px-1 pb-4" data-testid="service-template-toolbar">
+        {props.toolbar}
         <div class="flex flex-wrap items-center gap-3">
           <Tabs
             class="service-template-switcher"

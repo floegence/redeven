@@ -107,7 +107,16 @@ type RuntimeSettings = {
   compose?: Record<string, ContainerSettings>;
   host?: HostSettings;
 };
+type SourceVersion = {sha256:string;revision:number;repository:string;commit_sha:string};
 type SettingsView = {
+  source_version?: SourceVersion;
+  available_source_version?: SourceVersion;
+  source_review_required?: boolean;
+  selected_source_sha256?: string;
+  source_notices?: Array<{id:string;revision:number;acknowledgement_required:boolean;title?:string;description?:string}>;
+  source_localizations?: Record<string,{notices?:Record<string,{title:string;description:string}>}>;
+  source_default_locale?: string;
+  accepted_notice_revisions?: Record<string,number>;
   management_state?: string;
   parameter_definitions?: Array<{name:string;label?:string;description?:string;type:string;required?:boolean;default?:string}>;
   configured_secret_parameters?: string[];
@@ -117,7 +126,7 @@ type SettingsView = {
   description?: string;
   access_mode: AccessMode;
   deployment: "host" | "container" | "compose";
-  template_source: "builtin" | "custom";
+  template_source: "builtin" | "custom" | "git";
   observed_state: string;
   configuration_revision: number;
   configuration_sha256: string;
@@ -127,6 +136,8 @@ type SettingsView = {
 };
 
 export type ManagedServiceReconfigureDraft = {
+  template_source_sha256?: string;
+  accepted_notice_revisions?: Record<string,number>;
   secret_parameters?: Record<string,string>;
   configuration_revision: number;
   parameters: Record<string, string>;
@@ -338,6 +349,8 @@ export function ManagedServiceSettingsDrawer(props: {
     const value = draft();
     if (!value) return null;
     return {
+      template_source_sha256: value.selected_source_sha256,
+      accepted_notice_revisions: value.accepted_notice_revisions,
       configuration_revision: value.configuration_revision,
       parameters: clone(value.parameters ?? {}),
       secret_parameters: clone(value.secret_parameters ?? {}),
@@ -357,11 +370,13 @@ export function ManagedServiceSettingsDrawer(props: {
       loaded() &&
         draft() &&
         stable({
+          source:undefined,
           parameters: loaded()!.parameters ?? {},
           secret_parameters: {},
           runtime: loaded()!.runtime,
         }) !==
           stable({
+            source:draft()!.selected_source_sha256,
             parameters: draft()!.parameters ?? {},
             secret_parameters: draft()!.secret_parameters ?? {},
             runtime: draft()!.runtime,
@@ -472,6 +487,23 @@ export function ManagedServiceSettingsDrawer(props: {
     }
   };
 
+  const reviewSource = async () => {
+    const source = loaded()?.available_source_version;
+    if (!source || loading() || runtimeDirty()) return;
+    const generation = readGeneration;
+    setLoading(true); setError('');
+    try {
+      const next = await fetchLocalApiJSON<SettingsView>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(props.serviceID)}/settings?template_source_sha256=${encodeURIComponent(source.sha256)}`, {method:'GET'});
+      if (generation !== readGeneration || !props.open) return;
+      setDraft(current => ({...next, name:current?.name ?? next.name, description:current?.description ?? next.description, access_mode:current?.access_mode ?? next.access_mode,selected_source_sha256:source.sha256,accepted_notice_revisions:{}}));
+      setPlan(null); setAcceptedRisks({});
+    } catch (reason) { if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { if (generation === readGeneration) setLoading(false); }
+  };
+  const sourceNoticeText = (notice: NonNullable<SettingsView['source_notices']>[number], field:'title'|'description') => {
+    const value = draft();
+    return value?.source_localizations?.[i18n.locale()]?.notices?.[notice.id]?.[field] ?? value?.source_localizations?.[value.source_default_locale ?? 'en-US']?.notices?.[notice.id]?.[field] ?? notice[field] ?? notice.id;
+  };
   const preflight = async () => {
     const value = runtimeDraft();
     if (!value || !runtimeDirty() || !readConfirmed() || !props.canManage || !props.open) return;
@@ -726,6 +758,27 @@ export function ManagedServiceSettingsDrawer(props: {
                   <Show when={props.onEditTemplate && props.canManage}><Button size="sm" variant="outline" onClick={() => props.onEditTemplate?.()}>{i18n.t("webServices.managed.editTemplate")}</Button></Show>
                 </Show>
 
+                <Show when={loaded()?.source_version}>
+                  <section class="mb-4 space-y-3 rounded-lg border bg-muted/20 p-4" aria-label={i18n.t('webServices.market.sourceVersion')}>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div class="min-w-0 space-y-1">
+                        <h3 class="text-xs font-semibold">{i18n.t('webServices.market.sourceVersion')} · {loaded()?.source_version?.revision}</h3>
+                        <p class="break-all text-xs text-muted-foreground">{loaded()?.source_version?.repository} · {loaded()?.source_version?.commit_sha.slice(0,12)}</p>
+                      </div>
+                      <Show when={loaded()?.available_source_version && (loaded()?.source_review_required || loaded()?.available_source_version?.sha256 !== loaded()?.source_version?.sha256)}>
+                        <Button size="sm" variant="outline" disabled={!props.canManage || loading() || runtimeDirty()} onClick={() => void reviewSource()}>{i18n.t('webServices.market.reviewUpdate')}</Button>
+                      </Show>
+                    </div>
+                    <Show when={draft()?.selected_source_sha256}>
+                      <p class="text-xs text-muted-foreground">{i18n.t('webServices.market.sourceUpdateHelp', {revision:draft()?.source_version?.revision ?? 0})}</p>
+                      <For each={draft()?.source_notices ?? []}>{notice => <div class="space-y-1 text-xs">
+                        <p class="font-medium">{sourceNoticeText(notice,'title')}</p><p class="text-muted-foreground">{sourceNoticeText(notice,'description')}</p>
+                        <Show when={notice.acknowledgement_required}><Checkbox checked={draft()?.accepted_notice_revisions?.[notice.id] === notice.revision} onChange={checked => updateDraft(value => {value.accepted_notice_revisions = {...value.accepted_notice_revisions,[notice.id]:checked ? notice.revision : 0};})} label={i18n.t('webServices.market.acceptNotice')} /></Show>
+                      </div>}</For>
+                    </Show>
+                    <Show when={loaded()?.source_review_required}><p role="status" class="text-xs text-muted-foreground">{i18n.t('webServices.market.sourceReviewRequired')}</p></Show>
+                  </section>
+                </Show>
                 <Show when={section() === "general"}>
                   <section class="max-w-3xl space-y-4">
                     <header>

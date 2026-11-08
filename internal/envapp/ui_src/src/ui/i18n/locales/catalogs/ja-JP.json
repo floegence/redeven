@@ -4694,6 +4694,24 @@
       "missingEnvContext": "環境コンテキストが欠落しています。コントロールプレーンから再度開いてください。",
       "desktopWindowFailed": "Desktop で隔離された Web サービスウィンドウを開けませんでした。",
       "desktopLoopbackRequiresDesktop": "このサービスは「ローカル互換モード」に設定されており、Redeven Desktop でのみ使用できます。"
+    },
+    "market": {
+      "library": "マイテンプレート",
+      "discover": "探す",
+      "all": "すべての提供元",
+      "official": "公式",
+      "community": "コミュニティ",
+      "sourceFilter": "テンプレートの提供元",
+      "refresh": "更新",
+      "refreshFailed": "更新できませんでした。読み込み済みのテンプレートは引き続き利用できます。",
+      "cached": "保存済みのカタログを表示しています。更新して変更を確認してください。",
+      "unavailable": "提供元を利用できません",
+      "continueDeploy": "デプロイに進む",
+      "sourceVersion": "テンプレートのソース",
+      "reviewUpdate": "ソース更新を確認",
+      "sourceUpdateHelp": "リビジョン {revision} を確認し、事前検証後に停止中のインスタンスへ適用してください。既存のカスタム設定は保持されます。",
+      "acceptNotice": "この注意事項を読み、同意します",
+      "sourceReviewRequired": "この既存インスタンスでライフサイクル操作を実行するには、ソースの明示的な確認が必要です。"
     }
   },
   "debugConsoleSettings": {

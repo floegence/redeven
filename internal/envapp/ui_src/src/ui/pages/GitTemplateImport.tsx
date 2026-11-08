@@ -15,13 +15,13 @@ import {
   Package,
 } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input } from '@floegence/floe-webapp-core/ui';
-import type { GitSource, Snapshot, SourceCatalog } from '@floegence/redeven-service-templates';
+import type { GitSource, Snapshot, SourceCatalog, SourceExpectation } from '@floegence/redeven-service-templates';
 import { useI18n } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 import { ServiceTemplateActions } from './ServiceTemplateActions';
 import type { ManagedCatalogTemplate } from './EnvPortForwardsPage';
 
-type SourcePreview = {
+export type SourcePreview = {
   candidate_id: string;
   sha256: string;
   expected_sha256: string;
@@ -54,6 +54,7 @@ type DesktopSourceBridge = {
     action: 'discover' | 'capture';
     source: GitSource;
     token?: string;
+    expected?: SourceExpectation;
   }): Promise<{
     ok: boolean;
     catalog?: SourceCatalog;
@@ -72,6 +73,9 @@ const base = '/_redeven_proxy/api/managed-web-service-templates';
 
 export function GitTemplateImport(props: {
   open: boolean;
+  reviewIdentity?: unknown;
+  marketSource?: { source: GitSource; expected: SourceExpectation };
+  onReviewed?: (preview: SourcePreview) => void;
   environmentName?: string;
   template?: ManagedCatalogTemplate;
   onClose: () => void;
@@ -102,15 +106,16 @@ export function GitTemplateImport(props: {
   let controller: AbortController | undefined;
   let operationID = '';
   let confirmationID = '';
+  let reviewIdentity: unknown;
   const desktop = () => window.redevenDesktopTemplateSources;
-  const discard = () => {
+  const discard = (remote = true) => {
     fileController?.abort();
     setFilePreview(undefined);
     setFilePath('');
     setFileError(false);
     setFileLoading(false);
     const item = preview();
-    if (item)
+    if (item && remote)
       void fetchLocalApiJSON(`${base}/source-previews/${encodeURIComponent(item.candidate_id)}`, {
         method: 'DELETE',
       }).catch(() => undefined);
@@ -124,13 +129,19 @@ export function GitTemplateImport(props: {
     setBusy(false);
   };
   createEffect(() => {
+    const identity = props.reviewIdentity;
+    if (identity !== reviewIdentity) {
+      reviewIdentity = identity;
+      cancel();
+      untrack(() => discard(false));
+    }
     if (!props.open) {
       cancel();
       setToken('');
       untrack(discard);
       return;
     }
-    const source = props.template?.git_source;
+    const source = props.marketSource?.source ?? props.template?.git_source;
     setRepository(source?.repository ?? '');
     setRef(source?.ref ?? '');
     setPath(source?.path ?? '');
@@ -168,6 +179,7 @@ export function GitTemplateImport(props: {
           action: action === 'discover' ? 'discover' : 'capture',
           source,
           token: token(),
+          expected: props.marketSource?.expected,
         });
         if (signal.aborted) return;
         if (!response.ok) throw new LocalApiError({ message: '', code: response.error_code });
@@ -204,6 +216,7 @@ export function GitTemplateImport(props: {
           body: JSON.stringify({
             template_id: props.template?.template_id,
             source,
+            expected: props.marketSource?.expected,
             ...(snapshot ? { snapshot } : { token: token() }),
           }),
           signal,
@@ -226,6 +239,12 @@ export function GitTemplateImport(props: {
   const confirm = async () => {
     const item = preview();
     if (!item || busy()) return;
+    if (props.onReviewed) {
+      setPreview(undefined);
+      props.onReviewed(item);
+      props.onClose();
+      return;
+    }
     setBusy(true);
     setError('');
     setPhase('confirming');
@@ -275,7 +294,7 @@ export function GitTemplateImport(props: {
     }
   };
   const steps = () =>
-    props.template ? (['sourceStep', 'reviewStep'] as const) : (['sourceStep', 'templateStep', 'reviewStep'] as const);
+    (props.template || props.marketSource) ? (['sourceStep', 'reviewStep'] as const) : (['sourceStep', 'templateStep', 'reviewStep'] as const);
   const currentStep = () => (preview() ? steps().length - 1 : catalog() ? 1 : 0);
   const targetName = () => props.environmentName || i18n.t('webServices.sources.targetEnvironment');
   const editSource = () => {
@@ -295,7 +314,7 @@ export function GitTemplateImport(props: {
           path: entry.path,
         });
     } else {
-      void run(props.template ? 'inspect' : 'discover');
+      void run(props.template || props.marketSource ? 'inspect' : 'discover');
     }
   };
   createEffect(() => {
@@ -319,7 +338,7 @@ export function GitTemplateImport(props: {
       title={
         <span class="flex items-center gap-2">
           <Package class="size-4 text-muted-foreground" />
-          {i18n.t(props.template ? 'webServices.sources.checkUpdates' : 'webServices.sources.import')}
+          {i18n.t(props.marketSource ? 'webServices.sources.reviewTemplate' : props.template ? 'webServices.sources.checkUpdates' : 'webServices.sources.import')}
         </span>
       }
       footer={
@@ -333,7 +352,7 @@ export function GitTemplateImport(props: {
               onClick={editSource}
             >
               <ArrowLeft class="size-3.5 shrink-0" />
-              {i18n.t(preview() && !props.template ? 'webServices.sources.editSource' : 'webServices.sources.back')}
+              {i18n.t(preview() && !props.template && !props.marketSource ? 'webServices.sources.editSource' : 'webServices.sources.back')}
             </Button>
           </Show>
 
@@ -354,7 +373,7 @@ export function GitTemplateImport(props: {
             disabled={
               busy() ||
               !repository().trim() ||
-              (preview() ? fileLoading() || !preview()?.changed : !!catalog() && selectedPath() === undefined)
+              (preview() ? fileLoading() || (!preview()?.changed && !props.onReviewed) : !!catalog() && selectedPath() === undefined)
             }
             onClick={advance}
             loading={busy()}
@@ -362,11 +381,13 @@ export function GitTemplateImport(props: {
           >
             {i18n.t(
               preview()
-                ? preview()?.expected_sha256
+                ? props.onReviewed ? 'webServices.market.continueDeploy' : preview()?.expected_sha256
                   ? 'webServices.sources.confirmUpdate'
                   : 'webServices.sources.confirmImport'
                 : catalog()
                   ? 'webServices.sources.reviewTemplate'
+                  : props.marketSource
+                    ? 'webServices.sources.reviewTemplate'
                   : props.template
                     ? 'webServices.sources.check'
                     : 'webServices.sources.findTemplates',
@@ -412,7 +433,7 @@ export function GitTemplateImport(props: {
           </h3>
           <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
             {i18n.t(
-              preview()
+              preview() || props.marketSource
                 ? 'webServices.sources.reviewDescription'
                 : catalog()
                   ? 'webServices.sources.selectionHint'
@@ -429,7 +450,7 @@ export function GitTemplateImport(props: {
             }}
           >
             <Show
-              when={!props.template}
+              when={!props.template && !props.marketSource}
               fallback={
                 <div class="space-y-2 rounded-lg border bg-muted/20 p-3 text-xs">
                   <p class="break-all font-medium">{repository()}</p>
@@ -667,6 +688,7 @@ export function GitTemplateImport(props: {
                   </div>
                 </dl>
               </div>
+              <Show when={!props.onReviewed}>
               <div role="status" class="flex items-start gap-2 rounded-lg bg-primary/5 p-3 text-xs leading-relaxed">
                 <CheckCircle class="mt-0.5 size-4 shrink-0 text-primary" />
                 <p>
@@ -679,7 +701,8 @@ export function GitTemplateImport(props: {
                   )}
                 </p>
               </div>
-              <Show when={item.affected_service_ids.length}>
+              </Show>
+              <Show when={!props.onReviewed && item.affected_service_ids.length}>
                 <div class="space-y-2">
                   <p class="text-xs font-medium">{i18n.t('webServices.sources.affectedServices')}</p>
                   <div class="flex flex-wrap gap-1.5">

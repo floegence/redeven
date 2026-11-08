@@ -4694,6 +4694,24 @@
       "missingEnvContext": "缺少环境上下文。请从控制平面重新打开。",
       "desktopWindowFailed": "Desktop 无法打开隔离的 Web 服务窗口。",
       "desktopLoopbackRequiresDesktop": "该服务已配置为“本地兼容模式”，只能在 Redeven Desktop 中使用。"
+    },
+    "market": {
+      "library": "我的模板",
+      "discover": "发现",
+      "all": "全部来源",
+      "official": "官方",
+      "community": "社区",
+      "sourceFilter": "模板来源",
+      "refresh": "刷新",
+      "refreshFailed": "刷新失败，已加载的模板仍可使用。",
+      "cached": "正在显示已保存的目录，刷新可检查更新。",
+      "unavailable": "来源暂不可用",
+      "continueDeploy": "继续部署",
+      "sourceVersion": "模板源码",
+      "reviewUpdate": "审核源码更新",
+      "sourceUpdateHelp": "请审核修订版 {revision}，然后预检并应用到已停止的实例。现有实例的自定义配置将保留。",
+      "acceptNotice": "我已阅读并接受此提示",
+      "sourceReviewRequired": "此历史实例需要明确审核源码后才能执行生命周期操作。"
     }
   },
   "debugConsoleSettings": {

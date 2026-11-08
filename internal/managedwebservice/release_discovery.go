@@ -57,7 +57,7 @@ type releaseCheckSummary struct {
 }
 
 func (m *Manager) TemplateReleaseCandidates(ctx context.Context, templateID string, request ReleaseCandidateRequest) (*ReleaseCandidateResult, error) {
-	template, err := m.Template(ctx, strings.TrimSpace(templateID))
+	template, err := m.installTemplate(ctx, strings.TrimSpace(templateID), request.Source, request.SourceOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (m *Manager) TemplateReleaseCandidates(ctx context.Context, templateID stri
 		}
 	}
 	return m.browseReleaseCandidates(ctx, releaseBrowseContext{
-		Scope: "template:" + template.TemplateID, TemplateID: template.TemplateID, Spec: *template.Spec,
+		Scope: templateReleaseScope(*template, request.Source), TemplateID: template.TemplateID, Spec: *template.Spec,
 		Parameters: secrets, TemplateSource: template.Source, Recommended: template.RecommendedRelease,
 	}, request)
 }

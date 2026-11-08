@@ -100,3 +100,28 @@ it('exposes an actionable initial read failure and retries inside the same drawe
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect.element(page.getByTestId('managed-service-settings')).toBeVisible();
 });
+
+it('keeps a source update explicit and binds its exact digest to preflight', async () => {
+  await page.viewport(1024,768);
+  const oldSource = {sha256:'a'.repeat(64),revision:1,repository:'owner/repo',commit_sha:'a'.repeat(40)};
+  const newSource = {...oldSource,sha256:'b'.repeat(64),revision:2,commit_sha:'b'.repeat(40)};
+  const original = {service_id:'source-review',name:'Pinned service',access_mode:'unified_proxy',deployment:'host',template_source:'git',observed_state:'stopped',configuration_revision:1,configuration_sha256:'configuration',runtime:{host:{start_script:'exec old'}},source_version:oldSource,available_source_version:newSource};
+  api.request.mockReset().mockImplementation(async (url,_options) => {
+    if(url.includes('template_source_sha256=')) return {...original,source_version:newSource,runtime:{host:{start_script:'exec new'}}};
+    if(url.endsWith('/preflight')) return {configuration_revision:1,plan_digest:'source-plan',changed_sections:['template_source'],requires_rebuild:false,risks:[]};
+    return original;
+  });
+  const applied=vi.fn();const host=document.createElement('div');document.body.append(host);
+  dispose=render(() => <FloeProvider><ManagedServiceSettingsDrawer open serviceID="source-review" serviceName="Pinned service" canManage onOpenChange={() => {}} onChanged={() => {}} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={applied} /></FloeProvider>,host);
+  await expect.element(page.getByRole('button',{name:'Review source update',exact:true})).toBeVisible();
+  expect(api.request.mock.calls.some(([,options]) => options?.method==='POST')).toBe(false);
+  await userEvent.click(page.getByRole('button',{name:'Review source update',exact:true}));
+  await userEvent.click(page.getByRole('button',{name:'Review changes',exact:true}));
+  await expect.poll(() => api.request.mock.calls.find(([url]) => url.endsWith('/preflight'))?.[1]?.body).toBeDefined();
+  const draft = JSON.parse(api.request.mock.calls.find(([url]) => url.endsWith('/preflight'))![1].body);
+  expect(draft.template_source_sha256).toBe(newSource.sha256);
+  expect(draft.runtime.host.start_script).toBe('exec new');
+  expect(applied).not.toHaveBeenCalled();
+  await userEvent.click(page.getByRole('button',{name:'Apply configuration',exact:true}));
+  expect(applied).toHaveBeenCalledWith(expect.objectContaining({plan_digest:'source-plan',draft:expect.objectContaining({template_source_sha256:newSource.sha256})}));
+});

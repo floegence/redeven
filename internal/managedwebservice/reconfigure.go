@@ -23,6 +23,7 @@ const (
 )
 
 type reconfigureRelease struct {
+	TemplateSourceSHA256 string `json:"template_source_sha256,omitempty"`
 	ConfigurationJSON    string `json:"configuration_json"`
 	ConfigurationSHA256  string `json:"configuration_sha256"`
 	Revision             int64  `json:"revision"`
@@ -89,16 +90,31 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity, RuntimeSpecSHA256: service.RuntimeSpecSHA256, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
 		Target: reconfigureRelease{ConfigurationJSON: candidate.JSON, ConfigurationSHA256: candidate.SHA256, Revision: service.ConfigurationRevision + 1, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
 	}
+	oldSource, _, err := m.registry.GetServiceTemplateSource(ctx, service.ServiceID)
+	if err != nil {
+		return err
+	}
+	if oldSource != nil {
+		journal.Old.TemplateSourceSHA256 = oldSource.SHA256
+	}
+	journal.Target.TemplateSourceSHA256 = candidate.SourceSHA256
+	if journal.Target.TemplateSourceSHA256 == "" {
+		journal.Target.TemplateSourceSHA256 = journal.Old.TemplateSourceSHA256
+	}
 	var oldResolved *resolvedRuntime
 	if !journal.ConfigurationOnly && binding.Deployment != DeploymentHost {
-		oldResolved, err = m.resolveRuntimeDefinition(ctx, service)
+		oldRecord := *service
+		oldRecord.TemplateSourceSHA256 = journal.Old.TemplateSourceSHA256
+		oldResolved, err = m.resolveRuntimeDefinition(ctx, &oldRecord)
 		if err != nil {
 			return err
 		}
 		target := *service
+		target.TemplateSourceSHA256 = journal.Target.TemplateSourceSHA256
 		target.ConfigurationJSON, target.ConfigurationSHA256 = candidate.JSON, candidate.SHA256
 		target.ConfigurationRevision = service.ConfigurationRevision + 1
 		journal.Target.RuntimeSpecSHA256, err = currentRuntimeSpecDigest(candidate.Spec, candidate.Configuration, oldResolved.Release, oldResolved.Binding, candidate.Secrets, &target)
+		journal.Target.RuntimeSpecSHA256 = templateSourceRuntimeDigest(journal.Target.RuntimeSpecSHA256, candidate.SourceRuntimeSHA256)
 		if err != nil {
 			return err
 		}
@@ -135,7 +151,7 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 		if err := m.writeServiceSecretDocument(service.ServiceID, candidate.Secrets); err != nil {
 			return err
 		}
-		if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, service.RuntimeIdentity, service.RuntimeSpecSHA256, service.ArtifactReference, "{}"); err != nil {
+		if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, service.RuntimeIdentity, service.RuntimeSpecSHA256, service.ArtifactReference, "{}", candidate.SourceSHA256); err != nil {
 			return err
 		}
 		committed = true
@@ -166,6 +182,7 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 		return err
 	}
 	target := *service
+	target.TemplateSourceSHA256 = journal.Target.TemplateSourceSHA256
 	target.ConfigurationJSON, target.ConfigurationSHA256 = candidate.JSON, candidate.SHA256
 	target.ConfigurationRevision = service.ConfigurationRevision + 1
 	target.RuntimeIdentity, target.RuntimeSpecSHA256 = "", journal.Target.RuntimeSpecSHA256
@@ -192,7 +209,7 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 	if err := m.writeReconfigureJournal(ctx, service.ServiceID, journal); err != nil {
 		return err
 	}
-	if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, runtimeID, journal.Target.RuntimeSpecSHA256, artifact, "{}"); err != nil {
+	if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, runtimeID, journal.Target.RuntimeSpecSHA256, artifact, "{}", candidate.SourceSHA256); err != nil {
 		return err
 	}
 	service.ConfigurationJSON, service.ConfigurationSHA256 = candidate.JSON, candidate.SHA256
@@ -329,6 +346,7 @@ func (m *Manager) rollbackReconfigure(ctx context.Context, service *pfregistry.M
 }
 
 func serviceFromReconfigureRelease(base pfregistry.ManagedService, release reconfigureRelease) pfregistry.ManagedService {
+	base.TemplateSourceSHA256 = release.TemplateSourceSHA256
 	base.ConfigurationJSON = release.ConfigurationJSON
 	base.ConfigurationSHA256 = release.ConfigurationSHA256
 	base.ConfigurationRevision = release.Revision
@@ -385,7 +403,7 @@ func (m *Manager) recoverInterruptedReconfigure(service *pfregistry.ManagedServi
 				return errors.New("the verified reconfigured runtime identity is unavailable")
 			}
 		}
-		if _, err := m.registry.CommitManagedServiceReconfiguration(context.Background(), service.ServiceID, journal.Old.Revision, journal.Target.ConfigurationJSON, journal.Target.ConfigurationSHA256, journal.Target.RuntimeIdentity, journal.Target.RuntimeSpecSHA256, journal.Target.ArtifactReference, "{}"); err != nil {
+		if _, err := m.registry.CommitManagedServiceReconfiguration(context.Background(), service.ServiceID, journal.Old.Revision, journal.Target.ConfigurationJSON, journal.Target.ConfigurationSHA256, journal.Target.RuntimeIdentity, journal.Target.RuntimeSpecSHA256, journal.Target.ArtifactReference, "{}", journal.Target.TemplateSourceSHA256); err != nil {
 			return err
 		}
 		m.removeReconfigureStage(service.ServiceID, journal.OperationID)

@@ -10,11 +10,34 @@ import (
 )
 
 func (g *Server) handleManagedTemplateSourceRoute(w http.ResponseWriter, r *http.Request, parts []string) bool {
-	if len(parts) == 0 || (parts[0] != "source-discovery" && parts[0] != "source-previews" && parts[0] != "source-confirmations") {
+	if len(parts) == 0 || (parts[0] != "market-catalog" && parts[0] != "source-discovery" && parts[0] != "source-previews" && parts[0] != "source-confirmations") {
 		return false
 	}
-	meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+	permission := requiredPermissionFull
+	if parts[0] == "market-catalog" && r.Method == http.MethodGet {
+		permission = requiredPermissionRead
+	}
+	meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, permission)
 	if !ok {
+		return true
+	}
+	if parts[0] == "market-catalog" {
+		backend, ok := g.managed.(managedwebservice.TemplateMarketBackend)
+		if !ok {
+			writeJSON(w, 501, apiResp{OK: false, ErrorCode: "TEMPLATE_MARKET_UNAVAILABLE"})
+			return true
+		}
+		if len(parts) != 1 || (r.Method != http.MethodGet && r.Method != http.MethodPost) {
+			writeJSON(w, 405, apiResp{OK: false, ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		result, err := backend.TemplateMarket(r.Context(), r.Method == http.MethodPost)
+		w.Header().Set("Cache-Control", "no-store")
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+		} else {
+			writeJSON(w, 200, apiResp{OK: true, Data: result})
+		}
 		return true
 	}
 	backend, ok := g.managed.(managedwebservice.TemplateSourceBackend)

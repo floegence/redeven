@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Managed Service Instance Configuration
 tags: [architecture, web-services, containers, configuration, security]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -15,6 +15,8 @@ Verified template owns baseline; Redeven owns overrides, release/digest, resourc
 - Running services may edit drafts but require explicit Stop; no background stop/rebuild. Images/digests, primary Web port, loopback binding, Runtime/Compose identity, reserved labels and managed volume identities cannot be overridden. Renderer never submits raw Docker argv.
 - Secret values live only in service-private `0600` files, never configuration, plans, views, audits, events, logs or renderer persistence. Cancellation ends the owned operation before rollback.
 - Current Registry schema retains configuration v2, release identity, RuntimeBinding v2, applied digest, progress/retry, ownership/deletion and release-check v2 facts. Verify persisted digests before typed validation; [Registry migration](database-schema-migrations.md) owns current version and lineage.
+
+Explicit Git source upgrades use the [source-version contract](managed-web-service-templates.md#instance-source-versions). The reviewed target preserves existing overrides and release identity. The plan includes its source digest; configuration and source binding commit atomically. Collection overrides encode explicit empty arrays/maps rather than pointer-to-null values so clear operations remain canonical after reload.
 
 # Boundaries
 

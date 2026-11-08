@@ -3882,6 +3882,24 @@ export const enUS = defineDictionary({
     },
   },
   webServices: {
+    market: {
+      "library": "My templates",
+      "discover": "Discover",
+      "all": "All sources",
+      "official": "Official",
+      "community": "Community",
+      "sourceFilter": "Template source",
+      "refresh": "Refresh",
+      "refreshFailed": "Refresh failed. Previously loaded templates remain available.",
+      "cached": "Showing the last saved catalog. Refresh to check for changes.",
+      "unavailable": "Source currently unavailable",
+      "continueDeploy": "Continue to deployment",
+      "sourceVersion": "Template source",
+      "reviewUpdate": "Review source update",
+      "sourceUpdateHelp": "Review revision {revision}, then preflight and apply to this stopped instance. Existing instance overrides are preserved.",
+      "acceptNotice": "I have read and accept this notice",
+      "sourceReviewRequired": "This historical instance needs an explicit source review before its lifecycle can run."
+},
     sources: {
       "groupTitle": "GitHub templates",
       "groupDescription": "Templates imported from external GitHub repositories.",

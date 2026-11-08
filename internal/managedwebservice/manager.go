@@ -24,6 +24,7 @@ import (
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
+	"github.com/floegence/redeven/internal/templatemarket"
 )
 
 const operationProgressTotal = 7
@@ -38,6 +39,7 @@ type ManagerOptions struct {
 }
 
 type Manager struct {
+	templateMarket    *templatemarket.Service
 	log               *slog.Logger
 	stateDir          string
 	registry          *pfregistry.Registry
@@ -577,6 +579,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	parameterJSON, _ := json.Marshal(req.Parameters)
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
 	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), strings.TrimSpace(req.AccessMode), strings.TrimSpace(req.TargetReleaseID), string(parameterJSON), string(noticeJSON))
+	if req.Source != nil {
+		fingerprint = requestFingerprint(fingerprint, sourceSelectionFingerprint(req.Source, req.SourceOwner))
+	}
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -592,7 +597,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		}
 		return &CreateResult{Service: *service, Operation: *existing}, nil
 	}
-	template, err := m.template(ctx, strings.TrimSpace(req.TemplateID), false)
+	template, err := m.installTemplate(ctx, strings.TrimSpace(req.TemplateID), req.Source, req.SourceOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +658,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	var selectedRelease *cachedReleaseCandidate
 	if strings.TrimSpace(req.TargetReleaseID) != "" {
-		selectedRelease, err = m.reviewedReleaseCandidate("template:"+template.TemplateID, req.TargetReleaseID)
+		selectedRelease, err = m.reviewedReleaseCandidate(templateReleaseScope(*template, req.Source), req.TargetReleaseID)
 		if err != nil {
 			return nil, err
 		}
@@ -699,9 +704,24 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
 		return nil, serviceError("SERVICE_SECRETS_WRITE_FAILED", "The managed-service secret parameters could not be stored securely.", 500, false, err)
 	}
-	if err := m.registry.CreateManagedServiceWithOperation(ctx, service, forward, op); err != nil {
-		_ = os.Remove(m.serviceSecretPath(serviceID))
-		return nil, err
+	if req.Source != nil {
+		source, stageErr := m.stageInstallSource(ctx, req.TemplateID, req.Source, req.SourceOwner)
+		if stageErr != nil {
+			_ = os.Remove(m.serviceSecretPath(serviceID))
+			return nil, stageErr
+		}
+		err = m.registry.CreateManagedServiceFromSource(ctx, service, forward, op, *source, req.Source.ExpectedSHA256)
+	} else {
+		err = m.registry.CreateManagedServiceWithOperation(ctx, service, forward, op)
+	}
+	if err != nil {
+		// A commit error can have an uncertain outcome. Preserve credentials if
+		// the durable receipt or instance exists; reconciliation owns recovery.
+		persisted, readErr := m.registry.GetManagedService(context.WithoutCancel(ctx), serviceID)
+		if readErr == nil && persisted == nil {
+			_ = os.Remove(m.serviceSecretPath(serviceID))
+		}
+		return nil, sourceCommitError(err)
 	}
 	m.requestMu.Unlock()
 	locked = false

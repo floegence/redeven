@@ -3,7 +3,7 @@ type: Release Contract
 title: Automated service-template catalog updates
 tags: [release, automation, templates, supply-chain]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -28,7 +28,7 @@ A failed gate can leave a candidate on the ephemeral runner's local main, but it
 
 The schema/acquisition npm SDK is independently pinned to a formal upstream release tarball and SHA-512 in Desktop and Env App lockfiles.
 
-They are checked and updated only through the user-driven [Git source review](../architecture/managed-web-service-templates.md#github-sources) flow, never by repository scheduling or application startup.
+Imported originals are checked and accepted through the user-driven [source review](../architecture/managed-web-service-templates.md#discovery-and-acquisition) flow. Automatic market observation updates passive discovery only; application startup and catalog refresh never accept sources or update installed bindings.
 
 The [Managed Service release contract](../architecture/managed-service-release-discovery.md#release-discovery) owns installed release identity and user-selected upgrades; catalog adoption does not rebuild, restart, or upgrade installed instances.
 

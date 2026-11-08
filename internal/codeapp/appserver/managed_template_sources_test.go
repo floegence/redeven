@@ -5,6 +5,7 @@ import (
 	templatecontract "github.com/floegence/redeven-service-templates/template"
 	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/templatemarket"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -77,5 +78,31 @@ func TestTemplateSourceRoutesRequireFullPermissionAndKeepCredentialsPrivate(t *t
 	server.handleManagedWebServicesAPI(response, request)
 	if response.Code != http.StatusBadRequest || backend.calls != 1 {
 		t.Fatal("confirmation accepted an unexpected credential field")
+	}
+}
+
+func (b *templateSourceBackendStub) TemplateMarket(_ context.Context, refresh bool) (templatemarket.Snapshot, error) {
+	b.calls++
+	if refresh {
+		b.token = "refresh"
+	}
+	return templatemarket.Snapshot{Items: []templatemarket.Item{}}, nil
+}
+func TestTemplateMarketReadAndRefreshPermissions(t *testing.T) {
+	channel := "ch_market"
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		backend := &templateSourceBackendStub{}
+		server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channel, session.Meta{CanRead: true})}
+		req := httptest.NewRequest(method, managedTemplatesAPIBase+"/market-catalog", nil)
+		req.Header.Set("Origin", envOriginWithChannel(channel))
+		response := httptest.NewRecorder()
+		server.handleManagedWebServicesAPI(response, req)
+		if method == http.MethodGet {
+			if response.Code != 200 || backend.calls != 1 || backend.token != "" {
+				t.Fatal("passive read denied or refreshed", response.Code)
+			}
+		} else if response.Code != 403 || backend.calls != 0 {
+			t.Fatal("read-only user triggered network refresh")
+		}
 	}
 }

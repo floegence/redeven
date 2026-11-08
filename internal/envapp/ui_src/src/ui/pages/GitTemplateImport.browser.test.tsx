@@ -325,3 +325,25 @@ describe('GitHub source review in the browser', () => {
   });
 
 });
+
+it('reviews exact market bytes and hands deployment a live candidate without importing', async () => {
+  await page.viewport(1024, 768);
+  api.request.mockReset();
+  const expected = {repository_id:1,commit_sha:'a'.repeat(40),sha256:'b'.repeat(64)};
+  const onReviewed = vi.fn();
+  const candidate = {...preview, changed:false};
+  api.request.mockResolvedValue(candidate);
+  const host = document.createElement('div');document.body.append(host);
+  const dispose = render(() => <GitTemplateImport open marketSource={{source:{repository:'owner/repo',ref:'main',path:''},expected}} onReviewed={onReviewed} onClose={() => {}} onImported={() => {}} serviceName={id => id} />,host);
+  try {
+    await expect.element(page.getByRole('dialog', {name:'Review template'})).toBeVisible();
+    await userEvent.click(page.getByRole('button',{name:'Review template',exact:true}));
+    await expect.poll(() => api.request.mock.calls.some(([url,options]) => url.endsWith('/source-previews') && JSON.parse(options.body).expected.sha256 === expected.sha256)).toBe(true);
+    const deploy = page.getByRole('button',{name:'Continue to deployment',exact:true});
+    await expect.element(deploy).toBeEnabled();
+    await page.screenshot({path:'../../../dist/template-market/market-source-review.png'});
+    await userEvent.click(deploy);
+    expect(onReviewed).toHaveBeenCalledWith(candidate);
+    expect(api.request.mock.calls.some(([url,options]) => url.endsWith('/source-confirmations') || options?.method === 'DELETE')).toBe(false);
+  } finally {dispose();host.remove();api.request.mockReset();}
+});

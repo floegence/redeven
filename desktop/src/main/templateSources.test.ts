@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const sdk = vi.hoisted(() => ({ capture: vi.fn(), discover: vi.fn() }));
+const sdk = vi.hoisted(() => ({ capture: vi.fn(), pinned:vi.fn(), discover: vi.fn() }));
 vi.mock('@floegence/redeven-service-templates', async (original) => ({
   ...(await original<typeof import('@floegence/redeven-service-templates')>()),
   captureSource: sdk.capture,
+  capturePinnedSource: sdk.pinned,
   discoverSources: sdk.discover,
 }));
 import { DesktopTemplateSources } from './templateSources';
@@ -65,4 +66,15 @@ describe('Desktop template source acquisition', () => {
     );
     expect(sdk.capture.mock.calls.length).toBe(before);
   });
+  it('passes the exact market expectation through pinned acquisition', async () => {
+    const expected = {repository_id:123,commit_sha:'a'.repeat(40),sha256:'b'.repeat(64)};
+    sdk.pinned.mockResolvedValueOnce({sha256:expected.sha256});
+    const source = {repository:'owner/repo',ref:'main',path:'templates/app'};
+    const result = await new DesktopTemplateSources().acquire(7,{operation_id:'market',action:'capture',source,expected});
+    expect(result.ok).toBe(true);
+    expect(sdk.pinned).toHaveBeenCalledWith(source,expected,undefined,{signal:expect.any(AbortSignal)});
+    const invalid = await new DesktopTemplateSources().acquire(7,{operation_id:'market',action:'capture',source,expected:{...expected,commit_sha:'main'}});
+    expect(invalid).toEqual({ok:false,error_code:'REQUEST_INVALID'});
+  });
+
 });

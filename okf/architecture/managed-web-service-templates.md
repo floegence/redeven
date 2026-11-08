@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed service template publication, acquisition and formats
 tags: [architecture, templates, managed-services, localization, supply-chain]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -16,10 +16,17 @@ Published redeven-service-templates owns definitions/releases/locales/icons/noti
 
 start_script configures and runs foreground app; optional repeatable after_start_script shares startup deadline and cannot start another service. [Opening](managed-web-service-opening.md) owns recovery. Release upstream first; consume published module without copied assets/local wiring. [Catalog automation](../release/service-template-updates.md) owns discovery/checksum,not database migration.
 
-## GitHub sources
-Explicit Import from GitHub/Check updates acquires templates only,never app packages/npm/images. Request-scoped private credentials,no git/background updates/lifecycle effects. UI encoded body<=24MiB. Viewport/Workbench-bounded fixed-height review separates source,directory and confirmation. Source digest participates in install/update review/applied identity,including helper edits.
+## Discovery and acquisition
+The existing `redeven-plugin-market` Worker owns passive template discovery; no separate registry or repository is required. Public GitHub repositories opt in with `redeven-service-template`. The published SDK discovers either a root template or direct `templates/<name>` entries. The default branch is the tracking channel; directory changes require a new positive revision. The market rejects changed bytes at the same revision, records confirmed source unavailability and retains the last verified evidence after observation failures. Classification is presentation, not execution trust.
 
-<managed-state>/template-sources/source_<opaque-id>/ retains original files only. Uncertain commit never deletes possibly active directory; retry receipts/startup cleanup resolve complete unclaimed directories. Startup removes unreferenced sources only,never repairs/replaces corrupt active source. Hooks get REDEVEN_TEMPLATE_DIR for originals. [Registry migration](database-schema-migrations.md) owns atomic v4→v5 metadata/rollback.
+`GET /managed-web-service-templates/market-catalog` returns local cache with read permission; explicit/open-discovery refresh uses POST and full permission. The product reads a complete ordered generation, validates identity/presentation, rejects redirects, regressions and incomplete pages, then atomically replaces its cache. Failure preserves prior evidence. Environment changes fence UI responses. Official entries remain the embedded validated catalog; remote discovery cannot replace them.
+
+Import/check-source and market deployment use the same immutable, owner-scoped 15-minute review. The market selection pins numeric repository ID, commit SHA and directory digest through Desktop transfer or remote acquisition. Runtime independently verifies originals with the published reader. Private tokens remain request-scoped. Neither discovery, inspection, file review nor install preparation saves executable sources or runs lifecycle actions. A market deployment continues directly from source review to the existing install form; the final request atomically commits source acceptance, source binding, service, forward and operation receipt. Receipt reconciliation never blindly replays an uncertain install.
+
+## Instance source versions
+`<managed-state>/template-sources/source_<opaque-id>/` retains original files. Registry schema 7 stores source-version metadata and per-instance bindings, not copied executable specifications. Updating the library does not update instances. New instances bind the accepted digest; retained originals survive restart and library updates. The v6-to-v7 migration marks historical bindings unverified and preserves user rows. Execution requires matching applied runtime evidence; passive settings permit explicit source repair without guessing missing history.
+
+Settings expose current/available source versions. An explicit source review preserves instance overrides and installed application release, includes required notices, and binds the source digest to reconfiguration preflight. Applying requires a stopped instance. Source binding and configuration revision commit together; the existing journal carries old/target digests for container/Compose rollback and interrupted-operation recovery. Host hooks take effect on their next matching lifecycle action. Garbage collection protects current, bound and journal/active-operation source versions. Missing bindings or modified originals block execution. Hooks receive `REDEVEN_TEMPLATE_DIR` for the retained originals.
 
 ## Formats
 Authors use redeven-service-template.json,kind:redeven.service-template,schema_version4,template_id,service_family_id,positive revision,default_locale/locales and complete display/execution declarations. Branded filename requires branded document. Supported source→input→effective matrix:
@@ -37,4 +44,8 @@ Templates/catalogs never own Registry lifecycle,select user releases or bypass p
 
 - `redeven:go.mod` - Source.
 
-- `redeven:internal/portforward/registry/template_sources_test.go` - v4→v5 migration, rollback/stale rejection, no executable projection.
+- `redeven:internal/templatemarket/service_test.go` - complete cache generations, identity validation, cancellation and stale retention.
+- `redeven:internal/portforward/registry/template_versions_test.go` - atomic migration and install rollback.
+- `redeven:internal/managedwebservice/template_market_acceptance_test.go` - exact review, pinning, commit, rollback and recovery.
+- `redeven:internal/managedwebservice/template_market_native_test.go` - opt-in Host, Docker and Compose deployment/update/cleanup.
+- `redeven:internal/envapp/ui_src/src/ui/pages/serviceTemplateMarket.test.ts` - refresh failure and environment isolation.

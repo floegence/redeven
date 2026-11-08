@@ -159,6 +159,7 @@ func TestSourceHostHookReadsOriginalHelperDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	service.TemplateID = imported.TemplateID
+	service.TemplateSourceSHA256 = imported.SourceSHA256
 	service.RuntimeBindingJSON, service.RuntimeBindingSHA256, err = newRuntimeBinding(service.ServiceID, imported.ServiceFamilyID, DeploymentHost)
 	if err != nil {
 		t.Fatal(err)

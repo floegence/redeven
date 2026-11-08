@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, on, onCleanup, type Accessor } 
 import { fetchLocalApiJSON } from '../services/localApi';
 
 export type ManagedInstallRequest = Readonly<{
+  source?: {candidate_id: string; sha256: string; expected_sha256: string};
   template_id: string;
   deployment: string;
   workspace_path: string;

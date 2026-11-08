@@ -15,10 +15,36 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type TemplateSourceSettingsBackend interface {
+	TemplateSourceSettings(context.Context, string, string) (*ServiceSettingsView, error)
+}
+
 func (m *Manager) Settings(ctx context.Context, serviceID string) (*ServiceSettingsView, error) {
+	return m.TemplateSourceSettings(ctx, serviceID, "")
+}
+func (m *Manager) TemplateSourceSettings(ctx context.Context, serviceID, sourceDigest string) (*ServiceSettingsView, error) {
 	service, forward, err := m.serviceSettingsRecord(ctx, serviceID)
 	if err != nil {
 		return nil, err
+	}
+	source, verified, err := m.registry.GetServiceTemplateSource(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	available, err := m.registry.GetManagedTemplateSource(ctx, service.TemplateID)
+	if err != nil {
+		return nil, err
+	}
+	if sourceDigest != "" {
+		if available == nil || available.SHA256 != sourceDigest {
+			return nil, serviceError("TEMPLATE_SOURCE_REVIEW_STALE", "Review the available source again.", 409, true, nil)
+		}
+		service.TemplateSourceSHA256 = sourceDigest
+		source = available
+	} else if source != nil && !verified {
+		// Settings are passive. Permit inspection and explicit repair without
+		// allowing this unverified historical source to execute.
+		service.TemplateSourceSHA256 = source.SHA256
 	}
 	resolved, err := m.resolveRuntimeDefinition(ctx, service)
 	if err != nil {
@@ -59,6 +85,8 @@ func (m *Manager) Settings(ctx context.Context, serviceID string) (*ServiceSetti
 		}
 		view.Runtime.Compose = settings
 	}
+	view.SourceNotices, view.SourceLocalizations, view.SourceDefaultLocale = resolved.Template.Notices, resolved.Template.Localizations, resolved.Template.DefaultLocale
+	view.SourceVersion, view.AvailableSourceVersion, view.SourceReviewRequired = source, available, source != nil && !verified
 	view.Locked = lockedSettings(resolved.Template.Source, spec)
 	return view, nil
 }
@@ -146,12 +174,14 @@ func (m *Manager) serviceAndForward(ctx context.Context, serviceID string) (*pfr
 }
 
 type reconfigureCandidate struct {
-	Configuration serviceConfiguration
-	JSON          string
-	SHA256        string
-	Secrets       serviceSecrets
-	Spec          TemplateSpec
-	Plan          ReconfigurePlan
+	SourceSHA256        string
+	SourceRuntimeSHA256 string
+	Configuration       serviceConfiguration
+	JSON                string
+	SHA256              string
+	Secrets             serviceSecrets
+	Spec                TemplateSpec
+	Plan                ReconfigurePlan
 }
 
 func (m *Manager) PreflightReconfigure(ctx context.Context, serviceID string, draft ReconfigureDraft) (*ReconfigurePlan, error) {
@@ -170,9 +200,25 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 	if draft.ConfigurationRevision != service.ConfigurationRevision {
 		return reconfigureCandidate{}, serviceError("CONFIGURATION_REVISION_CONFLICT", "Service settings changed after this drawer was opened. Reload the latest settings.", 409, true, nil)
 	}
-	resolved, err := m.resolveRuntimeDefinition(ctx, service)
+	target := *service
+	if draft.TemplateSourceSHA256 != "" {
+		available, err := m.registry.GetManagedTemplateSource(ctx, service.TemplateID)
+		if err != nil {
+			return reconfigureCandidate{}, err
+		}
+		if available == nil || available.SHA256 != draft.TemplateSourceSHA256 {
+			return reconfigureCandidate{}, serviceError("TEMPLATE_SOURCE_REVIEW_STALE", "The available source changed after review.", 409, true, nil)
+		}
+		target.TemplateSourceSHA256 = draft.TemplateSourceSHA256
+	}
+	resolved, err := m.resolveRuntimeDefinition(ctx, &target)
 	if err != nil {
 		return reconfigureCandidate{}, err
+	}
+	if draft.TemplateSourceSHA256 != "" {
+		if err := validateAcceptedNotices(resolved.Template, draft.AcceptedNoticeRevisions); err != nil {
+			return reconfigureCandidate{}, err
+		}
 	}
 	baseline := cloneTemplateSpec(resolved.BaseSpec)
 	current, err := decodeServiceConfiguration(service.ConfigurationJSON)
@@ -180,6 +226,10 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		return reconfigureCandidate{}, err
 	}
 	configuration := current
+	if draft.TemplateSourceSHA256 != "" {
+		current.AcceptedNoticeRevisions = draft.AcceptedNoticeRevisions
+		configuration.AcceptedNoticeRevisions = draft.AcceptedNoticeRevisions
+	}
 
 	secretDocument, err := m.serviceSecretDocument(service.ServiceID)
 	if err != nil {
@@ -204,6 +254,9 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		secretDocument.Environment = map[string]string{}
 	}
 	changed := []string{}
+	if draft.TemplateSourceSHA256 != "" {
+		changed = append(changed, "template_source")
+	}
 	switch resolved.Template.Deployment {
 	case DeploymentContainer:
 		if baseline.Container == nil || draft.Runtime.Container == nil {
@@ -257,7 +310,23 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		return reconfigureCandidate{}, err
 	}
 	secretHash := sha256.Sum256(secretRaw)
-	risks := reconfigureRisks(baseline, spec, resolved.Template.Source)
+	riskBaseline := baseline
+	if draft.TemplateSourceSHA256 != "" {
+		oldRecord := *service
+		bound, _, bindErr := m.registry.GetServiceTemplateSource(ctx, service.ServiceID)
+		if bindErr != nil {
+			return reconfigureCandidate{}, bindErr
+		}
+		if bound != nil {
+			oldRecord.TemplateSourceSHA256 = bound.SHA256
+		}
+		old, err := m.resolveRuntimeDefinition(ctx, &oldRecord)
+		if err != nil {
+			return reconfigureCandidate{}, err
+		}
+		riskBaseline = old.Spec
+	}
+	risks := reconfigureRisks(riskBaseline, spec, resolved.Template.Source)
 	if resolved.Template.Source == "builtin" {
 		for _, risk := range risks {
 			if risk.RequiresAdmin {
@@ -295,8 +364,8 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		}
 		runtimePlanDigest = resourcePlan.PlanDigest
 	}
-	plan := ReconfigurePlan{ConfigurationRevision: service.ConfigurationRevision, PlanDigest: configurationPlanDigest(service.ServiceID, service.ConfigurationRevision, encoded, hex.EncodeToString(secretHash[:])+"\n"+runtimePlanDigest+fmt.Sprint(rebuild)+service.ManagementState+service.RuntimeIdentity), ChangedSections: changed, Risks: risks, RequiresRebuild: rebuild}
-	return reconfigureCandidate{Configuration: configuration, JSON: encoded, SHA256: digest, Secrets: secretDocument, Spec: spec, Plan: plan}, nil
+	plan := ReconfigurePlan{ConfigurationRevision: service.ConfigurationRevision, PlanDigest: configurationPlanDigest(service.ServiceID, service.ConfigurationRevision, encoded, hex.EncodeToString(secretHash[:])+"\n"+runtimePlanDigest+fmt.Sprint(rebuild)+service.ManagementState+service.RuntimeIdentity+resolved.Template.SourceSHA256), ChangedSections: changed, Risks: risks, RequiresRebuild: rebuild}
+	return reconfigureCandidate{SourceSHA256: draft.TemplateSourceSHA256, SourceRuntimeSHA256: resolved.Template.SourceRuntimeSHA256, Configuration: configuration, JSON: encoded, SHA256: digest, Secrets: secretDocument, Spec: spec, Plan: plan}, nil
 }
 
 func mergeSecretEnvironment(existing map[string]string, settings []EnvironmentSetting, replacements map[string]string) map[string]string {

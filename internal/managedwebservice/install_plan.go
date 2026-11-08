@@ -28,11 +28,14 @@ func installRequestFingerprint(req CreateRequest) string {
 	req.RequestID = ""
 	req.PlanDigest = ""
 	raw, _ := json.Marshal(req)
+	if req.Source != nil {
+		return requestFingerprint(string(raw), req.SourceOwner)
+	}
 	return requestFingerprint(string(raw))
 }
 
 func (m *Manager) PreflightInstall(ctx context.Context, req CreateRequest) (*InstallPlan, error) {
-	template, err := m.template(ctx, req.TemplateID, false)
+	template, err := m.installTemplate(ctx, req.TemplateID, req.Source, req.SourceOwner)
 	if err != nil {
 		return nil, err
 	}
