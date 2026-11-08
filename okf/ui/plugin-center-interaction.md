@@ -12,7 +12,7 @@ Redeven owns Plugin Center navigation and retained selection/search/filter/scrol
 # Contract
 
 ## Management placement and input
-Plugin Center is a retained category in the global Settings dialog, never a work destination or a child of inert/transformed Workbench ancestors. Connection and permission portals follow exact host visibility while retaining their drafts. Workbench Open closes management and focuses its widget; Activity opens over retained directory. Failed Open preserves context/error.
+Plugin Center is a retained category in the global Settings dialog, never a work destination or a child of inert/transformed Workbench ancestors. Connection and permission portals follow exact host visibility while retaining their drafts. Successful Open closes Settings and focuses the exact Workbench widget or Activity window after modal presence exits. Activity windows retain their owners while hidden under Settings; mobile isolation cannot compete with the modal. Reopening restores directory selection/search/scroll. Failed Open preserves context/error.
 
 ## Directory and responsive details
 Source/lifecycle filters retain identity; refresh status stays outside the grid.

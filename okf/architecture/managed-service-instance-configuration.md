@@ -20,7 +20,7 @@ Explicit Git source upgrades use the [source-version contract](managed-web-servi
 
 # Boundaries
 
-Settings retains one editor per visited service. Semantic opening identity excludes list-refresh churn. Navigation fences stale reads/plans but always settles pending preflight/apply busy state. Confirmed runtime apply adopts the new revision on reopening while preserving independent unsaved metadata; failed apply keeps its draft. Template dialogs opened from settings follow the host presentation.
+Settings retains one editor per visited service. Semantic opening identity excludes list-refresh churn. Navigation fences stale reads/plans but always settles pending preflight/apply and metadata-save busy state. An admitted metadata PATCH remains exclusive across category changes; confirmed fields become the baseline while later field edits and independent runtime/source drafts remain intact. Older GET responses cannot replace confirmed metadata. Confirmed runtime apply adopts the new revision on reopening while preserving independent unsaved metadata; failed apply keeps its draft. Template dialogs opened from settings follow the host presentation.
 
 No change to template topology/endpoint, ReDevPlugin or public IPC; no raw engine commands, silent stops or unreviewed host authority.
 

@@ -2,11 +2,16 @@ import '../../../index.css';
 import { FloeProvider } from '@floegence/floe-webapp-core';
 import { For, Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { SettingsDialog } from '../../../../../../settings_ui/src/SettingsDialog';
 import { createSettingsSession } from '../../../../../../settings_ui/src/settingsSession';
 import { HostedSettingsPanel, SettingsPanelContext, type SettingsPanelRegistration } from '../../../../../../settings_ui/src/SettingsPanelHost';
+import { ActivityPluginSurfaceWindow } from '../../plugins/ActivityPluginSurfaceWindow';
+import { EnvAppFloatingWindowStackProvider } from '../../context/EnvAppFloatingWindowStackContext';
+vi.mock('../../plugins/PluginSurfaceFrame', () => ({
+  PluginSurfaceBody: () => <iframe title="Plugin content" srcdoc="<button>Plugin action</button>" style={{ width: '100%', height: '100%' }} />,
+}));
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
 
@@ -63,4 +68,45 @@ it.each([1280, 390])('retains work and resource drafts in one global dialog at %
   await expect.element(page.getByRole('textbox', { name: 'Resource draft' })).toBeVisible();
   expect(panels()[0].target.resource).toBe('thread-b');
   expect(draft.value).toBe('kept');
+});
+
+
+it.each([1280, 390])('hands modal focus and pointer access to a retained Activity plugin at %ipx', async width => {
+  await page.viewport(width, 850);
+  const host = document.createElement('div'); document.body.append(host);
+  let session!: ReturnType<typeof createSettingsSession>;
+  const target = { pluginID: 'com.example.metrics', pluginInstanceID: 'metrics', surfaceID: 'dashboard', expectedManagementRevision: 1, displayName: 'Metrics' };
+  const windowProps = { instanceID: 'settings-handoff-plugin', target,
+    coordinator: {} as Parameters<typeof ActivityPluginSurfaceWindow>[0]['coordinator'],
+    confirmationQueue: {} as Parameters<typeof ActivityPluginSurfaceWindow>[0]['confirmationQueue'],
+    onActivate: () => {}, onClosed: () => {}, onEndPluginSession: async () => true, onRetirementError: () => {},
+  };
+  dispose = render(() => {
+    session = createSettingsSession();
+    const [admitted, setAdmitted] = createSignal(false);
+    return <FloeProvider><EnvAppFloatingWindowStackProvider>
+      <button onClick={() => session.open({ section: 'plugins' })}>Open settings</button>
+      <Show when={admitted()}><ActivityPluginSurfaceWindow {...windowProps} visible={!session.present()} active={!session.present()} focusRequest={1} /></Show>
+      <SettingsDialog globalZIndex={4000} open={session.target() !== null} present={session.present()} onPresenceChange={session.setPresent} onClose={session.close} title="Settings" closeLabel="Close settings">
+        <button onClick={() => { setAdmitted(true); session.close(); }}>Open plugin</button>
+      </SettingsDialog>
+    </EnvAppFloatingWindowStackProvider></FloeProvider>;
+  }, host);
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Open plugin', exact: true }).click();
+  await expect.poll(() => session.present()).toBe(false);
+  const frame = document.querySelector<HTMLIFrameElement>('iframe[title="Plugin content"]')!;
+  await expect.poll(() => document.activeElement).toBe(frame);
+  const isHit = () => {
+    const box = frame.getBoundingClientRect();
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === frame;
+  };
+  await expect.poll(isHit).toBe(true);
+  session.open({ section: 'plugins' });
+  await expect.element(page.getByRole('button', { name: 'Open plugin', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open plugin', exact: true }).click();
+  await expect.poll(() => session.present()).toBe(false);
+  expect(document.querySelector('iframe[title="Plugin content"]')).toBe(frame);
+  await expect.poll(isHit).toBe(true);
+  await expect.poll(() => document.activeElement).toBe(frame);
 });

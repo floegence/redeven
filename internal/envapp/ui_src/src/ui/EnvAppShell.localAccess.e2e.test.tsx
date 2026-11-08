@@ -57,6 +57,7 @@ const notesOverlayState = vi.hoisted(() => ({
     toggleKeybind?: string;
   },
 }));
+const settingsPresenceState = vi.hoisted(() => ({ holdExit: false, finishExit: undefined as (() => void) | undefined }));
 const settingsPageState = vi.hoisted(() => ({
   focusSeq: 0,
   focusSection: null as string | null,
@@ -864,7 +865,10 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
       </section>
     </Show>
   ),
-  Dialog: (props: any) => { createEffect(() => props.onPresenceChange?.(Boolean(props.open))); return (
+  Dialog: (props: any) => { createEffect(() => {
+    if (!props.open && settingsPresenceState.holdExit && props.class?.includes('redeven-unified-settings-dialog')) settingsPresenceState.finishExit = () => props.onPresenceChange?.(false);
+    else props.onPresenceChange?.(Boolean(props.open));
+  }); return (
     <Show when={props.open}>
       <section role="dialog" aria-label={props.title} class={props.class}>
         <h2>{props.title}</h2>
@@ -1342,6 +1346,9 @@ vi.mock('./pages/EnvContainersPage', () => ({ EnvContainersPage: () => <div>acti
 vi.mock('./pages/CodespacesPresentation', () => ({ CodespacesPageSkeleton: () => <div>codespaces skeleton</div> }));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div>activity main</div> }));
+vi.mock('./plugins/PluginCreationWorkspace', () => ({
+  PluginCreationWorkspace: (props: { renderFlower: (options: any) => JSX.Element }) => <div data-testid="plugin-creation-workspace">{props.renderFlower({})}</div>,
+}));
 vi.mock('./pages/EnvAIPage', () => ({
   EnvAIPage: (props: {
     settingsReturnSurfaceId?: string;
@@ -1585,6 +1592,7 @@ afterEach(() => {
 });
 
 beforeEach(async () => {
+  settingsPresenceState.holdExit = false; settingsPresenceState.finishExit = undefined;
   window.history.replaceState({}, '', '/');
   notificationErrorMock.mockReset();
   cacheProbe.enabled = false;
@@ -1858,6 +1866,35 @@ describe('EnvAppShell environment entry affordances', () => {
       } finally { dispose(); }
     }, 10000,
   );
+
+  it('covers a retained plugin creation transcript while settings is presented', async () => {
+    window.history.replaceState({}, '', '/?plugin_draft=new');
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      const workspace = () => host.querySelector<HTMLElement>('[data-testid="plugin-creation-workspace"]');
+      await flushUntil(() => Boolean(workspace()?.querySelector('[data-testid="ai-page"]')), 80);
+      const flower = workspace()!.querySelector<HTMLElement>('[data-testid="ai-page"]')!;
+      const composer = flower.querySelector<HTMLTextAreaElement>('textarea')!;
+      composer.value = 'Retained creation draft';
+      expect(flower.dataset.transcriptVisible).toBe('true');
+      flower.querySelector<HTMLButtonElement>('[data-testid="mock-open-flower-settings"]')!.click();
+      await flushUntil(() => Boolean(document.querySelector('.redeven-unified-settings-dialog')), 80);
+      await flushAsync();
+      expect(flower.dataset.transcriptVisible).toBe('false');
+      expect(flower.dataset.engaged).toBe('true');
+      expect(workspace()!.querySelector('[data-testid="ai-page"]')).toBe(flower);
+      expect(composer.value).toBe('Retained creation draft');
+      expect(new URL(window.location.href).searchParams.get('plugin_draft')).toBe('new');
+      host.querySelector<HTMLButtonElement>('[data-testid="mock-back-to-flower"]')!.click();
+      await flushUntil(() => flower.dataset.transcriptVisible === 'true', 80);
+      expect(flower.dataset.transcriptVisible).toBe('true');
+      expect(composer.value).toBe('Retained creation draft');
+    } finally { dispose(); }
+  }, 10000);
 
   it('returns Flower-origin runtime settings to Flower and clears the origin on normal settings entry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -3569,7 +3606,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it.each([false, true])('keeps Plugin Center beneath opened Activity windows: mobile=%s', async (isMobile) => {
+  it.each([false, true])('hands Settings to opened Activity windows and retains its selection: mobile=%s', async (isMobile) => {
     layoutIsMobile = isMobile;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -3586,11 +3623,13 @@ describe('EnvAppShell environment entry affordances', () => {
       const center = host.querySelector('[data-plugin-center-view]');
       const target = examplePluginProjection('enabled').items[0].defaultLaunchTarget!;
       const open = () => pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...target }, new AbortController().signal);
-      const expectCenter = () => {
+      const expectCenter = (present = true) => {
         expect(sidebarActiveTabValue).toBe('terminal');
-        expect(host.querySelector('[data-plugin-center-view]')).toBe(center);
+        if (present) expect(host.querySelector('[data-plugin-center-view]')).toBe(center);
+        else expect(center?.isConnected).toBe(false);
         expect(pluginCenterViewState.lastProps.selectedInventoryKey).toBe('instance:plugin_example_metrics');
-        expectPluginCenterMountedInSettings(host);
+        if (present) expectPluginCenterMountedInSettings(host);
+        else expect(new URL(window.location.href).searchParams.has('settings')).toBe(false);
       };
       await expect(pluginCenterViewState.lastProps.onCommand({
         type: 'open_surface', ...target, expectedManagementRevision: 10,
@@ -3598,14 +3637,19 @@ describe('EnvAppShell environment entry affordances', () => {
       expectCenter();
       expect(host.querySelector('[data-placement="activity"]')).toBeNull();
       await open();
+      await flushUntil(() => !host.querySelector('.redeven-unified-settings-dialog'));
       await flushUntil(() => Boolean(host.querySelector('[data-placement="activity"]')));
-      expectCenter();
+      expectCenter(false);
       const surface = host.querySelector('[data-placement="activity"]')!;
       const frame = surface.querySelector('iframe');
       const instanceID = pluginSurfaceFrameState.lastProps.instanceID;
       const focusRequest = pluginSurfaceFrameState.lastProps.focusRequest;
-      await open();
+      await pluginPanelState.lastProps.onOpenPluginDetails('instance:plugin_example_metrics');
+      await flushUntil(() => Boolean(host.querySelector('.redeven-unified-settings-dialog')));
       expectCenter();
+      await open();
+      await flushUntil(() => !host.querySelector('.redeven-unified-settings-dialog'));
+      expectCenter(false);
       expect(host.querySelectorAll('[data-placement="activity"]')).toHaveLength(1);
       expect(surface.querySelector('iframe')).toBe(frame);
       expect(pluginSurfaceFrameState.lastProps.instanceID).toBe(instanceID);
@@ -3614,10 +3658,14 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(Boolean(background.inert)).toBe(isMobile);
       host.querySelector<HTMLButtonElement>('[aria-label="Close Plugin Surface"]')!.click();
       await flushUntil(() => !host.querySelector('[data-placement="activity"]'));
-      expectCenter();
+      expectCenter(false);
       expect(background.inert).toBe(false);
-      await open();
+      await pluginPanelState.lastProps.onOpenPluginDetails('instance:plugin_example_metrics');
+      await flushUntil(() => Boolean(host.querySelector('.redeven-unified-settings-dialog')));
       expectCenter();
+      await open();
+      await flushUntil(() => !host.querySelector('.redeven-unified-settings-dialog'));
+      expectCenter(false);
       expect(pluginSurfaceFrameState.lastProps.instanceID).not.toBe(instanceID);
     } finally { dispose(); }
   }, 10000);
@@ -3660,7 +3708,7 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   }, 10000);
 
-  it('retains failed Workbench opens and dismisses management only after placement succeeds', async () => {
+  it.each([false, true])('waits for successful Workbench placement and modal exit before focusing: navigation=%s', async changeMode => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -3678,11 +3726,23 @@ describe('EnvAppShell environment entry affordances', () => {
       workbenchPluginSurfaceState.open.mockRejectedValueOnce(new Error('Placement unavailable'));
       await expect(open()).rejects.toThrow('Placement unavailable');
       expect(host.querySelector('.redeven-unified-settings-dialog')).not.toBeNull();
+      settingsPresenceState.holdExit = true;
       await open();
+      await flushAsync();
+      expect(workbenchPluginSurfaceState.focus).not.toHaveBeenCalled();
+      expect(settingsPresenceState.finishExit).toBeTypeOf('function');
+      if (changeMode) {
+        findButtonByText(host, 'Activity')!.click();
+        await flushUntil(() => window.localStorage.getItem('redeven_envapp_desktop_view_mode') === 'activity');
+      }
+      settingsPresenceState.finishExit!();
+      await flushAsync();
+      if (changeMode) expect(workbenchPluginSurfaceState.focus).not.toHaveBeenCalled();
+      else expect(workbenchPluginSurfaceState.focus).toHaveBeenCalledExactlyOnceWith(target);
       await flushUntil(() => !host.querySelector('.redeven-unified-settings-dialog'), 60);
       expect(workbenchPluginSurfaceState.open).toHaveBeenLastCalledWith(target);
       expect(host.querySelector('[data-placement="activity"]')).toBeNull();
-      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
+      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe(changeMode ? 'activity' : 'workbench');
     } finally { dispose(); }
   }, 10000);
 

@@ -305,23 +305,29 @@ export function ManagedServiceSettingsDrawer(props: {
   let ownerService: string | undefined;
   let disposed = false;
   let appliedNeedsReload = false;
+  let metadataSaveOwner: object | undefined;
+  let metadataVersion = 0;
   onCleanup(() => { disposed = true; readGeneration++; });
   const load = async () => {
     if (!props.open || !props.serviceID) return;
     const generation = ++readGeneration;
+    const metadataAtRead = metadataVersion;
     const serviceID = props.serviceID;
     setLoading(true);
     setReadConfirmed(false);
     setError("");
     try {
-      const value = await fetchLocalApiJSON<SettingsView>(
+      let value = await fetchLocalApiJSON<SettingsView>(
         `/_redeven_proxy/api/managed-web-services/${encodeURIComponent(props.serviceID)}/settings`,
         { method: "GET" },
       );
       if (generation !== readGeneration || serviceID !== props.serviceID || !props.open) return;
+      // A GET begun before a confirmed PATCH cannot restore older details.
+      const saved = loaded();
+      if (metadataAtRead !== metadataVersion && saved) value = { ...value, name: saved.name, description: saved.description, access_mode: saved.access_mode };
       setReadConfirmed(true);
       setPlan(null); setAcceptedRisks({});
-      if (!appliedNeedsReload && (metadataDirty() || runtimeDirty())) {
+      if (!appliedNeedsReload && (savingMetadata() || metadataDirty() || runtimeDirty())) {
         const authority = { management_state: value.management_state, observed_state: value.observed_state, locked: value.locked };
         setLoaded(current => current ? { ...current, ...authority } : current);
         setDraft(current => current ? { ...current, ...authority } : current);
@@ -352,8 +358,8 @@ export function ManagedServiceSettingsDrawer(props: {
     readGeneration++;
     setLoading(false);
     setReadConfirmed(false);
-    setSavingMetadata(false);
     if (serviceID !== ownerService) {
+      metadataSaveOwner = undefined; setSavingMetadata(false);
       ownerService = serviceID; appliedNeedsReload = false; setApplying(false);
       setLoaded(null); setDraft(null); setPlan(null); setAcceptedRisks({}); setError("");
     }
@@ -456,8 +462,13 @@ export function ManagedServiceSettingsDrawer(props: {
 
   const saveMetadata = async () => {
     const value = draft();
-    if (!value || !value.name.trim() || !metadataDirty() || !readConfirmed() || !props.canManage || !props.open) return;
-    const generation = readGeneration;
+    if (savingMetadata() || !value || !value.name.trim() || !metadataDirty() || !readConfirmed() || !props.canManage || !props.open) return;
+    // IMPORTANT: The admitted PATCH belongs to this service owner, not its
+    // visible category. Navigation cannot unlock a duplicate write or lose its
+    // settlement; a replacement owner cannot adopt the old result.
+    const owner = {};
+    metadataSaveOwner = owner;
+    const ownsSave = () => !disposed && metadataSaveOwner === owner;
     setSavingMetadata(true);
     setError("");
     try {
@@ -472,7 +483,8 @@ export function ManagedServiceSettingsDrawer(props: {
           }),
         },
       );
-      if (generation !== readGeneration) return;
+      if (!ownsSave()) return;
+      metadataVersion++;
       setLoaded((current) =>
         current
           ? {
@@ -487,18 +499,19 @@ export function ManagedServiceSettingsDrawer(props: {
         current
           ? {
               ...current,
-              name: updated.name,
-              description: updated.description,
-              access_mode: updated.access_mode,
+              // Preserve edits made after submission, independently per field.
+              name: current.name === value.name ? updated.name : current.name,
+              description: current.description === value.description ? updated.description : current.description,
+              access_mode: current.access_mode === value.access_mode ? updated.access_mode : current.access_mode,
             }
           : current,
       );
       props.onChanged();
       notify.success(settingText("savedTitle"), settingText("detailsSaved"));
     } catch (reason) {
-      if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason));
+      if (ownsSave()) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      if (generation === readGeneration) setSavingMetadata(false);
+      if (ownsSave()) { metadataSaveOwner = undefined; setSavingMetadata(false); }
     }
   };
 

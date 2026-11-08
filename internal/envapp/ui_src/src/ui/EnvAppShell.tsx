@@ -2028,7 +2028,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         await openPluginSurface(item.defaultLaunchTarget, { activityPlacement: 'window', creationID });
       }}
       renderFlower={options => <EnvAIPage draftCoordinator={flowerDraftCoordinator} embeddedConversation={options.embeddedConversation}
-        prepareTurnRoute={options.prepareTurnRoute} presentation="full" engaged={pluginCreationOpen()} transcriptVisible={pluginCreationOpen()}
+        prepareTurnRoute={options.prepareTurnRoute} presentation="full" engaged={pluginCreationOpen()} transcriptVisible={pluginCreationOpen() && !settingsSession.present()}
         focusRequestScope="workbench" onOpenPluginCreation={({ threadID }) => openPluginCreation(threadID)} />}
     />
   </Show>}</Show>;
@@ -2139,6 +2139,25 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     return workbenchPluginSurfaceController;
   };
 
+  const [pendingWorkbenchPluginFocus, setPendingWorkbenchPluginFocus] = createSignal<{
+    controller: WorkbenchPluginSurfaceController; target: PluginSurfaceLaunchTarget; owner: object | false;
+  } | null>(null);
+  createEffect(() => {
+    const request = pendingWorkbenchPluginFocus();
+    if (!request || settingsSession.present()) return;
+    setPendingWorkbenchPluginFocus(null);
+    // IMPORTANT: Floe releases modal isolation at presence exit, not at close.
+    // Focus only that admitted widget after the same owner regains input.
+    queueMicrotask(() => {
+      if (viewMode() === 'workbench' && !settingsSession.present()
+        && pluginInventorySource() === request.owner && canOpenPluginSurfaces()
+        && workbenchPluginSurfaceController === request.controller
+        && resolveCurrentPluginSurfaceTarget(request.target)?.expectedManagementRevision === request.target.expectedManagementRevision) {
+        request.controller.focus(request.target);
+      }
+    });
+  });
+
   type PluginSurfaceOpenOptions = Readonly<{
     workbenchPlacement?: WorkbenchCanvasWidgetPlacement;
     activityPlacement?: 'window';
@@ -2159,6 +2178,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       throw pluginSurfaceFailure();
     }
     if (mode === 'workbench' && !options.creationID) {
+      const owner = pluginInventorySource();
       const controller = await resolveWorkbenchPluginSurfaceController();
       if (options.workbenchPlacement) {
         await controller.open(currentTarget, options.workbenchPlacement);
@@ -2167,11 +2187,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       }
       updatePluginPanel({ open: false });
       settingsSession.close();
-      if (viewMode() === mode) queueMicrotask(() => controller.focus(currentTarget));
+      if (viewMode() === mode) setPendingWorkbenchPluginFocus({ controller, target: currentTarget, owner });
       return;
     }
     const targetKey = pluginSurfaceTargetKey(currentTarget);
-    // Management opens above its directory; a retained page keeps its own slot.
+    // A retained page keeps its own slot; successful placement leaves Settings.
     const existingPage = !options.activityPlacement && [...activityPluginPageRuntimes.entries()].find(([, runtime]) => {
       const target = runtime.target();
       return target && pluginSurfaceTargetKey(target) === targetKey;
@@ -2180,6 +2200,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       existingPage[1].setTarget(currentTarget);
       if (viewMode() === mode) setEnvSidebarActiveTab(pluginActivityComponentID(existingPage[0]), { openSidebar: false });
       updatePluginPanel({ open: false });
+      settingsSession.close();
       return;
     }
     const existingWindow = activityPluginWindows().find((window) => window.targetKey === targetKey && window.creationID === options.creationID);
@@ -2196,6 +2217,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       const [target, setTarget] = createSignal(currentTarget);
       setActivityPluginWindows(windows => [...windows, { instanceID, targetKey, target, setTarget, creationID: options.creationID }]);
     }
+    // IMPORTANT: Product modals sit above ordinary plugin windows. Close only
+    // after successful placement; visibility/focus waits for the modal exit.
+    settingsSession.close();
     requestPluginWindowFocus(instanceID);
     updatePluginPanel({ open: false });
     if (!options.activityPlacement && viewMode() === mode) activateActivitySurface(lastActivitySurface(), { persist: false });
@@ -5459,7 +5483,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     </div>
   );
 
-  const visiblePluginWindows = createMemo(() => activityPluginWindows().filter(window => pluginCreationOpen()
+  // IMPORTANT: Retain window owners while Settings owns focus and isolation.
+  const visiblePluginWindows = createMemo(() => settingsSession.present() ? [] : activityPluginWindows().filter(window => pluginCreationOpen()
     ? window.creationID === pluginCreationOwner() : !window.creationID && viewMode() === 'activity'));
   const mobilePluginModalOpen = () => layout.isMobile() && visiblePluginWindows().length > 0;
 

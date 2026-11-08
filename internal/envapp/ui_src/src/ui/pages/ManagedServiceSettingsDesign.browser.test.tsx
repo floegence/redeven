@@ -172,3 +172,73 @@ it('settles a hidden preflight without accepting its stale plan', async () => {
   await expect.element(page.getByRole('button', { name: 'Review changes', exact: true })).toBeEnabled();
   await expect.element(page.getByRole('button', { name: 'Apply configuration', exact: true })).toBeDisabled();
 });
+
+it.each([false, true])('settles a retained metadata save and preserves later edits=%s', async editWhileSaving => {
+  await page.viewport(1280, 900);
+  let server = { service_id: 'one', name: 'Original', description: '', access_mode: 'unified_proxy', deployment: 'container', template_source: 'custom', observed_state: 'stopped', configuration_revision: 3, configuration_sha256: 'fixture', parameters: {}, runtime: { container: { entrypoint: '', command: [], read_only_root: true } } };
+  let finish!: () => void;
+  api.request.mockReset().mockImplementation(async (_url, options) => {
+    if (options?.method === 'PATCH') return new Promise(resolve => { finish = () => { server = { ...server, ...JSON.parse(options.body) }; resolve(server); }; });
+    return server;
+  });
+  const [open, setOpen] = createSignal(true);
+  const changed = vi.fn();
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeProvider><div hidden={!open()}><ManagedServiceSettingsDrawer embedded open={open()} serviceID="one" serviceName="Original" canManage onOpenChange={setOpen} onChanged={changed} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={async () => {}} /></div></FloeProvider>, host);
+  const name = () => host.querySelector<HTMLInputElement>('.managed-settings-fields input')!;
+  await expect.poll(() => name()?.value).toBe('Original');
+  await userEvent.fill(name(), ' Submitted ');
+  await page.getByRole('button', { name: 'Save details', exact: true }).click();
+  await expect.poll(() => finish).toBeTypeOf('function');
+  setOpen(false); setOpen(true);
+  await expect.poll(() => host.querySelector('[data-testid="managed-service-settings"]')?.getAttribute('aria-busy')).toBe('false');
+  await expect.element(page.getByRole('button', { name: 'Save details', exact: true })).toBeDisabled();
+  if (editWhileSaving) await userEvent.fill(name(), 'Newer draft');
+  await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+  await page.getByPlaceholder('/usr/local/bin/start').fill('/keep-runtime-edit');
+  setOpen(false); finish();
+  await expect.poll(() => changed.mock.calls.length).toBe(1);
+  setOpen(true);
+  await expect.element(page.getByPlaceholder('/usr/local/bin/start')).toHaveValue('/keep-runtime-edit');
+  await page.getByRole('button', { name: 'General', exact: true }).click();
+  await expect.poll(() => name()?.value).toBe(editWhileSaving ? 'Newer draft' : 'Submitted');
+  if (editWhileSaving) await expect.element(page.getByRole('button', { name: 'Save details', exact: true })).toBeEnabled();
+  else expect([...host.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Save details')).toBe(false);
+  expect(api.request.mock.calls.filter(([, options]) => options?.method === 'PATCH')).toHaveLength(1);
+});
+
+it.each(['refresh', 'source'] as const)('keeps confirmed metadata when an older %s read settles', async kind => {
+  await page.viewport(1280, 900);
+  const source = { sha256: 'a'.repeat(64), revision: 1, repository: 'owner/repo', commit_sha: 'a'.repeat(40) };
+  const nextSource = { ...source, sha256: 'b'.repeat(64), revision: 2 };
+  const original = { service_id: 'one', name: 'Original', access_mode: 'unified_proxy', deployment: 'container', template_source: 'git', observed_state: 'stopped', configuration_revision: 1, configuration_sha256: 'fixture', source_version: source, available_source_version: nextSource, runtime: { container: { entrypoint: '', read_only_root: true } } };
+  let save!: () => void;
+  let read!: () => void;
+  let delayRead = false;
+  api.request.mockReset().mockImplementation(async (_url, options) => {
+    if (options?.method === 'PATCH') return new Promise(resolve => { save = () => resolve({ ...original, name: 'Saved' }); });
+    if (delayRead) return new Promise(resolve => { read = () => resolve(kind === 'source' ? { ...original, source_version: nextSource, runtime: { container: { entrypoint: '/source', read_only_root: true } } } : original); });
+    return original;
+  });
+  const [open, setOpen] = createSignal(true);
+  const changed = vi.fn();
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeProvider><div hidden={!open()}><ManagedServiceSettingsDrawer embedded open={open()} serviceID="one" serviceName="Original" canManage onOpenChange={setOpen} onChanged={changed} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={async () => {}} /></div></FloeProvider>, host);
+  const name = () => host.querySelector<HTMLInputElement>('.managed-settings-fields input')!;
+  await expect.poll(() => name()?.value).toBe('Original');
+  await userEvent.fill(name(), 'Saved');
+  await page.getByRole('button', { name: 'Save details', exact: true }).click();
+  delayRead = true;
+  if (kind === 'source') await page.getByRole('button', { name: 'Review source update', exact: true }).click();
+  else { setOpen(false); setOpen(true); }
+  await expect.poll(() => read).toBeTypeOf('function');
+  save(); await expect.poll(() => changed.mock.calls.length).toBe(1);
+  read();
+  await expect.poll(() => host.querySelector('[data-testid="managed-service-settings"]')?.getAttribute('aria-busy')).toBe('false');
+  expect(name().value).toBe('Saved');
+  expect([...host.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Save details')).toBe(false);
+  if (kind === 'source') {
+    await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+    await expect.element(page.getByPlaceholder('/usr/local/bin/start')).toHaveValue('/source');
+  }
+});

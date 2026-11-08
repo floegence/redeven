@@ -6,7 +6,11 @@ const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8'
 const shell = read('internal/envapp/ui_src/src/ui/EnvAppShell.tsx');
 const open = shell.slice(shell.indexOf('const openSettings ='), shell.indexOf('const openDebugConsole ='));
 for (const forbidden of ['navigation.commit', 'setViewMode(', 'activateActivitySurface(', 'updatePluginPanel(', 'openSurface(']) assert.ok(!open.includes(forbidden), forbidden);
-assert.match(shell, /transcriptVisible=\{[^\n]*!settingsSession.present\(\)/);
+// IMPORTANT: Every shell Flower owner must stop read visibility under Settings.
+const transcripts = [...shell.matchAll(/transcriptVisible=\{([^}]+)\}/g)];
+assert.ok(transcripts.length > 0);
+for (const [, expression] of transcripts) assert.ok(expression.includes('!settingsSession.present()'));
+assert.match(shell, /visiblePluginWindows = createMemo\(\(\) => settingsSession.present\(\) \? \[\]/);
 const mobile = read('internal/envapp/ui_src/src/ui/MobileShellTools.tsx');
 assert.doesNotMatch(mobile, /<EnvAppThemePicker|<LanguagePreferenceMenu/);
 assert.match(mobile, /onClick: props.onSettings/);
