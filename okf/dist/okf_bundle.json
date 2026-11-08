@@ -12058,7 +12058,7 @@
         "title": "Managed service template publication, acquisition and formats",
         "type": "Runtime Contract"
       },
-      "body_length": 7879,
+      "body_length": 8100,
       "summary": "Published templates own definitions, formats and passive resources; Redeven validates offline bundles and authorizes imported original directories. Strict decode,consecutive in-memory transformations,current validation/passive-resource checks feed one executor.",
       "sections": [
         {
@@ -12079,8 +12079,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:go.mod` - Source.\n\n- `redeven:internal/templatemarket/service_test.go` - complete cache generations, identity validation, cancellation and stale retention.\n- `redeven:internal/portforward/registry/template_versions_test.go` - atomic migration and install rollback.\n- `redeven:internal/managedwebservice/template_market_acceptance_test.go` - exact review, pinning, commit, rollback and recovery.\n- `redeven:internal/managedwebservice/template_official_acceptance_test.go` - opt-in production discovery, exact source review and real installation/open/stop/start/uninstall for all official templates; browser reload/reopen and screenshots via `checkOfficialTemplatePage.mjs`.\nLive qualification: set `REDEVEN_OFFICIAL_TEMPLATE_TEST=1`, `REDEVEN_OFFICIAL_TEMPLATE_NATIVE=1`, and an existing `REDEVEN_OFFICIAL_TEMPLATE_EVIDENCE` directory, then run `GOWORK=off go test ./internal/managedwebservice -run ^TestOfficialTemplateMarketLifecycle$ -timeout 60m -count=1 -v`. Install the pinned UI dependencies for the real Chromium opening check. Optional `GITHUB_TOKEN` is request-scoped. This exercises actual packages and Docker images, requires Docker, and removes only newly allocated service resources. Without the native flag it verifies discovery, immutable acquisition, review and preparation without installing applications.\n\n- `redeven:internal/managedwebservice/template_source_profile_test.go` - reserved-profile authorization requires the complete published original, including file modes.\n- `redeven:internal/managedwebservice/template_market_native_test.go` - opt-in Host, Docker and Compose deployment/update/cleanup.\n- `redeven:internal/envapp/ui_src/src/ui/pages/serviceTemplateMarket.test.ts` - refresh failure and environment isolation.",
-          "char_count": 1756
+          "body": "- `redeven:go.mod` - Source.\n\n- `redeven:internal/templatemarket/service_test.go` - complete cache generations, identity validation, cancellation and stale retention.\n- `redeven:internal/portforward/registry/template_versions_test.go` - atomic migration and install rollback.\n- `redeven:internal/managedwebservice/template_market_acceptance_test.go` - exact review, pinning, commit, rollback and recovery.\n- `redeven:internal/managedwebservice/template_official_acceptance_test.go` - opt-in production discovery, exact source review and real installation/open/stop/start/uninstall for all official templates; browser reload/reopen and screenshots via `checkOfficialTemplatePage.mjs`; desktop qualification requires rendered desktop pixels or decoded video rather than an empty canvas. Catalog v0.8.1 corrects the old Webtop recommendations with reviewed multiarchitecture artifacts (template revision 6).\nLive qualification: set `REDEVEN_OFFICIAL_TEMPLATE_TEST=1`, `REDEVEN_OFFICIAL_TEMPLATE_NATIVE=1`, and an existing `REDEVEN_OFFICIAL_TEMPLATE_EVIDENCE` directory, then run `GOWORK=off go test ./internal/managedwebservice -run ^TestOfficialTemplateMarketLifecycle$ -timeout 60m -count=1 -v`. Install the pinned UI dependencies for the real Chromium opening check. Optional `GITHUB_TOKEN` is request-scoped. This exercises actual packages and Docker images, requires Docker, and removes only newly allocated service resources. Without the native flag it verifies discovery, immutable acquisition, review and preparation without installing applications.\n\n- `redeven:internal/managedwebservice/template_source_profile_test.go` - reserved-profile authorization requires the complete published original, including file modes.\n- `redeven:internal/managedwebservice/template_market_native_test.go` - opt-in Host, Docker and Compose deployment/update/cleanup.\n- `redeven:internal/envapp/ui_src/src/ui/pages/serviceTemplateMarket.test.ts` - refresh failure and environment isolation.",
+          "char_count": 1977
         }
       ],
       "evidence": [
@@ -12105,9 +12105,9 @@
           "description": "exact review, pinning, commit, rollback and recovery."
         },
         {
-          "id": "redeven:internal/managedwebservice/template_official_acceptance_test.go:0:opt-in production discovery, exact source review and real installation/open/stop/start/uninstall for all official templates; browser reload/reopen and screenshots via `checkofficialtemplatepage.mjs`.",
+          "id": "redeven:internal/managedwebservice/template_official_acceptance_test.go:0:opt-in production discovery, exact source review and real installation/open/stop/start/uninstall for all official templates; browser reload/reopen and screenshots via `checkofficialtemplatepage.mjs`; desktop qualification requires rendered desktop pixels or decoded video rather than an empty canvas. catalog v0.8.1 corrects the old webtop recommendations with reviewed multiarchitecture artifacts (template revision 6).",
           "source": "redeven:internal/managedwebservice/template_official_acceptance_test.go",
-          "description": "opt-in production discovery, exact source review and real installation/open/stop/start/uninstall for all official templates; browser reload/reopen and screenshots via `checkOfficialTemplatePage.mjs`."
+          "description": "opt-in production discovery, exact source review and real installation/open/stop/start/uninstall for all official templates; browser reload/reopen and screenshots via `checkOfficialTemplatePage.mjs`; desktop qualification requires rendered desktop pixels or decoded video rather than an empty canvas. Catalog v0.8.1 corrects the old Webtop recommendations with reviewed multiarchitecture artifacts (template revision 6)."
         },
         {
           "id": "redeven:internal/managedwebservice/template_source_profile_test.go:0:reserved-profile authorization requires the complete published original, including file modes.",
@@ -24791,5 +24791,5 @@
       ]
     }
   ],
-  "source_sha256": "74f014510183f3133f5063bdea337d9aa8c15faaddd8ef93c8a03a4eb8182105"
+  "source_sha256": "b86f7244d7795949a2ba787c9675ef43b14071e125ca54815303b2f0fa36d97b"
 }

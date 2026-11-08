@@ -52,7 +52,7 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 			t.Fatalf("undiscovered official directory: %s", entry.Path)
 		}
 		t.Run(item.DocumentTemplateID, func(t *testing.T) {
-			if item.Status != "available" || item.Source.CommitSHA != discovered.Source.CommitSHA {
+			if item.Status != "available" {
 				t.Fatal("official catalog is not current")
 			}
 			home, _ := os.UserHomeDir()
@@ -66,6 +66,13 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 			snapshot, err := client.CapturePinned(ctx, templatecontract.GitSource{Repository: item.Source.Repository, Ref: item.Source.Ref, Path: item.Source.Path}, expected, os.Getenv("GITHUB_TOKEN"))
 			if err != nil {
 				t.Fatal(err)
+			}
+
+			if item.Source.CommitSHA != discovered.Source.CommitSHA {
+				current, err := client.Capture(ctx, templatecontract.GitSource{Repository: item.Source.Repository, Ref: discovered.Source.CommitSHA, Path: item.Source.Path}, os.Getenv("GITHUB_TOKEN"))
+				if err != nil || current.SHA256 != item.SHA256 {
+					t.Fatal("official catalog does not match current directory bytes", err)
+				}
 			}
 			evidence, err := templatecontract.InspectMarketTemplate(snapshot)
 			if err != nil {
@@ -160,7 +167,7 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			if dir := os.Getenv("REDEVEN_OFFICIAL_TEMPLATE_EVIDENCE"); dir != "" {
-				input, _ := json.Marshal(map[string]any{"url": fmt.Sprintf("http://127.0.0.1:%d%s", service.RuntimePort, opened.AppPath), "screenshot": filepath.Join(dir, item.DocumentTemplateID+".png"), "authenticated": opened.ManagedEntrance != nil})
+				input, _ := json.Marshal(map[string]any{"url": fmt.Sprintf("http://127.0.0.1:%d%s", service.RuntimePort, opened.AppPath), "screenshot": filepath.Join(dir, item.DocumentTemplateID+".png"), "authenticated": opened.ManagedEntrance != nil, "desktop": preview.Template.Spec.Container != nil && preview.Template.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop})
 				command := exec.CommandContext(ctx, "node", "../envapp/ui_src/scripts/checkOfficialTemplatePage.mjs")
 				command.Stdin = strings.NewReader(string(input))
 				output, err := command.CombinedOutput()

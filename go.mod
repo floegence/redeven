@@ -12,7 +12,7 @@ require (
 	github.com/floegence/floeterm/terminal-go v0.20.0
 	github.com/floegence/floret/v7 v7.107.9
 	github.com/floegence/flowersec/flowersec-go/v5 v5.12.0
-	github.com/floegence/redeven-service-templates v0.8.0
+	github.com/floegence/redeven-service-templates v0.8.1
 	github.com/floegence/redevplugin/v3 v3.24.1
 	github.com/go-openapi/runtime v0.33.3
 	github.com/godbus/dbus/v5 v5.2.2
