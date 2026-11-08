@@ -4,6 +4,20 @@ import { buildAskFlowerContextAction } from '../contextActions/askFlower';
 import { createClientId } from '../utils/clientId';
 import { receiveFilePreviewFlowerIntent } from './filePreviewFlowerIntent';
 
+export function prepareFlowerWindowHandoff(source: DesktopAskFlowerSource | undefined, environmentID: string, environmentName: string, invalidPath: string) {
+  return source ? { intent: desktopFlowerSourceIntent(source, environmentID, environmentName, invalidPath),
+    screenshot: desktopFlowerSourceScreenshot(source.id), anchor: { x: 32, y: 80 } }
+    : { intent: receiveFilePreviewFlowerIntent(undefined, invalidPath), screenshot: undefined, anchor: undefined };
+}
+
+export function deliverFlowerWindowHandoff(source: DesktopAskFlowerSource | undefined, environmentID: string, environmentName: string, invalidPath: string,
+  open: (intent: ReturnType<typeof prepareFlowerWindowHandoff>['intent'], anchor?: { x: number; y: number }) => unknown,
+  attachScreenshot: (screenshot: ReturnType<typeof prepareFlowerWindowHandoff>['screenshot']) => void) {
+  const handoff = prepareFlowerWindowHandoff(source, environmentID, environmentName, invalidPath);
+  if (open(handoff.intent, handoff.anchor)) attachScreenshot(handoff.screenshot);
+  else window.redevenDesktopShell?.releaseAskFlowerSource?.();
+}
+
 export function desktopFlowerSourceIntent(source: DesktopAskFlowerSource, environmentID: string, environmentName: string, invalidPath: string) {
   if (source.file_path) return receiveFilePreviewFlowerIntent(source.file_path, invalidPath);
   const snapshot = flowerPageContextSnapshot({ environmentID, environmentName, pageID: '', pageName: source.title || environmentName,

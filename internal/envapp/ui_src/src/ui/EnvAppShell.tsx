@@ -1,4 +1,5 @@
 import { FILE_PREVIEW_FLOWER_QUERY } from '../../../../../desktop/src/shared/filePreviewWindowRoute';
+import type { DesktopAskFlowerSource } from '../../../../../desktop/src/shared/manualScreenshotIPC';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
 import { createFlowerContextSources, FlowerContextSources, FlowerContextSource } from './flower/FlowerContextSource';
@@ -2617,7 +2618,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       environment === envId() && mode === viewMode() && (source.value.kind === 'navigation' || mode !== 'activity' || page === layout.sidebarActiveTab())
       && current()?.id === source.id && current()?.value.resourceKey === source.value.resourceKey } : undefined;
   };
-  const reportPreviewFlowerError = (error: unknown) => notify.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), getErrorMessage(error));
   let askPreviewFlower: (() => void) | undefined;
   const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
     if (standaloneFilePreview) return () => askPreviewFlower?.();
@@ -2662,6 +2662,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       ...(capturedMode === 'workbench' ? { workbenchAnchor: resolveWorkbenchHandoffAnchor() } : {}),
     });
     setFlowerTurnLauncherOpen(true);
+    return true;
   };
 
   const openTerminalInDirectory = (
@@ -2706,30 +2707,25 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
 
-  const openFileFlowerLauncher = async (path?: string) => {
-    const receiver = await import('./services/filePreviewFlowerIntent');
-    openFlowerTurnLauncher(receiver.receiveFilePreviewFlowerIntent(path, i18n.t('shell.notifications.invalidFilePath')));
-    bindScreenshotSource(undefined);
+  const receiveFlowerWindowHandoff = async (source?: DesktopAskFlowerSource) => {
+    try {
+      const receiver = await import('./services/desktopFlowerSource');
+      receiver.deliverFlowerWindowHandoff(source, envId(), environmentName(), i18n.t('shell.notifications.invalidFilePath'), openFlowerTurnLauncher, screenshot => {
+        bindScreenshotSource(undefined); externalScreenshot = screenshot;
+      });
+    } catch (error) {
+      window.redevenDesktopShell?.releaseAskFlowerSource?.();
+      notify.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), getErrorMessage(error));
+    }
   };
   let pendingPreviewFlower = new URLSearchParams(window.location.search).has(FILE_PREVIEW_FLOWER_QUERY);
   createEffect(() => {
     if (!pendingPreviewFlower || standalone || !runtimeConnectionEstablished() || accessGateVisible() || env.state !== 'ready') return;
     pendingPreviewFlower = false;
-    void openFileFlowerLauncher().catch(reportPreviewFlowerError);
+    void receiveFlowerWindowHandoff();
   });
   onMount(() => {
-    const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(async source => {
-      if (flowerTurnLauncherLocked()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
-      try {
-        const receiver = await import('./services/desktopFlowerSource');
-        if (flowerTurnLauncherLocked()) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); return; }
-        openFlowerTurnLauncher(receiver.desktopFlowerSourceIntent(source, envId(), environmentName(), i18n.t('shell.notifications.invalidFilePath')), { x: 32, y: 80 });
-        if (flowerTurnLauncherOpen()) {
-          bindScreenshotSource(undefined);
-          externalScreenshot = receiver.desktopFlowerSourceScreenshot(source.id);
-        } else window.redevenDesktopShell?.releaseAskFlowerSource?.();
-      } catch (error) { window.redevenDesktopShell?.releaseAskFlowerSource?.(); reportPreviewFlowerError(error); }
-    });
+    const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(receiveFlowerWindowHandoff);
     onCleanup(() => stopAsk?.());
     const stop = window.redevenDesktopShell?.onRemoteDesktopFiles?.(() => openSurface('files'));
     onCleanup(() => stop?.());
