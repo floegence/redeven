@@ -198,6 +198,23 @@ describe('applyFlowerRuntimeCurrentView', () => {
       .toEqual([{ choice_id: 'Stable', value: 'Stable', label: 'Stable', kind: 'select' }]);
   });
 
+  it('projects compact input without inventing retired metadata or changing its source', () => {
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 1, activity: 'active', turn_id: 'turn-a', run_id: 'run-a', interactions: [{
+      id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', tool_call_id: 'ask-a', input: { summary: 'Choose', evidence_refs: ['observe-a'], questions: [{
+        id: 'route', kind: 'select_or_write', header: 'Route', prompt: 'Which route?', write_label: 'Another route', write_placeholder: 'Describe it',
+        choices: [{ choice_id: 'staged', value: 'Staged rollout', label: 'Staged rollout', description: 'Start small.' }],
+      }] },
+    }] };
+    const before = JSON.stringify(current);
+    const request = applyFlowerRuntimeCurrentView(summary(), current).input_request!;
+    expect(request.reason_code).toBeUndefined();
+    expect(request.required_from_user).toBeUndefined();
+    expect(request.evidence_refs).toEqual(['observe-a']);
+    expect(request.questions[0]).toEqual({ id: 'route', header: 'Route', question: 'Which route?', is_secret: false, response_mode: 'select_or_write',
+      write_label: 'Another route', write_placeholder: 'Describe it', choices: [{ choice_id: 'staged', value: 'Staged rollout', label: 'Staged rollout', description: 'Start small.', kind: 'select' }] });
+    expect(JSON.stringify(current)).toBe(before);
+  });
+
   it.each(['multiple inputs', 'duplicate questions', 'duplicate choices', 'missing choices', 'invalid choice value'])('rejects ambiguous input: %s', (scenario) => {
     const question = { id: 'q', kind: 'select', prompt: 'Choose', choices: [{ choice_id: 'stable', value: 'Stable', label: 'Stable' }] };
     const interaction = { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input' as const, input: { summary: '', questions: [question] } };

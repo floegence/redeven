@@ -107,6 +107,8 @@ describe('FlowerSurface navigation structured input', () => {
 
   it('uses the bottom composer password field for secret structured input', async () => {
     const secretInputRequest = inputRequest({
+      reason_code: undefined,
+      required_from_user: undefined,
       contains_secret: true,
       public_summary: 'Provide the deployment token before Flower continues.',
       questions: [

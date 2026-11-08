@@ -28,12 +28,12 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 		computer, authoring, canvas   bool
 		nonstrictBudget, strictBudget int
 	}{
-		{"full", config.AIPermissionFullAccess, true, false, false, 27800, 32200},
-		{"readonly", config.AIPermissionReadonly, true, false, false, 17700, 21800},
-		{"computer_disabled", config.AIPermissionFullAccess, false, false, false, 24300, 28500},
-		{"plugin_creation", config.AIPermissionFullAccess, true, true, false, 30600, 35000},
-		{"tessiven", config.AIPermissionFullAccess, true, false, true, 38700, 44700},
-		{"tessiven_readonly", config.AIPermissionReadonly, true, false, true, 24000, 29500},
+		{"full", config.AIPermissionFullAccess, true, false, false, 27000, 31400},
+		{"readonly", config.AIPermissionReadonly, true, false, false, 16900, 21000},
+		{"computer_disabled", config.AIPermissionFullAccess, false, false, false, 23500, 27700},
+		{"plugin_creation", config.AIPermissionFullAccess, true, true, false, 29800, 34200},
+		{"tessiven", config.AIPermissionFullAccess, true, false, true, 37900, 43900},
+		{"tessiven_readonly", config.AIPermissionReadonly, true, false, true, 23200, 28700},
 	} {
 		for _, provider := range []string{"deepseek", "openai"} {
 			t.Run(fixture.name+"/"+provider, func(t *testing.T) {
@@ -83,6 +83,17 @@ func TestFlowerToolDefinitionBudget(t *testing.T) {
 							name, _ := tool["name"].(string)
 							names = append(names, name)
 							data, _ := json.Marshal(tool)
+							if name == "ask_user" {
+								askBudget := 1650
+								if strict {
+									askBudget = 1950
+								}
+								t.Logf("ask_user compact_json_bytes=%d budget=%d", len(data), askBudget)
+								if len(data) > askBudget {
+									t.Errorf("ask_user definition budget exceeded: %d > %d", len(data), askBudget)
+								}
+								assertCanonicalAskUserWireGuidance(t, tool["parameters"])
+							}
 							sizes = append(sizes, fmt.Sprintf("%s=%d", name, len(data)))
 							if strings.HasPrefix(name, "computer_") || strings.HasPrefix(name, "browser_") {
 								computerNames = append(computerNames, name)

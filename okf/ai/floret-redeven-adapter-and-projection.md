@@ -4,7 +4,7 @@ title: Floret Redeven adapter and projection
 tags: [ai, floret, adapter, projection]
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -31,12 +31,27 @@ Workspace facts preserve equal sidebar cache identity. Each observer has two can
 
 Optional encoding loss emits factual error and continues provider loop, never soliciting human confirmation merely for possible mutation. Preserve result_unavailable/result_error_code separately from original owner error, invocation ID, completed_actions, needs_observation and target, including confirmed prefix/uncertain remainder. Malformed metadata cannot replace classification. Empty prefix proves no absence of effects; invocation completion is not task success. Model chooses authorized observation/work; never replay tools. Actual interactions/cancellation/dispatch/uncertainty retain authority; failure to encode safe result is infrastructure failure. Persisted questions keep canonical answer/cancel after restart, without host migration/auto-answer.
 
-Published Floret v7.107.6 owns the model-visible `ask_user` schema and field guidance. Flower
+Published Floret v7.108.1 owns the model-visible `ask_user` schema and field guidance. Flower
 capability definitions consume `runtime.CoreControlDefinitions()` unchanged;
 there is no alternate product schema or model-only `open_subagent` choice field.
 Guidance for input modes, evidence and Goal operations belongs upstream. Final
 HTTP request tests cover control guidance, interaction continuation and provider
 adapters; local definition tests alone cannot prove what the model receives.
+
+The compact model contract omits `reason_code`, `required_from_user`,
+`choices_exhaustive` and constant choice `kind`. Evidence references remain
+required (an empty array is valid); Computer assistance resolves an actual
+same-Turn tool call and target, never a guessed latest failure. Stable question
+and choice IDs, secret input, custom answers and display hints remain available.
+Released v7 arguments, frozen definitions and pending presentations remain owned
+and validated by Floret; absent metadata stays absent, without host defaults or
+history rewrites. The browser derives its own choice-rendering discriminator.
+
+Final HTTP definition budgets cover OpenAI strict and DeepSeek non-strict forms
+across six capability surfaces. Published-runtime fixtures, structured-input and
+browser regressions cover compact presentation, selected/custom answers, draft
+continuity and secret input. Computer takeover tests cover restart and return
+without replaying the blocked action.
 
 request_key remains send idempotency for transient browser outbox, not invocation identity. ask_user supports write and select_or_write; fixed choices always include custom text even without write_label. Floret normalizes historical select; ordinary InputRequired is separate. No product compatibility path.
 

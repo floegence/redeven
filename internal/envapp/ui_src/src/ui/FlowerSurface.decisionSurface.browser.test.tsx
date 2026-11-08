@@ -287,15 +287,16 @@ describe('Flower bottom decision surface', () => {
     expect(submitInput.mock.calls[0]?.[0]).toMatchObject({ answers: { channel: { text: 'Gamma channel' } } });
   });
 
-  it('keeps fixed and custom answers mutually exclusive while preserving the custom draft', async () => {
+  it('preserves fixed choices and custom drafts without retired ask-user metadata', async () => {
     const request = inputRequest({
+      reason_code: undefined,
+      required_from_user: undefined,
       prompt_id: 'prompt-mutually-exclusive-answer',
       questions: [{
         id: 'preference',
         header: 'Travel preference',
         question: 'What kind of trip would you prefer?',
         response_mode: 'select_or_write',
-        choices_exhaustive: false,
         choices: [
           { choice_id: 'hiking', value: 'hiking', label: 'Nature and hiking', kind: 'select' },
           { choice_id: 'city', value: 'city', label: 'City and culture', kind: 'select' },

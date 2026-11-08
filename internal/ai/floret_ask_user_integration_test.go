@@ -52,7 +52,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		case 1:
 			assertPermissionProviderSurface(t, request, "approval_required")
 			initialProviderRequest <- request
-			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a deployment target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target should I deploy?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
+			args := `{"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target should I deploy?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			writeOpenAISSEJSON(w, flusher, map[string]any{
 				"type": "response.output_item.added", "output_index": 0,
 				"item": map[string]any{"type": "function_call", "id": "fc_ask_user", "call_id": "call_ask_user", "name": "ask_user", "arguments": args},
@@ -240,14 +240,26 @@ func assertCanonicalAskUserWireGuidance(t *testing.T, raw any) {
 	schema := raw.(map[string]any)
 	properties := schema["properties"].(map[string]any)
 	questions := properties["questions"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, retired := range []string{"reason_code", "required_from_user", "choices_exhaustive", `"kind"`} {
+		if bytes.Contains(encoded, []byte(retired)) {
+			t.Errorf("provider wire still advertises retired field %s", retired)
+		}
+	}
+	for _, preserved := range []string{`"is_secret"`, `"choice_id"`, `"write_label"`, `"write_placeholder"`} {
+		if !bytes.Contains(encoded, []byte(preserved)) {
+			t.Errorf("provider wire lost preserved field %s", preserved)
+		}
+	}
 	for _, field := range []struct {
 		properties    map[string]any
 		name, meaning string
 	}{
-		{properties, "required_from_user", "plain-language"},
-		{properties, "evidence_refs", "empty array"},
+		{properties, "evidence_refs", "[]"},
 		{questions, "response_mode", "custom-text answer"},
-		{questions, "choices_exhaustive", "false"},
 	} {
 		description, _ := field.properties[field.name].(map[string]any)["description"].(string)
 		if !strings.Contains(description, field.meaning) {
@@ -431,7 +443,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 			return
 		}
 		if mainCalls.Add(1) == 1 {
-			args := `{"reason_code":"missing_external_input","required_from_user":["Provide a receipt value."],"evidence_refs":[],"questions":[{"id":"receipt","header":"Receipt","question":"What value should continue the run?","response_mode":"write","is_secret":false,"write_label":"Value","write_placeholder":"Type a value"}]}`
+			args := `{"evidence_refs":[],"questions":[{"id":"receipt","header":"Receipt","question":"What value should continue the run?","response_mode":"write","is_secret":false,"write_label":"Value","write_placeholder":"Type a value"}]}`
 			writeDeepSeekIntegrationToolCall(w, flusher, "chat_waiting_receipt", "call_receipt", "ask_user", args)
 			return
 		}

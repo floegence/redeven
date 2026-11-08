@@ -214,10 +214,6 @@
         "run_id": "run-fixture",
         "kind": "input",
         "input": {
-          "reason_code": "user_decision_required",
-          "required_from_user": [
-            "channel"
-          ],
           "summary": "Which release channel should Flower use?",
           "questions": [
             {
@@ -229,7 +225,6 @@
                 "Beta"
               ],
               "header": "Release channel",
-              "choices_exhaustive": false,
               "choices": [
                 {
                   "choice_id": "stable",

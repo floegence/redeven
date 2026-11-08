@@ -241,9 +241,7 @@ func (g appserverAskUserGateway) Stream(context.Context, flprovider.Request) (<-
 func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, turnID string, runID string, toolID string) {
 	t.Helper()
 	args, err := json.Marshal(map[string]any{
-		"reason_code":        "needs_choice",
-		"required_from_user": []string{"Choose a path."},
-		"evidence_refs":      []string{"message:latest"},
+		"evidence_refs": []string{},
 		"questions": []map[string]any{{
 			"id": "question_1", "header": "Path", "question": "Which path?", "response_mode": "write", "is_secret": false,
 		}},

@@ -27,7 +27,7 @@ const (
 	flowersecCoreVersion = "5.11.1"
 	floeWebappVersion    = "0.90.11"
 	floeEnvCoreVersion   = floeWebappVersion
-	floretVersion        = "v7.107.9"
+	floretVersion        = "v7.108.1"
 )
 
 var flowersecNPMPackages = []string{

@@ -2,6 +2,7 @@
 
 Current contracts and qualification outcomes live in their indexed concepts. Git preserves chronological changes; this log does not duplicate them.
 
+- 2026-11-08: Adopt published Floret v7.108.1 for compact ask-user definitions; preserve released input and evidence-based Computer assistance, with final HTTP, restart and browser acceptance.
 - 2026-11-08: Improve Tessiven document reading with the published read-only code viewer, YAML highlighting, line numbers, folding, find, wrapping and exact-source copy/export.
 - 2026-11-08: Support multiple Tessiven conversations with one active root; restore new/history/fork controls, serialize activation with execution admission, block switching while work remains, and preserve isolation, history and late-receipt draft continuity.
 - 2026-11-08: Scope Tessiven tools, skills and conversation history to canvas-owned threads; preserve existing bindings through the automatic v2 → v3 library migration.
