@@ -343,7 +343,7 @@
               "desktop",
               "interaction"
             ],
-            "summary": "One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls. - macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.",
+            "summary": "One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls. macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.",
             "section_count": 3
           },
           {
@@ -13371,8 +13371,8 @@
         "title": "Remote desktop connection launcher",
         "type": "Interaction Contract"
       },
-      "body_length": 4838,
-      "summary": "One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls. - macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.",
+      "body_length": 4836,
+      "summary": "One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls. macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.",
       "sections": [
         {
           "id": "contract",
@@ -24603,5 +24603,5 @@
       ]
     }
   ],
-  "source_sha256": "eaf4000a054495487eb11724ab3fb4f1c595fb50315079a9ae2508f764b284f4"
+  "source_sha256": "918661ead4cea28723487fbc9f9f8cae215402662bb333302a1da5a87a041ad8"
 }

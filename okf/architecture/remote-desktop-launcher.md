@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls. - macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.
+One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls. macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.
 
 # Contract
 
