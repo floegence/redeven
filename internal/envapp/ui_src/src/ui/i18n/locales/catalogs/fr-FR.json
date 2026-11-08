@@ -4701,16 +4701,12 @@
       "all": "Toutes les sources",
       "official": "Officiel",
       "community": "Communauté",
-      "sourceFilter": "Source du modèle",
-      "refresh": "Actualiser",
       "refreshFailed": "Échec de l’actualisation. Les modèles déjà chargés restent disponibles.",
       "cached": "Le catalogue enregistré est affiché. Actualisez pour rechercher des changements.",
       "unavailable": "Source actuellement indisponible",
       "continueDeploy": "Continuer le déploiement",
       "sourceVersion": "Source du modèle",
       "reviewUpdate": "Examiner la mise à jour",
-      "sourceUpdateHelp": "Examinez la révision {revision}, puis validez et appliquez-la à cette instance arrêtée. Les personnalisations existantes sont conservées.",
-      "acceptNotice": "J’ai lu et j’accepte cet avertissement",
       "sourceReviewRequired": "Les opérations de cycle de vie de cette instance existante nécessitent un examen explicite de sa source."
     }
   },

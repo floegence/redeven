@@ -4701,16 +4701,12 @@
       "all": "Alle Quellen",
       "official": "Offiziell",
       "community": "Community",
-      "sourceFilter": "Vorlagenquelle",
-      "refresh": "Aktualisieren",
       "refreshFailed": "Aktualisierung fehlgeschlagen. Bereits geladene Vorlagen bleiben verfügbar.",
       "cached": "Der gespeicherte Katalog wird angezeigt. Aktualisieren Sie ihn, um Änderungen zu prüfen.",
       "unavailable": "Quelle derzeit nicht verfügbar",
       "continueDeploy": "Weiter zur Bereitstellung",
       "sourceVersion": "Vorlagenquelle",
       "reviewUpdate": "Quellaktualisierung prüfen",
-      "sourceUpdateHelp": "Prüfen Sie Revision {revision}, führen Sie die Vorprüfung aus und wenden Sie sie auf die gestoppte Instanz an. Bestehende Anpassungen bleiben erhalten.",
-      "acceptNotice": "Ich habe diesen Hinweis gelesen und akzeptiere ihn",
       "sourceReviewRequired": "Für Lebenszyklusaktionen dieser bestehenden Instanz muss die Quelle ausdrücklich geprüft werden."
     }
   },

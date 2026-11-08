@@ -762,7 +762,7 @@ export function ManagedServiceSettingsDrawer(props: {
                   <section class="mb-4 space-y-3 rounded-lg border bg-muted/20 p-4" aria-label={i18n.t('webServices.market.sourceVersion')}>
                     <div class="flex flex-wrap items-start justify-between gap-3">
                       <div class="min-w-0 space-y-1">
-                        <h3 class="text-xs font-semibold">{i18n.t('webServices.market.sourceVersion')} · {loaded()?.source_version?.revision}</h3>
+                        <h3 class="text-xs font-semibold">{i18n.t('webServices.market.sourceVersion')} · {loaded()?.source_version?.revision}<Show when={draft()?.selected_source_sha256}> → {draft()?.source_version?.revision}</Show></h3>
                         <p class="break-all text-xs text-muted-foreground">{loaded()?.source_version?.repository} · {loaded()?.source_version?.commit_sha.slice(0,12)}</p>
                       </div>
                       <Show when={loaded()?.available_source_version && (loaded()?.source_review_required || loaded()?.available_source_version?.sha256 !== loaded()?.source_version?.sha256)}>
@@ -770,10 +770,9 @@ export function ManagedServiceSettingsDrawer(props: {
                       </Show>
                     </div>
                     <Show when={draft()?.selected_source_sha256}>
-                      <p class="text-xs text-muted-foreground">{i18n.t('webServices.market.sourceUpdateHelp', {revision:draft()?.source_version?.revision ?? 0})}</p>
                       <For each={draft()?.source_notices ?? []}>{notice => <div class="space-y-1 text-xs">
                         <p class="font-medium">{sourceNoticeText(notice,'title')}</p><p class="text-muted-foreground">{sourceNoticeText(notice,'description')}</p>
-                        <Show when={notice.acknowledgement_required}><Checkbox checked={draft()?.accepted_notice_revisions?.[notice.id] === notice.revision} onChange={checked => updateDraft(value => {value.accepted_notice_revisions = {...value.accepted_notice_revisions,[notice.id]:checked ? notice.revision : 0};})} label={i18n.t('webServices.market.acceptNotice')} /></Show>
+                        <Show when={notice.acknowledgement_required}><Checkbox checked={draft()?.accepted_notice_revisions?.[notice.id] === notice.revision} onChange={checked => updateDraft(value => {value.accepted_notice_revisions = {...value.accepted_notice_revisions,[notice.id]:checked ? notice.revision : 0};})} label={i18n.t('webServices.managed.noticeAcceptance')} /></Show>
                       </div>}</For>
                     </Show>
                     <Show when={loaded()?.source_review_required}><p role="status" class="text-xs text-muted-foreground">{i18n.t('webServices.market.sourceReviewRequired')}</p></Show>

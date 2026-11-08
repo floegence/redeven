@@ -4091,10 +4091,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                 </div>
                 <Show when={templateCollection() === 'discover'}>
                   <div class="flex flex-wrap items-center gap-2">
-                    <select class="h-8 rounded-md border bg-background px-2 text-xs" aria-label={i18n.t('webServices.market.sourceFilter')} value={marketFilter()} onChange={event => setMarketFilter(event.currentTarget.value as 'all'|'official'|'community')}>
+                    <select class="h-8 rounded-md border bg-background px-2 text-xs" aria-label={i18n.t('webServices.market.sourceVersion')} value={marketFilter()} onChange={event => setMarketFilter(event.currentTarget.value as 'all'|'official'|'community')}>
                       <For each={['all','official','community'] as const}>{filter => <option value={filter}>{i18n.t(`webServices.market.${filter}`)}</option>}</For>
                     </select>
-                    <Button size="sm" variant="ghost" disabled={marketLoading() || !canManageManagedService()} onClick={() => void market.refresh()}>{i18n.t('webServices.market.refresh')}</Button>
+                    <Button size="sm" variant="ghost" disabled={marketLoading() || !canManageManagedService()} onClick={() => void market.refresh()}>{i18n.t('webServices.actions.refresh')}</Button>
                   </div>
                   <Show when={marketError() || marketStale()}><p role="status" class="w-full text-xs text-muted-foreground">{i18n.t(marketError() ? 'webServices.market.refreshFailed':'webServices.market.cached')}</p></Show>
                 </Show>

@@ -4701,16 +4701,12 @@
       "all": "所有來源",
       "official": "官方",
       "community": "社群",
-      "sourceFilter": "範本來源",
-      "refresh": "重新整理",
       "refreshFailed": "重新整理失敗，已載入的範本仍可使用。",
       "cached": "目前顯示已儲存的目錄，重新整理可檢查更新。",
       "unavailable": "來源暫時無法使用",
       "continueDeploy": "繼續部署",
       "sourceVersion": "範本原始碼",
       "reviewUpdate": "審閱原始碼更新",
-      "sourceUpdateHelp": "請審閱修訂版 {revision}，再預先檢查並套用至已停止的執行個體。現有的自訂設定會保留。",
-      "acceptNotice": "我已閱讀並接受此提示",
       "sourceReviewRequired": "此既有執行個體需要明確審閱原始碼後，才能執行生命週期操作。"
     }
   },

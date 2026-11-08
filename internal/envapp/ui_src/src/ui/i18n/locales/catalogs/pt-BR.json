@@ -4701,16 +4701,12 @@
       "all": "Todas as fontes",
       "official": "Oficial",
       "community": "Comunidade",
-      "sourceFilter": "Fonte do modelo",
-      "refresh": "Atualizar",
       "refreshFailed": "Falha ao atualizar. Os modelos já carregados continuam disponíveis.",
       "cached": "Exibindo o catálogo salvo. Atualize para verificar alterações.",
       "unavailable": "Fonte indisponível no momento",
       "continueDeploy": "Continuar implantação",
       "sourceVersion": "Código do modelo",
       "reviewUpdate": "Revisar atualização",
-      "sourceUpdateHelp": "Revise a revisão {revision}, execute a verificação prévia e aplique à instância parada. As personalizações existentes serão preservadas.",
-      "acceptNotice": "Li e aceito este aviso",
       "sourceReviewRequired": "Esta instância existente exige uma revisão explícita do código antes de executar operações do ciclo de vida."
     }
   },
