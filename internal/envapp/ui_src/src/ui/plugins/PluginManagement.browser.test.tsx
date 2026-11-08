@@ -1961,6 +1961,9 @@ describe('plugin management browser geometry and interaction', () => {
       while (disposers.length > 0) disposers.pop()?.();
       document.body.replaceChildren();
       mountConfirmationDialog();
+      // The first confirmation loads its dialog asynchronously. Geometry is
+      // meaningful only after the actual user-visible dialog is present.
+      await expect.element(page.getByRole('dialog')).toBeVisible();
       await settle();
       const confirmation = document.querySelector<HTMLElement>('[role="dialog"]')!;
       expect(confirmation).not.toBeNull();
