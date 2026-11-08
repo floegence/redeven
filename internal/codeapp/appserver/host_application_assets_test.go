@@ -38,7 +38,7 @@ func TestHostApplicationAssetsRequireOriginOwnerPermissionAndExactVersion(t *tes
 		{"mutation", "env-123", "alice", "running", route, "POST", true, 405},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			server := &Server{hostApps: &hostAppsStub{owner: "alice", state: tc.state, assets: assets}, resolveSessionMeta: resolveMetaForTest("ch_assets", session.Meta{UserPublicID: tc.owner, CanRead: true, CanWrite: tc.full, CanExecute: tc.full})}
+			server := &Server{configPath: writeTestConfig(t), hostApps: &hostAppsStub{owner: "alice", state: tc.state, assets: assets}, resolveSessionMeta: resolveMetaForTest("ch_assets", session.Meta{UserPublicID: tc.owner, CanRead: true, CanWrite: tc.full, CanExecute: tc.full})}
 			req := httptest.NewRequest(tc.method, "http://localhost"+tc.path, nil)
 			req.Header.Set("Origin", strings.Replace(envOriginWithChannel("ch_assets"), "env-123", tc.origin, 1))
 			req.Header.Set("Accept-Encoding", "gzip")

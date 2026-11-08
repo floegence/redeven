@@ -106,7 +106,7 @@ func TestHostApplicationLaunchAcceptsEveryPublishedPresentationField(t *testing.
 				t.Fatal(err)
 			}
 			backend := &hostAppsStub{}
-			server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+			server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 			r := httptest.NewRequest(http.MethodPost, hostApplicationsAPI+"/sessions", strings.NewReader(string(body)))
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 			w := httptest.NewRecorder()
@@ -131,7 +131,7 @@ func TestHostApplicationLaunchAcceptsEveryPublishedPresentationField(t *testing.
 
 func TestHostApplicationClientQueriesStayScoped(t *testing.T) {
 	backend := &hostAppsStub{}
-	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 	for _, path := range []string{hostApplicationsAPI + "/sessions?client_id=browser-a", hostApplicationsAPI + "?locale=en-US&client_id=browser-a"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
@@ -162,7 +162,7 @@ func TestHostApplicationClientQueriesStayScoped(t *testing.T) {
 			t.Fatalf("client session leaked or was omitted: %s", w.Body.String())
 		}
 	}
-	if backend.calls != 2 || backend.owner != "alice" {
+	if backend.calls != 3 || backend.owner != "alice" {
 		t.Fatalf("client scope did not reach the authorized backend: calls=%d owner=%q", backend.calls, backend.owner)
 	}
 }
@@ -193,7 +193,7 @@ func (s *hostAppsStub) DetachWithGrace(_ context.Context, owner, _ string, grace
 
 func TestHostApplicationDetachGraceIsBoundedAndForwarded(t *testing.T) {
 	backend := &hostAppsStub{}
-	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 	for _, test := range []struct {
 		path  string
 		code  int
@@ -212,7 +212,7 @@ func TestHostApplicationDetachGraceIsBoundedAndForwarded(t *testing.T) {
 func TestHostApplicationQuitRequestsRemainAcceptedUntilLifecycleReconciliation(t *testing.T) {
 	for _, path := range []string{hostApplicationsAPI + "/quit", hostApplicationsAPI + "/terminate"} {
 		backend := &hostAppsStub{}
-		server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+		server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"application_id":"editor.desktop","instances":["exact-instance"]}`))
 		r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 		w := httptest.NewRecorder()
@@ -239,7 +239,7 @@ func TestHostApplicationStatusSurvivesReleasedForward(t *testing.T) {
 	for _, state := range []string{"failed", "ended"} {
 		for _, owner := range []string{"alice", "bob"} {
 			for _, full := range []bool{false, true} {
-				server := &Server{pf: &stubPortForwardBackend{}, hostApps: &hostAppsStub{state: state}, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: owner, CanRead: true, CanWrite: full, CanExecute: full})}
+				server := &Server{configPath: writeTestConfig(t), pf: &stubPortForwardBackend{}, hostApps: &hostAppsStub{state: state}, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: owner, CanRead: true, CanWrite: full, CanExecute: full})}
 				for _, path := range []string{"", "state", "stream"} {
 					r := httptest.NewRequest(http.MethodGet, "http://localhost/_redeven_host_app/"+path, nil)
 					r.Header.Set("Origin", strings.Replace(envOriginWithChannel("ch_hostapps"), "env-123.", "pf-owned.", 1))
@@ -271,7 +271,7 @@ func TestHostApplicationStatusSurvivesReleasedForward(t *testing.T) {
 }
 
 func TestHostApplicationTerminalLocalRouteRetainsItsPrefix(t *testing.T) {
-	server := &Server{localPermissionCap: &config.PermissionSet{Read: true, Write: true, Execute: true}, pf: &stubPortForwardBackend{}, hostApps: &hostAppsStub{state: "failed", owner: localUserPublicID}}
+	server := &Server{configPath: writeTestConfig(t), localPermissionCap: &config.PermissionSet{Read: true, Write: true, Execute: true}, pf: &stubPortForwardBackend{}, hostApps: &hostAppsStub{state: "failed", owner: localUserPublicID}}
 	r := WithLocalUIPortForwardRoute(httptest.NewRequest(http.MethodGet, "http://localhost/pf/owned/_redeven_host_app/", nil), "owned")
 	w := httptest.NewRecorder()
 	server.handlePortForwardProxy(w, r)
@@ -289,7 +289,13 @@ func (s *hostAppsStub) Password(string) string                    { return "priv
 func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 	for _, full := range []bool{false, true} {
 		backend := &hostAppsStub{}
-		server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}
+		server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}
+		if _, err := config.Update(server.configPath, func(cfg *config.Config) error {
+			cfg.HostAccess = &config.HostAccessConfig{Applications: "enabled", Desktop: "unconfigured"}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 		for _, path := range []string{hostApplicationsAPI, hostApplicationsAPI + "/sessions", hostApplicationsAPI + "/running"} {
 			r := httptest.NewRequest(http.MethodGet, path, nil)
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
@@ -323,7 +329,7 @@ func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 
 func TestHostApplicationLegacyStopRouteIsRemoved(t *testing.T) {
 	backend := &hostAppsStub{}
-	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 	r := httptest.NewRequest(http.MethodDelete, hostApplicationsAPI+"/sessions/one", nil)
 	r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 	w := httptest.NewRecorder()
@@ -339,7 +345,7 @@ func TestHostApplicationForwardProtectsBootstrapAndWebSocket(t *testing.T) {
 		full    bool
 		allowed bool
 	}{{"alice", true, true}, {"alice", false, false}, {"bob", true, false}} {
-		server := &Server{hostApps: &hostAppsStub{}, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: test.owner, CanRead: true, CanWrite: test.full, CanExecute: test.full})}
+		server := &Server{configPath: writeTestConfig(t), hostApps: &hostAppsStub{}, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: test.owner, CanRead: true, CanWrite: test.full, CanExecute: test.full})}
 		for _, path := range []string{"/_redeven_host_app/state", "/index.html", "/"} {
 			r := httptest.NewRequest(http.MethodGet, path, nil)
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
@@ -404,7 +410,7 @@ func (s *hostAppsStub) CompleteSetup(owner, id string) (hostapps.SetupStatus, er
 func TestHostApplicationSetupPermissionAndOwner(t *testing.T) {
 	for _, full := range []bool{false, true} {
 		backend := &hostAppsStub{}
-		server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}
+		server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}
 		for _, test := range []struct{ method, path, body string }{{"GET", "/setup", ""}, {"GET", "/setup/plan", ""}, {"POST", "/setup", `{"request_id":"request","source":"download","owner":"bob"}`}, {"DELETE", "/setup/id", ""}, {"PUT", "/setup/id/content?offset=0", "data"}, {"POST", "/setup/id/complete", ""}} {
 			backend.calls = 0
 			backend.owner = ""
@@ -431,7 +437,7 @@ func TestHostApplicationSetupPermissionAndOwner(t *testing.T) {
 
 func TestHostApplicationSetupCarriesReceiverIdentity(t *testing.T) {
 	backend := &hostAppsStub{}
-	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 	digest := strings.Repeat("a", 64)
 	request := httptest.NewRequest("POST", hostApplicationsAPI+"/setup", strings.NewReader(`{"request_id":"update","source":"cache","package_digest":"`+digest+`"}`))
 	request.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
@@ -444,7 +450,7 @@ func TestHostApplicationSetupCarriesReceiverIdentity(t *testing.T) {
 
 func TestHostApplicationSetupRejectsUnboundedTransferBeforeAdmission(t *testing.T) {
 	backend := &hostAppsStub{}
-	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 	for _, test := range []struct{ query, body string }{
 		{"offset=-1", "x"}, {"offset=invalid", "x"}, {"offset=0", strings.Repeat("x", (256<<10)+1)},
 	} {

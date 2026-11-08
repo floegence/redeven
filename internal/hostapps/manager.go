@@ -45,6 +45,8 @@ type ownedSession struct {
 }
 
 type Manager struct {
+	accessMu                    sync.RWMutex
+	accessDisabled              bool
 	appsMu                      sync.Mutex
 	applications                map[string]*linuxApplication
 	appsLock                    *os.File
@@ -215,6 +217,11 @@ func (m *Manager) Add(ctx context.Context, req AddRequest) error {
 }
 
 func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (Session, error) {
+	m.accessMu.RLock()
+	defer m.accessMu.RUnlock()
+	if req.Mode != "native" && m.accessDisabled {
+		return Session{}, nativeapps.ErrForbidden
+	}
 	if owner == "" {
 		return Session{}, ErrInvalid
 	}
@@ -248,6 +255,34 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		return Session{}, ErrInvalid
 	}
 	return m.launchLinux(ctx, owner, req)
+}
+
+// SetAccessEnabled fences in-flight launches, then releases only viewer leases.
+// The reusable native/Linux application process and installed tools survive.
+func (m *Manager) SetAccessEnabled(ctx context.Context, enabled bool) error {
+	m.accessMu.Lock()
+	defer m.accessMu.Unlock()
+	m.accessDisabled = !enabled
+	if enabled {
+		return nil
+	}
+	m.mu.Lock()
+	all := make([]*ownedSession, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		all = append(all, s)
+	}
+	m.mu.Unlock()
+	for _, s := range all {
+		m.requestStop(s)
+	}
+	for _, s := range all {
+		select {
+		case <-s.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func validClientID(value string) bool {

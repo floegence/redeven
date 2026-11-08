@@ -8,6 +8,8 @@
 .remote-desktop-panel { padding: 24px; color: var(--foreground); font-size: var(--floe-type-body); }
 .remote-desktop-dialog .remote-desktop-panel { padding-top: 4px; }
 .remote-desktop-host { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.remote-desktop-host-actions { display: flex; flex-direction: column; flex-shrink: 0; }
+.remote-desktop-host-actions > button { width: 32px; height: 28px; min-height: 28px; }
 .remote-desktop-host-icon { width: 48px; height: 48px; display: grid; place-items: center; flex-shrink: 0; border-radius: 12px; background: var(--muted); }
 .remote-desktop-identity { flex: 1; min-width: 0; }
 .remote-desktop-identity h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 19px; font-weight: 600; letter-spacing: 0; line-height: 1.4; }
@@ -123,6 +125,7 @@
 .remote-desktop-permission-details > p { margin-top: 8px; }
 .remote-desktop-flow-content .remote-desktop-credential { margin-top: 16px; }
 .remote-desktop-flow-transition { display: flex; align-items: flex-start; gap: 12px; min-height: 154px; padding: 18px 4px; animation: remote-desktop-flow-content-enter 280ms ease both; }
+.remote-desktop-flow-content > .remote-desktop-flow-transition { min-height: 0; }
 .remote-desktop-inline-step { min-height: 260px; animation: remote-desktop-flow-content-enter 280ms ease both; }
 .remote-desktop-inline-step > h3 { margin: 4px 0 10px; font-size: 18px; font-weight: 600; letter-spacing: 0; }
 .remote-desktop-inline-step > p { margin: 0; color: var(--muted-foreground); line-height: 1.65; }

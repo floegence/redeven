@@ -32,6 +32,10 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	w.Header().Set("Cache-Control", "no-store")
+	if r.URL.Path == hostApplicationsAPI+"/access" && r.Method == http.MethodPut {
+		g.updateHostAccess(w, r, meta, false)
+		return true
+	}
 	if g.hostApps == nil {
 		writeHostAppError(w, hostapps.ErrUnavailable)
 		return true
@@ -109,6 +113,10 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.hostApps.Sessions(meta.UserPublicID)})
 	case r.Method == http.MethodGet && r.URL.Path == hostApplicationsAPI:
+		if err := g.initializeHostAccess(r.Context(), meta.UserPublicID); err != nil {
+			writeHostAppError(w, err)
+			return true
+		}
 		locale, clientID := r.URL.Query().Get("locale"), r.URL.Query().Get("client_id")
 		var catalog hostapps.Catalog
 		var err error
@@ -124,6 +132,12 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			writeHostAppError(w, err)
 		} else {
+			state, stateErr := g.hostAccessState(false)
+			if stateErr != nil {
+				writeHostAppError(w, stateErr)
+				return true
+			}
+			catalog.AccessState = resolvedHostAccess(state, catalog.Availability.Ready)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: catalog})
 		}
 	case r.Method == http.MethodPost && r.URL.Path == hostApplicationsAPI+"/permissions":
@@ -144,6 +158,11 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		var req hostapps.LaunchRequest
 		if decodeManagedJSON(r, &req) != nil {
 			writeHostAppError(w, hostapps.ErrInvalid)
+			return true
+		}
+		g.hostAccessMu.RLock()
+		defer g.hostAccessMu.RUnlock()
+		if req.Mode != "native" && !g.allowHostAccess(w, false) {
 			return true
 		}
 		view, err := g.hostApps.Launch(r.Context(), meta.UserPublicID, req)
@@ -227,6 +246,9 @@ func (g *Server) guardHostApplicationSession(w http.ResponseWriter, r *http.Requ
 	}
 	path := strings.TrimPrefix(r.URL.Path, base)
 	if !requireWindowSessionTransport(w, r, path) {
+		return true
+	}
+	if !g.allowHostAccess(w, false) {
 		return true
 	}
 	if path == windowTransportScript {

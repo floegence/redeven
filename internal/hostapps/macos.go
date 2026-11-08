@@ -284,7 +284,7 @@ func (m *Manager) Permissions(ctx context.Context, permission string) error {
 	if m.macHelper() == "" {
 		return ErrUnavailable
 	}
-	if permission != "screen_recording" && permission != "accessibility" {
+	if permission != "screen_recording" && permission != "accessibility" && permission != "screen_recording_settings" && permission != "accessibility_settings" {
 		return ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)

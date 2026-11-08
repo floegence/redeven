@@ -11600,7 +11600,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "applications",
           "desktop",
@@ -11611,15 +11611,15 @@
         "title": "Host application catalog, platforms and preparation",
         "type": "Runtime Contract"
       },
-      "body_length": 4716,
+      "body_length": 5457,
       "summary": "Redeven authorizes catalog, instances and independent shares; published native libraries own platform execution and preparation. Applications survive viewer release and compatible Runtime restart. Capability probes govern readiness, explicit controls govern termination and uncertainty never launches replacements.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Catalog\nCatalog and session listing require read permission. Ownership comes from authorized session metadata, never a request-provided user ID.\n\nTerminal sharing records remain bounded to forty-eight per Runtime lifetime.\n\nHost Applications is available in Activity navigation and the Workbench launcher. A separate Force quit confirmation explicitly warns that unsaved work is lost; it never follows cancellation automatically.\n\nApplication inventory loading uses matching horizontal skeleton cards and respects reduced motion.\n\n## Platforms\n### Immutable launch plan\nGIO resolves the authorized desktop entry. A sandbox launcher requiring metadata fails clearly when metadata is absent; a custom wrapper is not proof that the underlying package is supported.\n\nThe [preparation owner](#preparation) selects complete components.\n\n### Private graphics and host services\nEach instance owns unique private display/socket, authorization, runtime and bus resources.\n\nIt never exposes the whole desktop bus or arbitrary process management.\n\nSupport claims require real package and desktop evidence, as recorded in the [validation owner](../operations/host-application-validation.md#retained-xpraplatform-matrix).\n\n### macOS initialization\nThe [native macOS contract](macos-host-applications.md) owns local launch, remote single-window capture, input, and graceful lifecycle. macOS 13 or newer uses the packaged `redeven-computer-host` helper.\n\nA Mac without a graphical login cannot create a private headless AppKit session. Native AppKit applications do not become X11 applications by installing XQuartz, and Xpra desktop shadowing is not this implementation.\n\n## Preparation\n- `go.mod` owns exact dependency/toolchain versions. Never combine partial managed/system installations. [Applications](#catalog) owns environment restoration, private displays and dependencies.\n- Status, explicit transfer-plan inspection and observation require Read. Upstream serializes writers with a private-root lease and owns scoped cancellation/idempotent chunks. [Desktop cache](../desktop/host-application-component-cache.md) owns cross-device reuse, seven-day/2GB policy and separate progress.\n- Preparation names the selected app. Session refresh cannot reuse stale unavailable state or suppress its one pending opening. [macOS](macos-host-applications.md) owns helper/local launch/explicit capture-input permission and requires graphical login.",
-          "char_count": 2431
+          "body": "## Catalog\nCatalog and session listing require read permission. Ownership comes from authorized session metadata, never a request-provided user ID.\n\nTerminal sharing records remain bounded to forty-eight per Runtime lifetime.\n\nHost Applications is available in Activity navigation and the Workbench launcher. A separate Force quit confirmation explicitly warns that unsaved work is lost; it never follows cancellation automatically.\n\nApplication inventory loading uses matching horizontal skeleton cards and respects reduced motion.\n\n## Feature access\nPersisted `host_access.applications` and `host_access.desktop` independently record `unconfigured`, `enabled`, or `paused`. First catalog/status read initializes missing legacy states from passive capability/session evidence; later grants cannot change intent. Startup restores both gates.\n\nFull-permission `PUT /_redeven_proxy/api/{host-applications,remote-desktop}/access` requires an explicit state. Pause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.\n\nWhen both features are unconfigured, goal-based choices precede authorization; browsing remains available. Setup explains capability purpose and offers one next action. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws pending opening but retains grants. Access settings keeps reconfiguration, pause, removal and separate OS-permission management reachable.\n\n## Platforms\n### Immutable launch plan\nGIO resolves the authorized desktop entry. A sandbox launcher requiring metadata fails clearly when metadata is absent; a custom wrapper is not proof that the underlying package is supported.\n\nThe [preparation owner](#preparation) selects complete components.\n\n### Private graphics and host services\nEach instance owns unique private display/socket, authorization, runtime and bus resources.\n\nIt never exposes the whole desktop bus or arbitrary process management.\n\nSupport claims require real package and desktop evidence, as recorded in the [validation owner](../operations/host-application-validation.md#retained-xpraplatform-matrix).\n\n### macOS initialization\nThe [native macOS contract](macos-host-applications.md) owns local launch, remote single-window capture, input, and graceful lifecycle. macOS 13 or newer uses the packaged `redeven-computer-host` helper.\n\nA Mac without a graphical login cannot create a private headless AppKit session. Native AppKit applications do not become X11 applications by installing XQuartz, and Xpra desktop shadowing is not this implementation.\n\n## Preparation\n- `go.mod` owns exact dependency/toolchain versions. Never combine partial managed/system installations. [Applications](#catalog) owns environment restoration, private displays and dependencies.\n- Status, explicit transfer-plan inspection and observation require Read. Upstream serializes writers with a private-root lease and owns scoped cancellation/idempotent chunks. [Desktop cache](../desktop/host-application-component-cache.md) owns cross-device reuse, seven-day/2GB policy and separate progress.\n- Preparation names the selected app. Session refresh cannot reuse stale unavailable state or suppress its one pending opening. [macOS](macos-host-applications.md) owns helper/local launch/explicit capture-input permission and requires graphical login.",
+          "char_count": 3636
         },
         {
           "id": "boundaries",
@@ -11632,8 +11632,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `internal/hostapps/manager.go`, `linux.go` and `desktop.py`: discovery, instance recovery and sharing ownership.\n- `internal/hostapps/manager_test.go` and `desktop_test.py`: lifecycle, installed-stack launch/resume/stop, managed/system icon decoding and theme priority, and literal argument preservation.\n- `internal/codeapp/appserver/host_applications.go`, `host_application_viewer/`, and `host_applications_test.go`: API, permission/owner gates, and escaped private bootstrap.\n\n- `internal/hostapps/linux_desktop.go` and `launch_failure.go`: published immutable plan, private session and safe failure mapping.\n- `internal/hostapps/dependencies.go` and `dependencies_test.go`: retained/system Xpra capability checks.\n- `internal/hostapps/manager.go` and `manager_test.go`: isolated environment and opt-in installed-stack verification.\n\n- `internal/hostapps/setup.go`: thin released-library adapter, state placement and complete toolset selection.\n- `internal/codeapp/appserver/host_application_setup.go` and `host_applications_test.go`: authenticated status, event and mutation routes.\n- `internal/hostapps/linux_desktop.go`: upstream-owned session environment and capability selection.",
-          "char_count": 1189
+          "body": "- `internal/hostapps/manager.go`, `linux.go`, `desktop.py` and adjacent tests: discovery, isolated lifecycle, sharing, installed-stack qualification, icons and literal arguments.\n- `internal/hostapps/linux_desktop.go`, `launch_failure.go`, `dependencies.go`, `setup.go` and tests: published plan, capability checks, toolset selection, state placement and failure mapping.\n- `internal/codeapp/appserver/host_applications.go`, `host_application_setup.go`, viewer and tests: authenticated API, events, owner gates and escaped bootstrap.\n- `internal/codeapp/appserver/host_access_test.go`, `HostAccess.browser.test.tsx` and page tests: independent intent, restart, scoped removal, interrupted setup and ten-locale narrow layouts.",
+          "char_count": 725
         }
       ],
       "snippet": "Redeven authorizes catalog, instances and independent shares; published native libraries own platform execution and preparation. Applications survive viewer release and compatible Runtime restart. Capability probes govern readiness, explici",
@@ -11681,6 +11681,18 @@
           "path": "architecture/host-application-viewer.md",
           "concept_id": "architecture.host-application-viewer",
           "title": "Host application viewing, display and resource lifetime"
+        },
+        {
+          "label": "macOS application authority, capture and lifecycle",
+          "path": "architecture/macos-host-applications.md",
+          "concept_id": "architecture.macos-host-applications",
+          "title": "macOS application authority, capture and lifecycle"
+        },
+        {
+          "label": "Persistent remote desktop sharing approval",
+          "path": "architecture/remote-desktop-authorization.md",
+          "concept_id": "architecture.remote-desktop-authorization",
+          "title": "Persistent remote desktop sharing approval"
         },
         {
           "label": "Host application component cache",
@@ -11871,7 +11883,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "applications",
           "desktop",
@@ -11882,15 +11894,15 @@
         "title": "macOS application authority, capture and lifecycle",
         "type": "Runtime Contract"
       },
-      "body_length": 6076,
+      "body_length": 6541,
       "summary": "Redeven opens installed macOS bundles as the Runtime user and binds remote capture to actual windows/process generations. One helper owns independent sharing channels; decoded current pixels precede input. OS/app facts govern quit and closure, preserving unsaved work through viewing failures.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Discovery and input\nAppKit discovers standard directories, running bundle paths and explicit absolute .app paths. Canonical path defines identity; localized metadata/system icons provide presentation. Launch locally through trusted Desktop Local or capture remote selected windows with host-application protocol2, separate from Computer Use. Verify returned bundle path/process and reuse single-instance windows.\n\nRemote input shares the real foreground session: activate/raise the bound window, verify foreground/focused AX window/pointer hit ownership before injection. Local focus during recapture grants no remote authority; pre-frame composition never becomes authorized by waiting.\n\n## Helper\nOne lazy Manager-owned Swift process serves Runtime catalog/app/desktop channels, not one persistent helper per app. Empty inventory leaves it idle until Runtime closes, retaining ScreenCaptureKit identity. Released FloeNativeDesktop owns capture/native desktop input; separate binary media pipe and bounded per-channel queues avoid control serialization. Each response queue holds128 messages for supported result bursts. Authorization, input and frame credit stay independent; suspending one capture cannot affect another. Helper failure ends sharing, never apps; later explicit open may recover under native validation. Shutdown preserves unsaved applications.\n\n## Management\nAppKit's Running applications includes regular processes launched outside Redeven and windowless apps. Requests bind selected bundle plus opaque canonical path/PID/launch-time generations. Explicit graceful quit cannot force-kill/retarget. Acceptance is not exit evidence; stale/unavailable targets keep sharing and actionable error. Failed viewer admission never rolls back host sessions from stale catalog state.\n\n## Windows\nNative registry distinguishes present, unknown and confirmed-empty AX inventories. Live processes wait indefinitely for first shareable window; no first-window deadline. Client release during waiting ends the lease normally, not launch failure. Confirmed destruction alone starts last-window grace. Capture availability never defines lifetime: AX identity can survive surface replacement while input generation renews and retired callbacks are fenced. Launch/helper failures stay failures; missing pixels cannot turn confirmed process exit into launch failure.\n\nTerminal reasons remain exact: application_exited=bound process exit, windows_closed=last shared window closure, sharing_stopped=detachment. Neither closing windows nor sharing claims quit. Runtime shutdown releases capture/route/input, preserving applications; new Runtime discovers them through OS, but sharing needs explicit open. [Lifecycle acceptance](../operations/host-application-validation.md#input-cursor-and-lifecycle-acceptance) separates recovery evidence from compatibility limits.\n\n## Menus\nOnly explicit inspection reads the bound app's AX menu; never on launch/first frame. Structurally remove leading Apple/system/cross-app branches before issuing handles, independent of title/language. Literal app name is first exposed group, no replacement system menu/warning. Empty/filtered/truncated containers never become executable leaves. Handles bind app and capture/wait generation; only enabled current leaves with verified ancestry execute. Removed/relocated/excluded/disabled/nonleaf/stale handles fail without pressing or disturbing app/capture. AX cannot describe every command's effect; local launch leaves OS menu unchanged.\n\n## Picture\nNative helper validates bounds and captures at min(viewer DPR,native window density,longest-edge limit). Settings never resize app. Preferences/stats preserve process/permission/input identity. Browser H.264 WebCodecs software capability may receive VideoToolbox hardware output; encoder unavailability uses declared JPEG, decoder failure explicitly renegotiates image transport. Unchanged resize retains credit; ack only decoded current-generation frames. Runtime logs connection-to-first-frame/generation; browser logs first-decoded duration. Limits such as60 FPS are ceilings, not achieved guarantees; latency/capture/encoding/decode/network constrain delivery. Capture failure keeps session recovery policy.",
-          "char_count": 4239
+          "body": "## Discovery and input\nAppKit discovers standard directories, running bundle paths and explicit absolute .app paths. Canonical path defines identity; localized metadata/system icons provide presentation. Launch locally through trusted Desktop Local or capture remote selected windows with host-application protocol2, separate from Computer Use. Verify returned bundle path/process and reuse single-instance windows.\n\nRemote input shares the real foreground session: activate/raise the bound window, verify foreground/focused AX window/pointer hit ownership before injection. Local focus during recapture grants no remote authority; pre-frame composition never becomes authorized by waiting.\n\n## Helper\nOne lazy Manager-owned Swift process serves Runtime catalog/app/desktop channels, not one persistent helper per app. Empty inventory leaves it idle until Runtime closes, retaining ScreenCaptureKit identity. Released FloeNativeDesktop owns capture/native desktop input; separate binary media pipe and bounded per-channel queues avoid control serialization. Each response queue holds128 messages for supported result bursts. Authorization, input and frame credit stay independent; suspending one capture cannot affect another. Helper failure ends sharing, never apps; later explicit open may recover under native validation. Shutdown preserves unsaved applications.\n\n## Management\nRemote application setup explains screen recording as showing application windows and accessibility as mouse/keyboard control. Existing grants are reused; local native launch needs neither. Explicit management actions open the fixed Screen Recording or Accessibility System Settings pane. Opening a pane does not grant/revoke authorization. Feature pause/removal follows [independent access intent](host-applications.md#feature-access), never OS grant revocation.\n\nAppKit's Running applications includes regular processes launched outside Redeven and windowless apps. Requests bind selected bundle plus opaque canonical path/PID/launch-time generations. Explicit graceful quit cannot force-kill/retarget. Acceptance is not exit evidence; stale/unavailable targets keep sharing and actionable error. Failed viewer admission never rolls back host sessions from stale catalog state.\n\n## Windows\nNative registry distinguishes present, unknown and confirmed-empty AX inventories. Live processes wait indefinitely for first shareable window; no first-window deadline. Client release during waiting ends the lease normally, not launch failure. Confirmed destruction alone starts last-window grace. Capture availability never defines lifetime: AX identity can survive surface replacement while input generation renews and retired callbacks are fenced. Launch/helper failures stay failures; missing pixels cannot turn confirmed process exit into launch failure.\n\nTerminal reasons remain exact: application_exited=bound process exit, windows_closed=last shared window closure, sharing_stopped=detachment. Neither closing windows nor sharing claims quit. Runtime shutdown releases capture/route/input, preserving applications; new Runtime discovers them through OS, but sharing needs explicit open. [Lifecycle acceptance](../operations/host-application-validation.md#input-cursor-and-lifecycle-acceptance) separates recovery evidence from compatibility limits.\n\n## Menus\nOnly explicit inspection reads the bound app's AX menu; never on launch/first frame. Structurally remove leading Apple/system/cross-app branches before issuing handles, independent of title/language. Literal app name is first exposed group, no replacement system menu/warning. Empty/filtered/truncated containers never become executable leaves. Handles bind app and capture/wait generation; only enabled current leaves with verified ancestry execute. Removed/relocated/excluded/disabled/nonleaf/stale handles fail without pressing or disturbing app/capture. AX cannot describe every command's effect; local launch leaves OS menu unchanged.\n\n## Picture\nNative helper validates bounds and captures at min(viewer DPR,native window density,longest-edge limit). Settings never resize app. Preferences/stats preserve process/permission/input identity. Browser H.264 WebCodecs software capability may receive VideoToolbox hardware output; encoder unavailability uses declared JPEG, decoder failure explicitly renegotiates image transport. Unchanged resize retains credit; ack only decoded current-generation frames. Runtime logs connection-to-first-frame/generation; browser logs first-decoded duration. Limits such as60 FPS are ceilings, not achieved guarantees; latency/capture/encoding/decode/network constrain delivery. Capture failure keeps session recovery policy.",
+          "char_count": 4704
         },
         {
           "id": "boundaries",
@@ -11909,6 +11921,12 @@
       ],
       "snippet": "Redeven opens installed macOS bundles as the Runtime user and binds remote capture to actual windows/process generations. One helper owns independent sharing channels; decoded current pixels precede input. OS/app facts govern quit and closu",
       "links": [
+        {
+          "label": "independent access intent",
+          "path": "architecture/host-applications.md",
+          "concept_id": "architecture.host-applications",
+          "title": "Host application catalog, platforms and preparation"
+        },
         {
           "label": "Lifecycle acceptance",
           "path": "operations/host-application-validation.md",
@@ -13697,7 +13715,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "authorization",
           "desktop",
@@ -13707,15 +13725,15 @@
         "title": "Persistent remote desktop sharing approval",
         "type": "Runtime Contract"
       },
-      "body_length": 1826,
+      "body_length": 2131,
       "summary": "Redeven owns sharing preference/reset; Floe Native Apps owns OS consent/private recovery. Logged-in Runtime may reuse saved approval, which proves no admission and never reaches viewers/URLs/audits. This user Portal path is separate from SSH system-service deployment.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Compatible preference `remote_desktop.unattended` controls both creation and connection; renderer cannot override it. Audit only action/outcome.\n- Readiness (`ready`, `locked`, `session_unavailable`) is independent of authorization: `unsupported` allows temporary sharing; `needs_consent` has no usable credential; `saved` permits an attempt; `restoring` is pending; `revoked` requires positive OS evidence; `unknown` allows a fresh request after uncertainty.\n- Upstream validates credential-directory/file owner, restrictive modes, regular-file type, schema and bounded content. Retain uncertain single-use credentials without indefinite replay.\n- SSH status/creation select installed service and never fall back to Portal after preparation/authentication failure. Local Portal/macOS permission flows remain separate.",
-          "char_count": 820
+          "body": "- [Feature access](host-applications.md#feature-access) is independent of OS consent and approval reuse. Pause/remove revokes desktop sessions and fences admission without changing application access or shared grants. Remove clears Redeven desktop preferences; later capability reads cannot reenable it.\n\n- Compatible preference `remote_desktop.unattended` controls both creation and connection; renderer cannot override it. Audit only action/outcome.\n- Readiness (`ready`, `locked`, `session_unavailable`) is independent of authorization: `unsupported` allows temporary sharing; `needs_consent` has no usable credential; `saved` permits an attempt; `restoring` is pending; `revoked` requires positive OS evidence; `unknown` allows a fresh request after uncertainty.\n- Upstream validates credential-directory/file owner, restrictive modes, regular-file type, schema and bounded content. Retain uncertain single-use credentials without indefinite replay.\n- SSH status/creation select installed service and never fall back to Portal after preparation/authentication failure. Local Portal/macOS permission flows remain separate.",
+          "char_count": 1125
         },
         {
           "id": "boundaries",
@@ -13734,6 +13752,12 @@
       ],
       "snippet": "Redeven owns sharing preference/reset; Floe Native Apps owns OS consent/private recovery. Logged-in Runtime may reuse saved approval, which proves no admission and never reaches viewers/URLs/audits. This user Portal path is separate from SS",
       "links": [
+        {
+          "label": "Feature access",
+          "path": "architecture/host-applications.md",
+          "concept_id": "architecture.host-applications",
+          "title": "Host application catalog, platforms and preparation"
+        },
         {
           "label": "Session ownership",
           "path": "architecture/remote-desktop.md",
@@ -13762,7 +13786,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-05",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "accessibility",
           "applications",
@@ -13772,15 +13796,15 @@
         "title": "Remote desktop connection launcher",
         "type": "Interaction Contract"
       },
-      "body_length": 5149,
+      "body_length": 6297,
       "summary": "One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. Failure retains recovery; dismissing pending creation releases its session. Once opened, viewer lifetime is independent of the launcher.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Use the shared monitor/pointer mark, distinguishable at Dock/header sizes across themes/high contrast. Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.\n- SSH preparation, operation-bound challenge, progress and desktop opening stay in the same dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope/credential lifetime; opening the launcher changes no OS permission.\n- Closing the launcher dialog through its close button, Escape or backdrop dismisses the view without canceling SSH preparation. The launcher retains one operation and progress subscription; its entry reports preparation, required input or the observed outcome, and reopening restores that state. Explicit Cancel still stops preparation and reports rollback. Dismissal clears typed credentials and withdraws automatic viewer opening; completed preparation offers an explicit connection action. Password and interruption challenges retain their existing deadline and require user response. Pending viewer creation is still released on dismissal, and environment navigation, launcher disposal or Desktop window closure still cancels its owned work.\n- SSH host preparation presents observed checking, component, service and verification stages. The Desktop bridge forwards the published component media substate (`checking`, `downloading`, `receiving`, `verifying`, `installing`, `validating`, `ready`) only while the deployment stage is `preparing_media`; older byte-only reports remain valid. Component byte progress appears only during an observed transfer with a real total and received count. Integrity checking, unpacking, validation and packaging use one calm indeterminate Floe progress cue, so a completed download never masquerades as completed preparation. Avoid simultaneous spinners, shimmer and sweeping effects; static current-step emphasis and observed detail communicate stage changes. Interrupted or rollback states never imply completion.\n- Preparation keeps a compact viewport-bounded content area while observed detail text and transfer metrics change. The seven-step list scrolls independently within a 128px maximum height, yields space to wrapped status copy, and keeps the active step visible without moving keyboard focus. Compact markers center digits and checks; the section heading needs no decorative activity dot. Status copy uses its natural line count with a small gap above the progress bar instead of reserving empty text rows; the dialog footer remains stable across preparation updates. The current detail is announced through a single atomic status region, the progress wrapper owns the accessible progressbar semantics, and the visual Floe primitive is decorative. Reduced-motion and forced-colors preferences disable decorative motion while retaining a visible state boundary.\n- Authorization starts with one brief administrator-access sentence and a collapsed native permission disclosure. Full service scope and SSH setup details remain available on demand; the authorization selector and next action stay prominent. Authorization, password and result content use their natural height with an 18px gap before the actions. Constrained viewports scroll only the middle content area while retaining the host, steps and footer, including when permission details expand. Password focus reveals the field; stage-heading focus preserves the scroll position.\n- Initial content is target/readiness/connect. Admin/display selectors retain native keyboard behavior/labels; decorative chevrons sit 12px inside the field with separate text padding and no pointer interception.\n- Disabling approval reuse requests confirmation on future connections without revoking OS grants. Status refresh cannot erase connection failure.",
-          "char_count": 3785
+          "body": "- First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls.\n- macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.\n\n- Navigation uses the shared monitor/pointer mark. Onboarding SVGs instead show one selected window versus a whole desktop with multiple windows and a taskbar. Permission diagrams show picture delivery versus keyboard/pointer input. Management shows retained settings with explicit enabled, paused or removal marks. Localized adjacent text carries meaning; SVGs are decorative, theme-aware and legible without animation. Hover/focus may briefly explain delivery, never suggest ongoing setup; reduced motion and forced colors disable it.\n- Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.\n- SSH preparation, operation-bound challenge, progress and desktop opening stay in the same dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope/credential lifetime; opening the launcher changes no OS permission.\n- Closing the launcher dialog through its close button, Escape or backdrop dismisses the view without canceling SSH preparation. The launcher retains one operation and progress subscription; its entry reports preparation, required input or the observed outcome, and reopening restores that state. Explicit Cancel still stops preparation and reports rollback. Dismissal clears typed credentials and withdraws automatic viewer opening; completed preparation offers an explicit connection action. Password and interruption challenges retain their existing deadline and require user response. Pending viewer creation is still released on dismissal, and environment navigation, launcher disposal or Desktop window closure still cancels its owned work.\n- SSH host preparation presents observed checking, component, service and verification stages. The Desktop bridge forwards the published component media substate (`checking`, `downloading`, `receiving`, `verifying`, `installing`, `validating`, `ready`) only while the deployment stage is `preparing_media`; older byte-only reports remain valid. Component byte progress appears only during an observed transfer with a real total and received count. Integrity checking, unpacking, validation and packaging use one calm indeterminate Floe progress cue, so a completed download never masquerades as completed preparation. Avoid simultaneous spinners, shimmer and sweeping effects; static current-step emphasis and observed detail communicate stage changes. Interrupted or rollback states never imply completion.\n- Preparation keeps a compact viewport-bounded content area while observed detail text and transfer metrics change. The seven-step list scrolls independently within a 128px maximum height, yields space to wrapped status copy, and keeps the active step visible without moving keyboard focus. Compact markers center digits and checks; the section heading needs no decorative activity dot. Status copy uses its natural line count with a small gap above the progress bar instead of reserving empty text rows; the dialog footer remains stable across preparation updates. The current detail is announced through a single atomic status region, the progress wrapper owns the accessible progressbar semantics, and the visual Floe primitive is decorative. Reduced-motion and forced-colors preferences disable decorative motion while retaining a visible state boundary.\n- Authorization starts with one brief administrator-access sentence and a collapsed native permission disclosure. Full service scope and SSH setup details remain available on demand; the authorization selector and next action stay prominent. Authorization, password and result content use their natural height with an 18px gap before the actions. Constrained viewports scroll only the middle content area while retaining the host, steps and footer, including when permission details expand. Password focus reveals the field; stage-heading focus preserves the scroll position.\n- Initial content is target/readiness/connect. Admin/display selectors retain native keyboard behavior/labels; decorative chevrons sit 12px inside the field with separate text padding and no pointer interception.\n- Disabling approval reuse requests confirmation on future connections without revoking OS grants. Status refresh cannot erase connection failure.",
+          "char_count": 4781
         },
         {
           "id": "boundaries",
@@ -13793,8 +13817,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: selector geometry, keyboard focus, authorization method selection, localized narrow layouts and forced-color presentation.\n\n- `internal/envapp/ui_src/src/styles/remoteDesktopLauncher.browser.test.tsx`: dialog dismissal preserves preparation/progress, background completion requires an explicit connection, pending challenges survive without retaining typed credentials, explicit cancellation still works, and late viewer sessions are released.\n\n- `internal/envapp/ui_src/src/ui/icons/RemoteDesktopIcon.tsx`: shared monitor-and-pointer silhouette and compact launcher rendering.\n\n- `internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx`: themed Remote Desktop Dock tile.\n\n- `internal/envapp/ui_src/src/styles/navigationIcons.browser.test.tsx`: actual-size silhouettes, theme and high-contrast checks.",
-          "char_count": 882
+          "body": "- `HostAccess.browser.test.tsx`: distinct access scenes, permission/settings states, narrow layouts, keyboard focus, reduced motion and forced colors.\n\n- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: selector geometry, keyboard focus, authorization method selection, localized narrow layouts and forced-color presentation.\n\n- `internal/envapp/ui_src/src/styles/remoteDesktopLauncher.browser.test.tsx`: dialog dismissal preserves preparation/progress, background completion requires an explicit connection, pending challenges survive without retaining typed credentials, explicit cancellation still works, and late viewer sessions are released.\n\n- `internal/envapp/ui_src/src/ui/icons/RemoteDesktopIcon.tsx`: shared monitor-and-pointer silhouette and compact launcher rendering.\n\n- `internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx`: themed Remote Desktop Dock tile.\n\n- `internal/envapp/ui_src/src/styles/navigationIcons.browser.test.tsx`: actual-size silhouettes, theme and high-contrast checks.",
+          "char_count": 1034
         }
       ],
       "snippet": "One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. Failure retains recovery; dismissing pending creation releases its session. Once opened, viewer lifetime i",
@@ -26215,5 +26239,5 @@
       ]
     }
   ],
-  "source_sha256": "33f0660a079b64f73a46f92161b2954d0d272c79a79169ba79f24d7028fb6363"
+  "source_sha256": "240cbc4c42b5d66e08774523b79f4f8dd897df68c07dd11bdbb745822ce404a1"
 }

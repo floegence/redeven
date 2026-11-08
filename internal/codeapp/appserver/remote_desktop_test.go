@@ -42,7 +42,7 @@ func TestRemoteDesktopSettingsPreserveRememberedDisplayAcrossRestart(t *testing.
 }
 
 func TestRemoteDesktopRequiresFullPermissionForEverySessionRoute(t *testing.T) {
-	server := &Server{resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true})}
+	server := &Server{configPath: writeTestConfig(t), resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true})}
 	for _, route := range []struct{ method, path string }{
 		{"POST", "/sessions"}, {"GET", "/sessions/one"}, {"POST", "/sessions/one/takeover"}, {"POST", "/sessions/one/display"}, {"POST", "/sessions/one/mode"}, {"POST", "/sessions/one/lock"}, {"DELETE", "/sessions/one"}, {"PUT", "/settings"}, {"DELETE", "/authorization"}, {"POST", "/setup"}, {"POST", "/service/deployment"}, {"POST", "/service/install"}, {"DELETE", "/service"},
 	} {
@@ -68,7 +68,7 @@ func TestRemoteDesktopForwardOwnerProtectsViewOnlyAndMedia(t *testing.T) {
 		full    bool
 		allowed bool
 	}{{"alice", true, true}, {"alice", false, false}, {"bob", true, false}} {
-		server := &Server{resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: test.owner, CanRead: true, CanWrite: test.full, CanExecute: test.full})}
+		server := &Server{configPath: writeTestConfig(t), resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: test.owner, CanRead: true, CanWrite: test.full, CanExecute: test.full})}
 		s := remotedesktop.Session{ID: "one", Mode: "view", Locale: "en-US", HostName: "fixture"}
 		for _, path := range []string{"", "control", "media", "assets/host_desktop_player.mjs", "assets/icons.generated.js"} {
 			r := httptest.NewRequest("GET", "/pf/owned"+remotedesktop.ViewerPath+path, nil)
@@ -171,7 +171,7 @@ func TestRemoteDesktopStatusReportsEffectivePolicyFromLegacyConfiguration(t *tes
 func TestRemoteDesktopDeploymentAuditRejectsCredentialsAndUnconfirmedOutcomes(t *testing.T) {
 	manager := remotedesktop.New(t.TempDir(), nil, nil)
 	defer manager.Close()
-	server := &Server{remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	server := &Server{configPath: writeTestConfig(t), remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 	for _, test := range []struct {
 		body   string
 		status int
@@ -221,7 +221,7 @@ func TestRemoteDesktopDeploymentAuditRejectsCredentialsAndUnconfirmedOutcomes(t 
 func TestRemoteDesktopRetiredMutationRoutesAreUnavailable(t *testing.T) {
 	manager := remotedesktop.New(t.TempDir(), nil, nil)
 	defer manager.Close()
-	server := &Server{remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	server := &Server{configPath: writeTestConfig(t), remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
 	for _, route := range []struct{ method, path string }{{"POST", "/service/install"}, {"DELETE", "/service/install"}, {"DELETE", "/service"}} {
 		r := httptest.NewRequest(route.method, remoteDesktopAPI+route.path, strings.NewReader("{}"))
 		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))

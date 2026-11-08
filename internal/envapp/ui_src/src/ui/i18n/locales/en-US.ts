@@ -206,7 +206,6 @@ export const enUS = defineDictionary({
     "clarity": "Clarity",
     "data": "Low bandwidth",
     "sound": "System sound",
-    "enableSound": "Enable sound",
     "volume": "Volume",
     "clipboard": "Text clipboard",
     "clipboardHint": "Copy remote text here or paste text to the host. Browser clipboard access may require a click or permission.",
@@ -229,7 +228,6 @@ export const enUS = defineDictionary({
     "lockHint": "Lock the host desktop? Remote input pauses until the host is unlocked.",
     "cancel": "Cancel",
     "reconnect": "Reconnect",
-    "awaitingConnection": "Awaiting connection",
     "unattended": "Connect automatically after first approval",
     "unattendedHint": "Confirm sharing once on the host to save approval for later connections. Keep Redeven Runtime running. Revoked approval or desktop changes may require confirmation again. Turn this off to confirm every connection.",
     "approvalSaved": "Sharing approval saved",
@@ -258,22 +256,9 @@ export const enUS = defineDictionary({
     "frameRate": "Painted frame rate",
     "bandwidth": "Bandwidth",
     "decoder": "Decoder preference"
-    ,"loginServiceTitle": "Enable lock-screen access"
-    ,"loginServiceHint": "Remote desktop can show the login or lock screen and accept physical keyboard and pointer input after you authorize it."
     ,"serviceActive": "Ready for login or lock-screen access."
-    ,"serviceNotInstalled": "Lock-screen access will be enabled automatically when it is needed."
     ,"serviceUnsupported": "Login or lock-screen access is unavailable on this host. Unlock it locally and try again."
-    ,"serviceAuthorizationRequired": "Administrator authorization is required to enable lock-screen access."
-    ,"serviceInstalling": "Waiting for system authorization…"
-    ,"serviceUninstalling": "Disabling lock-screen access…"
-    ,"serviceFailed": "Lock-screen access could not be enabled."
-    ,"installLoginService": "Enable lock-screen access"
-    ,"uninstallLoginService": "Disable lock-screen access"
     ,"install": "Allow and connect"
-    ,"loginServiceInstallConfirm": "To connect before login or while the host is locked, Redeven needs a root/administrator service that can read the lock screen and inject physical keyboard and pointer events. It does not listen on a public port, can be disabled at any time, and cannot unlock FileVault, BitLocker, or other encrypted disks. The operating system will ask for administrator authorization next."
-    ,"loginServiceUninstallConfirm": "Disable lock-screen access? Existing desktop sessions will remain unchanged."
-    ,"unlockHint": "Unlock mode sends only physical keyboard and pointer events. Clipboard, paste, shortcuts, and ordinary controls stay disabled."
-    ,"startUnlock": "Start unlocking"
     ,"unlocking": "Unlocking host…"
     ,"unlockPhysicalOnly": "Unlock mode accepts physical keyboard and pointer input only."
     ,"unlockFailed": "The unlock attempt failed. The host remains locked; try again or cancel."
@@ -286,6 +271,54 @@ export const enUS = defineDictionary({
     detail: 'Your workspace and unsent drafts are preserved.',
     reopen: 'Reopen environment',
     connectionCenter: 'Connection Center',
+  },
+  hostAccess: {
+    "welcome": "Use {host}",
+    "choose": "Choose what to set up.",
+    "applications": "Open individual applications",
+    "desktop": "Connect to the entire desktop",
+    "appDescription": "Use one application in its own window.",
+    "desktopDescription": "See the desktop and switch applications.",
+    "setupApplications": "Set up application access",
+    "setupDesktop": "Set up remote desktop",
+    "independent": "Set up one feature now; add the other later.",
+    "browse": "Browse applications first",
+    "requirements": "Required for this feature",
+    "authorizeOnHost": "Allow access on {host}.",
+    "inputPurpose": "Use the mouse and keyboard",
+    "desktopPurpose": "Show the entire desktop",
+    "appPurpose": "Show application windows",
+    "screenPermission": "Screen recording",
+    "inputPermission": "Accessibility",
+    "allowed": "Allowed",
+    "required": "Required",
+    "permissionsReady": "Permissions granted. No further authorization needed.",
+    "allowScreen": "Allow screen display",
+    "allowInput": "Allow mouse and keyboard",
+    "checkAgain": "Check again",
+    "systemSettings": "Manage system permissions",
+    "sharedPermissions": "Revoking system permissions affects both features. Pause to stop only this feature.",
+    "manage": "Manage this feature",
+    "paused": "Paused · settings retained",
+    "unconfigured": "Not set up",
+    "enabled": "Enabled",
+    "resume": "Enable again",
+    "continue": "Continue setup",
+    "reconfigure": "Set up again",
+    "pause": "Pause",
+    "remove": "Remove settings…",
+    "pauseTitle": "Pause this feature?",
+    "removeTitle": "Remove this feature’s settings?",
+    "pauseHint": "Disconnect and block new connections. Keep apps running, settings, shared permissions and the other feature.",
+    "removeHint": "Disconnect and reset this feature’s preferences. Keep apps, components, shared permissions and the other feature.",
+    "settings": "Access settings",
+    "restorePermissions": "Restore permissions to use applications.",
+    "beforeUse": "Set up access to open applications.",
+    "nativeReady": "Local apps need no screen recording or accessibility permission.",
+    "showApplications": "Enable and view applications",
+    "updateFailed": "Could not confirm the update. Refresh to check.",
+    "useMode": "How to use",
+    "enableConnect": "Enable and connect"
   },
   hostApplications: {
     "componentSettings": "Component settings",
@@ -313,7 +346,6 @@ export const enUS = defineDictionary({
       "unsupported": "This runtime cannot use the installed component version. Its files have been preserved. Update the runtime before continuing.",
       "cacheChanged": "Cached files changed during preparation. Check the available files and try again.",
       "desktopMismatch": "This Desktop cannot prepare the requested components. Update Desktop or choose host download.",
-      "checkingSize": "Calculated before downloading"
     },
     "clipboardUnavailable": "Clipboard access is unavailable. Use HTTPS and allow clipboard access for this site, then copy again.",
     "macControls": "Application controls",
@@ -389,7 +421,6 @@ export const enUS = defineDictionary({
     "arguments": "Arguments (optional)",
     "cancel": "Cancel",
     "category": "Application category",
-    "description": "Your host’s applications, each in its own window.",
     "emptyDescription": "Host Applications opens graphical software already installed on this host.",
     "emptyTitle": "No graphical applications found",
     "ended": "This application session has ended.",
@@ -408,7 +439,6 @@ export const enUS = defineDictionary({
       "unavailable": "Host applications are not ready. Check the host dependencies and refresh."
     },
     "executable": "Executable path",
-    "eyebrow": "ON THIS HOST",
     "launchPermission": "Read, write, and execute permissions are required to open and control applications.",
     "library": "Application library",
     "loading": "Loading applications…",
@@ -420,28 +450,19 @@ export const enUS = defineDictionary({
     "readPermission": "Read permission is required to browse applications.",
     "refresh": "Refresh applications",
     "resume": "Resume",
-    "retained": "Closing a window keeps the application running. Sessions end when the runtime stops.",
     "retry": "Try again",
     "running": "Running applications",
     "search": "Search applications…",
     "setupDescription": "Prepare the graphical components in Redeven. Native applications do not require a desktop environment or monitor. Snap and Flatpak require their package runtime and host services.",
-    "setupRequirements": "Needs attention: {requirements}",
-    "setupGuide": "Installation guide",
     "catalogUnavailable": "The host application catalog could not be read. Check that the runtime is working on this host, then refresh.",
     "setupTitle": "Prepare this host",
     "starting": "Starting application…",
-    "stop": "End session",
-    "stopDescription": "This closes the application and all its windows. Unsaved changes may be lost.",
-    "stopTitle": "End this application session?",
     "title": "Host Applications",
     "unsupportedDescription": "Host applications require a Linux or macOS runtime. Connect to a supported host to use this feature.",
     "unsupportedTitle": "Supported host required",
     "allApplications": "All applications",
-    "macPermissions": "On this Mac, allow screen recording and accessibility for Redeven in System Settings, then refresh. Opening applications directly on this Mac does not require screen recording.",
     "macSessionRequired": "Sign in to the graphical session on this Mac and unlock it, then refresh.",
     "macHelperMissing": "The macOS application component is unavailable. Update or reinstall the Redeven runtime on this host, then refresh.",
-    "macAllowScreen": "Allow screen recording",
-    "macAllowAccessibility": "Allow accessibility",
     "macSharedControl": "Remote input uses this Mac’s current user session and may change its active window.",
     "macWindows": "Application windows",
     "macCloseWindow": "Close application window",
@@ -467,7 +488,6 @@ export const enUS = defineDictionary({
     "forceQuitTitle": "Force quit {name}?",
     "forceQuitDescription": "End the application immediately without a save prompt. Unsaved work will be lost.",
     "forceQuitPending": "Force quit requested. Waiting for the host to confirm that the application has exited.",
-    "operationRetry": "The operation failed. Try again.",
     "macRunning": "Running on this Mac",
     "macRunningHint": "Includes applications opened outside Redeven. Closing a viewer leaves the application running.",
     "macAppRunning": "Running",
@@ -491,8 +511,6 @@ export const enUS = defineDictionary({
     "pictureDensityLimitHint": "Rendering has reached the maximum supported pixel density for this display.",
     "macQuitDescription": "This asks the application to quit and close all of its windows on this Mac, including windows opened outside Redeven. The application may ask you to save changes; you can cancel there.",
     "macQuitViewerPending": "Quit requested. Respond to any save dialog in the application. Cancelling keeps it open.",
-    "macQuitPending": "Open the application to respond to any save dialog. If you cancel quitting, it stays open.",
-    "macQuitChanged": "The application restarted. Confirm again to quit its current process.",
     "macQuitFailed": "The quit request could not be confirmed. Check the application before trying again.",
     "macQuitRejected": "The application did not accept the quit request. Open it to check for a dialog, then try again.",
     "macPicture": "Picture quality",

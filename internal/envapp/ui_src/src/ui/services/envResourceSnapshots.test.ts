@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { codespaceSnapshot, containerInventorySnapshot, containerRuntimeSnapshot, containerServiceSnapshot, forwardSnapshot, hostApplicationSnapshot, managedServiceSnapshot } from './envResourceSnapshots';
 
 describe('disposable resource presentation contracts', () => {
+  it('preserves explicit host access intent and rejects unknown states', () => {
+    const catalog = { availability: { supported: true, ready: true }, applications: [], sessions: [] };
+    for (const access_state of ['enabled', 'paused', 'unconfigured'] as const) {
+      expect(hostApplicationSnapshot({ ...catalog, access_state }).access_state).toBe(access_state);
+    }
+    expect(() => hostApplicationSnapshot({ ...catalog, access_state: 'ready' })).toThrow();
+  });
   it('keeps application icons and process identities but excludes viewer capabilities', () => {
     const application = { id: 'editor', name: 'Editor', description: '', categories: [], icon: 'data:image/png;base64,aGVsbG8=', launch_token: 'secret' };
     const result = hostApplicationSnapshot({ availability: { ready: true, supported: true, backend: 'macos', token: 'secret' }, applications: [application],

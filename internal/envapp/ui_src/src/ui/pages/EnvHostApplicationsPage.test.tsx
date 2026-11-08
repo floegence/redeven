@@ -5,6 +5,10 @@ import type { RevealHostApplicationRequest } from './EnvContext';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
+const access = vi.hoisted(()=>({save:vi.fn(),desktop:vi.fn()}));
+vi.mock('../services/hostAccess',async original=>({...await original<object>(),setHostAccess:access.save}));
+vi.mock('../services/remoteDesktopApi',async original=>({...await original<object>(),getRemoteDesktopStatus:access.desktop}));
+
 const state = vi.hoisted(() => ({ reveal: null as RevealHostApplicationRequest | null, consumeReveal: vi.fn(), desktop: true, cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
@@ -27,6 +31,7 @@ let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 30));
 function button(label: string) { return [...host.querySelectorAll('button')].find(el => el.getAttribute('aria-label') === label)!; }
 beforeEach(() => {
+  access.save.mockReset();access.save.mockResolvedValue({state:'enabled'});access.desktop.mockReset();access.desktop.mockRejectedValue(new Error('Desktop status unavailable in unrelated fixture'));
   vi.clearAllMocks(); state.reveal = null; state.desktop = true; state.generation = 0; state.cacheScope = ''; state.full = true; state.localMac = false;
   state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
   state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
@@ -43,6 +48,67 @@ beforeEach(() => {
   host = document.createElement('div'); document.body.append(host);
 });
 afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
+
+describe('goal-based host access',()=>{
+ it('offers explicit completion after Linux preparation without enabling in the background',async()=>{
+  const catalog={access_state:'unconfigured',availability:{supported:true,ready:false},applications:[app],sessions:[]};
+  state.catalog.mockResolvedValue(catalog);
+  access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();
+  textButton('Set up application access').click();await settle();
+  textButton('Prepare',document.querySelector('[role=dialog]')!).click();await settle();
+  state.catalog.mockResolvedValue({...catalog,availability:{supported:true,ready:true}});
+  state.setupObserve.mock.calls[0][0]({...installedSetup,update_available:false});await settle();
+  expect(access.save).not.toHaveBeenCalled();
+  textButton('Continue setup',host).click();await settle();
+  state.catalog.mockResolvedValue({...catalog,access_state:'enabled',availability:{supported:true,ready:true}});
+  textButton('Enable and view applications').click();await settle();
+  expect(access.save).toHaveBeenCalledWith('applications','enabled');
+  expect(state.launch).not.toHaveBeenCalled();
+  await vi.waitFor(()=>expect(document.querySelector('[role=dialog]')).toBeNull());
+  expect(host.querySelector('.host-apps-library')).not.toBeNull();
+ });
+ const mac=(screen=false,input=false,access_state:'unconfigured'|'enabled'|'paused'='unconfigured')=>({access_state,availability:{backend:'macos',supported:true,native_ready:true,ready:screen&&input,reason:screen&&input?'':'macos_permissions',permissions:{screen_recording:screen,accessibility:input}},applications:[app],sessions:[]});
+ it('guides the first visit without requesting permissions and permits browsing',async()=>{
+  state.catalog.mockResolvedValue(mac());access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();
+  expect(host.querySelector('.host-access-welcome')).not.toBeNull();expect(host.querySelector('.host-apps-library')).toBeNull();expect(state.permission).not.toHaveBeenCalled();expect(access.save).not.toHaveBeenCalled();
+  textButton('Browse applications first').click();await settle();expect(host.querySelector('.host-apps-library')).not.toBeNull();
+  textButton('Continue setup').click();await settle();expect(document.querySelector('[role=dialog]')?.textContent).toContain('Show application windows');
+ });
+ it('retains grants across dismissal and finishes on the library without choosing an app',async()=>{
+  state.catalog.mockResolvedValue(mac());access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();textButton('Set up application access').click();await settle();
+  state.catalog.mockResolvedValue(mac(true,false));textButton('Allow screen display').click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording');
+  document.querySelector<HTMLButtonElement>('[role=dialog] button[aria-label=Close]')!.click();await settle();
+  textButton('Continue setup').click();await settle();expect(textButton('Allow screen display')).toBeUndefined();expect(textButton('Allow mouse and keyboard')).toBeTruthy();
+  state.catalog.mockResolvedValue(mac(true,true));window.dispatchEvent(new Event('focus'));await settle();
+  state.catalog.mockResolvedValue(mac(true,true,'enabled'));textButton('Enable and view applications').click();await settle();
+  expect(access.save).toHaveBeenCalledWith('applications','enabled');expect(state.launch).not.toHaveBeenCalled();await vi.waitFor(()=>expect(document.querySelector('[role=dialog]')).toBeNull());expect(host.querySelector('.host-apps-library')).not.toBeNull();
+ });
+ it('keeps paused access paused until explicitly enabled and keeps system management reachable',async()=>{
+  state.catalog.mockResolvedValue(mac(true,true,'paused'));access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();expect(host.querySelector('.host-access-welcome')).toBeNull();expect(access.save).not.toHaveBeenCalled();
+  textButton('Access settings').click();await settle();textButton('Open individual applications').click();await settle();
+  expect(textButton('Screen recording')).toBeTruthy();textButton('Screen recording').click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording_settings');expect(access.save).not.toHaveBeenCalled();
+ });
+ it('reserves a selected browser application before awaiting explicit activation',async()=>{
+  state.desktop=false;state.catalog.mockResolvedValue(mac(true,true));
+  const popup={closed:false,document:document.implementation.createHTMLDocument(),close:vi.fn(),focus:vi.fn()} as unknown as Window;
+  const opened=vi.spyOn(window,'open').mockReturnValue(popup);
+  access.save.mockImplementation(async()=>{expect(opened).toHaveBeenCalledOnce();state.catalog.mockResolvedValue(mac(true,true,'enabled'));return {state:'enabled'};});
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();
+  button('Open in new window · Text Editor').click();await settle();
+  textButton('Open in new window',document.querySelector('[role=dialog]')!).click();
+  await vi.waitFor(()=>expect(state.launch).toHaveBeenCalledOnce());
+  expect(opened).toHaveBeenCalledOnce();
+ });
+ it('does not gate native local launch behind remote access setup',async()=>{
+  state.localMac=true;state.catalog.mockResolvedValue(mac(false,false,'paused'));access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();expect(host.querySelector('.host-access-welcome')).toBeNull();
+  state.launch.mockResolvedValue({id:'native',mode:'native',state:'opened'});button('Open in new window · Text Editor').click();await settle();expect(state.launch).toHaveBeenCalledWith(app.id,'en-US',expect.anything(),'native');expect(access.save).not.toHaveBeenCalled();
+ });
+});
 
 function textButton(text: string, root: ParentNode = document) { return [...root.querySelectorAll('button')].find(el => controlText(el) === text)!; }
 async function inspectUpdate() {
@@ -284,10 +350,11 @@ it('opens local macOS applications without requiring capture permissions or crea
 it('guides remote macOS authorization and prevents launching until the host is ready', async () => {
   state.catalog.mockResolvedValue({availability:{backend:'macos',supported:true,ready:false,native_ready:true,reason:'macos_permissions',permissions:{screen_recording:false,accessibility:false}},applications:[app],sessions:[]});
   dispose=render(()=><EnvHostApplicationsPage />,host);await settle();
-  expect(controlText(host)).toContain('Allow screen recording');
+  expect(controlText(host)).toContain('Set up access to open applications.');
+  textButton('Continue setup',host).click();await settle();
   expect(controlText(host)).not.toContain('Install Xpra');
   expect(button('Open in new window · Text Editor').disabled).toBe(false);
-  [...host.querySelectorAll('button')].find(button=>controlText(button)==='Allow screen recording')!.click();await settle();
+  [...document.querySelectorAll('button')].find(button=>controlText(button)==='Allow screen display')!.click();await settle();
   expect(state.permission).toHaveBeenCalledWith('screen_recording');
 });
 
@@ -408,7 +475,7 @@ it('resumes the selected remote macOS app in its reserved window after actual au
  state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: false, native_ready: true, reason: 'macos_permissions', permissions: { screen_recording: false, accessibility: false } }, applications: [app], sessions: [] });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  button('Open in new window · Text Editor').click(); await settle();
- [...document.querySelectorAll('[role="dialog"] button')].find(el => controlText(el) === 'Allow screen recording')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); await settle();
+ [...document.querySelectorAll('[role="dialog"] button')].find(el => controlText(el) === 'Allow screen display')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); await settle();
  expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({ action: 'create' }));
  expect(state.launch).not.toHaveBeenCalled();
  state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [] });

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Host application catalog, platforms and preparation
 tags: [runtime, desktop, applications, security, ui]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -19,6 +19,13 @@ Terminal sharing records remain bounded to forty-eight per Runtime lifetime.
 Host Applications is available in Activity navigation and the Workbench launcher. A separate Force quit confirmation explicitly warns that unsaved work is lost; it never follows cancellation automatically.
 
 Application inventory loading uses matching horizontal skeleton cards and respects reduced motion.
+
+## Feature access
+Persisted `host_access.applications` and `host_access.desktop` independently record `unconfigured`, `enabled`, or `paused`. First catalog/status read initializes missing legacy states from passive capability/session evidence; later grants cannot change intent. Startup restores both gates.
+
+Full-permission `PUT /_redeven_proxy/api/{host-applications,remote-desktop}/access` requires an explicit state. Pause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.
+
+When both features are unconfigured, goal-based choices precede authorization; browsing remains available. Setup explains capability purpose and offers one next action. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws pending opening but retains grants. Access settings keeps reconfiguration, pause, removal and separate OS-permission management reachable.
 
 ## Platforms
 ### Immutable launch plan
@@ -57,14 +64,7 @@ Preparation never installs user applications. Closing a pending viewer withdraws
 
 # Evidence
 
-- `internal/hostapps/manager.go`, `linux.go` and `desktop.py`: discovery, instance recovery and sharing ownership.
-- `internal/hostapps/manager_test.go` and `desktop_test.py`: lifecycle, installed-stack launch/resume/stop, managed/system icon decoding and theme priority, and literal argument preservation.
-- `internal/codeapp/appserver/host_applications.go`, `host_application_viewer/`, and `host_applications_test.go`: API, permission/owner gates, and escaped private bootstrap.
-
-- `internal/hostapps/linux_desktop.go` and `launch_failure.go`: published immutable plan, private session and safe failure mapping.
-- `internal/hostapps/dependencies.go` and `dependencies_test.go`: retained/system Xpra capability checks.
-- `internal/hostapps/manager.go` and `manager_test.go`: isolated environment and opt-in installed-stack verification.
-
-- `internal/hostapps/setup.go`: thin released-library adapter, state placement and complete toolset selection.
-- `internal/codeapp/appserver/host_application_setup.go` and `host_applications_test.go`: authenticated status, event and mutation routes.
-- `internal/hostapps/linux_desktop.go`: upstream-owned session environment and capability selection.
+- `internal/hostapps/manager.go`, `linux.go`, `desktop.py` and adjacent tests: discovery, isolated lifecycle, sharing, installed-stack qualification, icons and literal arguments.
+- `internal/hostapps/linux_desktop.go`, `launch_failure.go`, `dependencies.go`, `setup.go` and tests: published plan, capability checks, toolset selection, state placement and failure mapping.
+- `internal/codeapp/appserver/host_applications.go`, `host_application_setup.go`, viewer and tests: authenticated API, events, owner gates and escaped bootstrap.
+- `internal/codeapp/appserver/host_access_test.go`, `HostAccess.browser.test.tsx` and page tests: independent intent, restart, scoped removal, interrupted setup and ten-locale narrow layouts.

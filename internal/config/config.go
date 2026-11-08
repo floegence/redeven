@@ -257,6 +257,16 @@ type RemoteDesktopConfig struct {
 	LastDisplayID         string `json:"last_display_id,omitempty"`
 }
 
+// HostAccessConfig records product intent independently of OS authorization.
+// Empty legacy values preserve existing access; explicit unconfigured values
+// require setup without revoking shared system grants or removing components.
+type HostAccessConfig struct {
+	Applications string `json:"applications,omitempty"`
+	Desktop      string `json:"desktop,omitempty"`
+}
+
+func HostAccessAllowed(state string) bool { return state == "" || state == "enabled" }
+
 // RememberApproval resolves legacy defaults without mutating configuration on read.
 func (c *RemoteDesktopConfig) RememberApproval() bool {
 	return c == nil || !c.ApprovalPreferenceSet || c.Unattended
@@ -275,6 +285,7 @@ type Config struct {
 	GatewayRemovalOutbox     []gatewaymembership.RemovalDelivery `json:"gateway_removal_outbox,omitempty"`
 	Gateways                 []*gatewaymembership.RuntimeConfig  `json:"gateways,omitempty"`
 	RemoteDesktop            *RemoteDesktopConfig                `json:"remote_desktop,omitempty"`
+	HostAccess               *HostAccessConfig                   `json:"host_access,omitempty"`
 	CloudOrigin              string                              `json:"cloud_origin"`
 	AccessPointOrigin        string                              `json:"access_point_origin"`
 	CloudID                  string                              `json:"cloud_id,omitempty"`
@@ -330,6 +341,13 @@ type Config struct {
 func (c *Config) ValidateLocalMinimal() error {
 	if c == nil {
 		return errors.New("nil config")
+	}
+	if c.HostAccess != nil {
+		for _, state := range []string{c.HostAccess.Applications, c.HostAccess.Desktop} {
+			if state != "" && state != "unconfigured" && state != "enabled" && state != "paused" {
+				return errors.New("invalid host_access state")
+			}
+		}
 	}
 	if err := c.TerminalHistoryRetention.Validate(); err != nil {
 		return fmt.Errorf("invalid terminal_history_retention: %w", err)

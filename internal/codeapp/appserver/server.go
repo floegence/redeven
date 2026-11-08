@@ -241,8 +241,9 @@ func codeRuntimeSetupChunkIndexFromPath(rawPath string) (int64, bool) {
 }
 
 type Server struct {
-	log         *slog.Logger
-	lifecycleMu sync.Mutex
+	hostAccessMu sync.RWMutex
+	log          *slog.Logger
+	lifecycleMu  sync.Mutex
 
 	backend            Backend
 	pf                 PortForwardBackend
@@ -496,6 +497,9 @@ func New(opts Options) (*Server, error) {
 	if g.remoteDesktop != nil {
 		g.remoteDesktop.SetDisplayPreference(func(id string) {
 			_, err := g.updateConfigLocked(func(cfg *config.Config) error {
+				if cfg.HostAccess != nil && cfg.HostAccess.Desktop == "unconfigured" {
+					return nil
+				}
 				if cfg.RemoteDesktop == nil {
 					cfg.RemoteDesktop = &config.RemoteDesktopConfig{}
 				}
@@ -509,6 +513,20 @@ func New(opts Options) (*Server, error) {
 		g.remoteDesktop.SetAudit(func(owner, id, event, reason string) {
 			g.appendAudit(&session.Meta{UserPublicID: owner}, "remote_desktop_"+event, reason, map[string]any{"session_id": id}, nil)
 		})
+	}
+	if strings.TrimSpace(g.configPath) != "" {
+		cfg, err := g.loadConfigLocked()
+		if err != nil {
+			return nil, err
+		}
+		if cfg.HostAccess != nil {
+			if err := g.applyHostAccess(context.Background(), false, cfg.HostAccess.Applications); err != nil {
+				return nil, err
+			}
+			if err := g.applyHostAccess(context.Background(), true, cfg.HostAccess.Desktop); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return g, nil
 }

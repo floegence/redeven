@@ -1,5 +1,6 @@
 import { fetchSessionHTTP, fetchSessionJSON, readSessionEvents } from './sessionHTTP';
 import { readUIStorageItem, writeUIStorageItem } from './uiStorage';
+import type { HostAccessState } from './hostAccess';
 import type { HostApplicationTransferPlan } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 export type { HostApplicationTransferPlan };
 
@@ -46,6 +47,7 @@ export type HostApplicationSession = Readonly<{
 export type RunningHostApplication = Readonly<{ application_id: string; instances: string[] }>;
 
 export type HostApplicationCatalog = Readonly<{
+ access_state?: HostAccessState;
   availability: { backend?: 'macos' | 'linux' | 'wayland'; native_ready?: boolean; permissions?: {screen_recording: boolean; accessibility: boolean}; supported: boolean; ready: boolean; reason?: string; version?: string; requirements?: string[] };
   applications: HostApplication[];
   sessions: HostApplicationSession[];
@@ -203,7 +205,7 @@ export function listHostApplicationSessions(signal?: AbortSignal) {
  return fetchSessionJSON<HostApplicationSession[]>(`${base}/sessions?client_id=${encodeURIComponent(currentHostApplicationClientID())}`, { method: 'GET', signal });
 }
 
-export function requestHostApplicationPermission(permission: 'screen_recording' | 'accessibility') {
+export function requestHostApplicationPermission(permission: 'screen_recording' | 'accessibility' | 'screen_recording_settings' | 'accessibility_settings') {
   return fetchSessionJSON(`${base}/permissions`, {method: 'POST', body: JSON.stringify({permission})});
 }
 

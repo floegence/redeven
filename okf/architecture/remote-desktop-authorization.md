@@ -3,13 +3,15 @@ type: Runtime Contract
 title: Persistent remote desktop sharing approval
 tags: [desktop, runtime, authorization, wayland]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
 Redeven owns sharing preference/reset; Floe Native Apps owns OS consent/private recovery. Logged-in Runtime may reuse saved approval, which proves no admission and never reaches viewers/URLs/audits. This user Portal path is separate from SSH system-service deployment.
 
 # Contract
+
+- [Feature access](host-applications.md#feature-access) is independent of OS consent and approval reuse. Pause/remove revokes desktop sessions and fences admission without changing application access or shared grants. Remove clears Redeven desktop preferences; later capability reads cannot reenable it.
 
 - Compatible preference `remote_desktop.unattended` controls both creation and connection; renderer cannot override it. Audit only action/outcome.
 - Readiness (`ready`, `locked`, `session_unavailable`) is independent of authorization: `unsupported` allows temporary sharing; `needs_consent` has no usable credential; `saved` permits an attempt; `restoring` is pending; `revoked` requires positive OS evidence; `unknown` allows a fresh request after uncertainty.

@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Remote desktop connection launcher
 tags: [desktop, applications, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -11,7 +11,11 @@ One Host Applications/Workbench flow identifies host, readiness and primary acti
 
 # Contract
 
-- Use the shared monitor/pointer mark, distinguishable at Dock/header sizes across themes/high contrast. Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.
+- First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls.
+- macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.
+
+- Navigation uses the shared monitor/pointer mark. Onboarding SVGs instead show one selected window versus a whole desktop with multiple windows and a taskbar. Permission diagrams show picture delivery versus keyboard/pointer input. Management shows retained settings with explicit enabled, paused or removal marks. Localized adjacent text carries meaning; SVGs are decorative, theme-aware and legible without animation. Hover/focus may briefly explain delivery, never suggest ongoing setup; reduced motion and forced colors disable it.
+- Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.
 - SSH preparation, operation-bound challenge, progress and desktop opening stay in the same dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope/credential lifetime; opening the launcher changes no OS permission.
 - Closing the launcher dialog through its close button, Escape or backdrop dismisses the view without canceling SSH preparation. The launcher retains one operation and progress subscription; its entry reports preparation, required input or the observed outcome, and reopening restores that state. Explicit Cancel still stops preparation and reports rollback. Dismissal clears typed credentials and withdraws automatic viewer opening; completed preparation offers an explicit connection action. Password and interruption challenges retain their existing deadline and require user response. Pending viewer creation is still released on dismissal, and environment navigation, launcher disposal or Desktop window closure still cancels its owned work.
 - SSH host preparation presents observed checking, component, service and verification stages. The Desktop bridge forwards the published component media substate (`checking`, `downloading`, `receiving`, `verifying`, `installing`, `validating`, `ready`) only while the deployment stage is `preparing_media`; older byte-only reports remain valid. Component byte progress appears only during an observed transfer with a real total and received count. Integrity checking, unpacking, validation and packaging use one calm indeterminate Floe progress cue, so a completed download never masquerades as completed preparation. Avoid simultaneous spinners, shimmer and sweeping effects; static current-step emphasis and observed detail communicate stage changes. Interrupted or rollback states never imply completion.
@@ -25,6 +29,8 @@ One Host Applications/Workbench flow identifies host, readiness and primary acti
 Desktop retains origin-only target validation and environment-scoped route admission. Product adapters cannot accept malformed session data to bypass either.
 
 # Evidence
+
+- `HostAccess.browser.test.tsx`: distinct access scenes, permission/settings states, narrow layouts, keyboard focus, reduced motion and forced colors.
 
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: selector geometry, keyboard focus, authorization method selection, localized narrow layouts and forced-color presentation.
 

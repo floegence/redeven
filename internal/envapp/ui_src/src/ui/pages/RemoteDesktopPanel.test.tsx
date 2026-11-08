@@ -10,7 +10,7 @@ import type { RemoteDesktopStatus } from '../services/remoteDesktopApi';
 const state = vi.hoisted(() => ({
   ssh: false, label: 'server', hostname: 'server.example', local: true, full: true, desktop: true,
   status: vi.fn(), create: vi.fn(), open: vi.fn(), disconnect: vi.fn(), save: vi.fn(), forget: vi.fn(), permission: vi.fn(),
-  deployment: vi.fn(), progress: vi.fn(),
+  deployment: vi.fn(), progress: vi.fn(), access: vi.fn(),
 }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: state.local ? 'Local Environment' : 'Research host', agent: { hostname: state.hostname }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
@@ -23,6 +23,7 @@ vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowO
 vi.mock('../services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 vi.mock('../services/remoteDesktopApi', async original => ({ ...await original<object>(), getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, disconnectRemoteDesktop: state.disconnect, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget }));
 vi.mock('../services/hostApplicationsApi', async original => ({ ...await original<object>(), requestHostApplicationPermission: state.permission }));
+vi.mock('../services/hostAccess', async original => ({ ...await original<object>(), setHostAccess: state.access }));
 
 const ready: RemoteDesktopStatus = {
   capabilities: { backend: 'macos', state: 'ready', screen: true, input: true, audio: true, clipboard: true, unattended: true, displays: [{ id: 'one', name: 'Studio Display', width: 2560, height: 1440, scale: 1, primary: true }] },
@@ -40,6 +41,42 @@ beforeEach(() => {
 afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
 const button = (name: string) => [...host.querySelectorAll('button')].find(item => controlText(item) === name || item.getAttribute('aria-label') === name)!;
 async function mount() { dispose = render(() => <RemoteDesktopPanel />, host); await vi.waitFor(() => expect(state.status).toHaveBeenCalled()); await vi.waitFor(() => expect(host.querySelector('.remote-desktop-connect')).toBeTruthy()); }
+
+it('keeps paused desktop explicit and enables only on connect', async () => {
+  state.status.mockResolvedValue({ ...ready, access_state: 'paused' });
+  await mount();
+  expect(state.access).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Paused · settings retained');
+  expect(host.querySelector('.remote-desktop-state-dot')?.getAttribute('data-ready')).toBe('false');
+  button('Enable and connect').click();
+  await vi.waitFor(() => expect(state.create).toHaveBeenCalledOnce());
+  expect(state.access).toHaveBeenCalledExactlyOnceWith('desktop', 'enabled');
+});
+
+it('removes only desktop preferences after confirmation and preserves OS grants', async () => {
+  state.status.mockResolvedValue({ ...ready, access_state: 'enabled' });
+  await mount();
+  button('Manage this feature').click();
+  button('Remove settings…').click();
+  expect(state.access).not.toHaveBeenCalled();
+  state.status.mockResolvedValue({ ...ready, access_state: 'unconfigured' });
+  button('Remove settings…').click();
+  await vi.waitFor(() => expect(host.querySelector('.host-access-state')?.textContent).toBe('Not set up'));
+  expect(state.access).toHaveBeenCalledExactlyOnceWith('desktop', 'unconfigured');
+  expect(state.permission).not.toHaveBeenCalled();
+  expect(state.forget).not.toHaveBeenCalled();
+  expect(state.create).not.toHaveBeenCalled();
+});
+
+it('shows access mutation failures without claiming removal or connecting', async () => {
+  state.status.mockResolvedValue({ ...ready, access_state: 'paused' });
+  state.access.mockRejectedValue(new Error('Connection interrupted'));
+  await mount();
+  button('Enable and connect').click();
+  await vi.waitFor(() => expect(host.querySelector('[role=alert]')).not.toBeNull());
+  expect(state.create).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Paused · settings retained');
+});
 
 it.each([
   { label: 'server', local: true, hostname: 'server.example', expected: 'server' },
@@ -162,7 +199,7 @@ it('reports permission-setting failures and permits view-only access without inp
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, input: false } });
   state.permission.mockRejectedValue(new LocalApiError({ status: 503, code: 'HOST_APPLICATION_UNAVAILABLE', message: 'Permission request failed' }));
   await mount(); expect(button('Connect to desktop').disabled).toBe(true);
-  button('Allow accessibility').click();
+  button('Allow mouse and keyboard').click();
   await vi.waitFor(() => expect(host.querySelector('[role=alert]')?.textContent).toContain('Could not open the host’s permission settings'));
   const view = host.querySelector<HTMLInputElement>('[role=switch]')!; view.click();
   expect(button('Connect to desktop').disabled).toBe(false);

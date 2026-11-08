@@ -3,7 +3,7 @@ type: Runtime Contract
 title: macOS application authority, capture and lifecycle
 tags: [runtime, desktop, applications, macos, security]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -20,6 +20,8 @@ Remote input shares the real foreground session: activate/raise the bound window
 One lazy Manager-owned Swift process serves Runtime catalog/app/desktop channels, not one persistent helper per app. Empty inventory leaves it idle until Runtime closes, retaining ScreenCaptureKit identity. Released FloeNativeDesktop owns capture/native desktop input; separate binary media pipe and bounded per-channel queues avoid control serialization. Each response queue holds128 messages for supported result bursts. Authorization, input and frame credit stay independent; suspending one capture cannot affect another. Helper failure ends sharing, never apps; later explicit open may recover under native validation. Shutdown preserves unsaved applications.
 
 ## Management
+Remote application setup explains screen recording as showing application windows and accessibility as mouse/keyboard control. Existing grants are reused; local native launch needs neither. Explicit management actions open the fixed Screen Recording or Accessibility System Settings pane. Opening a pane does not grant/revoke authorization. Feature pause/removal follows [independent access intent](host-applications.md#feature-access), never OS grant revocation.
+
 AppKit's Running applications includes regular processes launched outside Redeven and windowless apps. Requests bind selected bundle plus opaque canonical path/PID/launch-time generations. Explicit graceful quit cannot force-kill/retarget. Acceptance is not exit evidence; stale/unavailable targets keep sharing and actionable error. Failed viewer admission never rolls back host sessions from stale catalog state.
 
 ## Windows

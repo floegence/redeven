@@ -33,6 +33,41 @@ while IFS= read -r request; do
 done
 `)
 }
+
+func TestAccessPauseReleasesSharesAndPreservesNativeLaunch(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native macOS adapter")
+	}
+	m := macFixture(t)
+	s, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture", Mode: "stream"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, s.ID, "running")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err = m.SetAccessEnabled(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, s.ID, "ended")
+	sessions := m.Sessions("alice")
+	if len(sessions) != 1 || sessions[0].EndReason != "sharing_stopped" {
+		t.Fatal(sessions)
+	}
+	if _, err = m.Launch(ctx, "alice", LaunchRequest{Mode: "stream"}); err == nil {
+		t.Fatal("disabled admission succeeded")
+	}
+	native, err := m.macLaunch(ctx, "alice", LaunchRequest{ApplicationID: "macos-fixture", Mode: "native"})
+	if err != nil || native.State != "opened" {
+		t.Fatal(native, err)
+	}
+	if err = m.SetAccessEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if m.accessDisabled {
+		t.Fatal("explicit resume did not restore admission")
+	}
+}
 func macFixtureScript(t *testing.T, script string) *Manager {
 	t.Helper()
 	// Fixtures model the multiplexed native protocol while keeping each test's

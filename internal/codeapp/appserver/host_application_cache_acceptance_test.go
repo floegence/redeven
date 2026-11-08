@@ -23,7 +23,7 @@ func TestHostApplicationCacheAcceptanceServer(t *testing.T) {
 	root := t.TempDir()
 	manager := hostapps.New(root, root, nil)
 	defer manager.Close()
-	routes := &Server{hostApps: manager, resolveSessionMeta: resolveMetaForTest("component-cache", session.Meta{UserPublicID: "cache-acceptance", CanRead: true, CanWrite: true, CanExecute: true})}
+	routes := &Server{configPath: writeTestConfig(t), hostApps: manager, resolveSessionMeta: resolveMetaForTest("component-cache", session.Meta{UserPublicID: "cache-acceptance", CanRead: true, CanWrite: true, CanExecute: true})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write([]byte(envOriginWithChannel("component-cache"))); err != nil {

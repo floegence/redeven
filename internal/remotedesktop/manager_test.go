@@ -81,6 +81,28 @@ func testSession(m *Manager, id, mode string) (*ownedSession, *fakeTransport) {
 	}
 	return s, native
 }
+
+func TestAccessPauseRevokesDesktopAndPreservesOwnerPolicy(t *testing.T) {
+	m := &Manager{sessions: map[string]*ownedSession{}}
+	_, native := testSession(m, "active", "control")
+	m.SetAccessEnabled(false)
+	if len(m.sessions) != 0 || m.controller != "" {
+		t.Fatal("desktop connection survived pause")
+	}
+	select {
+	case <-native.done:
+	default:
+		t.Fatal("native input channel survived pause")
+	}
+	if _, err := m.Create(context.Background(), "alice", CreateRequest{Mode: "view"}, true); !errors.Is(err, ErrForbidden) {
+		t.Fatal("disabled admission", err)
+	}
+	m.RevokeDisallowed(func(string) bool { return false })
+	m.SetAccessEnabled(true)
+	if _, err := m.Create(context.Background(), "alice", CreateRequest{Mode: "view"}, true); !errors.Is(err, ErrForbidden) {
+		t.Fatal("resume bypassed owner policy", err)
+	}
+}
 func TestInputRequiresOwnerCurrentPaintAndControl(t *testing.T) {
 	m := &Manager{sessions: map[string]*ownedSession{}}
 	s, native := testSession(m, "first", "control")

@@ -1,10 +1,12 @@
 import { fetchSessionJSON } from './sessionHTTP';
+import type { HostAccessState } from './hostAccess';
 
 const api = '/_redeven_proxy/api/remote-desktop';
 export type DesktopDisplay = { id: string; name: string; width: number; height: number; scale: number; primary: boolean };
 export type DesktopAuthorization = 'unsupported' | 'needs_consent' | 'saved' | 'restoring' | 'revoked' | 'unknown';
 export type LoginServiceStatus = { state: 'unsupported' | 'not_installed' | 'authorization_required' | 'installing' | 'active' | 'stopped' | 'failed' | 'uninstalling'; reason?: string; backend?: string };
 export type RemoteDesktopStatus = {
+  access_state?: HostAccessState;
   capabilities: { backend: string; state: string; authorization?: DesktopAuthorization; reason?: string; screen: boolean; input: boolean; audio: boolean; clipboard: boolean; unattended?: boolean; unlock?: boolean; displays: DesktopDisplay[] };
   unattended: boolean;
   approval_policy?: 'persistent' | 'session';

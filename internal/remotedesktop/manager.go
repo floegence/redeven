@@ -51,6 +51,7 @@ type Session struct {
 	HostName  string `json:"host_name"`
 }
 type Status struct {
+	AccessState    string                             `json:"access_state,omitempty"`
 	ApprovalPolicy string                             `json:"approval_policy"`
 	Capabilities   nativeapps.HostDesktopCapabilities `json:"capabilities"`
 	Setup          *nativeapps.Status                 `json:"setup,omitempty"`
@@ -70,6 +71,7 @@ type ownedSession struct {
 	expires    time.Time
 }
 type Manager struct {
+	accessDisabled  bool
 	audit           func(owner, id, event, reason string)
 	displaySelected func(id string)
 	allowed         func(owner string) bool
@@ -236,6 +238,9 @@ func (m *Manager) Create(ctx context.Context, owner string, req CreateRequest, u
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.accessDisabled {
+		return Session{}, ErrForbidden
+	}
 	if m.allowed != nil && !m.allowed(owner) {
 		return Session{}, ErrForbidden
 	}
@@ -500,6 +505,19 @@ func (m *Manager) RevokeDisallowed(allowed func(owner string) bool) {
 	for _, s := range m.sessions {
 		if !allowed(s.owner) {
 			m.auditLocked(s, "revoke", "permission_changed")
+			m.removeLocked(s)
+		}
+	}
+}
+
+// SetAccessEnabled is separate from owner permission and OS sharing consent.
+func (m *Manager) SetAccessEnabled(enabled bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.accessDisabled = !enabled
+	if !enabled {
+		for _, s := range m.sessions {
+			m.auditLocked(s, "revoke", "feature_disabled")
 			m.removeLocked(s)
 		}
 	}

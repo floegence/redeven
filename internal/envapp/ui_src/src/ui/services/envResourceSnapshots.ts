@@ -47,7 +47,9 @@ export function hostApplicationSnapshot(value: unknown): HostApplicationCatalog 
   const source = record(value);
   const availability = record(source.availability);
   if (typeof availability.supported !== 'boolean' || typeof availability.ready !== 'boolean') throw new Error('Invalid application availability');
+  if(source.access_state!==undefined&&!['unconfigured','enabled','paused'].includes(String(source.access_state)))throw new Error('Invalid host access state');
   return {
+    ...(['unconfigured','enabled','paused'].includes(String(source.access_state)) ? { access_state: source.access_state as HostApplicationCatalog['access_state'] } : {}),
     availability: {
       ...fields(availability, ['backend', 'native_ready', 'supported', 'ready', 'reason', 'version', 'requirements']),
       ...(availability.permissions ? { permissions: fields(availability.permissions, ['screen_recording', 'accessibility']) } : {}),

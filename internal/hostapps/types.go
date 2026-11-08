@@ -40,6 +40,7 @@ type RunningApplication struct {
 type QuitRequest = RunningApplication
 
 type Catalog struct {
+	AccessState  string               `json:"access_state,omitempty"`
 	Running      []RunningApplication `json:"running,omitempty"`
 	Availability Availability         `json:"availability"`
 	Applications []Application        `json:"applications"`
@@ -217,6 +218,11 @@ type ClientSessions interface {
 // remains immediate for callers that do not provide one.
 type LeaseRelease interface {
 	DetachWithGrace(context.Context, string, string, time.Duration) error
+}
+
+// AccessControl governs viewer admission, never native application lifetime.
+type AccessControl interface {
+	SetAccessEnabled(context.Context, bool) error
 }
 
 var (

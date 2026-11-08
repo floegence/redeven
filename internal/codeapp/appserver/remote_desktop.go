@@ -31,6 +31,10 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		return true
 	}
 	w.Header().Set("Cache-Control", "no-store")
+	if r.URL.Path == remoteDesktopAPI+"/access" && r.Method == http.MethodPut {
+		g.updateHostAccess(w, r, meta, true)
+		return true
+	}
 	if g.remoteDesktop == nil {
 		writeDesktopError(w, remotedesktop.ErrUnavailable)
 		return true
@@ -43,6 +47,9 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 	case r.URL.Path == remoteDesktopAPI && r.Method == http.MethodGet:
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
+		if err = g.initializeHostAccess(ctx, owner); err != nil {
+			break
+		}
 		var status remotedesktop.Status
 		status, err = g.remoteDesktop.StatusTarget(ctx, owner, r.URL.Query().Get("target"))
 		if err == nil {
@@ -58,6 +65,11 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 				if cfg.RemoteDesktop != nil {
 					status.LastDisplayID = cfg.RemoteDesktop.LastDisplayID
 				}
+				state := ""
+				if cfg.HostAccess != nil {
+					state = cfg.HostAccess.Desktop
+				}
+				status.AccessState = resolvedHostAccess(state, status.Capabilities.Screen)
 			}
 			value = status
 		}
@@ -172,6 +184,11 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		value, err = g.remoteDesktop.CancelSetup(owner, strings.TrimPrefix(r.URL.Path, remoteDesktopAPI+"/setup/"))
 		action = "remote_desktop_setup_cancel"
 	case r.URL.Path == remoteDesktopAPI+"/sessions" && r.Method == http.MethodPost:
+		g.hostAccessMu.RLock()
+		defer g.hostAccessMu.RUnlock()
+		if !g.allowHostAccess(w, true) {
+			return true
+		}
 		var req remotedesktop.CreateRequest
 		if decodeManagedJSON(r, &req) != nil {
 			err = remotedesktop.ErrInvalid
@@ -289,6 +306,9 @@ func (g *Server) guardRemoteDesktopSession(w http.ResponseWriter, r *http.Reques
 	}
 	path := strings.TrimPrefix(r.URL.Path, base)
 	if !requireWindowSessionTransport(w, r, path) {
+		return true
+	}
+	if !g.allowHostAccess(w, true) {
 		return true
 	}
 	if path == windowTransportScript {
