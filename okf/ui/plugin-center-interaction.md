@@ -14,7 +14,7 @@ Redeven owns Plugin Center navigation; Floe owns dialogs, presence and input. Wo
 ## Management placement and input
 Only Plugin Center explicitly selects global Dialog placement at the product modal layer. Recent Dock or widget interactions cannot mount the drawer under `.workbench-surface`, `inert`, or a transformed canvas ancestor.
 
-A successful Open closes management and focuses the target after canvas input becomes available; a failed Open preserves the directory and error feedback.
+Workbench Open closes the drawer and focuses its widget. Activity opens above the retained directory. Failed Open keeps context and error feedback.
 
 ## Directory and responsive details
 Source and lifecycle filters preserve identity. Refresh status stays outside the card grid.

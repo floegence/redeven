@@ -3574,6 +3574,167 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it.each([false, true])('keeps Plugin Center beneath opened Activity windows: mobile=%s', async (isMobile) => {
+    layoutIsMobile = isMobile;
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      await pluginPanelState.lastProps.onOpenPluginDetails('instance:plugin_example_metrics');
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+      const center = host.querySelector('[data-plugin-center-view]');
+      const target = examplePluginProjection('enabled').items[0].defaultLaunchTarget!;
+      const open = () => pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...target }, new AbortController().signal);
+      const expectCenter = () => {
+        expect(sidebarActiveTabValue).toBe('plugin-center');
+        expect(host.querySelector('[data-plugin-center-view]')).toBe(center);
+        expect(pluginCenterViewState.lastProps.selectedInventoryKey).toBe('instance:plugin_example_metrics');
+        expectPluginCenterMountedInActivityMain(host);
+      };
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface', ...target, expectedManagementRevision: 10,
+      }, new AbortController().signal)).rejects.toThrow();
+      expectCenter();
+      expect(host.querySelector('[data-placement="activity"]')).toBeNull();
+      await open();
+      await flushUntil(() => Boolean(host.querySelector('[data-placement="activity"]')));
+      expectCenter();
+      const surface = host.querySelector('[data-placement="activity"]')!;
+      const frame = surface.querySelector('iframe');
+      const instanceID = pluginSurfaceFrameState.lastProps.instanceID;
+      const focusRequest = pluginSurfaceFrameState.lastProps.focusRequest;
+      await open();
+      expectCenter();
+      expect(host.querySelectorAll('[data-placement="activity"]')).toHaveLength(1);
+      expect(surface.querySelector('iframe')).toBe(frame);
+      expect(pluginSurfaceFrameState.lastProps.instanceID).toBe(instanceID);
+      expect(pluginSurfaceFrameState.lastProps.focusRequest).toBeGreaterThan(focusRequest);
+      const background = host.querySelector<HTMLElement>('[data-env-shell-background]')!;
+      expect(Boolean(background.inert)).toBe(isMobile);
+      host.querySelector<HTMLButtonElement>('[aria-label="Close Plugin Surface"]')!.click();
+      await flushUntil(() => !host.querySelector('[data-placement="activity"]'));
+      expectCenter();
+      expect(background.inert).toBe(false);
+      await open();
+      expectCenter();
+      expect(pluginSurfaceFrameState.lastProps.instanceID).not.toBe(instanceID);
+    } finally { dispose(); }
+  }, 10000);
+
+  it('opens from Plugin Center without navigating to or replacing a retained pinned page', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      await pluginPanelState.lastProps.onSetPluginPin('activity', 'instance:plugin_example_metrics', true);
+      const activityID = 'redeven.plugin.activity:instance%3Aplugin_example_metrics';
+      await flushUntil(() => Boolean(findActivityButton(host, activityID)), 60);
+      findActivityButton(host, activityID)!.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-plugin-surface-page]')), 60);
+      const page = host.querySelector('[data-activity-plugin-surface-page]')!;
+      const frame = page.querySelector('iframe');
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+      await pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...examplePluginProjection('enabled').items[0].defaultLaunchTarget }, new AbortController().signal);
+      expect(sidebarActiveTabValue).toBe('plugin-center');
+      await flushUntil(() => Boolean(host.querySelector('[data-placement="activity"]')));
+      expect(host.querySelectorAll('[data-placement="activity"]')).toHaveLength(1);
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(page);
+      expect(page.querySelector('iframe')).toBe(frame);
+      expect(activityPluginPageState.closeCalls).toBe(0);
+      host.querySelector<HTMLButtonElement>('[aria-label="Close Plugin Surface"]')!.click();
+      await flushUntil(() => !host.querySelector('[data-placement="activity"]'));
+      expect(sidebarActiveTabValue).toBe('plugin-center');
+      findActivityButton(host, activityID)!.click();
+      await flushUntil(() => sidebarActiveTabValue === activityID);
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(page);
+      expect(page.querySelector('iframe')).toBe(frame);
+      expect(activityPluginPageState.closeCalls).toBe(0);
+    } finally { dispose(); }
+  }, 10000);
+
+  it('retains failed Workbench opens and dismisses management only after placement succeeds', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+      const target = examplePluginProjection('enabled').items[0].defaultLaunchTarget!;
+      const open = () => pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...target }, new AbortController().signal);
+      workbenchPluginSurfaceState.open.mockRejectedValueOnce(new Error('Placement unavailable'));
+      await expect(open()).rejects.toThrow('Placement unavailable');
+      expect(host.querySelector('.redeven-plugin-center-drawer')).not.toBeNull();
+      await open();
+      await flushUntil(() => !host.querySelector('.redeven-plugin-center-drawer'), 60);
+      expect(workbenchPluginSurfaceState.open).toHaveBeenLastCalledWith(target);
+      expect(host.querySelector('[data-placement="activity"]')).toBeNull();
+      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
+    } finally { dispose(); }
+  }, 10000);
+
+  it.each(['files', 'workbench'] as const)('does not undo navigation to %s when a Plugin Center open waits for closure', async (destination) => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    const release = deferred<void>();
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+      const open = () => pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface', ...examplePluginProjection('enabled').items[0].defaultLaunchTarget,
+      }, new AbortController().signal);
+      await open();
+      await flushUntil(() => Boolean(pluginSurfaceFrameState.lastProps));
+      const first = pluginSurfaceFrameState.lastProps;
+      const closing = first.serializeClose(async () => {
+        await release.promise;
+        first.onClosed(first.instanceID);
+      });
+      const opening = open();
+      if (destination === 'files') {
+        findActivityButton(host, 'files')!.click();
+        await flushUntil(() => sidebarActiveTabValue === 'files');
+      } else {
+        findButtonByText(host, 'Workbench')!.click();
+        await flushUntil(() => window.localStorage.getItem('redeven_envapp_desktop_view_mode') === 'workbench');
+      }
+      const selectedTab = sidebarActiveTabValue;
+      release.resolve(undefined);
+      await Promise.all([closing, opening]);
+      await flushUntil(() => pluginSurfaceFrameState.lastProps.instanceID !== first.instanceID);
+      expect(sidebarActiveTabValue).toBe(selectedTab);
+      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe(destination === 'files' ? 'activity' : 'workbench');
+      expect(host.querySelectorAll('[data-placement="activity"]')).toHaveLength(1);
+      expect(pluginSurfaceFrameState.lastProps.visible).toBe(destination === 'files');
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+    } finally { release.resolve(undefined); dispose(); }
+  }, 10000);
+
   it('opens enabled plugin panel tiles in a root-level Activity floating window', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

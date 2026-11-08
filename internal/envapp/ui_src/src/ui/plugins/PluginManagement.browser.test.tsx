@@ -2,7 +2,7 @@ import { PluginBackgroundStatus } from './PluginBackgroundStatus';
 import '../../index.css';
 import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 
-import { createSignal } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
@@ -2021,6 +2021,60 @@ describe('plugin management browser geometry and interaction', () => {
   });
 });
 
+
+it.each([{ width: 1440, height: 900 }, { width: 390, height: 844 }])(
+  'returns from an Activity window to the same Plugin Center controls at $width px', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    const host = fixedHost();
+    const [open, setOpen] = createSignal(false);
+    const coordinator = browserCoordinator();
+    const opening = vi.spyOn(coordinator, 'open');
+    const release = vi.spyOn(coordinator, 'release');
+    const items = Array.from({ length: 40 }, (_, index) => ({
+      ...metricsItem, inventoryKey: `instance:metrics-${index}`, displayName: `Metrics ${index}`,
+      pluginInstanceID: `metrics-${index}`, presentation: undefined,
+      defaultLaunchTarget: { ...metricsItem.defaultLaunchTarget!, pluginInstanceID: `metrics-${index}` },
+    }));
+    disposers.push(render(() => <LayoutProvider><NotificationProvider>
+      <PluginCenterView projection={{ items }} loading={false} canManagePlugins canOpenPluginSurfaces
+        onRefresh={() => undefined} onCommand={() => setOpen(true)} />
+      <Show when={open()}>
+        <ActivityPluginSurfaceWindow instanceID="center-open" target={metricsItem.defaultLaunchTarget!}
+          coordinator={coordinator} confirmationQueue={createPluginConfirmationQueue()} visible active focusRequest={1}
+          onActivate={() => undefined} onClosed={() => setOpen(false)}
+          onEndPluginSession={async () => true} onRetirementError={(error) => { throw error; }} />
+      </Show>
+    </NotificationProvider></LayoutProvider>, host));
+    await settle();
+    const center = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
+    const search = host.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
+    await userEvent.fill(search, 'Metrics');
+    const list = host.querySelector<HTMLElement>('[data-plugin-center-list]')!;
+    const trigger = list.querySelectorAll<HTMLButtonElement>('[data-plugin-center-card-primary]')[12];
+    trigger.scrollIntoView({ block: 'center', behavior: 'instant' });
+    await settle();
+    let scroll = list.scrollTop;
+    trigger.addEventListener('pointerdown', () => { scroll = list.scrollTop; }, { once: true });
+    await page.elementLocator(trigger).click();
+    expect(scroll).toBeGreaterThan(0);
+    await expect.poll(() => document.querySelector('[data-redeven-plugin-activity-window] iframe')).not.toBeNull();
+    const windowSurface = document.querySelector<HTMLElement>('[data-redeven-plugin-activity-window]')!;
+    expectInsideViewport(windowSurface, viewport);
+    expect(host.querySelector('[data-plugin-center-view]')).toBe(center);
+    expect(search.value).toBe('Metrics');
+    expect(list.scrollTop).toBe(scroll);
+    await page.screenshot({ path: `../../../.vitest-attachments/plugin-center-open-${viewport.width}.png` });
+    await page.elementLocator(windowSurface).getByRole('button', { name: 'Close', exact: true }).click();
+    await expect.poll(() => document.querySelector('[data-redeven-plugin-activity-window]')).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    const slot = opening.mock.calls[0][0];
+    expect(release).toHaveBeenCalledWith(slot, { alreadyClosed: true });
+    expect(release.mock.calls.every(([released]) => released === slot)).toBe(true);
+    expect(host.querySelector('[data-plugin-center-view]')).toBe(center);
+    expect(search.value).toBe('Metrics');
+    expect(list.scrollTop).toBe(scroll);
+  },
+);
 
 describe('Workbench Plugin Center dialog continuity', () => {
   it.each(['no-preference', 'reduce'] as const)('retains management state and restores focus with %s motion', async (reducedMotion) => {

@@ -2151,7 +2151,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     return workbenchPluginSurfaceController;
   };
 
-  type PluginSurfaceOpenOptions = Readonly<{ workbenchPlacement?: WorkbenchCanvasWidgetPlacement }>;
+  type PluginSurfaceOpenOptions = Readonly<{
+    workbenchPlacement?: WorkbenchCanvasWidgetPlacement;
+    activityPlacement?: 'window';
+  }>;
 
   const performOpenPluginSurface = async (
     target: PluginSurfaceLaunchTarget,
@@ -2179,9 +2182,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       setWorkbenchPluginCenterOpen(false);
       return;
     }
-    const existingPage = [...activityPluginPageRuntimes.entries()].find(([, runtime]) => {
+    const targetKey = pluginSurfaceTargetKey(currentTarget);
+    // Management opens above its directory; a retained page keeps its own slot.
+    const existingPage = !options.activityPlacement && [...activityPluginPageRuntimes.entries()].find(([, runtime]) => {
       const target = runtime.target();
-      return target && pluginSurfaceTargetKey(target) === pluginSurfaceTargetKey(currentTarget);
+      return target && pluginSurfaceTargetKey(target) === targetKey;
     });
     if (existingPage) {
       existingPage[1].setTarget(currentTarget);
@@ -2189,33 +2194,21 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       updatePluginPanel({ open: false });
       return;
     }
-    const targetKey = pluginSurfaceTargetKey(currentTarget);
     const existingWindow = activityPluginWindows().find((window) => window.targetKey === targetKey);
     if (!existingWindow && activityPluginWindows().length >= MAX_ACTIVITY_PLUGIN_WINDOWS) {
       const leastRecentlyActive = activityPluginWindows()[0];
       await closeMatchingActivityPluginWindows(leastRecentlyActive.target());
     }
-    let existingInstanceID: string | undefined;
-    setActivityPluginWindows((windows) => {
-      const existing = windows.find((window) => window.targetKey === targetKey);
-      if (existing) {
-        existingInstanceID = existing.instanceID;
-        existing.setTarget({ ...currentTarget });
-        return windows;
-      }
-      const instanceID = `activity_plugin_surface_${++nextActivityPluginWindowID}`;
-      setActivityPluginFocusRequests((requests) => ({ ...requests, [instanceID]: 1 }));
-      return [...windows, createActivityPluginWindow(instanceID, targetKey, currentTarget)];
-    });
-    if (existingInstanceID) {
-      activatePluginSurfaceWindow(existingInstanceID);
-      setActivityPluginFocusRequests((requests) => ({
-        ...requests,
-        [existingInstanceID!]: (requests[existingInstanceID!] ?? 0) + 1,
-      }));
+    const instanceID = existingWindow?.instanceID ?? `activity_plugin_surface_${++nextActivityPluginWindowID}`;
+    if (existingWindow) {
+      existingWindow.setTarget({ ...currentTarget });
+      activatePluginSurfaceWindow(instanceID);
+    } else {
+      setActivityPluginWindows((windows) => [...windows, createActivityPluginWindow(instanceID, targetKey, currentTarget)]);
     }
+    setActivityPluginFocusRequests((requests) => ({ ...requests, [instanceID]: (requests[instanceID] ?? 0) + 1 }));
     updatePluginPanel({ open: false });
-    if (viewMode() === mode) activateActivitySurface(lastActivitySurface(), { persist: false });
+    if (!options.activityPlacement && viewMode() === mode) activateActivitySurface(lastActivitySurface(), { persist: false });
   };
 
   let pluginPlacementTail: Promise<unknown> = Promise.resolve();
@@ -2337,7 +2330,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         pluginInstanceID: command.pluginInstanceID,
         surfaceID: command.surfaceID,
         expectedManagementRevision: command.expectedManagementRevision,
-      });
+      }, { activityPlacement: 'window' });
     }
     return serializePluginPlacementOperation(async () => {
       await performPluginCenterManagementCommand(command, signal);
