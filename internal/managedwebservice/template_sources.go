@@ -139,6 +139,18 @@ func (m *Manager) InspectTemplateSource(ctx context.Context, owner string, req T
 		return nil, templateContractError(err)
 	}
 	source := sourceRecord(snapshot, parsed)
+	if parsed.Spec.Container != nil && parsed.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop && reviewedTemplateSource(parsed.Document.TemplateID, snapshot.Files) {
+		source.ReviewedRuntimeProfile = ContainerRuntimeProfileInteractiveDesktop
+	}
+	if source.ReviewedRuntimeProfile == "" {
+		retained, err := m.registry.GetTemplateSourceVersion(ctx, source.TemplateID, source.SHA256)
+		if err != nil {
+			return nil, err
+		}
+		if retained != nil {
+			source.ReviewedRuntimeProfile = retained.ReviewedRuntimeProfile
+		}
+	}
 	if old == nil {
 		old, err = m.registry.GetManagedTemplateSource(ctx, source.TemplateID)
 		if err != nil {
@@ -223,7 +235,7 @@ func (m *Manager) sourceTemplateWithAvailability(ctx context.Context, source pfr
 	if err != nil {
 		return nil, templateContractError(err)
 	}
-	if spec.Container != nil && spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
+	if spec.Container != nil && spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop && source.ReviewedRuntimeProfile != ContainerRuntimeProfileInteractiveDesktop {
 		return nil, serviceError("TEMPLATE_RUNTIME_PROFILE_RESERVED", "The interactive desktop runtime profile is reserved for reviewed Redeven templates.", 400, false, nil)
 	}
 	if err := validateTemplateSpec(spec); err != nil {
@@ -278,6 +290,13 @@ func (m *Manager) readSourceTemplateWithAvailability(ctx context.Context, source
 	}
 	if parsed.SHA256 != source.SHA256 || parsed.Document.TemplateID != source.DocumentTemplateID || parsed.Document.ServiceFamilyID != source.DocumentFamilyID || string(parsed.Spec.Kind) != source.Deployment {
 		return nil, nil, serviceError("TEMPLATE_SOURCE_DIGEST_MISMATCH", "The saved template source changed outside its reviewed update. Its original definition must be restored.", 409, false, nil)
+	}
+	retained, err := m.registry.GetTemplateSourceVersion(ctx, source.TemplateID, source.SHA256)
+	if err != nil {
+		return nil, nil, err
+	}
+	if retained != nil {
+		source.ReviewedRuntimeProfile = retained.ReviewedRuntimeProfile
 	}
 	result, err := m.sourceTemplateWithAvailability(ctx, source, parsed, probeRuntime)
 	if err == nil {

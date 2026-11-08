@@ -116,3 +116,37 @@ func TestAtomicMarketInstallRollsBackSourceWhenOperationFails(t *testing.T) {
 		}
 	}
 }
+
+func TestRetainedSourcePreservesReviewedProfileWithoutTrustingCurrentIndex(t *testing.T) {
+	r, err := Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ctx := context.Background()
+	source := ManagedTemplateSource{TemplateID: "git_profile", Repository: "owner/templates", RepositoryID: 1, Ref: "main", Path: "templates/desktop", CommitSHA: strings.Repeat("a", 40), SHA256: strings.Repeat("b", 64), Directory: "source_reviewed", DocumentTemplateID: "desktop", DocumentFamilyID: "desktop", Deployment: "container", Revision: 1, Name: "Desktop", Description: "Reviewed desktop", DefaultLocale: "en-US", ReviewedRuntimeProfile: "interactive_desktop"}
+	err = r.CommitManagedTemplateSource(ctx, source, "", ManagedTemplateRequest{RequestID: "profile-review", RequestFingerprint: "profile-review", TemplateID: source.TemplateID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	retained, err := r.GetTemplateSourceVersion(ctx, source.TemplateID, source.SHA256)
+	if err != nil || retained.ReviewedRuntimeProfile != source.ReviewedRuntimeProfile {
+		t.Fatal("reviewed capability was not retained", err)
+	}
+	current, err := r.GetManagedTemplateSource(ctx, source.TemplateID)
+	if err != nil || current.ReviewedRuntimeProfile != "" {
+		t.Fatal("mutable index granted a capability", err)
+	}
+	source.SHA256 = strings.Repeat("c", 64)
+	source.Directory = "source_new"
+	source.Revision++
+	source.ReviewedRuntimeProfile = ""
+	if err = r.CommitManagedTemplateSource(ctx, source, retained.SHA256, ManagedTemplateRequest{RequestID: "new-source", RequestFingerprint: "new-source", TemplateID: source.TemplateID}); err != nil {
+		t.Fatal(err)
+	}
+	next, _ := r.GetTemplateSourceVersion(ctx, source.TemplateID, source.SHA256)
+	old, _ := r.GetTemplateSourceVersion(ctx, source.TemplateID, retained.SHA256)
+	if next.ReviewedRuntimeProfile != "" || old.ReviewedRuntimeProfile != "interactive_desktop" {
+		t.Fatal("capability crossed immutable source versions")
+	}
+}

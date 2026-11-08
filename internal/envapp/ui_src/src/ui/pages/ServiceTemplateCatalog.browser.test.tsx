@@ -128,6 +128,14 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     ), host);
   }
 
+  it('identifies discovered official sources and keeps deployment review reachable', async () => {
+    mount([{...template, id:'git_official', source:'git', classification:'official', marketplace:true, runtimeSpec:undefined, hostLifecyclePlan:undefined, duplicateable:false}]);
+    await settle();
+    await expect.element(page.getByText('Official', {exact:true})).toBeVisible();
+    await expect.element(page.getByTestId('service-template-primary')).toBeEnabled();
+    expect(document.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Official');
+  });
+
   function mountInDrawer(templates: readonly ServiceTemplatePresentation[]): void {
     const host = document.createElement('div');
     document.body.appendChild(host);

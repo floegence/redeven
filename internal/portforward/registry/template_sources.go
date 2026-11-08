@@ -30,6 +30,10 @@ type ManagedTemplateSource struct {
 	DefaultLocale      string `json:"default_locale"`
 	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs    int64  `json:"updated_at_unix_ms"`
+
+	// Issued only after exact published-source verification. Retained version JSON
+	// keeps the reviewed capability tied to these immutable directory bytes.
+	ReviewedRuntimeProfile string `json:"reviewed_runtime_profile,omitempty"`
 }
 
 const templateSourceColumns = "template_id,repository,repository_id,ref,path,commit_sha,sha256,directory,document_template_id,document_family_id,deployment,revision,name,description,default_locale,created_at_unix_ms,updated_at_unix_ms"

@@ -2870,14 +2870,13 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
   const templatePresentations = createMemo(() => {
     if (templateCollection() === 'library') return managedTemplates().map(templatePresentation);
-    const official = managedTemplates().filter(template => template.source === 'builtin').map(template => ({...templatePresentation(template), classification:'official' as const}));
-    const community: ServiceTemplatePresentation[] = marketItems().filter(item => item.classification === 'community').map(item => {
+    const discovered: ServiceTemplatePresentation[] = marketItems().map(item => {
       const locale = item.localizations[i18n.locale()] ?? item.localizations[item.default_locale];
       const installed = managedTemplates().find(template => template.template_id === item.template_id);
       const installedPresentation = installed ? templatePresentation(installed) : undefined;
-      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:'community',marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:false,editable:false,sourceURL:`https://github.com/${item.source.repository}`};
+      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:item.classification,marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:false,editable:false,sourceURL:`https://github.com/${item.source.repository}`};
     });
-    return [...official,...community].filter(item => marketFilter() === 'all' || item.classification === marketFilter());
+    return discovered.filter(item => marketFilter() === 'all' || item.classification === marketFilter());
   });
   const templateCounts = createMemo(() => templatePresentations().reduce(
     (counts, template) => {
@@ -4113,7 +4112,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
               onImport={() => {setMarketSource(undefined);setGitImportTemplate(undefined);setGitImportOpen(true);}}
               onCheckSource={(id) => {setMarketSource(undefined);setGitImportTemplate(templateByID(id));setGitImportOpen(true);}}
               onDeploy={(templateID) => {
-                const item = templateCollection() === 'discover' ? marketItems().find(item => item.template_id === templateID && item.classification === 'community') : undefined;
+                const item = templateCollection() === 'discover' ? marketItems().find(item => item.template_id === templateID) : undefined;
                 if (item) { setGitImportTemplate(undefined); setMarketSource({source:item.source,expected:{repository_id:item.source.repository_id,commit_sha:item.source.commit_sha,sha256:item.sha256}});setGitImportOpen(true); }
                 else { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }
               }}

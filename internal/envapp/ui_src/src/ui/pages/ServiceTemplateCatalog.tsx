@@ -416,7 +416,7 @@ export function ServiceTemplateIdentity(props: {
           <h3 class={cn('min-w-0 text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground', props.compact && 'truncate')} dir="auto">{props.template.name}</h3>
           <Show when={!props.compact}>
             <span class="service-template-source-badge inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
-              {props.template.classification === 'community' ? i18n.t('webServices.market.community') : props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
+              {props.template.classification ? i18n.t(`webServices.market.${props.template.classification}`) : props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
             </span>
           </Show>
         </div>
@@ -426,7 +426,7 @@ export function ServiceTemplateIdentity(props: {
         <Show when={props.metadata !== undefined} fallback={
         <div class={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground', props.compact ? 'mt-0.5 leading-4' : 'mt-2')} data-template-metadata>
           <Show when={props.compact}>
-            <span>{props.template.classification === 'community' ? i18n.t('webServices.market.community') : props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}</span>
+            <span>{props.template.classification ? i18n.t(`webServices.market.${props.template.classification}`) : props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}</span>
             <span aria-hidden="true">·</span>
           </Show>
           <span>{props.template.deploymentLabel}</span>
@@ -597,7 +597,7 @@ export function ServiceTemplateDetailsPane(props: {
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 flex-wrap items-center gap-2">
             <span class="text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-              {props.template.classification === 'community' ? i18n.t('webServices.market.community') : props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
+              {props.template.classification ? i18n.t(`webServices.market.${props.template.classification}`) : props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
             </span>
             <Show when={props.template.developerPreview}>
               <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>

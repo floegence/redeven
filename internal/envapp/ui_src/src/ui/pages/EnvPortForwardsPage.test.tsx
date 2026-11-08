@@ -1911,14 +1911,14 @@ describe('EnvPortForwardsPage', () => {
     } finally { dispose(); }
   });
 
-  it.each(['submit', 'source-review', 'deployment-review'])('preserves market candidate ownership through %s', async phase => {
+  it.each(['official', 'community'].flatMap(classification => ['submit', 'source-review', 'deployment-review'].map(phase => ({classification, phase}))))('preserves $classification market candidate ownership through $phase', async ({classification, phase}) => {
     const [access, setAccess] = createSignal({phase: 'ready' as const, generation: 0, scope: ''});
     envContextMocks.resourceCacheAccess = access;
     const fixture = installHandoffFixture();
     const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
     const source = {repository:'owner/templates',repository_id:123,ref:'main',path:'templates/handoff',commit_sha:'a'.repeat(40)};
     const candidate = {candidate_id:'source_candidate_market',sha256:'b'.repeat(64),expected_sha256:'',changed:true,template:{...fixture.template,source:'git',git_source:source,source_sha256:'b'.repeat(64)},files:[],affected_service_ids:[],source_document_version:4,source_spec_version:7};
-    const item = {template_id:fixture.template.template_id,document_template_id:'handoff',service_family_id:'handoff',revision:1,source,sha256:candidate.sha256,deployment:'host',default_locale:'en-US',localizations:{'en-US':{name:'Community handoff',description:'Discovered service'}},classification:'community',status:'available'};
+    const item = {template_id:fixture.template.template_id,document_template_id:'handoff',service_family_id:'handoff',revision:1,source,sha256:candidate.sha256,deployment:'host',default_locale:'en-US',localizations:{'en-US':{name:'Discovered handoff',description:'Discovered service'}},classification,status:'available'};
     localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
       if (url.endsWith('/market-catalog')) return Promise.resolve({items:[item],stale:false,generation:1,checked_at:Date.now()});
       if (url.endsWith('/source-previews')) return Promise.resolve(candidate);
@@ -1931,7 +1931,7 @@ describe('EnvPortForwardsPage', () => {
       host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
       await flushPage();
       fixture.findButton('Discover').click();
-      await waitForAssertion(() => expect(host.textContent).toContain('Community handoff'));
+      await waitForAssertion(() => expect(host.textContent).toContain('Discovered handoff'));
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click();
       await flushPage();
       fixture.findButton('Review template').click();
@@ -1962,6 +1962,45 @@ describe('EnvPortForwardsPage', () => {
       fixture.response.resolve(fixture.receipt);
       await flushPage();
       expect(fixture.posts()).toHaveLength(1);
+    } finally { dispose(); }
+  });
+
+  it('shows the remote official catalog once and keeps builtin entries in the library', async () => {
+    const fixture = installHandoffFixture();
+    Object.assign(fixture.template, {source:'builtin',name:'Bundled handoff'});
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const entries = ['deepseek-harness-host','deepseek-harness-container','linuxserver-webtop-debian-xfce','linuxserver-webtop-ubuntu-kde'].map((id,index) => ({
+      template_id:`git_${id}`,document_template_id:id,service_family_id:id,revision:[17,26,5,5][index],
+      source:{repository:'floegence/redeven-service-templates',repository_id:1354288096,ref:'main',path:`templates/${id}`,commit_sha:'a'.repeat(40)},
+      sha256:'b'.repeat(64),deployment:index === 0 ? 'host':'container',default_locale:'en-US',localizations:{'en-US':{name:id,description:'Official remote template'}},classification:'official',status:'available',
+    }));
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/market-catalog') ? Promise.resolve({items:entries,stale:false,generation:4,checked_at:Date.now()}) : normalFetch(url,init));
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
+      await flushPage();
+      expect(host.textContent).toContain('Bundled handoff');
+      fixture.findButton('Discover').click();
+      await waitForAssertion(() => expect(host.textContent).toContain('deepseek-harness-host'));
+      expect(host.textContent).not.toContain('Bundled handoff');
+      expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Official');
+      expect(host.textContent).toContain('Host templates · 1');
+      expect(host.textContent).toContain('Container templates · 3');
+      const filter = host.querySelector<HTMLSelectElement>('select')!;
+      filter.value = 'community'; filter.dispatchEvent(new Event('change',{bubbles:true}));
+      await flushPage();
+      expect(host.textContent).not.toContain('deepseek-harness-host');
+      filter.value = 'official'; filter.dispatchEvent(new Event('change',{bubbles:true}));
+      await flushPage();
+      expect(host.textContent).toContain('deepseek-harness-host');
+      Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find(button => controlText(button)?.includes('Container templates'))!.click();
+      await flushPage();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
+      for (const entry of entries.slice(1)) expect(host.textContent).toContain(entry.document_template_id);
+      fixture.findButton('My templates').click();
+      await flushPage();
+      expect(host.textContent).not.toContain('linuxserver-webtop-debian-xfce');
     } finally { dispose(); }
   });
 
