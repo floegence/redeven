@@ -1,0 +1,43 @@
+.plugin-creation-empty-preview { position: relative; isolation: isolate; display: grid; place-items: center; height: 100%; min-height: 0; overflow: auto; padding: 32px 24px 64px; color: var(--muted-foreground); background: var(--redeven-surface-main, var(--background)); }
+.plugin-creation-placeholder { display: flex; flex-direction: column; align-items: center; width: min(100%, 360px); gap: 18px; margin: auto; }
+.plugin-creation-blueprint { display: block; flex: 0 0 auto; width: 100%; overflow: visible; color: var(--foreground); }
+.plugin-blueprint-guides { stroke: color-mix(in srgb, var(--foreground) 12%, transparent); stroke-width: 1; }
+.plugin-blueprint-paper { fill: var(--card); stroke: color-mix(in srgb, var(--foreground) 10%, transparent); }
+.plugin-blueprint-sheet { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--foreground) 5%, transparent)); animation: plugin-blueprint-float 10s ease-in-out infinite; }
+.plugin-blueprint-rule { stroke: color-mix(in srgb, var(--foreground) 7%, transparent); }
+.plugin-blueprint-ink { fill: color-mix(in srgb, var(--foreground) 24%, transparent); }
+.plugin-blueprint-muted { fill: color-mix(in srgb, var(--foreground) 9%, transparent); }
+.plugin-blueprint-tile { fill: color-mix(in srgb, var(--foreground) 2%, var(--card)); stroke: color-mix(in srgb, var(--foreground) 6%, transparent); }
+.plugin-blueprint-tint { fill: color-mix(in srgb, var(--ring) 8%, var(--card)); }
+.plugin-blueprint-accent { fill: color-mix(in srgb, var(--ring) 50%, var(--muted-foreground)); }
+.plugin-blueprint-spark { stroke: color-mix(in srgb, var(--ring) 48%, var(--muted-foreground)); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.plugin-blueprint-heading, .plugin-blueprint-summary, .plugin-blueprint-secondary, .plugin-blueprint-detail { animation: plugin-blueprint-assemble 10s cubic-bezier(.22, 1, .36, 1) infinite; }
+.plugin-blueprint-summary { animation-delay: .15s; }
+.plugin-blueprint-secondary { animation-delay: .3s; }
+.plugin-blueprint-detail { animation-delay: .45s; }
+.plugin-creation-placeholder-caption { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.plugin-creation-placeholder-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--foreground); }
+.plugin-creation-placeholder-state i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted-foreground); opacity: .55; }
+.plugin-creation-placeholder-caption p { max-width: 280px; margin: 0; font-size: 11px; line-height: 1.7; text-wrap: balance; }
+.plugin-creation-empty-preview[data-build-state='running'] .plugin-creation-placeholder-state i { background: var(--ring); animation: plugin-blueprint-breathe 2.4s ease-in-out infinite; }
+.plugin-creation-empty-preview[data-build-state='failed'] .plugin-creation-placeholder-state i { background: var(--destructive); opacity: 1; }
+.plugin-creation-placeholder-checks { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; margin-top: -8px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+.plugin-creation-placeholder-checks:hover { background: var(--muted); color: var(--foreground); }
+.plugin-creation-placeholder-checks:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.plugin-creation-atmosphere[data-active='false'] ~ .plugin-creation-placeholder * { animation-play-state: paused; }
+@keyframes plugin-blueprint-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes plugin-blueprint-assemble { 0%, 6%, 100% { opacity: .62; transform: translateY(3px); } 20%, 84% { opacity: 1; transform: translateY(0); } }
+@keyframes plugin-blueprint-breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@media (max-width: 720px) {
+  .plugin-creation-empty-preview { padding: 24px 24px 48px; }
+  .plugin-creation-placeholder { max-width: 320px; gap: 12px; }
+  .plugin-creation-placeholder-checks { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .plugin-creation-placeholder * { animation: none !important; } }
+@media (forced-colors: active) {
+  .plugin-creation-placeholder * { animation: none !important; filter: none; }
+  .plugin-creation-blueprint { opacity: .5; }
+  .plugin-blueprint-paper, .plugin-blueprint-tile { fill: Canvas; stroke: CanvasText; }
+  .plugin-blueprint-guides, .plugin-blueprint-rule, .plugin-blueprint-spark { stroke: CanvasText; }
+  .plugin-blueprint-ink, .plugin-blueprint-muted, .plugin-blueprint-accent, .plugin-blueprint-tint { fill: CanvasText; }
+}

@@ -62,6 +62,8 @@ it('keeps the live preview connected while a conversation resource is pending', 
   </Suspense></I18nProvider></FloeConfigProvider>, host);
   await expect.poll(() => lifetime.opened).toBe(1);
   const preview = host.querySelector('[data-preview-fixture]')!;
+  expect(host.querySelector('.plugin-creation-empty-preview')).toBeNull();
+  expect(host.querySelector('.plugin-creation-preview .plugin-creation-atmosphere')).toBeNull();
   try {
     setLoad(true);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));

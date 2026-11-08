@@ -7381,7 +7381,7 @@
         "question": "¿Qué plugin quieres crear?",
         "conversation": "Conversación",
         "preview": "Vista previa",
-        "emptyPreview": "Describe tu plugin a Flower. La primera compilación correcta aparecerá aquí.",
+        "emptyPreview": "Tu aplicación aparecerá aquí tras la primera compilación.",
         "saved": "Guardado",
         "saving": "Guardando…",
         "saveFailed": "No se pudo guardar",

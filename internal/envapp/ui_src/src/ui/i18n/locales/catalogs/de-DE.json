@@ -7381,7 +7381,7 @@
         "question": "Welches Plugin möchten Sie erstellen?",
         "conversation": "Unterhaltung",
         "preview": "Vorschau",
-        "emptyPreview": "Beschreiben Sie Ihr Plugin für Flower. Der erste erfolgreiche Build wird hier angezeigt.",
+        "emptyPreview": "Nach dem ersten Build erscheint Ihre App hier.",
         "saved": "Gespeichert",
         "saving": "Wird gespeichert…",
         "saveFailed": "Speichern fehlgeschlagen",

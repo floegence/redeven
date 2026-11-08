@@ -7377,7 +7377,7 @@
         "question": "你想创建什么插件？",
         "conversation": "对话",
         "preview": "预览",
-        "emptyPreview": "向 Flower 描述你的插件，首次构建成功后会在这里显示。",
+        "emptyPreview": "首次构建完成后，应用将在这里呈现。",
         "saved": "已保存",
         "saving": "保存中…",
         "saveFailed": "保存失败",

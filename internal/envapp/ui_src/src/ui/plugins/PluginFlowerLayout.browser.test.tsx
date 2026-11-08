@@ -50,13 +50,14 @@ it.each([
   { width: 1280, theme: 'light', started: true },
   { width: 1280, theme: 'dark', locale: 'zh-CN', started: true },
   { width: 390, theme: 'dark', locale: 'zh-CN', started: true },
-])('integrates the actual Flower composer in the $width px $theme $locale workspace (started: $started)', async ({ width, theme, locale, started }) => {
+  { width: 320, height: 480, theme: 'light', locale: 'zh-CN', started: true },
+])('integrates the actual Flower composer in the $width px $theme $locale workspace (started: $started)', async ({ width, height = 800, theme, locale, started }) => {
   localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale ?? 'en-US');
-  await page.viewport(width, 800);
+  await page.viewport(width, height);
   document.documentElement.classList.remove('light', 'dark');
   document.documentElement.classList.add(theme);
   host = document.createElement('div');
-  host.style.cssText = 'height:800px;width:100%;min-width:0';
+  host.style.cssText = `height:${height}px;width:100%;min-width:0`;
   document.body.append(host);
   let begin: (() => void) | undefined;
   dispose = render(() => {
@@ -101,6 +102,12 @@ it.each([
     expect(background.dataset.active).toBe('false');
     await page.getByRole('tab', { name: locale === 'zh-CN' ? '预览' : 'Preview', exact: true }).click();
     await expect.poll(() => host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!.dataset.active).toBe('true');
+    const canvas = host.querySelector<HTMLElement>('.plugin-creation-empty-preview')!;
+    const composition = host.querySelector<HTMLElement>('.plugin-creation-placeholder')!.getBoundingClientRect();
+    const bounds = canvas.getBoundingClientRect();
+    expect(canvas.scrollWidth).toBeLessThanOrEqual(canvas.clientWidth);
+    expect(composition.top).toBeGreaterThanOrEqual(bounds.top);
+    expect(composition.bottom).toBeLessThanOrEqual(bounds.bottom);
     await page.screenshot({ path: `__screenshots__/workspace-${width}-${theme}-generating-preview.png` });
   }
   document.documentElement.classList.remove(theme);

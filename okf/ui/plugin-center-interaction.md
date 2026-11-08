@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin Center interaction
 tags: [ui, plugins, plugin-center, workbench, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-07"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -41,10 +41,10 @@ Flower owns one composer and ordinary Send; no secondary creation intent or
 synthesized empty-input prompt exists.
 A new draft has one centered creation composer on a quiet canvas, without an
 empty split preview. The landing page and pre-preview canvas share a faint dot
-field and slow ambient drift. The placeholder gently rearranges into alternative
-application layouts without suggesting measurable build progress. Decoration uses
-theme tokens, never captures input, pauses off-screen or in a hidden document,
-and becomes static with reduced motion; forced colors omit the background.
+field and slow ambient drift. An original SVG application silhouette uses restrained
+assembly motion and concise actual status, without simulated progress. Theme-token
+decoration never captures input, pauses while hidden or after failure, and respects
+reduced motion; forced colors omit the background.
 A live sandbox replaces the placeholder and its motion. After submission the conversation occupies a compact
 280–328px column and the application becomes the primary canvas. Fit and phone
 width controls resize the same live iframe without moving or recreating it. Compact screens select conversation or preview through

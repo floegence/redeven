@@ -7377,7 +7377,7 @@
         "question": "どんなプラグインを作りますか？",
         "conversation": "会話",
         "preview": "プレビュー",
-        "emptyPreview": "Flower にプラグインの内容を伝えてください。最初のビルドが成功するとここに表示されます。",
+        "emptyPreview": "最初のビルドが完了すると、ここにアプリが表示されます。",
         "saved": "保存済み",
         "saving": "保存中…",
         "saveFailed": "保存できませんでした",

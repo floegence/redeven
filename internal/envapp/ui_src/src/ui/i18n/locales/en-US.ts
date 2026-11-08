@@ -862,7 +862,7 @@ export const enUS = defineDictionary({
         "question": "What would you like to create?",
         "conversation": "Conversation",
         "preview": "Preview",
-        "emptyPreview": "Describe your plugin to Flower. Its first successful build will appear here.",
+        "emptyPreview": "Your app will appear here after the first build.",
         "saved": "Saved",
         "saving": "Saving…",
         "saveFailed": "Could not save",

@@ -135,7 +135,7 @@ it('animates the empty canvas and pauses it when the workspace or document is hi
   const background = host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!;
   const grid = background.querySelector('span')!;
   const blueprint = host.querySelector<HTMLElement>('.plugin-creation-blueprint')!;
-  const tile = blueprint.querySelector<HTMLElement>('span:nth-child(3)')!;
+  const tile = blueprint.querySelector<SVGElement>('.plugin-blueprint-summary')!;
   const [animation] = tile.getAnimations();
   expect(animation.playState).toBe('running');
   const start = Number(animation.currentTime);
@@ -171,11 +171,11 @@ it('keeps the canvas static under reduced motion and omits it in forced colors',
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
   await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
   const background = host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!;
-  const tiles = host.querySelectorAll<HTMLElement>('.plugin-creation-blueprint span, .plugin-creation-atmosphere > span');
+  const tiles = host.querySelectorAll<HTMLElement>('.plugin-creation-blueprint g, .plugin-creation-atmosphere > span');
   for (const tile of tiles) expect(getComputedStyle(tile).animationName).toBe('none');
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'active' });
   expect(getComputedStyle(background).display).toBe('none');
-  expect(getComputedStyle(host.querySelector('.plugin-creation-blueprint span')!).animationName).toBe('none');
+  expect(getComputedStyle(host.querySelector('.plugin-blueprint-summary')!).animationName).toBe('none');
 });
 it('requires confirmation before deleting only the selected draft', async () => {
   const { onBack } = mount();
@@ -631,9 +631,10 @@ it('shows actual failed build stages and bounded command output', async () => {
   });
   mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
-  await expect.element(page.getByRole('button', { name: 'Checks', exact: true })).toHaveAttribute('data-build-state', 'failed');
-  await page.getByRole('button', { name: 'Checks', exact: true }).click();
-  await expect.element(page.getByText('Failed', { exact: true })).toBeVisible();
+  await expect.element(page.elementLocator(document.querySelector('.plugin-creation-check-button')!)).toHaveAttribute('data-build-state', 'failed');
+  expect(getComputedStyle(document.querySelector('.plugin-blueprint-summary')!).animationPlayState).toBe('paused');
+  await page.elementLocator(document.querySelector('.plugin-creation-placeholder-checks')!).click();
+  await expect.element(page.getByRole('dialog').getByText('Failed', { exact: true })).toBeVisible();
   await expect.element(page.getByText('Not run', { exact: true })).toBeVisible();
   await expect.element(page.getByText('Typecheck failed', { exact: true })).toBeVisible();
   await page.getByText('Output', { exact: true }).click();

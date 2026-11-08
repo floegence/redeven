@@ -32,6 +32,7 @@ import { PluginAuthorAccess } from './PluginAuthorAccess';
 import type { PluginSurfaceContextMenuEvent } from '@floegence/redevplugin-ui';
 import { PluginCanvasComment } from './PluginCanvasComment';
 import { PluginCreationCanvasBackground } from './PluginCreationCanvasBackground';
+import { PluginCreationPlaceholder } from './PluginCreationPlaceholder';
 import { PluginAuthorPreview } from './PluginAuthorPreview';
 import type { ExternalPluginInspection, PluginSurfaceLaunchTarget } from './pluginTypes';
 import type {
@@ -987,11 +988,8 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
               when={preview()}
               keyed
               fallback={
-                <div class="plugin-creation-empty-preview">
-                  <PluginCreationCanvasBackground active={props.visible && !landing() && (!narrow() || tab() === 'preview')} />
-                  <div class="plugin-creation-blueprint" aria-hidden="true"><span /><span /><span /><span /></div>
-                  <p>{i18n.t(snapshot()?.build?.status === 'running' ? 'uiCopy.plugin.creation.building' : 'uiCopy.plugin.creation.emptyPreview')}</p>
-                </div>
+                <PluginCreationPlaceholder active={props.visible && !landing() && (!narrow() || tab() === 'preview')}
+                  state={buildState()} onChecks={() => setChecks(true)} />
               }
             >
               {(value) => (
