@@ -216,9 +216,9 @@ it('releases a late session after the connection dialog is dismissed', async () 
 
 it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, width }))))('keeps the connection flow clear and compact in $locale at $width px', async ({ locale, width }) => {
   state.locale = locale;
-  const { dialog, copy, trigger } = await launch(width);
+  const { dialog, trigger } = await launch(width);
   expect(dialog.textContent).not.toContain('Local Environment');
-  expect(dialog.querySelector('h3')?.textContent).toBe('server');
+  expect(dialog.querySelector('.remote-desktop-identity')).toBeNull();
   expect(dialog.querySelector('select')).toBeNull();
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   expect(dialog.getBoundingClientRect().height).toBeLessThan(390);
@@ -226,15 +226,12 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => [320, 1000].map(width => ({ locale, 
   expect(connect.disabled).toBe(false);
   expect(connect.scrollWidth).toBeLessThanOrEqual(connect.clientWidth);
   expectSingleLineButtonLabels(dialog);
-  const options = dialog.querySelector<HTMLDetailsElement>('.remote-desktop-options')!;
-  expect(options.open).toBe(false);
+  expect(dialog.querySelector('.remote-desktop-options')).toBeNull();
+  expect(dialog.querySelector('.host-access-permissions')).toBeNull();
   expect(state.save).not.toHaveBeenCalled();
   if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/remote-desktop-ready-${width}.png` });
-  options.querySelector('summary')!.focus(); await userEvent.keyboard('{Enter}'); expect(options.open).toBe(true);
-  expect(options.textContent).toContain(copy.t('remoteDesktop.viewHint'));
-  const view = options.querySelector<HTMLInputElement>('[role=switch]')!;
+  const view = dialog.querySelector<HTMLInputElement>('input[type=radio][value=view]')!;
   view.focus(); await userEvent.keyboard(' '); expect(view.checked).toBe(true);
-  expect(options.querySelector('summary')?.textContent).toContain(copy.t('remoteDesktop.view'));
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   expectSingleLineButtonLabels(dialog);
   expect((await axe.run(dialog, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
@@ -438,7 +435,7 @@ it('keeps the authorization action label centered without an empty icon slot', a
 it.each(['locked', 'session_unavailable', 'unsupported', 'screen_permission_required', 'setup_required', 'authorization_required'])('explains the next step for %s', async value => {
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, state: value, backend: value === 'authorization_required' ? 'wayland' : 'macos', screen: value !== 'screen_permission_required' } });
   const { dialog } = await launch(390);
-  expect(dialog.querySelector('.remote-desktop-guidance, .remote-desktop-setup')).not.toBeNull();
+  expect(dialog.querySelector('.remote-desktop-guidance, .remote-desktop-setup, .host-access-permissions')).not.toBeNull();
   expect(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!.disabled).toBe(value !== 'authorization_required');
   expectSingleLineButtonLabels(dialog);
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
@@ -511,7 +508,6 @@ it('does not report permission reuse as enabled when saving fails', async () => 
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'ready', authorization: 'needs_consent' } });
   state.save.mockRejectedValue(new LocalApiError({ status: 403, code: 'DESKTOP_FORBIDDEN', message: 'Permission required' }));
   const { dialog, copy } = await launch(390);
-  await userEvent.click(dialog.querySelector('summary')!);
   const input = dialog.querySelector<HTMLInputElement>('.remote-desktop-sharing [role=switch]')!;
   input.focus(); await userEvent.keyboard(' ');
   await expect.poll(() => dialog.querySelector('[role=alert]')?.textContent).toContain(copy.t('remoteDesktop.settingsFailed'));
@@ -523,7 +519,7 @@ it('keeps controls within a scaled narrow Workbench panel', async () => {
   const host = document.createElement('main'); host.style.cssText = 'width:320px;height:500px;overflow:auto;transform:translate(80px,30px) scale(.8);transform-origin:top left;background:var(--background)'; document.body.append(host);
   dispose = render(() => <RemoteDesktopPanel />, host);
   await expect.poll(() => host.querySelector<HTMLButtonElement>('.remote-desktop-connect')?.disabled).toBe(false);
-  await userEvent.click(host.querySelector('summary')!);
+  await userEvent.click(host.querySelector('input[value=view]')!);
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
   expectSingleLineButtonLabels(host);
   await page.screenshot({ element: host, path: '__screenshots__/remote-desktop-workbench.png' });
@@ -593,4 +589,41 @@ it('closes only the ready reset confirmation after a pointer opening', async () 
   await expect.poll(() => dialog.querySelector('.remote-desktop-inline-step')).toBeNull();
   expect(dialog.isConnected).toBe(true);
   expect(state.forget).not.toHaveBeenCalled();
+});
+
+it('shows the ready multi-display connection without setup or management content', async () => {
+ state.status.mockResolvedValue({ ...ready, access_state: 'enabled', capabilities: { ...ready.capabilities, displays: [...ready.capabilities.displays, { ...ready.capabilities.displays[0], id: 'two', name: 'Second display', primary: false }] } });
+ const { dialog } = await launch(1000);
+ expect(dialog.querySelectorAll('select')).toHaveLength(1);
+ expect(dialog.querySelector('.host-access-permissions')).toBeNull();
+ expect(dialog.querySelector('.host-access-management')).toBeNull();
+ expect(dialog.textContent).not.toContain('Local Environment');
+ await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-ready-multiple-displays.png' });
+});
+
+it('guides only the remaining desktop permission and returns to connection when granted', async () => {
+ const missing = { ...ready, access_state: 'unconfigured', capabilities: { ...ready.capabilities, screen: true, input: false } };
+ state.status.mockResolvedValue(missing);
+ const { dialog, copy } = await launch(390);
+ expect(dialog.querySelectorAll('.host-access-permission')).toHaveLength(1);
+ expect(dialog.querySelector('[data-scene=screen]')).toBeNull();
+ expect(dialog.querySelector('.host-access-system')).toBeNull();
+ expect(dialog.querySelector('.host-access-management')).toBeNull();
+ await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-missing-input.png' });
+ state.permission.mockImplementation(async () => { state.status.mockResolvedValue({ ...ready, access_state: 'unconfigured' }); });
+ await userEvent.click(page.elementLocator(dialog).getByRole('button', { name: copy.t('hostAccess.allowInput'), exact: true }));
+ await expect.poll(() => dialog.querySelector('.host-access-permissions')).toBeNull();
+ expect(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!.disabled).toBe(false);
+ expect(state.create).not.toHaveBeenCalled();
+});
+
+it('keeps keyboard focus inside the separate desktop settings view and returns it', async () => {
+ const { dialog, copy } = await launch(390);
+ const link = page.elementLocator(dialog).getByRole('button', { name: copy.t('hostAccess.settings'), exact: true });
+ await userEvent.click(link);
+ await expect.poll(() => document.activeElement?.textContent).toBe(copy.t('remoteDesktop.backToConnection'));
+ expect(dialog.querySelector('.remote-desktop-connect')).toBeNull();
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => document.activeElement).toBe(dialog.querySelector('.remote-desktop-settings-link'));
+ expect(dialog.querySelector('.remote-desktop-connect')).not.toBeNull();
 });

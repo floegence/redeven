@@ -42,6 +42,21 @@ afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
 const button = (name: string) => [...host.querySelectorAll('button')].find(item => controlText(item) === name || item.getAttribute('aria-label') === name)!;
 async function mount() { dispose = render(() => <RemoteDesktopPanel />, host); await vi.waitFor(() => expect(state.status).toHaveBeenCalled()); await vi.waitFor(() => expect(host.querySelector('.remote-desktop-connect')).toBeTruthy()); }
 
+it('keeps ready connection focused and opens management as a separate view', async () => {
+  state.status.mockResolvedValue({ ...ready, access_state: 'enabled' });
+  state.label = 'Local Environment';
+  await mount();
+  expect(host.textContent).not.toContain('Local Environment');
+  expect(host.querySelector('.host-access-permissions')).toBeNull();
+  expect(host.querySelector('.host-access-management')).toBeNull();
+  button('Access settings').click();
+  expect(host.querySelector('.remote-desktop-connect')).toBeNull();
+  expect(host.querySelector('.host-access-management')).not.toBeNull();
+  expect(host.querySelector('.host-access-permissions')).toBeNull();
+  button('Back to connection').click();
+  expect(host.querySelector('.remote-desktop-connect')).not.toBeNull();
+});
+
 it('keeps paused desktop explicit and enables only on connect', async () => {
   state.status.mockResolvedValue({ ...ready, access_state: 'paused' });
   await mount();
@@ -56,7 +71,7 @@ it('keeps paused desktop explicit and enables only on connect', async () => {
 it('removes only desktop preferences after confirmation and preserves OS grants', async () => {
   state.status.mockResolvedValue({ ...ready, access_state: 'enabled' });
   await mount();
-  button('Manage this feature').click();
+  button('Access settings').click();
   button('Remove settings…').click();
   expect(state.access).not.toHaveBeenCalled();
   state.status.mockResolvedValue({ ...ready, access_state: 'unconfigured' });
@@ -85,7 +100,7 @@ it.each([
   { label: '', local: true, hostname: '', expected: 'env-fixture' },
 ])('identifies the actual connection as $expected', async test => {
   Object.assign(state, test); await mount();
-  expect(host.textContent).toContain(test.expected); expect(host.textContent).not.toContain('Local Environment');
+  expect(host.querySelector('.remote-desktop-identity')).toBeNull(); expect(host.textContent).not.toContain('Local Environment');
   button('Connect to desktop').click();
   await vi.waitFor(() => expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ host_name: test.expected })));
 });
@@ -113,7 +128,7 @@ it('permits the connection that triggers Wayland system authorization', async ()
 it('keeps advanced settings out of the initial connection flow and avoids a single-display selector', async () => {
   await mount(); expect(host.querySelector('select')).toBeNull();
   const options = host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!;
-  expect(options.open).toBe(false); expect(host.textContent).not.toContain('Connect automatically after first approval');
+  expect(options).toBeNull(); expect(host.textContent).not.toContain('Connect automatically after first approval');
   expect(host.textContent).not.toContain('Unattended reconnection'); expect(state.save).not.toHaveBeenCalled();
 });
 
@@ -201,7 +216,7 @@ it('reports permission-setting failures and permits view-only access without inp
   await mount(); expect(button('Connect to desktop').disabled).toBe(true);
   button('Allow mouse and keyboard').click();
   await vi.waitFor(() => expect(host.querySelector('[role=alert]')?.textContent).toContain('Could not open the host’s permission settings'));
-  const view = host.querySelector<HTMLInputElement>('[role=switch]')!; view.click();
+  const view = host.querySelector<HTMLInputElement>('input[type=radio][value=view]')!; view.click();
   expect(button('Connect to desktop').disabled).toBe(false);
   button('Connect to desktop').click(); await vi.waitFor(() => expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ mode: 'view' })));
 });

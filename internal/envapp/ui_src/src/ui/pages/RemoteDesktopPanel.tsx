@@ -1,6 +1,6 @@
 import { FlowerContextSource, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { Button, LinearProgress, StableText, Switch } from '@floegence/floe-webapp-core/ui';
-import { Refresh, Settings, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
+import { Refresh, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
 import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
 import { For, Match, Show, Switch as MatchSwitch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
@@ -15,7 +15,7 @@ import { openWebServiceRoute, resolveWebServiceOpenRoute, WebServiceWindowOpenEr
 import { requestHostApplicationPermission } from '../services/hostApplicationsApi';
 import { LocalApiError } from '../services/localApi';
 import './remote-desktop.css';
-import { HostAccessPermissions, HostAccessManagement } from './HostAccessControls';
+import { HostAccessPermissions, HostAccessFeatureSettings, HostAccessSystemPermissions } from './HostAccessControls';
 import { hostAccessState, setHostAccess, type HostAccessState } from '../services/hostAccess';
 
 type Failure = { title: EnvAppTranslationKey; hint: EnvAppTranslationKey; diagnostic?: string };
@@ -38,7 +38,7 @@ function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: Env
   return { title, hint };
 }
 
-export function RemoteDesktopLauncher(props: { request?: number; onStatus?: (status:RemoteDesktopStatus)=>void } = {}) {
+export function RemoteDesktopLauncher(props: { request?: number; onManage?: () => void; onStatus?: (status:RemoteDesktopStatus)=>void } = {}) {
   const [open, setOpen] = createSignal(false);
   const [started, setStarted] = createSignal(false);
   const [activity, setActivity] = createSignal<EnvAppTranslationKey>();
@@ -46,7 +46,7 @@ export function RemoteDesktopLauncher(props: { request?: number; onStatus?: (sta
   // The launcher owns preparation. Dialog presence only attaches its view;
   // dismissing the modal must not dispose the operation or its subscription.
   createEffect(()=>{if(props.request){setStarted(true);setOpen(true);}});
-  const content = createMemo(() => started() ? <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col" id="remote-desktop:dialog" pageID="remote-desktop" pageName={i18n.t('remoteDesktop.title')} mode="overlay" selected={open()}><RemoteDesktopPanel active={open()} onStatus={props.onStatus} onActivityChange={setActivity} onConnected={() => setOpen(false)} /></FlowerContextSource> : undefined);
+  const content = createMemo(() => started() ? <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col" id="remote-desktop:dialog" pageID="remote-desktop" pageName={i18n.t('remoteDesktop.title')} mode="overlay" selected={open()}><RemoteDesktopPanel active={open()} onManage={props.onManage ? () => { setOpen(false); props.onManage?.(); } : undefined} onStatus={props.onStatus} onActivityChange={setActivity} onConnected={() => setOpen(false)} /></FlowerContextSource> : undefined);
   return <>
     <Button variant="outline" onClick={() => { setStarted(true); setOpen(true); }}><RemoteDesktopIcon class="w-4 h-4" /><Show when={!open() && activity()} fallback={i18n.t('remoteDesktop.title')}>{key => <span role="status">{i18n.t(key())}</span>}</Show></Button>
     <Dialog open={open()} onOpenChange={setOpen} title={i18n.t('remoteDesktop.title')} closeLabel={i18n.t('common.actions.close')} escapeKeyPhase="bubble"
@@ -56,7 +56,7 @@ export function RemoteDesktopLauncher(props: { request?: number; onStatus?: (sta
   </>;
 }
 
-export function RemoteDesktopPanel(props: { active?: boolean; onStatus?: (status:RemoteDesktopStatus)=>void; onActivityChange?: (key: EnvAppTranslationKey | undefined) => void; onConnected?: () => void } = {}) {
+export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => void; onStatus?: (status:RemoteDesktopStatus)=>void; onActivityChange?: (key: EnvAppTranslationKey | undefined) => void; onConnected?: () => void } = {}) {
   const env = useEnvContext(), i18n = useI18n();
   const foreground = () => props.active !== false;
   const descriptionID = createUniqueId();
@@ -233,7 +233,7 @@ export function RemoteDesktopPanel(props: { active?: boolean; onStatus?: (status
     }
     if (!status() || preparing() || capabilities()?.state === 'setup_required') return undefined;
     if (capabilities()?.state === 'locked') return lockedDesktopAvailable() ? 'remoteDesktop.lockedHint' : 'remoteDesktop.serviceUnsupported';
-    if (macPermission()) return 'remoteDesktop.permissionHint';
+    if (macPermission()) return undefined;
     if (available() && !sshManaged() && capabilities()?.backend === 'wayland' && (!status()?.unattended || !capabilities()?.unattended || capabilities()?.authorization === 'needs_consent')) return 'remoteDesktop.authorizationHint';
     if (capabilities()?.state === 'session_unavailable') return loginDesktopAvailable() ? 'remoteDesktop.lockedHint' : 'remoteDesktop.sessionHint';
     if (capabilities()?.state === 'unsupported') return 'remoteDesktop.unsupportedHostHint';
@@ -313,6 +313,7 @@ export function RemoteDesktopPanel(props: { active?: boolean; onStatus?: (status
   createEffect(on(foreground, (active, previous) => {
     if (previous === undefined) return;
     if (active) {
+      setManaging(false);
       void refresh();
       const credential = panel?.querySelector<HTMLInputElement>('input[type=password]');
       if (credential) focusStep(credential);
@@ -519,17 +520,18 @@ export function RemoteDesktopPanel(props: { active?: boolean; onStatus?: (status
   }}>
     <MatchSwitch>
     <Match when={!deploymentOperation() && !confirmation() && busy() !== 'connect'}>
+    <Show when={!managing()} fallback={<>
+      <Button ref={focusStep} variant="ghost" class="host-access-back" onClick={() => { setManaging(false); restoreFocus(); }}>{i18n.t('remoteDesktop.backToConnection')}</Button>
+      <HostAccessFeatureSettings feature="desktop" state={accessState()} ready={available()} allowed={full()} busy={!!busy()} onChange={changeAccess} onReconfigure={() => {
+        if (accessState() === 'paused' && available()) void changeAccess('enabled').catch(() => {});
+        else { setManaging(false); void refresh(); }
+      }} />
+      <Show when={capabilities()?.backend === 'macos'}><HostAccessSystemPermissions screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} allowed={full()} busy={!!busy()} onPermission={permission => void runAction('permission', 'remoteDesktop.permissionFailed', () => requestHostApplicationPermission(`${permission}_settings`))} /></Show>
+    </>}>
     <div class="remote-desktop-host">
-      <div class="remote-desktop-host-icon" aria-hidden="true"><RemoteDesktopIcon size={24} /></div>
-      <div class="remote-desktop-identity">
-        <h3 title={hostName()}>{hostName()}</h3>
-        <p class="remote-desktop-state" role="status"><span class="remote-desktop-state-dot" data-ready={accessState() === 'enabled' && capabilities()?.state === 'ready' && available() && full() && !preparing() && (capabilities()?.backend !== 'wayland' || capabilities()?.authorization === 'saved' && status()?.unattended)} aria-hidden="true" />{stateCopy()}</p>
-      </div>
-      <div class="remote-desktop-host-actions"><Button size="icon" variant="ghost" disabled={refreshing() || !!busy()} aria-label={i18n.t('remoteDesktop.refresh')} title={i18n.t('remoteDesktop.refresh')} onClick={() => void refresh()}><Refresh size={16} class={refreshing() ? 'animate-spin motion-reduce:animate-none' : ''} /></Button>
-      <Button size="icon" variant="ghost" disabled={!!busy()} aria-label={i18n.t('hostAccess.manage')} title={i18n.t('hostAccess.manage')} aria-expanded={managing()} onClick={()=>setManaging(value=>!value)}><Settings size={16}/></Button>
-      </div>
+      <p class="remote-desktop-state" role="status"><span class="remote-desktop-state-dot" data-ready={accessState() === 'enabled' && capabilities()?.state === 'ready' && available() && full() && !preparing() && (capabilities()?.backend !== 'wayland' || capabilities()?.authorization === 'saved' && status()?.unattended)} aria-hidden="true" />{stateCopy()}</p>
+      <div class="remote-desktop-host-actions"><Button size="icon" variant="ghost" disabled={refreshing() || !!busy()} aria-label={i18n.t('remoteDesktop.refresh')} title={i18n.t('remoteDesktop.refresh')} onClick={() => void refresh()}><Refresh size={16} class={refreshing() ? 'animate-spin motion-reduce:animate-none' : ''} /></Button></div>
     </div>
-    <p class="remote-desktop-description">{i18n.t('remoteDesktop.description')}</p>
     <Show when={!failure() && stateHint()}>{key => <p class="remote-desktop-guidance" role={sshCaptureUnavailable() ? 'status' : undefined}>{i18n.t(key())}</p>}</Show>
     <Show when={!sshManaged() && (status()?.capabilities.state === 'setup_required' || preparing())}>
       <div class="remote-desktop-setup">
@@ -547,10 +549,6 @@ export function RemoteDesktopPanel(props: { active?: boolean; onStatus?: (status
         </div>
       </div>
     </Show>
-    <Show when={capabilities()?.backend==='macos'&&(macPermission()||managing())}>
-      <HostAccessPermissions host={hostName()} desktop screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} needsInput={mode()==='control'} allowed={full()} busy={!!busy()} onRefresh={()=>void refresh()} onPermission={(permission,manage)=>void runAction('permission','remoteDesktop.permissionFailed',()=>requestHostApplicationPermission(manage?`${permission}_settings`:permission))} />
-    </Show>
-    <Show when={macPermission()}><label class="remote-desktop-display"><span>{i18n.t('hostAccess.useMode')}</span><select value={mode()} disabled={!!busy()} onChange={event=>setMode(event.currentTarget.value as 'view'|'control')}><option value="control">{i18n.t('remoteDesktop.control')}</option><option value="view">{i18n.t('remoteDesktop.view')}</option></select></label></Show>
     <Show when={displays().length > 1}>
       <label class="remote-desktop-display">
         <span>{i18n.t('remoteDesktop.display')}</span>
@@ -562,31 +560,39 @@ export function RemoteDesktopPanel(props: { active?: boolean; onStatus?: (status
         </span>
       </label>
     </Show>
+    <fieldset class="remote-desktop-use-mode"><legend>{i18n.t('hostAccess.useMode')}</legend><div>
+      <For each={['control', 'view'] as const}>{value => <label data-selected={mode() === value}><input type="radio" name={descriptionID} value={value} checked={mode() === value} disabled={!!busy()} onChange={() => setMode(value)} /><span>{i18n.t(value === 'view' ? 'remoteDesktop.view' : 'hostAccess.controlMode')}</span></label>}</For>
+    </div></fieldset>
+    <Show when={macPermission()}>
+      <HostAccessPermissions desktop screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} needsInput={mode()==='control'} allowed={full()} busy={!!busy()} onRefresh={()=>void refresh()} onPermission={(permission,manage)=>void runAction('permission','remoteDesktop.permissionFailed',()=>requestHostApplicationPermission(manage?`${permission}_settings`:permission))} />
+    </Show>
+
     <Show when={!sshManaged() && capabilities()?.backend === 'wayland' && capabilities()?.unattended}><div class="remote-desktop-option remote-desktop-sharing"><Switch checked={pendingApproval() ?? status()?.unattended ?? false} disabled={!full() || !!busy() || refreshing()} onChange={rememberApproval} label={i18n.t('remoteDesktop.unattended')} description={i18n.t('remoteDesktop.unattendedHint')} /></div></Show>
     <Show when={sshManaged() && loginService()?.state === 'active'}><p class="remote-desktop-service-status">{i18n.t('remoteDesktop.serviceActive')}</p></Show>
-    <details class="remote-desktop-options" open={optionsOpen()} onToggle={event => setOptionsOpen(event.currentTarget.open)}>
+    <Show when={sshManaged() || capabilities()?.backend === 'wayland' && capabilities()?.unattended && ['saved', 'unknown', 'revoked'].includes(capabilities()?.authorization ?? '')}><details class="remote-desktop-options" open={optionsOpen()} onToggle={event => setOptionsOpen(event.currentTarget.open)}>
       <summary><ChevronRight size={14} aria-hidden="true" /><span>{i18n.t('remoteDesktop.options')}</span><span class="remote-desktop-mode">{i18n.t(mode() === 'view' ? 'remoteDesktop.view' : 'remoteDesktop.control')}</span></summary>
       <Show when={sshManaged() && (serviceUpdateRequired() || ['active', 'stopped'].includes(loginService()?.state ?? ''))}><div class="remote-desktop-actions remote-desktop-service-actions">
         <For each={['ensure', ...(loginService()?.state === 'active' ? ['stop'] : []), 'uninstall'] as DesktopDeploymentOperation[]}>{operation => <Button data-desktop-focus={operation} variant="outline" disabled={!full() || !!busy()} onClick={() => showDeployment(operation)}>{i18n.t(operationLabels[operation])}</Button>}</For>
       </div></Show>
-      <div class="remote-desktop-option"><Switch checked={mode() === 'view'} disabled={!!busy()} onChange={value => setMode(value ? 'view' : 'control')} label={i18n.t('remoteDesktop.view')} description={i18n.t('remoteDesktop.viewHint')} /></div>
       <Show when={!sshManaged() && capabilities()?.backend === 'wayland' && capabilities()?.unattended && ['saved', 'unknown', 'revoked'].includes(capabilities()?.authorization ?? '')}>
         <div class="remote-desktop-option"><Button data-desktop-focus="forget" variant="outline" disabled={!full() || !!busy() || refreshing()} onClick={() => showConfirmation('forget')}>{i18n.t('remoteDesktop.approvalForget')}</Button></div>
       </Show>
-    </details>
+    </details></Show>
+    </Show>
     <Show when={failure()}>{problem => <div class="remote-desktop-error" role="alert">
       <AlertCircle size={16} aria-hidden="true" />
       <div><strong>{i18n.t(problem().title)}</strong><p>{i18n.t(problem().hint)}</p>
         <Show when={problem().diagnostic}><details><summary>{i18n.t('remoteDesktop.errorDetails')}</summary><code>{problem().diagnostic}</code></details></Show>
       </div>
     </div>}</Show>
-    <div class="remote-desktop-footer">
+    <Show when={!managing()}><div class="remote-desktop-footer">
       <Button class="remote-desktop-connect" data-desktop-focus="connect" disabled={sshManaged() ? !full() || !!busy() || refreshing() || sshCaptureUnavailable() : !canConnect()} aria-describedby={descriptionID} onClick={() => { rememberFocus(); if (sshManaged()) showDeployment('ensure', true); else if (status()?.control_in_use && mode() === 'control') showConfirmation('takeover'); else void open(false); }}>
         <StableText class="text-center" reserve={[i18n.t('remoteDesktop.connecting'), i18n.t('remoteDesktop.connect'),i18n.t('hostAccess.enableConnect')]}>{i18n.t(busy()==='connect'?'remoteDesktop.connecting':status()?.access_state!==undefined&&accessState()!=='enabled'?'hostAccess.enableConnect':'remoteDesktop.connect')}</StableText><ArrowRight size={16} aria-hidden="true" />
       </Button>
       <p id={descriptionID} role={opened() ? 'status' : undefined}>{i18n.t(opened() ? 'remoteDesktop.windowOpened' : 'remoteDesktop.openHint')}</p>
     </div>
-    <Show when={managing()}><HostAccessManagement state={accessState()} allowed={full()} busy={!!busy()} onChange={changeAccess} onReconfigure={()=>{if(accessState()==='paused'&&available()){void changeAccess('enabled').catch(()=>{});}else{setOptionsOpen(true);setManaging(false);void refresh();}}} /></Show>
+    <Button class="remote-desktop-settings-link" data-desktop-focus="settings" variant="ghost" disabled={!!busy()} onClick={() => { rememberFocus(); if (props.onManage) props.onManage(); else setManaging(true); }}>{i18n.t('hostAccess.settings')}</Button>
+    </Show>
     </Match>
     <Match when={confirmation()}>
       {value => <div class="remote-desktop-inline-step">

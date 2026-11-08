@@ -49,6 +49,22 @@ export function HostAccessFeatureIllustration(props: { feature: 'applications' |
   );
 }
 
+// Compact settings marks preserve the same single-window / whole-screen scope.
+export function HostAccessFeatureMark(props: { feature: 'applications' | 'desktop' }) {
+  return <svg class="host-access-feature-mark" data-scene={props.feature} viewBox="0 0 64 48" fill="none" aria-hidden="true">
+    <Show when={props.feature === 'applications'} fallback={<g class="host-access-art-selected">
+      <rect x="4" y="4" width="56" height="34" rx="4" class="host-access-art-tint" />
+      <rect x="10" y="10" width="25" height="17" rx="2" class="host-access-art-paper" />
+      <rect x="30" y="18" width="23" height="14" rx="2" class="host-access-art-paper" />
+      <path d="M10 15h25m-5 8h23m-29 15v6m16-6v6m-22 0h28m-20-11h2m4 0h2m4 0h2" />
+    </g>}><g class="host-access-art-selected">
+      <rect x="7" y="7" width="50" height="34" rx="4" class="host-access-art-paper" />
+      <path d="M7 16h50m-42-5h2m4 0h2m12 13h14m-14 7h10" />
+      <rect x="15" y="23" width="12" height="11" rx="2" class="host-access-art-tint" />
+    </g></Show>
+  </svg>;
+}
+
 export function HostAccessPermissionIllustration(props: { kind: 'screen' | 'input'; desktop?: boolean }) {
   return (
     <svg class="host-access-permission-scene" data-scene={props.kind} viewBox="0 0 64 48" fill="none" aria-hidden="true">

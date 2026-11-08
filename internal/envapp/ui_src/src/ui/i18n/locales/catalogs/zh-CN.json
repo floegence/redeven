@@ -8186,7 +8186,7 @@
     "deployProtocolFailed": "不支持此管理员交互或协议。请切换授权方式或更新 Redeven。"
   },
   "hostAccess": {
-    "welcome": "在这里使用 {host}",
+    "welcome": "使用应用或整个桌面",
     "choose": "选择一种使用方式，我们会带你完成设置。",
     "applications": "单独打开应用",
     "desktop": "连接整个桌面",
@@ -8197,7 +8197,7 @@
     "independent": "只需设置你要用的功能，另一项随时可以添加。",
     "browse": "先查看应用列表",
     "requirements": "使用此功能需要",
-    "authorizeOnHost": "请在 {host} 上完成以下授权。",
+    "authorizeOnHost": "请在主机的系统设置中允许访问。",
     "inputPurpose": "使用鼠标和键盘操作",
     "desktopPurpose": "显示整个桌面的画面",
     "appPurpose": "显示应用窗口的画面",
@@ -8231,6 +8231,11 @@
     "showApplications": "开启并查看应用",
     "updateFailed": "暂时无法确认更新结果，请刷新查看当前状态。",
     "useMode": "使用方式",
-    "enableConnect": "开启并连接"
+    "enableConnect": "开启并连接",
+    "applicationFeature": "远程应用窗口",
+    "setup": "设置",
+    "openSystemSettings": "打开系统设置",
+    "needsAttention": "需要完成设置",
+    "controlMode": "鼠标和键盘"
   }
 }

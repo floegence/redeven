@@ -8186,7 +8186,7 @@
     "deployProtocolFailed": "この管理者認証またはプロトコルは未対応です。認証方法を切り替えるか Redeven を更新してください。"
   },
   "hostAccess": {
-    "welcome": "ここで {host} を使う",
+    "welcome": "アプリまたはデスクトップを使う",
     "choose": "使い方を選択してください。設定を順にご案内します。",
     "applications": "アプリを個別に開く",
     "desktop": "デスクトップ全体に接続",
@@ -8197,7 +8197,7 @@
     "independent": "必要な機能だけ設定してください。もう一方は後から追加できます。",
     "browse": "先にアプリ一覧を見る",
     "requirements": "この機能に必要な権限",
-    "authorizeOnHost": "{host} で次の権限を許可してください。",
+    "authorizeOnHost": "ホストのシステム設定でアクセスを許可してください。",
     "inputPurpose": "マウスとキーボードで操作",
     "desktopPurpose": "デスクトップ全体を表示",
     "appPurpose": "アプリのウィンドウを表示",
@@ -8231,6 +8231,11 @@
     "showApplications": "有効にしてアプリを見る",
     "updateFailed": "更新結果を確認できません。再読み込みして現在の状態を確認してください。",
     "useMode": "使い方",
-    "enableConnect": "有効にして接続"
+    "enableConnect": "有効にして接続",
+    "applicationFeature": "リモートアプリのウィンドウ",
+    "setup": "設定する",
+    "openSystemSettings": "システム設定を開く",
+    "needsAttention": "設定の確認が必要",
+    "controlMode": "マウスとキーボード"
   }
 }

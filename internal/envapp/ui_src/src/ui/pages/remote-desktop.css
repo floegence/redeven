@@ -171,3 +171,17 @@
   .remote-desktop-flow-footer > button:first-child { margin-inline-end: 0; }
   .remote-desktop-flow-footer > button:last-child:not(:first-child) { order: -1; }
 }
+.remote-desktop-host{justify-content:space-between;}
+.remote-desktop-use-mode{border:0;min-width:0;padding:0;margin:20px 0;}
+.remote-desktop-use-mode legend{font-weight:500;margin-bottom:8px;}
+.remote-desktop-use-mode>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.remote-desktop-use-mode label{display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px;border:1px solid var(--border);border-radius:var(--floe-radius-control);font-size:13px;cursor:pointer;}
+.remote-desktop-use-mode label[data-selected=true]{border-color:var(--foreground);background:var(--background);}
+.remote-desktop-use-mode input{accent-color:var(--foreground);flex-shrink:0;}
+.remote-desktop-use-mode label:focus-within{outline:2px solid var(--ring);outline-offset:2px;}
+.remote-desktop-settings-link{display:flex;margin:16px auto 0;font-size:12px;}
+.remote-desktop-panel>.host-access-system{margin-top:20px;}
+
+.remote-desktop-use-mode label span{overflow-wrap:anywhere;min-width:0;}
+
+.remote-desktop-panel>.host-access-permissions{margin-bottom:20px;}

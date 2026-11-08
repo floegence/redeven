@@ -8190,7 +8190,7 @@
     "deployProtocolFailed": "Esta autenticação de administrador ou protocolo não é compatível. Troque o método de autorização ou atualize o Redeven."
   },
   "hostAccess": {
-    "welcome": "Usar {host} aqui",
+    "welcome": "Usar aplicativos ou a área de trabalho",
     "choose": "Escolha como deseja usar este host. Vamos orientar a configuração.",
     "applications": "Abrir aplicativos individuais",
     "desktop": "Conectar à área de trabalho inteira",
@@ -8201,7 +8201,7 @@
     "independent": "Configure apenas o recurso necessário. Você pode adicionar o outro depois.",
     "browse": "Ver os aplicativos primeiro",
     "requirements": "Requisitos deste recurso",
-    "authorizeOnHost": "Conceda as seguintes permissões em {host}.",
+    "authorizeOnHost": "Permita o acesso nas configurações do sistema do host.",
     "inputPurpose": "Usar o mouse e o teclado",
     "desktopPurpose": "Mostrar a área de trabalho inteira",
     "appPurpose": "Mostrar janelas de aplicativos",
@@ -8235,6 +8235,11 @@
     "showApplications": "Ativar e ver aplicativos",
     "updateFailed": "Não foi possível confirmar a alteração. Atualize para verificar o estado atual.",
     "useMode": "Modo de uso",
-    "enableConnect": "Ativar e conectar"
+    "enableConnect": "Ativar e conectar",
+    "applicationFeature": "Janelas de aplicativos remotos",
+    "setup": "Configurar",
+    "openSystemSettings": "Abrir configurações do sistema",
+    "needsAttention": "Configuração pendente",
+    "controlMode": "Mouse e teclado"
   }
 }

@@ -69,6 +69,31 @@ describe('goal-based host access',()=>{
   expect(host.querySelector('.host-apps-library')).not.toBeNull();
  });
  const mac=(screen=false,input=false,access_state:'unconfigured'|'enabled'|'paused'='unconfigured')=>({access_state,availability:{backend:'macos',supported:true,native_ready:true,ready:screen&&input,reason:screen&&input?'':'macos_permissions',permissions:{screen_recording:screen,accessibility:input}},applications:[app],sessions:[]});
+ it('shows feature states and direct management without an intermediate chooser',async()=>{
+  state.catalog.mockResolvedValue(mac(true,true,'enabled'));
+  access.desktop.mockResolvedValue({access_state:'paused',capabilities:{backend:'macos',screen:true,input:true,state:'ready'}});
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();
+  textButton('Access settings').click();await settle();
+  const dialog=document.querySelector('[role=dialog]')!;
+  expect(dialog.querySelectorAll('.host-access-feature-settings')).toHaveLength(2);
+  expect(dialog.textContent).toContain('Enabled');
+  expect(dialog.textContent).toContain('Paused · settings retained');
+  expect(textButton('Pause',dialog)).toBeDefined();
+  expect(textButton('Enable again',dialog)).toBeDefined();
+  expect(state.permission).not.toHaveBeenCalled();
+ });
+ it('reports desktop settings failures and never mutates the application feature',async()=>{
+  state.catalog.mockResolvedValue(mac(true,true,'enabled'));
+  access.desktop.mockResolvedValue({access_state:'enabled',capabilities:{backend:'macos',screen:true,input:true,state:'ready'}});
+  access.save.mockRejectedValue(new Error('Disconnected'));
+  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();textButton('Access settings').click();await settle();
+  const desktop=document.querySelector('[aria-label="Remote desktop"].host-access-feature-settings')!;
+  textButton('Pause',desktop).click();textButton('Pause',desktop).click();await settle();
+  expect(access.save).toHaveBeenCalledExactlyOnceWith('desktop','paused');
+  expect(document.querySelector('[role=dialog]')?.textContent).toContain('Could not confirm the update');
+  expect(desktop.querySelector('.host-access-confirm')).not.toBeNull();
+  expect(state.launch).not.toHaveBeenCalled();expect(state.permission).not.toHaveBeenCalled();
+ });
  it('guides the first visit without requesting permissions and permits browsing',async()=>{
   state.catalog.mockResolvedValue(mac());access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
   dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();
@@ -89,8 +114,8 @@ describe('goal-based host access',()=>{
  it('keeps paused access paused until explicitly enabled and keeps system management reachable',async()=>{
   state.catalog.mockResolvedValue(mac(true,true,'paused'));access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
   dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();expect(host.querySelector('.host-access-welcome')).toBeNull();expect(access.save).not.toHaveBeenCalled();
-  textButton('Access settings').click();await settle();textButton('Open individual applications').click();await settle();
-  expect(textButton('Screen recording')).toBeTruthy();textButton('Screen recording').click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording_settings');expect(access.save).not.toHaveBeenCalled();
+  textButton('Access settings').click();await settle();
+  const system=document.querySelector<HTMLDetailsElement>('.host-access-system')!;system.open=true;expect(textButton('Open system settings',system)).toBeTruthy();textButton('Open system settings',system).click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording_settings');expect(access.save).not.toHaveBeenCalled();
  });
  it('reserves a selected browser application before awaiting explicit activation',async()=>{
   state.desktop=false;state.catalog.mockResolvedValue(mac(true,true));

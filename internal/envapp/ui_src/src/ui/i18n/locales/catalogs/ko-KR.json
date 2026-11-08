@@ -8186,7 +8186,7 @@
     "deployProtocolFailed": "이 관리자 인증 또는 프로토콜을 지원하지 않습니다. 인증 방식을 바꾸거나 Redeven을 업데이트하세요."
   },
   "hostAccess": {
-    "welcome": "여기서 {host} 사용",
+    "welcome": "앱 또는 전체 데스크톱 사용",
     "choose": "사용 방식을 선택하세요. 설정을 단계별로 안내합니다.",
     "applications": "개별 앱 열기",
     "desktop": "전체 데스크톱 연결",
@@ -8197,7 +8197,7 @@
     "independent": "필요한 기능만 설정하세요. 다른 기능은 나중에 추가할 수 있습니다.",
     "browse": "먼저 앱 목록 보기",
     "requirements": "이 기능에 필요한 권한",
-    "authorizeOnHost": "{host}에서 다음 권한을 허용하세요.",
+    "authorizeOnHost": "호스트의 시스템 설정에서 접근을 허용하세요.",
     "inputPurpose": "마우스와 키보드로 조작",
     "desktopPurpose": "전체 데스크톱 표시",
     "appPurpose": "앱 창 표시",
@@ -8231,6 +8231,11 @@
     "showApplications": "활성화하고 앱 보기",
     "updateFailed": "업데이트 결과를 확인할 수 없습니다. 새로 고쳐 현재 상태를 확인하세요.",
     "useMode": "사용 방식",
-    "enableConnect": "활성화하고 연결"
+    "enableConnect": "활성화하고 연결",
+    "applicationFeature": "원격 앱 창",
+    "setup": "설정",
+    "openSystemSettings": "시스템 설정 열기",
+    "needsAttention": "설정을 완료해야 함",
+    "controlMode": "마우스와 키보드"
   }
 }

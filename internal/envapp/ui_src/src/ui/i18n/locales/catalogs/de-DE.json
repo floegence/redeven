@@ -8190,7 +8190,7 @@
     "deployProtocolFailed": "Diese Administratorauthentifizierung oder dieses Protokoll wird nicht unterstützt. Wechseln Sie die Autorisierungsmethode oder aktualisieren Sie Redeven."
   },
   "hostAccess": {
-    "welcome": "{host} hier verwenden",
+    "welcome": "Apps oder den Desktop verwenden",
     "choose": "Wählen Sie die gewünschte Nutzung. Wir führen Sie durch die Einrichtung.",
     "applications": "Einzelne Anwendungen öffnen",
     "desktop": "Mit dem gesamten Desktop verbinden",
@@ -8201,7 +8201,7 @@
     "independent": "Richten Sie nur die benötigte Funktion ein. Die andere können Sie später hinzufügen.",
     "browse": "Zuerst Anwendungen ansehen",
     "requirements": "Für diese Funktion erforderlich",
-    "authorizeOnHost": "Erteilen Sie die folgenden Berechtigungen auf {host}.",
+    "authorizeOnHost": "Erlaube den Zugriff in den Systemeinstellungen des Hosts.",
     "inputPurpose": "Maus und Tastatur verwenden",
     "desktopPurpose": "Den gesamten Desktop anzeigen",
     "appPurpose": "Anwendungsfenster anzeigen",
@@ -8235,6 +8235,11 @@
     "showApplications": "Aktivieren und Anwendungen ansehen",
     "updateFailed": "Die Änderung konnte nicht bestätigt werden. Aktualisieren Sie den Status.",
     "useMode": "Nutzungsart",
-    "enableConnect": "Aktivieren und verbinden"
+    "enableConnect": "Aktivieren und verbinden",
+    "applicationFeature": "Remote-App-Fenster",
+    "setup": "Einrichten",
+    "openSystemSettings": "Systemeinstellungen öffnen",
+    "needsAttention": "Einrichtung erforderlich",
+    "controlMode": "Maus und Tastatur"
   }
 }

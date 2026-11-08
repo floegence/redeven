@@ -7,34 +7,29 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. First-entry host choices distinguish individual applications from the whole desktop. The launcher keeps feature management reachable after setup. Paused/unconfigured access needs explicit enable/connect; refreshing capabilities changes no intent. Shared grants are explained separately from feature controls. macOS setup names screen display and mouse/keyboard purpose before system permission names. View-only requires screen permission only. Reconfiguration rechecks grants; pause/removal confirms its connection scope and preserves running applications.
+Host Applications separates connection, setup and feature management. Access settings directly manages independent application-window and desktop access. Local application launch needs no remote-access permission. Setup asks only for missing grants; daily connection stays focused.
 
 # Contract
 
-- Navigation uses the shared monitor/pointer mark. Onboarding SVGs instead show one selected window versus a whole desktop with multiple windows and a taskbar. Permission diagrams show picture delivery versus keyboard/pointer input. Management shows retained settings with explicit enabled, paused or removal marks. Localized adjacent text carries meaning; SVGs are decorative, theme-aware and legible without animation. Hover/focus may briefly explain delivery, never suggest ongoing setup; reduced motion and forced colors disable it.
-- Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.
-- SSH preparation, operation-bound challenge, progress and desktop opening stay in the same dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope/credential lifetime; opening the launcher changes no OS permission.
-- Close/Escape/backdrop dismisses without canceling SSH preparation: retain one operation/subscription and restore observed progress/input/outcome on reopen. Explicit Cancel rolls back. Dismissal clears credentials and automatic opening; completed setup requires Connect. Challenges retain deadlines and require user response. Dismissal releases pending viewer creation; environment navigation, disposal and Desktop closure cancel owned work.
-- Show actual check/component/service/verification stages. Forward media substate (checking/downloading/receiving/verifying/installing/validating/ready) only during preparing_media, preserving older byte reports. Determinate progress requires real transfer counts/total; validation/unpack/package uses one calm indeterminate Floe cue. No concurrent spinner/shimmer/sweep or false completion after interruption/rollback.
-- Keep viewport-bounded content and stable footer. Seven steps scroll independently within128px, yield to wrapped status and reveal active row without moving focus. Center digit/check markers, omit decorative heading dots. Status takes natural height with small progress gap and one atomic announcement; wrapper owns progressbar semantics, visual Floe primitive is decorative. Reduced motion/forced colors suppress decoration while preserving state boundaries.
-- Start authorization with brief admin sentence and collapsed permission details; keep selector/next action prominent. Authorization/password/results use natural height and18px action gap. Short views scroll only middle content, retaining host/steps/footer even with expanded details. Password focus reveals input; heading focus preserves scroll.
-- Initial content is target/readiness/connect. Admin/display selectors retain native keyboard behavior/labels; decorative chevrons sit 12px inside the field with separate text padding and no pointer interception.
-- Disabling approval reuse requests confirmation on future connections without revoking OS grants. Status refresh cannot erase connection failure.
+- Connection omits environment names and completed grants. Show a display selector only for multiple displays, visible control/view-only choices and one connect action. Settings replaces connection. Viewer/SSH requests retain host identity.
+- Onboarding SVGs distinguish one window from the whole desktop; settings uses corresponding compact marks. Localized text carries meaning. Theme-aware artwork supports reduced motion/forced colors.
+- Setup shows only missing grants, naming screen/input purpose before OS permission names. View-only requires no input grant. Settings separates system-permission management and explains shared scope.
+- Enabled features offer pause/removal; paused features resume/removal; unconfigured features setup; missing prerequisites completion. Remove then set up to reconfigure. Confirm affected connections. Refresh changes no intent and opens no viewer. Local settings explains that ordinary app launch needs no capture/input grant.
+- Preserve failure diagnostics/retry; cancellation stops only selected setup without reload. Status refresh cannot erase connection failure. Disabling approval reuse requests future confirmation without revoking OS grants.
+- SSH preparation, operation-bound challenge, progress and opening stay in one dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope and credential lifetime. Opening the launcher changes no OS permission.
+- Close/Escape/backdrop retains one preparation operation/subscription and restores progress/input/outcome on reopen. Explicit Cancel rolls back. Dismissal clears credentials/auto-opening and releases pending viewers; completed setup requires Connect. Challenges retain deadlines and require response. Navigation, disposal and Desktop closure cancel owned work.
+- Display observed check/component/service/verification stages. Forward media substate only during preparing_media, retaining older byte reports. Determinate progress requires actual counts/total; validation/unpack/package uses one indeterminate Floe cue. Never combine spinner/shimmer/sweep or imply completion after interruption/rollback.
+- Bound content to viewport with a stable footer. Seven steps scroll within 128px, wrap and reveal active rows without moving focus. Center digit/check markers; omit heading dots. Status has natural height, compact progress gap and one atomic announcement. Wrapper owns progressbar semantics; visual primitive is decorative. Reduced motion/forced colors retain state boundaries without animation.
+- Authorization uses brief admin copy, collapsed details and prominent selector/action. Authorization/password/results use natural height and an 18px action gap. Only middle content scrolls in short views; host/steps/footer remain visible with expanded details. Password focus reveals input; heading focus preserves scroll.
+- Native selectors preserve labels/keyboard. Decorative chevrons reserve text padding and intercept no pointer events. Switching connection/settings preserves keyboard focus.
 
 # Boundaries
 
-Desktop retains origin-only target validation and environment-scoped route admission. Product adapters cannot accept malformed session data to bypass either.
+Desktop retains origin-only target validation and environment-scoped admission. Adapters cannot bypass either.
 
 # Evidence
 
-- `HostAccess.browser.test.tsx`: distinct access scenes, permission/settings states, narrow layouts, keyboard focus, reduced motion and forced colors.
-
-- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: selector geometry, keyboard focus, authorization method selection, localized narrow layouts and forced-color presentation.
-
-- `internal/envapp/ui_src/src/styles/remoteDesktopLauncher.browser.test.tsx`: dialog dismissal preserves preparation/progress, background completion requires an explicit connection, pending challenges survive without retaining typed credentials, explicit cancellation still works, and late viewer sessions are released.
-
-- `internal/envapp/ui_src/src/ui/icons/RemoteDesktopIcon.tsx`: shared monitor-and-pointer silhouette and compact launcher rendering.
-
-- `internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx`: themed Remote Desktop Dock tile.
-
-- `internal/envapp/ui_src/src/styles/navigationIcons.browser.test.tsx`: actual-size silhouettes, theme and high-contrast checks.
+- `HostAccess.browser.test.tsx`: management, local launch, grants, lifecycle, narrow locales and artwork.
+- `RemoteDesktopPanel.browser.test.tsx`: selectors, focus, authorization and localized/forced-color layouts.
+- `src/styles/remoteDesktopLauncher.browser.test.tsx`: connection/setup views, focus, dismissal continuity, explicit connection, credential clearing, challenges, cancellation and late-viewer release.
+- `RemoteDesktopIcon.tsx`, `WorkbenchSoftIcons.tsx` and `navigationIcons.browser.test.tsx`: monitor/pointer navigation, themed Dock tile, actual-size silhouettes and high contrast.

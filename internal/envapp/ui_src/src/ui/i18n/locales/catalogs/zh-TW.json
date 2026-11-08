@@ -8186,7 +8186,7 @@
     "deployProtocolFailed": "不支援此管理員互動或協定。請切換授權方式或更新 Redeven。"
   },
   "hostAccess": {
-    "welcome": "在這裡使用 {host}",
+    "welcome": "使用應用程式或整個桌面",
     "choose": "選擇使用方式，我們會引導你完成設定。",
     "applications": "單獨開啟應用程式",
     "desktop": "連線至整個桌面",
@@ -8197,7 +8197,7 @@
     "independent": "只需設定要用的功能，另一項隨時可以新增。",
     "browse": "先瀏覽應用程式清單",
     "requirements": "使用此功能需要",
-    "authorizeOnHost": "請在 {host} 上完成以下授權。",
+    "authorizeOnHost": "請在主機的系統設定中允許存取。",
     "inputPurpose": "使用滑鼠和鍵盤操作",
     "desktopPurpose": "顯示整個桌面的畫面",
     "appPurpose": "顯示應用程式視窗的畫面",
@@ -8231,6 +8231,11 @@
     "showApplications": "啟用並查看應用程式",
     "updateFailed": "暫時無法確認更新結果，請重新整理以查看目前狀態。",
     "useMode": "使用方式",
-    "enableConnect": "啟用並連線"
+    "enableConnect": "啟用並連線",
+    "applicationFeature": "遠端應用程式視窗",
+    "setup": "設定",
+    "openSystemSettings": "開啟系統設定",
+    "needsAttention": "需要完成設定",
+    "controlMode": "滑鼠與鍵盤"
   }
 }

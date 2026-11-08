@@ -8190,7 +8190,7 @@
     "deployProtocolFailed": "Cette authentification administrateur ou ce protocole n’est pas pris en charge. Changez de méthode d’autorisation ou mettez Redeven à jour."
   },
   "hostAccess": {
-    "welcome": "Utiliser {host} ici",
+    "welcome": "Utiliser des applications ou le bureau",
     "choose": "Choisissez votre mode d’utilisation. Nous vous guiderons dans la configuration.",
     "applications": "Ouvrir des applications séparément",
     "desktop": "Se connecter au bureau entier",
@@ -8201,7 +8201,7 @@
     "independent": "Configurez uniquement la fonction nécessaire. Vous pourrez ajouter l’autre plus tard.",
     "browse": "Voir d’abord les applications",
     "requirements": "Autorisations nécessaires",
-    "authorizeOnHost": "Accordez les autorisations suivantes sur {host}.",
+    "authorizeOnHost": "Autorisez l’accès dans les réglages système de l’hôte.",
     "inputPurpose": "Utiliser la souris et le clavier",
     "desktopPurpose": "Afficher le bureau entier",
     "appPurpose": "Afficher les fenêtres des applications",
@@ -8235,6 +8235,11 @@
     "showApplications": "Activer et voir les applications",
     "updateFailed": "La modification n’a pas pu être confirmée. Actualisez pour vérifier l’état actuel.",
     "useMode": "Mode d’utilisation",
-    "enableConnect": "Activer et se connecter"
+    "enableConnect": "Activer et se connecter",
+    "applicationFeature": "Fenêtres d’applications distantes",
+    "setup": "Configurer",
+    "openSystemSettings": "Ouvrir les réglages système",
+    "needsAttention": "Configuration à terminer",
+    "controlMode": "Souris et clavier"
   }
 }
