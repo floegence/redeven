@@ -332,7 +332,7 @@ describe('settings restart handoff', () => {
     });
     button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await waitForAccessEditor();
     input('local-ui-port', '25000'); button('Save and restart').click();
-    await vi.waitFor(() => expect(document.querySelector('.redeven-environment-settings-dialog')).toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('.redeven-unified-settings-dialog')).toBeNull());
     expect(document.querySelector('.redeven-environment-progress')?.textContent).toContain('Fixture SSH');
     expect(document.querySelector('.redeven-environment-progress')?.textContent).toContain('Stopping');
     expect(h.settings.save).toHaveBeenCalledTimes(1);
@@ -349,7 +349,7 @@ describe('settings restart handoff', () => {
     expect(h.settings.save).toHaveBeenCalledTimes(1);
     expect(h.jobs).toHaveLength(0);
     saved.resolve({ ok: false, error: 'Fixture save denied' }); await settle();
-    expect(document.querySelector('.redeven-environment-settings-dialog')?.textContent).toContain('Fixture save denied');
+    expect(document.querySelector('.redeven-unified-settings-dialog')?.textContent).toContain('Fixture save denied');
     expect(accessEditor().value).toBe('25000');
     expect(h.jobs).toHaveLength(0);
   });
@@ -376,7 +376,7 @@ describe('settings restart handoff', () => {
     expect(progressPanel()?.textContent).toContain('Settings applied. The environment is ready.');
     expect((document.querySelector('.redeven-desktop-toast-viewport')?.textContent ?? '')).not.toContain('Runtime restarted');
     button('Return to settings').click(); await finishMotion();
-    expect(document.querySelector('.redeven-environment-settings-dialog')).not.toBeNull();
+    expect(document.querySelector('.redeven-unified-settings-dialog')).not.toBeNull();
     expect(h.settings.load).toHaveBeenCalledTimes(2);
     expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Access & security');
   });
@@ -478,7 +478,7 @@ describe('settings restart handoff', () => {
     expect((button('Save and restart') as HTMLButtonElement).disabled).toBe(false);
     button('Save for next restart').click(); await settle();
     expect(h.jobs).toHaveLength(0);
-    expect(document.querySelector('.redeven-environment-settings-dialog')).not.toBeNull();
+    expect(document.querySelector('.redeven-unified-settings-dialog')).not.toBeNull();
   });
   it.each([true, false])('continues two-factor setup only on explicit return and owner HTTPS readiness=%s', async ready => {
     const h = await restartHarness();
@@ -490,7 +490,7 @@ describe('settings restart handoff', () => {
     await h.open(); button('Configure HTTPS').click(); await settle();
     button('Save and restart').click(); await settle();
     h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await finishMotion();
-    expect(document.querySelector('.redeven-environment-settings-dialog')).toBeNull();
+    expect(document.querySelector('.redeven-unified-settings-dialog')).toBeNull();
     expect(progressPanel()?.textContent).toContain('Continue two-factor setup');
     expect(security).toHaveBeenCalledTimes(1);
     httpsReady = ready;

@@ -31,6 +31,7 @@ export type DesktopThemePickerSnapshot = Readonly<{
 
 export type DesktopThemePickerProps = Readonly<{
   openRequest: number;
+  presentation?: 'inline' | 'popover';
   snapshot: DesktopThemePickerSnapshot;
   i18n: DesktopI18n;
   onSourceChange: (source: DesktopThemeSource) => DesktopThemePickerSnapshot | Promise<DesktopThemePickerSnapshot>;
@@ -296,55 +297,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
 
   onCleanup(clearScrollFrame);
 
-  return (
-    <>
-      <TopBarIconButton
-        ref={(element) => {
-          buttonRef = element;
-        }}
-        label={props.i18n.t(translationKey('shell.themePicker.openLabel'))}
-        tooltip={props.i18n.t(translationKey('shell.themePicker.openLabel'))}
-        aria-busy={Boolean(pending())}
-        aria-haspopup="dialog"
-        aria-expanded={open() ? 'true' : 'false'}
-        aria-controls={dialogID}
-        onClick={() => {
-          if (open()) {
-            closePicker(true);
-          } else {
-            openPicker();
-          }
-        }}
-      >
-        <Highlighter class="h-4 w-4" />
-      </TopBarIconButton>
-
-      <DesktopAnchoredOverlaySurface
-        open={open()}
-        anchorRef={buttonRef}
-        placement="bottom"
-        role="dialog"
-        ariaModal={false}
-        ariaLabel={props.i18n.t(translationKey('shell.themePicker.title'))}
-        interactive
-        hideArrow
-        motion="menu"
-        zIndex={235}
-        class="redeven-theme-picker"
-        onOverlayRef={(element) => {
-          overlayRef = element;
-        }}
-        onFocusOut={(event) => {
-          const nextTarget = event.relatedTarget;
-          if (isReplacedPreset(event.target) || !(nextTarget instanceof Node)) return;
-          queueMicrotask(() => {
-            if (!open() || overlayRef?.contains(nextTarget) || isReplacedPreset(nextTarget)) {
-              return;
-            }
-            closePicker(false);
-          });
-        }}
-      >
+  const panel = () => (
         <div id={dialogID} class="redeven-theme-picker__panel">
           <div class="redeven-theme-picker__header">
             <h2 class="redeven-theme-picker__title">
@@ -474,7 +427,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
             </div>
           </Show>
 
-          <button
+          <Show when={props.presentation !== 'inline'}><button
             type="button"
             class="redeven-theme-picker__close"
             aria-label={props.i18n.t(translationKey('shell.themePicker.closeLabel'))}
@@ -482,8 +435,61 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
             onClick={() => closePicker(true)}
           >
             <X class="h-4 w-4" />
-          </button>
+          </button></Show>
         </div>
+  );
+  if (props.presentation === 'inline') return <div class="redeven-theme-settings">{panel()}</div>;
+
+  return (
+    <>
+      <TopBarIconButton
+        ref={(element) => {
+          buttonRef = element;
+        }}
+        label={props.i18n.t(translationKey('shell.themePicker.openLabel'))}
+        tooltip={props.i18n.t(translationKey('shell.themePicker.openLabel'))}
+        aria-busy={Boolean(pending())}
+        aria-haspopup="dialog"
+        aria-expanded={open() ? 'true' : 'false'}
+        aria-controls={dialogID}
+        onClick={() => {
+          if (open()) {
+            closePicker(true);
+          } else {
+            openPicker();
+          }
+        }}
+      >
+        <Highlighter class="h-4 w-4" />
+      </TopBarIconButton>
+
+      <DesktopAnchoredOverlaySurface
+        open={open()}
+        anchorRef={buttonRef}
+        placement="bottom"
+        role="dialog"
+        ariaModal={false}
+        ariaLabel={props.i18n.t(translationKey('shell.themePicker.title'))}
+        interactive
+        hideArrow
+        motion="menu"
+        zIndex={235}
+        class="redeven-theme-picker"
+        onOverlayRef={(element) => {
+          overlayRef = element;
+        }}
+        onFocusOut={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (isReplacedPreset(event.target) || !(nextTarget instanceof Node)) return;
+          queueMicrotask(() => {
+            if (!open() || overlayRef?.contains(nextTarget) || isReplacedPreset(nextTarget)) {
+              return;
+            }
+            closePicker(false);
+          });
+        }}
+      >
+        {panel()}
       </DesktopAnchoredOverlaySurface>
     </>
   );

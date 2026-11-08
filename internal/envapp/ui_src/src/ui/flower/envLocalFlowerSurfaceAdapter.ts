@@ -40,7 +40,6 @@ async function fetchFlowerJSON<T>(input: string, init: RequestInit): Promise<T> 
   return (await fetchFlowerJSONResponse<T>(input, init)).data;
 }
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
-import { updateDefaultAIPermission } from '../services/aiDefaultPermission';
 import type {
   FlowerApprovalCommandResult,
   FlowerAttachmentUploadInput,
@@ -109,6 +108,8 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   settingsRevision?: () => string | number;
   modelReadResource?: FlowerModelReadResource;
   isAvailable?: () => boolean;
+  browserTransferAvailable?: () => boolean;
+  browserTransferScope?: string;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
   onSettingsChanged?: () => void | Promise<unknown>;
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
@@ -548,6 +549,15 @@ function visibleDirectory(directory: FlowerModelDirectory, exposeDesktop: boolea
 }
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
+  const settingsJSON = async <T,>(path: string, init: RequestInit): Promise<T> => {
+    options.signal?.throwIfAborted();
+    if (options.isAvailable?.() === false || init.method !== 'GET' && options.canMutate === false) throw new DOMException('Settings authority is unavailable.', 'NotAllowedError');
+    const signal = init.signal && options.signal ? AbortSignal.any([init.signal, options.signal]) : init.signal ?? options.signal;
+    const result = await fetchFlowerJSON<T>(path, { ...init, signal });
+    options.signal?.throwIfAborted();
+    if (options.isAvailable?.() === false) throw new DOMException('Settings authority changed.', 'AbortError');
+    return result;
+  };
   const copy = adapterCopy(options);
   // Every continuation in a managed draft must retain the authenticated channel.
   const resolveCanonicalReference = async (request: FlowerCanonicalReferenceOpenRequest): Promise<FlowerCanonicalReferenceNavigationTarget> => {
@@ -718,14 +728,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }),
     },
     mapperOptions: envLiveMapperOptions(options),
-    extensions: flowerExtensionsAdapter((method, path, body) => fetchFlowerJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => options.isAvailable?.() ?? true, canAdmin: () => options.canManageExtensions?.() ?? false }),
+    extensions: flowerExtensionsAdapter((method, path, body) => settingsJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => options.isAvailable?.() ?? true, canAdmin: () => options.canManageExtensions?.() ?? false }),
     loadSettings,
     loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh)),
     recoverModelSource: options.retryModelSource,
     subscribeModelDirectory: listener => resource.subscribe(directory => listener(directoryForSurface(directory))),
-    loadChatGPTAccounts: options.desktopSessionTargetRoute === 'remote_desktop' ? undefined : () => fetchFlowerJSON('/_redeven_proxy/api/ai/auth/chatgpt/accounts', { method: 'GET' }),
+    loadChatGPTAccounts: options.desktopSessionTargetRoute === 'remote_desktop' ? undefined : () => settingsJSON('/_redeven_proxy/api/ai/auth/chatgpt/accounts', { method: 'GET' }),
     chatGPTAuth: options.desktopSessionTargetRoute === 'remote_desktop' ? undefined : async (action, input) => {
-      const result = await fetchFlowerJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });
+      const result = await settingsJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });
       if (action === 'sign-out' || action === 'retry') {
         resource.invalidate();
         options.signal?.throwIfAborted();
@@ -733,19 +743,22 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }
       return result;
     },
-    discoverProviderModels: (input) => fetchFlowerJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }),
+    discoverProviderModels: (input) => settingsJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }),
     saveDefaultPermission: async (permissionType) => {
-      await updateDefaultAIPermission(normalizePermissionType(permissionType));
+      await settingsJSON('/_redeven_proxy/api/ai/default_permission', { method: 'PUT', body: JSON.stringify({ permission_type: normalizePermissionType(permissionType) }) });
       resource.invalidate();
       const snapshot = await loadSettings();
       options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
-    resolveSourceIcon: createFlowerSourceIconResolver(origin => fetchFlowerJSON('/_redeven_proxy/api/flower/source-icon?' + new URLSearchParams({ origin }), { method: 'GET' })),
-    computerManagement: { ...computerManagementAdapter((method, path, body, signal) => fetchFlowerJSON(path, { method, signal, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), `environment:${options.envPublicID}`, options.revealHostApplication) },
+    resolveSourceIcon: createFlowerSourceIconResolver(origin => settingsJSON('/_redeven_proxy/api/flower/source-icon?' + new URLSearchParams({ origin }), { method: 'GET' })),
+    computerManagement: { ...computerManagementAdapter((method, path, body, signal) => settingsJSON(path, { method, signal, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), `environment:${options.envPublicID}:${options.browserTransferScope ?? ''}`, options.revealHostApplication, async (method, path, body) => {
+      if (!(options.browserTransferAvailable?.() ?? options.isAvailable?.() ?? true)) throw new DOMException('Browser transfer target is unavailable.', 'NotAllowedError');
+      return fetchFlowerJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    }) },
     saveComputerUseEnabled: async (enabled) => {
-      await fetchFlowerJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
+      await settingsJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
         method: 'PUT',
         body: JSON.stringify({ enabled }),
       });
@@ -756,7 +769,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return snapshot;
     },
     saveAutoUpdateModelCatalog: async (enabled) => {
-      await fetchFlowerJSON<unknown>('/_redeven_proxy/api/ai/model_catalog_auto_update', {
+      await settingsJSON<unknown>('/_redeven_proxy/api/ai/model_catalog_auto_update', {
         method: 'PUT',
         body: JSON.stringify({ enabled }),
       });
@@ -787,7 +800,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const modelProfile = await draftToModelProfile(draft);
       options.signal?.throwIfAborted();
       if (options.canMutate === false) throw new DOMException('Flower access is read-only.', 'NotAllowedError');
-      const result = await fetchFlowerJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>('/_redeven_proxy/api/ai/provider_bundle', {
+      const result = await settingsJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({
           auth_schema_version: 1,

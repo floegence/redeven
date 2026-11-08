@@ -1,0 +1,12 @@
+/* IMPORTANT: Floe owns viewport placement, presence, inertness and focus.
+   Product dimensions stay stable across lazy sections and loading states. */
+.redeven-unified-settings-dialog { width: min(1060px, 96vw); max-width: 1060px; height: min(760px, 92dvh); padding: 0; overflow: hidden; }
+.redeven-unified-settings-dialog-content { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
+.redeven-unified-settings-dialog-content > * { min-width: 0; width: 100%; }
+@media (max-width: 640px) { .redeven-unified-settings-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; } }
+
+/* The settings host presents the existing theme controls inline. */
+.redeven-theme-settings .redeven-theme-picker__panel { width: 100%; max-width: none; box-shadow: none; }
+.redeven-theme-settings .redeven-theme-picker__theme-scroll { max-height: none; }
+
+.redeven-unified-settings-dialog-root { flex: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; }

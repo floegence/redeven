@@ -1,3 +1,4 @@
+import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { type FeedbackIndicatorEntry, Button, Dropdown, Input } from '@floegence/floe-webapp-core/ui';
@@ -40,7 +41,8 @@ function ApplicationIcon(props: { app: HostApplication }) {
   </span>;
 }
 
-export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPageContextRegistrar } = {}) {
+export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPageContextRegistrar; settingsOnly?: boolean } = {}) {
+  const presented = useSettingsPresentation('applications');
   const ctx = useEnvContext();
   const i18n = useI18n();
   let pageRoot: HTMLDivElement | undefined;
@@ -63,11 +65,10 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   const [desktopError, setDesktopError] = createSignal(false);
   const [desktopBusy, setDesktopBusy] = createSignal(false);
   const [desktopRequest, setDesktopRequest] = createSignal(0);
-  const [manageOpen, setManageOpen] = createSignal(false);
   const [setupManaging, setSetupManaging] = createSignal(false);
   const [accessBusy, setAccessBusy] = createSignal(false);
   const welcome = () => !nativeLaunch() && catalog()?.availability.supported && accessState() === 'unconfigured' && desktopState() === 'unconfigured' && !browse() && !preparationActive();
-  const beginSetup = () => {setManageOpen(false);setSetupManaging(false);setSelectedApplication(null);setSetupDialog(true);};
+  const beginSetup = () => {setSetupManaging(false);setSelectedApplication(null);setSetupDialog(true);};
   const changeAccess = async (value: HostAccessState) => {
     if (!canLaunch() || accessBusy()) return;
     const owner=applicationResource.identity(),current=applicationResource.captureAuthority();
@@ -105,7 +106,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     if (canRead()) void refreshDesktop();
     onCleanup(() => { desktopStatusRequest++; });
   });
-  const openSettings = () => { setManageOpen(true); void refresh(); void refreshDesktop(); };
+  const openSettings = () => { ctx.openSettings('applications'); void refresh(); void refreshDesktop(); };
   const changeDesktopAccess = async (value: HostAccessState) => {
     if (!canLaunch() || desktopBusy()) return;
     const current = applicationResource.captureAuthority();
@@ -273,14 +274,14 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     void locale;
     if (!canRead() || !active || !applicationResource.ready()) return;
     void refresh();
-    const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh(!(isMac() && (manageOpen() || setupDialog() || pendingApplications.size > 0))); }, isMac() ? 2000 : 8000);
+    const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh(!(isMac() && (props.settingsOnly || setupDialog() || pendingApplications.size > 0))); }, isMac() ? 2000 : 8000);
     onCleanup(() => { window.clearInterval(timer); request?.abort(); request = null; refreshPending = null; setLoading(false); });
   });
   const resumeMacPreparation = () => {
     if (!isMac() || !canRead() || (activation && !activation.active())) return;
     invalidateCatalog();
     void refresh();
-    if (manageOpen()) void refreshDesktop();
+    if (props.settingsOnly) void refreshDesktop();
   };
   window.addEventListener('focus', resumeMacPreparation);
   onCleanup(() => window.removeEventListener('focus', resumeMacPreparation));
@@ -738,8 +739,10 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     ...(ready() && !isMac() && setup()?.installed?.ready && ((hasApplications() && setup()?.update_available) || preparationActive() || preparationNeedsAttention()) ? [{ id: 'component-update', severity: setup()?.state === 'failed' ? 'error' as const : 'info' as const, summary: i18n.t(preparationActive() || preparationNeedsAttention() ? hostApplicationSetupHeading(setup(), acquisitionProgress()) : 'hostApplications.update.available'), detail: i18n.t(setup()?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description'), actions: <Button size="sm" variant="outline" onClick={() => void viewUpdate()}>{i18n.t('hostApplications.update.view')}</Button> }] : []),
   ];
   return <div ref={pageRoot} class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications" data-env-reload-state={catalog() ? 'content' : displayError() ? 'error' : 'pending'}>
+    <Show when={props.settingsOnly}><RemoteDesktopLauncher active={!props.settingsOnly || presented()} request={desktopRequest()} onStatus={setDesktopStatus} onManage={openSettings} /></Show>
+    <Show when={!props.settingsOnly}>
     <HostApplicationsHeader feedback={feedback()} actions={<>
-<RemoteDesktopLauncher request={desktopRequest()} onStatus={value => { if (!manageOpen()) setDesktopStatus(value); }} onManage={openSettings} />
+<RemoteDesktopLauncher active={!props.settingsOnly || presented()} request={desktopRequest()} onStatus={value => { if (!props.settingsOnly) setDesktopStatus(value); }} onManage={openSettings} />
         <Button variant="outline" size="sm" disabled={!canRead()} onClick={openSettings}><Settings class="w-4 h-4" />{i18n.t('hostAccess.settings')}</Button>
 
         <Button variant="ghost" size="sm" onClick={() => void refresh()} aria-busy={loading()} disabled={loading() || !canRead()} title={i18n.t('hostApplications.refresh')} aria-label={i18n.t('hostApplications.refresh')}><Refresh class={`w-4 h-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
@@ -848,8 +851,9 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
         </Show>
       </Show>
     </div>
-    <Dialog open={manageOpen()} onOpenChange={setManageOpen} class="host-apps-dialog" contentClass="host-apps-dialog-content" title={i18n.t('hostAccess.settings')} closeLabel={i18n.t('common.actions.close')}>
-      <div class="host-access-settings">
+    </Show>
+    <Show when={props.settingsOnly}>
+      <div class="host-access-settings p-4">
         <Show when={displayError()}><p role="alert" class="host-app-error">{displayError()}</p></Show>
         <Show when={nativeLaunch()}><p class="host-access-local-note">{i18n.t('hostAccess.nativeReady')}</p></Show>
         <HostAccessFeatureSettings feature="applications" state={accessState()} ready={Boolean(catalog()?.availability.ready)} allowed={canLaunch()} busy={accessBusy()} onChange={changeAccess} onReconfigure={() => {
@@ -859,13 +863,13 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
         <Show when={desktopStatus() && !desktopError()} fallback={<div class="host-access-notice"><p>{i18n.t(desktopError() ? 'remoteDesktop.statusFailed' : 'remoteDesktop.checking')}</p><Button variant="outline" disabled={desktopRefreshing()} onClick={() => void refreshDesktop()}>{i18n.t('remoteDesktop.refresh')}</Button></div>}>
           <HostAccessFeatureSettings feature="desktop" state={desktopState()!} ready={Boolean(desktopStatus()?.capabilities.screen)} allowed={canLaunch()} busy={desktopBusy() || desktopRefreshing()} onChange={changeDesktopAccess} onReconfigure={() => {
             if (desktopState() === 'paused' && desktopStatus()?.capabilities.screen) void changeDesktopAccess('enabled').catch(() => {});
-            else { setManageOpen(false); setDesktopRequest(value => value + 1); }
+            else {  setDesktopRequest(value => value + 1); }
           }} />
         </Show>
         <Show when={isMac()}><HostAccessSystemPermissions onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording)} input={Boolean(catalog()?.availability.permissions?.accessibility)} allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission, manage) => void requestPermission(permission, manage)} /></Show>
       </div>
-    </Dialog>
-    <Dialog open={setupDialog()} onOpenChange={value=>{setSetupDialog(value);if(!value){for(const pending of pendingApplications.values())closePending(pending);pendingApplications.clear();setSelectedApplication(null);}}} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} title={<Show when={selectedApplication()} keyed fallback={i18n.t(isMac()?'hostAccess.applications':setup()?.installed ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>{app => <span class="host-apps-dialog-identity"><ApplicationIcon app={app} /><span>{app.name}</span></span>}</Show>}>
+    </Show>
+    <Dialog open={(!props.settingsOnly || presented()) && setupDialog()} onOpenChange={value=>{setSetupDialog(value);if(!value){for(const pending of pendingApplications.values())closePending(pending);pendingApplications.clear();setSelectedApplication(null);}}} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} title={<Show when={selectedApplication()} keyed fallback={i18n.t(isMac()?'hostAccess.applications':setup()?.installed ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>{app => <span class="host-apps-dialog-identity"><ApplicationIcon app={app} /><span>{app.name}</span></span>}</Show>}>
       <Show when={error()}><p role="alert" class="host-app-error">{error()}</p></Show>
       <Show when={isMac()} fallback={<Show when={!ready()||setupManaging()||!selectedApplication()}>{preparationPanel(true)}</Show>}>
         <Show when={catalog()?.availability.native_ready} fallback={<p>{i18n.t(availabilityDescription())}</p>}>
@@ -882,7 +886,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
       </Show>
 
     </Dialog>
-    <Dialog open={Boolean(quitting())} onOpenChange={value => { if (!value && !quitBusy()) { setQuitError(''); setQuitting(null); } }} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')}
+    <Dialog open={(!props.settingsOnly || presented()) && Boolean(quitting())} onOpenChange={value => { if (!value && !quitBusy()) { setQuitError(''); setQuitting(null); } }} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')}
       title={i18n.t(quitting()?.force ? 'hostApplications.forceQuitTitle' : isMac() ? 'hostApplications.macQuitTitle' : 'hostApplications.closeAllWindowsTitle', { name: quitting()?.app.name ?? '' })}
       footer={
         <>
@@ -896,7 +900,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
       <p class="host-app-quit-description">{i18n.t(quitting()?.force ? 'hostApplications.forceQuitDescription' : isMac() ? 'hostApplications.macQuitDescription' : 'hostApplications.sessionQuitDescription')}</p>
       <Show when={quitError()}><p role="alert" class="host-app-error">{quitError()}</p></Show>
     </Dialog>
-    <Dialog class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
+    <Dialog class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} open={(!props.settingsOnly || presented()) && addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
       <div class="space-y-4"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t(isMac() ? 'hostApplications.macAddDescription' : 'hostApplications.addDescription')}</p>
         <Show when={!isMac()}><label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.name')}</span><Input value={name()} onInput={e => setName(e.currentTarget.value)} maxLength={120} /></label></Show>
         <label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t(isMac() ? 'hostApplications.macBundlePath' : 'hostApplications.executable')}</span><Input value={executable()} onInput={e => setExecutable(e.currentTarget.value)} placeholder={isMac() ? "/Applications/Example.app" : "/usr/bin/example"} /></label>

@@ -124,8 +124,11 @@ export type DesktopSettingsBridge = Readonly<{
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
   downloadManager?: DownloadManager;
   signal?: AbortSignal;
+  isAvailable?: () => boolean;
+  browserTransferAvailable?: () => boolean;
   openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   runtimeEnvironmentID?: string;
+  expectedRuntimeStartedAt?: number;
   directoryFavoritesClient?: ReturnType<typeof createDirectoryFavoritesClient>;
   modelReadResource?: FlowerModelReadResource;
   runtimeDisplayName?: string;
@@ -778,6 +781,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   bridge: DesktopSettingsBridge,
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
 ): FlowerSurfaceAdapter {
+  // IMPORTANT: Every operation from this adapter binds the same runtime identity.
+  // A retained settings editor cannot silently follow the default model owner.
+  const transport = bridge;
+  bridge = { ...transport, requestRuntimeFlower: request => {
+    options.signal?.throwIfAborted();
+    if (options.isAvailable?.() === false) throw new DOMException('Settings target is unavailable.', 'NotAllowedError');
+    return transport.requestRuntimeFlower({ ...request, ...(options.runtimeEnvironmentID ? { environment_id: options.runtimeEnvironmentID, ...(options.expectedRuntimeStartedAt !== undefined ? { expected_runtime_started_at_unix_ms: options.expectedRuntimeStartedAt } : {}) } : {}) });
+  } };
   const loadAttachment = async (url: string, signal: AbortSignal): Promise<Blob> => {
     signal.throwIfAborted();
     const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID, signal);
@@ -798,6 +809,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   return createRuntimeFlowerSurfaceAdapter({
     directoryFavorites: failureMessage => options.directoryFavoritesClient?.view(failureMessage),
     signal: options.signal,
+    get canMutate() { return !options.signal?.aborted && options.isAvailable?.() !== false; },
     runtime: {
       runtime_id: LOCAL_ENVIRONMENT_RUNTIME_ID,
       runtime_kind: 'local_environment',
@@ -928,7 +940,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
 		submitApproval: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, body),
     },
     mapperOptions: localEnvironmentLiveMapperOptions(),
-    extensions: flowerExtensionsAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), { canInteract: () => true, canAdmin: () => true }),
+    extensions: flowerExtensionsAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), { canInteract: () => !options.signal?.aborted && options.isAvailable?.() !== false, canAdmin: () => !options.signal?.aborted && options.isAvailable?.() !== false }),
     loadSettings,
     loadModelDirectory: refresh => resource.loadDirectory(refresh),
     recoverModelSource: async () => { await bridge.retryDesktopModels?.(); },
@@ -1007,7 +1019,13 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
     resolveSourceIcon: createFlowerSourceIconResolver(origin => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/flower/source-icon?' + new URLSearchParams({ origin }), undefined, undefined, options.runtimeEnvironmentID)),
-    computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), `desktop:${options.runtimeEnvironmentID ?? 'default'}`) },
+    computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), `desktop:${options.runtimeEnvironmentID ?? 'default'}:${options.expectedRuntimeStartedAt ?? ''}`, undefined,
+      (method, path, body) => runtimeJSON({ ...transport, requestRuntimeFlower: request => {
+        // IMPORTANT: Admission follows the panel grant; accepted bytes follow
+        // the captured Runtime, even when another default owner is selected.
+        if (!(options.browserTransferAvailable?.() ?? options.isAvailable?.() ?? true)) throw new DOMException('Browser transfer target is unavailable.', 'NotAllowedError');
+        return transport.requestRuntimeFlower({ ...request, ...(options.runtimeEnvironmentID ? { environment_id: options.runtimeEnvironmentID } : {}), ...(options.expectedRuntimeStartedAt !== undefined ? { expected_runtime_started_at_unix_ms: options.expectedRuntimeStartedAt } : {}) });
+      } }, method, path, body, undefined, options.runtimeEnvironmentID)) },
     saveModelProfile: async (draft) => {
       resource.invalidate();
       const result = await runtimeJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));

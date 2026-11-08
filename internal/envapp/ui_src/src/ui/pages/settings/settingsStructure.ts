@@ -40,6 +40,14 @@ export type SettingsGroupMeta = Readonly<{
 }>;
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
+  { id: 'appearance', navLabel: 'Appearance & Language', icon: Globe, group: 'overview' },
+  { id: 'terminal', navLabel: 'Terminal', icon: Terminal, group: 'runtime_configuration' },
+  { id: 'browser', navLabel: 'Browser', icon: Globe, group: 'runtime_configuration' },
+  { id: 'applications', navLabel: 'Applications & Desktop', icon: Code, group: 'runtime_configuration' },
+  { id: 'services', navLabel: 'Services', icon: Code, group: 'runtime_configuration' },
+  { id: 'extensions', navLabel: 'Extensions', icon: Zap, group: 'ai_extensions' },
+  { id: 'plugins', navLabel: 'Plugin Center', icon: Code, group: 'ai_extensions' },
+  { id: 'storage', navLabel: 'Storage & Recovery', icon: Database, group: 'diagnostics' },
   { id: 'config', navLabel: 'Config File', icon: FileCode, group: 'diagnostics' },
   { id: 'connection', navLabel: 'Connection', icon: Globe, group: 'overview' },
   { id: 'agent', navLabel: 'Runtime Status', icon: Zap, group: 'overview' },
@@ -59,11 +67,11 @@ export const SETTINGS_SECTION_META: Readonly<Record<EnvSettingsSection, Settings
 );
 
 export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
-  { id: 'overview', title: 'Overview', sections: ['connection', 'agent'] },
-  { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['runtime', 'codespaces'] },
+  { id: 'overview', title: 'Overview', sections: ['appearance', 'connection', 'agent'] },
+  { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['terminal', 'browser', 'applications', 'services', 'runtime', 'codespaces'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
-  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai'] },
-  { id: 'diagnostics', title: 'Diagnostics', sections: ['config', 'logging', 'debug_console'] },
+  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'extensions', 'plugins'] },
+  { id: 'diagnostics', title: 'Diagnostics', sections: ['storage', 'config', 'logging', 'debug_console'] },
 ]);
 
 export const SETTINGS_GROUP_META: Readonly<Record<SettingsGroupID, SettingsGroupMeta>> = Object.freeze(

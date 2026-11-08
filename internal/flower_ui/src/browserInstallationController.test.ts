@@ -24,7 +24,7 @@ function fixture(acquire?: BrowserPackageBridge['request'], beforeResponse?: (in
     subscribe: () => () => undefined,
   };
   const controller = new BrowserInstallationController(request, desktop);
-  return { controller, calls, desktop, pkg, start: () => controller.install({ action: 'start', source: 'upload', package_id: pkg.id }) };
+  return { controller, calls, desktop, pkg, request, start: () => controller.install({ action: 'start', source: 'upload', package_id: pkg.id }) };
 }
 describe('environment browser installation', () => {
   it('reads without acquisition and uploads exact target bytes only after confirmation', async () => {
@@ -129,4 +129,46 @@ it('uses the Runtime retained archive for system preparation without Desktop acq
   expect(controller.snapshot()?.state).toBe('awaiting_authorization');
   expect(vi.mocked(f.desktop.request).mock.calls.some(([input]) => input.action === 'acquire')).toBe(false);
   controller.dispose();
+});
+
+it('uses the current panel authority without replacing an admitted transfer owner', async () => {
+  const f = fixture(); const status = await f.controller.load(); f.controller.dispose();
+  const oldRequest = vi.fn(async () => status) as ComputerRequest;
+  const currentRequest = vi.fn(async () => status) as ComputerRequest;
+  const { browserInstallationForSession } = await import('../host/browserInstallationController');
+  const first = browserInstallationForSession('settings-owner-test', oldRequest, f.desktop);
+  const second = browserInstallationForSession('settings-owner-test', currentRequest, f.desktop);
+  expect(first).toBe(second);
+  await second.load(currentRequest); await second.setEnabled(true, currentRequest);
+  expect(oldRequest).not.toHaveBeenCalled(); expect(currentRequest).toHaveBeenCalledTimes(2);
+  first.dispose();
+});
+it('opening another environment does not cancel an active document transfer', async () => {
+  let finish!: () => void; const waiting = new Promise<void>(resolve => { finish = resolve; });
+  const f = fixture(async input => { if (input.action === 'acquire') { await waiting; return { ok: false }; } return { ok: true }; });
+  const { browserInstallationForSession } = await import('../host/browserInstallationController');
+  const status = await f.controller.load(); f.controller.dispose();
+  const request = vi.fn(async () => status) as ComputerRequest;
+  const controller = browserInstallationForSession('upload-owner-test', request, f.desktop);
+  await controller.install({ action: 'start', source: 'upload', package_id: f.pkg.id }, request);
+  await vi.waitFor(() => expect(f.desktop.request).toHaveBeenCalled());
+  const other = browserInstallationForSession('another-owner-test', request, f.desktop);
+  expect(vi.mocked(f.desktop.request).mock.calls.some(([input]) => input.action === 'cancel')).toBe(false);
+  finish(); await vi.waitFor(() => expect(controller.snapshot()?.transfer_active).toBe(false)); controller.dispose(); other.dispose();
+});
+
+it('keeps admitted upload transport alive when the admitting panel retires', async () => {
+  const f = fixture(); const status = await f.controller.load(); f.controller.dispose();
+  let finish!: () => void;
+  vi.mocked(f.desktop.request).mockImplementationOnce(async () => { await new Promise<void>(resolve => { finish = resolve; }); return { ok: true, package: f.pkg }; });
+  let panelAvailable = true;
+  const panel: ComputerRequest = async (method, path, body) => { if (!panelAvailable) throw new Error('Retired panel'); return f.request(method, path, body); };
+  const controller = new BrowserInstallationController(panel, f.desktop);
+  await controller.load(panel);
+  await panel('GET', '/_redeven_proxy/api/browser/installation');
+  await controller.install({ action: 'start', source: 'upload', package_id: status.package.id }, f.request);
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  panelAvailable = false; finish();
+  await vi.waitFor(() => expect(controller.snapshot()?.state).toBe('installed'));
+  expect(f.calls.filter(call => call.action === 'complete')).toHaveLength(1); controller.dispose();
 });

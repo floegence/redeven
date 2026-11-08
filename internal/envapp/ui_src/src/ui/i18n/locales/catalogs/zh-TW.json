@@ -365,7 +365,7 @@
     "moveFailed": "移動失敗"
   },
   "settings": {
-    "runtimeTitle": "運行時設定",
+    "runtimeTitle": "設定",
     "backToFlower": "返回 Flower",
     "searchPlaceholder": "搜尋設定",
     "filteredSections": "{visible}/{total} 個區段",
@@ -379,7 +379,11 @@
       "permissionPolicy": "權限策略",
       "flower": "Flower",
       "skills": "技能",
-      "debugConsole": "除錯主控台"
+      "debugConsole": "除錯主控台",
+      "appearance": "外觀與語言",
+      "browser": "瀏覽器",
+      "services": "服務",
+      "extensions": "擴充功能"
     },
     "groups": {
       "overview": "概覽",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "密鑰初始化過期時間",
       "notProvided": "未提供",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "此設定目標已無法使用。"
   },
   "flower": {
     "currentEnvironmentFallback": "目前環境",

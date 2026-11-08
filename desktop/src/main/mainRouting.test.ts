@@ -51,7 +51,7 @@ describe('main routing', () => {
     expect(request).toContain("const sourceIcon = new URL(path, 'http://runtime-flower.local').pathname === '/_redeven_proxy/api/flower/source-icon';");
     expect(request).toContain('browserInstallation || sourceIcon ? await runningBrowserFlowerTarget()');
     expect(request).toContain('ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path))');
-    expect(request).toContain("retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path))");
+    expect(request).toContain("retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !request.environment_id && !sourceIcon && !isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path))");
   });
 
   it('keeps member administration separate from Gateway service lifecycle', () => {

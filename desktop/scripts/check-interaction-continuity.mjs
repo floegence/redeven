@@ -89,7 +89,7 @@ try {
       await cancel.scrollIntoViewIfNeeded(); await cancel.click(); await dialog.waitFor({ state: 'detached' });
       await page.evaluate(value => window.settingsFixture.publish(value), snapshot);
       await owner.getByRole('button', { name: i18n.t('environmentCenter.settingsForLabel', { label: f.environment.label }), exact: true }).click();
-      const settings = page.locator('.redeven-environment-settings-dialog'); await settings.waitFor();
+      const settings = page.locator('.redeven-unified-settings-dialog'); await settings.waitFor();
       const name = settings.locator('#ssh-settings-label'); await name.fill('Unsubmitted connection'); await name.focus();
       const nameNode = await name.elementHandle();
       await name.evaluate(el => el.setSelectionRange(1, 7));

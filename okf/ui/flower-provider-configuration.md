@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower provider setup and account selection
 tags: [ai, flower, settings, authentication]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -41,6 +41,8 @@ Account persistence, renewal and cancellation belong to the [account lifecycle](
 The connection panel groups account identity, state guidance, and actions. Background reads of known accounts never remount a loading picker. All stages use the shared Desktop and Env styles and explicit localized copy.
 
 # Boundaries
+
+Global Settings deep links focus the exact provider/model. Category/host hiding only suppresses nested portals and preserves the provider draft; explicit provider close retains its existing reset behavior. Permission revocation/disposal fences account discovery and save results before success publication.
 
 Brand grouping is presentation only; both connection types remain in catalog/serialization. Floret mechanics and storage are unchanged.
 

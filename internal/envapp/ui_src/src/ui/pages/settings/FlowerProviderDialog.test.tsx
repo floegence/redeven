@@ -53,7 +53,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
     />
   ),
   Select: (props: any) => (
-    <select value={props.value ?? ''} disabled={props.disabled} onChange={(event) => props.onChange?.(event.currentTarget.value)}>
+    <select required={props.required} value={props.value ?? ''} disabled={props.disabled} onChange={(event) => props.onChange?.(event.currentTarget.value)}>
       <Show when={props.placeholder}>
         <option value="">{props.placeholder}</option>
       </Show>

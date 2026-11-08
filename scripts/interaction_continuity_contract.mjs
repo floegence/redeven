@@ -11,6 +11,7 @@ export const continuityTests = Object.freeze({
     'src/welcome/gatewaySourceOverlayState.test.ts',
   ],
   client: [
+    'src/welcome/DesktopSettingsDialog.client.test.tsx',
     'src/welcome/EnvironmentRelation.client.test.tsx',
     'src/welcome/DesktopActionPopover.client.test.tsx',
     'src/welcome/RuntimeCloudConnections.client.test.tsx',
@@ -28,7 +29,7 @@ export const continuityTests = Object.freeze({
   ],
 });
 export function continuityAffected(path) {
-  return /^(desktop\/|internal\/flower_ui\/|scripts\/(?:interaction_continuity|check_interaction_continuity|local_gate|check_final_integration|check_desktop|check_quick_ci|quick_ci_policy)|\.githooks\/|\.github\/workflows\/interaction-continuity)/u.test(path);
+  return /^(desktop\/|internal\/(?:flower_ui|settings_ui)\/|scripts\/(?:interaction_continuity|check_interaction_continuity|local_gate|check_final_integration|check_desktop|check_quick_ci|quick_ci_policy)|\.githooks\/|\.github\/workflows\/interaction-continuity)/u.test(path);
 }
 
 export const continuityLocales = Object.freeze(['en-US', 'zh-CN', 'zh-TW', 'de-DE', 'es-ES', 'fr-FR', 'ja-JP', 'ko-KR', 'pt-BR', 'ru-RU']);

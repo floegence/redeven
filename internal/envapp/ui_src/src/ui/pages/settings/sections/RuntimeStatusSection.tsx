@@ -1,3 +1,4 @@
+import { useSettingsPresentation } from '../../../../../../../settings_ui/src/SettingsPanelHost';
 import { Show, createSignal } from 'solid-js';
 import { Activity, Cpu, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
@@ -24,6 +25,7 @@ function desktopModelSourceActive(value: unknown): boolean {
 }
 
 export function RuntimeStatusSection() {
+  const presented = useSettingsPresentation('agent');
   const ctx = useEnvSettingsPage();
   const [maintenanceAction, setMaintenanceAction] = createSignal<'restart' | 'upgrade' | null>(null);
   const i18n = useI18n();
@@ -158,7 +160,7 @@ export function RuntimeStatusSection() {
         </Show>
       </div>
     </SettingsSection>
-    <ConfirmDialog open={Boolean(maintenanceAction())} onOpenChange={(open) => { if (!open) setMaintenanceAction(null); }}
+    <ConfirmDialog open={presented() && Boolean(maintenanceAction())} onOpenChange={(open) => { if (!open) setMaintenanceAction(null); }}
       title={maintenanceAction() === 'restart' ? i18n.t('runtimeStatus.restartAction') : upgradeActionLabel()}
       confirmText={maintenanceAction() === 'restart' ? i18n.t('runtimeStatus.restartAction') : upgradeActionLabel()}
       onConfirm={async () => { const action = maintenanceAction(); setMaintenanceAction(null); if (action === 'restart') await ctx.startRestart(); else if (action === 'upgrade') await ctx.startUpgrade(); }}>

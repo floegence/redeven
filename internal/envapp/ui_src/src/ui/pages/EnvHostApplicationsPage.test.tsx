@@ -1,5 +1,6 @@
 import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
+import { createSignal, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { RevealHostApplicationRequest } from './EnvContext';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,10 +10,11 @@ const access = vi.hoisted(()=>({save:vi.fn(),desktop:vi.fn()}));
 vi.mock('../services/hostAccess',async original=>({...await original<object>(),setHostAccess:access.save}));
 vi.mock('../services/remoteDesktopApi',async original=>({...await original<object>(),getRemoteDesktopStatus:access.desktop}));
 
-const state = vi.hoisted(() => ({ reveal: null as RevealHostApplicationRequest | null, consumeReveal: vi.fn(), desktop: true, cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ reveal: null as RevealHostApplicationRequest | null, consumeReveal: vi.fn(), desktop: true, cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), add: vi.fn(), open: vi.fn(), openSettings: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: state.generation, scope: state.cacheScope }),
+  openSettings: state.openSettings,
   env_id: () => 'host', localRuntime: () => ({}), revealHostApplicationRequest: () => state.reveal, consumeRevealHostApplicationRequest: state.consumeReveal,
 }) }));
 vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, getHostApplicationTransferPlan: state.setupPlan, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, terminateHostApplication: state.terminate, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
@@ -49,6 +51,11 @@ beforeEach(() => {
 });
 afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
 
+function ApplicationsWithSettings() {
+  const [settings, setSettings] = createSignal(false);
+  state.openSettings.mockImplementation((section: string) => { expect(section).toBe('applications'); setSettings(true); });
+  return <><EnvHostApplicationsPage /><Show when={settings()}><section role="dialog"><EnvHostApplicationsPage settingsOnly /></section></Show></>;
+}
 describe('goal-based host access',()=>{
  it('offers explicit completion after Linux preparation without enabling in the background',async()=>{
   const catalog={access_state:'unconfigured',availability:{supported:true,ready:false},applications:[app],sessions:[]};
@@ -72,7 +79,7 @@ describe('goal-based host access',()=>{
  it('shows feature states and direct management without an intermediate chooser',async()=>{
   state.catalog.mockResolvedValue(mac(true,true,'enabled'));
   access.desktop.mockResolvedValue({access_state:'paused',capabilities:{backend:'macos',screen:true,input:true,state:'ready'}});
-  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();
+  dispose=render(()=><ApplicationsWithSettings/>,host);await settle();
   textButton('Access settings').click();await settle();
   const dialog=document.querySelector('[role=dialog]')!;
   expect(dialog.querySelectorAll('.host-access-feature-settings')).toHaveLength(2);
@@ -86,7 +93,7 @@ describe('goal-based host access',()=>{
   state.catalog.mockResolvedValue(mac(true,true,'enabled'));
   access.desktop.mockResolvedValue({access_state:'enabled',capabilities:{backend:'macos',screen:true,input:true,state:'ready'}});
   access.save.mockRejectedValue(new Error('Disconnected'));
-  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();textButton('Access settings').click();await settle();
+  dispose=render(()=><ApplicationsWithSettings/>,host);await settle();textButton('Access settings').click();await settle();
   const desktop=document.querySelector('[aria-label="Remote desktop"].host-access-feature-settings')!;
   textButton('Pause',desktop).click();textButton('Pause',desktop).click();await settle();
   expect(access.save).toHaveBeenCalledExactlyOnceWith('desktop','paused');
@@ -113,7 +120,7 @@ describe('goal-based host access',()=>{
  });
  it('keeps paused access paused until explicitly enabled and keeps system management reachable',async()=>{
   state.catalog.mockResolvedValue(mac(true,false,'paused'));access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
-  dispose=render(()=><EnvHostApplicationsPage/>,host);await settle();expect(host.querySelector('.host-access-welcome')).toBeNull();expect(access.save).not.toHaveBeenCalled();
+  dispose=render(()=><ApplicationsWithSettings/>,host);await settle();expect(host.querySelector('.host-access-welcome')).toBeNull();expect(access.save).not.toHaveBeenCalled();
   textButton('Access settings').click();await settle();
   const system=document.querySelector<HTMLDetailsElement>('.host-access-system')!;system.open=true;expect([...system.querySelectorAll('.host-access-system-row span')].map(node=>node.textContent)).toEqual(['Allowed','Required']);expect(textButton('Open system settings',system)).toBeTruthy();textButton('Open system settings',system).click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording_settings');expect(access.save).not.toHaveBeenCalled();
  });

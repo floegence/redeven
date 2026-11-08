@@ -2157,7 +2157,8 @@
     "startEnvironment": "Iniciar entorno",
     "wslStopped": "Inicie este entorno WSL antes de leer o guardar su configuración de acceso.",
     "environmentOnlyLabel": "Solo dentro del entorno",
-    "environmentOnlyDescription": "El acceso desde el navegador queda limitado al interior del entorno. Puedes seguir abriéndolo desde Desktop."
+    "environmentOnlyDescription": "El acceso desde el navegador queda limitado al interior del entorno. Puedes seguir abriéndolo desde Desktop.",
+    "unifiedTitle": "Configuración"
   },
   "shell": {
     "accessibility": {

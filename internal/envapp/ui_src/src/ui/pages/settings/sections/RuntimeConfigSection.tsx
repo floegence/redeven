@@ -1,3 +1,4 @@
+import { useSettingsPresentation } from '../../../../../../../settings_ui/src/SettingsPanelHost';
 import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Terminal, Plus, Trash, Home, MonitorPointer, Folder, Pencil } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Switch } from '@floegence/floe-webapp-core/ui';
@@ -18,6 +19,7 @@ function nextCustomRootID(roots: readonly FilesystemRootPolicy[]): string {
 }
 
 export function RuntimeConfigSection() {
+  const presented = useSettingsPresentation('runtime');
   const ctx = useEnvSettingsPage();
   const canEdit = () => ctx.canInteract() && ctx.canAdmin();
   const i18n = useI18n();
@@ -159,7 +161,7 @@ export function RuntimeConfigSection() {
         </div>
       </SettingsSection>
 
-      <Dialog open={Boolean(rootEditor())} onOpenChange={(open) => { if (!open) setRootEditor(null); }}
+      <Dialog open={presented() && Boolean(rootEditor())} onOpenChange={(open) => { if (!open) setRootEditor(null); }}
         title={i18n.t(rootEditor()?.isNew ? 'runtimeConfig.addRoot' : 'settingsDesign.editDirectory')}
         class="redeven-settings-dialog w-[min(30rem,94vw)]"
         footer={<div class="flex justify-end gap-2">
@@ -179,7 +181,7 @@ export function RuntimeConfigSection() {
       </Dialog>
 
       <ConfirmDialog
-        open={Boolean(writeConfirmTarget())}
+        open={presented() && Boolean(writeConfirmTarget())}
         onOpenChange={(open) => { if (!open) setWriteConfirmTarget(null); }}
         title={i18n.t('runtimeConfig.allowWritesDialogTitle')}
         confirmText={i18n.t('runtimeConfig.allowWrites')}

@@ -445,6 +445,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
   return {
   LocaleProvider: actual.LocaleProvider,
+  createRetainedContent: actual.createRetainedContent,
   secureRandomUUID: actual.secureRandomUUID,
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   useResizeObserver: () => () => ({ width: 1024, height: 768 }),
@@ -863,7 +864,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
       </section>
     </Show>
   ),
-  Dialog: (props: any) => (
+  Dialog: (props: any) => { createEffect(() => props.onPresenceChange?.(Boolean(props.open))); return (
     <Show when={props.open}>
       <section role="dialog" aria-label={props.title} class={props.class}>
         <h2>{props.title}</h2>
@@ -872,7 +873,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
         {props.footer}
       </section>
     </Show>
-  ),
+  ); },
   DialogPlacementProvider: (props: any) => <>{props.children}</>,
   SurfaceFloatingLayer: (props: any) => {
     let layer: HTMLDivElement | undefined;
@@ -1398,10 +1399,9 @@ vi.mock('./pages/EnvAIPage', () => ({
 vi.mock('./pages/EnvSettingsPage', async () => {
   const { EnvContext } = await import('./pages/EnvContext');
   return {
-    EnvSettingsPage: () => {
+    EnvSettingsPage: (props: any) => {
       const env = useContext(EnvContext);
-      settingsPageState.focusSeq = env?.settingsFocusSeq() ?? 0;
-      settingsPageState.focusSection = env?.settingsFocusSection() ?? null;
+      createEffect(() => { settingsPageState.focusSeq = env?.settingsFocusSeq() ?? 0; settingsPageState.focusSection = env?.settingsFocusSection() ?? null; });
       const origin = env?.settingsOrigin?.() ?? null;
       return (
         <div
@@ -1410,6 +1410,7 @@ vi.mock('./pages/EnvSettingsPage', async () => {
           data-focus-section={settingsPageState.focusSection ?? ''}
           data-origin={origin?.kind ?? ''}
         >
+          <Show when={env?.settingsFocusSection() === 'plugins'}>{props.panels?.plugins?.()}</Show>
           {origin?.kind === 'flower' ? (
             <button type="button" data-testid="mock-back-to-flower" onClick={() => env?.returnFromSettingsOrigin?.()}>
               Back to Flower
@@ -1526,18 +1527,11 @@ function findActivityButton(root: ParentNode, activityID: string): HTMLButtonEle
     .find((button) => button.dataset.activityId === activityID) ?? null;
 }
 
-function expectPluginCenterMountedInActivityMain(host: ParentNode): void {
+function expectPluginCenterMountedInSettings(host: ParentNode): void {
   const view = host.querySelector('[data-plugin-center-view]');
-  const main = host.querySelector('[data-floe-shell-slot="main"]');
   expect(view).toBeTruthy();
-  expect(main?.contains(view)).toBe(true);
-
-  let node = view?.parentElement ?? null;
-  while (node && node !== document.body) {
-    const className = node.getAttribute('class') ?? '';
-    expect(className.split(/\s+/u)).not.toEqual(expect.arrayContaining(['fixed', 'z-40', 'shadow-2xl']));
-    node = node.parentElement;
-  }
+  expect(view?.closest('.redeven-unified-settings-dialog')).not.toBeNull();
+  expect(new URL(window.location.href).searchParams.get('settings')).toBe('plugins');
 }
 
 function createStorageMock(): Storage {
@@ -1591,6 +1585,7 @@ afterEach(() => {
 });
 
 beforeEach(async () => {
+  window.history.replaceState({}, '', '/');
   notificationErrorMock.mockReset();
   cacheProbe.enabled = false;
   cacheScopeMock.mockReset().mockResolvedValue({ scope_id: 'a'.repeat(64) });
@@ -1822,7 +1817,7 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   });
 
-  it.each(['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai', 'settings', 'plugin-center'])(
+  it.each(['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai'])(
     'keeps saved Activity target %s independent of Workbench startup and mode switching', async target => {
       const key = 'redeven-envapp:env_local-activity-navigation';
       const record = { version: 1, target: { kind: 'builtin', page: target }, recentBuiltins: [target] };
@@ -1845,7 +1840,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }, 10000,
   );
 
-  it.each(['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai', 'settings', 'plugin-center'])(
+  it.each(['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai'])(
     'selects saved Activity page %s before asynchronous runtime discovery and retains it after connection', async target => {
       window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
       window.localStorage.setItem('redeven_envapp_active_tab', target);
@@ -1889,20 +1884,20 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       const flowerContextState = host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null;
-      expect(sidebarActiveTabValue).toBe('settings');
+      expect(sidebarActiveTabValue).toBe('ai');
       expect(flowerContextState?.dataset.settingsOrigin).toBe('flower');
 
       (host.querySelector('[data-testid="mock-context-return-from-settings"]') as HTMLButtonElement | null)?.click();
       await flushAsync();
 
-      expect(sidebarActiveTabValue).toBe('terminal');
-      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
+      expect(sidebarActiveTabValue).toBe('ai');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('full_page');
       expect((host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null)?.dataset.settingsOrigin).toBe('');
 
       (host.querySelector('[data-activity-id="settings"]') as HTMLButtonElement | null)?.click();
       await flushAsync();
 
-      expect(sidebarActiveTabValue).toBe('settings');
+      expect(sidebarActiveTabValue).toBe('ai');
       expect((host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null)?.dataset.settingsOrigin).toBe('');
     } finally {
       dispose();
@@ -1938,20 +1933,20 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(runtimeSettingsButton?.textContent).toContain('Runtime Settings');
       expect(host.querySelector('[data-activity-id="switch-environment"]')).toBeNull();
       expect(host.querySelector('button[aria-label="Open environment actions"]')).toBeNull();
-      expect(languageButton).toBeTruthy();
+      expect(languageButton).toBeNull();
 
       setSidebarActiveTabMock.mockClear();
       runtimeSettingsButton?.click();
       await flushAsync();
 
-      expect(sidebarActiveTabValue).toBe('settings');
-      expect(setSidebarActiveTabMock).toHaveBeenCalled();
-      expect(settingsPageState.focusSection).toBe('config');
+      expect(sidebarActiveTabValue).toBe('terminal');
+      expect(setSidebarActiveTabMock).not.toHaveBeenCalled();
+      expect(settingsPageState.focusSection).toBe('appearance');
 
       languageButton?.click();
       await flushAsync();
 
-      expect(host.querySelector('[data-envapp-language-menu="topbar"]')).toBeTruthy();
+      expect(new URL(window.location.href).searchParams.get('settings')).toBe('appearance');
 
       const changeLanguageCommand = commandState.commands.find((command) => command.id === 'redeven.env.changeLanguage') as
         | undefined
@@ -1962,19 +1957,19 @@ describe('EnvAppShell environment entry affordances', () => {
       changeLanguageCommand?.execute?.();
       await flushAsync();
 
-      expect(host.querySelector('[data-envapp-language-menu="topbar"]')).toBeTruthy();
-      expect(settingsPageState.focusSection).toBe('config');
+      expect(new URL(window.location.href).searchParams.get('settings')).toBe('appearance');
+      expect(settingsPageState.focusSection).toBe('appearance');
 
       runtimeSettingsButton?.click();
       await flushAsync();
 
-      expect(settingsPageState.focusSection).toBe('config');
+      expect(settingsPageState.focusSection).toBe('appearance');
     } finally {
       dispose();
     }
   }, 10000);
 
-  it('opens the dedicated Plugin Center from the Plugins panel without entering Runtime Settings', async () => {
+  it('opens Plugin Center in unified settings without navigating Activity', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -1996,10 +1991,10 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
 
       expect(host.querySelector('[data-plugin-center-shell]')).toBeTruthy();
-      expectPluginCenterMountedInActivityMain(host);
-      expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
-      expect(settingsPageState.focusSection).not.toBe('plugins');
-      expect(sidebarActiveTabValue).toBe('plugin-center');
+      expectPluginCenterMountedInSettings(host);
+      expect(host.querySelector('[data-testid="settings-page"]')).not.toBeNull();
+      expect(settingsPageState.focusSection).toBe('plugins');
+      expect(sidebarActiveTabValue).toBe('terminal');
       expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
     } finally {
       dispose();
@@ -3483,16 +3478,14 @@ describe('EnvAppShell environment entry affordances', () => {
 
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
-      expectPluginCenterMountedInActivityMain(host);
-      expect(sidebarActiveTabValue).toBe('plugin-center');
+      expectPluginCenterMountedInSettings(host);
+      expect(sidebarActiveTabValue).toBe('monitor');
 
       (host.querySelector('button[aria-label="Close Plugin Center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => sidebarActiveTabValue === 'monitor');
 
-      const hiddenPluginCenter = host.querySelector('[data-plugin-center-view]');
-      expect(hiddenPluginCenter).toBeTruthy();
-      expect((hiddenPluginCenter?.closest('[data-testid="activity-view-plugin-center"]') as HTMLElement | null)?.style.display).toBe('none');
-      expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
+      await flushUntil(() => !host.querySelector('.redeven-unified-settings-dialog'));
+      expect(new URL(window.location.href).searchParams.has('settings')).toBe(false);
 
       const reopenedPluginTrigger = host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null;
       reopenedPluginTrigger?.click();
@@ -3529,10 +3522,10 @@ describe('EnvAppShell environment entry affordances', () => {
         item.inventoryKey === 'instance:plugin_example_metrics'
           && item.lifecycleState === 'disabled'
       )));
-      expectPluginCenterMountedInActivityMain(host);
-      expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
-      expect(settingsPageState.focusSection).not.toBe('plugins');
-      expect(sidebarActiveTabValue).toBe('plugin-center');
+      expectPluginCenterMountedInSettings(host);
+      expect(host.querySelector('[data-testid="settings-page"]')).not.toBeNull();
+      expect(settingsPageState.focusSection).toBe('plugins');
+      expect(sidebarActiveTabValue).toBe('terminal');
       expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
     } finally {
       dispose();
@@ -3594,10 +3587,10 @@ describe('EnvAppShell environment entry affordances', () => {
       const target = examplePluginProjection('enabled').items[0].defaultLaunchTarget!;
       const open = () => pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...target }, new AbortController().signal);
       const expectCenter = () => {
-        expect(sidebarActiveTabValue).toBe('plugin-center');
+        expect(sidebarActiveTabValue).toBe('terminal');
         expect(host.querySelector('[data-plugin-center-view]')).toBe(center);
         expect(pluginCenterViewState.lastProps.selectedInventoryKey).toBe('instance:plugin_example_metrics');
-        expectPluginCenterMountedInActivityMain(host);
+        expectPluginCenterMountedInSettings(host);
       };
       await expect(pluginCenterViewState.lastProps.onCommand({
         type: 'open_surface', ...target, expectedManagementRevision: 10,
@@ -3650,7 +3643,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await pluginPanelState.lastProps.onOpenCenter();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
       await pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...examplePluginProjection('enabled').items[0].defaultLaunchTarget }, new AbortController().signal);
-      expect(sidebarActiveTabValue).toBe('plugin-center');
+      expect(sidebarActiveTabValue).toBe(activityID);
       await flushUntil(() => Boolean(host.querySelector('[data-placement="activity"]')));
       expect(host.querySelectorAll('[data-placement="activity"]')).toHaveLength(1);
       expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(page);
@@ -3658,7 +3651,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(activityPluginPageState.closeCalls).toBe(0);
       host.querySelector<HTMLButtonElement>('[aria-label="Close Plugin Surface"]')!.click();
       await flushUntil(() => !host.querySelector('[data-placement="activity"]'));
-      expect(sidebarActiveTabValue).toBe('plugin-center');
+      expect(sidebarActiveTabValue).toBe(activityID);
       findActivityButton(host, activityID)!.click();
       await flushUntil(() => sidebarActiveTabValue === activityID);
       expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(page);
@@ -3684,9 +3677,9 @@ describe('EnvAppShell environment entry affordances', () => {
       const open = () => pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...target }, new AbortController().signal);
       workbenchPluginSurfaceState.open.mockRejectedValueOnce(new Error('Placement unavailable'));
       await expect(open()).rejects.toThrow('Placement unavailable');
-      expect(host.querySelector('.redeven-plugin-center-drawer')).not.toBeNull();
+      expect(host.querySelector('.redeven-unified-settings-dialog')).not.toBeNull();
       await open();
-      await flushUntil(() => !host.querySelector('.redeven-plugin-center-drawer'), 60);
+      await flushUntil(() => !host.querySelector('.redeven-unified-settings-dialog'), 60);
       expect(workbenchPluginSurfaceState.open).toHaveBeenLastCalledWith(target);
       expect(host.querySelector('[data-placement="activity"]')).toBeNull();
       expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
@@ -3797,7 +3790,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginLifecycleMocks.execute).not.toHaveBeenCalled();
       expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
-      expect(settingsPageState.focusSection).not.toBe('plugins');
+      expect(settingsPageState.focusSection).toBeNull();
       expect(sidebarActiveTabValue).toBe('terminal');
 
       const firstInstanceID = pluginSurfaceFrameState.lastProps.instanceID;
@@ -4498,7 +4491,7 @@ describe('EnvAppShell environment entry affordances', () => {
       (document.querySelector('[data-floating-menu-item-id="plugin-information"]') as HTMLButtonElement).click();
 
       await flushUntil(() => pluginCenterViewState.lastProps?.selectedInventoryKey === inventoryKey, 60);
-      expect(sidebarActiveTabValue).toBe('plugin-center');
+      expect(sidebarActiveTabValue).toBe('terminal');
       expect(pluginCenterViewState.lastProps.selectedInventoryKey).toBe(inventoryKey);
       expect(host.querySelector(`[data-plugin-center-item="${inventoryKey}"]`)).not.toBeNull();
     } finally {
@@ -4956,7 +4949,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('dismisses the Workbench manager on mode changes and preserves it through recoverable loss', async () => {
+  it('retains unified settings on mode changes and preserves it through recoverable loss', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -4965,7 +4958,7 @@ describe('EnvAppShell environment entry affordances', () => {
     document.body.appendChild(host);
     const { EnvAppShell } = await import('./EnvAppShell');
     const dispose = render(() => <EnvAppShell />, host);
-    const drawer = () => host.querySelector('.redeven-plugin-center-drawer');
+    const drawer = () => host.querySelector('.redeven-unified-settings-dialog');
     const changeMode = async (label: string) => {
       findButtonByText(host, label)!.click();
       await flushUntil(() => host.querySelector(`[data-testid="display-mode-view-${label.toLowerCase()}"]`)?.getAttribute('style')?.includes('display: block') ?? false, 60);
@@ -4976,7 +4969,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(drawer()));
       await changeMode('Activity');
       await changeMode('Workbench');
-      expect(drawer()).toBeNull();
+      expect(drawer()).not.toBeNull();
       await pluginPanelState.lastProps.onOpenCenter();
       await flushUntil(() => Boolean(drawer()));
       publishProtocolWaiting({ code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' });
@@ -5216,17 +5209,17 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]');
-      const appearanceButton = host.querySelector('button[data-envapp-theme-trigger="topbar"]') as HTMLButtonElement | null;
+      const appearanceButton = host.querySelector('button[aria-label="Settings"]') as HTMLButtonElement | null;
 
       expect(notesButton).toBeTruthy();
       expect(notesButton?.getAttribute('data-tooltip')).toBe('Notes overlay (⌘.)');
       expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
-      expect(appearanceButton?.getAttribute('aria-label')).toBe('Appearance');
-      expect(appearanceButton?.getAttribute('data-tooltip')).toBe('Appearance');
+      expect(appearanceButton?.getAttribute('aria-label')).toBe('Settings');
+      expect(appearanceButton?.getAttribute('data-tooltip')).toBe('Settings');
 
       appearanceButton?.click();
       await flushAsync();
-      expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeTruthy();
+      expect(new URL(window.location.href).searchParams.get('settings')).toBe('appearance');
     } finally {
       dispose();
     }
@@ -5269,7 +5262,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]') as HTMLButtonElement | null;
-      const appearanceButton = host.querySelector('button[data-envapp-theme-trigger="topbar"]');
+      const appearanceButton = host.querySelector('button[aria-label="Settings"]');
       expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
       expect(notesButton).toBeTruthy();
       expect(notesButton?.getAttribute('data-tooltip')).toBeNull();
@@ -5279,7 +5272,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(notesOverlayState.lastProps?.open).toBe(true);
 
-      expect(appearanceButton?.getAttribute('aria-label')).toBe('Appearance');
+      expect(appearanceButton?.getAttribute('aria-label')).toBe('Settings');
       expect(appearanceButton?.getAttribute('data-tooltip')).toBeNull();
     } finally {
       dispose();

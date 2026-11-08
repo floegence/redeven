@@ -1,5 +1,6 @@
 import {createServiceTemplateMarket} from './serviceTemplateMarket';
 import type { MarketTemplate } from '@floegence/redeven-service-templates';
+import { useSettingsPanelHost, useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { managedServiceFlowerContext, portForwardFlowerContext } from './webServiceFlowerContext';
 import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
@@ -2253,11 +2254,14 @@ export function ForwardMetadataDialog(props: Readonly<{
 // Main Component
 // ============================================================================
 
-export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageContextRegistrar } = {}) {
+export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageContextRegistrar; settingsOnly?: boolean } = {}) {
+  const settingsPresented = useSettingsPresentation('services');
+  const presented = () => !props.settingsOnly || settingsPresented();
   let collectionHeading: HTMLHeadingElement | undefined;
   let pageRoot: HTMLDivElement | undefined;
   let addressInput: HTMLInputElement | undefined;
   const ctx = useEnvContext();
+  const settingsHost = useSettingsPanelHost();
   const notify = useNotification();
   const outlineControlClass = redevenSurfaceRoleClass('control');
   const i18n = useI18n();
@@ -2414,6 +2418,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
   const [archiveView, setArchiveView] = createSignal('active');
   const [managedSettingsService, setManagedSettingsService] = createSignal<ManagedService | null>(null);
+  const [managedSettingsRevision, setManagedSettingsRevision] = createSignal(0);
+  const [visitedSettingsServices, setVisitedSettingsServices] = createSignal<readonly ManagedService[]>([]);
 	const [releasePickerTarget, setReleasePickerTarget] = createSignal<ManagedReleasePickerTarget | null>(null);
 	const [releaseCandidates, setReleaseCandidates] = createSignal<ManagedReleaseCandidateResult | null>(null);
 	const [releaseCandidatesLoading, setReleaseCandidatesLoading] = createSignal(false);
@@ -2742,6 +2748,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n));
     } catch (error) {
       notify.error(managedActionFailureTitle('reconfigure', i18n), error instanceof Error ? error.message : String(error));
+      throw error;
     } finally {
       if (operationID) managedOperations.clear(operationID);
     }
@@ -3422,6 +3429,14 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     managedOperationPresentation.dispose();
   });
 
+  createEffect(() => {
+    if (!props.settingsOnly || settingsHost?.target()?.section !== 'services') return;
+    const id = settingsHost.target()?.resource;
+    const service = managedState().find(item => item.service_id === id);
+    if (service && !untrack(visitedSettingsServices).some(item => item.service_id === id)) setVisitedSettingsServices(items => [...items, service]);
+    if (untrack(managedSettingsService)?.service_id !== service?.service_id) setManagedSettingsService(service ?? null);
+  });
+
   // Create service handler
   const doCreate = async (target: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
     if (!canExecute()) return;
@@ -3681,6 +3696,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   return (
     <div ref={pageRoot} {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('web-services flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+      <Show when={props.settingsOnly} fallback={<>
       <WebServicesHeader actions={<>
 
             <Button
@@ -3915,7 +3931,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                             onOperationExpandedChange={setManagedOperationExpanded}
                             onCancelOperation={() => void cancelManagedOperation(managedRowOperation(serviceID))}
                             onDiagnosticCopyFailure={(message) => notify.error(i18n.t('webServices.managed.failureDiagnosticCopyFailedTitle'), message)}
-                            onSettings={() => setManagedSettingsService(service())}
+                            onSettings={() => ctx.openSettings('services', { resource: service().service_id })}
                             onVersions={() => openServiceReleasePicker(service())}
                             onLogs={() => void loadManagedLogs(serviceID)}
                             onUninstall={() => setManagementTarget({ service: service(), action: 'uninstall' })}
@@ -3961,6 +3977,11 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         </div>
       </main>
 
+      </>}><div class="space-y-3 p-4" hidden={Boolean(managedSettingsService())}><h1 class="text-lg font-semibold">{i18n.t('settings.nav.services')}</h1>
+        <Button variant="outline" onClick={() => void loadManaged(false)}>{i18n.t('common.actions.refresh')}</Button>
+        <For each={managedState()}>{service => <Button class="w-full justify-start" variant="outline" onClick={() => { setManagedSettingsService(service); ctx.openSettings('services', { resource: service.service_id }); }}>{service.name}</Button>}</For>
+        <Show when={settingsHost?.target()?.resource && !managedSettingsService()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
+      </div></Show>
       {/* Create dialog */}
       <CreateForwardDialog open={createOpen()} loading={createLoading()} onOpenChange={setCreateOpen} onCreate={doCreate} />
       <ForwardMetadataDialog
@@ -4000,7 +4021,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         onClose={closeManagement}
 		onService={(id) => {setManagementTarget(null);setArchiveView('active');const service=managedServiceForID(id);if(service)setSearchQuery(service.name);}}
         onResource={(identity) => openManagedContainerResource({ kind: 'container', engine: 'docker', view: 'containers', identity })}
-        onSettings={() => { const target = managementTarget(); if (target) { setManagementTarget(null); setManagedSettingsService(target.service); } }}
+        onSettings={() => { const target = managementTarget(); if (target) { setManagementTarget(null); ctx.openSettings('services', { resource: target.service.service_id }); } }}
         onOpen={(refresh) => {const target=managementTarget();if(target){setManagementTarget(null);void openManaged(target.service,refresh);}}}
         onStart={() => {const target=managementTarget();if(target){setManagementTarget(null);void managedAction(target.service.service_id,'start');}}}
         onRestart={() => {const target=managementTarget();if(target){setManagementTarget(null);void managedAction(target.service.service_id,'restart');}}}
@@ -4023,42 +4044,47 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
           }
         }}
       />
-      <ManagedServiceSettingsDrawer
-        open={managedSettingsService() !== null}
-        serviceID={managedSettingsService()?.service_id ?? ''}
-        serviceName={managedSettingsService()?.name ?? ''}
-        canManage={canManageManagedService()}
-        onOpenChange={(open) => { if (!open) setManagedSettingsService(null); }}
+      <Show when={props.settingsOnly || !settingsHost}><For each={props.settingsOnly ? visitedSettingsServices() : managedSettingsService() ? [managedSettingsService()!] : []}>{captured => {
+        const current = () => props.settingsOnly ? managedState().find(service => service.service_id === captured.service_id) : managedSettingsService();
+        const active = () => current()?.service_id === captured.service_id && managedSettingsService()?.service_id === captured.service_id && (!props.settingsOnly || (!!settingsHost?.present() && settingsHost.target()?.section === 'services' && settingsHost.target()?.resource === captured.service_id));
+        return <div hidden={!active()} inert={!active()} class="h-full min-h-0"><ManagedServiceSettingsDrawer
+        refreshRevision={managedSettingsRevision()}
+        embedded={props.settingsOnly}
+        open={active()}
+        serviceID={captured.service_id}
+        serviceName={current()?.name ?? captured.name}
+        canManage={active() && canManageManagedService()}
+        onOpenChange={(open) => { if (!open) { settingsHost?.open({ section: 'services' }); setManagedSettingsService(null); } }}
         onChanged={() => { void loadManaged(false); bumpRefresh(); }}
         onRequestStop={() => {
-          const service = managedSettingsService();
+          const service = active() ? current() : null;
           if (!service) return;
-          setManagedSettingsService(null);
-          void managedAction(service.service_id, 'stop');
+          void managedAction(service.service_id, 'stop').then(() => { setManagedSettingsRevision(value => value + 1); });
         }}
         onApply={async (request) => {
-          const service = managedSettingsService();
-          if (!service) return;
-          setManagedSettingsService(null);
+          const service = active() ? current() : null;
+          if (!service) throw new Error(i18n.t('settings.targetUnavailable'));
           await reconfigureManagedService(service.service_id, request);
         }}
-        onEditTemplate={managedSettingsService() && templateByID(managedSettingsService()!.template_id)?.editable ? () => {
-          const template=templateByID(managedSettingsService()!.template_id);
+        onEditTemplate={current() && templateByID(current()!.template_id)?.editable ? () => {
+          if (!active()) return;
+          const template=templateByID(captured.template_id);
           if (!template) return;
-          setManagedSettingsService(null);beginTemplateEdit(template);setTemplateDrawerOpen(true);
+          settingsHost?.open({ section: 'services' }); setManagedSettingsService(null);beginTemplateEdit(template);setTemplateDrawerOpen(true);
         } : undefined}
         onDuplicateTemplate={() => {
-          const service = managedSettingsService();
+          const service = active() ? current() : null;
           const template = service ? managedTemplates().find((item) => item.template_id === service.template_id) : null;
           if (!template) return;
-          setManagedSettingsService(null);
+          settingsHost?.open({ section: 'services' }); setManagedSettingsService(null);
           setTemplateDuplicate(template);
           setTemplateDuplicateName(i18n.t('webServices.managed.copyName', { name: template.name }));
         }}
-      />
+      /></div>;
+      }}</For></Show>
 
       <EnvAppDrawer
-        open={templateDrawerOpen()}
+        open={presented() && (templateDrawerOpen())}
         class={templateDrawerView() === 'install' ? 'service-template-install-drawer' : 'service-template-explorer-drawer'}
         bodyClass="h-full"
         onOpenChange={(open) => {
@@ -4387,7 +4413,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       </EnvAppDrawer>
 
       <DirectoryPicker
-        open={templateDrawerOpen() && workspacePickerOpen()}
+        open={presented() && (templateDrawerOpen() && workspacePickerOpen())}
         onOpenChange={setWorkspacePickerOpen}
         {...workspacePicker}
         initialPath={workspacePickerInitialPath() || "/"}
@@ -4398,7 +4424,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       />
 
       <GitTemplateImport
-        open={gitImportOpen()}
+        open={presented() && (gitImportOpen())}
         environmentName={ctx.env()?.name || ctx.env_id()}
         template={gitImportTemplate()}
         marketSource={marketSource()}
@@ -4411,15 +4437,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         }}
         serviceName={(id) => managedState().find((item) => item.service_id === id)?.name || id}
       />
-      <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
+      <Dialog open={presented() && (templateDuplicate() !== null)} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
 
-      <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-[length:var(--floe-type-body)]">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
+      <ConfirmDialog open={presented() && (templateDelete() !== null)} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-[length:var(--floe-type-body)]">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
 
-      <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><Show when={managedLogIsHost()}><p class="mb-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.logScope')}</p></Show><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
+      <Dialog open={presented() && (managedLogs() !== null)} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><Show when={managedLogIsHost()}><p class="mb-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.logScope')}</p></Show><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
 
       <DialogPlacementProvider mode="global">
         <EnvAppDrawer
-          open={releasePickerTarget() !== null}
+          open={presented() && (releasePickerTarget() !== null)}
           class="managed-service-version-drawer"
           bodyClass="h-full min-h-0"
           onOpenChange={(open) => { if (!open) closeReleasePicker(); }}

@@ -1030,6 +1030,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const [searchOpen, setSearchOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [settingsSessionID, setSettingsSessionID] = createSignal<string | null>(null);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [sessionFilterQuery, setSessionFilterQuery] = createSignal('');
   const [localSessionDrawerOpen, setLocalSessionDrawerOpen] = createSignal(false);
@@ -4078,6 +4079,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleSettingsOpenChange = (open: boolean) => {
+    // IMPORTANT: Retained settings owns the exact session captured on opening.
+    if (open) { setSettingsSessionID(activeSessionId() || null); env.openSettings('terminal', { resource: accessibilityIdPrefix }); }
     setSettingsOpen(open);
     if (!open) {
       const sid = activeSessionId();
@@ -5532,6 +5535,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             </div>
 
             <TerminalSettingsDialog
+              ownerID={accessibilityIdPrefix}
               open={settingsOpen()}
               userTheme={userTheme()}
               fontSize={fontSize()}
@@ -5541,7 +5545,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               followInput={terminalPrefs.followInput()}
               onFollowInputChange={terminalPrefs.setFollowInput}
               retentionTransport={transport}
-              retentionSessionId={activeSessionId()}
+              retentionSessionId={settingsSessionID()}
+              retentionCanManage={connected() && permissionReady() && Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
               workIndicatorEnabled={workIndicatorEnabled()}
               fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
               minFontSize={TERMINAL_MIN_FONT_SIZE}

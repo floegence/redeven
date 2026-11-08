@@ -25,6 +25,14 @@ import { FlowerSection } from './settings/sections/FlowerSection';
 import { DebugConsoleSection } from './settings/sections/DebugConsoleSection';
 
 const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
+  appearance: ['theme', 'language', 'appearance'],
+  terminal: ['terminal', 'history', 'font', 'input'],
+  browser: ['browser', 'chrome', 'chromium'],
+  applications: ['applications', 'desktop', 'access'],
+  services: ['services', 'network', 'storage', 'resources'],
+  extensions: ['skills', 'mcp', 'agent plugins'],
+  plugins: ['plugin', 'connections'],
+  storage: ['storage', 'data', 'recovery', 'backup'],
   config: ['path', 'config file', 'configuration', 'json', 'config_path', 'toml'],
   connection: ['url', 'e2ee', 'psk', 'encryption', 'websocket', 'ws', 'channel', 'environment id', 'instance id', 'control plane'],
   agent: ['version', 'restart', 'upgrade', 'update', 'status', 'maintenance', 'health', 'runtime status', 'compatibility', 'release'],
@@ -48,6 +56,14 @@ function filterNavItems(query: string, items: readonly SettingsNavItem[]): Setti
 
 function navLabel(section: EnvSettingsSection, fallback: string, t: ReturnType<typeof useI18n>['t']): string {
   switch (section) {
+    case 'appearance': return t('settings.nav.appearance');
+    case 'terminal': return t('terminal.settings.title');
+    case 'browser': return t('settings.nav.browser');
+    case 'applications': return t('hostAccess.settings');
+    case 'services': return t('settings.nav.services');
+    case 'extensions': return t('settings.nav.extensions');
+    case 'plugins': return t('uiCopy.plugin.centerTitle');
+    case 'storage': return t('storage.title');
     case 'config':
       return t('settings.nav.config');
     case 'connection':
@@ -88,7 +104,7 @@ function groupTitle(groupID: SettingsGroupID, fallback: string, t: ReturnType<ty
   }
 }
 
-const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
+const sectionComponents: Partial<Record<EnvSettingsSection, () => JSX.Element>> = {
   config: ConfigFileSection,
   connection: ConnectionSection,
   agent: RuntimeStatusSection,
@@ -100,7 +116,7 @@ const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
   debug_console: DebugConsoleSection,
 };
 
-function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue } = {}) {
+function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue; panels?: Partial<Record<EnvSettingsSection, () => JSX.Element>>; onNavigate?: (section: EnvSettingsSection) => void } = {}) {
   const ctx = props.context ?? useEnvSettingsPage();
   registerFlowerPageReader(() => ({ section: ctx.activeSection() }));
   const i18n = useI18n();
@@ -114,7 +130,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
   const filteredItems = createMemo(() => filterNavItems(ctx.searchQuery(), localizedItems()));
   const sectionSelection = createUIFirstSelection<EnvSettingsSection>({
     committed: ctx.activeSection,
-    commit: ctx.setActiveSection,
+    commit: section => { ctx.setActiveSection(section); props.onNavigate?.(section); },
     onEvent: createUIPresentationEventRecorder({
       surface: 'settings',
       source: 'section-nav',
@@ -163,7 +179,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
           groups={SETTINGS_GROUPS.map((group) => ({
             id: group.id,
             label: groupTitle(group.id, group.title, i18n.t),
-            items: filteredItems().filter((item) => (group.sections as readonly string[]).includes(item.id)).map((item) => ({
+            items: group.sections.flatMap(id => filteredItems().filter(item => item.id === id)).map((item) => ({
               ...item,
               attributes: { 'data-settings-nav-item': item.id, title: item.label, ref: createFlowerContextTarget(() => ({ id: item.id, label: item.label, state: { navigation: item.id } })) },
             })),
@@ -189,7 +205,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
         <div class="redeven-settings-content absolute inset-0">
           <For each={SETTINGS_NAV_ITEMS}>
             {(item) => {
-              const Section = sectionComponents[item.id];
+              const Section = props.panels?.[item.id] ?? sectionComponents[item.id];
               return (
                 <UIFirstKeepAlivePanel
                   active={ctx.activeSection() === item.id}
@@ -205,7 +221,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                           </div>
                         </div>
                       </Show>
-                      <Section />
+                      {Section ? <Section /> : null}
                       <Show when={['config', 'logging', 'debug_console'].includes(item.id)}>
                         <div class="redeven-settings-related mt-8">
                           <h2 class="mb-3 text-xs font-medium text-muted-foreground">{i18n.t('settingsDesign.relatedSettings')}</h2>
@@ -230,17 +246,17 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
   );
 }
 
-export function EnvSettingsPage(props: { initialSection?: EnvSettingsSection; context?: EnvSettingsPageContextValue } = {}) {
+export function EnvSettingsPage(props: { initialSection?: EnvSettingsSection; context?: EnvSettingsPageContextValue; panels?: Partial<Record<EnvSettingsSection, () => JSX.Element>>; onNavigate?: (section: EnvSettingsSection) => void } = {}) {
   if (props.context) {
     return (
       <EnvSettingsPageCtx.Provider value={props.context}>
-        <EnvSettingsPageContent context={props.context} />
+        <EnvSettingsPageContent context={props.context} panels={props.panels} onNavigate={props.onNavigate} />
       </EnvSettingsPageCtx.Provider>
     );
   }
   return (
     <EnvSettingsPageProvider initialSection={props.initialSection}>
-      <EnvSettingsPageContent />
+      <EnvSettingsPageContent panels={props.panels} onNavigate={props.onNavigate} />
     </EnvSettingsPageProvider>
   );
 }

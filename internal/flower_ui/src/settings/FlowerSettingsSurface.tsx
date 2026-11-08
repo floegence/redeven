@@ -135,6 +135,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
 }
 
 export type FlowerSettingsSurfaceProps = Readonly<{
+  active?: boolean;
   chatGPTAuth?: import('../contracts/flowerSurfaceContracts').FlowerChatGPTAuth;
   loadChatGPTAccounts?: import('../contracts/flowerSurfaceContracts').FlowerSurfaceAdapter['loadChatGPTAccounts'];
   onDiscoverModels?: FlowerModelCatalogDiscovery;
@@ -342,7 +343,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   });
 
   createEffect(() => {
-    if (!recoveryProviderID() || props.providerFocusRequest) return;
+    // Hosted navigation hides presentation while retaining the recovery draft.
+    if (props.active !== undefined || !recoveryProviderID() || props.providerFocusRequest) return;
     providerDialogIdentity++;
     setProviderDialogOpen(false);
     setRecoveryProviderID(''); setRecoveryModelName('');
@@ -742,7 +744,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         </div>
       </div>
 
-      <ConfirmDialog open={pendingRemoval() !== null} onOpenChange={open => { if (!open) setPendingRemoval(null); }}
+      <ConfirmDialog open={props.active !== false && pendingRemoval() !== null} onOpenChange={open => { if (!open) setPendingRemoval(null); }}
         title={copy().removeProvider} confirmText={copy().removeProvider} cancelText={copy().dialog.chatGPT.cancelSignOut}
         variant="destructive" onConfirm={() => { const index = pendingRemoval(); setPendingRemoval(null); if (index !== null) removeProvider(index,true); }}>
         <p>{copy().dialog.chatGPT.removeAccountOnSaveImpact(pendingRemoval() !== null ? props.snapshot?.chatgpt_accounts?.[providers()[pendingRemoval()!]?.id ?? '']?.active_task_count ?? 0 : 0)}</p>
@@ -759,7 +761,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         chatGPTAvailable={props.snapshot?.auth_capabilities?.openai_chatgpt.available === true}
         chatGPTBindingID={props.snapshot?.auth_capabilities?.openai_chatgpt.binding_id}
         chatGPTAccount={props.snapshot?.chatgpt_accounts?.[providerDialogProvider()?.id ?? '']}
-        open={providerDialogOpen()}
+        open={providerDialogOpen()} visible={props.active !== false}
         mode={providerDialogMode()}
         provider={providerDialogProvider()}
         copy={copy().dialog}

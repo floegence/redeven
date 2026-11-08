@@ -157,30 +157,45 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const notify = useNotification();
   const i18n = useI18n();
 
-  const key = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.settingsSeq() : null));
-
-  const [settings, { mutate: mutateSettings, refetch }] = createResource<AgentSettingsResponse | null, number | null>(
-    () => key(),
-    async (k) => (k == null ? null : await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
-  );
-  const [codeRuntimeStatus, { mutate: mutateCodeRuntimeStatus, refetch: refetchCodeRuntimeStatus }] = createResource<CodeRuntimeStatus | null, number | null>(
-    () => key(),
-    async (k) => (k == null ? null : await fetchCodeRuntimeStatus()),
-  );
-
-  const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
-  const canManageCodeRuntime = createMemo(() => Boolean(env.env()?.permissions?.can_read && env.env()?.permissions?.can_write && env.env()?.permissions?.can_execute));
-  const canAdmin = createMemo(() => !!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner);
-
   // Navigation
-  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>(props.initialSection ?? 'config');
+  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>(props.initialSection ?? 'appearance');
   const [searchQuery, setSearchQuery] = createSignal('');
 
   createEffect(() => {
     const focusSeq = env.settingsFocusSeq();
     if (focusSeq <= 0) return;
-    setActiveSection(env.settingsFocusSection() ?? 'config');
+    setActiveSection(env.settingsFocusSection() ?? 'appearance');
   });
+
+  const lifetime = new AbortController();
+  onCleanup(() => lifetime.abort());
+  const authorityReady = () => !lifetime.signal.aborted && protocol.status() === 'connected' && (!env.resourceCacheAccess || env.resourceCacheAccess().phase === 'ready');
+  const authority = () => JSON.stringify([env.env_id?.(), env.resourceCacheAccess?.().generation]);
+  const assertAuthority = (captured = authority()) => {
+    if (!authorityReady() || !canAdmin() || authority() !== captured) throw new DOMException('Settings authority changed.', 'NotAllowedError');
+  };
+  const key = createMemo<number | null>(() => (authorityReady() ? env.settingsSeq() : null));
+
+  const [settings, { mutate: mutateSettings, refetch }] = createResource<AgentSettingsResponse | null, number | null>(
+    () => key(),
+    async (k) => {
+      if (k == null) return null;
+      const captured = authority();
+      const result = await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET', signal: lifetime.signal });
+      if (!authorityReady() || captured !== authority()) throw new DOMException('Settings read superseded.', 'AbortError');
+      return result;
+    },
+  );
+  const [codeRuntimeStatus, { mutate: mutateCodeRuntimeStatus, refetch: refetchCodeRuntimeStatus }] = createResource<CodeRuntimeStatus | null, number | null>(
+    () => activeSection() === 'codespaces' ? key() : null,
+    async (k) => (k == null ? null : await fetchCodeRuntimeStatus()),
+  );
+
+  // IMPORTANT: Loading gates controls that consume this resource; it is not an
+  // authorization grant. Independently loaded editors use canAdmin directly.
+  const canInteract = createMemo(() => authorityReady() && !settings.loading && !settings.error);
+  const canManageCodeRuntime = createMemo(() => Boolean(env.env()?.permissions?.can_read && env.env()?.permissions?.can_write && env.env()?.permissions?.can_execute));
+  const canAdmin = createMemo(() => authorityReady() && (!!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner));
 
   // Runtime maintenance
   const latestVersion = createMemo(() => runtimeUpdate.version.latestMeta());
@@ -266,11 +281,14 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const hideLoadingCurtain = () => setLoadingCurtain({ visible: false, surface: '' });
 
   const saveSettings = async (body: SettingsUpdateRequest): Promise<SettingsUpdateResponse> => {
+    // IMPORTANT: Hidden retained controls never retain a permission grant.
+    const captured = authority(); assertAuthority(captured);
     const json = await fetchLocalApiJSON<any>('/_redeven_proxy/api/settings', {
-      method: 'PUT',
+      method: 'PUT', signal: lifetime.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    assertAuthority(captured);
     const normalized = normalizeSettingsUpdateResponse(json);
     if (normalized.settings) mutateSettings(normalized.settings);
     env.bumpSettingsSeq();
@@ -278,7 +296,9 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   };
 
   const saveDefaultAIPermission = async (permissionType: AIPermissionType): Promise<SettingsUpdateResponse> => {
+    const captured = authority(); assertAuthority(captured);
     const response = await updateDefaultAIPermission(permissionType);
+    assertAuthority(captured);
     mutateSettings(response.settings);
     env.bumpSettingsSeq();
     return response;
@@ -287,7 +307,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const refreshSettingsPage = async () => {
     await Promise.allSettled([
       refetch(),
-      refetchCodeRuntimeStatus(),
+      activeSection() === 'codespaces' ? refetchCodeRuntimeStatus() : undefined,
       runtimeUpdate.version.refetchLatestVersion(),
     ]);
   };

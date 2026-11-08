@@ -365,7 +365,7 @@
     "moveFailed": "Error al mover"
   },
   "settings": {
-    "runtimeTitle": "Configuración de tiempo de ejecución",
+    "runtimeTitle": "Configuración",
     "backToFlower": "Volver a Flower",
     "searchPlaceholder": "Buscar configuración",
     "filteredSections": "{visible} de {total} secciones",
@@ -379,7 +379,11 @@
       "permissionPolicy": "Política de permisos",
       "flower": "Flower",
       "skills": "Habilidades",
-      "debugConsole": "Consola de depuración"
+      "debugConsole": "Consola de depuración",
+      "appearance": "Apariencia e idioma",
+      "browser": "Navegador",
+      "services": "Servicios",
+      "extensions": "Extensiones"
     },
     "groups": {
       "overview": "Resumen",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "La inicialización de la clave vence en",
       "notProvided": "No proporcionado",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "Este destino de configuración ya no está disponible."
   },
   "flower": {
     "currentEnvironmentFallback": "Este entorno",

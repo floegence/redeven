@@ -25,14 +25,13 @@ function mountTools() {
     enqueue: vi.fn(), cancel: vi.fn(), retry: vi.fn(),
     reveal: vi.fn(), open: vi.fn(), clearFinished: vi.fn(),
   };
-  const actions = { search: vi.fn(), notes: vi.fn(), dashboard: vi.fn(), close: vi.fn() };
+  const actions = { search: vi.fn(), notes: vi.fn(), dashboard: vi.fn(), close: vi.fn(), settings: vi.fn() };
   const host = document.createElement('div');
   document.body.appendChild(host);
   disposers.push(render(() => <div onKeyDown={event => handleMobileToolsEscape(event, page(), () => setPage('more'))}>
     <MobileShellTools page={page()} onPageChange={setPage}
     onSearch={actions.search} onNotes={actions.notes} onDashboard={actions.dashboard} onClose={actions.close}
-    manager={manager} notify={{ success: vi.fn() }}
-    theme={{ onSourceChange: vi.fn(), onShellThemeChange: vi.fn() }} /></div>, host));
+    manager={manager} onSettings={actions.settings} /></div>, host));
   const click = (id: string) => host.querySelector<HTMLButtonElement>(`[data-mobile-tool="${id}"]`)!.click();
   return { host, page, setPage, setTasks, setActiveCount, actions, click };
 }
@@ -52,7 +51,7 @@ describe('MobileShellTools', () => {
       tools.click(id);
       expect(tools.actions[id]).toHaveBeenCalledOnce();
     }
-    for (const id of ['downloads', 'language', 'appearance'] as const) {
+    for (const id of ['downloads'] as const) {
       tools.click(id);
       expect(tools.page()).toBe(id);
       const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
@@ -60,6 +59,9 @@ describe('MobileShellTools', () => {
       expect(event.defaultPrevented).toBe(true);
       expect(tools.page()).toBe('more');
     }
+    tools.click('language'); tools.click('appearance');
+    expect(tools.actions.settings).toHaveBeenCalledTimes(2);
+    expect(tools.page()).toBe('more');
     const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
     tools.host.firstElementChild!.dispatchEvent(escape);
     expect(escape.defaultPrevented).toBe(false);
@@ -85,7 +87,7 @@ describe('MobileShellTools', () => {
 
   it('returns to the top of the tools list after leaving a long subpage', () => {
     const tools = mountTools();
-    tools.click('appearance');
+    tools.click('downloads');
     const viewport = tools.host.querySelector<HTMLElement>('.mobile-shell-tools > div')!;
     viewport.scrollTop = 120;
     tools.setPage('more');

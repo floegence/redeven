@@ -365,7 +365,7 @@
     "moveFailed": "Échec du déplacement"
   },
   "settings": {
-    "runtimeTitle": "Paramètres d'exécution",
+    "runtimeTitle": "Paramètres",
     "backToFlower": "Retour à Flower",
     "searchPlaceholder": "Rechercher dans les paramètres",
     "filteredSections": "{visible} section(s) sur {total}",
@@ -379,7 +379,11 @@
       "permissionPolicy": "Politique d'autorisation",
       "flower": "Flower",
       "skills": "Compétences",
-      "debugConsole": "Console de débogage"
+      "debugConsole": "Console de débogage",
+      "appearance": "Apparence et langue",
+      "browser": "Navigateur",
+      "services": "Services",
+      "extensions": "Extensions"
     },
     "groups": {
       "overview": "Vue d’ensemble",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "L'initialisation de la clé expire à",
       "notProvided": "Non fourni",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "Cette cible de paramètres n’est plus disponible."
   },
   "flower": {
     "currentEnvironmentFallback": "Cet environnement",

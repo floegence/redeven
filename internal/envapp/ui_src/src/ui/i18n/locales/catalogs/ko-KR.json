@@ -365,7 +365,7 @@
     "moveFailed": "이동 실패"
   },
   "settings": {
-    "runtimeTitle": "런타임 설정",
+    "runtimeTitle": "설정",
     "backToFlower": "Flower로 돌아가기",
     "searchPlaceholder": "설정 검색",
     "filteredSections": "섹션 {total}개 중 {visible}개",
@@ -379,7 +379,11 @@
       "permissionPolicy": "권한 정책",
       "flower": "Flower",
       "skills": "기술",
-      "debugConsole": "디버그 콘솔"
+      "debugConsole": "디버그 콘솔",
+      "appearance": "모양 및 언어",
+      "browser": "브라우저",
+      "services": "서비스",
+      "extensions": "확장 기능"
     },
     "groups": {
       "overview": "개요",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "키 초기화는",
       "notProvided": "에 만료됩니다. 제공되지 않음",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "이 설정 대상은 더 이상 사용할 수 없습니다."
   },
   "flower": {
     "currentEnvironmentFallback": "이 환경",

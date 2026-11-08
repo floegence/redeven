@@ -23,7 +23,7 @@ export function extensionI18n(locale = 'en-US'): ExtensionI18n {
     tn: (name, count) => { const value = messages[name]; return format(typeof value === 'string' ? value : value?.[new Intl.PluralRules(locale).select(count)] ?? value?.other ?? name, { count }); },
   };
 }
-export const FlowerExtensionsContext = createContext<FlowerExtensionsAdapter & { i18n: ExtensionI18n; openPlugin?: (id: string) => void; selectedPlugin?: () => { id: string }; catalogRevision?: () => number; catalogChanged?: () => void }>();
+export const FlowerExtensionsContext = createContext<FlowerExtensionsAdapter & { i18n: ExtensionI18n; isPresented?: (section: 'skills' | 'mcp' | 'plugins') => boolean; openPlugin?: (id: string) => void; selectedPlugin?: () => { id: string }; catalogRevision?: () => number; catalogChanged?: () => void }>();
 export function useFlowerExtensions() {
   const context = useContext(FlowerExtensionsContext);
   if (!context) throw new Error('Flower extensions context is unavailable');

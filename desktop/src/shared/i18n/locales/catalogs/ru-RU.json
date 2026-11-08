@@ -2182,7 +2182,8 @@
     "startEnvironment": "Запустить среду",
     "wslStopped": "Запустите эту среду WSL, прежде чем читать или сохранять её настройки доступа.",
     "environmentOnlyLabel": "Только внутри среды",
-    "environmentOnlyDescription": "Доступ из браузера ограничен самой средой. Вы по-прежнему можете открыть её через Desktop."
+    "environmentOnlyDescription": "Доступ из браузера ограничен самой средой. Вы по-прежнему можете открыть её через Desktop.",
+    "unifiedTitle": "Настройки"
   },
   "shell": {
     "accessibility": {

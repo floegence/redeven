@@ -36,6 +36,7 @@ node --test scripts/ui_package_install.test.mjs scripts/run_parallel_builds.test
 node scripts/check_go_version_consistency.mjs
 node scripts/check_managed_service_catalog_boundary.mjs
 node scripts/check_storage_ownership.mjs
+node scripts/check_unified_settings.mjs
 python3 -m unittest discover -s scripts/tests -p test_storage_relocation.py
 python3 scripts/check_flower_storage_compatibility.py
 python3 scripts/model-catalog/test_generate.py

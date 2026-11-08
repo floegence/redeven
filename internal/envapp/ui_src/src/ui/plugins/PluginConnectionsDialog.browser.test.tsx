@@ -27,6 +27,7 @@ const disposers: (() => void)[] = [];
 function mount(overrides: Partial<PluginConnectionsAPI> = {}, initialManage = true, localized = false) {
   const host = document.createElement('div'); document.body.append(host);
   const [open, setOpen] = createSignal(true); const [owner, setOwner] = createSignal<object>({});
+  const [visible, setVisible] = createSignal(true);
   const [canManage, setCanManage] = createSignal(initialManage); const [currentItem, setItem] = createSignal(item);
   const api = {
     listConnections: vi.fn(async () => ({ connections: [connection] })),
@@ -35,10 +36,10 @@ function mount(overrides: Partial<PluginConnectionsAPI> = {}, initialManage = tr
     cancelConnectionReview: vi.fn(async () => ({ canceled: true as const })),
     revokeConnection: vi.fn(async () => ({ revoked: true as const })), ...overrides,
   };
-  const view = () => <PluginConnectionsDialog open={open()} item={currentItem()} ownerScope={owner()}
+  const view = () => <PluginConnectionsDialog visible={visible()} open={open()} item={currentItem()} ownerScope={owner()}
     canManage={canManage()} api={api} onOpenChange={setOpen} />;
   disposers.push(render(() => localized ? <I18nProvider>{view()}</I18nProvider> : view(), host));
-  return { api, open, setOwner, setCanManage, setItem };
+  return { api, open, setOwner, setCanManage, setItem, setVisible };
 }
 async function ready() { await vi.waitFor(() => expect(document.querySelector('select')?.disabled).toBe(false)); }
 async function prepare() {
@@ -50,6 +51,17 @@ async function prepare() {
   await vi.waitFor(() => expect(document.querySelector('[data-connection-review]')).not.toBeNull());
 }
 afterEach(() => { while (disposers.length) disposers.pop()?.(); document.body.replaceChildren(); localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY); });
+
+it('hides with its settings host and restores an unsubmitted connection draft', async () => {
+  const mounted = mount(); await ready();
+  await page.getByRole('textbox', { name: 'Destination', exact: true }).fill('https://draft.example.com');
+  mounted.setVisible(false);
+  await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+  mounted.setVisible(true);
+  await expect.element(page.getByRole('textbox', { name: 'Destination', exact: true })).toHaveValue('https://draft.example.com');
+  expect(mounted.api.reviewConnection).not.toHaveBeenCalled();
+  expect(mounted.api.listConnections).toHaveBeenCalledTimes(1);
+});
 
 it('requires a separate explicit approval and binds the exact reviewed identity', async () => {
   const mounted = mount(); await prepare();

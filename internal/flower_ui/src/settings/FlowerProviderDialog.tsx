@@ -44,6 +44,8 @@ export type FlowerProviderDialogProps = Readonly<{
   chatGPTAccounts?: readonly FlowerChatGPTAccount[];
   onDiscoverModels?: FlowerModelCatalogDiscovery;
   open: boolean;
+  /** Presentation may retire while the canonical provider draft stays open. */
+  visible?: boolean;
   mode: FlowerProviderDialogMode;
   allowTypeChange?: boolean;
   provider: FlowerProviderDraft | null;
@@ -640,7 +642,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   return (
     <>
     <Dialog
-      open={props.open}
+      open={props.open && props.visible !== false}
       onOpenChange={props.onOpenChange}
       escapeKeyPhase="bubble"
       title={props.mode === 'create' ? copy().addTitle : copy().editTitle}
@@ -1121,7 +1123,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
         </fieldset>
       </Show>
     </Dialog>
-    <Dialog open={confirmReauthorization() && props.open && chatGPTEnabled()} onOpenChange={setConfirmReauthorization} title={copy().chatGPT.signInAgain}
+    <Dialog open={confirmReauthorization() && props.open && props.visible !== false && chatGPTEnabled()} onOpenChange={setConfirmReauthorization} title={copy().chatGPT.signInAgain}
       bodyDescription={copy().chatGPT.signInAgainDescription} class="w-[min(28rem,96vw)] max-w-[96vw]"
       footer={<div class="flex flex-wrap justify-end gap-2">
         <Show when={reauthorizationAccount()?.state === 'signed_out'}><Button size="sm" variant="ghost" class="text-destructive mr-auto" disabled={accountBusy() || !accountListReady()} onClick={() => setAccountToRemove(reauthorizationAccount())}>{copy().chatGPT.removeAccount}</Button></Show>
@@ -1141,18 +1143,18 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
         <a class="text-sm text-primary hover:underline" href="https://chatgpt.com/#settings" target="_blank" rel="noopener noreferrer">{copy().chatGPT.disconnectApps}<ExternalLink class="inline h-3 w-3" aria-hidden="true" /></a>
       </Show>
     </Dialog>
-    <ConfirmDialog open={Boolean(accountToRemove()) && props.open && chatGPTEnabled()} onOpenChange={open => { if (!open && !removingAccount()) setAccountToRemove(undefined); }} title={copy().chatGPT.removeAccount}
+    <ConfirmDialog open={Boolean(accountToRemove()) && props.open && props.visible !== false && chatGPTEnabled()} onOpenChange={open => { if (!open && !removingAccount()) setAccountToRemove(undefined); }} title={copy().chatGPT.removeAccount}
       confirmText={copy().chatGPT.removeAccount} cancelText={copy().chatGPT.cancel} variant="destructive" loading={removingAccount()} onConfirm={() => void removeAccount()}>
       <p class="font-medium break-all">{accountToRemove()?.email}</p>
       <p>{copy().chatGPT.removeDescription}</p>
       <Show when={accountToRemove()?.revocation_confirmed === false}><p>{copy().chatGPT.revocationUnconfirmed}</p><a class="text-sm text-primary hover:underline" href="https://chatgpt.com/#settings" target="_blank" rel="noopener noreferrer">{copy().chatGPT.disconnectApps}<ExternalLink class="inline h-3 w-3" aria-hidden="true" /></a></Show>
       <Show when={authError()}><p role="alert" class="text-destructive">{authError()}</p></Show>
     </ConfirmDialog>
-    <ConfirmDialog open={confirmNewRegistration() && props.open && chatGPTEnabled()} onOpenChange={setConfirmNewRegistration} title={copy().chatGPT.changeAccount}
+    <ConfirmDialog open={confirmNewRegistration() && props.open && props.visible !== false && chatGPTEnabled()} onOpenChange={setConfirmNewRegistration} title={copy().chatGPT.changeAccount}
       confirmText={copy().chatGPT.continue} cancelText={copy().chatGPT.useSavedAccounts} onConfirm={() => { setConfirmNewRegistration(false); void startAuthorization(true); }}>
       <p>{copy().chatGPT.newRegistrationDescription}</p>
     </ConfirmDialog>
-    <ConfirmDialog open={confirmSignOut() && props.open} onOpenChange={setConfirmSignOut} title={copy().chatGPT.signOut}
+    <ConfirmDialog open={confirmSignOut() && props.open && props.visible !== false} onOpenChange={setConfirmSignOut} title={copy().chatGPT.signOut}
       confirmText={copy().chatGPT.signOut} cancelText={copy().chatGPT.cancelSignOut} variant="destructive" onConfirm={() => void signOut()}>
       <p>{copy().chatGPT.signOutImpact(account()?.binding_count ?? 1, account()?.active_task_count ?? 0)}</p>
     </ConfirmDialog>

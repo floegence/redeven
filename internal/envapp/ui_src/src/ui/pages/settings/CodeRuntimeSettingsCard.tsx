@@ -1,3 +1,4 @@
+import { useSettingsPresentation } from '../../../../../../settings_ui/src/SettingsPanelHost';
 import { StableText, Button, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { Code, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
@@ -189,6 +190,7 @@ export interface CodeRuntimeSettingsCardProps {
 }
 
 export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
+  const presented = useSettingsPresentation('codespaces');
   const i18n = useI18n();
   const [prepareConfirmOpen, setPrepareConfirmOpen] = createSignal(false);
   const [removeVersionConfirmOpen, setRemoveVersionConfirmOpen] = createSignal<string | null>(null);
@@ -502,7 +504,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       </SettingsSection>
 
       <ConfirmDialog
-        open={prepareConfirmOpen()}
+        open={presented() && prepareConfirmOpen()}
         onOpenChange={(open) => setPrepareConfirmOpen(open)}
         title={localizedPrepareCopy().confirmTitle}
         confirmText={prepareActionLabel()}
@@ -521,7 +523,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       </ConfirmDialog>
 
       <ConfirmDialog
-        open={Boolean(removeVersionConfirmOpen())}
+        open={presented() && Boolean(removeVersionConfirmOpen())}
         onOpenChange={(open) => setRemoveVersionConfirmOpen(open ? removeVersionConfirmOpen() : null)}
         title={i18n.t('codeRuntime.removeDialogTitle')}
         confirmText={i18n.t('codeRuntime.removeVersionAction')}

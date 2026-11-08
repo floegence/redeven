@@ -2,6 +2,7 @@ import { ASK_FILE_PREVIEW_FLOWER_CHANNEL } from '../shared/filePreviewWindowRout
 import { readFilePreviewWindowRequest } from '../shared/filePreviewWindow';
 import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
 import { askFilePreviewFlower, openFilePreviewWindow } from './filePreviewWindow';
+import { resolveRunningSettingsTarget } from './runtimeSettingsTarget';
 import { captureAuthorizedPage } from './manualScreenshot';
 import { RELEASE_FLOWER_SOURCE_CHANNEL, type DesktopAskFlowerSource, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
 import { attachDesktopEditContextMenu } from './editContextMenu';
@@ -11597,9 +11598,15 @@ async function withRuntimeFlowerTimeout<T>(promise: Promise<T>, timeoutMs: numbe
 
 // Background resource and browser status requests use the current environment.
 // They must never start a stopped Runtime or prepare model providers.
-async function runningBrowserFlowerTarget(): Promise<RuntimeFlowerTarget | null> {
+async function runningBrowserFlowerTarget(environmentID?: string): Promise<RuntimeFlowerTarget | null> {
   const preferences = await loadDesktopPreferencesCached();
-  if (desktopPlatformCapabilities.wsl_environment) {
+  // IMPORTANT: Explicit reads and admitted uploads resolve only their captured
+  // running target. Changing the default Flower owner cannot retarget them.
+  if (environmentID && environmentID !== preferences.local_environment.id) {
+    const record = runtimePlacementBridgeRegistry.values().find(entry => entry.environment_id === environmentID);
+    return record ? { record, local_environment: null } : null;
+  }
+  if (!environmentID && desktopPlatformCapabilities.wsl_environment) {
     const record = runtimePlacementBridgeRegistry.get(preferences.default_flower_runtime_target_id!);
     return record ? { record, local_environment: null } : null;
   }
@@ -11666,7 +11673,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest, signal?: Abor
   signal?.throwIfAborted();
   const browserInstallation = path === '/_redeven_proxy/api/ai/computer/managed/browser';
   const sourceIcon = new URL(path, 'http://runtime-flower.local').pathname === '/_redeven_proxy/api/flower/source-icon';
-  const flowerTarget = browserInstallation || sourceIcon ? await runningBrowserFlowerTarget() : await awaitRuntimeFlowerRead(withRuntimeFlowerTimeout(
+  const flowerTarget = request.environment_id ? await resolveRunningSettingsTarget(request, runningBrowserFlowerTarget) : browserInstallation || sourceIcon ? await runningBrowserFlowerTarget() : await awaitRuntimeFlowerRead(withRuntimeFlowerTimeout(
     ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path)),
     RUNTIME_FLOWER_READINESS_TIMEOUT_MS,
     'runtime_flower_readiness_timeout',
@@ -11676,7 +11683,8 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest, signal?: Abor
   if (!flowerTarget || (request.environment_id && request.environment_id !== flowerTarget.record.environment_id)) {
     throw new Error('The browser installation environment session has ended.');
   }
-  const leaseRequest = retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path));
+  // IMPORTANT: Explicit-target reads/settings never start a runtime or prepare providers.
+  const leaseRequest = retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !request.environment_id && !sourceIcon && !isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path));
   const lease = await awaitRuntimeFlowerRead(leaseRequest, signal).catch(error => {
     if (signal?.aborted) void leaseRequest.then(late => late?.release()).catch(() => console.warn('Flower cancelled read could not release its late Runtime lease.'));
     throw error;

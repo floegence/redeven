@@ -724,6 +724,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         <Show keyed when={selectedItem()}>
           {(item) => (
             <PluginCenterDetails
+              visible={props.visible}
               item={item}
               activityPinned={(props.activityPinnedInventoryKeys ?? []).includes(item.inventoryKey)}
               onSetActivityPin={props.onSetActivityPin ? (pinned) => props.onSetActivityPin?.(item.inventoryKey, pinned) : undefined}
@@ -761,7 +762,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         </Show>
       </div>
       <Show when={props.connectionsAPI}>{(api) => (
-        <PluginConnectionsDialog open={Boolean(connectionsKey())} item={connectionItem()}
+        <PluginConnectionsDialog visible={props.visible} open={Boolean(connectionsKey())} item={connectionItem()}
           ownerScope={props.pluginOwnerScope} canManage={Boolean(props.canManageConnections)} api={api()}
           onOpenChange={(open) => { if (!open) setConnectionsKey(undefined); }} />
       )}</Show>
@@ -1115,6 +1116,7 @@ function PluginCenterShell(props: {
 }
 
 export function PluginCenterDetails(props: {
+  visible?: boolean;
   onSetAutomaticUpdates?: (item: PluginInventoryItem, enabled: boolean) => Promise<unknown>;
   activityPinned?: boolean;
   onSetActivityPin?: (pinned: boolean) => void | Promise<void>;
@@ -1245,6 +1247,7 @@ export function PluginCenterDetails(props: {
                   <AutomaticUpdatePreference item={item()} disabled={!props.canManage || props.managementPending} onChange={(enabled) => props.onSetAutomaticUpdates!(item(), enabled)} />
                 </Show>
                 <PluginPermissionInventory
+                  visible={props.visible}
                   item={item()}
                   canManage={props.canManage}
                   commandPending={props.managementPending}
@@ -1391,6 +1394,7 @@ function PluginAuthorContent(props: {
 }
 
 export function PluginPermissionInventory(props: {
+  visible?: boolean;
   item: PluginInventoryItem;
   canManage: boolean;
   commandPending: boolean;
@@ -1556,7 +1560,7 @@ export function PluginPermissionInventory(props: {
               };
               return (
                 <Dialog
-                  open
+                  open={props.visible !== false}
                   onOpenChange={(open) => { if (!open) setConfirmation(null); }}
                   title={i18n.t('uiCopy.plugin.permissionConfirmationTitle')}
                   bodyDescription={pending().grant

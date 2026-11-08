@@ -11,6 +11,8 @@ import type { FlowerTurnLauncherIntent } from '../../../../internal/flower_ui/sr
 import { describe, expect, it, vi } from 'vitest';
 import { awaitRuntimeFlowerRead, createRuntimeFlowerReadOwner } from '../../main/runtimeFlowerReadOwner';
 import { runtimeFlowerMethodAllowed, runtimeFlowerPath } from '../../main/runtimeFlowerRoutes';
+import type { BrowserPackageBridge } from '../../shared/browserPackageIPC';
+import type { FlowerBrowserInstallation, FlowerBrowserInstallationSnapshot, FlowerBrowserInstallRequest } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
@@ -232,30 +234,21 @@ describe('Local Environment Flower surface adapter', () => {
     expect(snapshot.defaults.auto_update_model_catalog).toBe(false);
   });
 
-  it('settles stalled model IPC within ten seconds and keeps its late reply out of settings', async () => {
-    vi.useFakeTimers();
-    try {
-      let finish!: (value: unknown) => void;
-      let hang = false;
-      const bridge = bridgeFor(request => {
-        if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-        if (!hang) return { current_model: 'default/agent', directory: {
-          models: [{ id: 'default/agent', label: 'Agent', source: 'runtime_config', provider_id: 'default', model_name: 'agent', state: 'ready' }],
-          sources: [{ id: 'default', kind: 'runtime_config', state: 'ready' }],
-        } };
-        return new Promise(resolve => { finish = resolve; });
-      });
-      const surfaceAdapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
-      await surfaceAdapter.loadSettings();
-      await surfaceAdapter.loadModelDirectory!();
-      hang = true;
-      const read = surfaceAdapter.loadModelDirectory!(true);
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(await read).toMatchObject({ checking: false, models: [{ id: 'default/agent', state: 'ready' }] });
-      finish({ current_model: 'late/model', directory: { models: [], sources: [] } });
-      await vi.advanceTimersByTimeAsync(0);
-      expect((await surfaceAdapter.loadSettings()).model_directory?.current_model_id).toBe('default/agent');
-    } finally { vi.useRealTimers(); }
+  it('keeps a slow model read owned and rejects its completion after invalidation', async () => {
+    let finish!: (value: unknown) => void;
+    let scope = 'first';
+    const bridge = bridgeWithMainReadOwnership(bridgeFor(request => {
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      return new Promise(resolve => { finish = resolve; });
+    }));
+    const resource = createDesktopFlowerModelReadResource(bridge, () => scope);
+    const pending = resource.loadDirectory();
+    const rejected = expect(pending).rejects.toThrow();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    scope = 'replacement'; resource.invalidate();
+    finish({ current_model: 'old/model', directory: { models: [], sources: [] } });
+    await rejected;
+    expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalled();
   });
 
   it('updates runtime copy without replacing the adapter or transport', () => {
@@ -2024,4 +2017,66 @@ it('tracks native conversation downloads without losing the selected runtime or 
     expect(manager.tasks()[0]).toMatchObject({ status: 'completed', bytesRead: 6 });
     expect(native.complete).toHaveBeenCalledOnce(); expect(native.abort).not.toHaveBeenCalled();
   } finally { finish(); window.redevenDesktopDownloads = previous; }
+});
+
+it('binds a contextual browser opening to its captured runtime incarnation', async () => {
+  let startedAt = 100;
+  const bridge = bridgeFor(() => ({}));
+  const opening = () => { const captured = startedAt; return createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: 'same-id', expectedRuntimeStartedAt: captured, isAvailable: () => captured === startedAt }); };
+  const first = opening();
+  await first.computerManagement!.saveAccess('thread', { origins: [], apps: [], allow_foreground: false });
+  expect(bridge.requestRuntimeFlower).toHaveBeenLastCalledWith(expect.objectContaining({ environment_id: 'same-id', expected_runtime_started_at_unix_ms: 100 }));
+  startedAt = 200;
+  await expect(first.computerManagement!.saveAccess('thread', { origins: [], apps: [], allow_foreground: false })).rejects.toThrow('unavailable');
+  expect(first.canMutate).toBe(false);
+  const second = opening(); await second.computerManagement!.saveAccess('thread', { origins: [], apps: [], allow_foreground: false });
+  expect(bridge.requestRuntimeFlower).toHaveBeenLastCalledWith(expect.objectContaining({ environment_id: 'same-id', expected_runtime_started_at_unix_ms: 200 }));
+});
+
+it.each([false, true])('keeps admitted browser bytes bound to their runtime after owner selection changes (restart=%s)', async restart => {
+  const environmentID = `upload-${restart}`;
+  const lifetime = new AbortController();
+  let selected = environmentID;
+  let incarnation = 100;
+  const pkg = { id: 'chromium-test', name: 'Chromium', version: '148', platform: 'linux', architecture: 'arm64', url: 'https://example.test/browser.zip', sha256: 'a'.repeat(64), size_bytes: 300000, installed_bytes: 600000 };
+  let state: FlowerBrowserInstallation = { enabled: true, state: 'not_installed', launch: { state: 'installation_required' }, package: pkg, directory: '/browser', received_bytes: 0, storage_bytes: 0 };
+  let observed: FlowerBrowserInstallationSnapshot | undefined;
+  const actions: string[] = [];
+  const bridge = bridgeFor(request => {
+    expect(request.environment_id).toBe(environmentID);
+    expect(request.expected_runtime_started_at_unix_ms).toBe(100);
+    const input = request.body as FlowerBrowserInstallRequest | undefined;
+    if (request.method === 'POST' && input) {
+      actions.push(input.action);
+      if (input.action === 'start') state = { ...state, state: 'uploading', operation_id: 'operation', received_bytes: 0 };
+      if (input.action === 'chunk') state = { ...state, received_bytes: input.offset! + atob(input.data!).length };
+      if (input.action === 'complete') state = { ...state, state: 'installed', launch: { state: 'ready' } };
+    }
+    return { ...state };
+  });
+  let release!: () => void;
+  const paused = new Promise<void>(resolve => { release = resolve; });
+  const desktop: BrowserPackageBridge = { request: vi.fn(async input => {
+    if (input.action === 'acquire') { await paused; return { ok: true, package: pkg }; }
+    if (input.action === 'read') return { ok: true, data: new Uint8Array(Math.min(262144, pkg.size_bytes - input.offset)) };
+    return { ok: true };
+  }), subscribe: () => () => {} };
+  const browserWindow = window as Window & { redevenBrowserPackage?: BrowserPackageBridge };
+  const prior = browserWindow.redevenBrowserPackage;
+  browserWindow.redevenBrowserPackage = desktop;
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: environmentID, expectedRuntimeStartedAt: 100, signal: lifetime.signal,
+    isAvailable: () => selected === environmentID && incarnation === 100, browserTransferAvailable: () => incarnation === 100 });
+  const unsubscribe = adapter.computerManagement!.subscribeBrowserInstallation!(value => { observed = value; });
+  try {
+    await adapter.computerManagement!.installBrowser!({ action: 'start', source: 'upload', package_id: pkg.id });
+    await vi.waitFor(() => expect(desktop.request).toHaveBeenCalled());
+    selected = 'another-environment';
+    lifetime.abort();
+    if (restart) incarnation = 200;
+    release();
+    await vi.waitFor(() => expect(observed?.transfer_active).toBe(false));
+    if (restart) expect(actions).toEqual([]);
+    else { expect(actions).toEqual(['start', 'chunk', 'chunk', 'complete']); expect(observed?.state).toBe('installed'); }
+    await expect(adapter.computerManagement!.installBrowser!({ action: 'start', source: 'upload', package_id: pkg.id })).rejects.toThrow();
+  } finally { release(); unsubscribe(); browserWindow.redevenBrowserPackage = prior; }
 });

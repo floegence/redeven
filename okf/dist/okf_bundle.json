@@ -5932,7 +5932,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-05",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "ai",
           "computer-use",
@@ -5943,7 +5943,7 @@
         "title": "Browser and desktop settings",
         "type": "Product Interaction Contract"
       },
-      "body_length": 3446,
+      "body_length": 3852,
       "summary": "Both carriers share Browser and desktop settings. Runtime capabilities, thread grants and extension consent are independent. The browser page presents connected profiles with their actual Chrome/Chromium marks, inline connection status, and a shared connect/refresh action row.",
       "sections": [
         {
@@ -5957,8 +5957,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Inspection never selects a page, grants authority, starts a task or installs components. A lost selection stays unavailable until it is recovered or explicitly replaced; the settings dialog does not own Floret lifecycle.",
-          "char_count": 220
+          "body": "The global Settings category embeds the existing browser controller. Contextual links retain exact thread/environment identity; unavailable targets never substitute another Runtime. Browser installation transfers capture admitted environment/incarnation transport independently of panel lifetime; reopening observes the same operation. Chrome guide steps survive category changes without preparing twice.\n\nInspection never selects a page, grants authority, starts a task or installs components. A lost selection stays unavailable until it is recovered or explicitly replaced; the settings dialog does not own Floret lifecycle.",
+          "char_count": 626
         },
         {
           "id": "evidence",
@@ -11671,7 +11671,7 @@
         "title": "Managed Service Instance Configuration",
         "type": "Architecture Contract"
       },
-      "body_length": 1941,
+      "body_length": 2343,
       "summary": "Verified template owns baseline; Redeven owns overrides, release/digest, resources, secrets and rebuilds. One resolver combines baseline/differences. Apply requires stopped state, current revision/plan/risk checks; failure preserves prior state or explicitly reports rollback failure.",
       "sections": [
         {
@@ -11685,8 +11685,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "No change to template topology/endpoint, ReDevPlugin or public IPC; no raw engine commands, silent stops or unreviewed host authority.",
-          "char_count": 134
+          "body": "Settings retains one editor per visited service. Semantic opening identity excludes list-refresh churn. Navigation fences stale reads/plans but always settles pending preflight/apply busy state. Confirmed runtime apply adopts the new revision on reopening while preserving independent unsaved metadata; failed apply keeps its draft. Template dialogs opened from settings follow the host presentation.\n\nNo change to template topology/endpoint, ReDevPlugin or public IPC; no raw engine commands, silent stops or unreviewed host authority.",
+          "char_count": 536
         },
         {
           "id": "evidence",
@@ -15471,7 +15471,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "desktop",
           "environments",
@@ -15481,15 +15481,15 @@
         "title": "Environment settings sessions, connections and presentation",
         "type": "Desktop Contract"
       },
-      "body_length": 3711,
+      "body_length": 3859,
       "summary": "One target-bound settings session owns connection/access drafts and immediate opening. Local opens Access \u0026 security without a connection editor. Access management uses existing WSL authority only after exact-distribution discovery confirms it is running; opening/loading never starts stopped distros. Distinguish current password constraints from saved next-start configuration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Settings session\n- Each opening owns committed connection baseline/draft and lazy access baseline/draft. Health refresh preserves running summary, connection nodes, expanded listeners, address filters, selection, scroll and QR panels; never reload access/certificate/security configuration.\n- Save invalidates older reads. Late failure from a closed opening becomes a notification, never an error in the next editor. Access opens current-connection/browser/sign-in/HTTPS tasks; recovery-pending protection must be restored before changing it.\n\n## Presentation\n- Cap the panel at 50rem by 44.375rem and viewport/titlebar; only viewport resize changes the cap. Tabs/loading/disclosures cannot recenter it or move actions. Use one Current connection card with aligned, selectable, wrapping text/diagnostics/paths/addresses.\n- Browser scope, sign-in and certificate tasks share rows, meaningful icons and published outline controls with borders/hover/focus. Preserve specialized QR/recovery-code geometry. Removal drafts cannot look committed; review never shows passwords. Separate footer feedback/actions. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.\n- SSH destination fills the adjacent control column in creation/settings. Loading/cached-host failure uses its trailing inset, preserving width/draft/focus; idle indicators take no external column or input clicks.\n- Access steps place equal flexible connectors after non-final labels; narrow layouts stack aligned badges without horizontal connectors. Floe owns modal presence and 200ms tab underline; retained exit never blanks the panel.\n\n## Connection facts\nObservations preserve host/container namespaces; failures prove no exit. Explicit Stop clears addresses. Presentation never chooses transport.\n\n- Name the selected Environment before addresses. Never substitute SSH aliases for URL hosts or rely on WSL localhost forwarding. Address count cannot resize settings/move the footer.\n- Internal browser access aligns label with one expandable scope/count summary, stacking narrowly. Avoid duplicate scope paragraphs/disclosure labels. Preserve expansion on refresh and show total/filtered counts; environment-only addresses have no browser/copy/share actions.\n- Gateway cards retain explicit URL/local/SSH/container transport without Runtime lifecycle authority. Display, clipboard and QR exclude tokens/private loopback credentials.\n- Public addresses are independent of private management. Saved bind/protocol/port/password/certificate changes apply next start; drafts cannot synthesize current URLs. Failed writes preserve password verifier and report failure.",
-          "char_count": 2657
+          "body": "## Settings session\n- Each opening owns committed connection baseline/draft and lazy access baseline/draft. Health refresh preserves running summary, connection nodes, expanded listeners, address filters, selection, scroll and QR panels; never reload access/certificate/security configuration.\n- Save invalidates older reads. Late failure from a closed opening becomes a notification, never an error in the next editor. Access opens current-connection/browser/sign-in/HTTPS tasks; recovery-pending protection must be restored before changing it.\n\n## Presentation\n- Embed the canonical connection/access editor in the global [Settings host](../ui/runtime-settings.md#unified-settings-host); its standalone fallback retains the 50rem by 44.375rem cap. Global host dimensions are independent of category content. Tabs/loading/disclosures cannot recenter it or move actions. Use one Current connection card with aligned, selectable, wrapping text/diagnostics/paths/addresses.\n- Browser scope, sign-in and certificate tasks share rows, meaningful icons and published outline controls with borders/hover/focus. Preserve specialized QR/recovery-code geometry. Removal drafts cannot look committed; review never shows passwords. Separate footer feedback/actions. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.\n- SSH destination fills the adjacent control column in creation/settings. Loading/cached-host failure uses its trailing inset, preserving width/draft/focus; idle indicators take no external column or input clicks.\n- Access steps place equal flexible connectors after non-final labels; narrow layouts stack aligned badges without horizontal connectors. Floe owns modal presence and 200ms tab underline; retained exit never blanks the panel.\n\n## Connection facts\nObservations preserve host/container namespaces; failures prove no exit. Explicit Stop clears addresses. Presentation never chooses transport.\n\n- Name the selected Environment before addresses. Never substitute SSH aliases for URL hosts or rely on WSL localhost forwarding. Address count cannot resize settings/move the footer.\n- Internal browser access aligns label with one expandable scope/count summary, stacking narrowly. Avoid duplicate scope paragraphs/disclosure labels. Preserve expansion on refresh and show total/filtered counts; environment-only addresses have no browser/copy/share actions.\n- Gateway cards retain explicit URL/local/SSH/container transport without Runtime lifecycle authority. Display, clipboard and QR exclude tokens/private loopback credentials.\n- Public addresses are independent of private management. Saved bind/protocol/port/password/certificate changes apply next start; drafts cannot synthesize current URLs. Failed writes preserve password verifier and report failure.",
+          "char_count": 2805
         },
         {
           "id": "boundaries",
@@ -15543,6 +15543,12 @@
           "path": "desktop/desktop-ssh-environment-settings.md",
           "concept_id": "desktop.desktop-ssh-environment-settings",
           "title": "Desktop SSH environment settings"
+        },
+        {
+          "label": "Settings host",
+          "path": "ui/runtime-settings.md",
+          "concept_id": "ui.runtime-settings",
+          "title": "Runtime settings"
         }
       ],
       "backlinks": [
@@ -15566,7 +15572,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-05",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "accessibility",
           "desktop",
@@ -15576,7 +15582,7 @@
         "title": "Desktop interaction continuity",
         "type": "Interaction Contract"
       },
-      "body_length": 2184,
+      "body_length": 2451,
       "summary": "Welcome owns interaction sessions; Launcher/Runtime own business operations. Before the first asynchronous submission, one synchronous transition records the attempt, closes its menu and opens its operation surface. The interaction-continuity package command runs required state and real component suites, including the production snapshot subscription and observer.",
       "sections": [
         {
@@ -15590,8 +15596,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "## Layers, exit and recovery\nPublished presence and overlay ownership provide one exit and input-routing lifecycle.\n\nFailure, permission loss, cancellation failure and missing progress retain an exit or recovery action. Closing never infers cancellation.",
-          "char_count": 254
+          "body": "Settings adapters capture exact environment ID and Runtime start timestamp. Native admission rejects stopped, replaced or restarted targets before dispatch; explicit settings reads never start them. Contextual browser adapters capture again only on a fresh opening.\n\n## Layers, exit and recovery\nPublished presence and overlay ownership provide one exit and input-routing lifecycle.\n\nFailure, permission loss, cancellation failure and missing progress retain an exit or recovery action. Closing never infers cancellation.",
+          "char_count": 521
         },
         {
           "id": "evidence",
@@ -21381,7 +21387,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-03",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "flower",
           "mcp",
@@ -21392,7 +21398,7 @@
         "title": "Flower extensions",
         "type": "UI Contract"
       },
-      "body_length": 3597,
+      "body_length": 3817,
       "summary": "Shared Flower retains Skills/MCP/Plugins management through typed authenticated carrier adapters. MCP edits HTTP endpoints or local executable/one-argument-per-line. Never prefill secrets: omission preserves, explicit empty object clears. Retain search/enabled filter/tools/checks/confirmed removal.",
       "sections": [
         {
@@ -21406,8 +21412,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Visibility grants no mutation. [MCP runtime](../ai/mcp-runtime.md) owns persistence, protocol, dependency matching and execution authority.",
-          "char_count": 139
+          "body": "Nested Skills/MCP/Plugin editors and confirmations follow host presence and the selected supported category/tab. Hidden portals retain drafts; invalid resources cannot leave an active editor above an unavailable state.\n\nVisibility grants no mutation. [MCP runtime](../ai/mcp-runtime.md) owns persistence, protocol, dependency matching and execution authority.",
+          "char_count": 359
         },
         {
           "id": "evidence",
@@ -22154,7 +22160,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "ai",
           "authentication",
@@ -22164,7 +22170,7 @@
         "title": "Flower provider setup and account selection",
         "type": "UI Contract"
       },
-      "body_length": 2915,
+      "body_length": 3223,
       "summary": "Provider dialogs keep explicit access methods, keys, accounts and model selection independent. Use short names and access labels. Explain keys, quotas and saved methods in the access tooltip; model limits in the model tooltip. Icon links open official guidance.",
       "sections": [
         {
@@ -22178,8 +22184,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Brand grouping is presentation only; both connection types remain in catalog/serialization. Floret mechanics and storage are unchanged.\n\nAccount removal does not delete an OpenAI account or provider configuration. The dialog never treats account selection as OAuth intent or an implicit provider save.",
-          "char_count": 301
+          "body": "Global Settings deep links focus the exact provider/model. Category/host hiding only suppresses nested portals and preserves the provider draft; explicit provider close retains its existing reset behavior. Permission revocation/disposal fences account discovery and save results before success publication.\n\nBrand grouping is presentation only; both connection types remain in catalog/serialization. Floret mechanics and storage are unchanged.\n\nAccount removal does not delete an OpenAI account or provider configuration. The dialog never treats account selection as OAuth intent or an implicit provider save.",
+          "char_count": 609
         },
         {
           "id": "evidence",
@@ -22327,7 +22333,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-03",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "ai",
           "flower",
@@ -22337,15 +22343,15 @@
         "title": "Flower setup and settings",
         "type": "UI Contract"
       },
-      "body_length": 2911,
+      "body_length": 3018,
       "summary": "Shared setup/settings serve both Flower carriers. The unconfigured surface is one open, canvas-level composition using published Floe ink and Button interaction, with no card, icon tile, heavy heading or filled call-to-action. It contains the Flower mark, setup title, one short explanation and the available settings destinations.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## First-time setup\nWelcome setup requires no selected thread, configured provider or usable model, and absent/`not_configured`/`empty` Desktop source. Desktop `local_host` opens the current surface's settings, never another Welcome window or a remote destination. Artwork has no glow or continuous animation.\n\nLocal setup has one text action; remote Desktop setup keeps distinct Desktop and environment text actions with concise localized labels. No model-sync control or starter-task previews appear before configuration. Existing settings updates restore the retained composer and draft when a model becomes usable; configured-model recovery remains in its existing settings/menu owner.\n\n## Starter tasks\nFour editable drafts cover current-folder understanding, connected computer, installed applications and folder organization. Names/dates alone never justify deletion. The [companion](flower-activity-companion.md#companion) omits the grid.\n\n## Settings composition\nSettings edit the environment profile even with a Desktop model source. Flat sections preserve identity/drafts. Immediate switches block duplicate edits and roll back on failure.\n\n## Provider configuration\n[Provider configuration](flower-provider-configuration.md#provider-configuration) owns authentication, layout and connection-before-model sequencing.\n\n## Retained panels\nFlowerSurface retains chat/extensions and a lazily loaded settings form in a bounded scrollable modal. Covered chat/navigation remain inert through close and do not acknowledge reads. Settings interactions belong to the companion: dialog close keeps it expanded; host collapse closes both while retaining form/progress/errors.\n\n## Saving and ownership\nIndependent adapter operations save permission, model profile and default model. Permission uses a serialized 700 ms coalescing controller, fences older responses and restores the last confirmed value on failure. Computer-use failures restore the confirmed switch and expose errors.",
-          "char_count": 1982
+          "body": "## First-time setup\nWelcome setup requires no selected thread, configured provider or usable model, and absent/`not_configured`/`empty` Desktop source. Desktop `local_host` opens the current surface's settings, never another Welcome window or a remote destination. Artwork has no glow or continuous animation.\n\nLocal setup has one text action; remote Desktop setup keeps distinct Desktop and environment text actions with concise localized labels. No model-sync control or starter-task previews appear before configuration. Existing settings updates restore the retained composer and draft when a model becomes usable; configured-model recovery remains in its existing settings/menu owner.\n\n## Starter tasks\nFour editable drafts cover current-folder understanding, connected computer, installed applications and folder organization. Names/dates alone never justify deletion. The [companion](flower-activity-companion.md#companion) omits the grid.\n\n## Settings composition\nSettings edit the environment profile even with a Desktop model source. Flat sections preserve identity/drafts. Immediate switches block duplicate edits and roll back on failure.\n\n## Provider configuration\n[Provider configuration](flower-provider-configuration.md#provider-configuration) owns authentication, layout and connection-before-model sequencing.\n\n## Retained panels\nProduct settings commands enter the global [Settings host](runtime-settings.md#unified-settings-host), preserving Flower chat, composer, thread and extension owners. Standalone Flower retains its bounded fallback modal. Covered transcripts never acknowledge reads through modal exit. One canonical FlowerSettingsPanel/FlowerSettingsSurface owns provider/default edits; host adapters cannot duplicate its account or secret controller.\n\n## Saving and ownership\nIndependent adapter operations save permission, model profile and default model. Permission uses a serialized 700 ms coalescing controller, fences older responses and restores the last confirmed value on failure. Computer-use failures restore the confirmed switch and expose errors.",
+          "char_count": 2089
         },
         {
           "id": "boundaries",
@@ -22392,6 +22398,12 @@
           "path": "ui/flower-provider-configuration.md",
           "concept_id": "ui.flower-provider-configuration",
           "title": "Flower provider setup and account selection"
+        },
+        {
+          "label": "Settings host",
+          "path": "ui/runtime-settings.md",
+          "concept_id": "ui.runtime-settings",
+          "title": "Runtime settings"
         }
       ],
       "backlinks": [
@@ -23896,15 +23908,15 @@
         "title": "Plugin Center interaction",
         "type": "UI Contract"
       },
-      "body_length": 10854,
+      "body_length": 10955,
       "summary": "Redeven owns Plugin Center navigation and retained selection/search/filter/scroll; Floe owns dialogs, presence and input. New drafts center a composer on a quiet canvas without empty split preview. Landing/pre-preview use a fine two-scale lattice with slowly traveling theme-derived light. Grid lines stay aligned while their illumination changes, avoiding visual drift. The preview placeholder adds an original SVG application silhouette with restrained assembly motion and concise actual status, never simulated progress.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Management placement and input\nPlugin Center explicitly uses global product-modal placement, never inert/transformed Workbench ancestors after recent widget/Dock input. Workbench Open closes management and focuses its widget; Activity opens over retained directory. Failed Open preserves context/error.\n\n## Directory and responsive details\nSource/lifecycle filters retain identity; refresh status stays outside the grid.\n\n## Shared design language\nUse published controls/default card planes, selection fills and Tags; no resting contours, lift, magnification or custom shadows. Floe owns Input focus, Button busy/disabled and Tabs keyboard behavior. Menu triggers have one focus boundary, neutral hover/visible focus. Primary detail actions stay outside scrolling; evidence stays disclosed. Source tabs use three equal columns, ellipsis/full accessible names. Mobile targets\u003e=44px. Progress replaces primary action without moving cards; support long translations, themes and reduced motion. Floe Dialog preserves gutter/width during height changes and scrolling.\n\n## Plugin creation workspace\nCreation is a lazy addressable page outside startup graph. Deep links await authenticated environment/plugin readiness before draft reads. Plugin Center owns generation conversations; ordinary Flower lists omit them. History and workspace occupy only the current content viewport, retaining the Env App header, Activity rail or mobile navigation. Detail Back returns to history; history Back returns to Plugin Center. Activity/Workbench switches resize one stable creation container without moving or reloading its iframe. Covered app content remains mounted but hidden/inert; ordinary Flower stays retained and hidden. Shell page navigation waits for workspace close/persistence and preserves creation on cancellation. Embedded selection survives list refreshes. One composer uses ordinary Send, no synthetic empty prompt or second creation intent.\n\nDecoration cannot intercept input, pauses hidden/offscreen or after failure, is static under reduced motion and omitted under forced colors. Mouse movement softly illuminates nearby grid lines with time-based easing; tracking settles without a permanent frame loop and clears on leave, drag, scroll, blur or lifecycle changes. Touch and pen retain ordinary input without hover effects. Live sandbox replaces placeholder/motion. After Send, conversation defaults to 280–328px. The published Floe drag handle and keyboard separator adjust it between 280–720px while reserving 360px for the canvas. Width persists through the Desktop state bridge or browser storage; temporary viewport clamping does not overwrite the preference. Mobile keeps tabbed panes. Fit/phone controls resize the same iframe. Compact screens switch panes through named 44px toolbar icons with visible title. Omit ordinary mode bar, nested app header/border and bottom dock. One toolbar owns sizing/comments/build/install; permissions use overflow.\n\nEmbedded conversation displays HTML links/fences as source; files open through host actions and image/audio/video references retain rendering. Other conversations keep inline HTML. Workspace/history have a compact content toolbar; the Env App header alone owns Desktop drag/native-control insets. Display explicit user title, else verified preview name, else localized untitled without rewriting saved drafts. Checks reflect actual stages; output is disclosed.\n\nDirectory cards use 13px titles, 12px summaries/padding, 32px icons; selection/status cannot enlarge or duplicate refresh. Unfiltered installed/discovery grids append Add plugin for managers, even when empty; hide during load/error/filter/update. Published menu offers creation, marketplace discovery (clearing filters in the same center), and other-source install review, restoring focus on dismissal/return. Compact toolbar icons preserve accessible names/title width.\n\nHistory is a bounded-width modification-ordered list: mark/title/localized time/continue, with searchable localized untitled. Refresh retains records/query; loading/retry/empty stay explicit. Icons project the latest verified artifact through the released package/icon reader, before installation. Artifact/digest-bound authenticated URLs invalidate changed icons. Visible history refreshes every five seconds and on focus; keyed reconciliation retains focus/search. No artifact/icon means a neutral placeholder. Initialization/Flower rename persist titles; polling cannot remount composer. Legacy unnamed drafts use verified package names without durable rename.\n\nCreate is request-idempotent and URL becomes durable. Authority-free composer snapshots persist unsent text/File bytes through IndexedDB; status reflects actual transaction. Navigation waits for create/capture/pending saves; failed create/missing bytes preserve page/input. Unsaved latest snapshots protect reload/close; committed transaction clears protection. Runtime restart flushes workspace before bounded exact-session handoff of draft snapshots/files/comment text/route across private origins. Restore cache before ACK/mount; authorize draft read afterward. Never restore grants, credentials, ports or surface targets. Failed draft reads cannot show fresh composer/create replacement. Rename/delete bind revision; empty-draft rename and in-flight delete await that same create. Restart resumes admission/cleanup.\n\nPreview is released sandbox in isolated author Host. Conversation loading cannot detach independent live preview. First verified artifact may auto-apply; later Apply respects unsaved-state close. Failed builds preserve last preview and bounded keyboard-disclosed failure/logs/truncation. Install reviews exact displayed bytes; grants remain separate. Each artifact/platform generation gets fresh preview container even for identical bytes. After confirmed close, failed update rereads authority before reopen; canceled close preserves original surface/artifact. Back/Forward await close and persistence; cancellation retains, failure reconciles. Open installed retains route/composer/conversation/preview and opens separate creation-owned surface in either mode; stale/missing targets fail in place.\n\nPrimary action is Install, Update for newer artifact, or Open when current. Install/Update inspects the pending immutable artifact against the formal installed instance before asking to close the live preview. On success it applies that exact artifact and presents the same inspection; failure/cancel stops. Package conflicts offer a localized explicit Flower repair request through the ordinary outbox, preserving unsent composer content. Open remains overflow during iteration. Review uses Host intent; new builds cannot replace its artifact. Metadata refresh preserves composer. Changed bytes require higher source SemVer under exact Host rules. Reload queries same durable install request; unknown outcome prohibits another install. Committed install survives inventory failure; later builds update recorded instance. Only authoritative not_committed allows fresh review.\n\n## Canvas comments\nUse upstream opt-in native context-menu callback on same sandbox channel; never cross-origin DOM reads. Selection binds artifact/preview generation/platform frame. Normalized geometry draws noninteractive pin/outline; nearby clamped popover measures before reveal, uses Floe presence/reduced motion and retains edit anchor across freshness updates. Busy appears on Send without height shift. Keyboard/whole-preview comments are alternatives; closure retains text/focus. Compact actions\u003e=44px, no extra header/permanent cover; comment/update live in overflow, pending update marks a dot. Comment action selects preview; accepted submission returns compact view to conversation without unmounting preview. New edits during Send keep editor open.\n\nComments use the same thread's durable outbox independently of the composer, including during an active run; accepted messages enter the ordinary queue without stopping Flower. Preserve unsent text/references/files. Include only the comment's explicit visual context; neither comments nor package repair inherit composer references or repeat workspace instructions. Pending/unknown sends never duplicate. Handler, permission, pending interaction and admission protections still apply. Selection text is untrusted quoted context; edits/builds keep approval, Apply/install remain explicit. Cache only text under authenticated draft. Reload/replacement/navigation/resize/app input invalidate selection, not text; Send rechecks frame/artifact. Persistence failure protects unload/blocks navigation; deletion removes snapshots after close.\n\n## Restore saved data\nDetails action menu discovers retained records read-only even when enabled. Select by date/instance suffix; explicit Disable and continue obtains exact Host review, warning current data is retained. No permanent card/hash wall/automatic enable. Bind requests to owner/instance/read-write-admin authority. Refresh preserves review; closure aborts reads. Reopen uncertain plans checks status only; uncertain disabling rereads inventory without repeating writes. Completed recovery survives list failure. Native radios and existing Dialog own keyboard/isolation/dismissal/focus; mobile\u003e=44px.",
-          "char_count": 9276
+          "body": "## Management placement and input\nPlugin Center is a retained category in the global Settings dialog, never a work destination or a child of inert/transformed Workbench ancestors. Connection and permission portals follow exact host visibility while retaining their drafts. Workbench Open closes management and focuses its widget; Activity opens over retained directory. Failed Open preserves context/error.\n\n## Directory and responsive details\nSource/lifecycle filters retain identity; refresh status stays outside the grid.\n\n## Shared design language\nUse published controls/default card planes, selection fills and Tags; no resting contours, lift, magnification or custom shadows. Floe owns Input focus, Button busy/disabled and Tabs keyboard behavior. Menu triggers have one focus boundary, neutral hover/visible focus. Primary detail actions stay outside scrolling; evidence stays disclosed. Source tabs use three equal columns, ellipsis/full accessible names. Mobile targets\u003e=44px. Progress replaces primary action without moving cards; support long translations, themes and reduced motion. Floe Dialog preserves gutter/width during height changes and scrolling.\n\n## Plugin creation workspace\nCreation is a lazy addressable page outside startup graph. Deep links await authenticated environment/plugin readiness before draft reads. Plugin Center owns generation conversations; ordinary Flower lists omit them. History and workspace occupy only the current content viewport, retaining the Env App header, Activity rail or mobile navigation. Detail Back returns to history; history Back returns to Plugin Center. Activity/Workbench switches resize one stable creation container without moving or reloading its iframe. Covered app content remains mounted but hidden/inert; ordinary Flower stays retained and hidden. Shell page navigation waits for workspace close/persistence and preserves creation on cancellation. Embedded selection survives list refreshes. One composer uses ordinary Send, no synthetic empty prompt or second creation intent.\n\nDecoration cannot intercept input, pauses hidden/offscreen or after failure, is static under reduced motion and omitted under forced colors. Mouse movement softly illuminates nearby grid lines with time-based easing; tracking settles without a permanent frame loop and clears on leave, drag, scroll, blur or lifecycle changes. Touch and pen retain ordinary input without hover effects. Live sandbox replaces placeholder/motion. After Send, conversation defaults to 280–328px. The published Floe drag handle and keyboard separator adjust it between 280–720px while reserving 360px for the canvas. Width persists through the Desktop state bridge or browser storage; temporary viewport clamping does not overwrite the preference. Mobile keeps tabbed panes. Fit/phone controls resize the same iframe. Compact screens switch panes through named 44px toolbar icons with visible title. Omit ordinary mode bar, nested app header/border and bottom dock. One toolbar owns sizing/comments/build/install; permissions use overflow.\n\nEmbedded conversation displays HTML links/fences as source; files open through host actions and image/audio/video references retain rendering. Other conversations keep inline HTML. Workspace/history have a compact content toolbar; the Env App header alone owns Desktop drag/native-control insets. Display explicit user title, else verified preview name, else localized untitled without rewriting saved drafts. Checks reflect actual stages; output is disclosed.\n\nDirectory cards use 13px titles, 12px summaries/padding, 32px icons; selection/status cannot enlarge or duplicate refresh. Unfiltered installed/discovery grids append Add plugin for managers, even when empty; hide during load/error/filter/update. Published menu offers creation, marketplace discovery (clearing filters in the same center), and other-source install review, restoring focus on dismissal/return. Compact toolbar icons preserve accessible names/title width.\n\nHistory is a bounded-width modification-ordered list: mark/title/localized time/continue, with searchable localized untitled. Refresh retains records/query; loading/retry/empty stay explicit. Icons project the latest verified artifact through the released package/icon reader, before installation. Artifact/digest-bound authenticated URLs invalidate changed icons. Visible history refreshes every five seconds and on focus; keyed reconciliation retains focus/search. No artifact/icon means a neutral placeholder. Initialization/Flower rename persist titles; polling cannot remount composer. Legacy unnamed drafts use verified package names without durable rename.\n\nCreate is request-idempotent and URL becomes durable. Authority-free composer snapshots persist unsent text/File bytes through IndexedDB; status reflects actual transaction. Navigation waits for create/capture/pending saves; failed create/missing bytes preserve page/input. Unsaved latest snapshots protect reload/close; committed transaction clears protection. Runtime restart flushes workspace before bounded exact-session handoff of draft snapshots/files/comment text/route across private origins. Restore cache before ACK/mount; authorize draft read afterward. Never restore grants, credentials, ports or surface targets. Failed draft reads cannot show fresh composer/create replacement. Rename/delete bind revision; empty-draft rename and in-flight delete await that same create. Restart resumes admission/cleanup.\n\nPreview is released sandbox in isolated author Host. Conversation loading cannot detach independent live preview. First verified artifact may auto-apply; later Apply respects unsaved-state close. Failed builds preserve last preview and bounded keyboard-disclosed failure/logs/truncation. Install reviews exact displayed bytes; grants remain separate. Each artifact/platform generation gets fresh preview container even for identical bytes. After confirmed close, failed update rereads authority before reopen; canceled close preserves original surface/artifact. Back/Forward await close and persistence; cancellation retains, failure reconciles. Open installed retains route/composer/conversation/preview and opens separate creation-owned surface in either mode; stale/missing targets fail in place.\n\nPrimary action is Install, Update for newer artifact, or Open when current. Install/Update inspects the pending immutable artifact against the formal installed instance before asking to close the live preview. On success it applies that exact artifact and presents the same inspection; failure/cancel stops. Package conflicts offer a localized explicit Flower repair request through the ordinary outbox, preserving unsent composer content. Open remains overflow during iteration. Review uses Host intent; new builds cannot replace its artifact. Metadata refresh preserves composer. Changed bytes require higher source SemVer under exact Host rules. Reload queries same durable install request; unknown outcome prohibits another install. Committed install survives inventory failure; later builds update recorded instance. Only authoritative not_committed allows fresh review.\n\n## Canvas comments\nUse upstream opt-in native context-menu callback on same sandbox channel; never cross-origin DOM reads. Selection binds artifact/preview generation/platform frame. Normalized geometry draws noninteractive pin/outline; nearby clamped popover measures before reveal, uses Floe presence/reduced motion and retains edit anchor across freshness updates. Busy appears on Send without height shift. Keyboard/whole-preview comments are alternatives; closure retains text/focus. Compact actions\u003e=44px, no extra header/permanent cover; comment/update live in overflow, pending update marks a dot. Comment action selects preview; accepted submission returns compact view to conversation without unmounting preview. New edits during Send keep editor open.\n\nComments use the same thread's durable outbox independently of the composer, including during an active run; accepted messages enter the ordinary queue without stopping Flower. Preserve unsent text/references/files. Include only the comment's explicit visual context; neither comments nor package repair inherit composer references or repeat workspace instructions. Pending/unknown sends never duplicate. Handler, permission, pending interaction and admission protections still apply. Selection text is untrusted quoted context; edits/builds keep approval, Apply/install remain explicit. Cache only text under authenticated draft. Reload/replacement/navigation/resize/app input invalidate selection, not text; Send rechecks frame/artifact. Persistence failure protects unload/blocks navigation; deletion removes snapshots after close.\n\n## Restore saved data\nDetails action menu discovers retained records read-only even when enabled. Select by date/instance suffix; explicit Disable and continue obtains exact Host review, warning current data is retained. No permanent card/hash wall/automatic enable. Bind requests to owner/instance/read-write-admin authority. Refresh preserves review; closure aborts reads. Reopen uncertain plans checks status only; uncertain disabling rereads inventory without repeating writes. Completed recovery survives list failure. Native radios and existing Dialog own keyboard/isolation/dismissal/focus; mobile\u003e=44px.",
+          "char_count": 9377
         },
         {
           "id": "boundaries",
@@ -24110,7 +24122,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-03",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "runtime",
           "settings",
@@ -24119,15 +24131,15 @@
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 3242,
+      "body_length": 5740,
       "summary": "Env App owns settings destinations/drafts/API adapters; Floe reusable layout/navigation. Narrow/revisited panels retain usability, drafts and scroll. A ready editor has a compact version/source row with the update action. Installed versions and installation paths use keyboard-accessible disclosures; selection, removal confirmation and copying stay available.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Navigation and visual hierarchy\nDestinations are Config File, Connection, Runtime Status, Shell \u0026 Workspace, Codespaces \u0026 Tooling, Logging, Permission Policy, Flower and Debug Console. Page-owned geometry avoids competing global/lazy styles. Full padded diagnostic summaries toggle native disclosure with neutral hover and visible keyboard focus.\n\n## Codespaces and Browser Editor\nThe breadcrumb owns the visible destination label. The content has one Browser Editor heading, one status badge and one inventory refresh action. The settings installation surface omits its standalone heading and refresh control; initial setup shows the selected installation route and one primary action without an idle progress checklist or empty current-editor rows. Active setup shows the current stage once, measured progress, cancellation and diagnostics; errors retain explicit retry and failure details. Runtime permissions and install/update confirmations remain authoritative.\n\nPort fields show their values directly, including disabled defaults. The effective range is explained only when normalization changes custom input; autosave and its flat API payload remain unchanged. Floe tokens set field heights, corners and text; setup actions wrap and progress adapts within narrow settings surfaces.\n\n## Settings controls and identity\nRuntime, Desktop environment, Flower, terminal and managed-service fields share the published Floe control height (32px, `--floe-control-height-md`), `--floe-radius-field` corners, 12px text, quiet fill and subdued 1px border. Row identity icons and provider brands occupy the same 32px square on `--floe-radius-md`, so icon, field and select edges stay concentric within a row. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.\n\n## Configuration editing\nExisting autosave/restart rules govern shell, filesystem, logging, ports and permissions. Settings PUT accepts flat fields, never response-group wrappers such as `runtime`/`logging`/`codespaces`. Health, diagnostics, backup/restore use right-column actions without bypassing permission/confirmation.\n\n## Flower extension placement\n[Flower extensions](flower-extensions.md) own Skills/MCP browsing and management.",
-          "char_count": 2246
+          "body": "## Unified settings host\nEnv App and Desktop open one global Settings dialog above the current work surface. Activity, Workbench, terminal sessions, plugin surfaces, Flower drafts and scroll retain their owners; opening settings is not work navigation. Published Floe owns retained DOM, modal placement, focus, nested Escape and inert exit. Create the stable retained owner inside the global placement provider: moving DOM cannot transfer Solid context to nested dialogs. Its root owns definite dimensions. Desktop caps the host at 1060 by 760 pixels; narrow screens use the viewport. Search filters navigation; mobile uses the same category targets. Desktop environment selection names the exact target; opening never starts a Runtime.\n\nEnv categories cover Appearance \u0026 Language, Connection, Runtime Status, Terminal, Browser, Applications \u0026 Desktop, Services, Shell \u0026 Workspace, Codespaces \u0026 Tooling, Permission Policy, Flower, Extensions, Plugin Center, Storage \u0026 Recovery, Config File, Logging and Debug Console. Desktop offers its applicable appearance, environment connection, Flower, extensions and browser sections. Header/mobile commands and contextual gears route here. Access-gate language remains available before authorization.\n\nEnv links use `settings` and optional `settings_resource`; Back/Forward restores selection. Unknown/unsupported resources show an unavailable state, never another service, thread or environment. Contextual terminal/browser/service/connection editors register their exact owner, keep drafts across category changes, and unregister on domain close. Closing the host closes its contextual session; stale links cannot revive it. Generic forms retain their scope-owned drafts. All nested dialogs follow exact host presence/category/resource support, separately from draft and operation ownership.\n\nHost authority changes abort settings reads and reject late replies. Current admin/connection rights gate mutations; cached permission observations are insufficient. Independent provider saves do not depend on unrelated parent loading and publish success once. Settings covers Flower read visibility until modal exit. Installation transfers already admitted to an environment remain owned by that environment, not its visible settings panel or the current default model owner. Renderer grants and native explicit lookup bind the captured running incarnation; changing the selection cannot cancel or retarget admitted bytes, and a stopped/replacement Runtime rejects them.\n\n## Codespaces and Browser Editor\nThe breadcrumb owns the visible destination label. The content has one Browser Editor heading, one status badge and one inventory refresh action. The settings installation surface omits its standalone heading and refresh control; initial setup shows the selected installation route and one primary action without an idle progress checklist or empty current-editor rows. Active setup shows the current stage once, measured progress, cancellation and diagnostics; errors retain explicit retry and failure details. Runtime permissions and install/update confirmations remain authoritative.\n\nPort fields show their values directly, including disabled defaults. The effective range is explained only when normalization changes custom input; autosave and its flat API payload remain unchanged. Floe tokens set field heights, corners and text; setup actions wrap and progress adapts within narrow settings surfaces.\n\n## Settings controls and identity\nRuntime, Desktop environment, Flower, terminal and managed-service fields share the published Floe control height (32px, `--floe-control-height-md`), `--floe-radius-field` corners, 12px text, quiet fill and subdued 1px border. Row identity icons and provider brands occupy the same 32px square on `--floe-radius-md`, so icon, field and select edges stay concentric within a row. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.\n\n## Configuration editing\nExisting autosave/restart rules govern shell, filesystem, logging, ports and permissions. Settings PUT accepts flat fields, never response-group wrappers such as `runtime`/`logging`/`codespaces`. Health, diagnostics, backup/restore use right-column actions without bypassing permission/confirmation.\n\n## Flower extension placement\n[Flower extensions](flower-extensions.md) own Skills/MCP browsing and management.",
+          "char_count": 4404
         },
         {
           "id": "boundaries",
@@ -24140,8 +24152,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/config/config_update.go` and   `redeven:internal/config/config_update_test.go` own coordinated configuration   transactions, settings preservation, account removal, and failed writes.\n\n- `redeven:internal/agent/gateway_membership_lifecycle_test.go`,   `redeven:internal/agent/control_artifact_source_test.go`, and   `redeven:internal/agent/cloud_link_test.go`\n\n- `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.tsx`",
-          "char_count": 440
+          "body": "- `redeven:internal/config/config_update.go` and   `redeven:internal/config/config_update_test.go` own coordinated configuration   transactions, settings preservation, account removal, and failed writes.\n\n- `redeven:internal/agent/gateway_membership_lifecycle_test.go`,   `redeven:internal/agent/control_artifact_source_test.go`, and   `redeven:internal/agent/cloud_link_test.go`\n\n- `internal/settings_ui/src`: product navigation and retained host adapters.\n- `EnvSettingsDialog.browser.test.tsx`, `UnifiedSettings.browser.test.tsx`: real-host targets, drafts, portals, history, Escape, responsive geometry and live authority.\n- `scripts/check_unified_settings.mjs`: bounded source ownership gate; `scripts/check_unified_settings_acceptance.sh`: explicit behavioral qualification.",
+          "char_count": 780
         }
       ],
       "snippet": "Env App owns settings destinations/drafts/API adapters; Floe reusable layout/navigation. Narrow/revisited panels retain usability, drafts and scroll. A ready editor has a compact version/source row with the update action. Installed versions",
@@ -24155,9 +24167,21 @@
       ],
       "backlinks": [
         {
+          "label": "Environment settings sessions, connections and presentation",
+          "path": "desktop/desktop-environment-settings.md",
+          "concept_id": "desktop.desktop-environment-settings",
+          "title": "Environment settings sessions, connections and presentation"
+        },
+        {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower setup and settings",
+          "path": "ui/flower-setup-and-settings.md",
+          "concept_id": "ui.flower-setup-and-settings",
+          "title": "Flower setup and settings"
         },
         {
           "label": "Shared interface scale",
@@ -24791,5 +24815,5 @@
       ]
     }
   ],
-  "source_sha256": "75dd8cc27ff899519d318ba51a1144e87282f8553eff1e608615f0692ec7baa8"
+  "source_sha256": "21b6c09580ece57bb060fdd7dad5f2f1d0542270a9191ad4dfc6a1a4ecadf007"
 }

@@ -1,3 +1,4 @@
+import { HostedSettingsPanel } from '../../../internal/settings_ui/src/SettingsPanelHost';
 import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { Show, createMemo, createUniqueId, type JSX } from 'solid-js';
 import { Button, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
@@ -50,11 +51,14 @@ export function EnvironmentSettingsDialog(props: {
     const label = presentation()?.label?.trim();
     return label ? `${title} · ${label}` : title;
   });
-  return <Dialog open={isOpen()} onOpenChange={open => { if (!open) props.onClose(); }}
+  return <HostedSettingsPanel target={{ section: 'connection', resource: props.environment?.id }} open={props.open} onClose={props.onClose}
+    fallback={body => (<Dialog open={isOpen()} onOpenChange={open => { if (!open) props.onClose(); }}
     onPresenceChange={props.onPresenceChange}
     title={dialogTitle()}
     closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble"
     class={`redeven-environment-settings-dialog${hasTabs() ? ' environment-settings-with-tabs' : ''}`} contentClass="environment-settings-content">
+{body}</Dialog>)}><div class="redeven-environment-settings-content environment-settings-content h-full flex min-h-0 flex-col">
+    <h2 class="px-5 py-3 text-sm font-semibold">{dialogTitle()}</h2>
     <Show when={props.unavailable}><p role="alert" class="px-5 py-3 text-sm text-warning">{props.i18n.t('interactionContinuity.unavailable')}</p><Button class="mx-5 mb-3" variant="outline" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
     <Show when={hasTabs()}>
       <Tabs items={[
@@ -71,5 +75,5 @@ export function EnvironmentSettingsDialog(props: {
     <TabPanel id={panelID('access')} labelledBy={hasTabs() ? tabID('access') : undefined} active={hasAccess() && props.tab === 'access'} keepMounted class="environment-settings-tab">
       {props.access}
     </TabPanel>
-  </Dialog>;
+  </div></HostedSettingsPanel>;
 }

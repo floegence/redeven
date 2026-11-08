@@ -154,10 +154,13 @@ describe('Redeven Env App surface theme contract', () => {
     expect(css).toContain('background: var(--redeven-settings-selection-bg) !important;');
     const here = path.dirname(fileURLToPath(import.meta.url));
     const compactSettings = fs.readFileSync(path.resolve(here, '../ui/pages/runtime-settings-compact.css'), 'utf8');
-    expect(flower).toContain('class="settings-permission-options mt-3" role="radiogroup"');
-    expect(flower).toContain('class="settings-permission-option" role="radio" aria-checked={permissionType() === kind}');
+    const canonical = fs.readFileSync(path.resolve(here, '../../../../flower_ui/src/settings/FlowerSettingsSurface.tsx'), 'utf8');
+    expect(flower).toContain('<FlowerSettingsPanel');
+    expect(canonical).toContain('role="radiogroup"');
+    expect(canonical).toContain('role="radio"');
+    expect(canonical).toContain('aria-checked={active()}');
+    expect(canonical).toContain('flower-settings-policy-radio');
     expect(compactSettings).toContain('background: var(--redeven-settings-inset-bg);');
-    expect(compactSettings).toContain(".settings-permission-option[aria-checked='true'] .settings-permission-option-mark { border: 5px solid var(--primary); }");
     expect(flower).not.toContain("&& 'redeven-settings-choice--selected'");
   });
 

@@ -365,7 +365,7 @@
     "moveFailed": "移動に失敗しました"
   },
   "settings": {
-    "runtimeTitle": "実行時設定",
+    "runtimeTitle": "設定",
     "backToFlower": "Flower に戻る",
     "searchPlaceholder": "設定を検索",
     "filteredSections": "{total} 件中 {visible} 件のセクション",
@@ -379,7 +379,11 @@
       "permissionPolicy": "権限ポリシー",
       "flower": "Flower",
       "skills": "スキル",
-      "debugConsole": "デバッグコンソール"
+      "debugConsole": "デバッグコンソール",
+      "appearance": "外観と言語",
+      "browser": "ブラウザー",
+      "services": "サービス",
+      "extensions": "拡張機能"
     },
     "groups": {
       "overview": "概要",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "キーの初期化の有効期限は",
       "notProvided": "提供されません",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "この設定対象は利用できなくなりました。"
   },
   "flower": {
     "currentEnvironmentFallback": "この環境",

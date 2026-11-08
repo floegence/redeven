@@ -1861,11 +1861,13 @@ export const enUS = defineDictionary({
     moveFailed: 'Move failed',
   },
   settings: {
-    runtimeTitle: 'Runtime Settings',
+    runtimeTitle: 'Settings',
+    targetUnavailable: 'This settings target is no longer available.',
     backToFlower: 'Back to Flower',
     searchPlaceholder: 'Search settings',
     filteredSections: '{visible} of {total} sections',
     nav: {
+      appearance: 'Appearance & Language', browser: 'Browser', services: 'Services', extensions: 'Extensions',
       config: 'Config File',
       connection: 'Connection',
       agent: 'Runtime Status',

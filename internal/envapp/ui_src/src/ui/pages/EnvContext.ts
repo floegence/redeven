@@ -25,16 +25,7 @@ import type {
   EnvWorkbenchSurfaceOpenStrategy,
 } from '../envViewMode';
 
-export type EnvSettingsSection =
-  | 'config'
-  | 'connection'
-  | 'agent'
-  | 'runtime'
-  | 'logging'
-  | 'debug_console'
-  | 'codespaces'
-  | 'permission_policy'
-  | 'ai';
+export type EnvSettingsSection = import('../../../../../settings_ui/src/settingsSession').SettingsSection;
 
 export type EnvSettingsOrigin =
   | {
@@ -45,6 +36,7 @@ export type EnvSettingsOrigin =
 
 export type OpenEnvSettingsOptions = {
   origin?: EnvSettingsOrigin;
+  resource?: string;
 };
 
 export type SetEnvViewModeOptions = {
@@ -130,7 +122,9 @@ export type EnvContextValue = {
   bumpSettingsSeq: () => void;
   setFlowerWorkbenchHost?: (host: HTMLElement | null, foreground: boolean) => void;
   openSettings: (section?: EnvSettingsSection, options?: OpenEnvSettingsOptions) => void;
+  settingsOpen?: () => boolean;
   settingsOrigin: () => EnvSettingsOrigin;
+  createSettingsFlowerAdapter?: (lifetime: { signal: AbortSignal; isAvailable: () => boolean }) => Promise<FlowerSurfaceAdapter>;
   returnFromSettingsOrigin: () => void;
   debugConsoleEnabled: () => boolean;
   setDebugConsoleEnabled: (enabled: boolean) => void;

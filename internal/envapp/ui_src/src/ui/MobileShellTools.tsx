@@ -1,9 +1,6 @@
 import { For, Show, Suspense, lazy, createEffect, type Component } from 'solid-js';
 import { ArrowLeft, Download, Globe, Highlighter, LayoutDashboard, Search, X, ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
-import type { EnvAppThemePickerProps } from './EnvAppThemePicker';
-import { EnvAppThemePicker } from './EnvAppThemePicker';
-import { LanguagePreferenceMenu } from './i18n/LanguagePreferenceMenu';
 import { localeDisplayName } from './i18n/localeMeta';
 import { useI18n } from './i18n';
 import type { DownloadManager } from './downloads/types';
@@ -20,9 +17,8 @@ export function MobileShellTools(props: {
   onSearch: () => void;
   onNotes: () => void;
   onDashboard: () => void;
+  onSettings: () => void;
   manager: DownloadManager;
-  theme: Pick<EnvAppThemePickerProps, 'onSourceChange' | 'onShellThemeChange'>;
-  notify: { success: (title: string, message: string) => void };
 }) {
   const i18n = useI18n();
   let contentViewport: HTMLDivElement | undefined;
@@ -35,16 +31,14 @@ export function MobileShellTools(props: {
     }
   });
   const badge = () => props.manager.activeCount() || (props.manager.tasks().some(task => task.status === 'failed') ? '!' : '');
-  const title = () => props.page === 'downloads' ? i18n.t('uiCopy.downloads.title')
-    : props.page === 'language' ? i18n.t('language.label')
-      : props.page === 'appearance' ? i18n.t('shell.themePicker.title') : i18n.t('shell.mobileTools.more');
+  const title = () => props.page === 'downloads' ? i18n.t('uiCopy.downloads.title') : i18n.t('shell.mobileTools.more');
   const entries = (): { id: string; label: string; icon: Component<{ class?: string }>; onClick: () => void; detail?: string | number }[] => [
     { id: 'search', label: i18n.t('shell.mobileTools.search'), icon: Search, onClick: props.onSearch },
     { id: 'notes', label: i18n.t('shell.topbar.notesOverlay'), icon: NotesOverlayIcon, onClick: props.onNotes },
     { id: 'downloads', label: i18n.t('uiCopy.downloads.title'), icon: Download, onClick: () => props.onPageChange('downloads'), detail: badge() },
     ...(i18n.source() === 'browser' ? [{ id: 'language', label: i18n.t('language.label'), icon: Globe,
-      onClick: () => props.onPageChange('language'), detail: localeDisplayName(i18n.locale()) }] : []),
-    { id: 'appearance', label: i18n.t('shell.themePicker.title'), icon: Highlighter, onClick: () => props.onPageChange('appearance') },
+      onClick: props.onSettings, detail: localeDisplayName(i18n.locale()) }] : []),
+    { id: 'appearance', label: i18n.t('shell.themePicker.title'), icon: Highlighter, onClick: props.onSettings },
     { id: 'dashboard', label: i18n.t('shell.topbar.backToDashboard'), icon: LayoutDashboard, onClick: props.onDashboard },
   ];
   return <div class="mobile-shell-tools flex min-h-0 flex-col">
@@ -68,8 +62,6 @@ export function MobileShellTools(props: {
         </button>}</For>
       </div></Show>
       <Show when={props.page === 'downloads'}><Suspense fallback={<div role="status" class="p-3 text-sm text-muted-foreground">{i18n.t('floeControls.loading')}</div>}><DownloadTaskPanel manager={props.manager} inline /></Suspense></Show>
-      <Show when={props.page === 'language'}><LanguagePreferenceMenu variant="inline" notify={props.notify} /></Show>
-      <Show when={props.page === 'appearance'}><EnvAppThemePicker presentation="inline" {...props.theme} /></Show>
     </div>
   </div>;
 }

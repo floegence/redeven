@@ -48,7 +48,7 @@ try {
     await page.goto(new URL('environment-settings.html?restart-handoff=1', report.url).href);
     const t = createDesktopI18n(config.locale).t;
     await page.getByRole('button', { name: t('environmentCenter.settingsForLabel', { label: config.label }), exact: true }).click();
-    const dialog = page.locator('.redeven-environment-settings-dialog');
+    const dialog = page.locator('.redeven-unified-settings-dialog');
     if (await dialog.getByRole('tab', { name: t('settings.accessTab'), exact: true }).count()) {
       await dialog.getByRole('tab', { name: t('settings.accessTab'), exact: true }).click();
     }
@@ -59,7 +59,7 @@ try {
     await page.evaluate(() => {
       window.restartFrames = [];
       const record = () => {
-        const settings = document.querySelector('.redeven-environment-settings-dialog');
+        const settings = document.querySelector('.redeven-unified-settings-dialog');
         const progress = document.querySelector('.redeven-environment-progress');
         window.restartFrames.push({ settings: !!settings, progress: !!progress, focus: document.activeElement?.className });
         if (!progress) requestAnimationFrame(record);

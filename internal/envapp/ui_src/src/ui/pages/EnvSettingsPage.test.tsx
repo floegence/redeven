@@ -4,6 +4,8 @@ import { render } from 'solid-js/web';
 import { Show, createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { mapEnvFlowerSettings } from '../flower/envLocalFlowerSurfaceAdapter';
+import { serializeFlowerProvider } from '../../../../../flower_ui/src/settings/modelSelection';
 import { EnvSettingsPage } from './EnvSettingsPage';
 import type { EnvSettingsPageContextValue } from './settings/EnvSettingsPageContext';
 import { SETTINGS_GROUPS, SETTINGS_NAV_ITEMS } from './settings/settingsStructure';
@@ -73,7 +75,7 @@ const runtimeUpdateMocks = vi.hoisted(() => ({
 }));
 
 const localApiMocks = vi.hoisted(() => ({
-  fetchLocalApiJSON: vi.fn(async () => null),
+  fetchLocalApiJSON: vi.fn<(url: string, init?: RequestInit) => Promise<any>>(async () => null),
 }));
 
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
@@ -349,6 +351,19 @@ vi.mock('./EnvContext', () => ({
     settingsOrigin: envContextMocks.settingsOrigin,
     returnFromSettingsOrigin: envContextMocks.returnFromSettingsOrigin,
     bumpSettingsSeq: envContextMocks.bumpSettingsSeq,
+    createSettingsFlowerAdapter: async () => {
+      const loadSettings = async () => mapEnvFlowerSettings(await localApiMocks.fetchLocalApiJSON('/_redeven_proxy/api/settings', { method: 'GET' }) ?? { ai: null } as any);
+      return { loadSettings, canMutate: true,
+        saveDefaultPermission: async (permission_type: string) => {
+          const response = await localApiMocks.fetchLocalApiJSON('/_redeven_proxy/api/ai/default_permission', { method: 'PUT', body: JSON.stringify({ permission_type }) }) as any;
+          return mapEnvFlowerSettings(response.settings);
+        },
+        saveModelProfile: async (draft: any) => {
+          await localApiMocks.fetchLocalApiJSON('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ model_profile: { ...draft.model_profile, providers: draft.model_profile.providers.map(serializeFlowerProvider) } }) });
+          return loadSettings();
+        },
+      };
+    },
   }),
 }));
 
@@ -579,38 +594,18 @@ describe('EnvSettingsPage', () => {
 
     const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
-      'Config File',
-      'Connection',
-      'Runtime Status',
-      'Shell & Workspace',
-      'Codespaces & Tooling',
-      'Logging',
-      'Permission Policy',
-      'Flower',
-      'Debug Console',
+      'Appearance & Language', 'Terminal', 'Browser', 'Applications & Desktop', 'Services', 'Extensions', 'Plugin Center', 'Storage & Recovery',
+      'Config File', 'Connection', 'Runtime Status', 'Shell & Workspace', 'Codespaces & Tooling', 'Logging', 'Permission Policy', 'Flower', 'Debug Console',
     ]);
-
-    const renderedNavLabels = Array.from(host.querySelectorAll('[data-settings-nav-item]'))
-      .map((node) => node.textContent?.trim() ?? '')
-      .filter((label) => navLabels.includes(label));
-    expect(renderedNavLabels).toEqual([
-      'Connection',
-      'Runtime Status',
-      'Shell & Workspace',
-      'Codespaces & Tooling',
-      'Permission Policy',
-      'Flower',
-      'Config File',
-      'Logging',
-      'Debug Console',
-    ]);
-    expect(host.querySelector('[data-settings-nav-item="config"]')?.getAttribute('aria-current')).toBe('page');
+    const renderedIDs = Array.from(host.querySelectorAll('[data-settings-nav-item]')).map(node => node.getAttribute('data-settings-nav-item'));
+    expect(renderedIDs).toEqual(SETTINGS_GROUPS.flatMap(group => group.sections));
+    expect(host.querySelector('[data-settings-nav-item="appearance"]')?.getAttribute('aria-current')).toBe('page');
     expect(host.querySelector('[data-settings-nav-item="connection"]')?.hasAttribute('aria-current')).toBe(false);
     const settingsSidebar = host.querySelector('.floe-settings-layout__sidebar');
-    expect(settingsSidebar?.querySelector('nav')?.getAttribute('aria-label')).toBe('Runtime Settings');
+    expect(settingsSidebar?.querySelector('nav')?.getAttribute('aria-label')).toBe('Settings');
     expect(settingsSidebar?.querySelector('input')?.getAttribute('aria-label')).toBe('Search settings');
 
-    expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-card="Config File"]')).toBeNull();
     expect(host.textContent).not.toContain('Language preference');
     expect(host.textContent).not.toContain('System default');
 
@@ -632,8 +627,8 @@ describe('EnvSettingsPage', () => {
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
-    expect(aiGroupSections).toEqual(['ai']);
-    expect(host.querySelector('[data-settings-nav-item="plugins"]')).toBeNull();
+    expect(aiGroupSections).toEqual(['ai', 'extensions', 'plugins']);
+    expect(host.querySelector('[data-settings-nav-item="plugins"]')).not.toBeNull();
 
     await openSettingsSection(host, 'debug_console');
     expect(host.querySelector('[data-settings-card="Debug Console"]')).toBeTruthy();
@@ -644,11 +639,11 @@ describe('EnvSettingsPage', () => {
     expect(host.querySelector('[data-settings-nav-item="config"]')?.hasAttribute('aria-current')).toBe(false);
   });
 
-  it('opens Runtime Settings on the existing Config File section by default', async () => {
+  it('opens unified Settings on Appearance by default', async () => {
     render(() => <EnvSettingsPage />, host);
     await flushPage();
 
-    expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-nav-item="appearance"]')?.getAttribute('aria-current')).toBe('page');
   });
 
   it('shows the connection as a concise read-only information panel', async () => {
@@ -719,7 +714,7 @@ describe('EnvSettingsPage', () => {
 
   it('can render with an existing settings provider context instead of shadowing it', async () => {
     render(() => (
-      <EnvSettingsPage
+      <EnvSettingsPage panels={{ ai: () => <div data-settings-card="Flower" /> }}
         context={{
           env: {
             settingsOrigin: () => null,
@@ -787,7 +782,7 @@ describe('EnvSettingsPage', () => {
     ), host);
     await flushPage();
 
-    expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
+    expect(host.querySelector('.flower-settings-surface, [data-settings-card="Flower"]')).toBeTruthy();
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
   });
 
@@ -914,10 +909,10 @@ describe('EnvSettingsPage', () => {
     render(() => <EnvSettingsPage />, host);
     await openSettingsSection(host, 'ai');
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
+      expect(host.querySelector('.flower-settings-surface, [data-settings-card="Flower"]')).toBeTruthy();
     });
 
-    const flowerCard = host.querySelector('[data-settings-card="Flower"]');
+    const flowerCard = host.querySelector('.flower-settings-surface, [data-settings-card="Flower"]');
     await vi.waitFor(() => expect(flowerCard?.textContent).toContain('gpt-5.4'));
     expect(flowerCard?.textContent).toContain('Add provider');
     expect(flowerCard?.querySelectorAll('[role="radio"]')).toHaveLength(3);
@@ -953,7 +948,7 @@ describe('EnvSettingsPage', () => {
 
     render(() => <EnvSettingsPage />, host);
     await openSettingsSection(host, 'ai');
-    await vi.waitFor(() => expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy());
+    await vi.waitFor(() => expect(host.querySelector('.flower-settings-surface, [data-settings-card="Flower"]')).toBeTruthy());
 
     const readonly = host.querySelectorAll<HTMLButtonElement>('[role="radio"]')[0];
     expect(readonly).toBeTruthy();
@@ -995,7 +990,7 @@ describe('EnvSettingsPage', () => {
     render(() => <EnvSettingsPage />, host);
     await openSettingsSection(host, 'ai');
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
+      expect(host.querySelector('.flower-settings-surface, [data-settings-card="Flower"]')).toBeTruthy();
     });
 
     const radios = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
@@ -1154,7 +1149,7 @@ describe('EnvSettingsPage', () => {
     confirmButton?.click();
 
     await vi.waitFor(() => {
-      expect(host.textContent).toContain('current_model_id is not in providers[].models[]: missing/provider-model');
+      expect(host.textContent).toContain('Current model is not available: missing/provider-model.');
     });
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/provider_bundle',
@@ -1321,7 +1316,7 @@ describe('EnvSettingsPage', () => {
       updated_at_unix_ms: 1,
     });
 
-    render(() => <EnvSettingsPage />, host);
+    render(() => <EnvSettingsPage initialSection="codespaces" />, host);
     await vi.waitFor(() => {
       expect(codeRuntimeMocks.fetchCodeRuntimeStatus).toHaveBeenCalled();
     });

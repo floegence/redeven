@@ -365,7 +365,7 @@
     "moveFailed": "Не удалось переместить"
   },
   "settings": {
-    "runtimeTitle": "Настройки времени выполнения",
+    "runtimeTitle": "Настройки",
     "backToFlower": "Вернуться к Flower",
     "searchPlaceholder": "Поиск настроек",
     "filteredSections": "{visible} из {total} разделов",
@@ -379,7 +379,11 @@
       "permissionPolicy": "Политика разрешений",
       "flower": "Flower",
       "skills": "Навыки",
-      "debugConsole": "Консоль отладки"
+      "debugConsole": "Консоль отладки",
+      "appearance": "Оформление и язык",
+      "browser": "Браузер",
+      "services": "Сервисы",
+      "extensions": "Расширения"
     },
     "groups": {
       "overview": "Обзор",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "Срок инициализации ключа истекает в",
       "notProvided": "Не предусмотрено",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "Этот объект настроек больше недоступен."
   },
   "flower": {
     "currentEnvironmentFallback": "Эта среда",

@@ -1,3 +1,4 @@
+import { HostedSettingsPanel } from '../../../../../settings_ui/src/SettingsPanelHost';
 import './managed-service-settings.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
@@ -249,6 +250,8 @@ function TextListField(props: {
 
 export function ManagedServiceSettingsDrawer(props: {
   open: boolean;
+  embedded?: boolean;
+  refreshRevision?: number;
   serviceID: string;
   serviceName: string;
   canManage: boolean;
@@ -296,8 +299,13 @@ export function ManagedServiceSettingsDrawer(props: {
   createEffect(() => { if (!props.open) setPickerOpen(false); });
 
   let readGeneration = 0;
+  let openingGeneration = 0;
+  const openingIdentity = createMemo(() => JSON.stringify([props.open, props.serviceID]));
+  createEffect(on(openingIdentity, () => { openingGeneration++; }));
   let ownerService: string | undefined;
-  onCleanup(() => { readGeneration++; });
+  let disposed = false;
+  let appliedNeedsReload = false;
+  onCleanup(() => { disposed = true; readGeneration++; });
   const load = async () => {
     if (!props.open || !props.serviceID) return;
     const generation = ++readGeneration;
@@ -313,14 +321,19 @@ export function ManagedServiceSettingsDrawer(props: {
       if (generation !== readGeneration || serviceID !== props.serviceID || !props.open) return;
       setReadConfirmed(true);
       setPlan(null); setAcceptedRisks({});
-      if (metadataDirty() || runtimeDirty()) {
+      if (!appliedNeedsReload && (metadataDirty() || runtimeDirty())) {
         const authority = { management_state: value.management_state, observed_state: value.observed_state, locked: value.locked };
         setLoaded(current => current ? { ...current, ...authority } : current);
         setDraft(current => current ? { ...current, ...authority } : current);
         return;
       }
+      // Runtime apply never submits metadata; keep independent details edits.
+      const metadata = appliedNeedsReload && metadataDirty() && draft()
+        ? { name: draft()!.name, description: draft()!.description, access_mode: draft()!.access_mode }
+        : undefined;
+      appliedNeedsReload = false;
       setLoaded(clone(value));
-      setDraft(clone(value));
+      setDraft({ ...clone(value), ...metadata });
       setComposeService(
         Object.keys(value.runtime.compose ?? {}).sort()[0] ?? "",
       );
@@ -333,13 +346,15 @@ export function ManagedServiceSettingsDrawer(props: {
     }
   };
 
-  createEffect(on(() => [props.open, props.serviceID] as const, ([open, serviceID]) => {
+  const readIdentity = createMemo(() => JSON.stringify([props.open, props.serviceID, props.refreshRevision]));
+  createEffect(on(readIdentity, () => {
+    const open = props.open, serviceID = props.serviceID;
     readGeneration++;
     setLoading(false);
     setReadConfirmed(false);
-    setSavingMetadata(false); setApplying(false);
+    setSavingMetadata(false);
     if (serviceID !== ownerService) {
-      ownerService = serviceID;
+      ownerService = serviceID; appliedNeedsReload = false; setApplying(false);
       setLoaded(null); setDraft(null); setPlan(null); setAcceptedRisks({}); setError("");
     }
     if (open) void load();
@@ -506,8 +521,9 @@ export function ManagedServiceSettingsDrawer(props: {
   };
   const preflight = async () => {
     const value = runtimeDraft();
-    if (!value || !runtimeDirty() || !readConfirmed() || !props.canManage || !props.open) return;
+    if (applying() || !value || !runtimeDirty() || !readConfirmed() || !props.canManage || !props.open) return;
     const generation = readGeneration;
+    const serviceID = props.serviceID;
     setApplying(true);
     setError("");
     try {
@@ -521,16 +537,20 @@ export function ManagedServiceSettingsDrawer(props: {
     } catch (reason) {
       if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      if (generation === readGeneration) setApplying(false);
+      // IMPORTANT: Navigation invalidates a plan, not its pending-operation
+      // settlement. A retained editor must become usable when it completes.
+      if (!disposed && serviceID === props.serviceID) setApplying(false);
     }
   };
 
   const apply = async () => {
     const value = runtimeDraft();
     const checked = plan();
-    if (!value || !checked || !readConfirmed() || !props.canManage || !props.open) return;
+    if (applying() || !value || !checked || !readConfirmed() || !props.canManage || !props.open) return;
     if ((checked.risks ?? []).some((risk) => !acceptedRisks()[risk.id])) return;
     const generation = readGeneration;
+    const opening = openingGeneration;
+    const serviceID = props.serviceID;
     setApplying(true);
     setError("");
     try {
@@ -539,13 +559,19 @@ export function ManagedServiceSettingsDrawer(props: {
         plan_digest: checked.plan_digest,
         accepted_risk_ids: (checked.risks ?? []).map((risk) => risk.id),
       });
-      if (generation !== readGeneration) return;
+      if (disposed || serviceID !== props.serviceID) return;
+      // IMPORTANT: Confirmed apply retires its draft even if the user changed
+      // category while waiting. The next read must adopt the new revision.
+      appliedNeedsReload = true;
+      setPlan(null); setAcceptedRisks({}); setReadConfirmed(false);
+      const closeCurrent = props.open && opening === openingGeneration;
       props.onChanged();
-      props.onOpenChange(false);
+      if (closeCurrent) props.onOpenChange(false);
+      else if (props.open) void load();
     } catch (reason) {
       if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      if (generation === readGeneration) setApplying(false);
+      if (!disposed && serviceID === props.serviceID) setApplying(false);
     }
   };
 
@@ -667,7 +693,8 @@ export function ManagedServiceSettingsDrawer(props: {
 
   return (
     <>
-      <EnvAppDrawer
+      <HostedSettingsPanel embedded={props.embedded} target={{ section: 'services', resource: props.serviceID }} open={props.open} onClose={() => props.onOpenChange(false)}
+        fallback={body => (      <EnvAppDrawer
         open={props.open}
         onOpenChange={(open) => {
           if (!applying() && !savingMetadata())
@@ -677,8 +704,9 @@ export function ManagedServiceSettingsDrawer(props: {
         bodyClass="flex min-h-0 h-full flex-col"
         title={settingText("title", { name: props.serviceName })}
         bodyDescription={settingText("description")}
-        footer={footer()}
       >
+{body}</EnvAppDrawer>)}>
+        <div class="flex min-h-0 h-full flex-col"><div class="min-h-0 flex-1 overflow-auto">
         <Show
           when={draft()}
           fallback={
@@ -1922,7 +1950,8 @@ export function ManagedServiceSettingsDrawer(props: {
             </div>
           )}
         </Show>
-      </EnvAppDrawer>
+        </div><div data-managed-settings-footer class="shrink-0 border-t p-3">{footer()}</div></div>
+      </HostedSettingsPanel>
       <DirectoryPicker
         open={props.open && pickerOpen()}
         onOpenChange={setPickerOpen}

@@ -9,7 +9,7 @@ import type { RedevenTerminalTransport } from '../services/terminalTransport';
 type Defaults = { supported: boolean; can_manage: boolean; defaults: TerminalHistoryRetentionLimits };
 const endpoint = '/_redeven_proxy/api/terminal/history-retention';
 
-export function TerminalHistorySettings(props: { open: boolean; transport?: RedevenTerminalTransport; sessionId?: string | null }) {
+export function TerminalHistorySettings(props: { open: boolean; canManage?: boolean; transport?: RedevenTerminalTransport; sessionId?: string | null }) {
   const i18n = useI18n();
   const [defaults, setDefaults] = createSignal<Defaults | null>(null);
   const [current, setCurrent] = createSignal<TerminalHistoryRetentionState | null>(null);
@@ -25,6 +25,9 @@ export function TerminalHistorySettings(props: { open: boolean; transport?: Rede
   let disposed = false;
   const limits = createMemo(() => parseTerminalHistoryLimits(lines(), memory()));
   const valid = () => defaults()?.supported && limits() !== null && !loading() && !saving() && !uncertain();
+  // IMPORTANT: Retained snapshots do not grant current mutation authority.
+  // Revocation disables saves without discarding the user's draft.
+  const canManageDefaults = () => props.canManage !== false && defaults()?.can_manage;
   const load = async (sessionId: string | null | undefined) => {
     const request = ++epoch;
     setLoading(true); setFailed(false); setMessage(''); setConfirmation(null); setDefaults(null); setCurrent(null);
@@ -57,7 +60,7 @@ export function TerminalHistorySettings(props: { open: boolean; transport?: Rede
   const save = async (target: 'defaults' | 'current') => {
     const selected = target === 'current' ? confirmation() : null;
     const value = selected?.limits ?? limits();
-    if (!valid() || !value || (target === 'defaults' && !defaults()?.can_manage)
+    if (!valid() || !value || (target === 'defaults' && !canManageDefaults())
       || (target === 'current' && (!current() || !props.transport?.configureHistoryRetention || !selected || selected.sessionId !== props.sessionId))) return;
     const request = epoch;
     setSaving(true); setMessage(''); setFailed(false); setConfirmation(null);
@@ -100,11 +103,11 @@ export function TerminalHistorySettings(props: { open: boolean; transport?: Rede
         {i18n.t('terminal.settings.historyEffective', { lines: state().effective.max_lines === null ? '∞' : String(state().effective.max_lines), memory: state().effective.max_bytes === null ? '∞' : formatTerminalHistoryMemory(state().effective.max_bytes) })}
       </p>}</Show>
       <div class="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal text-center" disabled={!valid() || !defaults()?.can_manage} onClick={() => void save('defaults')}>{i18n.t('terminal.settings.historySaveDefaults')}</Button>
+        <Button size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal text-center" disabled={!valid() || !canManageDefaults()} onClick={() => void save('defaults')}>{i18n.t('terminal.settings.historySaveDefaults')}</Button>
         <Button size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal text-center" disabled={!valid() || !current() || !props.sessionId || !props.transport?.configureHistoryRetention}
           onClick={() => setConfirmation({ sessionId: props.sessionId!, limits: limits()! })}>{i18n.t('terminal.settings.historyApplyCurrent')}</Button>
       </div>
-      <Show when={!defaults()?.can_manage}><p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.historyAdminOnly')}</p></Show>
+      <Show when={!canManageDefaults()}><p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.historyAdminOnly')}</p></Show>
     </Show>
     <Show when={confirmation()}><div role="alert" class="space-y-2 rounded-md border border-border p-3">
       <p class="text-xs">{i18n.t('terminal.settings.historyConfirm')}</p>

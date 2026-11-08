@@ -4,7 +4,7 @@ import { browserPackageBridge } from './browserPackageBridge';
 import type { FlowerComputerManagement } from '../src/contracts/flowerSurfaceContracts';
 
 // Both product carriers use the same authenticated Runtime boundary.
-export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown, signal?: AbortSignal) => Promise<T>, sessionKey?: string, revealApplication?: (applicationID: string) => void): FlowerComputerManagement {
+export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown, signal?: AbortSignal) => Promise<T>, sessionKey?: string, revealApplication?: (applicationID: string) => void, transferRequest = request): FlowerComputerManagement {
   const path = '/_redeven_proxy/api/ai/computer';
   const desktop = browserPackageBridge();
   const browser = sessionKey ? browserInstallationForSession(sessionKey, request, desktop) : new BrowserInstallationController(request, desktop);
@@ -12,9 +12,11 @@ export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | '
     prepareRemoteBrowser: revealApplication ? remoteBrowserPreparation(request, revealApplication) : undefined,
     browserDesktopAvailable: Boolean(desktop),
     subscribeBrowserInstallation: listener => browser.subscribe(listener),
-    loadBrowserInstallation: () => browser.load(),
-    saveBrowserEnabled: enabled => browser.setEnabled(enabled),
-    installBrowser: body => browser.install(body),
+    loadBrowserInstallation: () => browser.load(request),
+    saveBrowserEnabled: enabled => browser.setEnabled(enabled, request),
+    // IMPORTANT: Admission belongs to the current panel grant; an admitted
+    // transfer belongs to the exact environment, not the panel visibility.
+    installBrowser: async body => { await request('GET', '/_redeven_proxy/api/browser/installation'); return browser.install(body, transferRequest); },
     loadEnvironment: () => request('GET', `${path}/environment`),
     verifyDesktop: () => request('POST', `${path}/desktop/verify`, {}),
     discoverBrowser: (threadID, cdpURL) => request('POST', `${path}/candidates`, { thread_id: threadID, cdp_url: cdpURL }),

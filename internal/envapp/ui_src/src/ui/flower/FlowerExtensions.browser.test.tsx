@@ -56,11 +56,12 @@ async function mount(width = 1280, dark = false, locale = 'en-US', empty = false
   localStorage.removeItem('extensions-test-theme');
   const state = fixture(empty, count); host = document.createElement('div'); host.style.height = '830px'; document.body.append(host);
   setup?.(state.adapter);
-  dispose = render(() => <FloeProvider config={{ theme: { storageKey: 'extensions-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><ThemeObserver /><FlowerExtensionsSurface adapter={state.adapter} i18n={extensionI18n(locale)} onBack={vi.fn()} /></FloeProvider>, host);
+  const [active, setActive] = createSignal(true);
+  dispose = render(() => <FloeProvider config={{ theme: { storageKey: 'extensions-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><ThemeObserver /><FlowerExtensionsSurface active={active()} adapter={state.adapter} i18n={extensionI18n(locale)} onBack={vi.fn()} /></FloeProvider>, host);
   theme.setTheme(dark ? 'dark' : 'light');
   await expect.poll(() => document.documentElement.classList.contains('dark')).toBe(dark);
   await expect.poll(() => state.adapter.listSkills).toHaveBeenCalled();
-  return state;
+  return { ...state, setActive };
 }
 function noOverflow() {
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
@@ -200,6 +201,18 @@ it('retains filters across keyboard tab changes and keeps row actions keyboard a
   await expect.element(page.getByText('# Code review', { exact: true })).toBeVisible();
 });
 
+it('hides nested MCP dialogs with the settings host and restores their drafts', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  await page.getByRole('dialog').getByRole('textbox', { name: 'Endpoint URL', exact: true }).fill('https://draft.example.com/mcp');
+  state.setActive(false);
+  await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+  state.setActive(true);
+  await expect.element(page.getByRole('dialog').getByRole('textbox', { name: 'Endpoint URL', exact: true })).toHaveValue('https://draft.example.com/mcp');
+  expect(state.saveMCP).not.toHaveBeenCalled();
+});
+
 it('creates and checks a server, preserves failed edits, and confirms removal', async () => {
   const state = await mount(390);
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
@@ -285,9 +298,9 @@ it('adds a local command without naming it and discloses execution only for loca
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   await page.getByRole('button', { name: 'Add server', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Remote HTTP', exact: true }).click();
-  await page.getByText('Local command', { exact: true }).click();
-  await expect.element(page.getByText('Remote HTTP', { exact: true })).not.toBeInTheDocument();
+  await dialog.getByRole('combobox').click();
+  await page.getByRole('option', { name: 'Local command', exact: true }).click();
+  await expect.element(page.getByRole('option', { name: 'Remote HTTP', exact: true })).not.toBeInTheDocument();
   await expect.element(dialog.getByText('Saving starts this command on the environment host.', { exact: true })).toBeVisible();
   await dialog.getByRole('textbox', { name: 'Executable', exact: true }).fill('project-mcp');
   await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).fill('--workspace\n/project');

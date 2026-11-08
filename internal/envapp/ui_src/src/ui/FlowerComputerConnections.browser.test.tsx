@@ -271,7 +271,8 @@ for (const [locale, copy, platform, dark] of [
       for (const element of dialog().querySelectorAll<HTMLElement>('.flower-chrome-install-action, button')) {
         if (!element.checkVisibility()) continue;
         expect(element.scrollWidth, element.className).toBeLessThanOrEqual(element.clientWidth + 1);
-        expect(element.getBoundingClientRect().right, element.className).toBeLessThanOrEqual(content.getBoundingClientRect().right);
+        const boundary = content.contains(element) ? content : dialog();
+        expect(element.getBoundingClientRect().right, element.className).toBeLessThanOrEqual(boundary.getBoundingClientRect().right);
       }
       await expect.poll(() => button(copy.setupInstalled).getBoundingClientRect().right).toBeLessThanOrEqual(390);
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-narrow.png` });
@@ -450,4 +451,22 @@ it('keeps desktop-only instructions out of the separate-browser preparation tran
   finish({ installation_id: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa', browser_name: 'Chromium (Snap)', extension_path: '/fixture', extension_home_path: ['fixture'], platform: 'linux', native_host: 'fixture.host', extension_id: 'fixture' });
   await waitFor(() => !!host.querySelector('[data-remote-browser-setup]'));
   expect(host.textContent).not.toContain(computerUseEnUS.chromeDesktopHint);
+});
+
+it('retains the embedded Chrome guide step without preparing again after category switches', async () => {
+  const { createSignal } = await import('solid-js');
+  const [active, setActive] = createSignal(true);
+  const host = document.createElement('div'); document.body.append(host);
+  const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture', platform: 'darwin', extension_home_path: ['fixture'], native_host: 'fixture.host', extension_id: 'fixture' }),
+    openExtension: vi.fn().mockResolvedValue(undefined), loadExtensionStatus: vi.fn().mockResolvedValue({ installations: [{ id: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa', kind: 'google_chrome', name: 'Google Chrome', installed: true, prepared: false, connected: false }], profiles: [] }),
+  };
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><div hidden={!active()}><FlowerComputerConnections embedded open={active()} connectionOnly threadID="" onOpenChange={() => {}} adapter={{ ...adapter(true), computerManagement: management }} copy={computerUseEnUS} /></div></LayoutProvider></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === text);
+  await waitFor(() => !!button(computerUseEnUS.openExtensions)); button(computerUseEnUS.openExtensions)!.click();
+  await waitFor(() => !!button(computerUseEnUS.setupInstalled)); button(computerUseEnUS.setupInstalled)!.click();
+  await waitFor(() => !!button(computerUseEnUS.openConnection));
+  const retained = button(computerUseEnUS.openConnection); setActive(false); setActive(true);
+  expect(button(computerUseEnUS.openConnection)).toBe(retained); expect(management.setupExtension).toHaveBeenCalledOnce();
 });

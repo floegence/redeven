@@ -3,7 +3,7 @@ type: Product Interaction Contract
 title: Browser and desktop settings
 tags: [ai, computer-use, settings, desktop, envapp]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -28,6 +28,8 @@ Published Floe components already supply the required UI primitives, so this cha
 Missing Linux desktop components have an explicit **Ask Flower to install** action in diagnostics and the canonical setup question. It creates a separate same-Runtime conversation using the normal durable send contract, with a reference back to the original task. Opening diagnostics, passive refresh and desktop verification never submit the original input or retry its failed action. Repair admission, installation and verification are distinct facts; the executable repair contract is owned by [Linux private desktop](computer-use-desktop.md#linux-private-desktop).
 
 # Boundaries
+
+The global Settings category embeds the existing browser controller. Contextual links retain exact thread/environment identity; unavailable targets never substitute another Runtime. Browser installation transfers capture admitted environment/incarnation transport independently of panel lifetime; reopening observes the same operation. Chrome guide steps survive category changes without preparing twice.
 
 Inspection never selects a page, grants authority, starts a task or installs components. A lost selection stays unavailable until it is recovered or explicitly replaced; the settings dialog does not own Floret lifecycle.
 

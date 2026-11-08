@@ -4,7 +4,7 @@ import type { BrowserPackageBridge, BrowserPackageProgress } from '../../../desk
 export type ComputerRequest = <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>;
 const path = '/_redeven_proxy/api/browser/installation';
 const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing', 'awaiting_authorization', 'verifying_system', 'preparing_system']);
-type Attempt = { source: 'download' | 'upload'; id: string; cancelled: boolean; runtimeID: string; done?: Promise<void> };
+type Attempt = { source: 'download' | 'upload'; id: string; cancelled: boolean; runtimeID: string; done?: Promise<void>; request: ComputerRequest };
 
 // One environment document owns transfer work. Panels are observers, never
 // owners of acquisition, upload, or the Runtime's installed state.
@@ -17,7 +17,7 @@ export class BrowserInstallationController {
   private timer?: ReturnType<typeof setTimeout>;
   private observation = 0;
   private disposed = false;
-  constructor(private readonly request: ComputerRequest, readonly desktop?: BrowserPackageBridge) {}
+  constructor(private request: ComputerRequest, readonly desktop?: BrowserPackageBridge) {}
 
   snapshot(): FlowerBrowserInstallationSnapshot | undefined {
     return this.status ? { ...this.status, desktop_progress: this.progress, desktop_error: this.failure, transfer_active: Boolean(this.attempt) } : undefined;
@@ -32,9 +32,10 @@ export class BrowserInstallationController {
     for (const listener of this.listeners) listener(current);
   }
   private accept(status: FlowerBrowserInstallation): void { this.observation++; this.status = status; this.publish(); }
-  async load(): Promise<FlowerBrowserInstallationSnapshot> {
+  async load(request = this.request): Promise<FlowerBrowserInstallationSnapshot> {
+    this.request = request;
     const revision = ++this.observation;
-    const status = await this.request<FlowerBrowserInstallation>('GET', path);
+    const status = await request<FlowerBrowserInstallation>('GET', path);
     if (!this.disposed && revision === this.observation) { if (this.failure === 'status_failed') this.failure = undefined; this.status = status; this.publish(); this.observe(); }
     return this.snapshot() ?? status;
   }
@@ -47,22 +48,22 @@ export class BrowserInstallationController {
       void this.load().catch(() => { this.failure = 'status_failed'; this.publish(); });
     }, 800);
   }
-  async setEnabled(enabled: boolean): Promise<FlowerBrowserInstallationSnapshot> {
-    if (!enabled) await this.cancel();
-    this.accept(await this.request<FlowerBrowserInstallation>('PUT', path, { enabled }));
+  async setEnabled(enabled: boolean, request = this.request): Promise<FlowerBrowserInstallationSnapshot> {
+    if (!enabled) await this.cancel(request);
+    this.accept(await request<FlowerBrowserInstallation>('PUT', path, { enabled }));
     return this.snapshot()!;
   }
-  async install(input: FlowerBrowserInstallRequest): Promise<FlowerBrowserInstallationSnapshot> {
-    if (input.action === 'cancel') { await this.cancel(); return this.snapshot() ?? await this.load(); }
+  async install(input: FlowerBrowserInstallRequest, request = this.request): Promise<FlowerBrowserInstallationSnapshot> {
+    if (input.action === 'cancel') { await this.cancel(request); return this.snapshot() ?? await this.load(request); }
     if (input.action !== 'start' && input.action !== 'prepare_system') throw new Error('Browser transfer is owned by its environment controller.');
-    if (this.attempt) return this.snapshot() ?? await this.load();
-    if (!this.status) await this.load();
+    if (this.attempt) return this.snapshot() ?? await this.load(request);
+    if (!this.status) await this.load(request);
     if (this.attempt) return this.snapshot()!;
     if (!this.status?.enabled || this.disposed) throw new Error('Browser installation is unavailable.');
     if (activeStates.has(this.status.state) || (this.status.state === 'installed' && input.action !== 'prepare_system')) return this.snapshot()!;
     if (input.package_id !== this.status.package.id || !['download', 'upload'].includes(input.source ?? '')) throw new Error('Invalid browser installation request.');
     if (input.source === 'upload' && !this.desktop) throw new Error('Desktop acquisition is unavailable.');
-    const attempt: Attempt = { source: input.source as 'download' | 'upload', id: crypto.randomUUID(), cancelled: false, runtimeID: '' };
+    const attempt: Attempt = { source: input.source as 'download' | 'upload', id: crypto.randomUUID(), cancelled: false, runtimeID: '', request };
     this.attempt = attempt; this.failure = undefined; this.observation++;
     if (input.source === 'upload') this.progress = { operation_id: attempt.id, phase: 'checking', received_bytes: 0, total_bytes: this.status.package.size_bytes };
     this.publish();
@@ -70,17 +71,18 @@ export class BrowserInstallationController {
     return this.snapshot()!;
   }
   private async run(attempt: Attempt, input: FlowerBrowserInstallRequest): Promise<void> {
+    const request = attempt.request;
     let unsubscribe: (() => void) | undefined;
     let stage: FlowerBrowserInstallationSnapshot['desktop_error'] = 'desktop_download_failed';
     const check = () => { if (attempt.cancelled || this.disposed) throw new Error('Browser installation cancelled.'); };
     try {
-      const current = await this.request<FlowerBrowserInstallation>('GET', path);
+      const current = await request<FlowerBrowserInstallation>('GET', path);
       check(); this.accept(current);
       if (!current.enabled || current.package.id !== input.package_id) throw new Error('Browser availability changed.');
       if ((current.state === 'installed' && input.action !== 'prepare_system') || activeStates.has(current.state)) return;
       let started: FlowerBrowserInstallation | undefined;
       if (input.action === 'prepare_system') {
-        started = await this.request<FlowerBrowserInstallation>('POST', path, input);
+        started = await request<FlowerBrowserInstallation>('POST', path, input);
         attempt.runtimeID = started.operation_id ?? '';
         this.progress = undefined; this.accept(started); check();
         if (input.source !== 'upload' || started.state !== 'uploading') return;
@@ -100,7 +102,7 @@ export class BrowserInstallationController {
       }
       check();
       stage = 'desktop_upload_failed';
-      started ??= await this.request<FlowerBrowserInstallation>('POST', path, input);
+      started ??= await request<FlowerBrowserInstallation>('POST', path, input);
       attempt.runtimeID = started.operation_id ?? '';
       this.progress = undefined; this.accept(started); check();
       if (input.source !== 'upload' || started.state !== 'uploading') return;
@@ -112,20 +114,20 @@ export class BrowserInstallationController {
         const expected = Math.min(256 * 1024, current.package.size_bytes - offset);
         if (!chunk.ok || !chunk.data || chunk.data.length !== expected) throw new Error('Incomplete browser package chunk.');
         let binary = ''; for (const byte of chunk.data) binary += String.fromCharCode(byte);
-        const uploaded = await this.request<FlowerBrowserInstallation>('POST', path, { action: 'chunk', operation_id: attempt.runtimeID, offset, data: btoa(binary) });
+        const uploaded = await request<FlowerBrowserInstallation>('POST', path, { action: 'chunk', operation_id: attempt.runtimeID, offset, data: btoa(binary) });
         check();
         if (uploaded.operation_id !== attempt.runtimeID || uploaded.received_bytes !== offset + expected) throw new Error('Browser upload cursor changed.');
         offset = uploaded.received_bytes; this.accept(uploaded);
       }
       check();
-      this.accept(await this.request<FlowerBrowserInstallation>('POST', path, { action: 'complete', operation_id: attempt.runtimeID }));
+      this.accept(await request<FlowerBrowserInstallation>('POST', path, { action: 'complete', operation_id: attempt.runtimeID }));
     } catch {
       // Never replay a request whose result is unknown. Observe the host and
       // offer an explicit retry/cancel instead of starting a second operation.
       if (attempt.runtimeID && this.status?.state === 'uploading') {
-        try { this.accept(await this.request<FlowerBrowserInstallation>('POST', path, { action: 'cancel', operation_id: attempt.runtimeID })); } catch { /* A later status read remains authoritative. */ }
+        try { this.accept(await request<FlowerBrowserInstallation>('POST', path, { action: 'cancel', operation_id: attempt.runtimeID })); } catch { /* A later status read remains authoritative. */ }
       }
-      try { this.accept(await this.request<FlowerBrowserInstallation>('GET', path)); } catch { /* Retain the last confirmed snapshot. */ }
+      try { this.accept(await request<FlowerBrowserInstallation>('GET', path)); } catch { /* Retain the last confirmed snapshot. */ }
       if (!attempt.cancelled && !this.disposed) this.failure = input.source === 'upload' ? stage : 'status_failed';
     } finally {
       unsubscribe?.();
@@ -134,7 +136,7 @@ export class BrowserInstallationController {
       this.publish(); this.observe();
     }
   }
-  async cancel(): Promise<void> {
+  async cancel(request = this.request): Promise<void> {
     const attempt = this.attempt;
     if (attempt) {
       attempt.cancelled = true;
@@ -143,7 +145,7 @@ export class BrowserInstallationController {
     }
     const status = this.status;
     if (status?.operation_id && activeStates.has(status.state)) {
-      this.accept(await this.request<FlowerBrowserInstallation>('POST', path, { action: 'cancel', operation_id: status.operation_id }));
+      this.accept(await (attempt?.request ?? request)<FlowerBrowserInstallation>('POST', path, { action: 'cancel', operation_id: status.operation_id }));
     }
     this.failure = undefined; this.observe(); this.publish();
   }
@@ -157,21 +159,24 @@ export class BrowserInstallationController {
       // Dispatch the known upload cancellation before document teardown can
       // prevent an awaited Desktop response from returning to this renderer.
       if (this.attempt.runtimeID && this.status?.state === 'uploading') {
-        void this.request('POST', path, { action: 'cancel', operation_id: this.attempt.runtimeID }).catch(() => undefined);
+        void this.attempt.request('POST', path, { action: 'cancel', operation_id: this.attempt.runtimeID }).catch(() => undefined);
       }
       void this.cancel().catch(() => undefined);
     }
   }
 }
 
-let session: { key: string; controller: BrowserInstallationController } | undefined;
+// IMPORTANT: Panels share transfer state, never the first panel's authority.
+// Each command supplies its current transport; an admitted transfer captures it.
+// Observing another environment cannot cancel an in-flight acquisition.
+const sessions = new Map<string, BrowserInstallationController>();
 export function browserInstallationForSession(key: string, request: ComputerRequest, desktop?: BrowserPackageBridge): BrowserInstallationController {
-  if (session?.key === key) return session.controller;
-  session?.controller.dispose();
+  const current = sessions.get(key);
+  if (current) return current;
   const controller = new BrowserInstallationController(request, desktop);
-  session = { key, controller };
+  sessions.set(key, controller);
   if (typeof window !== 'undefined') window.addEventListener('pagehide', () => {
-    controller.dispose(); if (session?.controller === controller) session = undefined;
+    controller.dispose(); if (sessions.get(key) === controller) sessions.delete(key);
   }, { once: true });
   return controller;
 }

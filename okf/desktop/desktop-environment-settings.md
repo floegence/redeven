@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Environment settings sessions, connections and presentation
 tags: [desktop, environments, settings, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -16,7 +16,7 @@ One target-bound settings session owns connection/access drafts and immediate op
 - Save invalidates older reads. Late failure from a closed opening becomes a notification, never an error in the next editor. Access opens current-connection/browser/sign-in/HTTPS tasks; recovery-pending protection must be restored before changing it.
 
 ## Presentation
-- Cap the panel at 50rem by 44.375rem and viewport/titlebar; only viewport resize changes the cap. Tabs/loading/disclosures cannot recenter it or move actions. Use one Current connection card with aligned, selectable, wrapping text/diagnostics/paths/addresses.
+- Embed the canonical connection/access editor in the global [Settings host](../ui/runtime-settings.md#unified-settings-host); its standalone fallback retains the 50rem by 44.375rem cap. Global host dimensions are independent of category content. Tabs/loading/disclosures cannot recenter it or move actions. Use one Current connection card with aligned, selectable, wrapping text/diagnostics/paths/addresses.
 - Browser scope, sign-in and certificate tasks share rows, meaningful icons and published outline controls with borders/hover/focus. Preserve specialized QR/recovery-code geometry. Removal drafts cannot look committed; review never shows passwords. Separate footer feedback/actions. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.
 - SSH destination fills the adjacent control column in creation/settings. Loading/cached-host failure uses its trailing inset, preserving width/draft/focus; idle indicators take no external column or input clicks.
 - Access steps place equal flexible connectors after non-final labels; narrow layouts stack aligned badges without horizontal connectors. Floe owns modal presence and 200ms tab underline; retained exit never blanks the panel.

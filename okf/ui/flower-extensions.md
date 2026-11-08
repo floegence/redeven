@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower extensions
 tags: [ui, flower, skills, mcp, plugins]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -31,6 +31,8 @@ Owned Skills/MCP navigate repeatedly to plugin management rather than standalone
 Manage sources is separate: admin-only mutations, retained failed input, Runtime-managed sources cannot be removed. Last removal returns installed view. Failure offers Retry, distinct from successful empty/search-miss. Metadata is inert, never approval. Cards enter existing preparation/review; package manifest owns preview. No official catalog. [Catalogs](../ai/flower-plugin-catalogs.md) owns activation/schema; [plugins](../ai/flower-agent-plugins.md) owns format/storage/update/permission.
 
 # Boundaries
+
+Nested Skills/MCP/Plugin editors and confirmations follow host presence and the selected supported category/tab. Hidden portals retain drafts; invalid resources cannot leave an active editor above an unavailable state.
 
 Visibility grants no mutation. [MCP runtime](../ai/mcp-runtime.md) owns persistence, protocol, dependency matching and execution authority.
 

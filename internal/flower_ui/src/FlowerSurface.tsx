@@ -51,6 +51,7 @@ import { ActivityFieldRows } from './ActivityFieldRows';
 import { ActivityFieldText } from './ActivityFieldText';
 import { createActivityFieldPresentation } from './activityFieldPresentation';
 import { FlowerActivityRows } from './FlowerActivityRows';
+import { useSettingsPanelHost } from '../../settings_ui/src/SettingsPanelHost';
 import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from './FlowerComputerConnections';
 import { computerAssistance } from './computerAssistance';
 import { desktopRepairPrompt } from './computerDesktopRepair';
@@ -654,6 +655,8 @@ export type FlowerConversationParts = Readonly<{
 
 export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
+  /** Capture a fresh exact-runtime settings owner without remounting chat. */
+  createComputerSettingsAdapter?: () => FlowerSurfaceAdapter;
   embeddedConversation?: FlowerEmbeddedConversation;
   /** Read and freeze the current host page for a new draft only. */
   captureNewConversationContext?: () => FlowerPageContextSnapshot | undefined;
@@ -972,6 +975,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadListState, setThreadListState] = createSignal<'loading' | 'ready' | 'error'>('loading');
   const [threadListError, setThreadListError] = createSignal('');
   const [historyFilter, setHistoryFilter] = createSignal('');
+  const settingsHost = useSettingsPanelHost();
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
   const visiblePanel = () => companionCollapsed() || sidePanel() === 'settings' ? 'chat' : sidePanel();
   const [settingsDialogPresent, setSettingsDialogPresent] = createSignal(false);
@@ -1444,7 +1448,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const readPresentationVisible = () => foregroundEngagementRequested() && sidePanel() === 'chat'
-    && !companionCollapsed() && !settingsDialogPresent();
+    && !companionCollapsed() && !settingsDialogPresent() && !settingsHost?.present();
   const schedulePresentedSelection = (threadID: string, sequence: number, contentRevision = threadCache().views.get(threadID)?.contentRevision ?? 0) => {
     const tid = trimString(threadID);
     cancelPresentedSelectionSchedule();
@@ -6006,7 +6010,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const slash = modelID.indexOf('/');
       const request = { providerID: slash > 0 ? modelID.slice(0, slash) : '', modelName: slash > 0 ? modelID.slice(slash + 1) : '', threadID, sequence };
       await readDetail(openSettings);
-      if (stillTargeted() && sidePanel() === 'settings') setProviderFocusRequest(request);
+      if (stillTargeted()) { if (settingsHost) settingsHost.open({ section: 'ai', resource: JSON.stringify({ providerID: request.providerID, modelName: request.modelName }) }); else if (sidePanel() === 'settings') setProviderFocusRequest(request); }
     } catch (error) {
       if (!surfaceDisposed && sequence === providerFocusSequence && requestEpoch === liveTransport.connectionEpoch()
         && threadID === trimString(selectedThreadID())) notifyThreadActionError(getErrorMessage(error));
@@ -6016,6 +6020,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const openSettings = () => {
+    if (settingsHost) { settingsHost.open({ section: 'ai' }); return Promise.resolve(); }
     if (sidePanel() !== 'settings') settingsRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setThreadNavigationOpen(false);
     closeSubagentOverlays();
@@ -7269,6 +7274,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedTimelineEntries = createMemo(() => selectedTimelineDocument().entries);
   const selectedTimelineThread = createFlowerThreadSubscription(() => selectedTimelineDocument().thread);
   const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | 'desktop_setup' | null>(null);
+  const [settingsComputerThreadID, setSettingsComputerThreadID] = createSignal('');
+  const [computerSettingsAdapter, setComputerSettingsAdapter] = createSignal<FlowerSurfaceAdapter>();
+  createEffect(on(computerDialog, (value, previous) => {
+    if (value && !previous) setComputerSettingsAdapter(props.createComputerSettingsAdapter?.() ?? props.adapter);
+  }));
+  createEffect(on(computerDialog, value => { if (value) setSettingsComputerThreadID(trimString(selectedThreadID())); }));
+  createEffect(on(selectedThreadID, threadID => { if (computerDialog() && trimString(threadID) !== settingsComputerThreadID()) setComputerDialog(null); }));
   const [desktopRepairReading, setDesktopRepairReading] = createSignal(false);
   const desktopRepairPending = () => transportOutbox().forThread(selectedThreadID() || pendingDraftKey()).some(entry => entry.desktopRepair);
   const startDesktopRepair = async (environment: FlowerComputerEnvironment) => {
@@ -15059,7 +15071,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           await submitInputRequest();
         }}
         permissionLabel={composerPermissionCopy()?.label} onEditPermissionMode={() => { queueMicrotask(() => openPermissionMenu()); }}
-        threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
+        threadID={settingsComputerThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={computerSettingsAdapter() ?? props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
       <Show when={composerSnapshotPreview()} keyed>{reference => (
         <Dynamic component={props.renderContextSnapshotPreview ?? FlowerChatContextPreview}
           title={reference.label} subtitle={reference.kind === 'page_context' ? reference.title : ''}
@@ -15195,7 +15207,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </button>
           <Show when={props.adapter.extensions}>
             <button type="button" class="flower-sidebar-extensions-button" aria-current={sidePanel() === 'extensions' ? 'page' : undefined}
-              onClick={() => { setExtensionsOpened(true); setSidePanel('extensions'); setThreadNavigationOpen(false); }}>
+              onClick={() => { if (settingsHost) { settingsHost.open({ section: 'extensions' }); return; } setExtensionsOpened(true); setSidePanel('extensions'); setThreadNavigationOpen(false); }}>
               <Zap class="h-4 w-4 shrink-0" aria-hidden="true" /><span>{copy().extensions.t('title')}</span><ChevronRight class="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </Show>

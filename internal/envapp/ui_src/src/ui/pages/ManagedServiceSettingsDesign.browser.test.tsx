@@ -33,7 +33,7 @@ it.each([1280, 390])('keeps service sections readable with reachable actions at 
     expect(content.scrollWidth, button.textContent ?? '').toBeLessThanOrEqual(content.clientWidth + 1);
     const dialog = document.querySelector<HTMLElement>('[role=dialog]')!;
     expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
-    const footer = dialog.querySelector('[data-floe-dialog-footer]')!;
+    const footer = dialog.querySelector('[data-managed-settings-footer]')!;
     expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(900);
     if (width === 1280) await page.screenshot({ path: `../../../dist/settings-design/managed-settings-${button.textContent?.trim().replaceAll(' ', '-').toLowerCase()}.png` });
   }
@@ -124,4 +124,51 @@ it('keeps a source update explicit and binds its exact digest to preflight', asy
   expect(applied).not.toHaveBeenCalled();
   await userEvent.click(page.getByRole('button',{name:'Apply configuration',exact:true}));
   expect(applied).toHaveBeenCalledWith(expect.objectContaining({plan_digest:'source-plan',draft:expect.objectContaining({template_source_sha256:newSource.sha256})}));
+});
+
+it.each([false, true])('adopts the confirmed service revision after apply with category switch=%s', async switchCategory => {
+  const settings = (revision: number) => ({ service_id: 'one', name: 'Service', access_mode: 'unified_proxy', deployment: 'container', template_source: 'custom', observed_state: 'stopped', configuration_revision: revision, configuration_sha256: `sha-${revision}`, parameters: {}, runtime: { container: { entrypoint: revision === 3 ? '' : '/saved', command: [], environment: [], labels: {}, ports: [], mounts: [], read_only_root: true } } });
+  let revision = 3;
+  api.request.mockReset().mockImplementation(async (url: string) => url.endsWith('/preflight') ? { configuration_revision: revision, plan_digest: 'checked', risks: [], changed_sections: ['runtime'], requires_rebuild: true } : settings(revision));
+  const [open, setOpen] = createSignal(true);
+  let complete!: () => void;
+  const apply = vi.fn(async () => { await new Promise<void>(resolve => { complete = resolve; }); revision = 4; });
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeProvider><div hidden={!open()}><ManagedServiceSettingsDrawer embedded open={open()} serviceID="one" serviceName="Service" canManage onOpenChange={setOpen} onChanged={() => {}} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={apply} /></div></FloeProvider>, host);
+  await expect.element(page.getByTestId('managed-service-settings')).toBeVisible();
+  await userEvent.fill(host.querySelector<HTMLInputElement>('.managed-settings-fields input')!, 'Unsaved metadata');
+  await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+  await page.getByPlaceholder('/usr/local/bin/start').fill('/saved');
+  await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply configuration', exact: true }).click();
+  await expect.poll(() => apply.mock.calls.length).toBe(1);
+  if (switchCategory) setOpen(false);
+  complete(); await expect.poll(() => revision).toBe(4);
+  if (!switchCategory) await expect.poll(open).toBe(false);
+  setOpen(true); await expect.poll(() => host.querySelector<HTMLInputElement>('input[placeholder="/usr/local/bin/start"]')?.value).toBe('/saved');
+  await page.getByPlaceholder('/usr/local/bin/start').fill('/next');
+  await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+  await expect.poll(() => {
+    const call = api.request.mock.calls.filter(([url]) => url.endsWith('/preflight')).at(-1);
+    return call && JSON.parse(String(call[1].body)).configuration_revision;
+  }).toBe(4);
+  await page.getByRole('button', { name: 'General', exact: true }).click();
+  expect(host.querySelector<HTMLInputElement>('.managed-settings-fields input')?.value).toBe('Unsaved metadata');
+});
+
+it('settles a hidden preflight without accepting its stale plan', async () => {
+  const value = { service_id: 'one', name: 'Service', access_mode: 'unified_proxy', deployment: 'container', template_source: 'custom', observed_state: 'stopped', configuration_revision: 3, parameters: {}, runtime: { container: { entrypoint: '', command: [], read_only_root: true } } };
+  let finish!: (value: unknown) => void;
+  api.request.mockReset().mockImplementation(async (url: string) => url.endsWith('/preflight') ? new Promise(resolve => { finish = resolve; }) : value);
+  const [open, setOpen] = createSignal(true);
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeProvider><div hidden={!open()}><ManagedServiceSettingsDrawer embedded open={open()} serviceID="one" serviceName="Service" canManage onOpenChange={setOpen} onChanged={() => {}} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={async () => {}} /></div></FloeProvider>, host);
+  await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+  await page.getByPlaceholder('/usr/local/bin/start').fill('/pending');
+  await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+  await expect.poll(() => finish).toBeTypeOf('function');
+  setOpen(false); finish({ configuration_revision: 3, plan_digest: 'stale', risks: [], changed_sections: ['runtime'] });
+  setOpen(true);
+  await expect.element(page.getByRole('button', { name: 'Review changes', exact: true })).toBeEnabled();
+  await expect.element(page.getByRole('button', { name: 'Apply configuration', exact: true })).toBeDisabled();
 });

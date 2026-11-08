@@ -38,7 +38,7 @@ function desktopFailure(title: EnvAppTranslationKey, failure: unknown, hint: Env
   return { title, hint };
 }
 
-export function RemoteDesktopLauncher(props: { request?: number; onManage?: () => void; onStatus?: (status:RemoteDesktopStatus)=>void } = {}) {
+export function RemoteDesktopLauncher(props: { active?: boolean; request?: number; onManage?: () => void; onStatus?: (status:RemoteDesktopStatus)=>void } = {}) {
   const [open, setOpen] = createSignal(false);
   const [started, setStarted] = createSignal(false);
   const [activity, setActivity] = createSignal<EnvAppTranslationKey>();
@@ -46,10 +46,10 @@ export function RemoteDesktopLauncher(props: { request?: number; onManage?: () =
   // The launcher owns preparation. Dialog presence only attaches its view;
   // dismissing the modal must not dispose the operation or its subscription.
   createEffect(()=>{if(props.request){setStarted(true);setOpen(true);}});
-  const content = createMemo(() => started() ? <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col" id="remote-desktop:dialog" pageID="remote-desktop" pageName={i18n.t('remoteDesktop.title')} mode="overlay" selected={open()}><RemoteDesktopPanel active={open()} onManage={props.onManage ? () => { setOpen(false); props.onManage?.(); } : undefined} onStatus={props.onStatus} onActivityChange={setActivity} onConnected={() => setOpen(false)} /></FlowerContextSource> : undefined);
+  const content = createMemo(() => started() ? <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col" id="remote-desktop:dialog" pageID="remote-desktop" pageName={i18n.t('remoteDesktop.title')} mode="overlay" selected={open() && props.active !== false}><RemoteDesktopPanel active={open() && props.active !== false} onManage={props.onManage ? () => { setOpen(false); props.onManage?.(); } : undefined} onStatus={props.onStatus} onActivityChange={setActivity} onConnected={() => setOpen(false)} /></FlowerContextSource> : undefined);
   return <>
     <Button variant="outline" onClick={() => { setStarted(true); setOpen(true); }}><RemoteDesktopIcon class="w-4 h-4" /><Show when={!open() && activity()} fallback={i18n.t('remoteDesktop.title')}>{key => <span role="status">{i18n.t(key())}</span>}</Show></Button>
-    <Dialog open={open()} onOpenChange={setOpen} title={i18n.t('remoteDesktop.title')} closeLabel={i18n.t('common.actions.close')} escapeKeyPhase="bubble"
+    <Dialog open={open() && props.active !== false} onOpenChange={setOpen} title={i18n.t('remoteDesktop.title')} closeLabel={i18n.t('common.actions.close')} escapeKeyPhase="bubble"
       class="remote-desktop-dialog" contentClass="remote-desktop-dialog-content">
       {content()}
     </Dialog>

@@ -365,7 +365,7 @@
     "moveFailed": "Verschieben fehlgeschlagen"
   },
   "settings": {
-    "runtimeTitle": "Laufzeiteinstellungen",
+    "runtimeTitle": "Einstellungen",
     "backToFlower": "Zurück zu Flower",
     "searchPlaceholder": "Einstellungen suchen",
     "filteredSections": "{visible} von {total} Bereichen",
@@ -379,7 +379,11 @@
       "permissionPolicy": "Berechtigungsrichtlinie",
       "flower": "Flower",
       "skills": "Fähigkeiten",
-      "debugConsole": "Debug-Konsole"
+      "debugConsole": "Debug-Konsole",
+      "appearance": "Darstellung & Sprache",
+      "browser": "Browser",
+      "services": "Dienste",
+      "extensions": "Erweiterungen"
     },
     "groups": {
       "overview": "Übersicht",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "Schlüsselinitialisierung läuft ab bei",
       "notProvided": "Nicht bereitgestellt",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "Dieses Einstellungsziel ist nicht mehr verfügbar."
   },
   "flower": {
     "currentEnvironmentFallback": "Diese Umgebung",

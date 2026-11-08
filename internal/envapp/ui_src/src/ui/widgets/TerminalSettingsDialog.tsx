@@ -1,3 +1,4 @@
+import { HostedSettingsPanel } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { StableText, Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
 import './terminal-settings.css';
 import { TerminalHistorySettings } from './TerminalHistorySettings';
@@ -60,10 +61,13 @@ const TERMINAL_THEME_GROUPS = [
 
 type TerminalSettingsDialogProps = {
   open: boolean;
+  embedded?: boolean;
+  ownerID?: string;
   followInput?: boolean;
   onFollowInputChange?: (value: boolean) => void;
   retentionTransport?: RedevenTerminalTransport;
   retentionSessionId?: string | null;
+  retentionCanManage?: boolean;
   userTheme: string;
   fontSize: number;
   fontFamilyId: string;
@@ -287,7 +291,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
   };
 
   return (
-    <Dialog
+    <HostedSettingsPanel embedded={props.embedded} target={{ section: 'terminal', resource: props.ownerID }} open={props.open} onClose={() => props.onOpenChange(false)}
+      fallback={body => (    <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={i18n.t('terminal.settings.title')}
@@ -305,6 +310,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         </Button>
       }
     >
+{body}</Dialog>)}>
       <div
         {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
         class="terminal-settings-body min-h-0 flex-1 overflow-y-auto overscroll-contain"
@@ -486,7 +492,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         <section class="space-y-3">
           <Checkbox checked={props.followInput ?? true} onChange={value => props.onFollowInputChange?.(value)}
             label={i18n.t('terminal.settings.followInput')} size="sm" />
-          <Show when={props.retentionTransport}><TerminalHistorySettings open={props.open} transport={props.retentionTransport} sessionId={props.retentionSessionId} /></Show>
+          <Show when={props.embedded || props.retentionTransport}><TerminalHistorySettings open={props.open} canManage={props.retentionCanManage} transport={props.retentionTransport} sessionId={props.retentionSessionId} /></Show>
         </section>
         <section class="space-y-3">
         <SectionTitle
@@ -512,6 +518,6 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         </section>
 
       </div>
-    </Dialog>
+    </HostedSettingsPanel>
   );
 }

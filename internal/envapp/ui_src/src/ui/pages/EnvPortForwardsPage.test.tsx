@@ -6,6 +6,8 @@ import { controlText } from '../../testSupport/controlText';
 import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 
 import { render } from 'solid-js/web';
+import { SettingsPanelContext } from '../../../../../settings_ui/src/SettingsPanelHost';
+import { createSettingsSession } from '../../../../../settings_ui/src/settingsSession';
 import { createSignal, Show } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,6 +39,7 @@ const envContextMocks = vi.hoisted(() => ({
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: '' }),
   env_id: () => 'env_demo',
   goActivity: vi.fn(),
+  openSettings: vi.fn(),
   env: Object.assign(
     () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
     { state: 'ready', loading: false, error: null },
@@ -2937,7 +2940,11 @@ describe('EnvPortForwardsPage', () => {
     });
     localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ ...running, state: 'succeeded', stage: 'completed', progress_current: 5 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
 
-    render(() => <EnvPortForwardsPage />, host);
+    render(() => {
+      const session = createSettingsSession(); session.setPresent(true);
+      envContextMocks.openSettings.mockImplementation((section, options) => session.open({ section, resource: options?.resource }));
+      return <SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}><EnvPortForwardsPage /><Show when={session.target()}><EnvPortForwardsPage settingsOnly /></Show></SettingsPanelContext.Provider>;
+    }, host);
     await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-settings"]')).toBeTruthy());
     Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-settings"] button')).find((button) => controlText(button)?.trim() === 'Settings')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeTruthy());
@@ -2949,7 +2956,7 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(preflightBody).toMatchObject({ configuration_revision: 3, runtime: { container: { entrypoint: '/usr/local/bin/dashboard' } } }));
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Apply configuration')?.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'reconfigure', reconfigure: { plan_digest: 'exact-plan', draft: { configuration_revision: 3 } } }));
-    expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeNull();
+    await waitForAssertion(() => expect(!host.querySelector('[data-testid="managed-service-settings"]') || !!host.querySelector('[data-testid="managed-service-settings"]')?.closest('[hidden]')).toBe(true));
     await waitForAssertion(() => expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-reconfigure/events'), expect.objectContaining({ method: 'GET', priority: 'low' })));
   });
 

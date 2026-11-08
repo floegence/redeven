@@ -875,6 +875,7 @@ export const enUS = {
     passwordNeeded: 'Password needed',
     optional: 'Optional',
     chooseEnvironmentFirst: 'Choose an environment first.',
+    unifiedTitle: 'Settings',
     settingsWindowTitle: 'Environment settings',
     settingsWindowDescription: '{label} · Runs on this device',
     saveSettings: 'Save settings',

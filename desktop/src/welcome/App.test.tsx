@@ -900,15 +900,11 @@ describe('DesktopWelcomeShell', () => {
   });
 
 
-  it('keeps the language picker closed until an explicit open request arrives', () => {
+  it('routes language requests through the retained appearance settings host', () => {
     const appSrc = readWelcomeSource();
-    const pickerStart = appSrc.indexOf('function DesktopLanguagePicker');
-    const pickerEnd = appSrc.indexOf('function PrimaryNavigation');
-    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
-
-    expect(pickerSrc).toContain('const [open, setOpen] = createSignal(false);');
-    expect(pickerSrc).toContain('{ defer: true }');
-    expect(pickerSrc).toContain('if (next === previous) {');
+    expect(appSrc).toContain("settingsHost.open({ section: 'appearance' })");
+    expect(appSrc).toContain('<DesktopLanguageSettings');
+    expect(appSrc).not.toContain('function DesktopLanguagePicker');
   });
 
   it('builds retained Gateway failure progress with Refresh-owned recovery actions', () => {
@@ -1051,7 +1047,6 @@ describe('DesktopWelcomeShell', () => {
     expect(sshComboboxSrc).toContain('<DesktopAnchoredListbox');
     expect(appSrc).toContain('anchorRef={buttonRef}');
     expect(sshComboboxSrc).toContain('anchorRef={rootRef}');
-    expect(appSrc).toContain('width={288}');
     expect(appSrc).not.toContain(
       'class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"',
     );
@@ -1071,33 +1066,15 @@ describe('DesktopWelcomeShell', () => {
     expect(listboxSrc).toContain('IMPORTANT: Dialog form listboxes must live outside dialog scroll containers.');
   });
 
-  it('renders the Desktop header language picker as an anchored rich listbox', () => {
-    const appSrc = readWelcomeSource();
-    const pickerStart = appSrc.indexOf('function DesktopLanguagePicker');
-    const pickerEnd = appSrc.indexOf('function DesktopCommandRegistrar', pickerStart);
-    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
-
-    expect(pickerSrc).not.toContain('<select');
-    expect(pickerSrc).not.toContain('<option');
-    expect(pickerSrc).toContain('<TopBarIconButton');
-    expect(pickerSrc).toContain('<DesktopAnchoredListbox');
-    expect(pickerSrc).toContain('anchorRef={buttonRef}');
-    expect(pickerSrc).toContain('width={288}');
-    expect(pickerSrc).toContain('role="listbox"');
-    expect(pickerSrc).toContain('role="option"');
-    expect(pickerSrc).toContain('tabIndex={-1}');
-    expect(pickerSrc).toContain('scrollDesktopListboxOptionIntoView');
-    expect(pickerSrc).toContain('aria-haspopup="listbox"');
-    expect(pickerSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
-    expect(pickerSrc).toContain('aria-controls="redeven-desktop-language-options"');
-    expect(pickerSrc).toContain(
-      'aria-activedescendant={open() ? `redeven-desktop-language-option-${highlightedIndex()}` : undefined}',
-    );
-    expect(pickerSrc).toContain("props.i18n.t('common.language')");
-    expect(pickerSrc).toContain("props.i18n.t('language.usingLanguage'");
-    expect(pickerSrc).toContain('REDEVEN_LOCALE_META[preference].english_name');
-    expect(pickerSrc).toContain('<Globe');
-    expect(pickerSrc).toContain('<Check');
+  it('renders language inline with the published accessible Select', () => {
+    const src = readWelcomeSource();
+    const picker = src.slice(src.indexOf('function DesktopLanguageSettings'), src.indexOf('function DesktopCommandRegistrar'));
+    expect(picker).toContain('<Select ariaLabel=');
+    expect(picker).toContain('value={props.snapshot.preference}');
+    expect(picker).toContain('REDEVEN_LOCALE_PREFERENCES.map');
+    expect(picker).toContain('localePreferenceDisplayName(preference)');
+    expect(picker).toContain('props.onPreferenceChange(value as RedevenLocalePreference)');
+    expect(picker).not.toContain('DesktopAnchoredListbox');
   });
 
   it('limits native browser selection to the paired Gateway member picker', () => {
@@ -1113,51 +1090,28 @@ describe('DesktopWelcomeShell', () => {
 
 
 
-  it('preserves keyboard and focus behavior for the Desktop header language listbox', () => {
-    const appSrc = readWelcomeSource();
-    const pickerStart = appSrc.indexOf('function DesktopLanguagePicker');
-    const pickerEnd = appSrc.indexOf('function DesktopCommandRegistrar', pickerStart);
-    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
-
-    expect(pickerSrc).toContain("event.key === 'ArrowDown'");
-    expect(pickerSrc).toContain("event.key === 'ArrowUp'");
-    expect(pickerSrc).toContain("event.key === 'Enter' || event.key === ' '");
-    expect(pickerSrc).toContain("event.key === 'Escape'");
-    expect(pickerSrc).toContain('createEffect(on(');
-    expect(pickerSrc).toContain('setHighlightedIndex(selectedIndex());');
-    expect(pickerSrc).toContain('setHighlightedIndex((current) => (current + delta + count) % count);');
-    expect(pickerSrc).toContain("document.addEventListener('mousedown', handlePointerDown);");
-    expect(pickerSrc).toContain("document.addEventListener('keydown', handleKeyDown);");
-    expect(pickerSrc).toContain('buttonRef?.focus();');
-    expect(pickerSrc).toContain('props.onPreferenceChange(preference);');
-    expect(pickerSrc).toContain('onMouseDown={(event) => {');
-    expect(pickerSrc).toContain('event.preventDefault();');
-  });
-
   it('routes Desktop language and command chrome through i18n dictionaries', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("props.i18n.t('language.systemDefault')");
-    expect(appSrc).toContain("props.i18n.t('language.usingLanguage'");
     expect(appSrc).toContain("i18n.t('shell.accessibility.skipLinkLabel')");
     expect(appSrc).toContain("i18n.t('shell.commandSearchPlaceholder')");
     expect(appSrc).toContain("props.i18n.t('commandPalette.changeLanguageTitle')");
     expect(appSrc).toContain('execute: () => props.openLanguageSettings()');
     expect(appSrc).toContain('openLanguageSettings={openLanguageSettings}');
     expect(appSrc).toContain('function openLanguageSettings(): void');
-    expect(appSrc).toContain('const [languagePickerOpenRequest, setLanguagePickerOpenRequest] = createSignal(0);');
-    expect(appSrc).toContain('setLanguagePickerOpenRequest((current) => current + 1);');
-    expect(appSrc).toContain('openRequest={languagePickerOpenRequest()}');
+    expect(appSrc).toContain('function DesktopLanguageSettings');
+    expect(appSrc).toContain("settingsHost.open({ section: 'appearance' })");
+    expect(appSrc).toContain('<DesktopLanguageSettings');
     expect(appSrc).not.toContain('<DesktopInterfaceSettingsDialog');
     expect(appSrc).not.toContain('open={languageSettingsOpen()}');
     expect(appSrc).not.toContain('setLanguageSettingsOpen');
     expect(appSrc).toContain("props.i18n.t('commandPalette.toggleThemeTitle')");
     expect(appSrc).toContain("id: 'redeven.desktop.changeAppearance'");
     expect(appSrc).toContain('execute: () => props.openThemePicker()');
-    expect(appSrc).toContain('openThemePicker={() => setThemePickerOpenRequest((current) => current + 1)}');
-    expect(appSrc).toContain('const [themePickerOpenRequest, setThemePickerOpenRequest] = createSignal(0);');
+    expect(appSrc).toContain("openThemePicker={() => settingsHost.open({ section: 'appearance' })}");
     expect(appSrc).toContain('<DesktopThemePicker');
-    expect(appSrc).toContain('openRequest={themePickerOpenRequest()}');
+    expect(appSrc).toContain('presentation="inline"');
     expect(appSrc).toContain('onSourceChange={updateDesktopThemeSource}');
     expect(appSrc).toContain('onShellThemeChange={updateDesktopShellTheme}');
     expect(appSrc).toContain('shellPresetStorageKey: DESKTOP_FLOE_SHELL_THEME_STORAGE_KEY');

@@ -4,7 +4,7 @@ import { createActivityNavigation, decodeActivityNavigation, PENDING_ACTIVITY_PL
 import { resolveEnvAppStorageBinding } from './uiPersistence';
 
 beforeEach(() => { localStorage.clear(); sessionStorage.clear(); vi.restoreAllMocks(); });
-const pages = ['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai', 'settings', 'plugin-center'] as const;
+const pages = ['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai'] as const;
 describe('Activity navigation record', () => {
   it.each(pages)('restores %s immediately across new owners', page => {
     const first = createActivityNavigation({ envID: 'host-a' });
@@ -13,13 +13,13 @@ describe('Activity navigation record', () => {
   });
   it('migrates Floe before the old product record, then ignores both legacy owners', () => {
     const namespace = resolveEnvAppStorageBinding({ envID: 'host', desktopStateStorageAvailable: false }).namespace;
-    localStorage.setItem(`${namespace}-layout`, JSON.stringify({ sidebar: { activeTab: 'settings' } }));
+    localStorage.setItem(`${namespace}-layout`, JSON.stringify({ sidebar: { activeTab: 'files' } }));
     localStorage.setItem('redeven_envapp_active_tab', 'ports');
     const nav = createActivityNavigation({ envID: 'host' });
-    expect(nav.initial).toEqual({ kind: 'builtin', page: 'settings' });
+    expect(nav.initial).toEqual({ kind: 'builtin', page: 'files' });
     nav.commit({ kind: 'builtin', page: 'ports' });
     expect(createActivityNavigation({ envID: 'host' }).initial).toEqual({ kind: 'builtin', page: 'ports' });
-    expect(JSON.parse(localStorage.getItem(`${namespace}-layout`)!).sidebar.activeTab).toBe('settings');
+    expect(JSON.parse(localStorage.getItem(`${namespace}-layout`)!).sidebar.activeTab).toBe('files');
   });
   it('uses valid legacy product data or terminal when the prior layout cannot be restored', () => {
     localStorage.setItem('redeven_envapp_active_tab', 'ports');
@@ -45,9 +45,9 @@ describe('Activity navigation record', () => {
   });
   it('keeps recent builtins unique and selects the latest available fallback', () => {
     const nav = createActivityNavigation();
-    for (const page of ['ports', 'settings', 'files', 'ports'] as const) nav.commit({ kind: 'builtin', page });
+    for (const page of ['ports', 'terminal', 'files', 'ports'] as const) nav.commit({ kind: 'builtin', page });
     nav.commit({ kind: 'plugin', pluginInstanceID: 'instance', pluginID: 'plugin', surfaceID: 'main' });
-    expect(nav.record().recentBuiltins).toEqual(['ports', 'files', 'settings', 'terminal']);
+    expect(nav.record().recentBuiltins).toEqual(['ports', 'files', 'terminal']);
     expect(nav.fallback(page => page !== 'ports')).toBe('files');
     expect(nav.fallback(() => false)).toBe('terminal');
   });
@@ -69,7 +69,7 @@ describe('Activity navigation record', () => {
   });
   it('isolates environments and handles corrupted or incompatible records', () => {
     const nav = createActivityNavigation({ envID: 'a' });
-    nav.commit({ kind: 'builtin', page: 'settings' });
+    nav.commit({ kind: 'builtin', page: 'terminal' });
     expect(createActivityNavigation({ envID: 'b' }).initial).toEqual({ kind: 'builtin', page: 'terminal' });
     localStorage.setItem(nav.key, '{');
     expect(createActivityNavigation({ envID: 'a' }).initial).toEqual({ kind: 'builtin', page: 'terminal' });
@@ -83,14 +83,14 @@ describe('Activity navigation record', () => {
     window.redevenDesktopSessionContext = { getSnapshot: () => ({ local_environment_id: 'environment-a', renderer_storage_scope_id: source, target_route: 'local_host', session_source: 'local_runtime' }) };
     try {
       const first = createActivityNavigation({ envID: 'env_local' });
-      first.commit({ kind: 'builtin', page: 'settings' });
+      first.commit({ kind: 'builtin', page: 'terminal' });
       expect(createActivityNavigation({ envID: 'env_local' }).initial).toEqual(first.record().target);
       source = 'provider-environment-a';
       expect(createActivityNavigation({ envID: 'env_local' }).initial).toEqual({ kind: 'builtin', page: 'terminal' });
       source = 'local-environment-b';
       expect(createActivityNavigation({ envID: 'env_local' }).initial).toEqual({ kind: 'builtin', page: 'terminal' });
       source = 'local-environment-a';
-      expect(createActivityNavigation({ envID: 'env_local' }).initial).toEqual({ kind: 'builtin', page: 'settings' });
+      expect(createActivityNavigation({ envID: 'env_local' }).initial).toEqual({ kind: 'builtin', page: 'terminal' });
     } finally { delete window.redevenDesktopStateStorage; delete window.redevenDesktopSessionContext; }
   });
 

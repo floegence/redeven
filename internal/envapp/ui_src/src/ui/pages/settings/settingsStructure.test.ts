@@ -34,10 +34,10 @@ describe('settingsStructure', () => {
     const labels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(new Set(labels).size).toBe(labels.length);
     expect(SETTINGS_NAV_ITEMS.map((item) => item.id)).toEqual(SETTINGS_SECTIONS.map((item) => item.id));
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'overview')?.sections).toEqual(['connection', 'agent']);
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'runtime_configuration')?.sections).toEqual(['runtime', 'codespaces']);
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'ai_extensions')?.sections).toEqual(['ai']);
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'diagnostics')?.sections).toEqual(['config', 'logging', 'debug_console']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'overview')?.sections).toEqual(['appearance', 'connection', 'agent']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'runtime_configuration')?.sections).toEqual(['terminal', 'browser', 'applications', 'services', 'runtime', 'codespaces']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'ai_extensions')?.sections).toEqual(['ai', 'extensions', 'plugins']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'diagnostics')?.sections).toEqual(['storage', 'config', 'logging', 'debug_console']);
   });
 
   it('maps key sections into the expected groups', () => {

@@ -74,6 +74,8 @@ import {
   type BottomBarCompanionPhase,
 } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { createSettingsSession } from '../../../../settings_ui/src/settingsSession';
+import { SettingsPanelContext, type SettingsPanelRegistration } from '../../../../settings_ui/src/SettingsPanelHost';
 import { DialogPlacementProvider, capturePromptCardAnchor } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { PluginPlatformRequestError, isPluginRecoveryCurrent, pluginMutationOutcome, type PluginRecoveryResult } from '@floegence/redevplugin-ui';
@@ -144,7 +146,6 @@ import type {
 import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
 import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
-import { PluginCenterDrawer } from './plugins/PluginCenterDrawer';
 import { pluginDraftForThread } from './plugins/pluginCreationApi';
 import { LocalApiError } from './services/localApi';
 import type { PluginSurfaceResolution } from './plugins/PluginSurfaceContainer';
@@ -171,7 +172,6 @@ import {
 import { ConnectionRecoveryView } from './reconnect/ConnectionRecoveryView';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { TopBarBrandButton } from './TopBarBrandButton';
-import { EnvAppThemePicker } from './EnvAppThemePicker';
 import { handleMobileToolsEscape, type MobileToolsPage } from './mobileToolsNavigation';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
@@ -324,7 +324,6 @@ const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 
-const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
 const PLUGIN_ACTIVITY_COMPONENT_PREFIX = 'redeven.plugin.activity:';
 
 function pluginActivityComponentID(inventoryKey: string): string {
@@ -343,7 +342,7 @@ const EnvHostApplicationsPage = lazy(() => import('./pages/EnvHostApplicationsPa
 const EnvPortForwardsPage = lazy(() => import('./pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
 const EnvContainersPage = lazy(() => import('./pages/EnvContainersPage').then((module) => ({ default: module.EnvContainersPage })));
 const EnvAIPage = lazy(() => import('./pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
-const EnvSettingsPage = lazy(() => import('./pages/EnvSettingsPage').then((module) => ({ default: module.EnvSettingsPage })));
+const EnvSettingsDialog = lazy(() => import('./pages/settings/EnvSettingsDialog').then((module) => ({ default: module.EnvSettingsDialog })));
 const ActivityPluginSurfaceWindow = lazy(() => import('./plugins/ActivityPluginSurfaceWindow').then((module) => ({ default: module.ActivityPluginSurfaceWindow })));
 const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow').then((module) => ({ default: module.DebugConsoleWindow })));
 
@@ -355,7 +354,7 @@ const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((mod
 const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
 
-type EnvActivitySurfaceId = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
+type EnvActivitySurfaceId = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID;
 
 type ActivityPluginWindow = Readonly<{
   creationID?: string;
@@ -1272,6 +1271,18 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
   const [debugConsoleMountRequested, setDebugConsoleMountRequested] = createSignal(false);
 
+  const settingsSession = createSettingsSession({ history: true });
+  const [settingsVisited, setSettingsVisited] = createSignal(false);
+  const [settingsPanels, setSettingsPanels] = createSignal<readonly SettingsPanelRegistration[]>([]);
+  const settingsPanelHost = {
+    target: settingsSession.target, present: settingsSession.present,
+    open: (target: import('../../../../settings_ui/src/settingsSession').SettingsTarget) => openSettings(target.section as EnvSettingsSection, { resource: target.resource }),
+    close: () => settingsSession.close(),
+    register: (entry: SettingsPanelRegistration) => {
+      setSettingsPanels(items => [...items, entry]);
+      return () => setSettingsPanels(items => items.filter(item => item !== entry));
+    },
+  };
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
@@ -1456,7 +1467,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   let workbenchPluginSurfaceController: WorkbenchPluginSurfaceController | null = null;
   let nextActivityPluginWindowID = 0;
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
-  const [themeMenuOpenSeq, setThemeMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   const [activityFlowerFocusRequest, setActivityFlowerFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let aiThreadFocusRequestSequence = 0;
@@ -1519,25 +1529,21 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   });
 
-  const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
-    if (pluginCreationOpen()) { leavePluginCreation(() => openSettings(section, options)); return; }
-    if (viewMode() === 'activity') { transientActivityFallback = ''; setPendingPluginRestore(undefined); navigation.commit({ kind: 'builtin', page: 'settings' }); }
-    updatePluginPanel({ open: false });
-    setPluginCenterSelectedInventoryKey(undefined);
-    setSettingsFocusSection(section ?? 'config');
-    setSettingsFocusSeq((n) => n + 1);
-    setViewMode('activity');
+  // IMPORTANT: Settings is an overlay, never an Activity or Workbench destination.
+  // Opening it must not change navigation, plugin selection, terminals or drafts.
+  const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin; resource?: string }) => {
     setSettingsOrigin(options?.origin ?? null);
-    activateActivitySurface('settings', { persist: false });
+    settingsSession.open({ section: section ?? 'appearance', resource: options?.resource });
   };
 
-  const returnFromSettingsOrigin = () => {
-    const origin = settingsOrigin();
-    setSettingsOrigin(null);
-    if (origin?.kind === 'flower') {
-      openSurface(origin.returnSurfaceId, { reason: 'direct_navigation', focus: true, ensureVisible: true });
-    }
-  };
+  createEffect(() => {
+    settingsSession.revision();
+    const target = settingsSession.target();
+    if (!target) return;
+    setSettingsVisited(true); setSettingsFocusSection(target.section); setSettingsFocusSeq(value => value + 1);
+  });
+
+  const returnFromSettingsOrigin = () => { settingsSession.close(); setSettingsOrigin(null); };
 
   const openDebugConsole = (options?: { query?: string }) => {
     setDebugConsoleMountRequested(true);
@@ -1939,20 +1945,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     })
   ));
 
-  const [workbenchPluginCenterOpen, setWorkbenchPluginCenterOpen] = createSignal(false);
-  const [workbenchPluginCenterPresent, setWorkbenchPluginCenterPresent] = createSignal(false);
-  let pluginCenterFocusTarget: PluginSurfaceLaunchTarget | undefined;
-  const onPluginCenterPresenceChange = (present: boolean) => {
-    setWorkbenchPluginCenterPresent(present);
-    if (present || !pluginCenterFocusTarget) return;
-    const target = pluginCenterFocusTarget;
-    pluginCenterFocusTarget = undefined;
-    queueMicrotask(() => {
-      if (viewMode() === 'workbench') workbenchPluginSurfaceController?.focus(target);
-    });
-  };
-  const workbenchPluginCenterBlocking = () => workbenchPluginCenterOpen() || workbenchPluginCenterPresent();
-  const [workbenchPluginCenterVisited, setWorkbenchPluginCenterVisited] = createSignal(false);
+  const workbenchPluginCenterBlocking = () => settingsSession.present();
   const initialPluginDraft = new URL(window.location.href).searchParams.get('plugin_draft');
   const [pluginCreationOpen, setPluginCreationOpen] = createSignal(Boolean(initialPluginDraft));
   const [pluginCreationProjectID, setPluginCreationProjectID] = createSignal(initialPluginDraft || 'new');
@@ -1996,7 +1989,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   window.addEventListener('popstate', syncPluginCreationNavigation);
   onCleanup(() => window.removeEventListener('popstate', syncPluginCreationNavigation));
   const openPluginDraft = (id: string) => {
-    const commit = () => { navigatePluginCreation(id); setWorkbenchPluginCenterOpen(false); updatePluginPanel({ open: false }); };
+    const commit = () => { navigatePluginCreation(id); settingsSession.close(); updatePluginPanel({ open: false }); };
     if (pluginCreationOpen() && pluginCreationNavigate && id !== pluginCreationOwner()) {
       void pluginCreationNavigate(commit).catch(reportPluginNavigationFailure);
     } else commit();
@@ -2050,24 +2043,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     setPluginWidgetCounts(counts);
   };
   const openPluginCenter = async (selectedInventoryKey?: string) => {
-    if (pluginCreationOpen()) { leavePluginCreation(() => openPluginCenter(selectedInventoryKey)); return; }
-    if (pluginsPanelOpen()) pluginsPanelTrigger()?.focus({ preventScroll: true });
-    updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(selectedInventoryKey);
     setPluginCenterFocusRequest((request) => request + 1);
     void refreshPluginWidgetCounts().catch(reportPluginNavigationFailure);
-    if (viewMode() === 'workbench') {
-      setWorkbenchPluginCenterVisited(true);
-      setWorkbenchPluginCenterOpen(true);
-    } else {
-      activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID);
-    }
+    openSettings('plugins');
   };
-
-  const closePluginCenter = () => {
-    if (viewMode() === 'workbench') { setWorkbenchPluginCenterOpen(false); return; }
-    activateActivitySurface(lastActivitySurface(), { persist: false });
-  };
+  const closePluginCenter = () => settingsSession.close();
 
   const pluginSurfaceTargetKey = (target: PluginSurfaceLaunchTarget) => (
     `${target.pluginInstanceID}\u0000${target.surfaceID}`
@@ -2185,9 +2166,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         await controller.open(currentTarget);
       }
       updatePluginPanel({ open: false });
-      if (workbenchPluginCenterPresent()) pluginCenterFocusTarget = currentTarget;
-      else if (viewMode() === mode) queueMicrotask(() => controller.focus(currentTarget));
-      setWorkbenchPluginCenterOpen(false);
+      settingsSession.close();
+      if (viewMode() === mode) queueMicrotask(() => controller.focus(currentTarget));
       return;
     }
     const targetKey = pluginSurfaceTargetKey(currentTarget);
@@ -2953,17 +2933,23 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   };
 
-  const createFlowerTurnLauncherAdapter = async () => {
+  const createFlowerTurnLauncherAdapter = async (lifetime?: { signal: AbortSignal; isAvailable: () => boolean }) => {
     const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
+    const browserTransferScope = flowerScopeKey();
     return createEnvLocalFlowerSurfaceAdapter({
       downloadManager,
+      signal: lifetime?.signal,
+      browserTransferScope,
+      browserTransferAvailable: () => flowerScopeKey() === browserTransferScope && resourceCacheAccess().phase === 'ready' && protocol.status() === 'connected' && Boolean(env()?.permissions?.can_read && env()?.permissions?.can_write && env()?.permissions?.can_execute),
+      isAvailable: () => !lifetime?.signal.aborted && resourceCacheAccess().phase === 'ready' && protocol.status() === 'connected' && (lifetime?.isAvailable() ?? true),
       modelReadResource: flowerModelReadResource,
       envPublicID: trimString(envId()),
       envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
       desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
       rpc,
       workspaceClientIdentity: () => protocol.session?.(),
-      canMutate: true,
+      get canMutate() { return !lifetime?.signal.aborted && (lifetime?.isAvailable() ?? true) && resourceCacheAccess().phase === 'ready' && protocol.status() === 'connected' && Boolean(env()?.permissions?.can_read && env()?.permissions?.can_write && env()?.permissions?.can_execute); },
+      canManageExtensions: () => !lifetime?.signal.aborted && (lifetime?.isAvailable() ?? true) && resourceCacheAccess().phase === 'ready' && protocol.status() === 'connected' && canAdmin(),
       copy: {
         currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),
         usingCurrentEnvironment: i18n.t('flowerChat.router.currentEnvHandler'),
@@ -2973,7 +2959,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
         failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
       },
-      onSettingsChanged: () => { bumpSettingsSeq(); },
+      // IMPORTANT: The retained settings panel publishes one successful change.
+      // Its adapter must not independently refresh the parent before save returns.
+      onSettingsChanged: lifetime ? undefined : () => { bumpSettingsSeq(); },
       revealHostApplication,
       openMessageFile: openFlowerMessageFile,
       openMessageURL: openFlowerMessageURL,
@@ -3550,9 +3538,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const recoverySnapshot = reconnectController.snapshot;
   const recoveryVisible = createMemo(() => recoverySnapshot().state !== 'idle' && recoverySnapshot().state !== 'succeeded');
   const recoveryBlocking = createMemo(() => recoverySnapshot().state === 'failed' || accessLocked());
-  createEffect(() => {
-    if (viewMode() !== 'workbench' || recoveryBlocking()) setWorkbenchPluginCenterOpen(false);
-  });
   const activityFlowerLauncherVisible = createMemo(() => (
     flowerTurnLauncherOpen() && flowerTurnLauncherHandoff()?.mode === 'activity'
   ));
@@ -4096,9 +4081,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     });
   });
 
-  const renderPluginCenter = (embedded = false) => (
+  const renderPluginCenter = () => (
         <PluginCenterView
-          visible={embedded ? workbenchPluginCenterOpen() && viewMode() === 'workbench' : viewMode() === 'activity' && layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID}
+          visible={settingsSession.present() && settingsSession.target()?.section === 'plugins' && !settingsSession.target()?.resource}
           pluginWidgetCounts={pluginWidgetCounts()}
           projection={pluginInventoryProjection() ?? { items: [] }}
           activityPinnedInventoryKeys={pluginPlacementPins().activityInventoryKeys}
@@ -4191,14 +4176,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       component: () => <EnvTessivenPage openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
       sidebar: { order: 97, fullScreen: true },
     });
-    list.push({
-      id: PLUGIN_CENTER_ACTIVITY_ID,
-      name: i18n.t('uiCopy.plugin.centerTitle'),
-      icon: ActivityBarPluginsIcon,
-      component: () => renderPluginCenter(),
-      sidebar: { order: 98, fullScreen: true },
-    });
-    list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: ActivityBarSettingsIcon, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
     list.push({ id: PENDING_ACTIVITY_PLUGIN_ID, name: i18n.t('uiCopy.plugin.continuity.loading'), icon: ActivityBarPluginsIcon, component: ActivityPageLoading, sidebar: { order: 101, fullScreen: true } });
     return list.map(item => ({ ...item, component: () => <FlowerContextSource
       id={`activity:${item.id}`} pageID={item.id} pageName={item.name} mode="activity"
@@ -4209,7 +4186,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const pageModules = { terminal: EnvTerminalPage, monitor: EnvMonitorPage, files: EnvFileBrowserPage,
     codespaces: EnvCodespacesPage, ports: EnvPortForwardsPage, applications: EnvHostApplicationsPage,
-    containers: EnvContainersPage, ai: EnvAIPage, tessiven: EnvTessivenPage, settings: EnvSettingsPage };
+    containers: EnvContainersPage, ai: EnvAIPage, tessiven: EnvTessivenPage };
   if (initialSurface in pageModules) void pageModules[initialSurface as keyof typeof pageModules].preload().catch(() => undefined);
 
   const [persistReady, setPersistReady] = createSignal(false);
@@ -4243,9 +4220,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (surface === 'ai') {
       setActivityFlowerPresentation('collapsed');
     }
-    if (surface !== 'settings' && surface !== PLUGIN_CENTER_ACTIVITY_ID) {
-      setSettingsOrigin(null);
-    }
+    setSettingsOrigin(null);
     if (isEnvSurfaceId(surface)) {
       setLastActivitySurface(surface);
       setLastRequestedSurface(surface);
@@ -4370,13 +4345,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
 
     const requestedSurface = options?.surfaceId ?? activeSurface();
-    const leavingActivityOnlyPluginCenter = requestedMode === 'workbench'
-      && previousMode === 'activity'
-      && layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID;
-    const modeSafeSurface: EnvSurfaceId = leavingActivityOnlyPluginCenter
-      ? lastRequestedSurface()
-      : requestedSurface;
-    const targetSurface = resolveOpenSurfaceTarget(modeSafeSurface, { reason: 'mode_restore' });
+    const targetSurface = resolveOpenSurfaceTarget(requestedSurface, { reason: 'mode_restore' });
     setLastRequestedSurface(targetSurface);
 
     if (requestedMode === 'activity') {
@@ -4388,9 +4357,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       }
       activateActivitySurface(targetSurface, { persist: false });
       return;
-    }
-    if (leavingActivityOnlyPluginCenter) {
-      activateActivitySurface(targetSurface, { persist: !pluginCreationOpen() });
     }
     if (!flowerTurnLauncherOpen()) {
       setActivityFlowerPresentation('collapsed');
@@ -4516,19 +4482,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (accessGateVisible() || pluginInventoryInitialPending()) return;
     if (pluginInventoryError()) { restoreFallback(false); return; }
     if (pluginInventoryProjection() || env()?.permissions?.can_read === false) restoreFallback(true);
-  });
-
-  // Plugin Center belongs to Activity. A stale sidebar tab must never become
-  // the visible or persisted surface while the durable display mode is
-  // Workbench (this can happen when the shell restores sidebar state after the
-  // async environment bootstrap completes).
-  createEffect(() => {
-    if (!persistReady() || viewMode() !== 'workbench') return;
-    if (layout.sidebarActiveTab() !== PLUGIN_CENTER_ACTIVITY_ID) return;
-    const fallback = resolveOpenSurfaceTarget(lastRequestedSurface(), { reason: 'mode_restore' });
-    setLastActivitySurface(fallback);
-    setLastRequestedSurface(fallback);
-    setEnvSidebarActiveTab(fallback, { openSidebar: false });
   });
 
   let mobileFlowerTrigger: HTMLButtonElement | null = null;
@@ -4960,7 +4913,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         description: i18n.t('shell.commandPalette.changeLanguageDescription'),
         category: i18n.t('language.label'),
         icon: Globe,
-        execute: () => layout.isMobile() ? openMobileTools('language') : setLanguageMenuOpenSeq((value) => value + 1),
+        execute: () => { if (accessGateVisible()) setLanguageMenuOpenSeq(value => value + 1); else openSettings('appearance'); },
       });
     }
 
@@ -5004,7 +4957,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         category: i18n.t('shell.commandPalette.categories.view'),
         keybind: 'mod+shift+l',
         icon: Highlighter,
-        execute: () => layout.isMobile() ? openMobileTools('appearance') : setThemeMenuOpenSeq((value) => value + 1),
+        execute: () => openSettings('appearance'),
       },
       {
         id: 'redeven.env.savePreviewFile',
@@ -5155,19 +5108,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <NotesOverlayIcon class="w-4 h-4" />
       </TopBarIconButton>
       <DownloadTaskButton tooltip={topBarTooltip(i18n.t('shell.topbar.downloads'))} />
-      <Show when={!accessGateVisible()}>
-        <LanguagePreferenceMenu
-          variant="topbar"
-          openRequestSeq={languageMenuOpenSeq}
-          notify={notify}
-        />
-      </Show>
-      <EnvAppThemePicker
-        openRequestSeq={themeMenuOpenSeq}
-        tooltip={topBarTooltip(i18n.t('shell.themePicker.openLabel'))}
-        onSourceChange={setThemeSourceWithRenderBoundary}
-        onShellThemeChange={setShellThemeWithRenderBoundary}
-      />
+      <TopBarIconButton label={i18n.t('settings.runtimeTitle')} tooltip={topBarTooltip(i18n.t('settings.runtimeTitle'))} onClick={() => openSettings()}><ActivityBarSettingsIcon class="h-4 w-4" /></TopBarIconButton>
     </div>
   );
 
@@ -5254,7 +5195,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
               captureNewConversationContext={captureNewConversationContext}
               presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
               engaged={flowerSurfaceEngaged() && !pluginCreationOpen()}
-              transcriptVisible={flowerSurfaceEngaged() && !pluginCreationOpen()}
+              transcriptVisible={flowerSurfaceEngaged() && !pluginCreationOpen() && !settingsSession.present()}
               companionPresenceOwner={!accessGateVisible() && !pluginCreationOpen()}
               companionOpen={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' || activityFlowerCompanionDetailVisible()}
               companionRegionID="redeven-activity-flower-companion"
@@ -5344,8 +5285,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         onSearch={() => runAfterMobileNavigation(() => cmd.open())}
         onNotes={() => runAfterMobileNavigation(toggleNotesOverlay)}
         onDashboard={() => runAfterMobileNavigation(() => { void openDashboard(); })}
-        manager={downloadManager} notify={notify}
-        theme={{ onSourceChange: setThemeSourceWithRenderBoundary, onShellThemeChange: setShellThemeWithRenderBoundary }} /></Suspense>
+        onSettings={() => runAfterMobileNavigation(() => openSettings('appearance'))}
+        manager={downloadManager} /></Suspense>
     </Show>
   </>;
 
@@ -5499,13 +5440,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           {accessGatePanel()}
         </Show>
       </div>
-      <Show when={workbenchPluginCenterVisited()}>
-        <PluginCenterDrawer open={workbenchPluginCenterOpen() && viewMode() === 'workbench' && !pluginCreationOpen() && !recoveryBlocking()}
-          onOpenChange={setWorkbenchPluginCenterOpen} onPresenceChange={onPluginCenterPresenceChange}
-          title={i18n.t('uiCopy.plugin.centerTitle')}>
-          <FlowerContextSource id="workbench:plugins" pageID="plugins" pageName={i18n.t('uiCopy.plugin.centerTitle')} mode="overlay" selected={workbenchPluginCenterOpen() && viewMode() === 'workbench'}>{renderPluginCenter(true)}</FlowerContextSource>
-        </PluginCenterDrawer>
-      </Show>
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>
         <Show
           when={accessGatePhase() === 'unlock_required'}
@@ -5708,6 +5642,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         bumpSettingsSeq,
         setFlowerWorkbenchHost,
         openSettings,
+        settingsOpen: settingsSession.present,
+        createSettingsFlowerAdapter: createFlowerTurnLauncherAdapter,
         settingsOrigin,
         returnFromSettingsOrigin,
         debugConsoleEnabled: debugConsole.enabled,
@@ -5737,7 +5673,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         focusAIThread,
         consumeAIThreadFocusRequest,
       }}
-    >
+    ><SettingsPanelContext.Provider value={settingsPanelHost}>
       <Show when={!standalone}>
         {renderPluginPanel()}
       </Show>
@@ -5776,6 +5712,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 refetchMaintenanceContext: refetchRuntimeMaintenanceContext,
               }}
             >
+              <Show when={settingsVisited()}><Suspense><EnvSettingsDialog session={settingsSession} panels={settingsPanels()} renderPlugins={() => renderPluginCenter()} onThemeSourceChange={setThemeSourceWithRenderBoundary} onShellThemeChange={setShellThemeWithRenderBoundary} /></Suspense></Show>
               <FloeRegistryRuntime components={components()}>
                 <FloeRegistryContributions
                   components={activityPluginContributions()}
@@ -5831,6 +5768,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         </FileBrowserSurfaceContext.Provider>
         </DownloadContext.Provider>
       </TerminalSessionCatalogProvider>
-    </EnvContext.Provider></FlowerContextSources.Provider></GlobalFlowerContextMenu>
+    </SettingsPanelContext.Provider></EnvContext.Provider></FlowerContextSources.Provider></GlobalFlowerContextMenu>
   );
 }

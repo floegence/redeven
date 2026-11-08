@@ -16,8 +16,8 @@
   color: var(--muted-foreground);
 }
 
-/* The dialog body keeps floe's own pad group; the product only adds the
- * container query context its layouts branch on. */
+/* The shared content owns spacing in both the global host and standalone guide. */
+.flower-computer-dialog-body { padding: 0; }
 .flower-computer-content {
   container-type: inline-size;
   padding: var(--floe-pad-group);

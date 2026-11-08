@@ -13,6 +13,7 @@ type Connection = Awaited<ReturnType<PluginConnectionsAPI['listConnections']>>['
 type Review = Awaited<ReturnType<PluginConnectionsAPI['reviewConnection']>>['review'];
 
 type Props = {
+  visible?: boolean;
   open: boolean; item?: PluginInventoryItem; ownerScope?: object | false; canManage: boolean;
   api: PluginConnectionsAPI; onOpenChange: (open: boolean) => void;
 };
@@ -128,7 +129,7 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
     });
   }
 
-  return <Dialog open={props.open} title={i18n.t('uiCopy.plugin.connections.title')}
+  return <Dialog open={props.open && props.visible !== false} title={i18n.t('uiCopy.plugin.connections.title')}
     onOpenChange={(open) => { if (!open && !busy()) { void cancelReview(true); } }}>
     <div class="space-y-4" data-plugin-connections aria-busy={busy()}>
       <Show when={busy() && !loaded()}><p role="status" class="text-sm text-muted-foreground">{i18n.t('common.status.loading')}</p></Show>

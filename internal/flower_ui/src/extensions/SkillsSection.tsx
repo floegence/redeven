@@ -221,7 +221,7 @@ export function SkillsSection() {
       </SettingsSection>
 
       {/* Install dialog */}
-      <Dialog open={skillInstallOpen()} onOpenChange={(open) => { if (!skillInstallSaving() && !skillInstallValidating()) { setSkillInstallOpen(open); if (!open) { setSkillInstallResolved([]); setValidatedRequest(''); } } }}
+      <Dialog open={ctx.isPresented?.('skills') !== false && (skillInstallOpen())} onOpenChange={(open) => { if (!skillInstallSaving() && !skillInstallValidating()) { setSkillInstallOpen(open); if (!open) { setSkillInstallResolved([]); setValidatedRequest(''); } } }}
         class="flower-extension-dialog w-[min(42rem,94vw)]"
         title={i18n.t('skillsSettings.installDialogTitle')}
         footer={
@@ -249,7 +249,7 @@ export function SkillsSection() {
       </Dialog>
 
       {/* Create dialog */}
-      <Dialog open={skillCreateOpen()} onOpenChange={(open) => { if (!skillCreateSaving()) setSkillCreateOpen(open); }} title={i18n.t('skillsSettings.createDialogTitle')} class="flower-extension-dialog w-[min(42rem,94vw)]"
+      <Dialog open={ctx.isPresented?.('skills') !== false && (skillCreateOpen())} onOpenChange={(open) => { if (!skillCreateSaving()) setSkillCreateOpen(open); }} title={i18n.t('skillsSettings.createDialogTitle')} class="flower-extension-dialog w-[min(42rem,94vw)]"
         footer={<><Button variant="outline" onClick={() => setSkillCreateOpen(false)} disabled={skillCreateSaving()}>{i18n.t('common.actions.cancel')}</Button><Button onClick={() => void createSkill()} loading={skillCreateSaving()} disabled={!canMutateCatalog() || !skillCreateName().trim() || !skillCreateDescription().trim()}>{i18n.t('skillsSettings.create')}</Button></>}>
         <Show when={skillCreateError()}><p role="alert" class="mb-4 text-[length:var(--floe-type-body)] text-destructive">{skillCreateError()}</p></Show>
         <fieldset disabled={!canManage() || skillCreateSaving()} class="space-y-3 min-w-0">
@@ -259,7 +259,7 @@ export function SkillsSection() {
           <div><FieldLabel hint={i18n.t('skillsSettings.optionalHint')}>{i18n.t('skillsSettings.initialBodyLabel')}</FieldLabel><textarea class="flower-extension-control w-full resize-y rounded-lg border px-3 py-2.5 font-mono text-xs" style={{ 'min-height': '7rem' }} aria-label={i18n.t('skillsSettings.initialBodyLabel')} value={skillCreateBody()} onInput={(e) => setSkillCreateBody(e.currentTarget.value)} spellcheck={false} /></div>
         </fieldset>
       </Dialog>
-      <ConfirmDialog open={Boolean(pendingAction()) && canManage()} onOpenChange={(open) => { if (!open && !actionSaving()) setPendingAction(null); }}
+      <ConfirmDialog open={ctx.isPresented?.('skills') !== false && (Boolean(pendingAction()) && canManage())} onOpenChange={(open) => { if (!open && !actionSaving()) setPendingAction(null); }}
         title={pendingAction()?.kind === 'delete' ? i18n.t('common.actions.delete') : i18n.t('skillsSettings.reinstall')}
         confirmText={pendingAction()?.kind === 'delete' ? i18n.t('common.actions.delete') : i18n.t('skillsSettings.reinstall')}
         cancelText={i18n.t('common.actions.cancel')} variant="destructive" loading={actionSaving()} onConfirm={confirmAction}>

@@ -1,6 +1,7 @@
+import { HostedSettingsPanel } from '../../settings_ui/src/SettingsPanelHost';
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, Show } from 'solid-js';
 import { Button, Dialog, StableText } from '@floegence/floe-webapp-core/ui';
-import { ChevronLeft, ChevronRight, Globe, Info, MonitorPointer, Plus, Refresh, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Globe, Info, MonitorPointer, Plus, Refresh, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
 import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerCapability, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import { FlowerManagedBrowser } from './FlowerManagedBrowser';
@@ -12,7 +13,7 @@ export type FlowerRequestedComputerAccess = Readonly<{ origin?: string; app?: st
 type Page = 'overview' | 'managed' | 'chrome' | 'setup' | 'access' | 'help' | 'diagnostics';
 
 export function FlowerComputerConnections(props: {
-  open: boolean; onOpenChange: (open: boolean) => void;
+  embedded?: boolean; open: boolean; onOpenChange: (open: boolean) => void;
   threadID: string; adapter: Pick<FlowerSurfaceAdapter, 'runtime' | 'canMutate' | 'computerManagement'>; copy: FlowerComputerCopy;
   requested?: FlowerRequestedComputerAccess; fullAccess?: boolean; connectionOnly?: boolean;
   permissionLabel?: string; onEditPermissionMode?: () => void;
@@ -43,9 +44,9 @@ export function FlowerComputerConnections(props: {
   let diagnosticsInput: HTMLTextAreaElement | undefined;
   onCleanup(() => { generation++; });
   const management = () => props.adapter.computerManagement;
-  const readable = () => !loading() && !busy();
+  const readable = () => props.open && !loading() && !busy();
   const mutable = () => props.adapter.canMutate !== false && readable();
-  const guideKey = createMemo(() => props.open ? `${props.threadID}:${props.connectionOnly ? 'assistance' : page()}` : '');
+  const guideKey = createMemo(() => (props.embedded || props.open) ? `${props.threadID}:${props.connectionOnly ? 'assistance' : page()}` : '');
   const targets = () => inventory()?.candidates ?? [];
   const stateLabel = (state?: string) => ({ ready: props.copy.available, on_demand: props.copy.onDemand,
     in_use: props.copy.inUse, user_control: props.copy.waitingControl, permission_required: props.copy.permissionRequired,
@@ -75,7 +76,7 @@ export function FlowerComputerConnections(props: {
     await refreshEnvironment(epoch);
     if (epoch === generation) setLoading(false);
   };
-  createEffect(on(() => [props.open, props.threadID, props.connectionOnly, props.installationOnly, props.desktopSetup] as const, ([open]) => {
+  createEffect(on(() => [props.embedded ? true : props.open, props.threadID, props.connectionOnly, props.installationOnly, props.desktopSetup] as const, ([open]) => {
     generation++; setPage(props.installationOnly ? 'managed' : props.desktopSetup ? 'diagnostics' : 'overview'); setDiagnostic(props.desktopSetup ? 'desktop' : 'managed'); setInventory(undefined); setEnvironment(undefined); setAccess(undefined);
     setProfiles([]); setStopProfile(''); setError(''); setSaved(false); setOrigin(''); setProfileName(''); setBusy(false);
     setVerification(undefined); setVerificationUnavailable(false); setDiagnosticsCopied(false);
@@ -160,19 +161,14 @@ export function FlowerComputerConnections(props: {
     return kind === 'google_chrome' ? 'chrome' : kind === 'chromium' || kind === 'chromium_snap' ? 'chromium' : undefined;
   };
   const capabilityTone = (state?: string) => state === 'ready' ? 'positive' : state === 'permission_required' || state === 'setup_required' ? 'attention' : 'neutral';
-  return <Dialog open={props.open} onOpenChange={props.onOpenChange}
+  return <HostedSettingsPanel embedded={props.embedded} target={{ section: 'browser', resource: props.threadID || undefined }} open={props.open} onClose={() => props.onOpenChange(false)}
+    fallback={body => (<Dialog open={props.open} onOpenChange={props.onOpenChange}
     title={<span class="flower-computer-title"><Show when={page() === 'chrome' || page() === 'setup' || props.connectionOnly} fallback={<Show when={page() === 'managed' || (page() === 'diagnostics' && diagnostic() === 'managed')} fallback={<MonitorPointer aria-hidden="true" />}><FlowerComputerBrandIcon kind="chromium" /></Show>}><FlowerComputerBrandIcon kind="chrome" /></Show>{title()}</span>}
     closeLabel={props.copy.close} class={props.connectionOnly ? 'flower-computer-dialog w-[min(36rem,94vw)] max-w-[36rem]' : 'flower-computer-dialog w-[min(42rem,94vw)] max-w-[42rem]'}
-    contentClass={`flower-computer-content${page() === 'managed' ? ' flower-computer-managed-content' : ''}`}
-    footer={props.connectionOnly ? undefined : <div class="flower-computer-footer">
-      <Show when={page() === 'overview'} fallback={<Button variant="outline" disabled={busy()} onClick={() => go('overview')}><ChevronLeft class="size-3.5" />{props.copy.back}</Button>}>
-        <Show when={props.threadID}><Button variant="outline" disabled={!readable()} onClick={openAccess}><Shield class="size-3.5" />{props.permissionLabel || (props.fullAccess ? props.copy.fullAccessTitle : props.copy.permissions)}<ChevronRight class="size-3.5" /></Button></Show>
-      </Show>
-      <div class="flex flex-wrap gap-2">
-        <Show when={page() === 'access' && !props.fullAccess}><Button size="sm" disabled={!mutable() || !access()} onClick={() => { const value = access(); if (value) void saveAccess(value); }}>{props.copy.save}</Button></Show>
-        <Button variant="outline" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button>
-      </div>
-    </div>}>
+    contentClass={`flower-computer-dialog-body${page() === 'managed' ? ' flower-computer-managed-content' : ''}`}
+    >
+{body}</Dialog>)}>
+    <div class="flower-computer-content">
     <Show when={!props.connectionOnly} fallback={<Show when={management()?.loadExtensionStatus && management()?.setupExtension && management()?.openExtension && props.adapter.canMutate !== false} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
       <Show when={guideKey()} keyed>{_key => <FlowerChromeConnection onRemoteBrowserPrepared={() => props.onOpenChange(false)} environmentName={environment()?.hostname || props.adapter.runtime.display_name} reuseConnected management={management()!} copy={props.copy} onConnected={async () => { await props.onContinue?.(); }} />}</Show>
     </Show>}>
@@ -273,5 +269,11 @@ export function FlowerComputerConnections(props: {
         <Show when={error()}><p role="alert" class="text-xs text-destructive">{error()}</p></Show><Show when={saved()}><p role="status" class="text-xs">{props.copy.saved}</p></Show>
       </div>
     </Show>
-  </Dialog>;
+    <Show when={!props.connectionOnly}>
+    <Show when={page() !== 'overview'}><Button variant="outline" onClick={() => go('overview')}>{props.copy.back}</Button></Show>
+    <Show when={props.threadID && page() === 'overview'}><Button variant="outline" disabled={!readable()} onClick={openAccess}>{props.copy.permissions}</Button></Show>
+    <Show when={page() === 'access' && !props.fullAccess}><Button disabled={!mutable() || !access()} onClick={() => { const value = access(); if (value) void saveAccess(value); }}>{props.copy.save}</Button></Show>
+    </Show>
+    </div>
+  </HostedSettingsPanel>;
 }

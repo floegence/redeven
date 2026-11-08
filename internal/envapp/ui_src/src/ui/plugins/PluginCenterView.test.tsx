@@ -1743,10 +1743,12 @@ describe('PluginCenterView', () => {
       sourceKind: 'community',
       officialCatalog: undefined,
     };
+    const [visible, setVisible] = createSignal(true);
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
+        visible={visible()}
         projection={externalProjection}
         loading={false}
         selectedInventoryKey="instance:plugininst_toolbox"
@@ -1762,6 +1764,10 @@ describe('PluginCenterView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(controlText(document.body)).toContain('Grant Read data to Example Toolbox?');
     expect(controlText(document.body)).not.toContain('Grant Read data to Metrics?');
+    setVisible(false);
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    setVisible(true);
+    await vi.waitFor(() => expect(controlText(document.body)).toContain('Grant Read data to Example Toolbox?'));
   });
 
   it('distinguishes generic permission IDs in switches and confirmation', async () => {

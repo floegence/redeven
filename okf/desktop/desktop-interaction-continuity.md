@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Desktop interaction continuity
 tags: [desktop, interaction, accessibility, testing]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -28,6 +28,8 @@ Synthetic composition verifies DOM continuity; it does not prove physical operat
 Desktop-owned BrowserWindows attach a localized native edit menu for unhandled Chromium context requests. Editable surfaces expose Undo, Redo, Cut, Copy, Paste and Select all with Chromium edit flags; reading selections expose Copy. Native roles preserve the originating frame, selection, undo stack and the existing paste event path (including Flower attachment handling). No renderer clipboard-read bridge is introduced. Renderer-owned menus prevent the native fallback, so conversation/file/terminal menus remain authoritative. Navigation and window close dismiss pending native menus. Browser-hosted editors retain their browser-native menu.
 
 # Boundaries
+
+Settings adapters capture exact environment ID and Runtime start timestamp. Native admission rejects stopped, replaced or restarted targets before dispatch; explicit settings reads never start them. Contextual browser adapters capture again only on a fresh opening.
 
 ## Layers, exit and recovery
 Published presence and overlay ownership provide one exit and input-routing lifecycle.

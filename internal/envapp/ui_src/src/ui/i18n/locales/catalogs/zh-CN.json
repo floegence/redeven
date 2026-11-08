@@ -365,7 +365,7 @@
     "moveFailed": "移动失败"
   },
   "settings": {
-    "runtimeTitle": "运行时设置",
+    "runtimeTitle": "设置",
     "backToFlower": "返回 Flower",
     "searchPlaceholder": "搜索设置",
     "filteredSections": "{visible}/{total} 个分区",
@@ -379,7 +379,11 @@
       "permissionPolicy": "权限策略",
       "flower": "Flower",
       "skills": "技能",
-      "debugConsole": "调试控制台"
+      "debugConsole": "调试控制台",
+      "appearance": "外观与语言",
+      "browser": "浏览器",
+      "services": "服务",
+      "extensions": "扩展"
     },
     "groups": {
       "overview": "概览",
@@ -445,7 +449,8 @@
       "channelInitExpiresAt": "密钥初始化过期时间",
       "notProvided": "未提供",
       "emptyValue": "—"
-    }
+    },
+    "targetUnavailable": "此设置目标已不可用。"
   },
   "flower": {
     "currentEnvironmentFallback": "当前环境",

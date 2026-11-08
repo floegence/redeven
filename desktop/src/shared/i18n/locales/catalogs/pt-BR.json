@@ -2157,7 +2157,8 @@
     "startEnvironment": "Iniciar ambiente",
     "wslStopped": "Inicie este ambiente WSL antes de ler ou salvar suas configurações de acesso.",
     "environmentOnlyLabel": "Apenas no ambiente",
-    "environmentOnlyDescription": "O acesso pelo navegador fica restrito ao ambiente. Você ainda pode abri-lo pelo Desktop."
+    "environmentOnlyDescription": "O acesso pelo navegador fica restrito ao ambiente. Você ainda pode abri-lo pelo Desktop.",
+    "unifiedTitle": "Configurações"
   },
   "shell": {
     "accessibility": {

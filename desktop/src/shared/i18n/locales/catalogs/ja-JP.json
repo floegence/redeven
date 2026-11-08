@@ -2157,7 +2157,8 @@
     "startEnvironment": "環境を起動",
     "wslStopped": "アクセス設定を読み取りまたは保存する前に、この WSL 環境を起動してください。",
     "environmentOnlyLabel": "環境内部のみ",
-    "environmentOnlyDescription": "ブラウザーからのアクセスは環境内部に限定されます。Desktop からは引き続き環境を開けます。"
+    "environmentOnlyDescription": "ブラウザーからのアクセスは環境内部に限定されます。Desktop からは引き続き環境を開けます。",
+    "unifiedTitle": "設定"
   },
   "shell": {
     "accessibility": {

@@ -31,7 +31,7 @@ try {
   async function settleMotion() {
     await page.evaluate(async () => {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const panel = document.querySelector('.redeven-environment-settings-dialog');
+      const panel = document.querySelector('.redeven-unified-settings-dialog');
       await Promise.all(panel.getAnimations({ subtree: true }).filter(animation => animation.effect.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
     });
   }
@@ -48,11 +48,11 @@ try {
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-floe-dialog-panel]')).opacity === '1');
     await settleMotion();
     assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
-    assert.ok((await dialog.locator('h2').innerText()).includes(label), 'environment identity stays in the title row');
+    assert.ok((await dialog.locator('.redeven-environment-settings-content h2').innerText()).includes(label), 'environment identity stays in the title row');
   }
   async function switchTab(name, { reducedMotion = false } = {}) {
     const frames = await page.evaluate(async name => {
-      const dialog = document.querySelector('.redeven-environment-settings-dialog');
+      const dialog = document.querySelector('.redeven-unified-settings-dialog');
       const frames = [], start = performance.now();
       const sample = () => {
         const rect = dialog.getBoundingClientRect();

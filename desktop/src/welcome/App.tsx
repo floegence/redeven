@@ -1,3 +1,6 @@
+import { SettingsPanelContext, type SettingsPanelRegistration } from '../../../internal/settings_ui/src/SettingsPanelHost';
+import { createSettingsSession } from '../../../internal/settings_ui/src/settingsSession';
+import { DesktopSettingsDialog } from './DesktopSettingsDialog';
 import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { createFlowerContextSources, FlowerContextSource, FlowerContextSources } from '../../../internal/flower_ui/src/FlowerContextSource';
 import { flowerPageContextSnapshot } from '../../../internal/flower_ui/src/flowerPageContext';
@@ -36,6 +39,7 @@ import {
   Dropdown,
   Input,
   SegmentedControl,
+  Select,
   Switch,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
@@ -111,7 +115,6 @@ import { createEnvironmentSettingsController } from './environmentSettingsSessio
 import { validateSSHEnvironmentSettings, type SSHConnectionDialogState } from './sshEnvironmentSettingsState';
 
 import {
-  REDEVEN_LOCALE_META,
   REDEVEN_LOCALE_PREFERENCES,
   SYSTEM_LOCALE_PREFERENCE,
   createDesktopI18n,
@@ -2237,193 +2240,16 @@ function desktopUpdateBridge() {
   return candidate;
 }
 
-function DesktopLanguagePicker(props: Readonly<{
-  openRequest: number;
+function DesktopLanguageSettings(props: Readonly<{
   snapshot: RedevenLanguageSnapshot;
   i18n: DesktopI18n;
   onPreferenceChange: (preference: RedevenLocalePreference) => void;
 }>) {
-  const [open, setOpen] = createSignal(false);
-  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
-  let buttonRef: HTMLButtonElement | undefined;
-  let listboxRef: HTMLDivElement | undefined;
-
-  const options = createMemo(() => (
-    REDEVEN_LOCALE_PREFERENCES.map((preference) => ({
-      preference,
-      label: preference === SYSTEM_LOCALE_PREFERENCE
-        ? props.i18n.t('language.systemDefault')
-        : localePreferenceDisplayName(preference),
-      secondary: preference === SYSTEM_LOCALE_PREFERENCE
-        ? props.i18n.t('language.usingLanguage', { language: localePreferenceDisplayName(props.snapshot.resolved_locale) })
-        : REDEVEN_LOCALE_META[preference].english_name,
-    }))
-  ));
-  const selectedIndex = createMemo(() => Math.max(0, options().findIndex((item) => item.preference === props.snapshot.preference)));
-
-  createEffect(on(
-    () => props.openRequest,
-    (next, previous) => {
-      if (next === previous) {
-        return;
-      }
-      setOpen(true);
-      buttonRef?.focus();
-    },
-    { defer: true },
-  ));
-
-  createEffect(on(
-    [open, () => props.snapshot.preference],
-    ([isOpen]) => {
-      if (isOpen) {
-        setHighlightedIndex(selectedIndex());
-      }
-    },
-  ));
-
-  createEffect(() => {
-    if (open()) {
-      scrollDesktopListboxOptionIntoView(listboxRef, `redeven-desktop-language-option-${highlightedIndex()}`);
-    }
-  });
-
-  createEffect(() => {
-    if (!open()) {
-      return;
-    }
-    const containsTarget = (target: EventTarget | null): boolean => (
-      target instanceof Node && (buttonRef?.contains(target) === true || listboxRef?.contains(target) === true)
-    );
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!containsTarget(event.target)) {
-        setOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setOpen(false);
-        buttonRef?.focus();
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    onCleanup(() => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    });
-  });
-
-  const moveHighlight = (delta: number) => {
-    const count = options().length;
-    if (count <= 0) {
-      return;
-    }
-    setHighlightedIndex((current) => (current + delta + count) % count);
-  };
-  const selectPreference = (preference: RedevenLocalePreference) => {
-    props.onPreferenceChange(preference);
-    setOpen(false);
-    buttonRef?.focus();
-  };
-
-  return (
-    <>
-      <TopBarIconButton
-        ref={(element) => {
-          buttonRef = element;
-        }}
-        label={props.i18n.t('common.language')}
-        tooltip={props.i18n.t('common.language')}
-        aria-haspopup="listbox"
-        aria-expanded={open() ? 'true' : 'false'}
-        aria-controls="redeven-desktop-language-options"
-        aria-activedescendant={open() ? `redeven-desktop-language-option-${highlightedIndex()}` : undefined}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            setOpen(true);
-            moveHighlight(event.key === 'ArrowDown' ? 1 : -1);
-          } else if ((event.key === 'Enter' || event.key === ' ') && open()) {
-            event.preventDefault();
-            const option = options()[highlightedIndex()];
-            if (option) {
-              selectPreference(option.preference);
-            }
-          }
-        }}
-      >
-        <Globe class="h-4 w-4" />
-      </TopBarIconButton>
-
-      <DesktopAnchoredListbox
-        id="redeven-desktop-language-options"
-        anchorRef={buttonRef}
-        class="min-w-72 p-1"
-        width={288}
-        maxHeight={360}
-        role="listbox"
-        open={open()}
-        onOverlayRef={(element) => {
-          listboxRef = element;
-        }}
-      >
-        <div class="min-h-0 flex-1 overflow-auto">
-          <For each={options()}>
-            {(option, index) => {
-              const selected = createMemo(() => props.snapshot.preference === option.preference);
-              const highlighted = createMemo(() => highlightedIndex() === index());
-              return (
-                <button
-                  type="button"
-                  id={`redeven-desktop-language-option-${index()}`}
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected={selected() ? 'true' : 'false'}
-                  class={cn(
-                    // Floe's menu row: a reserved leading mark slot so every
-                    // label starts on the same column, the row height token,
-                    // and a soft ink that the highlight lifts to full weight.
-                    'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left',
-                    'min-h-[calc(var(--floe-row-height)+0.375rem)]',
-                    'transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)]',
-                    highlighted()
-                      ? 'bg-[var(--floe-state-hover)] text-foreground'
-                      : 'text-[var(--floe-ink-soft)] hover:bg-[var(--floe-state-hover)] hover:text-foreground',
-                  )}
-                  title={`${option.label} - ${option.secondary}`}
-                  onClick={() => selectPreference(option.preference)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      selectPreference(option.preference);
-                    }
-                  }}
-                  onMouseEnter={() => setHighlightedIndex(index())}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    selectPreference(option.preference);
-                  }}
-                >
-                  <span class="flex h-3.5 w-3.5 flex-none items-center justify-center">
-                    <Show when={selected()}>
-                      <Check class="h-3 w-3" />
-                    </Show>
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="block truncate text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]">{option.label}</span>
-                    <span class="block truncate text-[length:var(--floe-type-caption)] leading-[var(--floe-line-caption,1rem)] text-[var(--floe-ink-quiet)]">{option.secondary}</span>
-                  </span>
-                </button>
-              );
-            }}
-          </For>
-        </div>
-      </DesktopAnchoredListbox>
-    </>
-  );
+  return <div class="space-y-2"><label class="text-sm font-medium">{props.i18n.t('common.language')}</label>
+    <Select ariaLabel={props.i18n.t('common.language')} value={props.snapshot.preference}
+      options={REDEVEN_LOCALE_PREFERENCES.map(preference => ({ value: preference, label: preference === SYSTEM_LOCALE_PREFERENCE ? props.i18n.t('language.systemDefault') : localePreferenceDisplayName(preference) }))}
+      onChange={value => props.onPreferenceChange(value as RedevenLocalePreference)} />
+  </div>;
 }
 
 function DesktopCommandRegistrar(props: Readonly<{
@@ -2573,7 +2399,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [languageSnapshot, setLanguageSnapshot] = createSignal<RedevenLanguageSnapshot>(
     shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
   );
-  const [languagePickerOpenRequest, setLanguagePickerOpenRequest] = createSignal(0);
   const fallbackThemePickerSnapshot = (): DesktopThemePickerSnapshot => ({
     source: theme.theme(),
     resolvedTheme: theme.resolvedTheme(),
@@ -2585,7 +2410,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [themeSnapshot, setThemeSnapshot] = createSignal<DesktopThemePickerSnapshot>(
     shellTheme?.getSnapshot() ?? fallbackThemePickerSnapshot(),
   );
-  const [themePickerOpenRequest, setThemePickerOpenRequest] = createSignal(0);
   const [desktopUpdateSnapshot, setDesktopUpdateSnapshot] = createSignal<DesktopUpdateSnapshot>(
     unsupportedDesktopUpdateSnapshot(),
   );
@@ -2663,8 +2487,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     closed: token => props.runtime.settings.cancel(token),
     lateError: error => showActionToast(settingsAccessErrorMessage(error), 'error'),
   });
+  const unifiedSettings = createSettingsSession();
+  const [unifiedSettingsVisited, setUnifiedSettingsVisited] = createSignal(false);
+  const [unifiedPanels, setUnifiedPanels] = createSignal<readonly SettingsPanelRegistration[]>([]);
+  const [settingsFlowerOwner, setSettingsFlowerOwner] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const settingsHost = {
+    target: unifiedSettings.target, present: unifiedSettings.present,
+    open: (target: import('../../../internal/settings_ui/src/settingsSession').SettingsTarget) => {
+      if (!unifiedSettings.target()) setSettingsFlowerOwner(flowerRuntimeEnvironment() ?? null);
+      setUnifiedSettingsVisited(true); unifiedSettings.open(target);
+    },
+    close: unifiedSettings.close,
+    register: (entry: SettingsPanelRegistration) => { setUnifiedPanels(items => [...items, entry]); return () => setUnifiedPanels(items => items.filter(item => item !== entry)); },
+  };
   const settingsSession = settingsController.session;
-  const [settingsPresent, setSettingsPresent] = createSignal(false);
+  const settingsPresent = unifiedSettings.present;
   const settingsPresentation = createMemo<ReturnType<typeof settingsSession>>(previous => settingsSession() ?? previous, null);
   const [newConnectionState, setNewConnectionState] = createSignal<ConnectionDialogState>(null);
   const connectionDialogState = () => settingsSession()?.connection ?? newConnectionState();
@@ -2799,7 +2636,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   // The renderer owns in-window navigation. Host snapshots carry explicit open
   // requests separately from environment/progress refreshes.
-  const [activeSurface, setActiveSurface] = createSignal(props.snapshot.surface);
+  const [activeSurface, setActiveSurface] = createSignal<DesktopLauncherSurface>(props.snapshot.surface === 'environment_settings' ? 'connect_environment' : props.snapshot.surface);
   const flowerVisible = () => activeSurface() === 'flower';
   const [tessivenOpenRequest, setTessivenOpenRequest] = createSignal<TessivenOpenRequest | null>(null);
   onMount(() => {
@@ -2814,7 +2651,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const tessivenCopy = createMemo(() => tessivenText(languageSnapshot().resolved_locale));
   const flowerVisited = createMemo((visited: boolean) => visited || flowerVisible(), false);
   const environmentsVisited = createMemo((visited: boolean) => visited || environmentsVisible(), false);
-  const visibleSurface = createMemo<DesktopLauncherSurface>(() => settingsSession() ? 'environment_settings' : activeSurface());
+  const visibleSurface = createMemo<DesktopLauncherSurface>(() => activeSurface());
   const i18n = createMemo(() => createDesktopI18n(languageSnapshot().resolved_locale));
   const sshConfigHostsLoadKey = createMemo(() => {
     const connectionState = connectionDialogState();
@@ -3059,6 +2896,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       : localEnvironmentEntry();
     return environment;
   });
+  const settingsTransferAvailable = (owner: DesktopEnvironmentEntry | null | undefined) => {
+    const current = snapshot().environments.find(entry => entry.id === owner?.id);
+    return !!owner && !!current
+      && environmentInteractionIdentity(current) === environmentInteractionIdentity(owner)
+      && current.runtime_started_at_unix_ms === owner.runtime_started_at_unix_ms
+      && current.open_session_key === owner.open_session_key
+      && Number.isSafeInteger(owner.runtime_started_at_unix_ms) && (owner.runtime_started_at_unix_ms ?? 0) > 0
+      && !!current.runtime_service && current.runtime_service.open_readiness?.state !== 'blocked';
+  };
+  const settingsFlowerAvailable = (owner = settingsFlowerOwner()) =>
+    settingsTransferAvailable(owner) && owner?.id === flowerRuntimeEnvironment()?.id;
+  const createComputerSettingsAdapter = () => {
+    // IMPORTANT: Each opening captures an incarnation. Retained chat state does
+    // not grant an old browser editor access to a same-ID replacement Runtime.
+    const owner = flowerRuntimeEnvironment();
+    return createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+      runtimeEnvironmentID: owner?.id, expectedRuntimeStartedAt: owner?.runtime_started_at_unix_ms,
+      isAvailable: () => settingsFlowerAvailable(owner), runtimeDisplayName: owner?.label,
+      browserTransferAvailable: () => settingsTransferAvailable(owner),
+    });
+  };
   const flowerIdentityKey = createMemo((previous: string | undefined) => {
     const next = flowerRuntimeEnvironment()?.id || 'default';
     if (previous !== undefined && previous !== next) untrack(() => flowerDraftCoordinator.reset());
@@ -3236,6 +3094,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   });
   onCleanup(unsubscribeSnapshot);
+  createEffect(on(() => snapshot().flower_settings_focus_revision, (revision, previous) => {
+    if (revision && revision !== previous) settingsHost.open({ section: 'ai' });
+  }));
   const unsubscribeActionProgress = props.runtime.launcher.subscribeActionProgress?.((progress) => {
     if (!acceptCenterProgress(progress)) return;
     rememberLiveActionProgress(progress);
@@ -3245,9 +3106,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     onCleanup(unsubscribeActionProgress);
   }
 
+  let handledSettingsFocusRevision = 0;
   createEffect(on(() => snapshot().navigation_revision ?? 0, (revision, previous) => {
     if (previous !== undefined && revision <= previous) return;
-    navigateWelcomeSurface(snapshot().surface);
+    const settingsRequested = (snapshot().flower_settings_focus_revision ?? 0) > handledSettingsFocusRevision;
+    handledSettingsFocusRevision = snapshot().flower_settings_focus_revision ?? 0;
+    if (snapshot().surface !== 'environment_settings' && !settingsRequested) navigateWelcomeSurface(snapshot().surface);
     if (snapshot().surface === 'environment_settings' && snapshot().settings_environment_id) {
       openSettingsSurface(snapshot().settings_environment_id);
     }
@@ -3803,15 +3667,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setGatewaySetupDialogState(null);
     setControlPlaneDialogState(null);
     settingsController.open(environment, createEnvironmentConnectionDraft(environment));
+    settingsHost.open({ section: 'connection', resource: environment.id });
   }
 
-  function openLanguageSettings(): void {
-    resetMessages();
-    setConnectionDialogState(null);
-    setGatewaySetupDialogState(null);
-    setControlPlaneDialogState(null);
-    setLanguagePickerOpenRequest((current) => current + 1);
-  }
+  function openLanguageSettings(): void { settingsHost.open({ section: 'appearance' }); }
 
   function openCreateConnectionDialog(
     message = '',
@@ -5628,6 +5487,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function cancelSettings(): void {
+    unifiedSettings.close();
     settingsController.close();
 
     setSettingsError('');
@@ -6502,7 +6362,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return environment ? environmentOperationState(environment, activeActionProgress(), busyState()) : undefined;
   });
   return (
-    <FlowerContextSources.Provider value={flowerContextSources}><GlobalFlowerContextMenu disabled={flowerTurnLauncherLocked()} label={i18n().t('environmentCenter.askFlowerCardTitle')}
+    <SettingsPanelContext.Provider value={settingsHost}><FlowerContextSources.Provider value={flowerContextSources}><GlobalFlowerContextMenu disabled={flowerTurnLauncherLocked()} label={i18n().t('environmentCenter.askFlowerCardTitle')}
       editingLabels={{ undo: i18n().t('editContextMenu.undo'), redo: i18n().t('editContextMenu.redo'), cut: i18n().t('editContextMenu.cut'), copy: i18n().t('editContextMenu.copy'), paste: i18n().t('editContextMenu.paste'), selectAll: i18n().t('editContextMenu.selectAll'), openLink: i18n().t('editContextMenu.openLink'), copyLink: i18n().t('editContextMenu.copyLink') }}
       prepare={prepareGlobalAskFlower} onError={error => showActionToast(getErrorMessage(error), 'error')}>
       <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
@@ -6546,7 +6406,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         openEnvironment={openEnvironment}
         closeLauncherOrQuit={closeLauncherOrQuit}
         openLanguageSettings={openLanguageSettings}
-        openThemePicker={() => setThemePickerOpenRequest((current) => current + 1)}
+        openThemePicker={() => settingsHost.open({ section: 'appearance' })}
         checkForUpdates={checkForDesktopUpdates}
         askFlower={openGlobalAskFlower}
       />
@@ -6590,19 +6450,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               </button>
             </Show>
             <Show when={!tessivenVisible()}><button type="button" class="redeven-flower-topbar-button" aria-label="Tessiven" title="Tessiven" onClick={() => navigateWelcomeSurface('tessiven')}><TessivenIcon kind="tessiven" class="h-4 w-4" /></button></Show>
-            <DesktopLanguagePicker
-              openRequest={languagePickerOpenRequest()}
-              snapshot={languageSnapshot()}
-              i18n={i18n()}
-              onPreferenceChange={updateDesktopLanguagePreference}
-            />
-            <DesktopThemePicker
-              openRequest={themePickerOpenRequest()}
-              snapshot={themeSnapshot()}
-              i18n={i18n()}
-              onSourceChange={updateDesktopThemeSource}
-              onShellThemeChange={updateDesktopShellTheme}
-            />
+            <TopBarIconButton label={i18n().t('settings.unifiedTitle')} onClick={() => settingsHost.open({ section: 'appearance' })}><Settings class="h-4 w-4" /></TopBarIconButton>
           </div>
         )}
         topBarCornerActions={(
@@ -6787,8 +6635,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                     onSettingsChanged: flowerSettingsChanged,
                     modelReadResource: flowerModelReadResource,
                   });
-                  return <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
-                    engaged={surface.engaged} transcriptVisible={surface.transcriptVisible}
+                  return <FlowerSurface adapter={adapter} createComputerSettingsAdapter={createComputerSettingsAdapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
+                    engaged={surface.engaged} transcriptVisible={surface.transcriptVisible && !unifiedSettings.present()}
                     embeddedConversation={surface.embeddedConversation} copy={flowerSurfaceCopy()}
                     filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
                     notify={notice => showActionToast(notice.message, notice.tone, notice.title ? { title: notice.title } : {})} />;
@@ -6828,9 +6676,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                         modelReadResource: flowerModelReadResource,
                       });
                       return <FlowerSurface
+                        createComputerSettingsAdapter={createComputerSettingsAdapter}
                         registerContextReader={read => { readFlowerContext = read; onCleanup(() => { if (readFlowerContext === read) readFlowerContext = undefined; }); }}
                         engaged={flowerVisible()}
-                        transcriptVisible={flowerVisible()}
+                        transcriptVisible={flowerVisible() && !unifiedSettings.present()}
                         draftCoordinator={flowerDraftCoordinator}
                         filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
                         threadListPreferenceScope={environmentID}
@@ -6843,7 +6692,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                         }}
                         copy={flowerSurfaceCopy()}
                         warmup={flowerWarmupState()}
-                        settingsFocusRequest={snapshot().flower_settings_focus_revision}
                         focusThreadRequest={flowerVisible() ? flowerFocusThreadRequest() : null}
                         sidebarLeadingAction={(
                           <button
@@ -6920,11 +6768,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         perform={performDesktopUpdateAction}
       />
 
+      <Show when={unifiedSettingsVisited()}><DesktopSettingsDialog session={unifiedSettings} panels={unifiedPanels()} i18n={i18n()}
+        flowerScope={settingsFlowerOwner() ? JSON.stringify([settingsFlowerOwner()!.id, settingsFlowerOwner()!.runtime_started_at_unix_ms, settingsFlowerOwner()!.open_session_key]) : ''} flowerLabel={settingsFlowerOwner()?.label ?? ''} available={settingsFlowerAvailable()} changed={() => void flowerSettingsChanged()}
+        createFlowerAdapter={(signal) => {
+          const owner = settingsFlowerOwner();
+          const environmentID = owner?.id;
+          // IMPORTANT: An explicit model owner never falls back to local runtime.
+          if (!environmentID) throw new Error('SETTINGS_ENVIRONMENT_UNAVAILABLE');
+          return createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, { runtimeEnvironmentID: environmentID, expectedRuntimeStartedAt: owner?.runtime_started_at_unix_ms, signal, isAvailable: () => settingsFlowerAvailable(owner), browserTransferAvailable: () => settingsTransferAvailable(owner), runtimeDisplayName: owner?.label });
+        }}
+        appearance={() => <div class="space-y-5"><h1 class="text-lg font-semibold">{i18n().t('settings.languageTitle')}</h1>
+          <DesktopLanguageSettings snapshot={languageSnapshot()} i18n={i18n()} onPreferenceChange={updateDesktopLanguagePreference} />
+          <DesktopThemePicker presentation="inline" openRequest={0} snapshot={themeSnapshot()} i18n={i18n()} onSourceChange={updateDesktopThemeSource} onShellThemeChange={updateDesktopShellTheme} />
+        </div>}
+        connections={() => <div class="space-y-3"><h1 class="text-lg font-semibold">{i18n().t('settings.settingsWindowTitle')}</h1><For each={snapshot().environments}>{environment => <Button variant="outline" class="w-full justify-start" onClick={() => openSettingsSurface(environment.id)}>{environment.label}</Button>}</For></div>} />
+      </Show>
       <EnvironmentSettingsDialog open={Boolean(settingsSession())} environment={settingsSession()?.environment ?? null} unavailable={!settingsOwnerAvailable()}
         tab={settingsPresentation()?.tab ?? 'connection'} i18n={i18n()} onClose={cancelSettings}
         canRevalidate={!!snapshot().environments.find(entry => entry.id === settingsSession()?.environment.id)?.can_edit}
         onRevalidate={() => { const entry = snapshot().environments.find(entry => entry.id === settingsSession()?.environment.id); if (entry?.can_edit) settingsController.revalidate(entry); }}
-        onPresenceChange={setSettingsPresent}
         onTabChange={settingsController.selectTab}
         connection={(
           <Show when={settingsPresentation()?.opening_id} keyed>{(_token) => (
@@ -7318,7 +7180,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
         </div>
       </Dialog>
-    </GlobalFlowerContextMenu></FlowerContextSources.Provider>
+    </GlobalFlowerContextMenu></FlowerContextSources.Provider></SettingsPanelContext.Provider>
   );
 }
 

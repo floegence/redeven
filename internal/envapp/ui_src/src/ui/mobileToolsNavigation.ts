@@ -1,4 +1,4 @@
-export type MobileToolsPage = 'more' | 'downloads' | 'language' | 'appearance';
+export type MobileToolsPage = 'more' | 'downloads';
 
 export function handleMobileToolsEscape(event: KeyboardEvent, page: MobileToolsPage | 'plugins' | 'closed', onBack: () => void) {
   if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing

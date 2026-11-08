@@ -142,7 +142,7 @@ try {
         valid: document.getElementById(tab.getAttribute('aria-controls'))?.getAttribute('aria-labelledby') === tab.id })));
       assert(relations.every(({ id, valid }) => id && valid));
       await page.addScriptTag({ content: axe });
-      const violations = await page.evaluate(async () => (await window.axe.run('.redeven-environment-settings-dialog', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations.map(({ id, nodes }) => ({ id, nodes: nodes.map(({ target }) => target) })));
+      const violations = await page.evaluate(async () => (await window.axe.run('.redeven-unified-settings-dialog', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations.map(({ id, nodes }) => ({ id, nodes: nodes.map(({ target }) => target) })));
       assert.deepEqual(violations, [], `${locale}/${width}: Welcome settings axe audit`);
       await assertUnchangedPresentation(dialog, '[role="tab"], [role="tabpanel"]');
       await tabs.first().focus();
