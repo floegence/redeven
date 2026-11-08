@@ -134,6 +134,11 @@ await session.run(async () => {
     await popout(parent, true);
     const child = await until(() => children()[0], 'native preview'); await verifyStandalone(child, htmlFile);
     console.log('Native standalone page is ready');
+    await app.evaluate(({ BrowserWindow }, url) => {
+      globalThis.previewRootFocusCount = 0;
+      BrowserWindow.getAllWindows().find(win => win.webContents.getURL() === url)
+        .on('focus', () => { globalThis.previewRootFocusCount += 1; });
+    }, parent.url());
     const initialFrame = await frameFor(child);
     await initialFrame.getByRole('textbox', { name: 'Retained input' }).fill('retained through Flower');
     await initialFrame.evaluate(() => scrollTo(0, 400));
@@ -190,7 +195,8 @@ await session.run(async () => {
     await captureCard.locator('.flower-composer-context-source').filter({ hasText: /Screenshot-.*\.png/ }).waitFor();
     await child.screenshot({ path: path.join(output, 'native-local-capture.png') });
     await child.keyboard.press('Escape'); await captureCard.waitFor({ state: 'hidden' });
-    assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getFocusedWindow()?.webContents.getURL()), child.url());
+    assert.equal(await app.evaluate(() => globalThis.previewRootFocusCount), 0, 'Local Flower actions never activate the main window');
+    assert.notEqual(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getFocusedWindow()?.webContents.getURL()), parent.url());
     await child.bringToFront();
     await more(child).click(); await child.getByRole('menuitem', { name: 'Copy path', exact: true }).click();
     await child.getByRole('status').filter({ hasText: 'Path copied' }).waitFor();
@@ -207,7 +213,7 @@ await session.run(async () => {
     await more(child).click(); await child.getByRole('menuitem', { name: 'Download file', exact: true }).click();
     await until(async () => { try { return (await readFile(destination, 'utf8')) === (await readFile(htmlFile, 'utf8')); } catch { return false; } }, 'native downloaded bytes');
     await child.getByRole('button', { name: 'Downloads', exact: true }).click();
-    await child.getByText('Completed', { exact: true }).waitFor(); await child.keyboard.press('Escape');
+    await child.getByRole('dialog', { name: 'Downloads', exact: true }).getByText('Completed', { exact: true }).waitFor(); await child.keyboard.press('Escape');
     await frame.getByRole('link', { name: 'Read notes', exact: true }).click();
     const linked = await until(() => children().find(page => new URL(page.url()).searchParams.get('path') === markdownFile), 'linked native preview');
     await verifyStandalone(linked, markdownFile); await linked.getByRole('heading', { name: 'Independent document', exact: true }).waitFor(); await linked.close(); await child.bringToFront();
