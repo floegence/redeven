@@ -1,4 +1,4 @@
-/* global window */
+/* global window, document, getComputedStyle */
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -89,6 +89,56 @@ try {
   const draftID = await workspace.getAttribute('data-project-id');
   await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await page.screenshot({ path: path.join(evidence, 'workspace-light.png') });
+  const canvas = workspace.locator('.plugin-creation-main > .plugin-creation-atmosphere');
+  await expect(canvas).toHaveAttribute('data-active', 'true');
+  const ambientTime = await canvas.evaluate(element => Number(element.querySelector('.plugin-creation-atmosphere-light').getAnimations()[0].currentTime));
+  await expect.poll(() => canvas.evaluate(element => Number(element.querySelector('.plugin-creation-atmosphere-light').getAnimations()[0].currentTime))).toBeGreaterThan(ambientTime + 100);
+  await composer.evaluate(element => {
+    window.__pluginContinuityComposer = element;
+    element.focus();
+    element.setSelectionRange(5, 9);
+  });
+  const canvasBounds = await canvas.boundingBox();
+  assert.ok(canvasBounds);
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * .26, canvasBounds.y + canvasBounds.height * .33, { steps: 16 });
+  await expect(canvas).toHaveAttribute('data-pointer-active', 'true');
+  await expect.poll(() => canvas.locator('.plugin-creation-atmosphere-pointer').evaluate(element => Number(getComputedStyle(element).opacity))).toBe(1);
+  assert.deepEqual(await composer.evaluate(element => ({ focused: document.activeElement === element, selection: [element.selectionStart, element.selectionEnd] })), { focused: true, selection: [5, 9] });
+  await page.screenshot({ path: path.join(evidence, 'workspace-hover-light.png') });
+  await page.mouse.move(20, 20);
+  await expect(canvas).toHaveAttribute('data-pointer-active', 'false');
+  const changeColorMode = async name => {
+    await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+    await page.getByRole('radio', { name, exact: true }).click();
+    await expect(page.locator('html')).toHaveClass(name === 'Dark' ? /dark/ : /light/);
+    await page.keyboard.press('Escape');
+    await composer.focus();
+  };
+  await changeColorMode('Dark');
+  await page.screenshot({ path: path.join(evidence, 'workspace-dark.png') });
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * .72, canvasBounds.y + canvasBounds.height * .35, { steps: 16 });
+  await expect(canvas).toHaveAttribute('data-pointer-active', 'true');
+  await expect.poll(() => canvas.locator('.plugin-creation-atmosphere-pointer').evaluate(element => Number(getComputedStyle(element).opacity))).toBe(1);
+  await page.screenshot({ path: path.join(evidence, 'workspace-hover-dark.png') });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(canvas).toHaveAttribute('data-pointer-active', 'false');
+  assert.equal(await canvas.evaluate(element => element.getAnimations({ subtree: true }).length), 0);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await changeColorMode('Light');
+  const touch = await context.newCDPSession(page);
+  await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('[data-floe-shell-slot="mobile-tab-bar"]:visible')).toBeVisible();
+  await expect(composer).toBeVisible();
+  assert.equal(await composer.evaluate(element => element === window.__pluginContinuityComposer), true);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  await page.screenshot({ path: path.join(evidence, 'workspace-mobile-light.png') });
+  await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await touch.detach();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await assertContentPlacement();
+  await expect(composer).toHaveValue('Keep this plugin draft while I check the terminal.');
+  report.assertions.push('Animated light/dark canvas responds to mouse movement without stealing composer focus or selection; reduced motion is static and mobile retains the same composer');
   await page.getByRole('button', { name: 'Back to creation history', exact: true }).click();
   await page.locator('[data-plugin-draft-library]').waitFor();
   await assertContentPlacement();
