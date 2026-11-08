@@ -52,7 +52,9 @@ Selecting history keeps the transcript, composer and draft within Tessiven;
 there is no exit into the ordinary Flower conversation surface. Both Desktop
 and Env App use the same embedding contract. New conversations, Goals and forks
 retain canvas ownership before first execution. Ordinary navigation cannot render
-a canvas transcript, including a stale direct ThreadID navigation request.
+a canvas transcript, including a stale direct ThreadID navigation request or
+live receipt. Existing-thread runtime content waits for product metadata; a new
+conversation's provisional receipt retains its submitted canvas ownership.
 
 Messages, tool disclosures, questions, approvals and errors remain canonical.
 

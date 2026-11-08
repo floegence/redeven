@@ -3886,6 +3886,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const sequenceHistoryGap = (messageID: Accessor<string>, scroll: FlowerScrollTailController) =>
     <Show when={messageID()} keyed>{id => renderHistoryGap(id, scroll === subagentDetailScroll, true, true)}</Show>;
 
+  const threadMatchesSurface = (thread: FlowerThreadSnapshot) => !thread.tessiven_canvas_id
+    || thread.tessiven_canvas_id === props.embeddedConversation?.tessivenCanvasID;
+
   const receiveThreadDetail = (
     candidate: ThreadView,
     source: ThreadDetailSource,
@@ -3894,6 +3897,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     installedBaseline = false,
     liveReceipt = source === 'live_current',
   ): ThreadDetailReceiveResult => batch(() => {
+    if (!threadMatchesSurface(candidate.thread)) throw new Error(copy().chat.threadReference.unavailable);
     const threadID = trimString(candidate.thread.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) {
       return {
@@ -3977,7 +3981,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestEpoch: number,
     readingBaseline = false,
   ): ThreadDetailReceiveResult => {
-    if (live.thread.tessiven_canvas_id && live.thread.tessiven_canvas_id !== props.embeddedConversation?.tessivenCanvasID) {
+    if (!threadMatchesSurface(live.thread)) {
       throw new Error(copy().chat.threadReference.unavailable);
     }
     if (requestEpoch !== liveTransport.connectionEpoch()) return {
@@ -5312,8 +5316,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       .matchCurrent(current, { canConfirm: canConfirmOutboxEntry })
       .find((entry) => entry.provisionalThreadSettings);
     const provisionalSettings = admissionSettings ?? matchingAdmission?.provisionalThreadSettings;
+    const knownThread = threadCache().views.get(threadID)?.thread ?? threadCache().summaries.get(threadID);
+    // Runtime observations carry no product ownership. An existing conversation
+    // needs its metadata before content can enter this surface; a local admission
+    // already has frozen provisional settings from the submitted request.
+    if (!knownThread && !provisionalSettings) return false;
     const now = Date.now();
-    const base = threadCache().views.get(threadID)?.thread ?? threadCache().summaries.get(threadID) ?? {
+    const base = knownThread ?? {
       thread_id: threadID,
 		title: '',
       title_status: 'unset',
@@ -5340,6 +5349,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const contextualBase = {
       ...base,
       ...(provisionalSettings ? {
+        ...(provisionalSettings.tessiven_canvas_id ? { tessiven_canvas_id: provisionalSettings.tessiven_canvas_id } : {}),
         model_id: provisionalSettings.model_id || base.model_id,
         working_dir: provisionalSettings.working_dir || base.working_dir,
         permission_type: provisionalSettings.permission_type,
@@ -5348,6 +5358,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           : {}),
       } : {}),
     };
+    if (!threadMatchesSurface(contextualBase)) {
+      setThreadCache(cache => reconcileRuntimeObservation(current, cache, threadID));
+      return false;
+    }
     try {
       const projected = applyFlowerRuntimeCurrentView(contextualBase, current, {
         model_context: modelContext, context_usage: contextUsage,
@@ -6676,6 +6690,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         };
         const provisionalThreadSettings = !admittedThreadID && frozenPermissionType
           ? {
+            ...(launchCanvasID ? { tessiven_canvas_id: launchCanvasID } : {}),
             model_id: launchModelID,
             working_dir: frozenDisplayedWorkingDir,
             permission_type: frozenPermissionType,

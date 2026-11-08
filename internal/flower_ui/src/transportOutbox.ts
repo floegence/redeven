@@ -10,6 +10,7 @@ import type { FlowerComposerDraftAttachment, FlowerComposerDraftReference } from
 export type TransportOutboxInput = FlowerTurnLaunchInput;
 
 export type TransportOutboxProvisionalThreadSettings = Readonly<{
+  tessiven_canvas_id?: string;
   model_id: string;
   working_dir: string;
   permission_type: FlowerPermissionType;

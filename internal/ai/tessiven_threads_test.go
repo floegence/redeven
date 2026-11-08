@@ -112,6 +112,36 @@ func TestTessivenThreadOwnershipIsolatesInventoryAndRuntime(t *testing.T) {
 	if err != nil || len(baseline) != 1 || baseline[0].ThreadID != ordinary.ThreadID {
 		t.Fatalf("live baseline: %+v %v", baseline, err)
 	}
+	subscription, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	for {
+		envelope := flowerBackpressureEnvelope(t, subscription)
+		for _, summary := range envelope.Summaries {
+			if summary.ThreadID != ordinary.ThreadID {
+				t.Fatal("canvas conversation entered live inventory")
+			}
+		}
+		if envelope.BaselineComplete != nil && *envelope.BaselineComplete {
+			break
+		}
+	}
+	for _, id := range []string{dedicated.ThreadID, ordinary.ThreadID} {
+		if err := svc.publishCanonicalThreadSummary(t.Context(), meta.EndpointID, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for {
+		envelope := flowerBackpressureEnvelope(t, subscription)
+		if envelope.Kind == FlowerLiveStreamSummaryBatch {
+			if len(envelope.Summaries) != 1 || envelope.Summaries[0].ThreadID != ordinary.ThreadID {
+				t.Fatal("canvas conversation entered live summary updates")
+			}
+			break
+		}
+	}
 	scope, err := svc.threadQueryScope(t.Context(), meta)
 	if err != nil || len(scope.ThreadIDs) != 1 || scope.ThreadIDs[0].String() != ordinary.ThreadID {
 		t.Fatalf("model query scope: %+v %v", scope, err)
