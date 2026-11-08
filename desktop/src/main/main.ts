@@ -18942,7 +18942,10 @@ function askFlowerFromOwnedWindow(source: WebContents, owner?: DesktopSessionRec
   root.webContents.once('destroyed', clearFlowerWindowOrigin);
   root.webContents.removeListener('did-navigate', clearFlowerWindowOrigin);
   root.webContents.once('did-navigate', clearFlowerWindowOrigin);
-  const preview = new URL(url).pathname === LOCAL_UI_ENV_APP_ENTRY_PATH ? readFilePreviewWindowRequest(new URL(url).search) : null;
+  const sourceURL = new URL(url);
+  const preview = sessionRecordForWebContentsID(source.id) === record && isAllowedSessionNavigation(record.session_key, url)
+    && sourceURL.origin === new URL(record.entry_url).origin && sourceURL.pathname === LOCAL_UI_ENV_APP_ENTRY_PATH
+    ? readFilePreviewWindowRequest(sourceURL.search) : null;
   const metadata = { ...(preview ? { file_path: preview.path } : {}), id, title: source.getTitle().slice(0, 512), url: publicURL, captured_at_ms: Date.now(), ...(selection ? { selection } : {}) };
   flowerWindowOrigins.set(root.webContents.id, { id, source, url, record, metadata });
   root.webContents.send(ASK_FLOWER_SOURCE_CHANNEL, metadata);

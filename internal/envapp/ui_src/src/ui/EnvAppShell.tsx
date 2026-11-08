@@ -2713,7 +2713,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
   let pendingPreviewFlower = new URLSearchParams(window.location.search).has(FILE_PREVIEW_FLOWER_QUERY);
   createEffect(() => {
-    if (!pendingPreviewFlower || standalone || !runtimeConnectionEstablished() || accessGateVisible()) return;
+    if (!pendingPreviewFlower || standalone || !runtimeConnectionEstablished() || accessGateVisible() || env.state !== 'ready') return;
     pendingPreviewFlower = false;
     void openFileFlowerLauncher().catch(reportPreviewFlowerError);
   });

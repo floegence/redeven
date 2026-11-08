@@ -4027,6 +4027,24 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); window.history.replaceState({}, '', '/'); }
   }, 10000);
 
+  it('waits for file handoff permissions before consuming the browser request', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let resolve!: (value: any) => void;
+    getEnvironmentMock.mockReturnValue(new Promise(done => { resolve = done; }));
+    window.history.replaceState({}, '', '/?ask_file=%2Fdocs%2Freport.md');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell'); const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => getEnvironmentMock.mock.calls.length > 0); await new Promise(resolve => setTimeout(resolve, 100));
+      expect(host.querySelector('[data-testid="flower-launcher"]')?.getAttribute('data-open')).not.toBe('true');
+      expect(window.location.search).toContain('ask_file');
+      resolve({ public_id: 'env_local', name: 'Local', permissions: { can_read: true, can_write: true, can_execute: true } });
+      await flushUntil(() => host.querySelector('[data-testid="flower-launcher"]')?.getAttribute('data-open') === 'true');
+      expect(window.location.search).toBe('');
+    } finally { dispose(); window.history.replaceState({}, '', '/'); }
+  }, 10000);
+
   it('keeps standalone file previews behind access approval', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });

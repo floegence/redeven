@@ -143,7 +143,8 @@ await session.run(async () => {
     await parent.keyboard.press('Escape'); await parent.locator('[data-floe-prompt-card]').waitFor({ state: 'hidden' });
     await child.bringToFront();
     await more(child).click(); await child.getByRole('menuitem', { name: 'Copy path', exact: true }).click();
-    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), htmlFile);
+    await child.getByRole('status').filter({ hasText: 'Path copied' }).waitFor();
+    await until(async () => (await app.evaluate(({ clipboard }) => clipboard.readText())) === htmlFile, 'native copied path');
     assert.equal(await child.evaluate(path => window.redevenDesktopShell.askFilePreviewFlower({ path }), markdownFile).then(result => result.ok), false);
 
     const frame = await frameFor(child); await frame.getByRole('heading', { name: 'Independent preview' }).waitFor();
