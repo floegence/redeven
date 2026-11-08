@@ -7373,8 +7373,8 @@
       },
       "flowerCreationPlaceholder": "Cuéntale a Flower qué debe hacer este plugin…",
       "creation": {
-        "drafts": "Borradores",
-        "noDrafts": "Tus borradores de plugins aparecerán aquí.",
+        "drafts": "Historial de creación",
+        "noDrafts": "Los plugins que crees aparecerán aquí.",
         "untitled": "Plugin sin título",
         "continue": "Continuar creando",
         "deleting": "Eliminando…",
@@ -7390,8 +7390,8 @@
         "install": "Instalar en este entorno",
         "changesNotice": "Se instalará la vista previa actual. Los cambios sin aplicar no se incluyen.",
         "checks": "Comprobaciones",
-        "deleteDraft": "Eliminar borrador",
-        "deleteTitle": "¿Eliminar este borrador de plugin?",
+        "deleteDraft": "Eliminar proyecto",
+        "deleteTitle": "¿Eliminar este proyecto de plugin?",
         "deleteBody": "Se eliminarán la conversación dedicada, el código fuente y la vista previa. Se conservarán los plugins instalados.",
         "retry": "Reintentar",
         "building": "Compilando…",
@@ -7401,13 +7401,13 @@
         "removeReference": "Quitar referencia",
         "review": "Revisar instalación",
         "confirmInstall": "Confirmar instalación",
-        "rename": "Renombrar borrador",
+        "rename": "Renombrar proyecto",
         "passed": "Correcto",
         "failed": "Fallido",
         "not_run": "Sin ejecutar",
         "inventoryFailed": "Instalado, pero no se pudo actualizar la lista de complementos. Inténtalo de nuevo.",
         "accessLoadFailed": "No se pudieron cargar los permisos de la vista previa. Inténtalo de nuevo.",
-        "draftsLoadFailed": "No se pudieron cargar los borradores de plugins. Actualiza para volver a intentarlo.",
+        "draftsLoadFailed": "No se pudo cargar el historial de creación. Inténtalo de nuevo.",
         "studio": "Estudio de plugins",
         "intro": "Describe tu idea. Créala con Flower y perfecciónala en el lienzo.",
         "canvasTools": "Herramientas del lienzo",
@@ -7422,8 +7422,13 @@
         "commentTarget": "Elemento seleccionado",
         "commentPage": "Toda la vista previa",
         "commentClose": "Cerrar comentario",
-        "commentShortcut": "⌘ / Ctrl ↵"
-      }
+        "commentShortcut": "⌘ / Ctrl ↵",
+        "recentlyEdited": "Editados recientemente",
+        "searchHistory": "Buscar en el historial",
+        "noMatchingHistory": "No hay proyectos coincidentes.",
+        "clearSearch": "Borrar búsqueda"
+      },
+      "addPlugin": "Añadir plugin"
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "La dirección del entorno aislado del complemento no está disponible para este entorno.",

@@ -7369,8 +7369,8 @@
       },
       "flowerCreationPlaceholder": "このプラグインで実現したいことを Flower に伝えてください…",
       "creation": {
-        "drafts": "下書き",
-        "noDrafts": "プラグインの下書きがここに表示されます。",
+        "drafts": "作成履歴",
+        "noDrafts": "作成したプラグインがここに表示されます。",
         "untitled": "無題のプラグイン",
         "continue": "作成を続ける",
         "deleting": "削除中…",
@@ -7386,8 +7386,8 @@
         "install": "この環境にインストール",
         "changesNotice": "現在のプレビューをインストールします。未適用の変更は含まれません。",
         "checks": "チェック結果",
-        "deleteDraft": "下書きを削除",
-        "deleteTitle": "このプラグインの下書きを削除しますか？",
+        "deleteDraft": "プロジェクトを削除",
+        "deleteTitle": "このプラグインプロジェクトを削除しますか？",
         "deleteBody": "専用の会話、ソース、プレビューを削除します。インストール済みのプラグインは保持されます。",
         "retry": "再試行",
         "building": "ビルド中…",
@@ -7397,13 +7397,13 @@
         "removeReference": "参照を削除",
         "review": "インストールを確認",
         "confirmInstall": "インストールを確定",
-        "rename": "下書きの名前を変更",
+        "rename": "プロジェクト名を変更",
         "passed": "成功",
         "failed": "失敗",
         "not_run": "未実行",
         "inventoryFailed": "インストール済みですが、プラグイン一覧を更新できませんでした。再試行してください。",
         "accessLoadFailed": "プレビューの権限を読み込めませんでした。もう一度お試しください。",
-        "draftsLoadFailed": "プラグインの下書きを読み込めませんでした。更新して再試行してください。",
+        "draftsLoadFailed": "作成履歴を読み込めませんでした。もう一度お試しください。",
         "studio": "プラグイン制作",
         "intro": "アイデアを伝えて Flower と形にし、キャンバスで細部を整えましょう。",
         "canvasTools": "キャンバスツール",
@@ -7418,8 +7418,13 @@
         "commentTarget": "選択した要素",
         "commentPage": "プレビュー全体",
         "commentClose": "コメントを閉じる",
-        "commentShortcut": "⌘ / Ctrl ↵"
-      }
+        "commentShortcut": "⌘ / Ctrl ↵",
+        "recentlyEdited": "最近編集した項目",
+        "searchHistory": "作成履歴を検索",
+        "noMatchingHistory": "一致するプロジェクトはありません。",
+        "clearSearch": "検索をクリア"
+      },
+      "addPlugin": "プラグインを追加"
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "この環境ではプラグインのサンドボックスアドレスを利用できません。",

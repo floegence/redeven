@@ -7369,8 +7369,8 @@
         "preferenceFailed": "无法保存更新偏好。请刷新后重试。"
       },
       "creation": {
-        "drafts": "草稿",
-        "noDrafts": "你创建的插件草稿会显示在这里。",
+        "drafts": "创建历史",
+        "noDrafts": "你创建的插件会显示在这里。",
         "untitled": "未命名插件",
         "continue": "继续创作",
         "deleting": "正在删除…",
@@ -7386,8 +7386,8 @@
         "install": "安装到当前环境",
         "changesNotice": "安装的是当前预览版本，尚未应用的修改不包含在内。",
         "checks": "检查结果",
-        "deleteDraft": "删除草稿",
-        "deleteTitle": "删除这个插件草稿？",
+        "deleteDraft": "删除项目",
+        "deleteTitle": "删除这个插件项目？",
         "deleteBody": "将删除专属对话、源码和预览，已安装的插件会保留。",
         "retry": "重试",
         "building": "构建中…",
@@ -7397,13 +7397,13 @@
         "removeReference": "移除引用",
         "review": "审查安装",
         "confirmInstall": "确认安装",
-        "rename": "重命名草稿",
+        "rename": "重命名项目",
         "passed": "通过",
         "failed": "失败",
         "not_run": "未运行",
         "inventoryFailed": "已安装，但无法刷新插件列表。请重试。",
         "accessLoadFailed": "无法加载预览权限，请重试。",
-        "draftsLoadFailed": "无法加载插件草稿，请刷新重试。",
+        "draftsLoadFailed": "无法加载创建历史，请重试。",
         "studio": "插件创作",
         "intro": "描述你的想法，与 Flower 一起构建，再在画布上精细调整。",
         "canvasTools": "画布工具",
@@ -7418,8 +7418,13 @@
         "commentTarget": "已选元素",
         "commentPage": "整个预览",
         "commentClose": "收起评论",
-        "commentShortcut": "⌘ / Ctrl ↵"
-      }
+        "commentShortcut": "⌘ / Ctrl ↵",
+        "recentlyEdited": "最近编辑",
+        "searchHistory": "搜索创建历史",
+        "noMatchingHistory": "没有匹配的项目。",
+        "clearSearch": "清除搜索"
+      },
+      "addPlugin": "新增插件"
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "当前环境无法提供插件沙箱地址。",

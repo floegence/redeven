@@ -1,0 +1,37 @@
+.plugin-creation-history { --floe-type-control: 12px; --floe-type-body: 13px; }
+.plugin-history-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; padding: 28px 24px 48px; }
+.plugin-history-content { width: 100%; max-width: 800px; margin-inline: auto; }
+.plugin-history-tools { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.plugin-history-order { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; color: var(--muted-foreground); font-size: 11px; }
+.plugin-history-tools > div { width: min(240px, 55%); }
+.plugin-history-search { height: 32px; font-size: 12px; }
+.plugin-history-create { min-height: 32px; }
+.plugin-history-list { margin: 0; padding: 0; list-style: none; }
+.plugin-history-list > li + li { border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent); }
+.plugin-history-entry { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 84px; padding: 16px 14px; border-radius: 8px; text-align: start; cursor: pointer; transition: background-color 140ms; }
+.plugin-history-entry:hover { background: var(--floe-state-hover); }
+.plugin-history-entry:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; background: var(--floe-state-hover); }
+.plugin-history-mark { display: grid; place-items: center; flex: 0 0 38px; height: 38px; border-radius: 10px; background: var(--redeven-surface-panel-elevated, var(--muted)); color: var(--muted-foreground); }
+.plugin-history-identity { flex: 1; min-width: 0; }
+.plugin-history-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: 20px; }
+.plugin-history-time { display: block; margin-top: 4px; color: var(--muted-foreground); font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.plugin-history-action { display: flex; align-items: center; justify-content: flex-end; gap: 9px; max-width: 30%; color: var(--muted-foreground); font-size: 11px; line-height: 16px; }
+.plugin-history-entry:hover .plugin-history-action, .plugin-history-entry:focus-visible .plugin-history-action { color: var(--foreground); }
+.plugin-history-empty { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 80px 16px; text-align: center; color: var(--muted-foreground); font-size: 12px; }
+.plugin-history-empty-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: var(--muted); }
+.plugin-history-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; font-size: 12px; color: var(--destructive); }
+.plugin-history-error button { flex-shrink: 0; }
+@media (max-width: 639px) {
+  .plugin-history-scroll { padding: 16px 12px 32px; }
+  .plugin-history-tools { gap: 10px; margin-bottom: 8px; }
+  .plugin-history-tools > div { width: 60%; }
+  .plugin-history-search { height: 44px; }
+  .plugin-history-entry { gap: 12px; min-height: 80px; padding: 14px 8px; }
+  .plugin-history-action > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .plugin-creation-history .plugin-history-create { width: 44px; min-height: 44px; padding: 0; }
+  .plugin-history-create > span { display: none; }
+  .plugin-history-empty button, .plugin-history-error button { min-height: 44px; }
+}
+@media (pointer: coarse) { .plugin-history-search { min-height: 44px; font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { .plugin-history-entry { transition: none; } }
+@media (forced-colors: active) { .plugin-history-mark, .plugin-history-empty-mark { outline: 1px solid CanvasText; } }

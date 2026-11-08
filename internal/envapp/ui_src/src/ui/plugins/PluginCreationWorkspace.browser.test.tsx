@@ -181,10 +181,10 @@ it('requires confirmation before deleting only the selected draft', async () => 
   const { onBack } = mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.getByText('Delete draft', { exact: true }).click();
+  await page.getByText('Delete project', { exact: true }).click();
   await expect.element(page.getByRole('dialog')).toBeVisible();
   expect(deletes).toBe(0);
-  await page.getByRole('button', { name: 'Delete draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete project', exact: true }).click();
   await expect.poll(() => deletes).toBe(1);
   await expect.poll(() => onBack.mock.calls.length).toBe(1);
 });
@@ -449,14 +449,14 @@ it.each(['rename', 'delete', 'rename_empty'])('completes %s after a new draft fi
   if (action !== 'rename_empty') embedded!.onDraftPresence?.(true);
   try {
     await page.getByRole('button', { name: 'More actions', exact: true }).click();
-    await page.getByText(action !== 'delete' ? 'Rename draft' : 'Delete draft', { exact: true }).click();
+    await page.getByText(action !== 'delete' ? 'Rename project' : 'Delete project', { exact: true }).click();
     if (action !== 'delete') {
-      await page.getByRole('textbox', { name: 'Rename draft', exact: true }).fill('Renamed draft');
+      await page.getByRole('textbox', { name: 'Rename project', exact: true }).fill('Renamed draft');
       finish?.();
       await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
       await page.getByRole('button', { name: 'Save', exact: true }).click();
     } else {
-      await page.getByRole('button', { name: 'Delete draft', exact: true }).click();
+      await page.getByRole('button', { name: 'Delete project', exact: true }).click();
       expect(onBack).not.toHaveBeenCalled();
       finish?.();
     }
@@ -586,8 +586,8 @@ it('renames a draft with its current revision', async () => {
   mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.getByText('Rename draft', { exact: true }).click();
-  await page.getByRole('textbox', { name: 'Rename draft' }).fill('Focused timer');
+  await page.getByText('Rename project', { exact: true }).click();
+  await page.getByRole('textbox', { name: 'Rename project' }).fill('Focused timer');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect.element(page.getByText('Focused timer', { exact: true })).toBeVisible();
   expect(renames).toEqual([{ revision: 2, title: 'Focused timer' }]);

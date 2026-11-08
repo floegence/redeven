@@ -108,8 +108,8 @@ it.each(['accepted', 'cancelled', 'failed'])('closes the preview before %s draft
   </I18nProvider></FloeConfigProvider>, host);
   await expect.poll(() => lifetime.opened).toBe(1);
   await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.getByText('Delete draft', { exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete draft', exact: true }).click();
+  await page.getByText('Delete project', { exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete project', exact: true }).click();
   await expect.poll(() => events.length).toBe(outcome === 'cancelled' ? 1 : 2);
   expect(events).toEqual(outcome === 'cancelled' ? ['close'] : ['close', 'delete']);
   if (outcome === 'accepted') await expect.poll(() => onBack.mock.calls.length).toBe(1);

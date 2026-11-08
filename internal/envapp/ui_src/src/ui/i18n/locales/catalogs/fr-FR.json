@@ -7373,8 +7373,8 @@
       },
       "flowerCreationPlaceholder": "Indiquez à Flower ce que ce plugin doit faire…",
       "creation": {
-        "drafts": "Brouillons",
-        "noDrafts": "Vos brouillons de plugins apparaîtront ici.",
+        "drafts": "Historique de création",
+        "noDrafts": "Les plugins que vous créez apparaîtront ici.",
         "untitled": "Plugin sans titre",
         "continue": "Continuer la création",
         "deleting": "Suppression…",
@@ -7390,8 +7390,8 @@
         "install": "Installer dans cet environnement",
         "changesNotice": "La version actuellement affichée sera installée. Les modifications non appliquées ne sont pas incluses.",
         "checks": "Vérifications",
-        "deleteDraft": "Supprimer le brouillon",
-        "deleteTitle": "Supprimer ce brouillon de plugin ?",
+        "deleteDraft": "Supprimer le projet",
+        "deleteTitle": "Supprimer ce projet de plugin ?",
         "deleteBody": "La conversation dédiée, les sources et l’aperçu seront supprimés. Les plugins installés seront conservés.",
         "retry": "Réessayer",
         "building": "Compilation…",
@@ -7401,13 +7401,13 @@
         "removeReference": "Retirer la référence",
         "review": "Vérifier l’installation",
         "confirmInstall": "Confirmer l’installation",
-        "rename": "Renommer le brouillon",
+        "rename": "Renommer le projet",
         "passed": "Réussi",
         "failed": "Échec",
         "not_run": "Non exécuté",
         "inventoryFailed": "Installé, mais la liste des extensions n’a pas pu être actualisée. Réessayez.",
         "accessLoadFailed": "Impossible de charger les autorisations de l’aperçu. Réessayez.",
-        "draftsLoadFailed": "Impossible de charger les brouillons de plugins. Actualisez pour réessayer.",
+        "draftsLoadFailed": "Impossible de charger l’historique de création. Réessayez.",
         "studio": "Atelier de plugins",
         "intro": "Décrivez votre idée. Créez-la avec Flower, puis affinez-la sur le canevas.",
         "canvasTools": "Outils du canevas",
@@ -7422,8 +7422,13 @@
         "commentTarget": "Élément sélectionné",
         "commentPage": "Aperçu complet",
         "commentClose": "Fermer le commentaire",
-        "commentShortcut": "⌘ / Ctrl ↵"
-      }
+        "commentShortcut": "⌘ / Ctrl ↵",
+        "recentlyEdited": "Modifiés récemment",
+        "searchHistory": "Rechercher dans l’historique",
+        "noMatchingHistory": "Aucun projet correspondant.",
+        "clearSearch": "Effacer la recherche"
+      },
+      "addPlugin": "Ajouter un plugin"
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "L’adresse du bac à sable du plugin n’est pas disponible pour cet environnement.",

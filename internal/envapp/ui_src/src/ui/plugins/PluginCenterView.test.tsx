@@ -613,7 +613,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const grid = mount.querySelector('[data-plugin-center-list]')!;
-    expect(grid.children).toHaveLength(1);
+    expect(grid.querySelectorAll('[data-plugin-directory-card]')).toHaveLength(1);
+    expect(grid.querySelector('[data-plugin-center-add]')).not.toBeNull();
     setLoading(true);
     expect(grid.children).toHaveLength(1);
     expect(grid.getAttribute('aria-busy')).toBe('true');
@@ -949,7 +950,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(controlText(mount)).not.toContain('Install from source');
+    expect(controlText(mount.querySelector('[data-plugin-center-toolbar]'))).not.toContain('Install from source');
     (mount.querySelector('[data-plugin-center-install-external]') as HTMLButtonElement).click();
     await Promise.resolve();
     findDocumentButton('Install from source').click();

@@ -6,7 +6,7 @@ import { FeedbackIndicator, type FeedbackIndicatorEntry, StableText, Button, Inp
 import './plugin-center-compact.css';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, Check, Filter, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, Wand, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, Check, Filter, History, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, Wand, X } from '@floegence/floe-webapp-core/icons';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
@@ -33,6 +33,7 @@ import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginPendingActionLabels, pluginPendingCommandLabel, pluginSourceLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginPinButton } from './PluginPinButton';
 import { PluginCenterItem } from './PluginCenterItems';
+import { PluginAddCard } from './PluginAddCard';
 import { PluginIdentityHeader, PluginProcessStatusBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
@@ -286,6 +287,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     return projection().marketUnavailable ? i18n.t('uiCopy.plugin.marketUnavailable') : undefined;
   });
   const canManage = createMemo(() => props.canManagePlugins);
+  const showAddCard = () => canManage() && !loading() && !errorMessage() && activeTab() !== 'updates' && !filtersActive();
   const canOpenSurfaces = createMemo(() => props.canOpenPluginSurfaces);
   const tabSelection = createUIFirstSelection<PluginCenterTab>({
     committed: activeTab,
@@ -697,7 +699,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                 />
               )}
             </For>
-            <Show when={!loading() && !errorMessage() && visibleItems().length === 0}>
+            <Show when={showAddCard()}>
+              <PluginAddCard onCreate={props.onCreatePlugin} onInstall={() => openExternalDialog()} />
+            </Show>
+            <Show when={!loading() && !errorMessage() && visibleItems().length === 0 && !showAddCard()}>
               <div class={cn('col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-[length:var(--floe-type-body)] text-muted-foreground', PLUGIN_ENTER_MOTION_CLASS)}>
                 <Show when={activeTab() === 'updates' && updateSuccess()} fallback={<Search class="h-6 w-6" />}>
                   <CheckCircle class="h-6 w-6 text-[var(--redeven-status-success-foreground)]" />
@@ -970,8 +975,10 @@ function PluginCenterShell(props: {
             onSelect={id => { if (id === 'clear') props.onClearFilters(); else { const [groupID, value] = id.split(':'); filterGroups.find(group => group.id === groupID)?.onSelect(value); } }} /></div>
           <div class="plugin-center-management ml-auto flex shrink-0 items-center gap-1.5">
             <Show when={props.canManage && props.onCreatePlugin}>
-              <Button variant="default" size="sm" data-plugin-center-create-plugin onClick={() => props.onCreatePlugin?.()}><Wand class="mr-1 h-3.5 w-3.5" />{i18n.t('uiCopy.plugin.creationTitle')}</Button>
-              <Button variant="ghost" size="sm" data-plugin-center-drafts onClick={props.onOpenDrafts}>{i18n.t('uiCopy.plugin.creation.drafts')}</Button>
+              <Button variant="default" size="sm" data-plugin-center-create-plugin aria-label={i18n.t('uiCopy.plugin.creationTitle')} title={i18n.t('uiCopy.plugin.creationTitle')} onClick={() => props.onCreatePlugin?.()}><Wand class="h-3.5 w-3.5" /><span>{i18n.t('uiCopy.plugin.creationTitle')}</span></Button>
+            </Show>
+            <Show when={props.canManage && props.onOpenDrafts}>
+              <Button variant="ghost" size="sm" data-plugin-center-drafts aria-label={i18n.t('uiCopy.plugin.creation.drafts')} title={i18n.t('uiCopy.plugin.creation.drafts')} onClick={props.onOpenDrafts}><History class="h-3.5 w-3.5" /><span>{i18n.t('uiCopy.plugin.creation.drafts')}</span></Button>
             </Show>
             <FeedbackIndicator label={i18n.t('uiCopy.plugin.centerTitle')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => searchRef} entries={props.feedback ?? []} />
             <Show when={props.filtersActive}>

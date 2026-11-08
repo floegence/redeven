@@ -7373,8 +7373,8 @@
       },
       "flowerCreationPlaceholder": "Beschreibe Flower, was dieses Plugin tun soll…",
       "creation": {
-        "drafts": "Entwürfe",
-        "noDrafts": "Ihre Plugin-Entwürfe werden hier angezeigt.",
+        "drafts": "Erstellungsverlauf",
+        "noDrafts": "Deine erstellten Plugins erscheinen hier.",
         "untitled": "Unbenanntes Plugin",
         "continue": "Weiter erstellen",
         "deleting": "Wird gelöscht…",
@@ -7390,8 +7390,8 @@
         "install": "In dieser Umgebung installieren",
         "changesNotice": "Die aktuelle Vorschau wird installiert. Nicht angewendete Änderungen sind nicht enthalten.",
         "checks": "Prüfungen",
-        "deleteDraft": "Entwurf löschen",
-        "deleteTitle": "Diesen Plugin-Entwurf löschen?",
+        "deleteDraft": "Projekt löschen",
+        "deleteTitle": "Dieses Plugin-Projekt löschen?",
         "deleteBody": "Die zugehörige Unterhaltung, der Quellcode und die Vorschau werden gelöscht. Installierte Plugins bleiben erhalten.",
         "retry": "Erneut versuchen",
         "building": "Wird erstellt…",
@@ -7401,13 +7401,13 @@
         "removeReference": "Referenz entfernen",
         "review": "Installation prüfen",
         "confirmInstall": "Installation bestätigen",
-        "rename": "Entwurf umbenennen",
+        "rename": "Projekt umbenennen",
         "passed": "Bestanden",
         "failed": "Fehlgeschlagen",
         "not_run": "Nicht ausgeführt",
         "inventoryFailed": "Installiert, aber die Plugin-Liste konnte nicht aktualisiert werden. Bitte erneut versuchen.",
         "accessLoadFailed": "Die Vorschau-Berechtigungen konnten nicht geladen werden. Versuchen Sie es erneut.",
-        "draftsLoadFailed": "Plugin-Entwürfe konnten nicht geladen werden. Aktualisieren Sie die Ansicht.",
+        "draftsLoadFailed": "Der Erstellungsverlauf konnte nicht geladen werden. Versuche es erneut.",
         "studio": "Plugin-Studio",
         "intro": "Beschreibe deine Idee. Entwickle sie mit Flower und verfeinere sie auf der Arbeitsfläche.",
         "canvasTools": "Werkzeuge der Arbeitsfläche",
@@ -7422,8 +7422,13 @@
         "commentTarget": "Ausgewähltes Element",
         "commentPage": "Gesamte Vorschau",
         "commentClose": "Kommentar schließen",
-        "commentShortcut": "⌘ / Strg ↵"
-      }
+        "commentShortcut": "⌘ / Strg ↵",
+        "recentlyEdited": "Zuletzt bearbeitet",
+        "searchHistory": "Erstellungsverlauf durchsuchen",
+        "noMatchingHistory": "Keine passenden Projekte.",
+        "clearSearch": "Suche löschen"
+      },
+      "addPlugin": "Plugin hinzufügen"
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "Die Plugin-Sandbox-Adresse ist für diese Umgebung nicht verfügbar.",

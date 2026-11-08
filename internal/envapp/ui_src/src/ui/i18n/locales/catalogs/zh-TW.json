@@ -7369,8 +7369,8 @@
       },
       "flowerCreationPlaceholder": "告訴 Flower 這個外掛需要做什麼…",
       "creation": {
-        "drafts": "草稿",
-        "noDrafts": "你建立的外掛草稿會顯示在這裡。",
+        "drafts": "建立紀錄",
+        "noDrafts": "你建立的外掛會顯示在這裡。",
         "untitled": "未命名外掛",
         "continue": "繼續創作",
         "deleting": "正在刪除…",
@@ -7386,8 +7386,8 @@
         "install": "安裝到目前環境",
         "changesNotice": "安裝的是目前預覽版本，尚未套用的修改不包含在內。",
         "checks": "檢查結果",
-        "deleteDraft": "刪除草稿",
-        "deleteTitle": "刪除這個外掛草稿？",
+        "deleteDraft": "刪除專案",
+        "deleteTitle": "刪除這個外掛專案？",
         "deleteBody": "將刪除專屬對話、原始碼和預覽，已安裝的外掛會保留。",
         "retry": "重試",
         "building": "建置中…",
@@ -7397,13 +7397,13 @@
         "removeReference": "移除引用",
         "review": "檢閱安裝",
         "confirmInstall": "確認安裝",
-        "rename": "重新命名草稿",
+        "rename": "重新命名專案",
         "passed": "通過",
         "failed": "失敗",
         "not_run": "未執行",
         "inventoryFailed": "已安裝，但無法重新整理外掛程式清單。請重試。",
         "accessLoadFailed": "無法載入預覽權限，請重試。",
-        "draftsLoadFailed": "無法載入外掛草稿，請重新整理後再試。",
+        "draftsLoadFailed": "無法載入建立紀錄，請再試一次。",
         "studio": "外掛創作",
         "intro": "描述你的想法，與 Flower 一起建立，再於畫布上細緻調整。",
         "canvasTools": "畫布工具",
@@ -7418,8 +7418,13 @@
         "commentTarget": "已選取元素",
         "commentPage": "整個預覽",
         "commentClose": "收起留言",
-        "commentShortcut": "⌘ / Ctrl ↵"
-      }
+        "commentShortcut": "⌘ / Ctrl ↵",
+        "recentlyEdited": "最近編輯",
+        "searchHistory": "搜尋建立紀錄",
+        "noMatchingHistory": "沒有符合的專案。",
+        "clearSearch": "清除搜尋"
+      },
+      "addPlugin": "新增外掛"
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "目前環境無法提供外掛程式沙箱位址。",

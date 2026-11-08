@@ -7373,8 +7373,8 @@
       },
       "flowerCreationPlaceholder": "Conte ao Flower o que este plugin deve fazer…",
       "creation": {
-        "drafts": "Rascunhos",
-        "noDrafts": "Seus rascunhos de plugins aparecerão aqui.",
+        "drafts": "Histórico de criação",
+        "noDrafts": "Os plugins que você criar aparecerão aqui.",
         "untitled": "Plugin sem título",
         "continue": "Continuar criando",
         "deleting": "Excluindo…",
@@ -7390,8 +7390,8 @@
         "install": "Instalar neste ambiente",
         "changesNotice": "A prévia atual será instalada. Alterações não aplicadas não estão incluídas.",
         "checks": "Verificações",
-        "deleteDraft": "Excluir rascunho",
-        "deleteTitle": "Excluir este rascunho de plugin?",
+        "deleteDraft": "Excluir projeto",
+        "deleteTitle": "Excluir este projeto de plugin?",
         "deleteBody": "A conversa dedicada, o código-fonte e a prévia serão excluídos. Os plugins instalados serão mantidos.",
         "retry": "Tentar novamente",
         "building": "Compilando…",
@@ -7401,13 +7401,13 @@
         "removeReference": "Remover referência",
         "review": "Revisar instalação",
         "confirmInstall": "Confirmar instalação",
-        "rename": "Renomear rascunho",
+        "rename": "Renomear projeto",
         "passed": "Aprovado",
         "failed": "Falhou",
         "not_run": "Não executado",
         "inventoryFailed": "Instalado, mas não foi possível atualizar a lista de plugins. Tente novamente.",
         "accessLoadFailed": "Não foi possível carregar as permissões da prévia. Tente novamente.",
-        "draftsLoadFailed": "Não foi possível carregar os rascunhos de plugins. Atualize para tentar novamente.",
+        "draftsLoadFailed": "Não foi possível carregar o histórico de criação. Tente novamente.",
         "studio": "Estúdio de plugins",
         "intro": "Descreva sua ideia. Crie com o Flower e refine os detalhes na tela.",
         "canvasTools": "Ferramentas da tela",
@@ -7422,8 +7422,13 @@
         "commentTarget": "Elemento selecionado",
         "commentPage": "Prévia inteira",
         "commentClose": "Fechar comentário",
-        "commentShortcut": "⌘ / Ctrl ↵"
-      }
+        "commentShortcut": "⌘ / Ctrl ↵",
+        "recentlyEdited": "Editados recentemente",
+        "searchHistory": "Buscar no histórico",
+        "noMatchingHistory": "Nenhum projeto correspondente.",
+        "clearSearch": "Limpar busca"
+      },
+      "addPlugin": "Adicionar plugin"
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "O endereço da sandbox do plugin não está disponível para este ambiente.",

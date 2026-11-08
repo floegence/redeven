@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin Center interaction
 tags: [ui, plugins, plugin-center, workbench, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-07"
 ---
 # Summary
 
@@ -17,28 +17,28 @@ Only Plugin Center explicitly selects global Dialog placement at the product mod
 A successful Open closes management and focuses the target after canvas input becomes available; a failed Open preserves the directory and error feedback.
 
 ## Directory and responsive details
-Local filters combine source (official or community) and lifecycle without rebuilding identity. Refresh status remains outside the card grid, so a pending refresh cannot appear as a duplicate card.
+Source and lifecycle filters preserve identity. Refresh status stays outside the card grid.
 
 ## Shared design language
 
-The directory, detail actions, package-install source form and update review compose released Floe controls. Cards use the shared default plane, without visible resting contours, decorative lift, icon magnification or custom shadow stacks. Selected cards use the shared selection fill. Shared Tags carry source/lifecycle semantics without changing Host authority.
+Directory, details and install/update reviews compose released Floe controls. Cards use the shared default plane and selection fill without resting contours, lift, magnification or custom shadows. Shared Tags present source/lifecycle without changing Host authority.
 
-Floe owns Input focus, Button pending/disabled treatment and Tabs keyboard/selection behavior. Search, source/lifecycle filters, retained selection and scroll remain product state. Menu triggers are single focusable boundaries with centered content, neutral hover and visible keyboard focus; nested trigger boxes are avoided. Details keep primary actions outside their scroll body, with secondary evidence in quiet disclosures.
+Floe owns Input focus, Button pending/disabled states and Tabs keyboard behavior.
+Redeven owns search, filters, selection and scroll. Menu triggers have one focusable
+boundary, neutral hover and visible focus. Details keep primary actions outside
+the scroll body; secondary evidence stays in disclosures.
 
-Source tabs retain complete accessible names, with ellipsized labels in three equal columns on compact dialogs. Mobile actions remain at least 44px; install progress replaces the primary action without changing card/sibling geometry. Reduced-motion, localized long copy and light/dark themes use the same shared controls.
+Compact source tabs use three equal columns with ellipsis and full accessible names. Mobile targets remain at least 44px. Install progress replaces the primary action without shifting cards. Shared controls support reduced motion, long localized copy and both themes.
 
 External source changes may increase body height. Published Floe Dialog keeps the scrollbar gutter and widths stable during height transitions; content remains scrollable.
 
 ## Plugin creation workspace
 
-Creation opens a full product page, with an addressable draft and return path.
-Creation and draft-library code load on navigation, outside the initial shell graph.
-Deep links wait for the authenticated environment and plugin session before mounting
-the draft reader; they do not turn connection startup into a failed draft read.
-Files, Terminal, the ordinary Flower surface and Workbench retain their existing
-instances while this page is active. The dedicated embedded Flower surface owns
-one composer; requirements and implementation requests use its ordinary Send
-action. There is no secondary creation intent or synthesized empty-input prompt.
+Creation is an addressable full page loaded lazily outside the initial shell graph.
+Deep links await authenticated environment/plugin readiness before reading drafts.
+Files, Terminal, ordinary Flower and Workbench retain their instances. Embedded
+Flower owns one composer and ordinary Send; no secondary creation intent or
+synthesized empty-input prompt exists.
 A new draft has one centered creation composer on a quiet canvas, without an
 empty split preview. The landing page and pre-preview canvas share a faint dot
 field and slow ambient drift. The placeholder gently rearranges into alternative
@@ -66,9 +66,20 @@ The compact checks action reflects actual running, failed, passed or unrun stage
 it never displays a success icon before checks have passed. Detailed output opens
 on demand without adding another permanent header.
 
-Directory cards use 13-pixel names, 12-pixel summaries, 32-pixel icons and 12-pixel
-padding; selection and status do not enlarge cards or duplicate refresh content.
-Drafts use a compact list with title, modified time and continuation action.
+Directory cards use 13px names, 12px summaries/padding and 32px icons.
+Selection/status never enlarge cards or duplicate refresh content.
+The unfiltered installed/discovery grid ends with an Add plugin card for managers,
+including an empty directory. Its released Floe menu opens creation or the existing
+installation review; it is absent during loading/errors, filtered searches and updates.
+Menu dismissal and installation return focus to the card. Compact toolbar actions
+keep accessible names while using icons to leave room for translated titles.
+
+The user-facing library is Creation history; durable draft IDs and APIs stay unchanged.
+A bounded-width list orders projects by modification time, with a neutral project
+mark, title, localized timestamp and continuation action. Search includes the localized
+untitled label. Refresh preserves visible records and the query; failures offer retry,
+initial loading shows non-interactive geometry, and empty history offers creation.
+No generated icon, preview or build status is inferred from a draft record.
 
 Draft creation is request-idempotent and the URL becomes durable after creation.
 Unsent text and File bytes persist through the canonical authority-free composer
@@ -139,10 +150,9 @@ never grants execution authority. Source edits and builds retain normal approval
 preview application and installation remain explicit existing actions.
 
 Only comment text is cached under the authenticated draft key. Reload, preview
-replacement, navigation, resizing and subsequent application interaction require
-a new selection; text survives. Submission rechecks the live frame and artifact.
-Failed local persistence keeps unload protection and blocks navigation. Draft
-deletion removes its composer and comment snapshots after surface closure.
+replacement, navigation, resizing and application interaction invalidate selection,
+not text. Submission rechecks the live frame/artifact. Failed persistence protects
+unload and blocks navigation; deletion removes snapshots after surface closure.
 
 ## Restore saved data
 
@@ -160,6 +170,8 @@ The product must not delete its authenticated author route before SDK retirement
 Management presentation never creates a second lifecycle or permission authority. Global placement applies only to this product modal and its confirmations, not to ordinary Workbench widget dialogs or menus.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginAddCard.browser.test.tsx` and `redeven:internal/envapp/ui_src/src/ui/plugins/PluginDraftLibrary.browser.test.tsx` cover entry actions, focus, permission/loading restrictions, history search/retry and responsive themes.
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterDrawer.tsx:1` - Source.

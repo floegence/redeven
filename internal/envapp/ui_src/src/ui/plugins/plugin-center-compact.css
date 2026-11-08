@@ -1,11 +1,14 @@
 [data-plugin-center-view] { container: plugin-center / inline-size; }
 .plugin-center-compact-filter { display: none; }
 @container plugin-center (width < 768px) {
-  [data-plugin-center-toolbar-primary] { display: grid; grid-template-columns: minmax(128px, 1fr) auto; gap: 8px; padding: 4px 12px; }
-  [data-plugin-center-toolbar-primary] > label { grid-column: 1; grid-row: 2; order: 0; width: auto; max-width: none; margin: 0; }
+  [data-plugin-center-toolbar-primary] { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 4px 12px; }
+  [data-plugin-center-toolbar-primary] > div:first-child { min-width: 0; }
+  [data-plugin-center-toolbar-primary] > label { grid-column: 1 / -1; grid-row: 2; order: 0; width: auto; max-width: none; margin: 0 52px 0 0; }
   [data-plugin-center-search] { height: 44px; font-size: var(--floe-type-control); }
-  .plugin-center-management { grid-column: 2; grid-row: 1; gap: 8px; }
+  .plugin-center-management { grid-column: 2; grid-row: 1; gap: 2px; }
   .plugin-center-management button, .plugin-center-management [role="button"] { min-width: 44px; height: 44px; }
+  .plugin-center-management [data-plugin-center-create-plugin], .plugin-center-management [data-plugin-center-drafts] { width: 44px; padding: 0; }
+  .plugin-center-management [data-plugin-center-create-plugin] > span, .plugin-center-management [data-plugin-center-drafts] > span { display: none; }
   .plugin-center-management [data-plugin-center-clear-filters] { display: none; }
   .plugin-center-compact-filter { display: block; grid-column: 2; grid-row: 2; justify-self: end; }
   .plugin-center-filter-trigger { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; height: 44px; border-radius: 6px; cursor: pointer; }
