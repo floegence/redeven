@@ -330,6 +330,7 @@ function pluginActivityComponentID(inventoryKey: string): string {
 }
 const MobileShellTools = lazy(() => import('./MobileShellTools').then(module => ({ default: module.MobileShellTools })));
 const PluginCreationWorkspace = lazy(() => import('./plugins/PluginCreationWorkspace').then(module => ({ default: module.PluginCreationWorkspace })));
+const PluginCreationViewport = lazy(() => import('./plugins/PluginCreationViewport').then(module => ({ default: module.PluginCreationViewport })));
 const PluginDraftLibrary = lazy(() => import('./plugins/PluginDraftLibrary').then(module => ({ default: module.PluginDraftLibrary })));
 const EnvTessivenPage = lazy(() => import('./pages/EnvTessivenPage'));
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
@@ -1959,28 +1960,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   let pluginCreationNavigate: ((commit: () => unknown) => Promise<boolean>) | undefined;
   let pluginCreationSaveForRestart: (() => Promise<string | undefined>) | undefined;
   const [pluginCreationBoundsHost, setPluginCreationBoundsHost] = createSignal<HTMLElement>();
-  const [pluginCreationBounds, setPluginCreationBounds] = createSignal<{ left: number; top: number; width: number; height: number }>();
-  // One stable creation container follows the content viewport in either mode.
-  // Moving its iframe between parents would reset the live application.
-  createEffect(() => {
-    if (!pluginCreationOpen()) return;
-    setPluginCreationBounds(undefined);
-    const parent = pluginCreationBoundsHost(), content = notesViewportAnchor();
-    if (!parent || !content) return;
-    let frame = 0;
-    const measure = () => {
-      const outer = parent.getBoundingClientRect(), inner = content.getBoundingClientRect();
-      if (!outer.width || !outer.height || !inner.width || !inner.height) return;
-      const scaleX = outer.width / parent.offsetWidth, scaleY = outer.height / parent.offsetHeight;
-      setPluginCreationBounds({ left: (inner.left - outer.left) / scaleX, top: (inner.top - outer.top) / scaleY,
-        width: inner.width / scaleX, height: inner.height / scaleY });
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(parent); observer.observe(content);
-    window.addEventListener('resize', measure);
-    measure(); frame = requestAnimationFrame(measure);
-    onCleanup(() => { observer.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('resize', measure); });
-  });
   let pluginHistoryPending = false;
   let pluginHistoryTarget = { url: pluginCreationURL(), state: window.history.state };
   const navigatePluginCreation = (id: string | undefined, replace = false) => {
@@ -5624,15 +5603,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             ]}
           />
           <Show when={pluginCreationOpen()}>
-            <div class="absolute z-10 overflow-hidden bg-background"
-              style={{ left: `${pluginCreationBounds()?.left ?? 0}px`, top: `${pluginCreationBounds()?.top ?? 0}px`,
-                width: `${pluginCreationBounds()?.width ?? 0}px`, height: `${pluginCreationBounds()?.height ?? 0}px`,
-                visibility: pluginCreationBounds() ? 'visible' : 'hidden' }}
-              inert={mobilePluginModalOpen()} aria-hidden={mobilePluginModalOpen() || undefined} data-redeven-plugin-creation-page>
+            <Suspense><PluginCreationViewport host={pluginCreationBoundsHost()} content={notesViewportAnchor()} blocked={mobilePluginModalOpen()}>
               <Show when={canOpenPluginSurfaces()} fallback={<ActivityPageLoading />}>
                 <Suspense fallback={<ActivityPageLoading />}>{renderPluginCreation()}</Suspense>
               </Show>
-            </div>
+            </PluginCreationViewport></Suspense>
           </Show>
         </div>
         <Show when={canUseFlower()}>{renderActivityFlowerAnchor()}</Show>

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success.
+Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success. Environment data, Desktop profiles and external projects have separate ownership; relocation requires an explicit offline operation with verified recovery state.
 
 # Contract
 
@@ -25,11 +25,13 @@ Template catalog entries have no instance ID and publish no invented data path. 
 
 The administrator-only no-store storage endpoint inspects named Environment locations with one 20,000-entry/two-second budget, without database reads or symlink traversal outside a pinned root. Missing, unavailable and partial observations remain distinct. No global total or completeness claim is made. Settings preserves last successful rows on refresh failure, fences replies on scope/access loss, supports narrow layouts and routes cleanup/recovery to owning features. No generic recursive deletion API exists.
 
-Flower recovery covers only its declared conversation/read-state/upload/media collection. Managed plugins, skills, task working files, user projects and Desktop state are not implicitly included. Existing owner-specific cleanup and recovery remain authoritative.
-
 # Pre-release relocation
 
 `scripts/relocate_prerelease_storage.py --state-dir <absolute> [--skills-source <absolute>]` previews exact moves. `--apply` requires the stopped Runtime lease; conflicts, links, special files or changed fingerprints stop without replacing data. SQLite and sidecars move as opaque bytes; orphan sidecars fail before migration. Shared skills copy only from the explicit source and retain originals; only Redeven-owned path metadata is rewritten. A durable journal binds original product metadata bytes to source fingerprints and permits only the selected lexical/canonical prefix rewrite; external shared-scope decisions remain separate. Explicit source arguments must match the journal. It fences feature admission until verified completion and supports interrupted moves and metadata publication. Interrupted copy stages remain untouched: inspect the reported stage, move it outside the Environment without deletion, and rerun the same command; source fingerprints are checked again. This offline tool is never called by startup and is not a permanent compatibility reader. Do not remove its guard while pending local relocations exist.
+
+# Boundaries
+
+Flower recovery covers only its declared conversation/read-state/upload/media collection. Managed plugins, skills, task working files, user projects and Desktop state are not implicitly included. Existing owner-specific cleanup and recovery remain authoritative.
 
 # Evidence
 

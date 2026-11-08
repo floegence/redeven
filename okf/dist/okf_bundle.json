@@ -25,8 +25,8 @@
               "skills",
               "storage"
             ],
-            "summary": "Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success.",
-            "section_count": 3
+            "summary": "Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success. Environment data, Desktop profiles and external projects have separate ownership; relocation requires an explicit offline operation with verified recovery state.",
+            "section_count": 4
           },
           {
             "concept_id": "architecture.host-application-input",
@@ -14445,15 +14445,15 @@
         "title": "Product storage placement and lifecycle",
         "type": "Storage Contract"
       },
-      "body_length": 4638,
-      "summary": "Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success.",
+      "body_length": 4814,
+      "summary": "Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success. Environment data, Desktop profiles and external projects have separate ownership; relocation requires an explicit offline operation with verified recovery state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`StateRoot` resolves from explicit input, `REDEVEN_STATE_ROOT`, then `~/.redeven`; `StateDir` is its `local-environment` child. Desktop credentials/preferences remain in Electron userData, environment registrations in StateRoot/catalog, independent Gateway and Center in their explicitly selected roots. An Environment backup is not a Desktop profile or external-project backup.\n\nReDevPlugin receives only `StateDir/apps/plugins/platform`, including its control/data/assets, host adapters and author workspaces. Host migrations, SQL and recovery remain upstream. Retired root-level plugin files block plugin admission unchanged. Product draft records remain in apps/plugin-creation; market snapshots in apps/plugins. Flower Agent Plugins remain separately owned under ai/agent-plugins.\n\nManaged skills use `apps/skills/{packages,state.json,sources.json}` in the selected Environment. Explicit `.agents/skills` remains shared user content. Managed ancestors and metadata reject symlinks/non-directory placement. Disabled/source decisions follow managed files; retired metadata blocks Flower admission. No silent HOME-based fallback imports another Environment's managed skills.\n\nDesktop business caches all use `REDEVEN_DESKTOP_CACHE_ROOT`, or `StateRoot/cache/desktop`. userData is never a disposable cache. Existing cache acquisition, verification and eviction belong to their original owners. Old userData caches are retained; new roots reacquire verified packages without treating userData as disposable.\n\nConfig remains one atomic identity/recovery envelope: settings, binding/outbox and one-shot control artifacts cannot be split across independent writes. Provider credentials remain in secrets.json. Neither filename implies export safety. Sanitize settings exports; never export this envelope as portable preferences.\n\nTemplate catalog entries have no instance ID and publish no invented data path. Existing service inspection exposes actual binding-derived resource identity. New Host allocations retain instances/\u003cservice-id\u003e/{install,data,logs}; old resource locations remain their owner's concern.\n\nThe administrator-only no-store storage endpoint inspects named Environment locations with one 20,000-entry/two-second budget, without database reads or symlink traversal outside a pinned root. Missing, unavailable and partial observations remain distinct. No global total or completeness claim is made. Settings preserves last successful rows on refresh failure, fences replies on scope/access loss, supports narrow layouts and routes cleanup/recovery to owning features. No generic recursive deletion API exists.\n\nFlower recovery covers only its declared conversation/read-state/upload/media collection. Managed plugins, skills, task working files, user projects and Desktop state are not implicitly included. Existing owner-specific cleanup and recovery remain authoritative.",
-          "char_count": 2889
+          "body": "`StateRoot` resolves from explicit input, `REDEVEN_STATE_ROOT`, then `~/.redeven`; `StateDir` is its `local-environment` child. Desktop credentials/preferences remain in Electron userData, environment registrations in StateRoot/catalog, independent Gateway and Center in their explicitly selected roots. An Environment backup is not a Desktop profile or external-project backup.\n\nReDevPlugin receives only `StateDir/apps/plugins/platform`, including its control/data/assets, host adapters and author workspaces. Host migrations, SQL and recovery remain upstream. Retired root-level plugin files block plugin admission unchanged. Product draft records remain in apps/plugin-creation; market snapshots in apps/plugins. Flower Agent Plugins remain separately owned under ai/agent-plugins.\n\nManaged skills use `apps/skills/{packages,state.json,sources.json}` in the selected Environment. Explicit `.agents/skills` remains shared user content. Managed ancestors and metadata reject symlinks/non-directory placement. Disabled/source decisions follow managed files; retired metadata blocks Flower admission. No silent HOME-based fallback imports another Environment's managed skills.\n\nDesktop business caches all use `REDEVEN_DESKTOP_CACHE_ROOT`, or `StateRoot/cache/desktop`. userData is never a disposable cache. Existing cache acquisition, verification and eviction belong to their original owners. Old userData caches are retained; new roots reacquire verified packages without treating userData as disposable.\n\nConfig remains one atomic identity/recovery envelope: settings, binding/outbox and one-shot control artifacts cannot be split across independent writes. Provider credentials remain in secrets.json. Neither filename implies export safety. Sanitize settings exports; never export this envelope as portable preferences.\n\nTemplate catalog entries have no instance ID and publish no invented data path. Existing service inspection exposes actual binding-derived resource identity. New Host allocations retain instances/\u003cservice-id\u003e/{install,data,logs}; old resource locations remain their owner's concern.\n\nThe administrator-only no-store storage endpoint inspects named Environment locations with one 20,000-entry/two-second budget, without database reads or symlink traversal outside a pinned root. Missing, unavailable and partial observations remain distinct. No global total or completeness claim is made. Settings preserves last successful rows on refresh failure, fences replies on scope/access loss, supports narrow layouts and routes cleanup/recovery to owning features. No generic recursive deletion API exists.",
+          "char_count": 2625
         },
         {
           "id": "pre-release-relocation",
@@ -14463,6 +14463,13 @@
           "char_count": 1137
         },
         {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Flower recovery covers only its declared conversation/read-state/upload/media collection. Managed plugins, skills, task working files, user projects and Desktop state are not implicitly included. Existing owner-specific cleanup and recovery remain authoritative.",
+          "char_count": 262
+        },
+        {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
@@ -14470,7 +14477,7 @@
           "char_count": 371
         }
       ],
-      "snippet": "Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success.",
+      "snippet": "Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success. Environment data, Desktop profiles and external projects have sep",
       "backlinks": [
         {
           "label": "Flower prompt and rule sources",
@@ -24744,5 +24751,5 @@
       ]
     }
   ],
-  "source_sha256": "138807283224a1a83512fdc0f74ad4f2203d42abead20af8b11e8a950ae9d51f"
+  "source_sha256": "dafce5c2762da667ad147ffceb033ce0fac1c9f08020762f60625bb0908e62f1"
 }
