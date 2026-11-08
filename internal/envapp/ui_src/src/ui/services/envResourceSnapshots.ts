@@ -51,7 +51,7 @@ export function hostApplicationSnapshot(value: unknown): HostApplicationCatalog 
   return {
     ...(['unconfigured','enabled','paused'].includes(String(source.access_state)) ? { access_state: source.access_state as HostApplicationCatalog['access_state'] } : {}),
     availability: {
-      ...fields(availability, ['backend', 'native_ready', 'supported', 'ready', 'reason', 'version', 'requirements']),
+      ...fields(availability, ['backend', 'permission_app_name', 'native_ready', 'supported', 'ready', 'reason', 'version', 'requirements']),
       ...(availability.permissions ? { permissions: fields(availability.permissions, ['screen_recording', 'accessibility']) } : {}),
     } as HostApplicationCatalog['availability'],
     applications: list(source.applications).map(application),

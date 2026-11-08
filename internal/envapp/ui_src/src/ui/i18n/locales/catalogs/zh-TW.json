@@ -8191,6 +8191,8 @@
     "deployProtocolFailed": "不支援此管理員互動或協定。請切換授權方式或更新 Redeven。"
   },
   "hostAccess": {
+    "permissionApp": "在系統設定中找到「{app}」。",
+    "permissionAppUnknown": "目前啟動方式的授權名稱尚未確認，macOS 可能顯示啟動 Redeven 的終端機名稱。從 Finder 打開 Redeven Desktop 後，即可單獨為其授權。",
     "welcome": "使用應用程式或整個桌面",
     "choose": "選擇使用方式，我們會引導你完成設定。",
     "applications": "單獨開啟應用程式",

@@ -23,6 +23,7 @@ export function HostAccessWelcome(props: {
  </section>;
 }
 export function HostAccessPermissions(props: {
+    permissionAppName?: string;
     screen: boolean;
     input: boolean;
     needsInput: boolean;
@@ -35,7 +36,7 @@ export function HostAccessPermissions(props: {
     const i18n = useI18n();
     const next = (): 'screen_recording' | 'accessibility' | undefined => !props.screen ? 'screen_recording' : props.needsInput && !props.input ? 'accessibility' : undefined;
     return <section class="host-access-permissions" aria-label={i18n.t('hostAccess.requirements')}>
-  <Show when={next()}><p>{i18n.t('hostAccess.authorizeOnHost')}</p></Show>
+  <Show when={next()}><HostAccessPermissionDestination name={props.permissionAppName} /></Show>
   <For each={['screen_recording', 'accessibility'] as const}>{permission => <Show when={permission === 'screen_recording' ? !props.screen : props.needsInput && !props.input}>
    <div class="host-access-permission">
     <div class="host-access-permission-visual"><HostAccessPermissionIllustration kind={permission === 'screen_recording' ? 'screen' : 'input'} desktop={props.desktop} /></div>
@@ -51,6 +52,7 @@ export function HostAccessPermissions(props: {
  </section>;
 }
 export function HostAccessSystemPermissions(props: {
+    permissionAppName?: string;
     screen: boolean;
     input: boolean;
     allowed: boolean;
@@ -59,12 +61,18 @@ export function HostAccessSystemPermissions(props: {
 }) {
     const i18n = useI18n();
     return <details class="host-access-system"><summary>{i18n.t('hostAccess.systemSettings')}</summary>
-      <p>{i18n.t('hostAccess.sharedPermissions')}</p>
+      <HostAccessPermissionDestination name={props.permissionAppName} />
       <For each={['screen_recording', 'accessibility'] as const}>{permission => <div class="host-access-system-row">
         <div><strong>{i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission')}</strong><span>{i18n.t((permission === 'screen_recording' ? props.screen : props.input) ? 'hostAccess.allowed' : 'hostAccess.required')}</span></div>
-        <Button size="sm" variant="outline" disabled={!props.allowed || props.busy} onClick={() => props.onPermission(permission, true)}>{i18n.t('hostAccess.openSystemSettings')}</Button>
+        <Button size="sm" variant="outline" disabled={!props.allowed || props.busy} onClick={() => props.onPermission(permission, permission === 'screen_recording' ? props.screen : props.input)}>{i18n.t((permission === 'screen_recording' ? props.screen : props.input) ? 'hostAccess.openSystemSettings' : permission === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
       </div>}</For>
+      <p>{i18n.t('hostAccess.sharedPermissions')}</p>
     </details>;
+}
+
+function HostAccessPermissionDestination(props: { name?: string }) {
+    const i18n = useI18n();
+    return <p class="host-access-permission-destination">{props.name ? i18n.t('hostAccess.permissionApp', { app: props.name }) : i18n.t('hostAccess.permissionAppUnknown')}</p>;
 }
 
 export function HostAccessFeatureSettings(props: {
@@ -80,15 +88,21 @@ export function HostAccessFeatureSettings(props: {
     return <section class="host-access-feature-settings" aria-label={i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title')}>
       <div class="host-access-feature-heading">
         <HostAccessFeatureMark feature={props.feature} />
-        <div><h3>{i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title')}</h3><p>{i18n.t(props.feature === 'applications' ? 'hostAccess.appDescription' : 'hostAccess.desktopDescription')}</p></div>
+        <div class="host-access-feature-copy"><div class="host-access-feature-title"><h3>{i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title')}</h3><HostAccessStatus state={props.state} ready={props.ready} /></div><p>{i18n.t(props.feature === 'applications' ? 'hostAccess.appDescription' : 'hostAccess.desktopDescription')}</p></div>
       </div>
-      <HostAccessManagement {...props} />
+      <HostAccessManagement {...props} inlineStatus />
     </section>;
+}
+
+function HostAccessStatus(props: { state: HostAccessState; ready?: boolean }) {
+    const i18n = useI18n();
+    return <span class="host-access-state" data-state={props.state} data-ready={props.ready !== false} role="status">{i18n.t(props.state === 'paused' ? 'hostAccess.paused' : props.state === 'unconfigured' ? 'hostAccess.unconfigured' : props.ready === false ? 'hostAccess.needsAttention' : 'hostAccess.enabled')}</span>;
 }
 
 export function HostAccessManagement(props: {
     state: HostAccessState;
     ready?: boolean;
+    inlineStatus?: boolean;
     allowed: boolean;
     busy: boolean;
     onChange: (state: HostAccessState) => Promise<void>;
@@ -97,7 +111,7 @@ export function HostAccessManagement(props: {
     const i18n = useI18n();
     const [confirm, setConfirm] = createSignal<'paused' | 'unconfigured'>();
     return <section class="host-access-management" aria-label={i18n.t('hostAccess.manage')}>
-  <Show when={!confirm()}><div class="host-access-state-summary"><p class="host-access-state" data-state={props.state} data-ready={props.ready !== false} role="status">{i18n.t(props.state === 'paused' ? 'hostAccess.paused' : props.state === 'unconfigured' ? 'hostAccess.unconfigured' : props.ready === false ? 'hostAccess.needsAttention' : 'hostAccess.enabled')}</p></div></Show>
+  <Show when={!confirm() && !props.inlineStatus}><HostAccessStatus state={props.state} ready={props.ready} /></Show>
   <Show when={confirm()} fallback={<div class="host-access-actions">
    <Show when={props.state !== 'enabled' || props.ready === false}><Button variant="outline" disabled={!props.allowed || props.busy} onClick={props.onReconfigure}>{i18n.t(props.state === 'paused' ? 'hostAccess.resume' : props.state === 'unconfigured' ? 'hostAccess.setup' : 'hostAccess.continue')}</Button></Show>
    <Show when={props.state === 'enabled'}><Button variant="outline" disabled={!props.allowed || props.busy} onClick={() => setConfirm('paused')}>{i18n.t('hostAccess.pause')}</Button></Show>

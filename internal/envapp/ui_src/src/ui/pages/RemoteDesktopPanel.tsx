@@ -526,7 +526,7 @@ export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => v
         if (accessState() === 'paused' && available()) void changeAccess('enabled').catch(() => {});
         else { setManaging(false); void refresh(); }
       }} />
-      <Show when={capabilities()?.backend === 'macos'}><HostAccessSystemPermissions screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} allowed={full()} busy={!!busy()} onPermission={permission => void runAction('permission', 'remoteDesktop.permissionFailed', () => requestHostApplicationPermission(`${permission}_settings`))} /></Show>
+      <Show when={capabilities()?.backend === 'macos'}><HostAccessSystemPermissions permissionAppName={status()?.permission_app_name} screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} allowed={full()} busy={!!busy()} onPermission={(permission, manage) => void runAction('permission', 'remoteDesktop.permissionFailed', () => requestHostApplicationPermission(manage ? `${permission}_settings` : permission))} /></Show>
     </>}>
     <div class="remote-desktop-host">
       <p class="remote-desktop-state" role="status"><span class="remote-desktop-state-dot" data-ready={accessState() === 'enabled' && capabilities()?.state === 'ready' && available() && full() && !preparing() && (capabilities()?.backend !== 'wayland' || capabilities()?.authorization === 'saved' && status()?.unattended)} aria-hidden="true" />{stateCopy()}</p>
@@ -564,7 +564,7 @@ export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => v
       <For each={['control', 'view'] as const}>{value => <label data-selected={mode() === value}><input type="radio" name={descriptionID} value={value} checked={mode() === value} disabled={!!busy()} onChange={() => setMode(value)} /><span>{i18n.t(value === 'view' ? 'remoteDesktop.view' : 'hostAccess.controlMode')}</span></label>}</For>
     </div></fieldset>
     <Show when={macPermission()}>
-      <HostAccessPermissions desktop screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} needsInput={mode()==='control'} allowed={full()} busy={!!busy()} onRefresh={()=>void refresh()} onPermission={(permission,manage)=>void runAction('permission','remoteDesktop.permissionFailed',()=>requestHostApplicationPermission(manage?`${permission}_settings`:permission))} />
+      <HostAccessPermissions permissionAppName={status()?.permission_app_name} desktop screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} needsInput={mode()==='control'} allowed={full()} busy={!!busy()} onRefresh={()=>void refresh()} onPermission={(permission,manage)=>void runAction('permission','remoteDesktop.permissionFailed',()=>requestHostApplicationPermission(manage?`${permission}_settings`:permission))} />
     </Show>
 
     <Show when={!sshManaged() && capabilities()?.backend === 'wayland' && capabilities()?.unattended}><div class="remote-desktop-option remote-desktop-sharing"><Switch checked={pendingApproval() ?? status()?.unattended ?? false} disabled={!full() || !!busy() || refreshing()} onChange={rememberApproval} label={i18n.t('remoteDesktop.unattended')} description={i18n.t('remoteDesktop.unattendedHint')} /></div></Show>

@@ -45,9 +45,12 @@
 .host-access-feature-settings{min-width:0;padding:18px;border:1px solid var(--border);border-radius:var(--floe-radius-group);}
 .host-access-feature-heading{display:flex;align-items:center;gap:16px;}
 .host-access-feature-heading>.host-access-feature-mark{width:60px;height:48px;flex-shrink:0;}
+.host-access-feature-copy{flex:1;min-width:0;}
+.host-access-feature-title{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;}
+.host-access-feature-title>.host-access-state{font-size:12px;line-height:1.5;max-width:100%;overflow-wrap:anywhere;}
 .host-access-feature-heading h3{font-size:15px;font-weight:600;line-height:1.5;}
 .host-access-feature-heading p,.host-access-local-note,.host-access-ready{font-size:13px;line-height:1.6;color:var(--muted-foreground);}
-.host-access-feature-settings .host-access-management{border:0;padding:0;margin:14px 0 0;gap:12px;}
+.host-access-feature-settings .host-access-management{border:0;padding:0;margin:12px 0 0 76px;gap:12px;}
 .host-access-state-summary:has(>.host-access-state){gap:8px;}
 .host-access-state::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;margin-inline-end:7px;background:var(--muted-foreground);}
 .host-access-state[data-state=enabled]::before{background:var(--redeven-status-success-foreground);}
@@ -57,6 +60,6 @@
 .host-access-system-row>div{display:grid;gap:3px;}
 .host-access-system-row strong{font-weight:500;color:var(--foreground);}
 .host-access-back{margin-bottom:16px;}
-@media(max-width:380px){.host-access-feature-settings{padding:14px;}.host-access-feature-heading{gap:12px;align-items:flex-start;}.host-access-feature-heading>.host-access-feature-mark{width:48px;height:40px;}.host-access-system-row{flex-wrap:wrap;}}
+@media(max-width:380px){.host-access-feature-settings{padding:14px;}.host-access-feature-heading{gap:12px;align-items:flex-start;}.host-access-feature-heading>.host-access-feature-mark{width:48px;height:40px;}.host-access-feature-settings .host-access-management{margin-inline-start:0;}.host-access-system-row{flex-wrap:wrap;}}
 
 .host-access-state[data-state=enabled][data-ready=false]::before{background:var(--redeven-status-warning-foreground);}

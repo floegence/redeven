@@ -170,6 +170,9 @@ func (m *Manager) macCatalog(ctx context.Context, owner string) (Catalog, error)
 		return result, nil
 	}
 	result.Availability = msg.Availability
+	// Presentation only: Launch Services supplies this name; never infer TCC
+	// ownership from an ancestor executable or use the name as grant evidence.
+	result.Availability.PermissionAppName = os.Getenv("REDEVEN_HOST_PERMISSION_APP_NAME")
 	result.Applications = msg.Applications
 	result.Running = msg.Running
 	return result, nil

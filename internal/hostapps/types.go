@@ -21,14 +21,15 @@ type Application struct {
 }
 
 type Availability struct {
-	Backend      string          `json:"backend,omitempty"`
-	NativeReady  bool            `json:"native_ready,omitempty"`
-	Permissions  map[string]bool `json:"permissions,omitempty"`
-	Supported    bool            `json:"supported"`
-	Ready        bool            `json:"ready"`
-	Reason       string          `json:"reason,omitempty"`
-	Version      string          `json:"version,omitempty"`
-	Requirements []string        `json:"requirements,omitempty"`
+	PermissionAppName string          `json:"permission_app_name,omitempty"`
+	Backend           string          `json:"backend,omitempty"`
+	NativeReady       bool            `json:"native_ready,omitempty"`
+	Permissions       map[string]bool `json:"permissions,omitempty"`
+	Supported         bool            `json:"supported"`
+	Ready             bool            `json:"ready"`
+	Reason            string          `json:"reason,omitempty"`
+	Version           string          `json:"version,omitempty"`
+	Requirements      []string        `json:"requirements,omitempty"`
 }
 
 type RunningApplication struct {

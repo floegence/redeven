@@ -25,7 +25,7 @@ Persisted `host_access.applications` and `host_access.desktop` independently rec
 
 Pause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.
 
-When both features are unconfigured, goal-based choices precede authorization; browsing remains available. Setup explains capability purpose and offers one next action. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws pending opening but retains grants. Access settings directly shows both feature states and scoped actions; system permissions stay separate. [Launcher interaction](remote-desktop-launcher.md) owns setup and connection presentation.
+When both features are unconfigured, goal-based choices precede authorization; browsing remains available. Setup explains capability purpose and offers one next action. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws pending opening but retains grants. Access settings places state beside each feature title, with scoped actions below; system permissions stay separate. Returning from macOS settings refreshes permissions and both feature summaries, not only running apps. [Launcher interaction](remote-desktop-launcher.md) owns setup and connection presentation.
 
 ## Platforms
 ### Immutable launch plan

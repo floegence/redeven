@@ -94,6 +94,20 @@ done
 	}
 }
 
+func TestMacPermissionAppNameComesOnlyFromLauncher(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native macOS adapter")
+	}
+	for _, name := range []string{"", "Redeven Desktop Dev"} {
+		t.Setenv("REDEVEN_HOST_PERMISSION_APP_NAME", name)
+		m := macFixture(t)
+		catalog, err := m.macCatalog(context.Background(), "alice")
+		if err != nil || catalog.Availability.PermissionAppName != name {
+			t.Fatalf("permission identity: %+v, %v", catalog.Availability, err)
+		}
+	}
+}
+
 func macFixtureScript(t *testing.T, script string) *Manager {
 	t.Helper()
 	// Fixtures model the multiplexed native protocol while keeping each test's

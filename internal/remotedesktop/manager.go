@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -51,14 +52,15 @@ type Session struct {
 	HostName  string `json:"host_name"`
 }
 type Status struct {
-	AccessState    string                             `json:"access_state,omitempty"`
-	ApprovalPolicy string                             `json:"approval_policy"`
-	Capabilities   nativeapps.HostDesktopCapabilities `json:"capabilities"`
-	Setup          *nativeapps.Status                 `json:"setup,omitempty"`
-	Unattended     bool                               `json:"unattended"`
-	ControlInUse   bool                               `json:"control_in_use"`
-	LastDisplayID  string                             `json:"last_display_id"`
-	LoginService   nativeapps.ServiceStatus           `json:"login_service"`
+	PermissionAppName string                             `json:"permission_app_name,omitempty"`
+	AccessState       string                             `json:"access_state,omitempty"`
+	ApprovalPolicy    string                             `json:"approval_policy"`
+	Capabilities      nativeapps.HostDesktopCapabilities `json:"capabilities"`
+	Setup             *nativeapps.Status                 `json:"setup,omitempty"`
+	Unattended        bool                               `json:"unattended"`
+	ControlInUse      bool                               `json:"control_in_use"`
+	LastDisplayID     string                             `json:"last_display_id"`
+	LoginService      nativeapps.ServiceStatus           `json:"login_service"`
 }
 type ownedSession struct {
 	physical   bool
@@ -158,6 +160,9 @@ func (m *Manager) StatusTarget(ctx context.Context, owner, target string) (Statu
 	case message := <-connection.Control():
 		if message.Capabilities != nil {
 			status.Capabilities = *message.Capabilities
+			if status.Capabilities.Backend == "macos" {
+				status.PermissionAppName = os.Getenv("REDEVEN_HOST_PERMISSION_APP_NAME")
+			}
 			if status.Capabilities.Service != "" {
 				status.LoginService = nativeapps.ServiceStatus{State: status.Capabilities.Service, Backend: status.Capabilities.Backend}
 			}

@@ -8195,6 +8195,8 @@
     "deployProtocolFailed": "Cette authentification administrateur ou ce protocole n’est pas pris en charge. Changez de méthode d’autorisation ou mettez Redeven à jour."
   },
   "hostAccess": {
+    "permissionApp": "Dans Réglages Système, recherchez « {app} ».",
+    "permissionAppUnknown": "Le nom associé aux autorisations de ce lancement n’est pas confirmé. macOS peut afficher le terminal qui a lancé Redeven. Ouvrez Redeven Desktop depuis le Finder pour lui accorder ses propres autorisations.",
     "welcome": "Utiliser des applications ou le bureau",
     "choose": "Choisissez votre mode d’utilisation. Nous vous guiderons dans la configuration.",
     "applications": "Ouvrir des applications séparément",

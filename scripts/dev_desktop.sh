@@ -466,7 +466,12 @@ collect_desktop_pids() {
 		*"--redeven-dev-instance=$DEVELOPMENT_INSTANCE_ID"*) ;;
 		*) return 0 ;;
 	esac
-	[ "$cwd" = "$DESKTOP_DIR" ] || return 0
+	if [ "$cwd" != "$DESKTOP_DIR" ]; then
+		case "$command" in
+			*"$DEVELOPMENT_STATE_ROOT/desktop/macos-launch/Redeven Desktop Dev.app/Contents/MacOS/"*" $DESKTOP_DIR"*) ;;
+			*) return 0 ;;
+		esac
+	fi
 	add_pid "$pid"
 }
 
@@ -921,7 +926,7 @@ start_desktop() {
   if [ "${#ELECTRON_DEBUG_ARGS[@]}" -gt 0 ]; then
     cmd+=("${ELECTRON_DEBUG_ARGS[@]}")
   fi
-	cmd+=("--redeven-dev-instance=$DEVELOPMENT_INSTANCE_ID" .)
+	cmd+=("--redeven-dev-instance=$DEVELOPMENT_INSTANCE_ID" "$DESKTOP_DIR")
   if [ "${#ELECTRON_ARGS[@]}" -gt 0 ]; then
     cmd+=("${ELECTRON_ARGS[@]}")
   fi
@@ -946,6 +951,18 @@ start_desktop() {
   [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
 
   mkdir -p "$(dirname -- "$DEVELOPMENT_DESKTOP_PID_FILE")"
+  if [ "$(uname -s)" = Darwin ]; then
+    local launch_paths launcher development_app
+    launch_paths=$(node "$SCRIPT_DIR/dev_desktop_macos.mjs" "$electron_binary" "$DEVELOPMENT_STATE_ROOT" "$DEVELOPMENT_INSTANCE_ID" "$DESKTOP_DIR")
+    launcher=$(printf '%s\n' "$launch_paths" | sed -n '1p')
+    development_app=$(printf '%s\n' "$launch_paths" | sed -n '2p')
+    "$launcher" "$development_app" "$DEVELOPMENT_DESKTOP_PID_FILE" "${cmd[@]:1}" &
+    DESKTOP_PID=$!
+    desktop_status=0
+    wait "$DESKTOP_PID" || desktop_status=$?
+    DESKTOP_PID=""
+    return "$desktop_status"
+  fi
   (
     cd "$DESKTOP_DIR"
     exec env REDEVEN_DESKTOP_PID_FILE="$DEVELOPMENT_DESKTOP_PID_FILE" sh -c '

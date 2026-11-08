@@ -8191,6 +8191,8 @@
     "deployProtocolFailed": "この管理者認証またはプロトコルは未対応です。認証方法を切り替えるか Redeven を更新してください。"
   },
   "hostAccess": {
+    "permissionApp": "システム設定で「{app}」を見つけてください。",
+    "permissionAppUnknown": "今回の起動方法では権限の対象名を確認できません。Redeven を起動したターミナル名が表示される場合があります。Finder から Redeven Desktop を開くと、個別に権限を付与できます。",
     "welcome": "アプリまたはデスクトップを使う",
     "choose": "使い方を選択してください。設定を順にご案内します。",
     "applications": "アプリを個別に開く",

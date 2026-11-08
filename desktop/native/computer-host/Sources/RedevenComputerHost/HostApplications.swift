@@ -170,15 +170,7 @@ final class HostApplicationSession {
                 guard HostApplicationCatalog.applications(extra: [url]).contains(url) else { throw NativeInput.invalid("Invalid application bundle.") }
                 self.output(["type": "validated"])
             case "permissions":
-                if request["permission"] as? String == "screen_recording_settings" {
-                    guard NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!) else { throw NativeInput.invalid("System Settings could not be opened.") }
-                }
-                else if request["permission"] as? String == "accessibility_settings" {
-                    guard NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!) else { throw NativeInput.invalid("System Settings could not be opened.") }
-                }
-                else if request["permission"] as? String == "screen_recording" { _ = CGRequestScreenCaptureAccess() }
-                else if request["permission"] as? String == "accessibility" { _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary) }
-                else { throw NativeInput.invalid("Unknown permission.") }
+                try HostApplicationPermissions.perform(request["permission"] as? String ?? "")
                 self.output(["type": "result"])
             case "launch", "native": try launch(request, native: action == "native")
             case "configure":

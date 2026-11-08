@@ -3,7 +3,7 @@ type: Development Contract
 title: Desktop development sessions and bundles
 tags: [desktop, development, storage, retention]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -36,6 +36,8 @@ Reuse compatible intact Gateways; drift never auto-upgrades. Owner repairs corru
 
 Dev gzip1/Brotli4 preserves decoded bytes; release uses maximum compression; profile belongs to identity. Exclude other worktrees/native cache from Gateway copies. Record dependency/verification/Desktop/Runtime/Gateway durations. Rebuilt/reused launch acceptance needs saved local Gateway,exact Runtime commit and verified cleanup; empty profile timing is insufficient. Exit/signals/failure stop owned services only. Electron resolver emits only path to stdout, diagnostics stderr, propagates failure and rechecks executable after build.
 
+macOS stages a profile-owned, signed `Redeven Desktop Dev.app` from installed Electron and opens it through Launch Services. Direct terminal exec inherits terminal privacy authority and is not equivalent. Stable per-profile identity and verified source/output receipts preserve grants across reuse. The supervisor records the real app PID, forwards interruption, observes exit status and never substitutes another running instance. Packaged Launch Services metadata names `Redeven Desktop`; CLI ancestry without launcher evidence remains unknown.
+
 ## Credentials/retention
 Unpackaged dev uses AES-256-GCM with random retained0600 profile key, protecting plaintext rather than same-user access. Other modes use system storage without constructor probes. Explicit legacy Keychain recovery never reads preferences/secrets automatically; migrate files atomically, retaining credentials/Retry/Quit on failure. Corrupt keys cannot reset accounts/Runtime/Keychain.
 
@@ -47,6 +49,7 @@ Prune generated packages only in selected profile; builders own in-progress dire
 
 # Evidence
 
-- November 4, 2026: fixed the stale shell-variable Rust-pin reader. An isolated macOS ARM64 session launched the real `dev_desktop.sh` through a managed checkout alias, rebuilt Desktop and published ReDevPlugin 3.15.0 resources, then restarted with verified cache reuse. Both real windows displayed the local Environment as Ready, both Runtime process identities were verified, and the same immutable bundle was reused. The supervised session passed cleanup with no remaining processes. Focused checks passed 39 cases including real Linux amd64/arm64 C/archive/Rust-link probes and offline/download failures; process ownership and all 12 signal/failure cleanup scenarios passed. Preserve the earlier alias-path failures as failed evidence; the final product launch and cache-reuse results are separate successful runs.
+- November 4, 2026: isolated macOS ARM64 launcher rebuilt and reused the verified bundle through a checkout alias. Saved Gateway, ready local Environment, exact Runtime identities and cleanup passed; 39 focused cases and 12 signal/failure cases passed. Earlier alias failures remain failed evidence.
+- November 8, 2026: Launch Services fixture verified independent TCC identity, denied unrequested grants, sandboxed renderer, normal/error exits and interruption cleanup. Product UI fixtures covered permission destinations and refresh; no new user grant was made.
 - `redeven:scripts/dev_desktop.sh` - Source.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Tests.

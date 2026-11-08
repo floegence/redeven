@@ -255,7 +255,12 @@ export default {
     sign: signPackagedRuntime,
     signIgnore: ['/Contents/Resources/bin/redevplugin-runtime$'],
     icon: path.join(buildResourcesDir, 'icon.icns'),
-    extendInfo: macUpdaterInfo,
+    extendInfo: {
+      ...macUpdaterInfo,
+      // Only Launch Services establishes the app's own TCC responsibility.
+      // Direct CLI launches intentionally keep the permission name unknown.
+      LSEnvironment: { REDEVEN_HOST_PERMISSION_APP_NAME: 'Redeven Desktop' },
+    },
   },
   dmg: {
     sign: true,

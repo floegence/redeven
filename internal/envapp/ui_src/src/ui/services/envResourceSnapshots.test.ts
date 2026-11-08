@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { codespaceSnapshot, containerInventorySnapshot, containerRuntimeSnapshot, containerServiceSnapshot, forwardSnapshot, hostApplicationSnapshot, managedServiceSnapshot } from './envResourceSnapshots';
 
 describe('disposable resource presentation contracts', () => {
+  it('retains the permission destination without inventing an app name', () => {
+    const catalog = { availability: { supported: true, ready: true }, applications: [], sessions: [] };
+    expect(hostApplicationSnapshot(catalog).availability.permission_app_name).toBeUndefined();
+    expect(hostApplicationSnapshot({ ...catalog, availability: { ...catalog.availability, permission_app_name: 'Redeven Desktop Dev' } }).availability.permission_app_name).toBe('Redeven Desktop Dev');
+    expect(() => hostApplicationSnapshot({ ...catalog, availability: { ...catalog.availability, permission_app_name: {} } })).toThrow();
+  });
   it('preserves explicit host access intent and rejects unknown states', () => {
     const catalog = { availability: { supported: true, ready: true }, applications: [], sessions: [] };
     for (const access_state of ['enabled', 'paused', 'unconfigured'] as const) {

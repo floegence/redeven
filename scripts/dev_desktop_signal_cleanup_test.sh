@@ -41,6 +41,13 @@ cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "
 cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$ROOT_DIR/scripts/run_parallel_builds.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
+# Model the Launch Services supervisor while preserving the fake Electron PID.
+cat > "$FAKE_SCRIPTS/dev_desktop_macos.mjs" <<'JS'
+const fs = await import('node:fs'), path = await import('node:path');
+const launcher = path.join(process.argv[3], 'fake-launch');
+fs.writeFileSync(launcher, '#!/bin/bash\napp=$1; pid_file=$2; shift 2\nprintf "%s\\n" "$$" > "$pid_file"\ncd "${@: -1}" 2>/dev/null || true\nexec "$app" "$@"\n', {mode:0o700});
+console.log(launcher); console.log(process.argv[2]);
+JS
 cat > "$FAKE_SCRIPTS/dev_desktop_build_proxy.mjs" <<'JS'
 if (process.env.FAKE_SESSION_CASE === 'system-proxy') {
   console.log('https_proxy=http://127.0.0.1:1082');

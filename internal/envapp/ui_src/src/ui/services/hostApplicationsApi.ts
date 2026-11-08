@@ -48,7 +48,7 @@ export type RunningHostApplication = Readonly<{ application_id: string; instance
 
 export type HostApplicationCatalog = Readonly<{
  access_state?: HostAccessState;
-  availability: { backend?: 'macos' | 'linux' | 'wayland'; native_ready?: boolean; permissions?: {screen_recording: boolean; accessibility: boolean}; supported: boolean; ready: boolean; reason?: string; version?: string; requirements?: string[] };
+  availability: { backend?: 'macos' | 'linux' | 'wayland'; permission_app_name?: string; native_ready?: boolean; permissions?: {screen_recording: boolean; accessibility: boolean}; supported: boolean; ready: boolean; reason?: string; version?: string; requirements?: string[] };
   applications: HostApplication[];
   sessions: HostApplicationSession[];
   running?: RunningHostApplication[];

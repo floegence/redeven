@@ -326,6 +326,8 @@ export const enUS = defineDictionary({
     connectionCenter: 'Connection Center',
   },
   hostAccess: {
+    "permissionApp": "In System Settings, find “{app}”.",
+    "permissionAppUnknown": "The permission name is not confirmed for this launch. macOS may list the terminal that started Redeven. Open Redeven Desktop from Finder to grant it its own permissions.",
     "controlMode": "Mouse and keyboard",
     "needsAttention": "Setup needs attention",
     "openSystemSettings": "Open system settings",

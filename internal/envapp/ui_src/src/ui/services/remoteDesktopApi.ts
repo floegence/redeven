@@ -6,6 +6,7 @@ export type DesktopDisplay = { id: string; name: string; width: number; height: 
 export type DesktopAuthorization = 'unsupported' | 'needs_consent' | 'saved' | 'restoring' | 'revoked' | 'unknown';
 export type LoginServiceStatus = { state: 'unsupported' | 'not_installed' | 'authorization_required' | 'installing' | 'active' | 'stopped' | 'failed' | 'uninstalling'; reason?: string; backend?: string };
 export type RemoteDesktopStatus = {
+  permission_app_name?: string;
   access_state?: HostAccessState;
   capabilities: { backend: string; state: string; authorization?: DesktopAuthorization; reason?: string; screen: boolean; input: boolean; audio: boolean; clipboard: boolean; unattended?: boolean; unlock?: boolean; displays: DesktopDisplay[] };
   unattended: boolean;

@@ -666,6 +666,7 @@ describe('macOS running application management', () => {
     expect(controlText(host)).toContain('Open the application to respond to any save dialog.');
     expect(button('Quit application · Text Editor')).toBeDefined();
     state.running.mockResolvedValue([]);
+    state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [], running: [] });
     window.dispatchEvent(new Event('focus')); await settle();
     expect(button('Quit application · Text Editor')).toBeUndefined();
   });
