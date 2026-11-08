@@ -334,9 +334,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                 </button>
 
               </div>
-              <p id="plugin-launcher-description" class="sr-only">
-                {i18n.t('uiCopy.plugin.launcherDescription')}
-              </p>
               <Show when={(props.mobile || isWorkbenchPopup()) && pluginTiles().length >= CATEGORY_FILTER_THRESHOLD}>
                 <div class="mt-3 flex gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
                   <CategoryButton id="all" active={category()} onSelect={setCategory} label={i18n.t('uiCopy.plugin.categoryAll')} />
@@ -474,7 +471,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             data-plugin-panel-motion-state={motionState()}
             tabIndex={-1}
             aria-label={i18n.t('uiCopy.plugin.launcherTitle')}
-            aria-describedby="plugin-launcher-description"
             class={cn(
               'plugin-panel-surface redeven-plugin-motion flex max-h-[min(380px,calc(100dvh-120px))] w-[min(320px,calc(100vw-24px))] min-h-0 flex-col overflow-hidden text-foreground',
             )}
@@ -489,6 +485,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
         <>
           <SurfaceAnchoredLayer
             anchor={props.trigger ?? undefined}
+            portalScope="viewport"
             placement="right"
             gap={16}
             onAnchorDisconnect={dismiss}
@@ -506,7 +503,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               inert={!props.open}
               aria-hidden={props.open ? undefined : 'true'}
               aria-labelledby="plugin-launcher-title"
-              aria-describedby="plugin-launcher-description"
               class="plugin-panel-surface plugin-activity-panel redeven-plugin-motion flex min-h-0 w-full flex-col rounded-2xl border bg-popover text-popover-foreground shadow-2xl"
             >
               <span class="plugin-activity-arrow" aria-hidden="true" />

@@ -144,6 +144,22 @@ await session.run(async () => {
     assert.equal((await current()).version, '0.2.0');
     frame = await launchWorker();
     await echo(frame, 'Updated plugin survives Runtime restart');
+    phase('Disable and explicitly re-enable the retained plugin');
+    installed = await current();
+    await request('/_redevplugin/api/plugins/disable', {
+      plugin_instance_id: installed.plugin_instance_id, expected_management_revision: installed.management_revision, reason: 'user_disabled',
+    });
+    installed = await current();
+    assert.equal(installed.enable_state, 'disabled_by_user');
+    // Use the user-facing action so the ordinary coordinator owns both the
+    // mutation and its inventory refresh, just as in an actual retained window.
+    await page.getByRole('button', { name: 'Enable plugin', exact: true }).click();
+    await waitFor(async () => (await current()).enable_state === 'enabled', 30000, 'explicit re-enable');
+    const restoredHost = page.locator('[data-plugin-surface-host]').filter({ visible: true }).last();
+    frame = restoredHost.frameLocator('iframe');
+    await frame.getByRole('button', { name: 'Send to worker', exact: true }).waitFor();
+    await echo(frame, 'Explicitly re-enabled worker executes');
+    report.assertions.push('Disable revokes execution and explicit re-enable restores the retained surface');
     await page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first().click();
     await page.locator('[data-plugin-center-market-action]').click();
     await page.locator('[data-plugin-center-drafts]').click();
@@ -151,6 +167,13 @@ await session.run(async () => {
     await waitFor(() => page.locator('[data-plugin-creation-workspace]').getAttribute('data-project-id').then(value => value === fixture.draft_id), 30000, 'retained author workspace');
     await page.screenshot({ path: path.join(evidence, 'author-restored.png') });
     report.assertions.push('Restart retains the updated worker, author workspace and creation history');
+    phase('Uninstall only the isolated acceptance plugin');
+    installed = await current();
+    await request('/_redevplugin/api/plugins/uninstall', {
+      plugin_instance_id: installed.plugin_instance_id, expected_management_revision: installed.management_revision, delete_data: true,
+    });
+    assert.equal(await current(), undefined);
+    report.assertions.push('Explicit uninstall removes the isolated plugin from authoritative inventory');
     report.status = 'passed';
   } catch (error) {
     report.status = 'failed';

@@ -7030,7 +7030,6 @@
       "panelTitle": "プラグイン",
       "panelDescription": "このランタイムにインストールされている公式プラグインです。",
       "launcherTitle": "アプリケーション",
-      "launcherDescription": "このランタイムにインストールされているツールを開きます。",
       "launcherSearchLabel": "インストール済みプラグインを検索",
       "launcherSearchPlaceholder": "アプリケーションを検索",
       "launcherApplications": "アプリケーション",

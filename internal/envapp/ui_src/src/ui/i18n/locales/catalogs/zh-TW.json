@@ -7030,7 +7030,6 @@
       "panelTitle": "外掛程式",
       "panelDescription": "安裝在此執行環境中的官方外掛程式。",
       "launcherTitle": "應用程式",
-      "launcherDescription": "開啟此執行環境中已安裝的工具。",
       "launcherSearchLabel": "搜尋已安裝的外掛程式",
       "launcherSearchPlaceholder": "搜尋應用程式",
       "launcherApplications": "應用程式",

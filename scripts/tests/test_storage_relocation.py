@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -57,10 +58,30 @@ class RelocationTests(unittest.TestCase):
         self.assertNotIn('Traceback', result.stderr)
         self.assertEqual((self.state / m.MARKER).read_text(), '[]')
 
+    def test_startup_preflight_rejects_special_journal_without_reading_it(self):
+        os.mkfifo(self.state / m.MARKER)
+        result = subprocess.run([sys.executable, str(Path(m.__file__)), '--state-dir', str(self.state), '--check-plugins'], capture_output=True, text=True, timeout=3)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('invalid storage relocation journal', result.stderr)
+
     def test_startup_preflight_rejects_orphan_sidecars_without_writing(self):
         (self.state / 'control.sqlite-wal').write_bytes(b'opaque orphan')
         self.assertNotEqual(self.check_plugins().returncode, 0)
         self.assertFalse((self.state / m.MARKER).exists())
+
+    def test_nested_dependency_links_fail_without_mutating_retained_state(self):
+        source = self.state / 'author-workspaces/projects/example/source/node_modules'
+        (source / '.bin').mkdir(parents=True)
+        (source / 'tool.js').write_bytes(b'retained dependency')
+        (source / '.bin/tool').symlink_to('../tool.js')
+        (self.state / 'control.sqlite').write_bytes(b'retained control state')
+        with self.assertRaisesRegex(ValueError, 'unsupported filesystem entry'):
+            m.relocate(self.state, apply=True)
+        self.assertEqual((source / '.bin/tool').readlink(), Path('../tool.js'))
+        self.assertEqual((source / 'tool.js').read_bytes(), b'retained dependency')
+        self.assertEqual((self.state / 'control.sqlite').read_bytes(), b'retained control state')
+        self.assertFalse((self.state / m.MARKER).exists())
+        self.assertFalse((self.state / 'apps/plugins/platform').exists())
 
     def test_opaque_sqlite_and_sidecars_move_without_interpretation(self):
         for name in ['control.sqlite', 'control.sqlite-wal', 'secrets.sqlite']:

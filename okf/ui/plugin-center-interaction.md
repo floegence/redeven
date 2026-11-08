@@ -12,6 +12,8 @@ Redeven owns Plugin Center navigation and retained selection/search/filter/scrol
 # Contract
 
 ## Management placement and input
+The Activity Applications launcher uses the published Floe anchored viewport portal so its global commands remain clickable above retained plugin/Flower windows. Its source trigger remains the anchor; viewport bounds control sizing, flipping and clipping. Workbench keeps the local Dock popover and its own material. Opening the launcher or Plugin Center never remounts, reparents or reloads a live plugin document.
+
 Plugin Center is a retained category in the global Settings dialog, never a work destination or a child of inert/transformed Workbench ancestors. Connection and permission portals follow exact host visibility while retaining their drafts. Successful Open closes Settings and focuses the exact Workbench widget or Activity window after modal presence exits. Activity windows retain their owners while hidden under Settings; mobile isolation cannot compete with the modal. Reopening restores directory selection/search/scroll. Failed Open preserves context/error.
 
 ## Directory and responsive details

@@ -7030,7 +7030,6 @@
       "panelTitle": "Plugins",
       "panelDescription": "In dieser Laufzeit installierte offizielle Plugins.",
       "launcherTitle": "Anwendungen",
-      "launcherDescription": "In dieser Laufzeit installierte Werkzeuge öffnen.",
       "launcherSearchLabel": "Installierte Plugins durchsuchen",
       "launcherSearchPlaceholder": "Anwendungen durchsuchen",
       "launcherApplications": "Anwendungen",

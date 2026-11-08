@@ -261,7 +261,8 @@ describe('PluginPanel', () => {
     expect(plugin.getAttribute('role')).toBeNull();
     expect(plugin.parentElement?.tagName).toBe('LI');
     expect(plugin.querySelector('[data-plugin-update-badge]')).toBeNull();
-    expect(dialog.getAttribute('aria-describedby')).toBe('plugin-launcher-description');
+    expect(dialog.getAttribute('aria-labelledby')).toBe('plugin-launcher-title');
+    expect(document.getElementById('plugin-launcher-title')?.textContent).toBe('Applications');
     expect(center).toHaveLength(1);
     expect(center[0]?.getAttribute('aria-label')).toBe('Plugin Center');
     expect(center[0]?.title).toBe('Plugin Center');

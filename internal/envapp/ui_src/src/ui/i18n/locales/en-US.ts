@@ -1164,7 +1164,6 @@ export const enUS = defineDictionary({
       panelTitle: 'Plugins',
       panelDescription: 'Official plugins installed in this runtime.',
       launcherTitle: 'Applications',
-      launcherDescription: 'Open tools installed in this runtime.',
       launcherSearchLabel: 'Search installed plugins',
       launcherSearchPlaceholder: 'Search applications',
       launcherApplications: 'Applications',

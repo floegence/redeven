@@ -121,6 +121,7 @@ def check_plugin_placement(state):
     marker = secure_path(state, MARKER)
     blocked = False
     if marker.exists():
+        if not marker.is_file(): raise ValueError('invalid storage relocation journal')
         record = json.loads(marker.read_text())
         blocked = not isinstance(record, dict) or record.get('version') != 1 or record.get('status') != 'complete'
     for source in allowed_moves():

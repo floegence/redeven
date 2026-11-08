@@ -7030,7 +7030,6 @@
       "panelTitle": "Plugins",
       "panelDescription": "Plugins oficiales instalados en este entorno de ejecución.",
       "launcherTitle": "Aplicaciones",
-      "launcherDescription": "Abre las herramientas instaladas en este entorno de ejecución.",
       "launcherSearchLabel": "Buscar plugins instalados",
       "launcherSearchPlaceholder": "Buscar aplicaciones",
       "launcherApplications": "Aplicaciones",

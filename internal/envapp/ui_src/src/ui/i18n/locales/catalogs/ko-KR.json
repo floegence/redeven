@@ -7030,7 +7030,6 @@
       "panelTitle": "플러그인",
       "panelDescription": "이 런타임에 설치된 공식 플러그인입니다.",
       "launcherTitle": "애플리케이션",
-      "launcherDescription": "이 런타임에 설치된 도구를 엽니다.",
       "launcherSearchLabel": "설치된 플러그인 검색",
       "launcherSearchPlaceholder": "애플리케이션 검색",
       "launcherApplications": "애플리케이션",
