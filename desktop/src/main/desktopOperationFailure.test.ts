@@ -7,9 +7,47 @@ import {
   diagnosticsFromRecentLogs,
   operationFailureFromUnknown,
   runtimeStateIncompatibleFailure,
+  runtimeAccessVerificationFailure,
 } from './desktopOperationFailure';
+import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
+import { createDesktopI18n } from '../shared/i18n';
+import { buildWelcomeOperationFailureDisplay } from '../welcome/operationFailureDisplay';
 
 describe('desktopOperationFailure main helpers', () => {
+  it('reports the observed readiness reason without exposing private bridge credentials', () => {
+    const failure = runtimeAccessVerificationFailure('udesk26', { ok: true, value: {
+      local_ui_url: '', local_ui_urls: [], local_ui_bridge_token: 'private-token',
+      runtime_service: normalizeRuntimeServiceSnapshot({
+        compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH, compatibility: 'compatible',
+        open_readiness: { state: 'starting', reason_code: 'env_app_shell_unreachable', message: 'Environment App shell is not reachable yet.' },
+      }),
+    } });
+    expect(failure).toMatchObject({ code: 'runtime_access_verification_failed',
+      title_key: 'progress.runtimeAccessVerificationFailedTitle',
+      summary_key: 'progress.runtimeAccessVerificationFailedSummary', target_label: 'udesk26' });
+    expect(failure.detail).toBeUndefined();
+    expect(JSON.parse(failure.diagnostics![0].text)).toMatchObject({ stage: 'runtime_readiness',
+      open_readiness: { state: 'starting', reason_code: 'env_app_shell_unreachable' } });
+    expect(JSON.stringify(failure)).not.toContain('private-token');
+    for (const locale of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'] as const) {
+      const display = buildWelcomeOperationFailureDisplay({
+        i18n: createDesktopI18n(locale), failure, fallback_title: 'Failure',
+      });
+      expect(display.title).not.toBe('Failure');
+      expect(display.summary).toContain('udesk26');
+      expect(display.summary).not.toContain('{target}');
+      expect(display.diagnostics).toEqual(failure.diagnostics);
+    }
+  });
+
+  it('preserves the exact access probe failure stage and status', () => {
+    const failure = runtimeAccessVerificationFailure('udesk26', { ok: false, failure: {
+      kind: 'invalid_response', stage: 'runtime_health', status_code: 401,
+    } });
+    expect(JSON.parse(failure.diagnostics![0].text)).toEqual({
+      kind: 'invalid_response', stage: 'runtime_health', status_code: 401,
+    });
+  });
   it('distinguishes SSH authentication rejection from network and Runtime failures', () => {
     const fallback = desktopOperationFailurePresentation({
       code: 'ssh_connection_failed', title: 'Connection failed', summary: 'Connection failed.', targetLabel: 'orange',

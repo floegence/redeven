@@ -274,6 +274,7 @@ import { DesktopWelcomeSnapshotOrder } from './desktopWelcomeSnapshotOrder';
 import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
+  runtimeAccessVerificationFailure,
   isDesktopOperationFailureError,
   operationFailureFromUnknown,
 } from './desktopOperationFailure';
@@ -15654,15 +15655,7 @@ async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
       shellCacheScope: args.targetID,
     });
     if (!localUI.ok || !runtimeServiceIsOpenable(localUI.value.runtime_service)) {
-      throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
-        code: 'runtime_access_verification_failed',
-        title: 'Runtime access verification failed',
-        summary: `Desktop could not verify the bridge and Local UI on "${args.label}".`,
-        detail: localUI.ok
-          ? 'The Local UI responded without an openable Runtime Service.'
-          : `Local UI probe failed (${localUI.failure.kind}${localUI.failure.stage ? `:${localUI.failure.stage}` : ''}).`,
-        targetLabel: args.label,
-      }));
+      throw new DesktopOperationFailureError(runtimeAccessVerificationFailure(args.label, localUI));
     }
   } finally {
     await bridge.disconnect().catch(() => undefined);

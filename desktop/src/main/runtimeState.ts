@@ -21,6 +21,9 @@ import {
 } from './desktopPrivateBridge';
 
 export const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
+// Leave bridge capacity for control and interactive traffic while reusing
+// connections across every asset in a packaged Env App.
+const RUNTIME_PROBE_MAX_SOCKETS = 8;
 
 export type RuntimeProbeOptions = Readonly<{
   timeoutMs?: number;
@@ -96,6 +99,22 @@ const ENV_APP_ASSET_REF_PATTERN = /\b(?:src|href)\s*=\s*["'](\/_redeven_proxy\/e
 const envAppShellFingerprintByRuntimeIdentity = new Map<string, string>();
 const envAppShellSuccessCache = new Set<string>();
 
+async function withRuntimeProbeAgent<T>(
+  baseURL: string,
+  options: NormalizedRuntimeProbeOptions,
+  probe: (options: NormalizedRuntimeProbeOptions) => Promise<T>,
+): Promise<T> {
+  // Gateway callers own their authenticated connection path and its lifetime.
+  if (options.agent) return probe(options);
+  const Agent = new URL(baseURL).protocol === 'https:' ? https.Agent : http.Agent;
+  const agent = new Agent({
+    keepAlive: true,
+    maxSockets: RUNTIME_PROBE_MAX_SOCKETS,
+    maxTotalSockets: RUNTIME_PROBE_MAX_SOCKETS,
+  });
+  try { return await probe({ ...options, agent }); } finally { agent.destroy(); }
+}
+
 function request(
   url: URL,
   options: Readonly<{
@@ -107,7 +126,10 @@ function request(
     agent?: http.Agent | https.Agent;
   }>,
 ): Promise<RuntimeProbeResponse> {
-  return new Promise((resolve, reject) => {
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  let cancel: (() => void) | undefined;
+  return new Promise<RuntimeProbeResponse>((resolve, reject) => {
+    options.signal?.throwIfAborted();
     const requestImpl = url.protocol === 'https:' ? https.request : http.request;
     let timedOut = false;
     const request = requestImpl(url, {
@@ -138,10 +160,21 @@ function request(
       });
     });
 
-    request.on('timeout', () => {
+    const timeout = () => {
       timedOut = true;
       request.destroy(new Error('request timed out'));
-    });
+      resolve({ ok: false, failure: { kind: 'timeout' } });
+    };
+    // Socket inactivity alone does not bound time queued behind an Agent or
+    // a bridge CONNECT stream. Include queueing in the caller's budget.
+    deadline = setTimeout(timeout, options.timeoutMs);
+    deadline.unref();
+    request.on('timeout', timeout);
+    cancel = () => {
+      request.destroy();
+      reject(options.signal?.reason ?? new DOMException('Runtime probe canceled.', 'AbortError'));
+    };
+    options.signal?.addEventListener('abort', cancel, { once: true });
     request.on('error', (error: NodeJS.ErrnoException) => {
       if (options.signal?.aborted || error.name === 'AbortError' || error.code === 'ABORT_ERR') {
         reject(error);
@@ -164,6 +197,9 @@ function request(
       });
     });
     request.end();
+  }).finally(() => {
+    clearTimeout(deadline);
+    if (cancel) options.signal?.removeEventListener('abort', cancel);
   });
 }
 
@@ -231,6 +267,13 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
 }
 
 async function probeRedevenLocalUIHealth(
+  baseURL: string,
+  options: NormalizedRuntimeProbeOptions,
+): Promise<RuntimeProbeResult<RuntimeProbeStatus>> {
+  return withRuntimeProbeAgent(baseURL, options, probeOptions => requestRedevenLocalUIHealth(baseURL, probeOptions));
+}
+
+async function requestRedevenLocalUIHealth(
   baseURL: string,
   options: NormalizedRuntimeProbeOptions,
 ): Promise<RuntimeProbeResult<RuntimeProbeStatus>> {
@@ -322,6 +365,13 @@ async function probeEnvAppShell(
   baseURL: string,
   options: NormalizedRuntimeProbeOptions,
 ): Promise<EnvAppShellProbeOutcome> {
+  return withRuntimeProbeAgent(baseURL, options, probeOptions => requestEnvAppShell(baseURL, probeOptions));
+}
+
+async function requestEnvAppShell(
+  baseURL: string,
+  options: NormalizedRuntimeProbeOptions,
+): Promise<EnvAppShellProbeOutcome> {
   const deadline = Date.now() + options.timeoutMs;
   const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), {
     timeoutMs: Math.max(1, deadline - Date.now()),
@@ -341,16 +391,26 @@ async function probeEnvAppShell(
     return { result: 'invalid' };
   }
   const assetFingerprint = validation.assetPaths.join('\n');
-  const assetResponses = await Promise.all(validation.assetPaths.map((assetPath) => {
-    const assetURL = new URL(assetPath, baseURL);
-    return request(assetURL, {
-      timeoutMs: Math.max(1, deadline - Date.now()),
-      signal: options.signal,
-      method: 'HEAD',
-      accept: '*/*',
-      headers: options.headers,
-      agent: options.agent,
-    });
+  const assetResponses: RuntimeProbeResponse[] = [];
+  let nextAsset = 0;
+  await Promise.all(Array.from({ length: Math.min(RUNTIME_PROBE_MAX_SOCKETS, validation.assetPaths.length) }, async () => {
+    while (nextAsset < validation.assetPaths.length) {
+      options.signal?.throwIfAborted();
+      const assetPath = validation.assetPaths[nextAsset++];
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        assetResponses.push({ ok: false, failure: { kind: 'timeout' } });
+        return;
+      }
+      assetResponses.push(await request(new URL(assetPath, baseURL), {
+        timeoutMs: remainingMs,
+        signal: options.signal,
+        method: 'HEAD',
+        accept: '*/*',
+        headers: options.headers,
+        agent: options.agent,
+      }));
+    }
   }));
   if (assetResponses.some((response) => !response.ok && response.failure.kind !== 'invalid_response')) {
     return { result: 'unavailable', assetFingerprint };
@@ -559,18 +619,18 @@ export async function probeLocalRuntimeBridgeStartup(
   if (!bridge) {
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
-  const result = await probeLocalRuntimeBridgeHealth(startup, options);
-  if (!result.ok) {
-    return result;
-  }
-  return {
-    ok: true,
-    value: {
-      ...await validateExternalLocalUIShellAtBaseURL(result.value, bridge.bridgeURL, bridge.options),
-      local_ui_bridge_url: bridge.bridgeURL,
-      local_ui_bridge_token: bridge.bridgeToken,
-    },
-  };
+  return withRuntimeProbeAgent(bridge.bridgeURL, normalizedProbeOptions(bridge.options), async probeOptions => {
+    const result = await probeLocalRuntimeBridgeHealth(startup, probeOptions);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      value: {
+        ...await validateExternalLocalUIShellAtBaseURL(result.value, bridge.bridgeURL, probeOptions),
+        local_ui_bridge_url: bridge.bridgeURL,
+        local_ui_bridge_token: bridge.bridgeToken,
+      },
+    };
+  });
 }
 
 async function validateExternalLocalUIShellAtBaseURL(
@@ -604,12 +664,9 @@ export async function probeExternalLocalUIStartup(
   options: RuntimeProbeOptions = {},
 ): Promise<RuntimeProbeResult<StartupReport>> {
   const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL, options);
-  const result = await probeExternalLocalUIHealth(normalizedBaseURL, options);
-  if (!result.ok) {
-    return result;
-  }
-  return {
-    ok: true,
-    value: await validateExternalLocalUIShellAtBaseURL(result.value, normalizedBaseURL, options),
-  };
+  return withRuntimeProbeAgent(normalizedBaseURL, normalizedProbeOptions(options), async probeOptions => {
+    const result = await probeExternalLocalUIHealth(normalizedBaseURL, { ...options, ...probeOptions });
+    if (!result.ok) return result;
+    return { ok: true, value: await validateExternalLocalUIShellAtBaseURL(result.value, normalizedBaseURL, { ...options, ...probeOptions }) };
+  });
 }

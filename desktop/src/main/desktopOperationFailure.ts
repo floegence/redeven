@@ -7,6 +7,8 @@ import type {
 import type { DesktopTranslationKey } from '../shared/i18n';
 import type { DesktopRuntimeLifecycleStepID } from '../shared/desktopRuntimeLifecycleProgress';
 import { DesktopSSHTransportAuthenticationError } from './sshTransportManager';
+import type { RuntimeProbeResult } from './runtimeState';
+import type { StartupReport } from './startup';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -83,6 +85,32 @@ export function runtimeStateIncompatibleFailure(
     detail: input.message,
     targetLabel: input.targetLabel,
     diagnostics: input.diagnostics,
+  });
+}
+
+export function runtimeAccessVerificationFailure(
+  targetLabel: string,
+  result: RuntimeProbeResult<StartupReport>,
+): DesktopOperationFailurePresentation {
+  const service = result.ok ? result.value.runtime_service : undefined;
+  return desktopOperationFailurePresentation({
+    code: 'runtime_access_verification_failed',
+    title: 'Runtime access verification failed',
+    titleKey: 'progress.runtimeAccessVerificationFailedTitle',
+    summary: `Desktop could not verify the bridge and Local UI on "${targetLabel}".`,
+    summaryKey: 'progress.runtimeAccessVerificationFailedSummary',
+    targetLabel,
+    diagnostics: [{
+      channel: 'runtime_access_probe',
+      label: 'Runtime access probe',
+      text: JSON.stringify(result.ok ? {
+        stage: 'runtime_readiness',
+        runtime_version: service?.runtime_version,
+        runtime_commit: service?.runtime_commit,
+        compatibility: service?.compatibility,
+        open_readiness: service?.open_readiness ?? null,
+      } : result.failure, null, 2),
+    }],
   });
 }
 
