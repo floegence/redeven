@@ -85,7 +85,11 @@ await session.run(async () => {
       await page.locator('#template-editor-compose-yaml').fill(`services:
   web:
     image: ${image}
-    command: [sh, -c, 'mkdir -p /www; echo compose-product-verified > /www/index.html; exec httpd -f -p 8080 -h /www']
+    command: [sh, -c, 'echo compose-product-verified > /data/index.html; exec httpd -f -p 8080 -h /data']
+    volumes:
+      - data:/data
+volumes:
+  data: {}
 `);
       const savedResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/api/managed-web-service-templates'));
       await page.getByRole('button', {name: 'Save template', exact: true}).click();
@@ -145,6 +149,10 @@ await session.run(async () => {
     report.receipt = envelope.data ?? envelope;
     console.log('Created owned service', serviceID);
     await waitFor(async () => { const inspected = await api(`/${serviceID}/inspection`); report.last_inspection = inspected; return inspected.status === 'running' || Boolean(inspected.last_failure); }, 180000, `real ${kind} installation`);
+    if (report.last_inspection.status !== 'running') {
+      try { report.service_logs = await api(`/${serviceID}/logs`); }
+      catch (error) { report.service_log_error = String(error); }
+    }
     assert.equal(report.last_inspection.status, 'running', JSON.stringify(report.last_inspection.last_failure));
     report.steps.push(`install form -> preflight -> pending row -> ${kind} running`);
     await page.screenshot({ path: path.join(evidence, 'product-running.png') });
