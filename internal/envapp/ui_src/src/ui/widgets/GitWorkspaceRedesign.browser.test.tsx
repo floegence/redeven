@@ -55,6 +55,52 @@ function expandTree(host: HTMLElement) {
   }
 }
 describe('Git workspace redesign acceptance', () => {
+  it('uses one aligned animated tablist including stashes and spaces embedded cards below the toolbar', async () => {
+    await page.viewport(1280, 820);
+    const { host } = mount(1180, true);
+    const nav = host.querySelector('[data-git-workspace-navigation]')!;
+    const tabs = [...nav.querySelectorAll<HTMLElement>('[role="tab"]')];
+    expect(tabs).toHaveLength(4);
+    expect(nav.querySelectorAll('[role="tablist"]')).toHaveLength(1);
+    for (const tab of tabs) expect(tab.getBoundingClientRect().bottom).toBeCloseTo(tabs[0].getBoundingClientRect().bottom, 0);
+    await expect.poll(() => nav.querySelector('.git-workspace-view-indicator')).not.toBeNull();
+    const indicator = nav.querySelector<HTMLElement>('.git-workspace-view-indicator')!;
+    expect(indicator).not.toBeNull();
+    await expect.poll(() => getComputedStyle(indicator).transitionProperty).toContain('transform');
+    const start = indicator.getBoundingClientRect().x;
+    tabs[3].focus();
+    tabs[3].click();
+    const positions: number[] = [];
+    for (let frame = 0; frame < 20; frame++) {
+      positions.push(indicator.getBoundingClientRect().x);
+      await new Promise(requestAnimationFrame);
+    }
+    const destination = tabs[3].getBoundingClientRect().x;
+    expect(positions.some(x => x > start + 1 && x < destination - 1)).toBe(true);
+    await expect.poll(() => tabs[3].getAttribute('aria-selected')).toBe('true');
+    await expect.poll(() => indicator.getBoundingClientRect().x).toBeCloseTo(tabs[3].getBoundingClientRect().x, 0);
+    expect(nav.querySelectorAll('[role="tab"][aria-selected="true"]')).toHaveLength(1);
+    const embedded = host.querySelector('[data-git-stash-embedded]')!;
+    const toolbar = embedded.querySelector('[data-git-stash-toolbar]')!;
+    const card = embedded.querySelector('[data-git-stash-id]')!;
+    expect(card.getBoundingClientRect().top - toolbar.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(10);
+    await userEvent.keyboard('{Home}');
+    await expect.poll(() => tabs[0].getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('removes tab travel for reduced motion while keeping the shared indicator aligned', async () => {
+    const media = commands as unknown as { emulateMediaPreferences: (options: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    try {
+      const { host } = mount(1180, true);
+      await expect.poll(() => host.querySelector('.git-workspace-view-indicator')).not.toBeNull();
+      const indicator = host.querySelector<HTMLElement>('.git-workspace-view-indicator')!;
+      const stash = host.querySelector<HTMLElement>('[data-floe-tab-id="stashes"]')!;
+      await userEvent.click(stash);
+      expect(getComputedStyle(indicator).transitionProperty).toBe('none');
+      await expect.poll(() => indicator.getBoundingClientRect().x).toBeCloseTo(stash.getBoundingClientRect().x, 0);
+    } finally { await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); }
+  });
   it('disables collapse for a collapsed tree and keeps the commit action explicit', async () => {
     const { host } = mount(1180, true);
     const collapse = host.querySelector<HTMLButtonElement>('button[aria-label="Collapse all folders"]')!;
@@ -171,10 +217,10 @@ describe('Git workspace redesign acceptance', () => {
     await userEvent.click([...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Side by Side')!);
     expect(host.querySelector('[data-git-patch-layout="split"]')).not.toBeNull();
     expect(host.querySelector('[data-diff-side="left"]')?.textContent).toContain('@@');
-    await userEvent.click(host.querySelector<HTMLButtonElement>('.git-workspace-stashes')!);
+    await userEvent.click(host.querySelector<HTMLElement>('[data-floe-tab-id="stashes"]')!);
     expect(host.querySelector('[data-git-stash-embedded]')?.textContent).toContain('Review workspace layout');
     expect(host.querySelector('[data-git-workspace-navigation]')!.getBoundingClientRect().width).toBe(1180);
-    await userEvent.click(host.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Changes"]')!);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-tab-id="changes"]')!);
     expect(host.querySelector('[data-git-all-scroll]')).toBe(scroll);
     expect(scroll.scrollLeft).toBe(300);
   });

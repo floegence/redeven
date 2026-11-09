@@ -140,6 +140,8 @@ export interface GitDiffPanelProps {
   actions?: JSX.Element;
   loading?: boolean;
   refreshKey?: number;
+  /** Retain same-request paint only until authoritative refresh settles. */
+  retainWhileRefreshing?: boolean;
   item: GitDiffDialogItem | null | undefined;
   source?: GitDiffDialogSource | null;
   emptyMessage: string;
@@ -435,7 +437,9 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
       };
     }
     if (previewSlotMatchesSelection() && preview.phase === "ready" && !preview.item) return { kind: "empty" };
-    const readyItem = previewSlotMatchesSelection()
+    const retainPreview = props.retainWhileRefreshing && preview.requestKey === session.previewRequestKey
+      && preview.transport === protocol.rpcTransport() && preview.phase !== 'error';
+    const readyItem = previewSlotMatchesSelection() || retainPreview
       ? preview.item ?? session.seededPreviewItem
       : session.seededPreviewItem;
     if (readyItem) {
@@ -486,7 +490,9 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
       };
     }
     if (fullSlotMatchesSelection() && full.phase === "ready" && !full.item) return { kind: "empty" };
-    if (fullSlotMatchesSelection() && full.item) {
+    const retainFull = props.retainWhileRefreshing && full.requestKey === session.fullRequestKey
+      && full.transport === protocol.rpcTransport() && full.phase !== 'error';
+    if ((fullSlotMatchesSelection() || retainFull) && full.item) {
       return {
         kind: "ready",
         mode: "full",
@@ -603,7 +609,9 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
 
         let slot = readSlot();
         if (slot.selectionKey !== selectionKey || slot.requestKey !== requestKey || slot.transport !== transport) {
+          const retainedItem = props.retainWhileRefreshing && slot.requestKey === requestKey && slot.transport === transport ? slot.item : null;
           slot = createGitDiffDialogLoadSlot({ selectionKey, requestKey, transport, presentation: session.commitPresentation });
+          slot.item = retainedItem;
           writeSlot(slot);
         }
         if (slot.phase !== 'idle') continue;
@@ -633,6 +641,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
           writeSlot({
             ...pending,
             phase: 'error',
+            item: null,
             error: resolveDiffErrorState(error,
               i18n.t(contentMode === 'preview' ? 'gitDiff.failedPatch' : 'gitDiff.failedFullContext'),
               context, i18n, props.errorFormatter),

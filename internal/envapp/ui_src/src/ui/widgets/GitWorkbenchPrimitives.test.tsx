@@ -191,7 +191,7 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     }
   });
 
-  it('uses content-shaped skeleton slots for paged table footer loading', () => {
+  it('retains one concise disabled pagination control while loading', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -205,13 +205,15 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     ), host);
 
     try {
-      expect(host.querySelector('.git-inline-loading-status')).toBeTruthy();
-      expect(host.querySelector('.git-inline-loading-status__skeleton')).toBeTruthy();
-      expect(host.querySelector('.git-paged-footer__button-skeleton')).toBeTruthy();
+      expect(host.querySelector('.git-inline-loading-status')).toBeNull();
+      expect(host.querySelector('button')?.getAttribute('aria-busy')).toBe('true');
+      expect(host.querySelector('button')?.disabled).toBe(true);
+      expect(host.querySelector('.git-inline-loading-status__skeleton')).toBeNull();
+      expect(host.querySelector('.git-paged-footer__button-skeleton')).toBeNull();
       expect(host.querySelector('.git-loading-indicator--inline')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.textContent).toContain('Loading next page');
-      expect(host.textContent).not.toContain('Loading more...');
+      expect(host.textContent).toContain('Loading more...');
       expect(host.textContent).toContain('Loaded 2 of 40 files.');
     } finally {
       dispose();

@@ -141,7 +141,7 @@ describe('Native Files/Git control through the real retained workspaces', () => 
     const changesTab = page.getByRole('tab', { name: 'Changes', exact: true });
     for (const source of ['Commit Graph', 'Stashes', 'Branches']) {
       if (source === 'Stashes') {
-        await userEvent.click(host.querySelector<HTMLButtonElement>('.git-workspace-stashes')!);
+        await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-tab-id="stashes"]')!);
         await expect.poll(() => host.querySelector<HTMLElement>('[data-git-stash-embedded]')?.checkVisibility({ checkVisibilityCSS: true })).toBe(true);
       } else {
         await page.getByRole('tab', { name: source, exact: true }).click();

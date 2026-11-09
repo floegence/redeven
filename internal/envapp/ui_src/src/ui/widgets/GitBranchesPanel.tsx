@@ -931,24 +931,6 @@ function BranchStatusTable(props: BranchStatusTableProps) {
     }
     return actions;
   };
-  const footerSummary = () => {
-    const totalRows = Math.max(0, Number(props.totalCount ?? 0));
-    const scopedFiles = Math.max(
-      0,
-      Number(props.scopeFileCount ?? props.totalCount ?? 0),
-    );
-    if (props.section === "changes" && scopedFiles !== totalRows) {
-      return i18n.t('uiCopy.git.showingRows', {
-        range: props.items.length,
-        total: totalRows,
-        count: scopedFiles,
-      });
-    }
-    return i18n.t('uiCopy.git.showingFiles', {
-      range: props.items.length,
-      total: scopedFiles,
-    });
-  };
 
   return (
     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
@@ -962,7 +944,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
         when={(props.hasMore || props.loadingMore) && props.items.length > 0}
       >
         <GitPagedTableFooter
-          summary={footerSummary()}
+          summary={null}
           onLoadMore={props.onLoadMore}
           hasMore={props.hasMore}
           loading={props.loadingMore}
@@ -1894,6 +1876,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       nextOffset: Number(page.nextOffset ?? 0),
       hasMore: Boolean(page.hasMore),
       loading: false,
+      loadingMode: undefined,
       error: "",
       initialized: true,
       directoryPath: String(page.directoryPath ?? ""),
@@ -1945,7 +1928,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       : visibleStatusTotalRows();
   const visibleStatusLoadingMore = () =>
     Boolean(
-      visibleStatusPageState().loading && visibleStatusPageState().initialized,
+      visibleStatusPageState().loading && visibleStatusPageState().loadingMode === 'append',
     );
   const visibleStatusItems = () =>
     workspacePageItems(
@@ -2784,7 +2767,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       }
     }
 
-    if (!append) { setStatusTreeGeneration(value => value + 1); setSelectedStatusFile(null); }
+    if (!append && !background) setSelectedStatusFile(null);
     const seq = (statusReqSeqBySection[section] ?? 0) + 1;
     statusReqSeqBySection[section] = seq;
     const clientIdentity = props.protocolClientIdentity;
@@ -2803,6 +2786,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     updateStatusPageState(section, (state) => ({
       ...state,
       loading: true,
+      loadingMode: append ? 'append' : currentState.initialized ? 'refresh' : 'initial',
       error: background ? state.error : "",
     }));
     if (selectedStatusSection() === section && !append && !background) {

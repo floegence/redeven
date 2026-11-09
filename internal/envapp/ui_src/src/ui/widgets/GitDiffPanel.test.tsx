@@ -90,6 +90,33 @@ describe('GitDiffPanel request ownership', () => {
     } finally { dispose(); }
   });
 
+  it('retains a same-file patch during requested background refresh and settles authoritative empty results', async () => {
+    let finish!: (value: GitGetDiffContentResponse) => void;
+    getDiffContent.mockResolvedValueOnce({ repoRootPath: '/repo', mode: 'preview', file: { path: 'restored.ts', patchText: '@@ -1 +1 @@\n-old\n+retainedValue' } })
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const [refresh, setRefresh] = createSignal(0);
+    const host = mountPanel({ get refreshKey() { return refresh(); }, retainWhileRefreshing: true });
+    await flush();
+    expect(host.textContent).toContain('retainedValue');
+    const viewport = host.querySelector('.git-patch-viewer__viewport');
+    setRefresh(1); await flush();
+    expect(host.textContent).toContain('retainedValue');
+    expect(host.querySelector('.git-patch-viewer__viewport')).toBe(viewport);
+    finish({ repoRootPath: '/repo', mode: 'preview', file: null as unknown as GitDiffFileContent }); await flush();
+    expect(host.textContent).not.toContain('retainedValue');
+    expect(host.querySelector('[data-git-diff-empty]')).not.toBeNull();
+  });
+
+  it('clears retained paint when a same-request refresh fails', async () => {
+    getDiffContent.mockResolvedValueOnce({ repoRootPath: '/repo', file: { path: 'restored.ts', patchText: '@@ -1 +1 @@\n-old\n+priorValue' } }).mockRejectedValueOnce(new Error('offline'));
+    const [refresh, setRefresh] = createSignal(0);
+    const host = mountPanel({ get refreshKey() { return refresh(); }, retainWhileRefreshing: true });
+    await flush(); expect(host.textContent).toContain('priorValue');
+    setRefresh(1); await flush();
+    expect(host.textContent).not.toContain('priorValue');
+    expect(host.textContent).toContain('Failed');
+  });
+
   it('loads when mounted open, rejects late file results, and reloads refreshed summaries at the same path', async () => {
     const pending: Array<(value: GitGetDiffContentResponse) => void> = [];
     getDiffContent.mockImplementation(() => new Promise((resolve) => pending.push(resolve)));

@@ -158,6 +158,8 @@ function GitChangesEmptyState(props: { section: GitWorkspaceViewSection; message
 interface WorkspaceTableProps {
   directoryPath: string;
   generation?: number;
+  refreshing?: boolean;
+  onDirectoryItems?: (items: GitSeededWorkspaceChange[], directoryPath: string, hasMore: boolean, section: GitWorkspaceViewSection) => void;
   filter?: string;
   collapseToken?: number;
   onExpandedChange?: (expanded: boolean) => void;
@@ -233,8 +235,8 @@ function WorkspaceTable(props: WorkspaceTableProps) {
         )}
       >
         <GitWorkspaceTree items={props.items} section={props.section} directoryPath={props.directoryPath}
-          generation={props.generation} filter={props.filter} collapseToken={props.collapseToken} onExpandedChange={props.onExpandedChange}
-          loadDirectory={props.loadDirectory} selectedKey={props.selectedKey}
+          generation={props.generation} refreshing={props.refreshing} filter={props.filter} collapseToken={props.collapseToken} onExpandedChange={props.onExpandedChange}
+          loadDirectory={props.loadDirectory} onDirectoryItems={props.onDirectoryItems} selectedKey={props.selectedKey}
           busyWorkspaceKey={props.busyWorkspaceKey} busyWorkspaceAction={props.busyWorkspaceAction} sectionActionKey={props.sectionActionKey}
           onSelect={props.onSelectItem} onOpenDirectory={props.onOpenDirectory} onAction={props.onAction} onDiscard={props.onDiscard}
           onContextMenu={props.onOpenContextMenu} onContextMenuKey={props.onOpenContextMenuFromKeyboard} />
@@ -414,8 +416,23 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       ?? files.find((item) => workspaceEntryKey(item) === workspaceEntryKey(props.selectedItem))
       ?? files[0] ?? null;
   });
-  createEffect(on(() => [props.workspaceGeneration, selectedSection(), activeDirectoryPath(), repoRootPath()] as const, () => { if (!props.showAllWorkspaceSections) setSelectedDiffItem(null); }, { defer: true }));
-  createEffect(on(() => [props.workspaceGeneration, repoRootPath()] as const, () => setSelectedDiffItem(null), { defer: true }));
+  const selectionScope = createMemo(() => JSON.stringify([selectedSection(), activeDirectoryPath(), repoRootPath()]));
+  const selectionRepository = createMemo(repoRootPath);
+  createEffect(on(selectionScope, () => { if (!props.showAllWorkspaceSections) setSelectedDiffItem(null); }, { defer: true }));
+  createEffect(on(selectionRepository, () => setSelectedDiffItem(null), { defer: true }));
+  const selectionPage = () => pageStateFor(selectedDiffItem()?.section === 'staged' ? 'staged' : selectedDiffItem()?.section === 'conflicted' ? 'conflicted' : 'changes');
+  const reconcileSelectedItems = (items: GitSeededWorkspaceChange[], directoryPath = '', hasMore = false, section?: GitWorkspaceViewSection) => {
+    const candidate = selectedDiffItem();
+    const candidateSection = candidate?.section === 'staged' ? 'staged' : candidate?.section === 'conflicted' ? 'conflicted' : 'changes';
+    if (!candidate || (section && candidateSection !== section) || (directoryPath && !itemPath(candidate).startsWith(`${directoryPath}/`))) return;
+    const match = items.find(item => workspaceEntryKey(item) === workspaceEntryKey(candidate));
+    if (match) { if (match !== candidate) setSelectedDiffItem(match); return; }
+    const nested = items.some(item => isGitWorkspaceDirectoryEntry(item) && itemPath(candidate).startsWith(`${workspaceDirectoryPath(item)}/`));
+    if (!nested && !hasMore) setSelectedDiffItem(null);
+  };
+  createEffect(on(() => selectionPage(), state => {
+    if (state.initialized && !state.loading && !state.stale) reconcileSelectedItems(state.items, state.directoryPath, state.hasMore);
+  }));
   const selectedKey = () => workspaceEntryKey(diffItem());
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
   const bulkActionLabel = () => (
@@ -997,6 +1014,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
               <GitDiffPanel
                 open={Boolean(diffItem())}
                 item={diffItem()}
+                retainWhileRefreshing
+                refreshKey={selectionPage().generation}
                 source={diffItem() ? {
                   kind: 'workspace',
                   repoRootPath: exactGitPath(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath),
@@ -1005,7 +1024,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                 emptyMessage={i18n.t('git.changes.workspaceDiffEmpty')}
                 actions={<Show when={diffItem()}>{item => <>
                   <Show when={item().section !== 'conflicted' && (item().section === 'staged' ? props.onUnstageSelected : props.onStageSelected)}>
-                    <Button size="sm" variant="outline" disabled={Boolean(props.busyWorkspaceKey)} onClick={() => item().section === 'staged' ? props.onUnstageSelected?.(item()) : props.onStageSelected?.(item())}>
+                    <Button size="sm" variant="outline" disabled={Boolean(props.busyWorkspaceKey) || selectionPage().stale || selectionPage().loading} onClick={() => item().section === 'staged' ? props.onUnstageSelected?.(item()) : props.onStageSelected?.(item())}>
                       <Show when={item().section === 'staged'} fallback={<Plus class="size-4" />}><Minus class="size-4" /></Show>
                       {i18n.t(item().section === 'staged' ? 'git.changes.unstage' : 'git.changes.stage')}
                     </Button>
@@ -1106,8 +1125,10 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                 section={selectedSection()}
                 items={visibleItems()}
                 directoryPath={activeDirectoryPath()}
-                generation={props.workspaceGeneration}
+                generation={selectedPageState().generation ?? props.workspaceGeneration}
+                refreshing={selectedPageState().stale || (selectedPageState().loading && selectedPageState().loadingMode !== 'append')}
                 loadDirectory={props.onLoadWorkspaceDirectory}
+                onDirectoryItems={reconcileSelectedItems}
                 filter={filterQuery()}
                 collapseToken={collapseToken()}
                 onExpandedChange={expanded => reportExpanded('selected', expanded)}
@@ -1149,7 +1170,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         <div class="git-workspace-all__heading"><button type="button" class="flex items-center gap-2 rounded-sm text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring" aria-expanded={!collapsedSections().has(section)} onClick={() => setCollapsedSections(current => { const next = new Set(current); if (next.has(section)) next.delete(section); else next.add(section); return next; })}><ChevronDown class={`size-3.5 ${collapsedSections().has(section) ? '-rotate-90' : ''}`} /><span>{i18n.t(section === 'changes' ? 'git.changes.workspace' : section === 'staged' ? 'git.common.staged' : 'git.common.conflicted')}</span><span class="text-muted-foreground tabular-nums">{count()}</span></button><span class="flex-1" /><Show when={props.onBulkAction && count() > 0}><Button size="icon" variant="ghost" class="size-7" disabled={Boolean(props.busyWorkspaceKey)} aria-label={i18n.t(section === 'staged' ? 'git.changes.unstageAll' : 'git.changes.stageAll')} onClick={() => props.onBulkAction?.(section)}>{section === 'staged' ? <Minus class="size-3.5" /> : <Plus class="size-3.5" />}</Button></Show></div>
                         <div hidden={collapsedSections().has(section)}><Show when={!state().error} fallback={<div role="alert" class="p-2 text-xs text-destructive">{state().error}<Button variant="ghost" size="xs" onClick={() => props.onRetryWorkspaceSection?.(section)}>{i18n.t('common.actions.retry')}</Button></div>}>
                           <Show when={state().initialized || items().length > 0 || !state().loading} fallback={<GitContentSkeleton variant="file-rail" rows={2} label={i18n.t('git.changes.loadingWorkspaceChanges')} />}>
-                            <GitWorkspaceTree scrollMode="content" items={items()} section={section} directoryPath={state().directoryPath ?? ''} generation={props.workspaceGeneration} filter={filterQuery()} collapseToken={collapseToken()} onExpandedChange={expanded => reportExpanded(section, expanded)} selectedKey={selectedKey()} loadDirectory={props.onLoadWorkspaceDirectory}
+                            <GitWorkspaceTree scrollMode="content" items={items()} section={section} directoryPath={state().directoryPath ?? ''} generation={state().generation ?? props.workspaceGeneration} refreshing={state().stale || (state().loading && state().loadingMode !== 'append')} filter={filterQuery()} collapseToken={collapseToken()} onExpandedChange={expanded => reportExpanded(section, expanded)} selectedKey={selectedKey()} loadDirectory={props.onLoadWorkspaceDirectory} onDirectoryItems={reconcileSelectedItems}
                               busyWorkspaceKey={props.busyWorkspaceKey} busyWorkspaceAction={props.busyWorkspaceAction} sectionActionKey={workspaceViewSectionActionKey(section, state().directoryPath ?? '')}
                               onSelect={openWorkspaceDiff} onAction={item => item.section === 'staged' ? props.onUnstageSelected?.(item) : props.onStageSelected?.(item)}
                               onDiscard={item => setDiscardTarget({ kind: 'item', item })} onContextMenu={(event, item) => contextMenu.openFromContextMenu(event, itemContextTarget(item))} onContextMenuKey={(event, item) => contextMenu.openFromKeyboard(event, itemContextTarget(item))} />

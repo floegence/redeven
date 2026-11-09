@@ -155,6 +155,7 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
     repoInfoLoading: boolean;
     repoSummaryLoading: boolean;
     workspaceLoading: boolean;
+    workspacePaths?: string[];
     branchesLoading: boolean;
     listLoading: boolean;
     listRefreshing: boolean;
@@ -939,6 +940,7 @@ vi.mock('./GitWorkspace', () => ({
     repoInfoLoading?: boolean;
     repoSummaryLoading?: boolean;
     workspaceLoading?: boolean;
+    workspacePages?: Record<string, { items: Array<{ path?: string }> }>;
     branchesLoading?: boolean;
     listLoading?: boolean;
     fetchBusy?: boolean;
@@ -1009,6 +1011,7 @@ vi.mock('./GitWorkspace', () => ({
         repoInfoLoading: Boolean(props.repoInfoLoading),
         repoSummaryLoading: Boolean(props.repoSummaryLoading),
         workspaceLoading: Boolean(props.workspaceLoading),
+        workspacePaths: props.workspacePages?.changes.items.map(item => item.path ?? ''),
         branchesLoading: Boolean(props.branchesLoading),
         listLoading: Boolean(props.listLoading),
         listRefreshing: Boolean(props.listRefreshing),
@@ -5895,6 +5898,35 @@ describe('RemoteFileBrowser persistence', () => {
         expect(Array.from(group.querySelectorAll('button'))).toEqual(buttons);
         expect(group.closest('[data-browser-mode-panel]')?.getAttribute('data-browser-mode-panel')).toBe(mode);
       }
+    } finally { dispose(); }
+  });
+
+  it.each(['stageWorkspace', 'unstageWorkspace'] as const)('retains visible inventory throughout %s invalidation and delayed refresh', async operation => {
+    widgetStateStore.values['widget-1'] = { ...widgetStateStore.values['widget-1'], pageModeByEnv: { 'env-1': 'git' }, gitSubviewByEnv: { 'env-1': 'changes' } };
+    mockRpc.git.getCapabilities.mockResolvedValue({ workspaceRevisionV1: true, workspaceDirectoryScopeV1: true, workspacePathStatusV1: true, stashSectionDiffV1: true });
+    let revision = 'before';
+    const summary = { unstagedCount: 2, stagedCount: 1 };
+    mockRpc.git.getRepoSummary.mockImplementation(async () => ({ repoRootPath: '/workspace/repo', workspaceRevision: revision, workspaceSummary: summary }));
+    const pending = deferred<any>();
+    mockRpc.git.listWorkspacePage.mockImplementation(async request => {
+      if (revision === 'after' && request.section === 'changes') return pending.promise;
+      return { repoRootPath: '/workspace/repo', section: request.section, workspaceRevision: revision, summary, items: [{ path: 'src', directoryPath: 'src', entryKind: 'directory', section: request.section }], totalCount: 1 };
+    });
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush(); await flush(); await flush();
+      expect(gitWorkspaceRenderStore.snapshots.at(-1)?.workspacePaths).toEqual(['src']);
+      gitWorkspaceRenderStore.snapshots.length = 0;
+      mockRpc.git[operation].mockImplementationOnce(async () => { revision = 'after'; return { result: { affectedCount: 1 } }; });
+      const action = operation === 'stageWorkspace' ? 'mock-stage-conflicted-file' : 'mock-unstage-directory';
+      Array.from(host.querySelectorAll('button')).find(button => button.textContent === action)!.click();
+      await flush(); await flush();
+      expect(gitWorkspaceRenderStore.snapshots.every(state => state.workspacePaths?.includes('src'))).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every(state => !state.workspaceLoading)).toBe(true);
+      pending.resolve({ repoRootPath: '/workspace/repo', section: 'changes', workspaceRevision: revision, summary, items: [{ path: 'src', directoryPath: 'src', entryKind: 'directory', section: 'changes' }] });
+      await flush(); await flush();
+      expect(gitWorkspaceRenderStore.snapshots.at(-1)?.workspacePaths).toEqual(['src']);
     } finally { dispose(); }
   });
 

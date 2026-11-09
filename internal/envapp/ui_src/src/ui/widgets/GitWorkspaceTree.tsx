@@ -1,12 +1,12 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
-import { Button, PersistentHorizontalScrollbar } from '@floegence/floe-webapp-core/ui';
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from 'solid-js';
+import { Button, KeyedFor, PersistentHorizontalScrollbar } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, Minus, MoreHorizontal, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { GitListWorkspacePageResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
 import { changeSecondaryPath, workspaceEntryKey, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { useI18n } from '../i18n';
 import { gitChangePathClass } from './GitChrome';
-import { GitChangeStatusPill, GitContentSkeleton, GitPagedTableFooter, gitChangedFilesRowClass } from './GitWorkbenchPrimitives';
+import { GitChangeStatusPill, GitPagedTableFooter, gitChangedFilesRowClass } from './GitWorkbenchPrimitives';
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { buildGitWorkspaceTree, type GitWorkspaceDirectoryLoader, type GitWorkspaceTreeNode } from './gitWorkspaceTreeModel';
@@ -16,6 +16,7 @@ interface DirectoryState {
   loading: boolean;
   failed: boolean;
   initialized: boolean;
+  stale: boolean;
   nextOffset: number;
   hasMore: boolean;
 }
@@ -25,6 +26,7 @@ export interface GitWorkspaceTreeProps {
   section: GitWorkspaceViewSection;
   directoryPath: string;
   generation: unknown;
+  refreshing?: boolean;
   filter?: string;
   collapseToken?: number;
   onExpandedChange?: (expanded: boolean) => void;
@@ -34,6 +36,7 @@ export interface GitWorkspaceTreeProps {
   busyWorkspaceAction?: string;
   sectionActionKey?: string;
   loadDirectory?: GitWorkspaceDirectoryLoader;
+  onDirectoryItems?: (items: GitWorkspaceChange[], directoryPath: string, hasMore: boolean, section: GitWorkspaceViewSection) => void;
   onSelect?: (item: GitWorkspaceChange) => void;
   onOpenDirectory?: (path: string) => void;
   onAction?: (item: GitWorkspaceChange) => void;
@@ -51,8 +54,19 @@ export function GitWorkspaceTree(props: GitWorkspaceTreeProps) {
   const [focusKey, setFocusKey] = createSignal('');
   let epoch = 0;
   onCleanup(() => { epoch++; });
-  createEffect(on(() => [props.generation, props.section, props.directoryPath] as const, () => { epoch++; setPages({}); setFocusKey(''); }));
-  createEffect(on(() => [props.section, props.directoryPath] as const, () => { setExpanded(new Set<string>()); setFocusKey(''); }));
+  const scope = createMemo(() => JSON.stringify([props.section, props.directoryPath]));
+  const generation = createMemo(() => props.generation);
+  const refreshing = createMemo(() => Boolean(props.refreshing));
+  createEffect(on(scope, () => {
+    epoch++; setPages({}); setExpanded(new Set<string>()); setFocusKey('');
+  }));
+  const retirePages = () => {
+    epoch++;
+    // Retire read authority without discarding the last painted directory page.
+    setPages(all => Object.fromEntries(Object.entries(all).map(([path, page]) => [path, { ...page, stale: true, loading: false, failed: false }])));
+  };
+  createEffect(on(generation, retirePages, { defer: true }));
+  createEffect(on(refreshing, refreshing => { if (refreshing) retirePages(); }, { defer: true }));
   createEffect(on(() => props.collapseToken, () => { setExpanded(new Set<string>()); setFocusKey(''); }, { defer: true }));
   const itemKey = (item: GitWorkspaceChange) => props.itemKey?.(item) ?? workspaceEntryKey(item);
   const tree = createMemo(() => buildGitWorkspaceTree(props.items, props.directoryPath));
@@ -64,13 +78,14 @@ export function GitWorkspaceTree(props: GitWorkspaceTreeProps) {
   onCleanup(() => props.onExpandedChange?.(false));
   const load = async (path: string, append = false) => {
     const previous = pages()[path];
-    if (!props.loadDirectory || previous?.loading || (!append && previous?.initialized && !previous.failed)) return;
+    if (props.refreshing || (append && previous?.stale) || !props.loadDirectory || previous?.loading || (!append && previous?.initialized && !previous.stale && !previous.failed)) return;
     const generation = epoch;
-    setPages(all => ({ ...all, [path]: { items: previous?.items ?? [], loading: true, failed: false, initialized: previous?.initialized ?? false, nextOffset: previous?.nextOffset ?? 0, hasMore: previous?.hasMore ?? false } }));
+    setPages(all => ({ ...all, [path]: { items: previous?.items ?? [], loading: true, failed: false, initialized: previous?.initialized ?? false, stale: previous?.stale ?? false, nextOffset: previous?.nextOffset ?? 0, hasMore: previous?.hasMore ?? false } }));
     try {
       const result: GitListWorkspacePageResponse | undefined = await props.loadDirectory(props.section, path, append ? previous?.nextOffset ?? 0 : 0);
       if (generation !== epoch) return;
-      setPages(all => ({ ...all, [path]: result ? { items: append ? [...(previous?.items ?? []), ...result.items] : result.items, loading: false, failed: false, initialized: true, nextOffset: result.nextOffset ?? 0, hasMore: Boolean(result.hasMore) } : { ...all[path], loading: false, failed: true } }));
+      setPages(all => ({ ...all, [path]: result ? { items: append ? [...(previous?.items ?? []), ...result.items] : result.items, loading: false, failed: false, initialized: true, stale: false, nextOffset: result.nextOffset ?? 0, hasMore: Boolean(result.hasMore) } : { ...all[path], loading: false, failed: true } }));
+      if (result) props.onDirectoryItems?.(pages()[path].items, path, Boolean(result.hasMore), props.section);
     } catch {
       if (generation === epoch) setPages(all => ({ ...all, [path]: { ...all[path], loading: false, failed: true } }));
     }
@@ -108,43 +123,44 @@ export function GitWorkspaceTree(props: GitWorkspaceTreeProps) {
     event.preventDefault(); event.stopPropagation(); focus(next);
   };
   createEffect(on(query, () => setFocusKey(''), { defer: true }));
-  const renderNode = (node: GitWorkspaceTreeNode, depth: number) => {
-    const page = () => pages()[node.path];
-    const children = createMemo(() => node.item ? buildGitWorkspaceTree(page()?.items ?? [], node.path) : node.children);
-    const active = () => Boolean(node.item && props.selectedKey === itemKey(node.item));
-    const busy = () => Boolean(props.busyWorkspaceAction && (props.busyWorkspaceKey === (node.item && workspaceEntryKey(node.item)) || props.busyWorkspaceKey === props.sectionActionKey));
-    const discardable = () => node.item && ['changes', 'unstaged', 'untracked'].includes(node.item.section ?? '');
-    createEffect(() => { if (node.directory && node.item && open(node) && !page()?.initialized && !page()?.loading && !page()?.failed) void load(node.path); });
+  const renderNode = (node: Accessor<GitWorkspaceTreeNode>, depth: number, parentRefreshing: Accessor<boolean> = () => false) => {
+    const page = () => pages()[node().path];
+    const children = createMemo(() => node().item ? buildGitWorkspaceTree(page()?.items ?? [], node().path) : node().children);
+    const refreshing = () => Boolean(props.refreshing || parentRefreshing() || page()?.stale);
+    const active = () => Boolean(node().item && props.selectedKey === itemKey(node().item!));
+    const busy = () => Boolean(props.busyWorkspaceAction && (props.busyWorkspaceKey === (node().item && workspaceEntryKey(node().item)) || props.busyWorkspaceKey === props.sectionActionKey));
+    const discardable = () => node().item && ['changes', 'unstaged', 'untracked'].includes(node().item?.section ?? '');
+    createEffect(() => { if (!props.refreshing && node().directory && node().item && open(node()) && (!page()?.initialized || page()?.stale) && !page()?.loading && !page()?.failed) void load(node().path); });
     return (
-      <Show when={matches(node)}>
-        <div role="treeitem" aria-level={depth + 1} aria-expanded={node.directory ? open(node) : undefined} aria-selected={active()} data-git-tree-path={node.path}>
+      <Show when={matches(node())}>
+        <div role="treeitem" aria-level={depth + 1} aria-expanded={node().directory ? open(node()) : undefined} aria-selected={active()} aria-busy={node().directory && page()?.loading || undefined} data-git-tree-path={node().path}>
           <div class={`${gitChangedFilesRowClass(active())} git-workspace-tree__row`} style={{ '--git-tree-depth': depth }} data-git-changes-context-target="item"
-            on:contextmenu={event => { if (node.item) { event.stopPropagation(); props.onContextMenu?.(event, node.item); } }}
-            onKeyDown={event => { if (node.item && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.stopPropagation(); props.onContextMenuKey?.(event, node.item); } }}>
-            <button type="button" class="git-workspace-tree__identity" aria-expanded={node.directory ? open(node) : undefined} data-git-tree-select={node.path} data-git-tree-key={node.key} title={node.item ? changeSecondaryPath(node.item) || node.path : node.path}
-              tabIndex={focusKey() ? focusKey() === node.key ? 0 : -1 : tree().find(matches)?.key === node.key ? 0 : -1}
-              onFocus={() => setFocusKey(node.key)}
-              onClick={() => node.directory ? toggle(node) : node.item && props.onSelect?.(node.item)}
-              onKeyDown={event => navigate(event, node)}>
-              <span class="git-workspace-tree__chevron"><Show when={node.directory}><ChevronRight class={`size-3 ${open(node) ? 'rotate-90' : ''}`} /></Show></span>
-              <FileItemIcon size={14} open={node.directory && open(node)} item={{ name: node.label, type: node.directory ? 'folder' : 'file' }} class="size-3.5 shrink-0" />
-              <span class={node.directory ? '' : gitChangePathClass(node.item?.changeType)}>{node.label}</span>
+            on:contextmenu={event => { if (node().item) { event.stopPropagation(); props.onContextMenu?.(event, node().item!); } }}
+            onKeyDown={event => { if (node().item && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.stopPropagation(); props.onContextMenuKey?.(event, node().item!); } }}>
+            <button type="button" class="git-workspace-tree__identity" aria-expanded={node().directory ? open(node()) : undefined} data-git-tree-select={node().path} data-git-tree-key={node().key} title={node().item ? changeSecondaryPath(node().item) || node().path : node().path}
+              tabIndex={focusKey() ? focusKey() === node().key ? 0 : -1 : tree().find(matches)?.key === node().key ? 0 : -1}
+              onFocus={() => setFocusKey(node().key)}
+              onClick={() => node().directory ? toggle(node()) : node().item && props.onSelect?.(node().item!)}
+              onKeyDown={event => navigate(event, node())}>
+              <span class="git-workspace-tree__chevron"><Show when={node().directory}><ChevronRight class={`size-3 ${open(node()) ? 'rotate-90' : ''}`} /></Show></span>
+              <FileItemIcon size={14} open={node().directory && open(node())} item={{ name: node().label, type: node().directory ? 'folder' : 'file' }} class="size-3.5 shrink-0" />
+              <span class={node().directory ? '' : gitChangePathClass(node().item?.changeType)}>{node().label}</span>
             </button>
-            <Show when={!node.directory && node.item}><GitChangeStatusPill compact change={node.item?.changeType} /></Show>
-            <Show when={node.item && (props.onAction || props.onDiscard || props.onContextMenu)}>
+            <Show when={!node().directory && node().item}><GitChangeStatusPill compact change={node().item?.changeType} /></Show>
+            <Show when={node().item && (props.onAction || props.onDiscard || props.onContextMenu)}>
               <span class="git-workspace-tree__actions">
-                <Show when={props.onAction}><Button size="icon" variant="ghost" disabled={busy()} loading={busy() && props.busyWorkspaceAction !== 'discard'} icon={props.section === 'staged' ? Minus : Plus} aria-label={i18n.t(props.section === 'staged' ? 'git.changes.unstage' : 'git.changes.stageWithPlus')} onClick={() => props.onAction?.(node.item!)} /></Show>
-                <Show when={discardable() && props.onDiscard}><Button size="icon" variant="ghost" class="text-destructive" disabled={busy()} loading={busy() && props.busyWorkspaceAction === 'discard'} icon={Trash} aria-label={i18n.t('git.changes.discard')} onClick={() => props.onDiscard?.(node.item!)} /></Show>
-                <Show when={props.onContextMenu}><Button size="icon" variant="ghost" icon={MoreHorizontal} aria-label={i18n.t('git.common.moreActions')} onClick={event => props.onContextMenu?.(event, node.item!)} /></Show>
+                <Show when={props.onAction}><Button size="icon" variant="ghost" disabled={busy() || refreshing()} loading={busy() && props.busyWorkspaceAction !== 'discard'} icon={props.section === 'staged' ? Minus : Plus} aria-label={i18n.t(props.section === 'staged' ? 'git.changes.unstage' : 'git.changes.stageWithPlus')} onClick={() => props.onAction?.(node().item!)} /></Show>
+                <Show when={discardable() && props.onDiscard}><Button size="icon" variant="ghost" class="text-destructive" disabled={busy() || refreshing()} loading={busy() && props.busyWorkspaceAction === 'discard'} icon={Trash} aria-label={i18n.t('git.changes.discard')} onClick={() => props.onDiscard?.(node().item!)} /></Show>
+                <Show when={props.onContextMenu}><Button size="icon" variant="ghost" icon={MoreHorizontal} aria-label={i18n.t('git.common.moreActions')} onClick={event => props.onContextMenu?.(event, node().item!)} /></Show>
               </span>
             </Show>
           </div>
-          <Show when={node.directory && open(node)}>
+          <Show when={node().directory && open(node())}>
             <div role="group">
-              <For each={children()}>{child => renderNode(child, depth + 1)}</For>
-              <Show when={page()?.loading && !page()?.initialized}><GitContentSkeleton variant="file-rail" rows={2} label={i18n.t('git.changes.loadingWorkspaceChanges')} /></Show>
-              <Show when={page()?.failed}><div class="git-workspace-tree__recovery" role="alert"><span>{i18n.t('git.tree.loadFailed')}</span><Button size="xs" variant="ghost" onClick={() => void load(node.path, Boolean(page()?.initialized))}>{i18n.t('common.actions.retry')}</Button></div></Show>
-              <Show when={page()?.hasMore}><GitPagedTableFooter summary={null} hasMore loading={page()?.loading} onLoadMore={() => void load(node.path, true)} loadingStatus={i18n.t('git.changes.loadingNextPage')} /></Show>
+              <KeyedFor each={children()} by={child => child.key}>{child => renderNode(child, depth + 1, refreshing)}</KeyedFor>
+              <Show when={page()?.loading}><span role="status" class="sr-only">{i18n.t('git.changes.loadingWorkspaceChanges')}</span></Show>
+              <Show when={page()?.failed}><div class="git-workspace-tree__recovery" role="alert"><span>{i18n.t('git.tree.loadFailed')}</span><Button size="xs" variant="ghost" onClick={() => void load(node().path, Boolean(page()?.initialized && !page()?.stale))}>{i18n.t('common.actions.retry')}</Button></div></Show>
+              <Show when={page()?.hasMore && !page()?.stale}><GitPagedTableFooter summary={null} hasMore loading={page()?.loading} onLoadMore={() => void load(node().path, true)} loadingStatus={i18n.t('git.changes.loadingNextPage')} /></Show>
             </div>
           </Show>
         </div>
@@ -154,7 +170,7 @@ export function GitWorkspaceTree(props: GitWorkspaceTreeProps) {
   return (
     <div class="git-workspace-tree" data-scroll-mode={props.scrollMode ?? 'viewport'}>
       <div ref={setViewport} {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="git-workspace-tree__viewport" data-git-tree-scroll>
-        <div role="tree" aria-label={i18n.t('uiCopy.git.changedFiles')} class="git-workspace-tree__content"><For each={tree()}>{node => renderNode(node, 0)}</For></div>
+        <div role="tree" aria-label={i18n.t('uiCopy.git.changedFiles')} class="git-workspace-tree__content"><KeyedFor each={tree()} by={node => node.key}>{node => renderNode(node, 0)}</KeyedFor></div>
       </div>
       <Show when={props.scrollMode !== 'content'}><PersistentHorizontalScrollbar viewport={viewport()} {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} aria-label={i18n.t('git.tree.horizontalScroll')} /></Show>
     </div>

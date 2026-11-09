@@ -1356,6 +1356,18 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitWorkspacePages(createEmptyWorkspaceViewPageStateRecord());
   };
 
+  const invalidateRetainedGitWorkspace = (invalidateSummary = true) => {
+    clearFilesGitDecorationIndex();
+    gitWorkspaceRevision = '';
+    if (invalidateSummary) gitRepoSummaryReqSeq += 1;
+    setGitTreeGeneration(value => value + 1);
+    for (const section of WORKSPACE_VIEW_SECTIONS) gitWorkspaceReqSeqBySection[section] += 1;
+    setGitWorkspacePages(prev => Object.fromEntries(WORKSPACE_VIEW_SECTIONS.map(section => [section, {
+      ...prev[section], stale: true, loading: false, loadingMode: undefined, error: '',
+    }])) as typeof prev);
+    setGitBranchStatusRefreshToken(value => value + 1);
+  };
+
   const discardGitWorkspaceGeneration = () => {
     clearFilesGitDecorationIndex();
     gitWorkspaceRevision = '';
@@ -1397,7 +1409,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const initializeKnownEmptyGitWorkspaceSection = (section: GitWorkspaceViewSection): boolean => {
     const state = gitWorkspacePageState(section);
-    if (state.initialized || state.loading) return false;
+    if (state.initialized || state.loading || state.stale) return false;
     if (!isWorkspaceViewSectionKnownEmpty(currentGitWorkspaceSummary(), section)) return false;
 
     updateGitWorkspacePageState(section, (prev) => ({
@@ -1440,7 +1452,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     options: { append?: boolean } = {},
   ) => {
     if (!page) return;
-    if (!options.append) setGitTreeGeneration(value => value + 1);
     const section = page.section ?? 'changes';
     let nextWorkspace: GitListWorkspaceChangesResponse | null = null;
     setGitWorkspace((prev) => {
@@ -1452,6 +1463,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     updateGitWorkspacePageState(section, (state) => ({
       ...state,
       items: options.append ? [...state.items, ...page.items] : [...page.items],
+      stale: false,
+      generation: options.append ? state.generation : (state.generation ?? 0) + 1,
       totalCount: Number(page.totalCount ?? 0),
       scopeFileCount: Number(page.scopeFileCount ?? page.totalCount ?? 0),
       nextOffset: Number(page.nextOffset ?? 0),
@@ -1656,7 +1669,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const client = protocol.session?.();
       for (const section of WORKSPACE_VIEW_SECTIONS) {
         if (protocol.session?.() !== client || resolveActiveRepoRootPath() !== repoRootPath) return;
-        if (section !== activeSection && isWorkspaceViewSectionKnownEmpty(currentGitWorkspaceSummary(), section)) continue;
+        if (section !== activeSection && !gitWorkspacePageState(section).stale && isWorkspaceViewSectionKnownEmpty(currentGitWorkspaceSummary(), section)) continue;
         await loadGitWorkspaceSection(section, { repoRootPath, silent: true, force: true });
       }
       return;
@@ -1807,7 +1820,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     notification.success(params.successTitle, message);
   };
 
+  let workspaceInvalidationRefresh: { repoRootPath: string; promise: Promise<void> } | null = null;
   const refreshGitWorkspaceSectionsAfterMutation = async (repoRootPath: string, sections: GitWorkspaceViewSection[]) => {
+    if (workspaceInvalidationRefresh?.repoRootPath === repoRootPath) {
+      await workspaceInvalidationRefresh.promise;
+      return;
+    }
     const wanted = Array.from(new Set(sections));
     const decorationRefresh = loadFilesGitDecorationIndex(repoRootPath);
     await loadGitRepoSummary({ silent: true, repoRootPath });
@@ -2992,8 +3010,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
       const nextRevision = gitCapabilityMode() === 'capable' ? String(resp.workspaceRevision ?? '') : '';
       if (gitWorkspaceRevision && nextRevision && gitWorkspaceRevision !== nextRevision) {
-        setGitWorkspace(null);
-        resetGitWorkspacePages();
+        invalidateRetainedGitWorkspace(false);
       }
       gitWorkspaceRevision = nextRevision;
       setGitRepoSummary(resp);
@@ -3036,17 +3053,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
+    if (append && currentState.stale) return;
     if (!options.force) {
       if (append) {
-        if (!currentState.initialized || currentState.loading || !currentState.hasMore) {
+        if (!currentState.initialized || currentState.stale || currentState.loading || !currentState.hasMore) {
           return;
         }
-      } else if (currentState.initialized || currentState.loading) {
+      } else if ((currentState.initialized && !currentState.stale) || currentState.loading) {
         return;
       }
     }
 
-    if (!append) setGitTreeGeneration(value => value + 1);
     const seq = (gitWorkspaceReqSeqBySection[section] ?? 0) + 1;
     gitWorkspaceReqSeqBySection[section] = seq;
     const expectedWorkspaceRevision = gitCapabilityMode() === 'capable' ? gitWorkspaceRevision : '';
@@ -3080,15 +3097,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (gitCapabilityMode() === 'capable' && !resp.workspaceRevision) {
         throw new Error('Git workspace response omitted workspace_revision');
       }
-      applyWorkspacePageSnapshot(resp, { append });
+      batch(() => applyWorkspacePageSnapshot(resp, { append }));
       return resp;
     } catch (err) {
       if (seq !== gitWorkspaceReqSeqBySection[section]) return;
       if (gitCapabilityMode() === 'capable' && isGitWorkspaceSnapshotStale(err) && !options.staleRetry) {
-        gitWorkspaceRevision = '';
-        setGitRepoSummary(null);
-        setGitWorkspace(null);
-        resetGitWorkspacePages();
+        invalidateRetainedGitWorkspace();
         const summary = await loadGitRepoSummary({ ...options, repoRootPath });
         if (!summary) return;
         return loadGitWorkspaceSection(section, { ...options, repoRootPath, force: true, staleRetry: true });
@@ -3143,6 +3157,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = resolveActiveRepoRootPath();
     const client = protocol.session?.();
     const generation = gitTreeGeneration();
+    const sectionSequence = gitWorkspaceReqSeqBySection[section];
     if (!repoRootPath || !client) return;
     if (gitCapabilityMode() === 'capable' && !gitWorkspaceRevision) return;
     const revision = gitCapabilityMode() === 'capable' ? gitWorkspaceRevision : '';
@@ -3151,16 +3166,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     try {
       response = await rpc.git.listWorkspacePage({ repoRootPath, section, directoryPath, offset, limit: GIT_WORKSPACE_PAGE_SIZE, expectedWorkspaceRevision: revision || undefined });
     } catch (error) {
-      if (protocol.session?.() !== client || resolveActiveRepoRootPath() !== repoRootPath || generation !== gitTreeGeneration()) return;
+      if (protocol.session?.() !== client || resolveActiveRepoRootPath() !== repoRootPath || generation !== gitTreeGeneration() || sectionSequence !== gitWorkspaceReqSeqBySection[section]) return;
       if (gitCapabilityMode() === 'capable' && isGitWorkspaceSnapshotStale(error)) {
-        discardGitWorkspaceGeneration();
+        invalidateRetainedGitWorkspace();
         await loadGitWorkspaceSection(section, { repoRootPath, force: true, silent: true });
         return;
       }
       throw error;
     }
     if (protocol.session?.() !== client || resolveActiveRepoRootPath() !== repoRootPath
-      || generation !== gitTreeGeneration() || getGitWorkspaceWatermark(client, repoRootPath) !== watermark) return;
+      || generation !== gitTreeGeneration() || sectionSequence !== gitWorkspaceReqSeqBySection[section] || getGitWorkspaceWatermark(client, repoRootPath) !== watermark) return;
     if (response.repoRootPath !== repoRootPath || (response.directoryPath ?? '') !== directoryPath || (response.section ?? 'changes') !== section
       || (revision && response.workspaceRevision !== revision)) throw new Error('Git directory response changed its requested scope or revision');
     return response;
@@ -3168,7 +3183,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const loadMoreGitWorkspaceSection = async (section: GitWorkspaceViewSection) => {
     const state = gitWorkspacePageState(section);
-    if (!state.initialized || state.loading || !state.hasMore) return;
+    if (!state.initialized || state.stale || state.loading || !state.hasMore) return;
     return loadGitWorkspaceSection(section, {
       append: true,
       offset: state.nextOffset,
@@ -3539,7 +3554,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (gitSubview() === 'changes') {
       const section = selectedGitWorkspaceSection();
       const sectionState = gitWorkspacePageState(section);
-      if (!sectionState.initialized && !sectionState.loading && !initializeKnownEmptyGitWorkspaceSection(section)) {
+      if ((!sectionState.initialized || sectionState.stale) && !sectionState.loading && !initializeKnownEmptyGitWorkspaceSection(section)) {
         refreshes.push(loadGitWorkspaceSection(section, {
           silent: true,
           repoRootPath,
@@ -4649,18 +4664,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const unsubscribe = subscribeGitWorkspaceInvalidation(client, (event) => {
       const activeRepo = String(repoInfo()?.repoRootPath ?? '');
       if (event.repoRootPath && event.repoRootPath !== activeRepo) return;
-      discardGitWorkspaceGeneration();
+      batch(invalidateRetainedGitWorkspace);
 
       if (!activeRepo) return;
-      void (async () => {
+      const refresh = { repoRootPath: activeRepo, promise: Promise.resolve() };
+      refresh.promise = (async () => {
         const summary = await loadGitRepoSummary({ repoRootPath: activeRepo, silent: true });
         if (!summary || protocol.session?.() !== client) return;
         if (pageMode() === 'git' && gitSubview() === 'changes') {
-          await loadCurrentGitWorkspaceSection({ repoRootPath: activeRepo, silent: true, force: true });
+          await refreshVisibleGitWorkspaceSection(activeRepo);
         } else if (pageMode() === 'files') {
           await loadFilesGitDecorationIndex(activeRepo);
         }
-      })();
+      })().finally(() => { if (workspaceInvalidationRefresh === refresh) workspaceInvalidationRefresh = null; });
+      workspaceInvalidationRefresh = refresh;
     });
     onCleanup(unsubscribe);
 

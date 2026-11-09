@@ -155,16 +155,10 @@ describe('browser workspace layout wiring', () => {
     expect(shellSrc).toContain('bg-[var(--redeven-overlay-scrim)]');
     expect(shellSrc).toContain("aria-label={i18n.t('uiCopy.shell.closeSidebar')}");
 
-    expect(navSrc).toContain('role="tablist"');
-    expect(navSrc).toContain('data-git-view-nav-label');
-    expect(navSrc).toContain('git-workspace-views flex min-w-0 items-center');
-    expect(navSrc).not.toContain('overflow-x-auto');
-    expect(navSrc).toContain("aria-label={i18n.t('uiCopy.git.views')}");
-    expect(navSrc).toContain('aria-orientation="horizontal"');
-    expect(navSrc).toContain("resolveRovingTabTargetId(itemIds(), currentId, event.key, 'horizontal')");
-    expect(navSrc).toContain('justify-center');
-    expect(navSrc).toContain('git-workspace-view-tab');
-    expect(navSrc).toContain("const active = () => !props.inactive && props.value === item.id");
+    expect(navSrc).toContain('<Tabs');
+    expect(navSrc).toContain("indicator: { mode: 'slider', animated: true }");
+    expect(navSrc).toContain("activeId={props.stashActive ? 'stashes' : props.value}");
+    expect(navSrc).toContain("ariaLabel={i18n.t('uiCopy.git.views')}");
     expect(navSrc).not.toContain('gitSelectedChipClass(true)');
     expect(navSrc).not.toContain("typeof item.count === 'number' && item.count > 0");
     expect(navSrc).not.toContain('gitSubviewTone');
@@ -306,7 +300,7 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-3 py-2.5 align-top';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';");
     expect(primitivesSrc).toContain("grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5");
-    expect(primitivesSrc).toContain("'grid grid-cols-1 gap-2 border-t px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2'");
+    expect(primitivesSrc).toContain('flex shrink-0 flex-wrap items-center justify-center gap-2 border-t px-3 py-2');
     expect(primitivesSrc).toContain("redevenDividerRoleClass()");
     expect(primitivesSrc).toContain("redevenSurfaceRoleClass('inset')");
     expect(primitivesSrc).toContain("class={cn('inline-flex max-w-full flex-wrap items-center gap-1.5', props.class)}");
@@ -466,7 +460,8 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain('data-git-content-skeleton={variant()}');
     expect(primitivesSrc).toContain('export function GitInlineLoadingStatus');
     expect(primitivesSrc).toContain('git-inline-loading-status__skeleton');
-    expect(primitivesSrc).toContain('<GitInlineLoadingStatus>{status()}</GitInlineLoadingStatus>');
+    expect(primitivesSrc).toContain('disabled={!props.hasMore || loading()}');
+    expect(primitivesSrc).not.toContain('git-paged-footer__button-skeleton');
     expect(primitivesSrc).not.toContain('export function GitLoadingIndicator');
     expect(primitivesSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
     expect(primitivesSrc).not.toContain('<SnakeLoader');

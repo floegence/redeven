@@ -94,6 +94,9 @@ export type GitSeededWorkspaceChangesResponse = Omit<
   conflicted: GitSeededWorkspaceChange[];
 };
 export type GitWorkspaceViewPageState = {
+  /** Retained paint awaiting a replacement revision; never append its old offset. */
+  stale?: boolean;
+  generation?: number;
   items: GitWorkspaceChange[];
   totalCount: number;
   scopeFileCount?: number;

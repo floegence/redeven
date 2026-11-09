@@ -59,7 +59,6 @@ export interface GitWorkbenchProps {
   onResizeRail?: (delta: number) => void;
   stashContent?: JSX.Element;
   stashActive?: boolean;
-  onShowStashes?: () => void;
   workspaceGeneration?: number;
   showAllWorkspaceSections?: boolean;
   onShowAllWorkspaceSections?: () => void;
@@ -487,7 +486,6 @@ export function GitWorkbench(props: GitWorkbenchProps) {
       <Show when={props.navigation}>
         <div class="git-workspace-navigation" data-git-workspace-navigation>
           {props.navigation}
-          <Show when={props.onOpenStash}><Button variant="ghost" size="sm" class="git-workspace-stashes" aria-pressed={Boolean(props.stashActive)} disabled={repoActionsDisabled()} onClick={() => props.onShowStashes ? props.onShowStashes() : runRepositoryAction('stashes')}><History class="size-4" />{i18n.t('git.common.stashes')}</Button></Show>
           <span class="flex-1" />
           <Show when={props.onAskFlower}><Button variant="ghost" size="sm" class="git-workspace-flower" disabled={repoActionsDisabled()} onClick={() => { const target = repositoryContextTarget(); if (target) props.onAskFlower?.({ kind: 'repository', ...target }); }}><FlowerIcon class="size-4" /><span>{i18n.t('git.contextMenu.askFlower')}</span></Button></Show>
         </div>
@@ -642,7 +640,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           </div>
         )} />
       </div>
-      <div class="min-h-0 flex-1" hidden={!props.stashActive}>{props.stashContent}</div>
+      <div class="min-h-0 flex-1" role="tabpanel" id={buildTabPanelElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'stashes')} aria-labelledby={buildTabElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'stashes')} hidden={!props.stashActive}>{props.stashContent}</div>
       <Show when={props.onResizeRail && !props.stashActive}><div class="git-workspace-resize"><ResizeHandle direction="horizontal" onResize={delta => props.onResizeRail?.(delta)} /></div></Show>
       </div>
 

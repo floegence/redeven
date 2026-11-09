@@ -159,7 +159,6 @@ export function GitWorkspace(props: GitWorkspaceProps) {
       onResizeRail={props.resizable ? props.onResize : undefined}
       stashContent={props.stashContent}
       stashActive={props.stashActive}
-      onShowStashes={props.onShowStashes}
       modeSwitcher={props.modeSwitcherMount ? <div ref={props.modeSwitcherMount} /> : (
         <GitHistoryModeSwitch
           mode={props.mode}
@@ -170,7 +169,8 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           class="w-full"
         />
       )}
-      navigation={<GitViewNav inactive={props.stashActive} value={props.navigationSubview ?? props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
+      navigation={<GitViewNav stashActive={props.stashActive} onShowStashes={props.onOpenStash ? () => props.onShowStashes ? props.onShowStashes() : props.onOpenStash?.({ tab: 'stashes', source: 'header' }) : undefined}
+        stashesDisabled={Boolean(props.repoInfoLoading || !(props.repoInfo?.available ?? Boolean(props.repoSummary?.repoRootPath)) || !(props.repoInfo?.repoRootPath || props.repoSummary?.repoRootPath))} value={props.navigationSubview ?? props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
       selectorRail={<GitWorkbenchSidebar
         subview={props.subview}
         repoInfoLoading={props.repoInfoLoading}

@@ -972,9 +972,9 @@ describe('GitChangesPanel interactions', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(host.textContent).toContain('Loading next page');
-      expect(host.textContent).not.toContain('Loading more...');
-      expect(host.querySelector('.git-inline-loading-status')).toBeTruthy();
-      expect(host.querySelector('.git-inline-loading-status__skeleton')).toBeTruthy();
+      expect(host.textContent).toContain('Loading more...');
+      expect(host.querySelector('.git-inline-loading-status')).toBeNull();
+      expect(host.querySelector('.git-inline-loading-status__skeleton')).toBeNull();
       expect(host.querySelector('.git-loading-indicator--inline')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
     } finally {

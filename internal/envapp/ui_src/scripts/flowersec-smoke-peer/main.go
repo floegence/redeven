@@ -312,41 +312,84 @@ func newHandlers(nativeCode, visualGit, fileContinuity, visualWorkspace bool, ht
 		if !visualGit {
 			return nil, errors.New("visual Git workspace requires visual Git")
 		}
-		summary := map[string]any{"staged_count": 3, "unstaged_count": 2}
-		registrations[1104] = func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
-			return map[string]any{"repo_root_path": "/workspace", "worktree_path": "/workspace", "head_ref": "main", "head_commit": "abcdef1234567890", "workspace_summary": summary, "workspace_revision": "visual-1", "staged_stats": map[string]int{"additions": 232, "deletions": 60}}, nil
+		// Task-owned in-memory inventory: mutations never touch a real repository.
+		var workspaceMu sync.Mutex
+		revision := 1
+		staged := map[string]bool{"src/staged-0.ts": true, "src/staged-1.ts": true, "src/staged-2.ts": true}
+		paths := []string{"src/feature-0.ts", "src/" + strings.Repeat("LongComponentName", 10) + ".tsx", "src/staged-0.ts", "src/staged-1.ts", "src/staged-2.ts"}
+		summary := func() map[string]any {
+			return map[string]any{"staged_count": len(staged), "unstaged_count": len(paths) - len(staged)}
 		}
-		registrations[1128] = func(_ context.Context, body json.RawMessage) (any, *flowersec.RPCError) {
+		registrations[1104] = func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			workspaceMu.Lock()
+			defer workspaceMu.Unlock()
+			return map[string]any{"repo_root_path": "/workspace", "worktree_path": "/workspace", "head_ref": "main", "head_commit": "abcdef1234567890", "workspace_summary": summary(), "workspace_revision": fmt.Sprintf("visual-%d", revision), "staged_stats": map[string]int{"additions": 232, "deletions": 60}}, nil
+		}
+		registrations[1128] = func(ctx context.Context, body json.RawMessage) (any, *flowersec.RPCError) {
 			var request struct {
 				Section   string `json:"section"`
 				Directory string `json:"directory_path"`
+				Revision  string `json:"expected_workspace_revision"`
 			}
 			if err := json.Unmarshal(body, &request); err != nil {
 				return nil, &flowersec.RPCError{Code: 400, Message: "Invalid workspace fixture request"}
+			}
+			select {
+			case <-time.After(120 * time.Millisecond):
+			case <-ctx.Done():
+				return nil, &flowersec.RPCError{Code: 499, Message: "Cancelled fixture read"}
+			}
+			workspaceMu.Lock()
+			defer workspaceMu.Unlock()
+			current := fmt.Sprintf("visual-%d", revision)
+			if request.Revision != "" && request.Revision != current {
+				return nil, &flowersec.RPCError{Code: 40901, Message: "Stale fixture snapshot"}
 			}
 			items := []any{}
 			count := 0
 			if request.Section == "changes" || request.Section == "staged" {
 				section := "unstaged"
-				count = 2
 				if request.Section == "staged" {
 					section = "staged"
-					count = 3
 				}
-				if request.Directory == "" {
-					items = append(items, map[string]any{"section": section, "entry_kind": "directory", "path": "src", "directory_path": "src", "descendant_file_count": count})
-				} else {
-					for index := 0; index < count; index++ {
-						name := fmt.Sprintf("src/feature-%d.ts", index)
-						if index == count-1 {
-							name = "src/" + strings.Repeat("LongComponentName", 10) + ".tsx"
-						}
+				for _, name := range paths {
+					if staged[name] != (request.Section == "staged") {
+						continue
+					}
+					count++
+					if request.Directory == "src" {
 						items = append(items, map[string]any{"section": section, "path": name, "change_type": "modified", "additions": 70, "deletions": 1})
 					}
 				}
+				if request.Directory == "" && count > 0 {
+					items = append(items, map[string]any{"section": section, "entry_kind": "directory", "path": "src", "directory_path": "src", "descendant_file_count": count})
+				}
 			}
-			return map[string]any{"repo_root_path": "/workspace", "section": request.Section, "directory_path": request.Directory, "summary": summary, "items": items, "workspace_revision": "visual-1", "scope_file_count": count, "total_count": len(items), "next_offset": len(items), "has_more": false}, nil
+			return map[string]any{"repo_root_path": "/workspace", "section": request.Section, "directory_path": request.Directory, "summary": summary(), "items": items, "workspace_revision": current, "scope_file_count": count, "total_count": len(items), "next_offset": len(items), "has_more": false}, nil
 		}
+		for _, typeID := range []uint32{1108, 1109} {
+			registrations[typeID] = func(_ context.Context, body json.RawMessage) (any, *flowersec.RPCError) {
+				var request struct {
+					Paths []string `json:"paths"`
+				}
+				if err := json.Unmarshal(body, &request); err != nil || len(request.Paths) != 1 {
+					return nil, &flowersec.RPCError{Code: 400, Message: "Fixture requires one exact file"}
+				}
+				workspaceMu.Lock()
+				defer workspaceMu.Unlock()
+				if request.Paths[0] != "src/feature-0.ts" {
+					return nil, &flowersec.RPCError{Code: 400, Message: "Unknown fixture mutation target"}
+				}
+				if typeID == 1108 {
+					staged[request.Paths[0]] = true
+				} else {
+					delete(staged, request.Paths[0])
+				}
+				revision++
+				return map[string]any{"repo_root_path": "/workspace", "result": map[string]int{"affected_count": 1}}, nil
+			}
+		}
+
 	}
 
 	for typeID, handler := range registrations {

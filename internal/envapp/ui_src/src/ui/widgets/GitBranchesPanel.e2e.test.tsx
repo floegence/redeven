@@ -264,6 +264,33 @@ function expandFileTree(host: ParentNode) {
 }
 
 describe("GitBranchesPanel interactions", () => {
+  it('keeps the branch workspace mounted without a pagination footer during background refresh', async () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const branch: GitBranchSummary = { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true };
+    const snapshot = { repoRootPath: '/workspace/repo', section: 'changes', summary: { unstagedCount: 5 }, totalCount: 2, scopeFileCount: 5, hasMore: false, items: [
+      { path: 'Resources', directoryPath: 'Resources', entryKind: 'directory', section: 'changes' },
+      { path: 'Sources', directoryPath: 'Sources', entryKind: 'directory', section: 'changes' },
+    ] };
+    let finish!: (value: unknown) => void;
+    mockListWorkspacePage.mockResolvedValueOnce(snapshot).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const [refresh, setRefresh] = createSignal(0);
+    const dispose = render(() => <LayoutProvider><NotificationProvider><ProtocolProvider contract={redevenV1Contract}>
+      <GitBranchesPanel repoRootPath="/workspace/repo" selectedBranch={branch} statusRefreshToken={refresh()} />
+    </ProtocolProvider></NotificationProvider></LayoutProvider>, host);
+    try {
+      await flush();
+      const row = host.querySelector('[data-git-tree-select="Sources"]');
+      expect(row).not.toBeNull();
+      setRefresh(1); await flush();
+      expect(host.querySelector('.git-paged-footer__button-skeleton')).toBeNull();
+      expect(host.querySelector('.git-inline-loading-status')).toBeNull();
+      expect(host.textContent).not.toContain('Showing');
+      expect(host.querySelector('[data-git-tree-select="Sources"]')).toBe(row);
+      finish(snapshot); await flush();
+      expect(host.querySelector('[data-git-tree-select="Sources"]')).toBe(row);
+    } finally { dispose(); }
+  });
+
   it("keeps a branch status failure local without retrying indefinitely", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -517,7 +544,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("keeps paged branch totals in footer copy without inventing unloaded scroll space", async () => {
+  it("keeps branch pagination concise without inventing unloaded scroll space", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -608,7 +635,8 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(controlText(host)).toContain("Showing 2 of 40 files.");
+      expect(controlText(host)).not.toContain("Showing 2 of 40 files.");
+      expect(controlText(host)).toContain("Load more");
       expect(controlText(host)).toContain("src/linked.ts");
       expect(controlText(host)).toContain("notes.txt");
       expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(

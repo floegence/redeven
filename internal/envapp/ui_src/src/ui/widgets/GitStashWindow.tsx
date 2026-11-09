@@ -689,7 +689,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
   const Content = createRetainedContent(() => <>
         <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
           {/* Header */}
-          <div class={cn('shrink-0 border-b px-3 py-2', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
+          <div data-git-stash-toolbar class={cn('shrink-0 border-b px-3 py-2', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-[13px] font-semibold tracking-tight text-foreground truncate">{repoName()}</span>
@@ -716,7 +716,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
             </div>
           </div>
 
-          <div class="@container min-h-0 flex-1 overflow-hidden">
+          <div class="@container min-h-0 flex-1 overflow-hidden" classList={{ 'p-3': props.embedded }}>
             <Show
               when={props.tab === 'save'}
               fallback={(

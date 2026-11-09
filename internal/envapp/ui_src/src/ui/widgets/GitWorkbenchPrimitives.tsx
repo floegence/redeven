@@ -1,7 +1,7 @@
 import { For, Show, type Component, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
-import { Button, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
+import { Button, StableText, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Tooltip } from '../primitives/Tooltip';
 import { useI18n } from '../i18n';
 import { localizedGitChangeLabel } from '../utils/localizedGitWorkbench';
@@ -498,48 +498,13 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
   const loadingStatus = () => (loading() ? (props.loadingStatus ?? i18n.t('git.common.loadingNextPage')) : '');
 
   return (
-    <div
-      class={cn(
-        'grid grid-cols-1 gap-2 border-t px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2',
-        redevenDividerRoleClass(),
-        redevenSurfaceRoleClass('inset'),
-        props.class,
-      )}
-    >
-      <div class="flex min-h-5 min-w-0 items-center justify-self-start">
-        <Show when={loadingStatus()}>
-          {(status) => (
-            <GitInlineLoadingStatus>{status()}</GitInlineLoadingStatus>
-          )}
-        </Show>
-      </div>
-
-      <div class="justify-self-stretch sm:justify-self-center">
-        <Show
-          when={!loading()}
-          fallback={(
-            <div class="git-paged-footer__button-skeleton" aria-hidden="true">
-              <span class="git-content-skeleton__block" />
-            </div>
-          )}
-        >
-          <Button
-            size="sm"
-            variant="outline"
-            class={cn('w-full rounded-full px-3 text-[11px] font-medium transition-[background-color,border-color] duration-150 hover:bg-accent/60 sm:min-w-[8.75rem] sm:w-auto', redevenSurfaceRoleClass('control'))}
-            onClick={() => props.onLoadMore?.()}
-            disabled={!props.hasMore}
-          >
-            {buttonLabel()}
-          </Button>
-        </Show>
-      </div>
-
-      <div class="min-w-0 justify-self-stretch sm:justify-self-end">
-        <GitSubtleNote class={cn('w-full px-2 py-1 text-[11px] leading-4 sm:max-w-full', redevenSurfaceRoleClass('controlMuted'))}>
-          {props.summary}
-        </GitSubtleNote>
-      </div>
+    <div class={cn('flex shrink-0 flex-wrap items-center justify-center gap-2 border-t px-3 py-2', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'), props.class)}>
+      <Button size="sm" variant="outline" class="min-w-0 max-w-full" onClick={() => props.onLoadMore?.()}
+        disabled={!props.hasMore || loading()} aria-busy={loading() || undefined}>
+        <StableText reserve={[props.buttonLabel ?? i18n.t('uiCopy.git.loadMore'), props.loadingLabel ?? i18n.t('git.common.loadingMore')]}>{buttonLabel()}</StableText>
+      </Button>
+      <Show when={loadingStatus()}><span role="status" class="sr-only">{loadingStatus()}</span></Show>
+      <Show when={props.summary}><GitSubtleNote class="text-[11px] leading-4">{props.summary}</GitSubtleNote></Show>
     </div>
   );
 }

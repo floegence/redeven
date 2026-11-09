@@ -77,6 +77,40 @@ await session.run(async () => {
     await screenshot(`changes-zh-${report.theme}`);
     report.cases.push('whole-index summary, explicit commit, collapsed lazy tree, horizontal scrolling');
     const nav = page.locator('[data-git-workspace-navigation]');
+    await page.locator('[data-git-all-section="changes"] [data-git-tree-select="src"]').click();
+    await page.locator('[data-git-all-section="staged"] [data-git-tree-select="src"]').click();
+    await page.locator('[data-git-all-section="staged"] [data-git-tree-select="src/staged-0.ts"]').waitFor();
+    const retained = page.locator('[data-git-all-section="changes"] [data-git-tree-select*="LongComponentName"]');
+    await retained.click();
+    await page.locator('.git-patch-viewer__viewport:visible').waitFor();
+    for (const section of ['changes', 'staged']) {
+      const source = page.locator(`[data-git-all-section="${section}"] [data-git-tree-path="src/feature-0.ts"]`);
+      await source.waitFor();
+      const frames = await source.evaluate(async (row, section) => {
+        const leaf = document.querySelector('[data-git-all-section="changes"] [data-git-tree-select*="LongComponentName"]');
+        const root = document.querySelector('[data-git-all-section="changes"] [data-git-tree-select="src"]');
+        const viewport = document.querySelector('[data-git-all-scroll]');
+        const patch = document.querySelector('.git-patch-viewer__viewport');
+        viewport.scrollLeft = 100;
+        const beforeLeft = viewport.scrollLeft;
+        row.querySelector('.git-workspace-tree__actions button').click();
+        const samples = [];
+        for (let frame = 0; frame < 70; frame++) {
+          samples.push({ leaf: leaf.isConnected, root: root.isConnected, viewport: viewport.isConnected,
+            patch: patch.isConnected, skeletons: viewport.querySelectorAll('[data-git-content-skeleton]').length,
+            left: viewport.scrollLeft, beforeLeft });
+          await new Promise(requestAnimationFrame);
+        }
+        return { section, samples };
+      }, section);
+      assert.ok(frames.samples.every(frame => frame.leaf && frame.root && frame.viewport && frame.patch && !frame.skeletons && frame.left === frame.beforeLeft), JSON.stringify(frames));
+      const destination = section === 'changes' ? 'staged' : 'changes';
+      await page.locator(`[data-git-all-section="${destination}"] [data-git-tree-select="src/feature-0.ts"]`).waitFor();
+      assert.equal(await draft.locator('textarea').inputValue(), 'fix: preserve git review state');
+      report.cases.push(frames);
+    }
+    await screenshot(`retained-stage-unstage-${report.theme}`);
+
     for (const label of ['已暂存', '变更', '全部']) {
       await page.getByRole('radio', { name: label, exact: true }).click();
       const overlay = await page.getByRole('radio', { name: label, exact: true }).evaluate(button => {
@@ -93,6 +127,9 @@ await session.run(async () => {
     }
     await nav.getByRole('tab', { name: '分支', exact: true }).click();
     await page.locator('[data-git-sidebar-branch-key]').first().click();
+    await page.locator('[data-git-branch-status-content-frame] [data-git-tree-select="src"]:visible').waitFor();
+    assert.equal(await page.locator('[data-git-branch-status-content-frame] .git-paged-footer__button-skeleton').count(), 0);
+    await screenshot(`branch-workspace-${report.theme}`);
     const branchPanel = page.locator('[data-testid="git-main-subview-branches"]');
     await branchPanel.getByRole('tab', { name: '提交图', exact: true }).click();
     await branchPanel.locator('[data-commit-graph-row]').first().click();
@@ -117,8 +154,26 @@ await session.run(async () => {
         await page.locator('[data-testid="git-main-subview-history"]:visible').waitFor();
       }
       if (source === 'stashes') {
-        await nav.locator('.git-workspace-stashes').click();
+        await nav.getByRole('tab', { name: '储藏', exact: true }).click();
         await page.locator('[data-git-stash-embedded]:visible').waitFor();
+        const geometry = await nav.evaluate(el => [...el.querySelectorAll('[role="tab"]')].map(tab => tab.getBoundingClientRect().bottom));
+        assert.equal(geometry.length, 4);
+        assert.ok(geometry.every(bottom => Math.abs(bottom - geometry[0]) < 1));
+        await page.waitForFunction(() => {
+          const active = document.querySelector('[data-git-workspace-navigation] [role="tab"][aria-selected="true"]');
+          const indicator = document.querySelector('.git-workspace-view-indicator');
+          if (active?.dataset.floeTabId !== 'stashes' || !indicator) return false;
+          const tab = active.getBoundingClientRect(), line = indicator.getBoundingClientRect();
+          return Math.abs(tab.x - line.x) < 1 && Math.abs(tab.width - line.width) < 1 && Math.abs(tab.bottom - line.bottom) < 1;
+        });
+        const emptyCard = page.getByText('暂无储藏', { exact: true }).locator('..').locator('..');
+        await emptyCard.waitFor();
+        const cardBounds = await emptyCard.boundingBox();
+        const toolbarBounds = await page.locator('[data-git-stash-toolbar]:visible').boundingBox();
+        const stashCardGap = cardBounds.y - toolbarBounds.y - toolbarBounds.height;
+        assert.ok(stashCardGap >= 12, `Empty stash card gap: ${stashCardGap}px`);
+        report.cases.push({ stashCardGap });
+        await screenshot(`stashes-${report.theme}`);
       }
       const samples = await nav.getByRole('tab', { name: '变更', exact: true }).evaluate(async button => {
         button.click(); const frames = [];
