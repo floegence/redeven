@@ -1754,7 +1754,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Redeven owns Plugin Center navigation and retained selection/search/filter/scroll; Floe owns dialogs, presence and input. New drafts center a composer on a quiet canvas without empty split preview. Landing/pre-preview use a fine two-scale lattice with slowly traveling theme-derived light. Grid lines stay aligned while their illumination changes, avoiding visual drift. The preview placeholder adds an original SVG application silhouette with restrained assembly motion and concise actual status, never simulated progress.",
+            "summary": "Redeven owns Plugin Center navigation and retained selection/search/filter/scroll; Floe owns dialogs, presence and input. New drafts center a composer on a quiet canvas without empty split preview. Landing/pre-preview use a fine two-scale lattice with slowly traveling theme-derived light. Grid lines stay aligned while their illumination changes, avoiding visual drift. The preview placeholder uses four filled, softly lit sculptural pieces that gather into an open bloom and loosen with staggered motion. Theme-derived blue/green materials, small satellites and a diffuse shadow add depth without a mock application frame. Motion uses transforms, a small material silhouette morph and opacity, pauses while hidden/inactive/failed, and becomes static for reduced motion or forced colors. Concise actual status stays separate from decoration; no simulated progress.",
             "section_count": 3
           },
           {
@@ -24079,7 +24079,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-08",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "accessibility",
           "plugin-center",
@@ -24090,8 +24090,8 @@
         "title": "Plugin Center interaction",
         "type": "UI Contract"
       },
-      "body_length": 11749,
-      "summary": "Redeven owns Plugin Center navigation and retained selection/search/filter/scroll; Floe owns dialogs, presence and input. New drafts center a composer on a quiet canvas without empty split preview. Landing/pre-preview use a fine two-scale lattice with slowly traveling theme-derived light. Grid lines stay aligned while their illumination changes, avoiding visual drift. The preview placeholder adds an original SVG application silhouette with restrained assembly motion and concise actual status, never simulated progress.",
+      "body_length": 12091,
+      "summary": "Redeven owns Plugin Center navigation and retained selection/search/filter/scroll; Floe owns dialogs, presence and input. New drafts center a composer on a quiet canvas without empty split preview. Landing/pre-preview use a fine two-scale lattice with slowly traveling theme-derived light. Grid lines stay aligned while their illumination changes, avoiding visual drift. The preview placeholder uses four filled, softly lit sculptural pieces that gather into an open bloom and loosen with staggered motion. Theme-derived blue/green materials, small satellites and a diffuse shadow add depth without a mock application frame. Motion uses transforms, a small material silhouette morph and opacity, pauses while hidden/inactive/failed, and becomes static for reduced motion or forced colors. Concise actual status stays separate from decoration; no simulated progress.",
       "sections": [
         {
           "id": "contract",
@@ -24997,5 +24997,5 @@
       ]
     }
   ],
-  "source_sha256": "c89f73eabdf52f98e2406259fd49aee50d9e5e5e929109726485ba11f3bcd8f7"
+  "source_sha256": "0bab71dbd4fe5910683ed75a0bb96a3cd7287ef75de5f9438618ba64e4dcbbdb"
 }

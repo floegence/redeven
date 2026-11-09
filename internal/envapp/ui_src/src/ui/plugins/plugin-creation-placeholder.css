@@ -1,43 +1,62 @@
-.plugin-creation-empty-preview { position: relative; isolation: isolate; display: grid; place-items: center; height: 100%; min-height: 0; overflow: auto; padding: 32px 24px 64px; color: var(--muted-foreground); background: var(--redeven-surface-main, var(--background)); }
-.plugin-creation-placeholder { display: flex; flex-direction: column; align-items: center; width: min(100%, 360px); gap: 18px; margin: auto; }
-.plugin-creation-blueprint { display: block; flex: 0 0 auto; width: 100%; overflow: visible; color: var(--foreground); }
-.plugin-blueprint-guides { stroke: color-mix(in srgb, var(--foreground) 12%, transparent); stroke-width: 1; }
-.plugin-blueprint-paper { fill: var(--card); stroke: color-mix(in srgb, var(--foreground) 10%, transparent); }
-.plugin-blueprint-sheet { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--foreground) 5%, transparent)); animation: plugin-blueprint-float 10s ease-in-out infinite; }
-.plugin-blueprint-rule { stroke: color-mix(in srgb, var(--foreground) 7%, transparent); }
-.plugin-blueprint-ink { fill: color-mix(in srgb, var(--foreground) 24%, transparent); }
-.plugin-blueprint-muted { fill: color-mix(in srgb, var(--foreground) 9%, transparent); }
-.plugin-blueprint-tile { fill: color-mix(in srgb, var(--foreground) 2%, var(--card)); stroke: color-mix(in srgb, var(--foreground) 6%, transparent); }
-.plugin-blueprint-tint { fill: color-mix(in srgb, var(--ring) 8%, var(--card)); }
-.plugin-blueprint-accent { fill: color-mix(in srgb, var(--ring) 50%, var(--muted-foreground)); }
-.plugin-blueprint-spark { stroke: color-mix(in srgb, var(--ring) 48%, var(--muted-foreground)); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.plugin-blueprint-heading, .plugin-blueprint-summary, .plugin-blueprint-secondary, .plugin-blueprint-detail { animation: plugin-blueprint-assemble 10s cubic-bezier(.22, 1, .36, 1) infinite; }
-.plugin-blueprint-summary { animation-delay: .15s; }
-.plugin-blueprint-secondary { animation-delay: .3s; }
-.plugin-blueprint-detail { animation-delay: .45s; }
-.plugin-creation-placeholder-caption { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.plugin-creation-empty-preview {
+  position: relative; isolation: isolate; display: grid; place-items: center;
+  height: 100%; min-height: 0; overflow: auto; padding: 28px 24px 56px;
+  color: var(--muted-foreground); background: var(--redeven-surface-main, var(--background));
+}
+.plugin-creation-placeholder { display: flex; flex-direction: column; align-items: center; width: min(100%, 340px); gap: 12px; margin: auto; }
+/* Four softly lit pieces gather into an open bloom, then loosen again. This is
+   ambient material, not a simulated application or a progress indicator. */
+.plugin-creation-sculpture {
+  --sculpture-ink: var(--info);
+  --sculpture-sage: var(--success);
+  --sculpture-warm: color-mix(in srgb, var(--info) 65%, var(--card));
+  --sculpture-light: var(--redeven-surface-highlight-source);
+  --sculpture-shade: var(--redeven-surface-shadow-source);
+  position: relative; width: 100%; aspect-ratio: 1.32; flex: 0 0 auto;
+  pointer-events: none; user-select: none;
+}
+.plugin-sculpture-halo { position: absolute; inset: 3% 4% 0; border-radius: 50%; background: radial-gradient(ellipse, color-mix(in srgb, var(--sculpture-ink) 9%, transparent), transparent 68%); }
+.plugin-sculpture-shadow { position: absolute; inset: auto 27% 9%; height: 9%; border-radius: 50%; background: color-mix(in srgb, var(--sculpture-ink) 13%, transparent); filter: blur(14px); animation: plugin-sculpture-shadow 14s ease-in-out infinite; }
+.plugin-sculpture-materials { position: absolute; inset: 16% 25% 20%; animation: plugin-sculpture-drift 14s ease-in-out infinite; }
+.plugin-sculpture-petal {
+  --material: var(--sculpture-ink);
+  position: absolute; width: 51%; height: 51%; overflow: hidden;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--material) 20%, var(--sculpture-light)), color-mix(in srgb, var(--material) 76%, var(--sculpture-light)) 58%, color-mix(in srgb, var(--material) 84%, var(--sculpture-shade)));
+  box-shadow: inset 1px 1px 2px color-mix(in srgb, var(--sculpture-light) 65%, transparent), inset -1px -2px 5px color-mix(in srgb, var(--material) 22%, transparent), 0 5px 12px color-mix(in srgb, var(--material) 14%, transparent);
+  animation: plugin-sculpture-unfold 14s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+.plugin-sculpture-petal i { position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(ellipse at 20% 10%, color-mix(in srgb, var(--sculpture-light) 45%, transparent), transparent 70%); }
+.plugin-sculpture-petal-a { --move-x: -10%; --move-y: -12%; --turn: -12deg; left: 0; top: 0; --petal-shape: 64% 48% 12% 48%; border-radius: var(--petal-shape); transform-origin: bottom right; }
+.plugin-sculpture-petal-b { --material: var(--sculpture-sage); --move-x: 12%; --move-y: -10%; --turn: 10deg; right: 0; top: 0; --petal-shape: 48% 64% 48% 12%; border-radius: var(--petal-shape); transform-origin: bottom left; animation-delay: -.5s; }
+.plugin-sculpture-petal-c { --material: var(--sculpture-warm); --move-x: -12%; --move-y: 10%; --turn: 9deg; left: 0; bottom: 0; --petal-shape: 48% 12% 48% 64%; border-radius: var(--petal-shape); transform-origin: top right; animation-delay: -1s; }
+.plugin-sculpture-petal-d { --material: color-mix(in srgb, var(--sculpture-ink) 60%, var(--sculpture-sage)); --move-x: 10%; --move-y: 12%; --turn: -10deg; right: 0; bottom: 0; --petal-shape: 12% 48% 64% 48%; border-radius: var(--petal-shape); transform-origin: top left; animation-delay: -.7s; }
+.plugin-sculpture-satellite { position: absolute; border-radius: 38%; background: linear-gradient(140deg, color-mix(in srgb, var(--sculpture-light) 65%, var(--sculpture-ink)), color-mix(in srgb, var(--sculpture-ink) 55%, var(--card))); box-shadow: inset 1px 1px 1px color-mix(in srgb, var(--sculpture-light) 65%, transparent), 0 5px 12px color-mix(in srgb, var(--sculpture-ink) 10%, transparent); animation: plugin-sculpture-orbit 14s ease-in-out infinite; }
+.plugin-sculpture-satellite-a { width: 18px; height: 18px; top: 22%; right: 14%; transform: rotate(18deg); }
+.plugin-sculpture-satellite-b { width: 10px; height: 10px; bottom: 28%; left: 15%; border-radius: 50%; animation-delay: -7s; opacity: .75; }
+.plugin-creation-placeholder-caption { display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center; }
 .plugin-creation-placeholder-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--foreground); }
-.plugin-creation-placeholder-state i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted-foreground); opacity: .55; }
+.plugin-creation-placeholder-state i { width: 4px; height: 4px; border-radius: 50%; background: var(--muted-foreground); opacity: .55; }
 .plugin-creation-placeholder-caption p { max-width: 280px; margin: 0; font-size: 11px; line-height: 1.7; text-wrap: balance; }
-.plugin-creation-empty-preview[data-build-state='running'] .plugin-creation-placeholder-state i { background: var(--ring); animation: plugin-blueprint-breathe 2.4s ease-in-out infinite; }
+.plugin-creation-empty-preview[data-build-state='running'] .plugin-creation-placeholder-state i { background: var(--ring); animation: plugin-sculpture-breathe 2.8s ease-in-out infinite; }
 .plugin-creation-empty-preview[data-build-state='failed'] .plugin-creation-placeholder-state i { background: var(--destructive); opacity: 1; }
-.plugin-creation-placeholder-checks { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; margin-top: -8px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+.plugin-creation-placeholder-checks { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; margin-top: -4px; border-radius: 6px; font-size: 11px; cursor: pointer; }
 .plugin-creation-placeholder-checks:hover { background: var(--muted); color: var(--foreground); }
 .plugin-creation-placeholder-checks:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .plugin-creation-atmosphere[data-active='false'] ~ .plugin-creation-placeholder * { animation-play-state: paused; }
-@keyframes plugin-blueprint-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-@keyframes plugin-blueprint-assemble { 0%, 6%, 100% { opacity: .62; transform: translateY(3px); } 20%, 84% { opacity: 1; transform: translateY(0); } }
-@keyframes plugin-blueprint-breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@keyframes plugin-sculpture-unfold { 0%, 100% { border-radius: 36%; transform: translate(var(--move-x), var(--move-y)) rotate(var(--turn)) scale(.86); } 38%, 58% { border-radius: var(--petal-shape); transform: translate(0, 0) rotate(0) scale(1); } }
+@keyframes plugin-sculpture-drift { 0%, 100% { transform: translateY(3px) rotate(-8deg); } 50% { transform: translateY(-5px) rotate(3deg); } }
+@keyframes plugin-sculpture-shadow { 0%, 100% { transform: scale(1); opacity: .8; } 50% { transform: scale(.86); opacity: .5; } }
+@keyframes plugin-sculpture-orbit { 0%, 100% { translate: 0 0; rotate: 0deg; } 50% { translate: 3px -9px; rotate: 18deg; } }
+@keyframes plugin-sculpture-breathe { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
 @media (max-width: 720px) {
-  .plugin-creation-empty-preview { padding: 24px 24px 48px; }
-  .plugin-creation-placeholder { max-width: 320px; gap: 12px; }
+  .plugin-creation-empty-preview { padding: 20px 24px 32px; }
+  .plugin-creation-placeholder { max-width: 280px; gap: 8px; }
   .plugin-creation-placeholder-checks { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .plugin-creation-placeholder * { animation: none !important; } }
 @media (forced-colors: active) {
-  .plugin-creation-placeholder * { animation: none !important; filter: none; }
-  .plugin-creation-blueprint { opacity: .5; }
-  .plugin-blueprint-paper, .plugin-blueprint-tile { fill: Canvas; stroke: CanvasText; }
-  .plugin-blueprint-guides, .plugin-blueprint-rule, .plugin-blueprint-spark { stroke: CanvasText; }
-  .plugin-blueprint-ink, .plugin-blueprint-muted, .plugin-blueprint-accent, .plugin-blueprint-tint { fill: CanvasText; }
+  .plugin-creation-placeholder * { animation: none !important; filter: none; box-shadow: none; }
+  .plugin-sculpture-halo, .plugin-sculpture-shadow, .plugin-sculpture-petal i { display: none; }
+  .plugin-sculpture-petal, .plugin-sculpture-satellite { background: CanvasText; }
+  .plugin-sculpture-petal-b, .plugin-sculpture-petal-c { background: Highlight; }
 }

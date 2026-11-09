@@ -3,11 +3,11 @@ type: UI Contract
 title: Plugin Center interaction
 tags: [ui, plugins, plugin-center, workbench, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Redeven owns Plugin Center navigation and retained selection/search/filter/scroll; Floe owns dialogs, presence and input. New drafts center a composer on a quiet canvas without empty split preview. Landing/pre-preview use a fine two-scale lattice with slowly traveling theme-derived light. Grid lines stay aligned while their illumination changes, avoiding visual drift. The preview placeholder adds an original SVG application silhouette with restrained assembly motion and concise actual status, never simulated progress.
+Redeven owns Plugin Center navigation and retained selection/search/filter/scroll; Floe owns dialogs, presence and input. New drafts center a composer on a quiet canvas without empty split preview. Landing/pre-preview use a fine two-scale lattice with slowly traveling theme-derived light. Grid lines stay aligned while their illumination changes, avoiding visual drift. The preview placeholder uses four filled, softly lit sculptural pieces that gather into an open bloom and loosen with staggered motion. Theme-derived blue/green materials, small satellites and a diffuse shadow add depth without a mock application frame. Motion uses transforms, a small material silhouette morph and opacity, pauses while hidden/inactive/failed, and becomes static for reduced motion or forced colors. Concise actual status stays separate from decoration; no simulated progress.
 
 # Contract
 

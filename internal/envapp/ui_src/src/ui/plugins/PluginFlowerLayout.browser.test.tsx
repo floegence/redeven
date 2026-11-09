@@ -98,6 +98,15 @@ it.each([
   const toolbar = host.querySelector<HTMLElement>('.plugin-creation-toolbar')!;
   expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
   await page.screenshot({ path: `__screenshots__/workspace-${width}-${theme}${locale ? '-'+locale : ''}${started ? '-generating' : ''}.png` });
+  if (started && width === 1280) {
+    const animations = host.querySelector('.plugin-creation-sculpture')!.getAnimations({ subtree: true });
+    for (const animation of animations) animation.pause();
+    for (const time of [0, 6000, 11000]) {
+      for (const animation of animations) animation.currentTime = time;
+      await page.screenshot({ path: `__screenshots__/workspace-${theme}-sculpture-${time}.png` });
+    }
+    for (const animation of animations) animation.play();
+  }
   if (started && width < 720) {
     expect(background.dataset.active).toBe('false');
     await page.getByRole('tab', { name: locale === 'zh-CN' ? '预览' : 'Preview', exact: true }).click();
