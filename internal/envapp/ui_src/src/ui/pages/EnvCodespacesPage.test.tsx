@@ -186,6 +186,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
+    env_id: () => 'codespaces-test',
     resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: envContextMocks.scopeAccessor ? envContextMocks.scopeAccessor() : envContextMocks.scope }),
     env: envContextMocks.env,
     openFlowerTurnLauncher: envContextMocks.openFlowerTurnLauncher,
@@ -263,6 +264,7 @@ vi.mock('../services/browserEditorSetup', () => ({
         if (!result.ok || !result.prepared) throw new Error(result.message);
         return { state: 'succeeded', ...result };
       },
+      retire: () => controller.abort(),
       cancel: async () => {
         cancelled = true;
         controller.abort();
@@ -519,7 +521,7 @@ describe('EnvCodespacesPage', () => {
     await flushPage();
     expect(controlText(host)).toContain('Renamed Space');
     expect(host.querySelector('[data-testid="codespace-card"]')).toBe(card);
-    expect(readPage()).toEqual({ view: 'codespaces' });
+    expect(readPage()).toEqual({ view: 'codespaces', visible_spaces: [{id:'space-1', name:'Renamed Space'}], truncated:false });
     dispose();
   });
 
@@ -767,9 +769,10 @@ describe('EnvCodespacesPage', () => {
     const [intent, anchor] = envContextMocks.openFlowerTurnLauncher.mock.calls[0];
     expect(anchor).toEqual({ x: 40, y: 56 });
     expect(intent).toMatchObject({
-      source_surface: 'file_browser',
+      source_surface: 'flower_composer',
       suggested_working_dir: '/workspace/demo',
       context_items: [
+        expect.objectContaining({kind:'text_snapshot',title:'Demo Space'}),
         {
           kind: 'file_path',
           path: '/workspace/demo',
@@ -779,7 +782,7 @@ describe('EnvCodespacesPage', () => {
       pending_attachments: [],
       notes: [],
     });
-    expect(buildFlowerTurnLauncherCopy(intent).context_entries).toEqual([expect.objectContaining({ tone: 'directory', label: 'demo' })]);
+    expect(buildFlowerTurnLauncherCopy(intent).context_entries).toEqual(expect.arrayContaining([expect.objectContaining({ tone: 'directory', label: 'demo' })]));
   });
 
   it('shows Browser Editor setup guidance when the runtime is missing', async () => {

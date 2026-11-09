@@ -208,6 +208,16 @@ describe('browserEditorSetup', () => {
     expect(mocks.createOperation).toHaveBeenCalledOnce();
   });
 
+  it('retires observation without canceling accepted Runtime work', async () => {
+    const status = {...completedStatus(), operation:{...completedStatus().operation, operation_id:'browser-editor:owned', install_method:'remote_download', state:'running'}};
+    mocks.createOperation.mockResolvedValue(status.operation); mocks.fetchStatus.mockResolvedValue(status);
+    const orchestration = createBrowserEditorSetupOrchestration({operationID:'browser-editor:owned',installMethod:'remote_download'});
+    const pending=orchestration.run();
+    await vi.waitFor(() => expect(orchestration.snapshot().operationObserved).toBe(true));
+    orchestration.retire(); await pending;
+    expect(mocks.cancelRuntime).not.toHaveBeenCalled(); expect(mocks.cancelDesktop).not.toHaveBeenCalled(); expect(mocks.createOperation).toHaveBeenCalledOnce();
+  });
+
   it('cancels the Runtime operation using its observed identity', async () => {
     const runningStatus = {
       ...completedStatus(),

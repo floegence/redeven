@@ -1682,6 +1682,21 @@ func (m *Manager) Operation(ctx context.Context, operationID string) (*pfregistr
 	return op, nil
 }
 
+// OperationByRequestID only observes admission; absence never authorizes replay.
+func (m *Manager) OperationByRequestID(ctx context.Context, requestID string) (*pfregistry.ManagedOperation, error) {
+	if err := validateRequestID(requestID); err != nil {
+		return nil, err
+	}
+	op, err := m.registry.GetManagedOperationByRequestID(ctx, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil {
+		return nil, serviceError("OPERATION_NOT_FOUND", "The managed Web Service request has no recorded operation.", 404, false, nil)
+	}
+	return op, nil
+}
+
 func (m *Manager) Subscribe(operationID string) (<-chan pfregistry.ManagedOperation, func(), error) {
 	ch := make(chan pfregistry.ManagedOperation, 8)
 	m.mu.Lock()

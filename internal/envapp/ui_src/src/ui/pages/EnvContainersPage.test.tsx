@@ -26,6 +26,7 @@ const harness = vi.hoisted(() => ({
   listResources: vi.fn(),
   resourceDetails: vi.fn(),
   listOperations: vi.fn(),
+  getOperation: vi.fn(),
   listOperationEvents: vi.fn(),
   subscribeOperationEvents: vi.fn(),
   createComposeDefinition: vi.fn(),
@@ -125,7 +126,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
     data-point-count={props.series[0]?.data?.length ?? 0}
     data-y-max={props.yMax}
   />,
-  Select: (props: any) => <select class={props.class} value={props.value} disabled={props.disabled} onChange={(event) => props.onChange(event.currentTarget.value)}>{props.options.map((option: any) => <option value={option.value}>{option.label}</option>)}</select>,
+  Select: (props: any) => <select aria-label={props.ariaLabel ?? props['aria-label']} class={props.class} value={props.value} disabled={props.disabled} onChange={(event) => props.onChange(event.currentTarget.value)}>{props.options.map((option: any) => <option value={option.value}>{option.label}</option>)}</select>,
   Tabs: (props: any) => <div class={props.class} role="tablist" aria-label={props.ariaLabel}>
     {props.items.map((item: any) => <button
       type="button"
@@ -234,6 +235,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   createContainerExecSession: harness.createExecSession,
   deleteContainerExecSession: harness.deleteExecSession,
   ContainerOperationRejectedError: class extends Error {},
+  getContainerOperation: harness.getOperation,
   subscribeContainerOperation: vi.fn(),
   tailContainerLogs: vi.fn(),
 }));
@@ -348,7 +350,7 @@ describe('native Containers page', () => {
       plan: { method: 'containers.start', target: {}, plan_digest: 'plan', risk_level: 'low', risk_flags: [], requires_admin: false },
       management: { managed: false },
     });
-    harness.createOperation.mockReset().mockResolvedValue({ operation_id: 'operation-1', state: 'queued' });
+    harness.createOperation.mockReset().mockImplementation(async (_preflight, _request, requestID) => ({ operation_id: 'operation-1', request_id: requestID, state: 'queued' }));
     harness.createExecSession.mockReset().mockResolvedValue({ session_id: 'exec-session-1' });
     harness.deleteExecSession.mockReset().mockResolvedValue(undefined);
     harness.execTerminalProps.clear();
@@ -597,7 +599,7 @@ describe('native Containers page', () => {
     Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
       .find(button => button.textContent?.includes('containers.actions.start'))?.click();
     await settle();
-    expect(harness.createOperation).toHaveBeenCalledWith(preflight, { engine: 'docker', service_id: 'container_service_docker' });
+    expect(harness.createOperation).toHaveBeenCalledWith(preflight, { engine: 'docker', service_id: 'container_service_docker' }, expect.any(String));
   });
 
   it.each(['engine_timeout', 'reconciliation_required', 'unrecognized_future_error'])(
@@ -663,6 +665,7 @@ describe('native Containers page', () => {
       created_at_unix_ms: 1, updated_at_unix_ms: 120001, finished_at_unix_ms: 120001,
     };
     harness.listOperations.mockResolvedValue([operation]);
+    harness.getOperation.mockResolvedValue(operation);
     const host = document.createElement('div'); document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host); await settle();
     host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click(); await settle();
@@ -707,12 +710,13 @@ describe('native Containers page', () => {
     }
   });
 
-  it.each(['succeeded', 'failed'])('refreshes service readiness when polling observes %s after a lost stream', async (outcome) => {
+  it.each(['succeeded', 'failed'])('refreshes service readiness when exact-operation reconciliation observes %s after a lost stream', async (outcome) => {
     const operation = {
       operation_id: 'starting', method: 'container.services.start', engine: 'docker', resource_kind: 'container_service', resource_identity: 'container_service_docker',
       state: 'running', created_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
     };
     harness.listOperations.mockResolvedValue([operation]);
+    harness.getOperation.mockResolvedValue(operation);
     const host = document.createElement('div'); document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host); await settle();
     host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click(); await settle();
@@ -723,6 +727,7 @@ describe('native Containers page', () => {
       capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine'] },
     }]);
     harness.listOperations.mockResolvedValue([{ ...operation, state: outcome, ...(outcome === 'failed' ? { error_code: 'engine_timeout' } : {}) }]);
+    harness.getOperation.mockResolvedValue({ ...operation, state: outcome });
     await vi.waitFor(() => expect(harness.listServices.mock.calls.length).toBeGreaterThan(calls), { timeout: 2500 });
     await settle();
     expect(host.querySelector('.container-service-card')?.getAttribute('data-state')).toBe('running');
@@ -840,12 +845,12 @@ describe('native Containers page', () => {
     actionButton().click(); await settle();
     dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
     const confirm = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === `containers.actions.${action}`)!;
-    const pending = deferred<{ operation_id: string; state: string }>();
+    const pending = deferred<{ operation_id: string; request_id: string; state: string }>();
     harness.createOperation.mockReturnValueOnce(pending.promise);
     confirm.click(); confirm.click();
-    expect(harness.createOperation).toHaveBeenCalledExactlyOnceWith(preflight, request);
+    expect(harness.createOperation).toHaveBeenCalledExactlyOnceWith(preflight, request, expect.any(String));
     expect(confirm.disabled).toBe(true);
-    pending.resolve({ operation_id: 'service-operation', state: 'queued' }); await settle();
+    pending.resolve({ operation_id: 'service-operation', request_id: harness.createOperation.mock.lastCall![2], state: 'queued' }); await settle();
     expect(host.querySelector('[data-dialog]')).toBeNull();
     expect(host.querySelector('[data-drawer]')).toBeNull();
   });
@@ -901,16 +906,17 @@ describe('native Containers page', () => {
     await settle();
     expect(host.querySelector('[data-testid="container-settings-panel"]')?.textContent).toContain('containers.services.dockerCLIScope');
     expect(host.querySelector('[data-testid="container-settings-panel"]')?.textContent).not.toContain('containers.services.openSettings');
-    expect(host.querySelectorAll('[data-testid="container-settings-panel"] .container-service-cli-setting-card')).toHaveLength(2);
-    const outputFormats = host.querySelector<HTMLDetailsElement>('[data-testid="container-settings-panel"] .container-service-cli-disclosure');
+    expect(host.querySelector('[aria-label="containers.services.currentContext"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="containers.services.detachKeys"]')).not.toBeNull();
+    const outputFormats = host.querySelector<HTMLDetailsElement>('[data-testid="container-settings-panel"] details');
     expect(outputFormats?.open).toBe(false);
     expect(outputFormats?.textContent).toContain('docker ps');
-    expect(outputFormats?.textContent).toContain('psFormat');
+    expect(outputFormats?.querySelector('[aria-label="docker ps"]')).not.toBeNull();
     Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="container-settings-panel"] [role="tab"]'))
       .find((button) => button.textContent?.includes('containers.services.proxies'))
       ?.click();
     await settle();
-    const httpProxy = host.querySelectorAll<HTMLInputElement>('[data-testid="container-settings-panel"] .container-service-cli-profile input')[1] ?? null;
+    const httpProxy = host.querySelector<HTMLInputElement>('[data-testid="container-settings-panel"] [aria-label="containers.services.proxyFields.httpProxy"]');
     expect(httpProxy).not.toBeNull();
     httpProxy!.value = 'http://updated-proxy.example.test:3128';
     httpProxy!.dispatchEvent(new InputEvent('input', { bubbles: true }));

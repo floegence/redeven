@@ -557,11 +557,42 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 func (g *Server) handleManagedOperationRoute(w http.ResponseWriter, r *http.Request) bool {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, managedOperationsAPIBase+"/"), "/")
 	parts := strings.Split(rest, "/")
-	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+	if (len(parts) != 1 && len(parts) != 2) || strings.TrimSpace(parts[0]) == "" {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return true
 	}
-	operationID, action := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if len(parts) == 2 && parts[0] == "by-request" && r.Method == http.MethodGet {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
+			return true
+		}
+		op, err := g.managed.OperationByRequestID(r.Context(), strings.TrimSpace(parts[1]))
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "private, no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: op})
+		return true
+	}
+	operationID := strings.TrimSpace(parts[0])
+	if len(parts) == 1 && r.Method == http.MethodGet {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
+			return true
+		}
+		op, err := g.managed.Operation(r.Context(), operationID)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "private, no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: op})
+		return true
+	}
+	if len(parts) != 2 {
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+	action := strings.TrimSpace(parts[1])
 	if r.Method == http.MethodPost && action == "cancel" {
 		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
 		if !ok {

@@ -1,3 +1,4 @@
+import { createContainerOperationSession } from '../services/containerOperationSession';
 import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
@@ -64,14 +65,12 @@ import {
   cancelContainerOperation,
   createContainerExecSession,
   createComposeProjectDefinition,
-  createContainerOperation,
   deleteContainerExecSession,
   deleteComposeProjectDefinition,
   getComposeProjectDefinition,
   getContainerImageBuildHistory,
   getRawContainerInspect,
   getContainerResourceDetails,
-  listContainerOperations,
   listContainerServices,
   listContainerOperationEvents,
   listContainerResources,
@@ -79,7 +78,6 @@ import {
   listContainerResourceFiles,
   readContainerResourceFile,
   preflightContainerOperation,
-  subscribeContainerOperation,
   subscribeContainerOperationEvents,
   subscribeContainerLogs,
   subscribeContainerStats,
@@ -806,7 +804,10 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
       status: resourceStatus(view(), entry.item) },
   });
   registerFlowerPageReader(() => ({ view: view(), query: searchQuery(), filter: resourceFilter() }), props.registerPageContext);
-  const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
+  const operationSession = env.containerOperationSession ?? createContainerOperationSession(env);
+  const operations = operationSession.operations;
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
   const [operationsOpen, setOperationsOpen] = createSignal(false);
   const [selectedOperationID, setSelectedOperationID] = createSignal('');
   const [operationEvents, setOperationEvents] = createSignal<ContainerOperationEvent[]>([]);
@@ -853,7 +854,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   const [pendingConfirmation, setPendingConfirmation] = createSignal<MutationDraft | null>(null);
   const [confirmation, setConfirmation] = createSignal('');
   const [review, setReview] = createSignal<ReviewState | null>(null);
-  const [mutationBusy, setMutationBusy] = createSignal(false);
+  const [preflightBusy, setMutationBusy] = createSignal(false);
+  const mutationBusy = () => preflightBusy() || operationSession.admissions().length > 0;
   const [logs, setLogs] = createSignal<ContainerLogLine[] | null>(null);
   const [stats, setStats] = createSignal<ContainerStats | null>(null);
   const [statsHistory, setStatsHistory] = createSignal<ContainerStats[]>([]);
@@ -915,7 +917,6 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   const inventoryResource = (runtime: ReadyContainerRuntime, view: ContainerResourceView) => resources.resource(
     `container-inventory:${inventoryCacheKey(runtime, view)}`, (value) => containerInventorySnapshot(view, value),
   );
-  let operationStreamAbort: AbortController | null = null;
   let operationDetailsAbort: AbortController | null = null;
   let servicesLoadAbort: AbortController | null = null;
   let logViewElement: HTMLDivElement | undefined;
@@ -1104,32 +1105,19 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
 
   const loadOperations = async () => {
     if (!canRead()) return;
-    try {
-      const next = await listContainerOperations();
-      const completedService = next.some(item => item.resource_kind === 'container_service'
-        && TERMINAL_OPERATION_STATES.has(item.state)
-        && operations().some(previous => previous.operation_id === item.operation_id && operationActive(previous)));
-      setOperations(next);
-      if (completedService) {
-        servicesResource.invalidate();
-        runtimeResource().invalidate();
-        void loadContainerServices();
-        void reloadConsole(true);
-      }
-      const pendingID = pendingContainerCreateOperationID();
-      const pendingCreate = pendingID ? next.find((operation) => operation.operation_id === pendingID) : undefined;
-      if (pendingCreate && TERMINAL_OPERATION_STATES.has(pendingCreate.state)) {
-        setPendingContainerCreateOperationID('');
-        if (pendingCreate.state === 'succeeded') {
-          setContainerRunDraft(emptyContainerRunDraft());
-          setContainerRunPortSuggestions([]);
-          setContainerRunAdvanced(false);
-        }
-      }
-    } catch {
-      // Inventory remains usable when operation history is temporarily unavailable.
-    }
+    try { await operationSession.refresh(); } catch { /* Retain confirmed history. */ }
   };
+  const unsubscribeOperations = operationSession.subscribe(next => {
+    if (!TERMINAL_OPERATION_STATES.has(next.state)) return;
+    void reloadConsole(true);
+    if (next.resource_kind === 'container_service') void loadContainerServices();
+    const ownsDraft = pendingContainerCreateOperationID() === next.operation_id;
+    if (ownsDraft) {
+      setPendingContainerCreateOperationID('');
+      if (next.state === 'succeeded') { setContainerRunDraft(emptyContainerRunDraft()); setContainerRunPortSuggestions([]); setContainerRunAdvanced(false); }
+    }
+  });
+  onCleanup(unsubscribeOperations);
 
   const loadContainerServices = async () => {
     if (!canRead() || !servicesResource.ready()) return;
@@ -1657,11 +1645,6 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     if (!available && execSessionID()) void closeExecSession();
   });
 
-  createEffect(() => {
-    if (!operations().some(operationActive)) return;
-    const timer = window.setInterval(() => void loadOperations(), 1200);
-    onCleanup(() => window.clearInterval(timer));
-  });
 
   createEffect(() => {
     const ready = readyConsole();
@@ -1779,7 +1762,6 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   onCleanup(() => {
     consoleLoadAbort?.abort();
     servicesLoadAbort?.abort();
-    operationStreamAbort?.abort();
     operationDetailsAbort?.abort();
     void closeExecSession();
   });
@@ -2310,40 +2292,22 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   const runReviewedOperation = async () => {
     const current = review();
     if (mutationBusy() || !resources.ready() || !current || (current.preflight.plan.requires_admin && !canAdmin())) return;
+    const admitted = operationSession.captureAuthority();
     setMutationBusy(true);
     try {
-      const operation = await createContainerOperation(current.preflight, current.request);
+      const operation = await operationSession.submit(current.preflight, current.request);
+      if (disposed || !admitted()) return;
       if (current.preflight.method === 'containers.create') {
         setPendingContainerCreateOperationID(operation.operation_id);
       }
       setReview(null);
       setSelectedOperationID(operation.operation_id);
       if (current.preflight.resource_kind !== 'container_service') setOperationsOpen(true);
-      setOperations((previous) => [operation, ...previous.filter((item) => item.operation_id !== operation.operation_id)]);
-      operationStreamAbort?.abort();
-      const controller = new AbortController();
-      operationStreamAbort = controller;
-      void subscribeContainerOperation(operation.operation_id, (next) => {
-        setOperations((previous) => [next, ...previous.filter((item) => item.operation_id !== next.operation_id)]);
-        if (TERMINAL_OPERATION_STATES.has(next.state)) {
-          for (const runtime of readyRuntimes()) for (const view of availableResourceViews([runtime])) inventoryResource(runtime, view).invalidate();
-          runtimeResource().invalidate();
-          servicesResource.invalidate();
-          void reloadConsole(true);
-          if (next.resource_kind === 'container_service') void loadContainerServices();
-          const ownsContainerDraft = pendingContainerCreateOperationID() === next.operation_id;
-          if (ownsContainerDraft) setPendingContainerCreateOperationID('');
-          if (next.state === 'succeeded') {
-            if (ownsContainerDraft) {
-              setContainerRunDraft(emptyContainerRunDraft());
-              setContainerRunPortSuggestions([]);
-              setContainerRunAdvanced(false);
-            }
-            notify.success(i18n.t('containers.notifications.operationCompleteTitle'), i18n.t('containers.notifications.operationCompleteMessage'));
-          }
-        }
-      }, controller.signal).catch(() => loadOperations());
+      void operationSession.track(operation).then(next => {
+        if (!disposed && next.state === 'succeeded') notify.success(i18n.t('containers.notifications.operationCompleteTitle'), i18n.t('containers.notifications.operationCompleteMessage'));
+      }).catch(() => undefined);
     } catch (cause) {
+      if (disposed) return;
       if (current.preflight.method === 'containers.create') setContainerRunOpen(true);
       notify.error(i18n.t('containers.notifications.operationFailedTitle'), cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -3634,6 +3598,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
             <For each={containerServices().map(service => service.service_id)}>{(serviceID) => {
               const service = () => servicesByID().get(serviceID)!;
               const operation = () => serviceOperation(service().service_id);
+              const admission = () => operationSession.admissions().find(item => item.preflight.resource_kind === 'container_service' && item.preflight.resource_identity === service().service_id);
               const active = () => operation() && operationActive(operation()!);
               const feedback = () => {
                 const latest = operation();
@@ -3646,7 +3611,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                 <div class="container-service-card__header">
                   <div class="container-service-card__mark"><ContainerServiceBrandMark engine={service().engine} remote={service().remote} /></div>
                   <div class="container-service-card__identity"><span>{runtimeName(service().engine)}</span><h3>{service().name}</h3><small>{i18n.t(`containers.services.implementations.${service().implementation}` as Parameters<typeof i18n.t>[0])}<Show when={service().version}> · {service().version}</Show><Show when={service().rootless}> · {i18n.t('containers.services.rootless')}</Show></small></div>
-                  <Show when={!active()}><Tag variant={service().state === 'running' ? 'success' : service().state === 'error' || service().state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{serviceStateLabel(service().state)}</Tag></Show>
+                  <Show when={!active()}><Tag variant={service().state === 'running' ? 'success' : service().state === 'error' || service().state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{admission() ? i18n.t('containers.operationStates.queued') : serviceStateLabel(service().state)}</Tag></Show>
                 </div>
                 <div class="container-service-card__body">
                   <Show when={service().restart_required}><div class="container-service-card__notice"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.restartRequired')}</div></Show>

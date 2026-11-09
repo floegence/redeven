@@ -3,19 +3,17 @@ type: Architecture Contract
 title: Container execution and operation observation
 tags: [architecture, containers, operations, reconciliation]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Every container operation binds exact engine, endpoint and resource identity. Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline.
+Operations bind exact engine, endpoint and resource identity. Known storage, registry, rate-limit, not-found and permission codes receive localized guidance beside the durable timeline.
 
 # Contract
 
 ## Operation ownership
 ### Admission and serialization
-The operation key contains engine, opaque endpoint ID, resource kind, and canonical identity.
-
-Reusing a request ID with different hashes produces an idempotency conflict instead of a second operation.
+The key binds engine, opaque endpoint ID, resource kind and canonical identity; a reused request ID with different hashes yields an idempotency conflict.
 
 ### Exact recovery
 Settings reads a known operation by ID, or uses the read-only `by-request/<request_id>` endpoint when creation returned no operation ID. Neither depends on the bounded recent-operation list. Absence remains uncertain because admission may still be in flight; observation never replays a mutation. `Container-Operation-Admission: rejected` is emitted only before entering operation storage, never for a storage-boundary failure.
@@ -23,30 +21,26 @@ Settings reads a known operation by ID, or uses the read-only `by-request/<reque
 ### Execution, cancellation, and events
 The service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.
 
-Unknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that host work may still be in progress. Desktop service cards direct users to its native application for setup/startup recovery and expose status revalidation. Service history shows state transitions without generic execution stages or a synthetic percentage bar.
+Unknown codes receive generic localized failure copy; raw diagnostics stay separate. Timeout does not prove execution stopped. Desktop recovery directs users to its native application and status revalidation. History shows actual transitions, not synthetic stages/percentages.
 
 ### Authoritative terminal observation
-After engine execution returns, the service reloads the exact endpoint-bound resource or relevant bounded inventory.
-
-The operation is never replayed, regardless of whether the resource appears present or absent.
+After execution, reload the exact endpoint-bound resource or bounded inventory. Presence or absence never authorizes replay.
 
 ### UI observation
-Inventory requests and streams are fenced by source runtime, endpoint, resource view, and request generation. A superseded response cannot replace current data.
+Shell owns pending admissions, concurrent operation streams and settlement invalidation. Settings and inventory views own only presentation. Ambiguous submissions retain their exact request identity and block duplicate work while background reads reconcile admission. View disposal cannot cancel accepted work. Same-owner reconnect retains history; authentication/environment changes retire observers. Inventory reads remain runtime/endpoint/view-generation fenced; stale snapshots cannot regress operation state.
 
-Mobile and desktop expose the same state and cancellation authority. Service lifecycle feedback stays on its card; history is secondary. Polling terminal transitions refresh authoritative service/runtime facts even when the event stream was lost. The portaled history drawer owns its responsive container and independent scrolling. Desktop uses a history sidebar; narrow drawers place a horizontal history strip above details. Rows use stable operation IDs and pressed selection; polling preserves focus and detail nodes. Details separate identity, live cancellation, duration/current health and timeline. The active final timeline step uses a pending indicator, never a completed check.
+Mobile/desktop share state and cancellation authority. Lifecycle feedback stays on service cards; terminal polling refreshes facts after stream loss. The portaled drawer scrolls independently, with a desktop sidebar or narrow horizontal history strip. Stable operation IDs and pressed selection preserve focus/detail nodes. Details separate identity, cancellation, duration/health and timeline; active steps show pending, never completion.
 
 ## Engine execution
 Observe Docker/Podman independently without probing inactive contexts or changing global selection.
 
 ### Execution ownership
-Every request binds `(engine, endpoint_id, resource kind, canonical identity)`.
-
-Observation failures are returned as errors and must never be converted into an empty project or a successful removal.
+Observation failures return errors, never an empty project or successful removal.
 
 ### Image pull observation
-Docker/Podman pulls retain CLI endpoint selection and credential helpers. On Unix the dedicated pull runner supplies terminal output so Docker emits transfer counters; both output streams are read continuously with bounded lines and terminal controls removed. Ordinary command/log runners keep their existing behavior. Windows retains combined pipe output and reports only counters actually supplied by its CLI. Cancellation terminates the task process group; an executed pull is never replayed as a non-streaming fallback.
+Pulls preserve CLI endpoint/credential helpers. Unix's dedicated terminal runner captures both streams with bounded lines and stripped controls; other runners stay unchanged. Windows uses combined pipes and only actual CLI counters. Cancel terminates the task process group; never replay a pull as a non-streaming fallback.
 
-Downloaded bytes sum observed compressed download counters even while another layer's size is unknown. Total bytes remain unknown until every noncached layer supplies a total. Cached layers contribute no transfer bytes; extraction counters never replace download counters, and download completion does not imply extraction completion. Repeated terminal redraws for unchanged layers are suppressed. Error classification retains bounded trailing evidence, including containerd's unresolved-reference not-found response.
+Downloaded bytes sum observed compressed counters; totals remain unknown until all noncached layers report sizes. Cached layers add no transfer bytes. Extraction is separate and may continue after download. Suppress unchanged redraws; retain bounded trailing error evidence, including containerd unresolved-reference not-found.
 
 # Boundaries
 

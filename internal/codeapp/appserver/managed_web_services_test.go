@@ -133,6 +133,52 @@ func TestManagedWebServiceSettingsAndReconfigureUseOnePermissionBoundary(t *test
 	}
 }
 
+func TestManagedOperationSnapshotRequiresReadPermission(t *testing.T) {
+	t.Parallel()
+	for _, allowed := range []bool{false, true} {
+		backend := &managedBackendStub{}
+		channelID := "ch_operation_snapshot"
+		server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: allowed})}
+		request := httptest.NewRequest(http.MethodGet, managedOperationsAPIBase+"/mop_one", nil)
+		request.Header.Set("Origin", envOriginWithChannel(channelID))
+		response := httptest.NewRecorder()
+		server.handleManagedWebServicesAPI(response, request)
+		if allowed {
+			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"operation_id":"mop_one"`) {
+				t.Fatalf("snapshot status=%d body=%s", response.Code, response.Body.String())
+			}
+		} else if response.Code != http.StatusForbidden {
+			t.Fatalf("read permission bypass: %d", response.Code)
+		}
+		if backend.operateCalls != 0 {
+			t.Fatal("reading an operation executed work")
+		}
+	}
+}
+
+func TestManagedOperationRequestSnapshotIsReadOnly(t *testing.T) {
+	t.Parallel()
+	for _, allowed := range []bool{false, true} {
+		backend := &managedBackendStub{}
+		channelID := "ch_operation_request"
+		server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: allowed})}
+		request := httptest.NewRequest(http.MethodGet, managedOperationsAPIBase+"/by-request/exact-request", nil)
+		request.Header.Set("Origin", envOriginWithChannel(channelID))
+		response := httptest.NewRecorder()
+		server.handleManagedWebServicesAPI(response, request)
+		if allowed {
+			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"request_id":"exact-request"`) || response.Header().Get("Cache-Control") != "private, no-store" {
+				t.Fatalf("request snapshot: %d %s", response.Code, response.Body.String())
+			}
+		} else if response.Code != http.StatusForbidden {
+			t.Fatalf("read permission bypass: %d", response.Code)
+		}
+		if backend.operateCalls != 0 {
+			t.Fatal("read executed work")
+		}
+	}
+}
+
 func TestManagedOperationEventsBeginWithSnapshotAndFinishAtTerminalState(t *testing.T) {
 	t.Parallel()
 	backend := &managedBackendStub{subscribeOperation: pfregistry.ManagedOperation{OperationID: "mop_one", ServiceID: "mws_one", State: "succeeded", Stage: "completed", ProgressCurrent: 7, ProgressTotal: 7}}
@@ -396,8 +442,11 @@ func (b *managedBackendStub) Operate(_ context.Context, serviceID string, reques
 func (b *managedBackendStub) Cancel(context.Context, string) (*pfregistry.ManagedOperation, error) {
 	return &pfregistry.ManagedOperation{}, nil
 }
-func (b *managedBackendStub) Operation(context.Context, string) (*pfregistry.ManagedOperation, error) {
-	return &pfregistry.ManagedOperation{}, nil
+func (b *managedBackendStub) Operation(_ context.Context, operationID string) (*pfregistry.ManagedOperation, error) {
+	return &pfregistry.ManagedOperation{OperationID: operationID}, nil
+}
+func (b *managedBackendStub) OperationByRequestID(_ context.Context, requestID string) (*pfregistry.ManagedOperation, error) {
+	return &pfregistry.ManagedOperation{OperationID: "mop_one", RequestID: requestID}, nil
 }
 func (b *managedBackendStub) Subscribe(string) (<-chan pfregistry.ManagedOperation, func(), error) {
 	events := make(chan pfregistry.ManagedOperation, 1)

@@ -1,3 +1,8 @@
+import { createBrowserEditorSetupSession } from './services/browserEditorSetupSession';
+import { createHostApplicationOperationSession } from './services/hostApplicationOperationSession';
+import { createContainerOperationSession } from './services/containerOperationSession';
+import { createHostApplicationSetupSession } from './services/hostApplicationSetupSession';
+import { createManagedServiceSession } from './services/managedServiceSession';
 import { TerminalSettingsAttachmentsProvider } from './services/terminalSettingsTargets';
 import type { DesktopAskFlowerSource } from '../../../../../desktop/src/shared/manualScreenshotIPC';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
@@ -1071,6 +1076,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     connection: () => protocol.status() === 'connected' && !accessPending() && !accessRecoveryBusy() && !accessResumePending()
       ? protocol.session?.() : null,
     retryPermissions: () => { void refetchEnv(); },
+  });
+  const browserEditorSetupSession = createBrowserEditorSetupSession({ env_id: envId, resourceCacheAccess });
+  const containerOperationSession = createContainerOperationSession({ env_id: envId, resourceCacheAccess });
+  const hostApplicationOperationSession = createHostApplicationOperationSession({ env_id: envId, resourceCacheAccess });
+  const hostApplicationSetupSession = createHostApplicationSetupSession({ env_id: envId, env, resourceCacheAccess });
+  const managedServiceSession = createManagedServiceSession({ env_id: envId, resourceCacheAccess }, {
+    streamFailedMessage: () => i18n.t('webServices.managed.operationStreamFailed'),
   });
   let flowerIdentity = '';
   let flowerConfirmedUserScope: string | undefined;
@@ -5687,6 +5699,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     <FlowerContextSources.Provider value={flowerContextSources}><EnvContext.Provider
       value={{
         resourceCacheAccess,
+        browserEditorSetupSession,
+        managedServiceSession,
+        hostApplicationSetupSession,
+        hostApplicationOperationSession,
+        containerOperationSession,
         flowerScopeKey,
         flowerDraftCoordinator,
         aiReadinessController,

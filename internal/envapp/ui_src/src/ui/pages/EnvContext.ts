@@ -82,6 +82,11 @@ export type OpenTerminalInDirectoryRequest = {
 export type RevealHostApplicationRequest = { requestId: string; applicationID: string; environmentID: string };
 
 export type EnvContextValue = {
+  browserEditorSetupSession?: import('../services/browserEditorSetupSession').BrowserEditorSetupSession;
+  hostApplicationOperationSession?: import('../services/hostApplicationOperationSession').HostApplicationOperationSession;
+  containerOperationSession?: import('../services/containerOperationSession').ContainerOperationSession;
+  hostApplicationSetupSession?: import('../services/hostApplicationSetupSession').HostApplicationSetupSession;
+  managedServiceSession?: import('../services/managedServiceSession').ManagedServiceSession;
   resourceCacheAccess?: () => import('../services/envResourceCache').EnvResourceCacheAccess;
   flowerDraftCoordinator?: FlowerComposerDraftCoordinator;
   flowerScopeKey?: () => string;

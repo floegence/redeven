@@ -1,15 +1,18 @@
+import { createRoot } from 'solid-js';
+import { createHostApplicationOperationSession, type HostApplicationOperationSession } from '../services/hostApplicationOperationSession';
 import '../../index.css';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', catalog: vi.fn(), setup: vi.fn(), detach: vi.fn(), quit: vi.fn(), terminate: vi.fn(), processStopped: false, sharingStopped: false }));
+const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', operationSession: undefined as HostApplicationOperationSession | undefined, catalog: vi.fn(), setup: vi.fn(), detach: vi.fn(), quit: vi.fn(), terminate: vi.fn(), processStopped: false, sharingStopped: false }));
 vi.mock('../i18n', async () => {
   const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return { useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) };
 });
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
+  hostApplicationOperationSession: state.operationSession,
   env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.scope }),
   env_id: () => 'host', localRuntime: () => ({}),
@@ -31,8 +34,9 @@ vi.mock('../services/hostApplicationsApi', async importOriginal => {
 });
 
 let dispose: (() => void) | undefined;
+let disposeSession: (() => void) | undefined;
 afterEach(async () => {
-  dispose?.();
+  dispose?.(); disposeSession?.(); disposeSession=undefined; state.operationSession=undefined;
   document.body.replaceChildren();
   state.locale = 'en-US'; state.detach.mockReset(); state.catalog.mockReset(); state.setup.mockReset(); state.quit.mockReset(); state.terminate.mockReset(); state.scope = ""; state.processStopped = false; state.sharingStopped = false;
   await page.viewport(1280, 720);
@@ -227,3 +231,21 @@ it.each(['macos', 'xpra'])('keeps the %s inventory compact and shares one entry 
   expect(host.querySelector('button.host-app-tile')).toBe(tile);
   expect(tile.getBoundingClientRect().toJSON()).toEqual(before);
 });
+
+ it('retains quit admission through page replacement and settles with no page', async () => {
+  createRoot(cleanup => {disposeSession=cleanup; state.operationSession=createHostApplicationOperationSession({env_id:()=> 'host'});});
+  const host=document.createElement('div'); document.body.append(host);
+  let accept!:()=>void; state.quit.mockReturnValue(new Promise<void>(resolve=>{accept=resolve;}));
+  dispose=render(()=><EnvHostApplicationsPage/>,host);
+  await expect.poll(()=>host.querySelector('.host-app-quit')).toBeTruthy();
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.host-app-quit')!);
+  await page.getByRole('dialog').getByRole('button',{name:'Quit application',exact:true}).click();
+  await expect.poll(()=>state.quit.mock.calls.length).toBe(1);
+  dispose(); host.replaceChildren(); accept();
+  await expect.poll(()=>state.operationSession?.operations()['editor.app']?.state).toBe('accepted');
+  dispose=render(()=><EnvHostApplicationsPage/>,host);
+  await expect.poll(()=>host.textContent).toContain('Close requested.');
+  dispose(); host.replaceChildren(); state.processStopped=true;
+  await expect.poll(()=>Object.keys(state.operationSession!.operations()),{timeout:4000}).toEqual([]);
+  expect(state.quit).toHaveBeenCalledOnce(); expect(state.terminate).not.toHaveBeenCalled();
+ });

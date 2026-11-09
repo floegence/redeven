@@ -1,5 +1,7 @@
 import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 import '../../index.css';
+import { createRoot } from 'solid-js';
+import { createManagedServiceSession, type ManagedServiceSession } from '../services/managedServiceSession';
 import { render } from 'solid-js/web';
 import { FloeConfigProvider, builtInShellThemePresets, ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,11 +10,12 @@ import axe from 'axe-core';
 import { I18nProvider } from '../i18n';
 import { SUPPORTED_LOCALES } from '../i18n/localeMeta';
 import { EnvPortForwardsPage } from './EnvPortForwardsPage';
+import { LocalApiError } from '../services/localApi';
 import type { ManagedOperation } from './managedServiceOperationController';
 
-const api = vi.hoisted(() => ({ fetch: vi.fn(), stream: vi.fn(), open: vi.fn(), notify: { success: vi.fn(), error: vi.fn() } }));
+const api = vi.hoisted(() => ({ fetch: vi.fn(), stream: vi.fn(), open: vi.fn(), session: undefined as ManagedServiceSession | undefined, notify: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@floegence/floe-webapp-core', async (original) => ({ ...await original<typeof import('@floegence/floe-webapp-core')>(), useNotification: () => api.notify }));
-vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ env: Object.assign(() => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }), { state: 'ready' }), env_id: () => 'test-env' }) }));
+vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ managedServiceSession: api.session, env: Object.assign(() => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }), { state: 'ready' }), env_id: () => 'test-env' }) }));
 vi.mock('../services/localApi', async (original) => ({ ...await original<typeof import('../services/localApi')>(), fetchLocalApiJSON: api.fetch, fetchLocalApi: api.stream }));
 vi.mock('@floegence/floe-webapp-protocol', () => ({ useProtocol: () => ({ session: () => null }) }));
 vi.mock('../protocol/redeven_v1', () => ({ useRedevenRpc: () => ({ fs: { list: async () => ({ entries: [] }) } }) }));
@@ -38,6 +41,7 @@ const media = commands as unknown as {
 
 describe('Web Services product interaction', () => {
   let dispose: (() => void) | undefined;
+  let disposeSession: (() => void) | undefined;
   let records: (typeof base & { problem_code?: string })[];
   let failRefresh = false;
   let host: HTMLDivElement;
@@ -73,6 +77,7 @@ describe('Web Services product interaction', () => {
   });
   afterEach(async () => {
     dispose?.();
+    disposeSession?.(); disposeSession = undefined; api.session = undefined;
     document.body.replaceChildren();
     localStorage.clear();
     for (const [key, value] of storedPreferences) localStorage.setItem(key, value);
@@ -81,6 +86,7 @@ describe('Web Services product interaction', () => {
     for (const [name, value] of rootAttributes) document.documentElement.setAttribute(name, value);
     await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
   });
+  function unmountPage() { dispose?.(); dispose = undefined; host.remove(); }
   async function mount(width = 1120, preset = 'classic-light') {
     await page.viewport(1440, 960);
     host = document.createElement('div');
@@ -608,6 +614,111 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => host.contains(document.activeElement)).toBe(true);
   });
 
+  it('keeps uninstall submission and execution visible after closing its drawer', async () => {
+    records = [base];
+    let accept!: (operation: ManagedOperation) => void;
+    const receipt = new Promise<ManagedOperation>(resolve => { accept = resolve; });
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    let signal: AbortSignal | null | undefined;
+    api.stream.mockImplementation(async (_url: string, options?: RequestInit) => {
+      signal = options?.signal;
+      return new Response(new ReadableStream<Uint8Array>({start(controller) { stream = controller; }}), {headers: {'Content-Type': 'text/event-stream'}});
+    });
+    const original = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/operations') ? receipt : original(url, options));
+    await mount();
+    await userEvent.click(page.getByRole('button', {name: 'Example dashboard: More', exact: true}));
+    await userEvent.click(page.getByRole('menuitem', {name: 'Uninstall', exact: true}));
+    await userEvent.click(page.getByRole('button', {name: 'Keep data and complete uninstall', exact: true}));
+    await expect.poll(() => api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/operations')).length).toBe(1);
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    const row = host.querySelector<HTMLElement>('[data-managed-service-id="sample-running"]')!;
+    await expect.poll(() => row.querySelector('[data-testid="managed-service-status"]')?.textContent).not.toBe('Running');
+    expect((page.getByRole('button', {name: 'Example dashboard: Stop', exact: true}).element() as HTMLButtonElement).disabled).toBe(true);
+    const running: ManagedOperation = {operation_id: 'background-uninstall', service_id: base.service_id, action: 'uninstall', state: 'running', stage: 'stopping', progress_current: 1, progress_total: 3};
+    accept(running);
+    await expect.poll(() => api.stream.mock.calls.length).toBe(1);
+    await userEvent.click(page.elementLocator(row.querySelector<HTMLButtonElement>('.web-service-status-trigger')!));
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-disclosure"]')?.textContent).toContain('Uninstall');
+    expect(signal?.aborted).toBe(false);
+    records = [];
+    stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({...running, state: 'succeeded', stage: 'completed', progress_current: 3})}\n\n`));
+    stream.close();
+    await expect.poll(() => host.querySelector('[data-managed-service-id="sample-running"]')).toBeNull();
+    expect(api.fetch.mock.calls.some(([url]) => String(url).endsWith('/cancel'))).toBe(false);
+  });
+
+  it.each(['host', 'container', 'compose'])('keeps %s uninstall admission and completion across page unmounts', async deployment => {
+    createRoot(dispose => {
+      disposeSession = dispose;
+      api.session = createManagedServiceSession({env_id: () => 'test-env'}, {streamFailedMessage: () => 'Observation unavailable',});
+    });
+    records = [{...base, deployment}];
+    let accept!: (value: ManagedOperation) => void;
+    const receipt = new Promise<ManagedOperation>(resolve => { accept = resolve; });
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    let signal: AbortSignal | null | undefined;
+    api.stream.mockImplementation(async (_url: string, options?: RequestInit) => {
+      signal = options?.signal;
+      return new Response(new ReadableStream<Uint8Array>({start(controller) {stream = controller;}}), {headers: {'Content-Type': 'text/event-stream'}});
+    });
+    const original = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/operations') ? receipt : original(url, options));
+    await mount(680);
+    await userEvent.click(page.getByRole('button', {name: 'Example dashboard: More', exact: true}));
+    await userEvent.click(page.getByRole('menuitem', {name: 'Uninstall', exact: true}));
+    await userEvent.click(page.getByRole('button', {name: 'Keep data and complete uninstall', exact: true}));
+    await expect.poll(() => api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/operations')).length).toBe(1);
+    unmountPage();
+    expect(api.session!.operations.operationForService(base.service_id)?.state).toBe('submitting');
+    const running: ManagedOperation = {operation_id: 'background-uninstall', service_id: base.service_id, action: 'uninstall', state: 'running', stage: 'stopping', progress_current: 1, progress_total: 3};
+    accept(running);
+    await expect.poll(() => api.stream.mock.calls.length).toBe(1);
+    await mount(680);
+    const row = host.querySelector<HTMLElement>('[data-managed-service-id="sample-running"]')!;
+    expect(row.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Stopping');
+    expect((page.getByRole('button', {name: 'Example dashboard: Stop', exact: true}).element() as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(page.elementLocator(row.querySelector<HTMLButtonElement>('.web-service-status-trigger')!));
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-disclosure"]')?.textContent).toContain('Uninstall');
+    const evidence = (import.meta as ImportMeta & {env: Record<string, string>}).env.VITE_REDEVEN_MANAGEMENT_EVIDENCE_DIR;
+    if (evidence) await page.screenshot({path: `${evidence}/background-uninstall-${deployment}.png`});
+    unmountPage();
+    expect(signal?.aborted).toBe(false);
+    records = [];
+    stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({...running, state: 'succeeded', stage: 'completed', progress_current: 3})}\n\n`)); stream.close();
+    await expect.poll(() => api.session!.managedResource.data()?.length).toBe(0);
+    await mount(680);
+    expect(host.querySelector('[data-managed-service-id="sample-running"]')).toBeNull();
+    expect(api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/operations'))).toHaveLength(1);
+    expect(api.fetch.mock.calls.some(([url]) => String(url).endsWith('/cancel'))).toBe(false);
+  });
+
+  it('keeps pending install admission across view replacement', async () => {
+    createRoot(dispose => {
+      disposeSession = dispose;
+      api.session = createManagedServiceSession({env_id: () => 'test-env'}, {streamFailedMessage: () => 'Observation unavailable',});
+    });
+    records = [];
+    installFixture();
+    let accept!: (value: unknown) => void;
+    const receipt = new Promise(resolve => { accept = resolve; });
+    const original = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/managed-web-services') && options?.method === 'POST' ? receipt : original(url, options));
+    await mount(); await openInstall();
+    await userEvent.click(page.getByTestId('managed-install-submit'));
+    await expect.poll(() => api.session!.installSubmissions().length).toBe(1);
+    unmountPage();
+    const installed = {...base, service_id: 'compact-install', template_id: 'compact-harness'};
+    records = [installed];
+    accept({service: installed, operation: {operation_id: 'install-background', service_id: installed.service_id, action: 'install', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7}});
+    await expect.poll(() => api.session!.managedResource.data()?.length).toBe(1);
+    await mount();
+    expect(api.session!.installSubmissions()).toHaveLength(0);
+    expect(api.fetch.mock.calls.filter(([url, options]) => String(url).endsWith('/managed-web-services') && options?.method === 'POST')).toHaveLength(1);
+    expect(host.querySelector('[data-managed-service-id="compact-install"]')).not.toBeNull();
+  });
+
   async function executeRecovery(mode: 'immediate' | 'streamed' | 'stream-error', state = 'succeeded') {
     records = [{ ...base, status: 'recovery_required', observed_state: 'missing', primary_action: 'inspect', actions: { ...base.actions, open: { available: false }, recover: { available: true } } }];
     const completed: ManagedOperation = {
@@ -628,6 +739,7 @@ describe('Web Services product interaction', () => {
         if (state === 'succeeded') records = [base];
         return completed;
       }
+      if (url.endsWith('/managed-web-service-operations/recovery-operation')) { records = [base]; return completed; }
       return original(url, options);
     });
     await mount(680);
@@ -706,16 +818,12 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => api.open.mock.calls.length).toBe(1);
   });
 
-  it('releases a disconnected recovery stream so the service can be reviewed again', async () => {
+  it('reconciles a disconnected recovery stream without repeating the mutation', async () => {
     const row = await executeRecovery('stream-error');
-    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"] [role="alert"]')).toBeTruthy();
-    await userEvent.keyboard('{Escape}');
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
-    const review = page.getByRole('button', { name: 'Example dashboard: Details and diagnostics', exact: true });
-    expect((review.element() as HTMLButtonElement).disabled).toBe(false);
-    await userEvent.click(review);
-    await expect.poll(() => document.querySelector('[data-testid="service-management-footer"] button:not(:disabled)')).toBeTruthy();
-    expect(row.isConnected).toBe(true);
+    await expect.poll(() => row.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
+    expect(api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/operations'))).toHaveLength(1);
+    expect(api.fetch.mock.calls.some(([url]) => String(url).endsWith('/managed-web-service-operations/recovery-operation'))).toBe(true);
   });
 
   it('shows request acceptance and completion without blocking other services or repeating a start', async () => {
@@ -753,7 +861,7 @@ describe('Web Services product interaction', () => {
 
   it('keeps a rejected request in recent operation details while retaining the observed running state', async () => {
     const original = api.fetch.getMockImplementation()!;
-    api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/operations') ? Promise.reject(new Error('The operation request was not accepted.')) : original(url, options));
+    api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/operations') ? Promise.reject(new LocalApiError({message: 'The operation request was not accepted.', status: 409, code: 'UI_REQUEST_FAILED'})) : original(url, options));
     await mount();
     await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Stop', exact: true }));
     await expect.poll(() => host.querySelector('[data-managed-service-id="sample-running"] [data-testid="managed-service-status"]')?.textContent).toBe('Stop · Failed');

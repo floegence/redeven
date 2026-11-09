@@ -25,7 +25,9 @@ Persisted `host_access.applications` and `host_access.desktop` independently rec
 
 Pause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.
 
-When both features are unconfigured, goal-based choices precede authorization; browsing remains available. Setup explains capability purpose and offers one next action. macOS permission requests preserve the selected application intent; Settings and Finder recovery are explicit. A confirmed helper restart ends current shares, keeps feature intent and user applications, and requires a fresh connection. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws pending opening but retains grants. The application header opens access settings through an icon-only gear with a localized tooltip and accessible name. Access settings starts with the two independent feature states and one setup/resume action per feature. Before a feature is enabled and ready, only its explicit setup flow exposes missing permissions or components; no picture tuning is shown. Application picture preferences live under that enabled application feature in a collapsed, optional disclosure, never under desktop access. Desktop persistent authorization appears only under an enabled, ready desktop. Shared system permissions remain a collapsed maintenance action while either feature is usable. Collapsing tuning, pausing access, losing readiness or leaving the category retires its portals and mutation authority without discarding unsaved choices; returning never reopens tuning or replays writes. Returning from macOS settings refreshes permissions and both feature summaries, not only running apps. [Launcher interaction](remote-desktop-launcher.md) owns setup and connection presentation.
+Unconfigured features offer goal-based setup before authorization; browsing remains available. Setup explains capability purpose and one next action. macOS settings/restart paths are explicit and preserve selected-app intent. Confirmed helper restart ends shares, retains access intent/apps, and requires reconnection. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws opening, not grants.
+
+An icon-only application-header gear has a localized name/tooltip and opens independent feature states with one setup/resume action each. Before readiness, only explicit setup exposes missing permissions/components; hide picture tuning. Optional collapsed application-picture settings belong to enabled Applications, never Desktop. Persistent desktop authorization requires enabled/ready Desktop. Shared permission maintenance is collapsed while either feature is usable. Collapse, pause, readiness loss or category exit retires portals/mutation authority, preserving drafts; return never reopens tuning or replays writes. Returning from macOS Settings refreshes permissions and both feature summaries. [Launcher interaction](remote-desktop-launcher.md) owns setup/connection presentation.
 
 ## Platforms
 ### Immutable launch plan
@@ -48,19 +50,13 @@ A Mac without a graphical login cannot create a private headless AppKit session.
 ## Preparation
 - `go.mod` owns exact dependency/toolchain versions. Never combine partial managed/system installations. [Applications](#catalog) owns environment restoration, private displays and dependencies.
 - Status, explicit transfer-plan inspection and observation require Read. Upstream serializes writers with a private-root lease and owns scoped cancellation/idempotent chunks. [Desktop cache](../desktop/host-application-component-cache.md) owns cross-device reuse, seven-day/2GB policy and separate progress.
-- Preparation names the selected app. Session refresh cannot reuse stale unavailable state or suppress its one pending opening. [macOS](macos-host-applications.md) owns helper/local launch/explicit capture-input permission and requires graphical login.
+- Shell owns preparation admission, Desktop acquisition, upload and observation; views own selected-app opening intent. Page disposal only withdraws automatic opening. Explicit Cancel alone requests host cancellation; environment retirement fences results and stops transport. Lost events reconcile status while work is active. Preparation names the selected app. Session refresh cannot reuse stale unavailable state or suppress its one pending opening. [macOS](macos-host-applications.md) owns helper/local launch/explicit capture-input permission and requires graphical login.
 
 # Boundaries
 
-The [macOS contract](macos-host-applications.md) owns native launch and capture; the [Linux lifecycle contract](host-application-behavior.md#linux-recovery) owns private display recovery.
+The [macOS contract](macos-host-applications.md) owns native launch/capture; [Linux lifecycle](host-application-behavior.md#linux-recovery) owns display recovery. Icons are bounded PNG data URIs. Audio, microphone, webcam, printing and notification forwarding remain excluded.
 
-Returned icons remain bounded PNG data URIs.
-
-Audio, microphone, webcam, printing and remote notification forwarding remain excluded.
-
-Capability probes, not distribution names, determine Linux readiness. Missing support components block opening until preparation succeeds. macOS requires its native graphical session and permissions; Linux virtual-display assumptions cannot substitute for them.
-
-Preparation never installs user applications. Closing a pending viewer withdraws automatic opening; unqualified staged bytes never activate.
+Linux readiness uses capability probes; missing components block opening. macOS requires a native graphical session/permissions. Preparation never installs user apps or activates unqualified bytes. Closing a pending viewer withdraws automatic opening.
 
 # Evidence
 

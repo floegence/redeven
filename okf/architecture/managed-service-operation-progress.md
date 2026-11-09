@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Service operation progress
 tags: [architecture, managed-services, operations, observability, security, ui]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -14,13 +14,16 @@ Manager Reporter owns live output; Registry owns history. Capture/storage/transp
 ## Reporter and persisted detail
 ManagedOperationProgressDetail schema v2 alone owns detail. Duplicate command IDs get deterministic suffixes. Failed uninstall retains records/output for [reviewed recovery](service-management-recovery.md#management-recovery).
 
+## Background ownership
+The environment Shell owns submissions, operation streams and settlement refreshes. Views subscribe without owning execution; closing a drawer or replacing a page neither cancels work nor loses pending admission. Same-owner transport reconnection retains state; environment/authentication retirement fences late results. Streams recover through exact read-only operation/request lookup with bounded backoff, never POST replay or a fabricated timeout failure. Terminal state cannot regress. Private GET snapshots require Read and `private, no-store`; operation output stays memory-only.
+
 ## Service-row interaction
 Page state keys disclosure by operation_id, never component/service-object identity. Rejected submissions retain local safe failure without backend operation or observed-state change. Compact status opens explicitly; failure labels/notices survive settlement and dismissal. Reduced motion removes animation, not readable completion hold.
 
 ## Install admission and handoff
 Final install immediately closes the template drawer, clears collection filters and shows a request-owned row at the service's append position. This row is presentation only, never a fabricated ServiceView or persistent cache entry. A raw CreateResult binds its reviewed service ID to the real operation; slow collection refresh cannot hide operation details, cancellation or terminal outcome. Full ServiceView handoff preserves expansion and transfers focus only when the replaced row owned it. No management drawer or service window opens automatically.
 
-A missing receipt proves no rejection. Accepted work uses existing lifecycle retry, not new creation. Identity/permission generations fence late results; reopening a drawer cannot cancel work or let an earlier review overwrite it.
+A missing receipt proves no rejection. Accepted work uses existing lifecycle retry, not new creation. Fresh reviews remain permission-generation fenced; accepted work follows environment ownership. Unknown install receipts reconcile in the background. Earlier callbacks cannot close a replacement drawer.
 
 ## Execution panel
 Published Floe planes, ink, LinearProgress, StableText and presence compose a connected rail and fixed-height panel. Narrow rail reveals its current step without scrolling the page. Open details show commands/output immediately in one scrolling transcript; no secondary disclosure. Logs/transfer/stage changes preserve neighboring geometry and existing output nodes. Preserve canonical interleaved output order; follow only while already at the end.
@@ -37,3 +40,5 @@ Operation output is observability data, not a terminal, shell, downloadable tran
 - `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx` - Bounded transcript, retained reading, disabled Open, current step, themes/locales and reduced motion.
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/WebServicesPage.browser.test.tsx` - Real drawer install handoff, delayed receipt/list, focus and expansion continuity across wide/narrow light/dark locales and reduced motion.
+
+- `redeven:internal/envapp/ui_src/src/ui/services/managedServiceSession.test.ts` and `pages/managedServiceOperationController.test.ts`: reconnect, exact receipt recovery and session retirement.

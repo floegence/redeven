@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Host application lifecycle and Linux instance recovery
 tags: [applications, macos, linux, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -26,7 +26,7 @@ Viewing, sharing, closing windows and ending processes remain distinct across pl
 | Host reboot / display server destruction / OS cleanup | No survival guarantee | Same; Runtime cgroup cleanup may also end its virtual display |
 
 ### Accepted operations and visible state
-Quit and force-quit requests are asynchronous. The Host Applications surface must close the confirmation dialog after acceptance and show a per-application pending state until the authoritative running snapshot confirms the target instance is gone.
+Quit and force-quit are asynchronous. Shell retains per-application admission and pending state across view replacement and polls authoritative running instances. Only disappearance of the exact target instances settles the operation. The confirmation closes after acceptance; stale cached inventory cannot settle it. No observer retries a quit or escalates it. Environment retirement fences late responses.
 
 ## Linux recovery
 - Upstream supervises GIO/descendant/sandbox lifetime. Preparation, launcher failure, app exit, windows and first pixels are separate facts. Xpra retains published readiness/final-window/audio-disable behavior.

@@ -103,7 +103,7 @@ describe('session event transport', () => {
     release = await bindTestSessionHTTP(fetchMock as typeof fetch);
     const onOperationUpdated = vi.fn();
     const controller = createManagedServiceOperationController({
-      streamFailedMessage: () => 'Stream failed', timedOutMessage: () => 'Timed out', onOperationUpdated,
+      streamFailedMessage: () => 'Stream failed', onOperationUpdated,
     });
     try {
       await expect(controller.track(operation)).resolves.toEqual(terminal);
@@ -125,7 +125,7 @@ describe('session event transport', () => {
     const nativeFetch = vi.fn();
     vi.stubGlobal('fetch', nativeFetch);
     release = await bindTestSessionHTTP(fetchMock as typeof fetch);
-    const controller = createManagedServiceOperationController({ streamFailedMessage: () => 'Stream failed', timedOutMessage: () => 'Timed out' });
+    const controller = createManagedServiceOperationController({ streamFailedMessage: () => 'Stream failed', });
     const result = controller.track(operation);
     const rejected = expect(result).rejects.toMatchObject({ code: 'transport', cause: { name: 'AbortError' } });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());

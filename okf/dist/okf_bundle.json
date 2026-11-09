@@ -827,7 +827,7 @@
               "operations",
               "reconciliation"
             ],
-            "summary": "Every container operation binds exact engine, endpoint and resource identity. Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline.",
+            "summary": "Operations bind exact engine, endpoint and resource identity. Known storage, registry, rate-limit, not-found and permission codes receive localized guidance beside the durable timeline.",
             "section_count": 3
           },
           {
@@ -1367,7 +1367,7 @@
               "desktop",
               "local-ui"
             ],
-            "summary": "Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes or through remote `cs-*` sandbox hosts, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.",
+            "summary": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.",
             "section_count": 3
           }
         ]
@@ -10322,7 +10322,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-08",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "architecture",
           "containers",
@@ -10332,15 +10332,15 @@
         "title": "Container execution and operation observation",
         "type": "Architecture Contract"
       },
-      "body_length": 5328,
-      "summary": "Every container operation binds exact engine, endpoint and resource identity. Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline.",
+      "body_length": 4549,
+      "summary": "Operations bind exact engine, endpoint and resource identity. Known storage, registry, rate-limit, not-found and permission codes receive localized guidance beside the durable timeline.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Operation ownership\n### Admission and serialization\nThe operation key contains engine, opaque endpoint ID, resource kind, and canonical identity.\n\nReusing a request ID with different hashes produces an idempotency conflict instead of a second operation.\n\n### Exact recovery\nSettings reads a known operation by ID, or uses the read-only `by-request/\u003crequest_id\u003e` endpoint when creation returned no operation ID. Neither depends on the bounded recent-operation list. Absence remains uncertain because admission may still be in flight; observation never replays a mutation. `Container-Operation-Admission: rejected` is emitted only before entering operation storage, never for a storage-boundary failure.\n\n### Execution, cancellation, and events\nThe service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.\n\nUnknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that host work may still be in progress. Desktop service cards direct users to its native application for setup/startup recovery and expose status revalidation. Service history shows state transitions without generic execution stages or a synthetic percentage bar.\n\n### Authoritative terminal observation\nAfter engine execution returns, the service reloads the exact endpoint-bound resource or relevant bounded inventory.\n\nThe operation is never replayed, regardless of whether the resource appears present or absent.\n\n### UI observation\nInventory requests and streams are fenced by source runtime, endpoint, resource view, and request generation. A superseded response cannot replace current data.\n\nMobile and desktop expose the same state and cancellation authority. Service lifecycle feedback stays on its card; history is secondary. Polling terminal transitions refresh authoritative service/runtime facts even when the event stream was lost. The portaled history drawer owns its responsive container and independent scrolling. Desktop uses a history sidebar; narrow drawers place a horizontal history strip above details. Rows use stable operation IDs and pressed selection; polling preserves focus and detail nodes. Details separate identity, live cancellation, duration/current health and timeline. The active final timeline step uses a pending indicator, never a completed check.\n\n## Engine execution\nObserve Docker/Podman independently without probing inactive contexts or changing global selection.\n\n### Execution ownership\nEvery request binds `(engine, endpoint_id, resource kind, canonical identity)`.\n\nObservation failures are returned as errors and must never be converted into an empty project or a successful removal.\n\n### Image pull observation\nDocker/Podman pulls retain CLI endpoint selection and credential helpers. On Unix the dedicated pull runner supplies terminal output so Docker emits transfer counters; both output streams are read continuously with bounded lines and terminal controls removed. Ordinary command/log runners keep their existing behavior. Windows retains combined pipe output and reports only counters actually supplied by its CLI. Cancellation terminates the task process group; an executed pull is never replayed as a non-streaming fallback.\n\nDownloaded bytes sum observed compressed download counters even while another layer's size is unknown. Total bytes remain unknown until every noncached layer supplies a total. Cached layers contribute no transfer bytes; extraction counters never replace download counters, and download completion does not imply extraction completion. Repeated terminal redraws for unchanged layers are suppressed. Error classification retains bounded trailing evidence, including containerd's unresolved-reference not-found response.",
-          "char_count": 3927
+          "body": "## Operation ownership\n### Admission and serialization\nThe key binds engine, opaque endpoint ID, resource kind and canonical identity; a reused request ID with different hashes yields an idempotency conflict.\n\n### Exact recovery\nSettings reads a known operation by ID, or uses the read-only `by-request/\u003crequest_id\u003e` endpoint when creation returned no operation ID. Neither depends on the bounded recent-operation list. Absence remains uncertain because admission may still be in flight; observation never replays a mutation. `Container-Operation-Admission: rejected` is emitted only before entering operation storage, never for a storage-boundary failure.\n\n### Execution, cancellation, and events\nThe service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.\n\nUnknown codes receive generic localized failure copy; raw diagnostics stay separate. Timeout does not prove execution stopped. Desktop recovery directs users to its native application and status revalidation. History shows actual transitions, not synthetic stages/percentages.\n\n### Authoritative terminal observation\nAfter execution, reload the exact endpoint-bound resource or bounded inventory. Presence or absence never authorizes replay.\n\n### UI observation\nShell owns pending admissions, concurrent operation streams and settlement invalidation. Settings and inventory views own only presentation. Ambiguous submissions retain their exact request identity and block duplicate work while background reads reconcile admission. View disposal cannot cancel accepted work. Same-owner reconnect retains history; authentication/environment changes retire observers. Inventory reads remain runtime/endpoint/view-generation fenced; stale snapshots cannot regress operation state.\n\nMobile/desktop share state and cancellation authority. Lifecycle feedback stays on service cards; terminal polling refreshes facts after stream loss. The portaled drawer scrolls independently, with a desktop sidebar or narrow horizontal history strip. Stable operation IDs and pressed selection preserve focus/detail nodes. Details separate identity, cancellation, duration/health and timeline; active steps show pending, never completion.\n\n## Engine execution\nObserve Docker/Podman independently without probing inactive contexts or changing global selection.\n\n### Execution ownership\nObservation failures return errors, never an empty project or successful removal.\n\n### Image pull observation\nPulls preserve CLI endpoint/credential helpers. Unix's dedicated terminal runner captures both streams with bounded lines and stripped controls; other runners stay unchanged. Windows uses combined pipes and only actual CLI counters. Cancel terminates the task process group; never replay a pull as a non-streaming fallback.\n\nDownloaded bytes sum observed compressed counters; totals remain unknown until all noncached layers report sizes. Cached layers add no transfer bytes. Extraction is separate and may continue after download. Suppress unchanged redraws; retain bounded trailing error evidence, including containerd unresolved-reference not-found.",
+          "char_count": 3247
         },
         {
           "id": "boundaries",
@@ -10379,7 +10379,7 @@
           "description": "Mixed unknown/cached layers and download/extraction accounting."
         }
       ],
-      "snippet": "Every container operation binds exact engine, endpoint and resource identity. Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to locali",
+      "snippet": "Operations bind exact engine, endpoint and resource identity. Known storage, registry, rate-limit, not-found and permission codes receive localized guidance beside the durable timeline.",
       "links": [
         {
           "label": "Native container resources",
@@ -11109,7 +11109,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "applications",
           "lifecycle",
@@ -11119,15 +11119,15 @@
         "title": "Host application lifecycle and Linux instance recovery",
         "type": "Interaction Contract"
       },
-      "body_length": 3428,
+      "body_length": 3587,
       "summary": "Viewing, sharing, closing windows and ending processes remain distinct across platforms. The first Force quit action only enters that state; only its final confirmation sends the destructive host request. Instance records bind opaque ID, authorized owner, metadata, boot/PID/start, component identity and private backend endpoint. Reusable window IDs never grant authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Cross-platform behavior\n| Operation | macOS | Linux |\n| --- | --- | --- |\n| Close outer Desktop window / browser popup | Release this client lease; app survives | Same |\n| Network loss, reload, second viewer | Reconnect same live app; stale input is revoked | Same |\n| Release this client lease | End this capture/route; other clients and app survive | End this proxy/route; other clients and app survive |\n| No window for more than 40 seconds | Waiting, with native menu/reopen | Waiting, reconnect same process without relaunch |\n| Close last window | Viewer closes; app decides whether its process exits | Same |\n| Cancel normal close/quit | Preserve application and save dialog | Same; ordinary control is Close all windows |\n| Explicit Force quit in library | Confirm loss warning; exact AppKit instance | Confirm loss warning; exact owned backend and descendants |\n| Orderly Runtime shutdown or process exit | Native app remains discoverable | Private display survives; new Runtime verifies/reconnects it |\n| Running list | Regular apps in the logged-in OS session | Caller-owned Redeven instances, including detached/windowless apps |\n| Host reboot / display server destruction / OS cleanup | No survival guarantee | Same; Runtime cgroup cleanup may also end its virtual display |\n\n### Accepted operations and visible state\nQuit and force-quit requests are asynchronous. The Host Applications surface must close the confirmation dialog after acceptance and show a per-application pending state until the authoritative running snapshot confirms the target instance is gone.\n\n## Linux recovery\n- Upstream supervises GIO/descendant/sandbox lifetime. Preparation, launcher failure, app exit, windows and first pixels are separate facts. Xpra retains published readiness/final-window/audio-disable behavior.\n- Browser profiles are stable private directories per owner/catalog app. Observed process-tree exit before first window fails launch even with zero status; live processes may keep waiting.\n- Linux ordinary control is Close all windows, respecting save/cancel. Explicit force quit never follows close, disconnect, cancellation or uncertain response automatically. Acceptance is not exit proof; remove running rows only after kernel confirmation.",
-          "char_count": 2257
+          "body": "## Cross-platform behavior\n| Operation | macOS | Linux |\n| --- | --- | --- |\n| Close outer Desktop window / browser popup | Release this client lease; app survives | Same |\n| Network loss, reload, second viewer | Reconnect same live app; stale input is revoked | Same |\n| Release this client lease | End this capture/route; other clients and app survive | End this proxy/route; other clients and app survive |\n| No window for more than 40 seconds | Waiting, with native menu/reopen | Waiting, reconnect same process without relaunch |\n| Close last window | Viewer closes; app decides whether its process exits | Same |\n| Cancel normal close/quit | Preserve application and save dialog | Same; ordinary control is Close all windows |\n| Explicit Force quit in library | Confirm loss warning; exact AppKit instance | Confirm loss warning; exact owned backend and descendants |\n| Orderly Runtime shutdown or process exit | Native app remains discoverable | Private display survives; new Runtime verifies/reconnects it |\n| Running list | Regular apps in the logged-in OS session | Caller-owned Redeven instances, including detached/windowless apps |\n| Host reboot / display server destruction / OS cleanup | No survival guarantee | Same; Runtime cgroup cleanup may also end its virtual display |\n\n### Accepted operations and visible state\nQuit and force-quit are asynchronous. Shell retains per-application admission and pending state across view replacement and polls authoritative running instances. Only disappearance of the exact target instances settles the operation. The confirmation closes after acceptance; stale cached inventory cannot settle it. No observer retries a quit or escalates it. Environment retirement fences late responses.\n\n## Linux recovery\n- Upstream supervises GIO/descendant/sandbox lifetime. Preparation, launcher failure, app exit, windows and first pixels are separate facts. Xpra retains published readiness/final-window/audio-disable behavior.\n- Browser profiles are stable private directories per owner/catalog app. Observed process-tree exit before first window fails launch even with zero status; live processes may keep waiting.\n- Linux ordinary control is Close all windows, respecting save/cancel. Explicit force quit never follows close, disconnect, cancellation or uncertain response automatically. Acceptance is not exit proof; remove running rows only after kernel confirmation.",
+          "char_count": 2416
         },
         {
           "id": "boundaries",
@@ -11360,22 +11360,22 @@
         "title": "Host application catalog, platforms and preparation",
         "type": "Runtime Contract"
       },
-      "body_length": 6287,
+      "body_length": 6030,
       "summary": "Redeven authorizes catalog, instances and independent shares; published native libraries own platform execution and preparation. Host Applications is available in Activity navigation and the Workbench launcher. Full-permission `PUT /_redeven_proxy/api/{host-applications,remote-desktop}/access` requires an explicit state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Catalog\nCatalog and session listing require read permission. Ownership comes from authorized session metadata, never a request-provided user ID.\n\nTerminal sharing records remain bounded to forty-eight per Runtime lifetime.\n\nA separate Force quit confirmation explicitly warns that unsaved work is lost; it never follows cancellation automatically.\n\nApplication inventory loading uses matching horizontal skeleton cards and respects reduced motion.\n\n## Feature access\nPersisted `host_access.applications` and `host_access.desktop` independently record `unconfigured`, `enabled`, or `paused`. First catalog/status read initializes missing legacy states from passive capability/session evidence; later grants cannot change intent. Startup restores both gates.\n\nPause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.\n\nWhen both features are unconfigured, goal-based choices precede authorization; browsing remains available. Setup explains capability purpose and offers one next action. macOS permission requests preserve the selected application intent; Settings and Finder recovery are explicit. A confirmed helper restart ends current shares, keeps feature intent and user applications, and requires a fresh connection. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws pending opening but retains grants. The application header opens access settings through an icon-only gear with a localized tooltip and accessible name. Access settings starts with the two independent feature states and one setup/resume action per feature. Before a feature is enabled and ready, only its explicit setup flow exposes missing permissions or components; no picture tuning is shown. Application picture preferences live under that enabled application feature in a collapsed, optional disclosure, never under desktop access. Desktop persistent authorization appears only under an enabled, ready desktop. Shared system permissions remain a collapsed maintenance action while either feature is usable. Collapsing tuning, pausing access, losing readiness or leaving the category retires its portals and mutation authority without discarding unsaved choices; returning never reopens tuning or replays writes. Returning from macOS settings refreshes permissions and both feature summaries, not only running apps. [Launcher interaction](remote-desktop-launcher.md) owns setup and connection presentation.\n\n## Platforms\n### Immutable launch plan\nGIO resolves the authorized desktop entry. A sandbox launcher requiring metadata fails clearly when metadata is absent; a custom wrapper is not proof that the underlying package is supported.\n\nThe [preparation owner](#preparation) selects complete components.\n\n### Private graphics and host services\nEach instance owns unique private display/socket, authorization, runtime and bus resources.\n\nIt never exposes the whole desktop bus or arbitrary process management.\n\nSupport claims require real package and desktop evidence, as recorded in the [validation owner](../operations/host-application-validation.md#retained-xpraplatform-matrix).\n\n### macOS initialization\nThe [native macOS contract](macos-host-applications.md) owns local launch, remote single-window capture, input, and graceful lifecycle. macOS 13 or newer uses the packaged `redeven-computer-host` helper.\n\nA Mac without a graphical login cannot create a private headless AppKit session. Native AppKit applications do not become X11 applications by installing XQuartz, and Xpra desktop shadowing is not this implementation.\n\n## Preparation\n- `go.mod` owns exact dependency/toolchain versions. Never combine partial managed/system installations. [Applications](#catalog) owns environment restoration, private displays and dependencies.\n- Status, explicit transfer-plan inspection and observation require Read. Upstream serializes writers with a private-root lease and owns scoped cancellation/idempotent chunks. [Desktop cache](../desktop/host-application-component-cache.md) owns cross-device reuse, seven-day/2GB policy and separate progress.\n- Preparation names the selected app. Session refresh cannot reuse stale unavailable state or suppress its one pending opening. [macOS](macos-host-applications.md) owns helper/local launch/explicit capture-input permission and requires graphical login.",
-          "char_count": 4650
+          "body": "## Catalog\nCatalog and session listing require read permission. Ownership comes from authorized session metadata, never a request-provided user ID.\n\nTerminal sharing records remain bounded to forty-eight per Runtime lifetime.\n\nA separate Force quit confirmation explicitly warns that unsaved work is lost; it never follows cancellation automatically.\n\nApplication inventory loading uses matching horizontal skeleton cards and respects reduced motion.\n\n## Feature access\nPersisted `host_access.applications` and `host_access.desktop` independently record `unconfigured`, `enabled`, or `paused`. First catalog/status read initializes missing legacy states from passive capability/session evidence; later grants cannot change intent. Startup restores both gates.\n\nPause/remove fence new streamed launches and release only that feature's viewers. Applications, installed components, shared OS grants and the other feature survive. Desktop removal also clears its saved preferences; application inventory is retained. Native local application launch remains independent.\n\nUnconfigured features offer goal-based setup before authorization; browsing remains available. Setup explains capability purpose and one next action. macOS settings/restart paths are explicit and preserve selected-app intent. Confirmed helper restart ends shares, retains access intent/apps, and requires reconnection. Explicit completion enables access and returns to the list; only selected-app intent opens an app. Background preparation cannot undo pause/removal; dismissal withdraws opening, not grants.\n\nAn icon-only application-header gear has a localized name/tooltip and opens independent feature states with one setup/resume action each. Before readiness, only explicit setup exposes missing permissions/components; hide picture tuning. Optional collapsed application-picture settings belong to enabled Applications, never Desktop. Persistent desktop authorization requires enabled/ready Desktop. Shared permission maintenance is collapsed while either feature is usable. Collapse, pause, readiness loss or category exit retires portals/mutation authority, preserving drafts; return never reopens tuning or replays writes. Returning from macOS Settings refreshes permissions and both feature summaries. [Launcher interaction](remote-desktop-launcher.md) owns setup/connection presentation.\n\n## Platforms\n### Immutable launch plan\nGIO resolves the authorized desktop entry. A sandbox launcher requiring metadata fails clearly when metadata is absent; a custom wrapper is not proof that the underlying package is supported.\n\nThe [preparation owner](#preparation) selects complete components.\n\n### Private graphics and host services\nEach instance owns unique private display/socket, authorization, runtime and bus resources.\n\nIt never exposes the whole desktop bus or arbitrary process management.\n\nSupport claims require real package and desktop evidence, as recorded in the [validation owner](../operations/host-application-validation.md#retained-xpraplatform-matrix).\n\n### macOS initialization\nThe [native macOS contract](macos-host-applications.md) owns local launch, remote single-window capture, input, and graceful lifecycle. macOS 13 or newer uses the packaged `redeven-computer-host` helper.\n\nA Mac without a graphical login cannot create a private headless AppKit session. Native AppKit applications do not become X11 applications by installing XQuartz, and Xpra desktop shadowing is not this implementation.\n\n## Preparation\n- `go.mod` owns exact dependency/toolchain versions. Never combine partial managed/system installations. [Applications](#catalog) owns environment restoration, private displays and dependencies.\n- Status, explicit transfer-plan inspection and observation require Read. Upstream serializes writers with a private-root lease and owns scoped cancellation/idempotent chunks. [Desktop cache](../desktop/host-application-component-cache.md) owns cross-device reuse, seven-day/2GB policy and separate progress.\n- Shell owns preparation admission, Desktop acquisition, upload and observation; views own selected-app opening intent. Page disposal only withdraws automatic opening. Explicit Cancel alone requests host cancellation; environment retirement fences results and stops transport. Lost events reconcile status while work is active. Preparation names the selected app. Session refresh cannot reuse stale unavailable state or suppress its one pending opening. [macOS](macos-host-applications.md) owns helper/local launch/explicit capture-input permission and requires graphical login.",
+          "char_count": 4591
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The [macOS contract](macos-host-applications.md) owns native launch and capture; the [Linux lifecycle contract](host-application-behavior.md#linux-recovery) owns private display recovery.\n\nReturned icons remain bounded PNG data URIs.\n\nAudio, microphone, webcam, printing and remote notification forwarding remain excluded.\n\nCapability probes, not distribution names, determine Linux readiness. Missing support components block opening until preparation succeeds. macOS requires its native graphical session and permissions; Linux virtual-display assumptions cannot substitute for them.\n\nPreparation never installs user applications. Closing a pending viewer withdraws automatic opening; unqualified staged bytes never activate.",
-          "char_count": 727
+          "body": "The [macOS contract](macos-host-applications.md) owns native launch/capture; [Linux lifecycle](host-application-behavior.md#linux-recovery) owns display recovery. Icons are bounded PNG data URIs. Audio, microphone, webcam, printing and notification forwarding remain excluded.\n\nLinux readiness uses capability probes; missing components block opening. macOS requires a native graphical session/permissions. Preparation never installs user apps or activates unqualified bytes. Closing a pending viewer withdraws automatic opening.",
+          "char_count": 529
         },
         {
           "id": "evidence",
@@ -11388,7 +11388,7 @@
       "snippet": "Redeven authorizes catalog, instances and independent shares; published native libraries own platform execution and preparation. Host Applications is available in Activity navigation and the Workbench launcher. Full-permission `PUT /_redeve",
       "links": [
         {
-          "label": "Linux lifecycle contract",
+          "label": "Linux lifecycle",
           "path": "architecture/host-application-behavior.md",
           "concept_id": "architecture.host-application-behavior",
           "title": "Host application lifecycle and Linux instance recovery"
@@ -11787,7 +11787,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-06",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "architecture",
           "managed-services",
@@ -11799,15 +11799,15 @@
         "title": "Managed Service operation progress",
         "type": "Runtime Contract"
       },
-      "body_length": 3275,
+      "body_length": 4155,
       "summary": "Manager Reporter owns live output; Registry owns history. Capture/storage/transport failures must not expose secrets, queries, private paths or control bytes. Explicit rejection offers fresh review with non-secret inputs; secrets clear with the drawer. Ambiguous transport outcomes offer read-only request-ID receipt lookup, never blind POST replay.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Reporter and persisted detail\nManagedOperationProgressDetail schema v2 alone owns detail. Duplicate command IDs get deterministic suffixes. Failed uninstall retains records/output for [reviewed recovery](service-management-recovery.md#management-recovery).\n\n## Service-row interaction\nPage state keys disclosure by operation_id, never component/service-object identity. Rejected submissions retain local safe failure without backend operation or observed-state change. Compact status opens explicitly; failure labels/notices survive settlement and dismissal. Reduced motion removes animation, not readable completion hold.\n\n## Install admission and handoff\nFinal install immediately closes the template drawer, clears collection filters and shows a request-owned row at the service's append position. This row is presentation only, never a fabricated ServiceView or persistent cache entry. A raw CreateResult binds its reviewed service ID to the real operation; slow collection refresh cannot hide operation details, cancellation or terminal outcome. Full ServiceView handoff preserves expansion and transfers focus only when the replaced row owned it. No management drawer or service window opens automatically.\n\nA missing receipt proves no rejection. Accepted work uses existing lifecycle retry, not new creation. Identity/permission generations fence late results; reopening a drawer cannot cancel work or let an earlier review overwrite it.\n\n## Execution panel\nPublished Floe planes, ink, LinearProgress, StableText and presence compose a connected rail and fixed-height panel. Narrow rail reveals its current step without scrolling the page. Open details show commands/output immediately in one scrolling transcript; no secondary disclosure. Logs/transfer/stage changes preserve neighboring geometry and existing output nodes. Preserve canonical interleaved output order; follow only while already at the end.\n\nRestrained transitions retain progress identity. Reduced motion is static. Open is natively disabled during operations with its ordinary icon and keyboard/touch/hover action-stage tooltip.",
-          "char_count": 2107
+          "body": "## Reporter and persisted detail\nManagedOperationProgressDetail schema v2 alone owns detail. Duplicate command IDs get deterministic suffixes. Failed uninstall retains records/output for [reviewed recovery](service-management-recovery.md#management-recovery).\n\n## Background ownership\nThe environment Shell owns submissions, operation streams and settlement refreshes. Views subscribe without owning execution; closing a drawer or replacing a page neither cancels work nor loses pending admission. Same-owner transport reconnection retains state; environment/authentication retirement fences late results. Streams recover through exact read-only operation/request lookup with bounded backoff, never POST replay or a fabricated timeout failure. Terminal state cannot regress. Private GET snapshots require Read and `private, no-store`; operation output stays memory-only.\n\n## Service-row interaction\nPage state keys disclosure by operation_id, never component/service-object identity. Rejected submissions retain local safe failure without backend operation or observed-state change. Compact status opens explicitly; failure labels/notices survive settlement and dismissal. Reduced motion removes animation, not readable completion hold.\n\n## Install admission and handoff\nFinal install immediately closes the template drawer, clears collection filters and shows a request-owned row at the service's append position. This row is presentation only, never a fabricated ServiceView or persistent cache entry. A raw CreateResult binds its reviewed service ID to the real operation; slow collection refresh cannot hide operation details, cancellation or terminal outcome. Full ServiceView handoff preserves expansion and transfers focus only when the replaced row owned it. No management drawer or service window opens automatically.\n\nA missing receipt proves no rejection. Accepted work uses existing lifecycle retry, not new creation. Fresh reviews remain permission-generation fenced; accepted work follows environment ownership. Unknown install receipts reconcile in the background. Earlier callbacks cannot close a replacement drawer.\n\n## Execution panel\nPublished Floe planes, ink, LinearProgress, StableText and presence compose a connected rail and fixed-height panel. Narrow rail reveals its current step without scrolling the page. Open details show commands/output immediately in one scrolling transcript; no secondary disclosure. Logs/transfer/stage changes preserve neighboring geometry and existing output nodes. Preserve canonical interleaved output order; follow only while already at the end.\n\nRestrained transitions retain progress identity. Reduced motion is static. Open is natively disabled during operations with its ordinary icon and keyboard/touch/hover action-stage tooltip.",
+          "char_count": 2792
         },
         {
           "id": "boundaries",
@@ -11820,8 +11820,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/managedwebservice/operation_progress.go` - Redacted detail owner.\n- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx` - Bounded transcript, retained reading, disabled Open, current step, themes/locales and reduced motion.\n\n- `redeven:internal/envapp/ui_src/src/ui/pages/WebServicesPage.browser.test.tsx` - Real drawer install handoff, delayed receipt/list, focus and expansion continuity across wide/narrow light/dark locales and reduced motion.",
-          "char_count": 502
+          "body": "- `redeven:internal/managedwebservice/operation_progress.go` - Redacted detail owner.\n- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx` - Bounded transcript, retained reading, disabled Open, current step, themes/locales and reduced motion.\n\n- `redeven:internal/envapp/ui_src/src/ui/pages/WebServicesPage.browser.test.tsx` - Real drawer install handoff, delayed receipt/list, focus and expansion continuity across wide/narrow light/dark locales and reduced motion.\n\n- `redeven:internal/envapp/ui_src/src/ui/services/managedServiceSession.test.ts` and `pages/managedServiceOperationController.test.ts`: reconnect, exact receipt recovery and session retirement.",
+          "char_count": 697
         }
       ],
       "evidence": [
@@ -15152,7 +15152,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Cross-surface Browser Editor contract spanning Code App runtime state, Desktop transfer, Env App orchestration, remote download validation, and codespace navigation security.",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "browser-editor",
           "code-app",
@@ -15162,22 +15162,22 @@
         "title": "Browser Editor runtime",
         "type": "Runtime Contract"
       },
-      "body_length": 1258,
-      "summary": "Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes or through remote `cs-*` sandbox hosts, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.",
+      "body_length": 1106,
+      "summary": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\nThe Code App app server backend owns codespace lifecycle, port resolution, managed runtime status, setup operations, Desktop-transfer chunks, completion, version selection, version removal, and operation cancellation. Only one setup operation may run at a time, an accepted operation id cannot be reused during the RuntimeManager lifetime, and stale chunk, completion, cancellation, or progress updates cannot terminate or overwrite a different operation.\n\nExternal system-browser and ordinary browser opens retain the existing Local UI or remote launcher flow.",
-          "char_count": 574
+          "body": "## Mechanism\nCode App owns lifecycle, ports, status, setup, transfer chunks, versions and cancellation. Setup is single-flight; accepted IDs cannot be reused within RuntimeManager lifetime. Stale chunks, completion, cancellation or progress cannot alter another operation.\n\nShell owns Browser Editor orchestration, Desktop delivery, progress and cancellation state across page replacement. Pages own optional follow-on opening. Explicit Cancel requests cancellation; environment retirement only aborts observation/transport. New views reuse pending preparation and cannot start duplicates. External browser opens retain the Local UI or remote launcher flow.",
+          "char_count": 657
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Opening or managing Browser Editor is not just a static file route. The session-scoped Desktop bridge values are transport bootstrap inputs for the current isolated app origin; they do not grant broader runtime permissions or replace controller source, origin, and capability validation.",
-          "char_count": 287
+          "body": "Desktop bridge bootstrap values belong to the current isolated app origin. They cannot grant runtime permission or replace source, origin and capability validation.",
+          "char_count": 164
         },
         {
           "id": "evidence",
@@ -15195,7 +15195,7 @@
           "description": "Source."
         }
       ],
-      "snippet": "Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes or through remote `cs-*` sandbox hosts, while Desktop and Env App can prepare or update managed Browser Editor runtime ver",
+      "snippet": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -25138,5 +25138,5 @@
       ]
     }
   ],
-  "source_sha256": "106c080d8990ee5962e75b50733dec1eb94d043d5db42dd4220a5e7227a08753"
+  "source_sha256": "fc1b9f4a3fb4e90fdfb97ebe5baac550b12ca80c517544387d1382c92303e757"
 }

@@ -571,6 +571,7 @@ type Backend interface {
 	Operate(context.Context, string, OperationRequest) (*pfregistry.ManagedOperation, error)
 	Cancel(context.Context, string) (*pfregistry.ManagedOperation, error)
 	Operation(context.Context, string) (*pfregistry.ManagedOperation, error)
+	OperationByRequestID(context.Context, string) (*pfregistry.ManagedOperation, error)
 	Subscribe(string) (<-chan pfregistry.ManagedOperation, func(), error)
 	Logs(context.Context, string, int) (*LogResult, error)
 	OpenSession(context.Context, string, OpenSessionRequest) (*OpenSession, error)

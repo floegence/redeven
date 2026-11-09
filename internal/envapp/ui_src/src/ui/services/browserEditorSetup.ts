@@ -98,6 +98,9 @@ export class BrowserEditorSetupOrchestration {
     return this.runPromise;
   }
 
+  /** Retiring environment observation never requests host cancellation. */
+  retire(): void { this.abortController.abort(); }
+
   async cancel(): Promise<void> {
     if (this.phase === 'terminal') return;
     if (!this.cancellationRequested) {

@@ -17,6 +17,7 @@ vi.mock('@floegence/floe-webapp-core', async original => ({
   ...await original<object>(), useNotification: () => ({ error: vi.fn(), success: vi.fn() }),
 }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
+    env_id: () => 'codespaces-test',
   env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.scope }),
 }) }));

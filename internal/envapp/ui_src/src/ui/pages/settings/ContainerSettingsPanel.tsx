@@ -1,3 +1,4 @@
+import { createContainerOperationSession } from '../../services/containerOperationSession';
 import { useSettingsPanelHost } from '../../../../../../settings_ui/src/SettingsPanelHost';
 import { SettingsSelect as Select } from './SettingsSelect';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
@@ -11,7 +12,7 @@ import { useEnvSettingsPage } from './EnvSettingsPageContext';
 import { TextFilePreviewPane } from '../../widgets/TextFilePreviewPane';
 import { createEnvCachedResource, createEnvResourceCollection } from '../../services/envResourceCache';
 import { containerServiceSnapshot } from '../../services/envResourceSnapshots';
-import { ContainerOperationRejectedError, listContainerServices, getContainerServiceConfiguration, preflightContainerOperation, createContainerOperation, subscribeContainerOperation, getContainerOperation, getContainerOperationByRequestID,
+import { ContainerOperationRejectedError, listContainerServices, getContainerServiceConfiguration, preflightContainerOperation, getContainerOperation, getContainerOperationByRequestID,
   type ContainerService, type ContainerServiceConfiguration, type ContainerServiceConfigurationSource, type ContainerServiceConfigurationSourceID, type ContainerPreflight, type ContainerOperation } from '../../services/containerResourcesApi';
 import '../container-operation-dialogs.css';
 
@@ -80,14 +81,13 @@ export function ContainerSettingsPanel(props: { resource?: string }) {
   const target = () => props.resource ?? selected();
   const [visited, setVisited] = createSignal<string[]>([]);
   createEffect(() => { const id = target(); if (id && ids().includes(id)) setVisited(old => old.includes(id) ? old : [...old, id]); });
-  return <div class="space-y-5 min-w-0" data-testid="container-settings-panel">
+  return <div class="space-y-5 min-w-0" data-testid="container-settings-panel" aria-busy={services.loading}>
     <SettingsResourceToolbar label={i18n.t('containers.services.title')} actions={
       <Button size="sm" variant="ghost" icon={Refresh} disabled={services.loading || !ctx.canInteract()} onClick={() => void refetch()} aria-label={i18n.t('common.actions.refresh')}>{i18n.t('common.actions.refresh')}</Button>
     }><Select section="containers" class="w-full" value={target()} onChange={id => { setSelected(id); env.openSettings('containers', { resource: id }); }}
       options={ (serviceData() ?? []).map(service => ({ value: service.service_id, label: service.name })) } placeholder={i18n.t('containers.services.title')} ariaLabel={i18n.t('containers.services.title')} />
     </SettingsResourceToolbar>
     <Show when={services.error}><p role="alert">{String(services.error)}</p></Show>
-    <Show when={services.loading}><p role="status">{i18n.t('containers.loading')}</p></Show>
     <Show when={target() && !services.loading && !ids().includes(target())}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
     <For each={visited()}>{id => <div hidden={target() !== id} inert={target() !== id}>
       <ContainerServiceSettings service={(serviceData() ?? []).find(service => service.service_id === id) ?? stableServices.get(id)!} available={() => ids().includes(id)} active={() => target() === id && (!host || host.present() && host.target()?.section === 'containers' && host.target()?.resource === id)} captureAuthority={cache.captureAuthority} />
@@ -97,6 +97,7 @@ export function ContainerSettingsPanel(props: { resource?: string }) {
 
 function ContainerServiceSettings(props: { service: ContainerService; available: () => boolean; active: () => boolean; captureAuthority: () => () => boolean }) {
   const env = useEnvContext();
+  const operationSession = env.containerOperationSession ?? createContainerOperationSession(env);
   const i18n = useI18n();
   const ctx = useEnvSettingsPage();
   const lifetime = new AbortController();
@@ -111,10 +112,18 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
   const [pendingSource, setPendingSource] = createSignal<string>();
   let sourceSequence = 0;
   onCleanup(() => lifetime.abort());
-  const canSave = () => props.active() && !uncertain() && current() && ctx.canInteract() && ctx.canAdmin() && !!env.env()?.permissions?.can_read && !!env.env()?.permissions?.can_write && !!env.env()?.permissions?.can_execute;
+  const sessionBusy = () => operationSession.admissions().some(item => item.preflight.resource_kind === 'container_service' && item.preflight.resource_identity === props.service.service_id)
+    || operationSession.operations().some(item => item.resource_kind === 'container_service' && item.resource_identity === props.service.service_id && !['succeeded', 'failed', 'canceled', 'interrupted'].includes(item.state));
+  const canSave = () => props.active() && !sessionBusy() && !uncertain() && current() && ctx.canInteract() && ctx.canAdmin() && !!env.env()?.permissions?.can_read && !!env.env()?.permissions?.can_write && !!env.env()?.permissions?.can_execute;
   const [busy, setBusy] = createSignal(false);
   const [review, setReview] = createSignal<{ request: Record<string, unknown>; preflight: ContainerPreflight } | null>(null);
   const [operation, setOperation] = createSignal<ContainerOperation>();
+  createEffect(() => {
+    const admission = operationSession.admissions().find(item => item.preflight.resource_kind === 'container_service' && item.preflight.resource_identity === props.service.service_id);
+    if (admission) { setPendingRequestID(admission.requestID); setUncertain(true); }
+    const observed = operationSession.operations().find(item => item.request_id === pendingRequestID());
+    if (observed) { setOperation(observed); setUncertain(!['succeeded', 'failed', 'canceled', 'interrupted'].includes(observed.state)); }
+  });
   const [serviceConfigurationError, setServiceConfigurationError] = createSignal('');
   const [serviceConfigurationLoading, setServiceConfigurationLoading] = createSignal(false);
   const [serviceConfiguration, setServiceConfiguration] = createSignal<ContainerServiceConfiguration | null>(null);
@@ -293,14 +302,11 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
     // IMPORTANT: Submit only the reviewed request once, fenced to the current
     // environment authority. Never silently replay an uncertain save/restart.
     try {
-      const started = await createContainerOperation(confirmed.preflight, confirmed.request, requestID);
+      const started = await operationSession.submit(confirmed.preflight, confirmed.request, requestID);
       if (!admitted() || started.request_id !== requestID) return;
       setOperation(started);
-      await subscribeContainerOperation(started.operation_id, next => {
-        if (!admitted() || next.request_id !== requestID) return;
-        setOperation(next);
-        if (['succeeded', 'failed', 'canceled', 'interrupted'].includes(next.state)) setUncertain(false);
-      }, lifetime.signal);
+      const completed = await operationSession.track(started);
+      if (admitted() && completed.request_id === requestID) { setOperation(completed); setUncertain(false); }
       if (admitted() && operation()?.state === 'succeeded') await openServiceConfiguration(props.service, pendingSource());
     } catch (error) {
       if (admitted()) { if (error instanceof ContainerOperationRejectedError) setUncertain(false); setServiceConfigurationError(String(error)); }
@@ -317,7 +323,7 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
         : pendingRequestID() ? await getContainerOperationByRequestID(pendingRequestID()) : undefined;
       if (!admitted()) return;
       const match = observed?.request_id === pendingRequestID() && (!known || observed.operation_id === known.operation_id) ? observed : undefined;
-      if (match) { setOperation(match); setUncertain(!['succeeded', 'failed', 'canceled', 'interrupted'].includes(match.state)); }
+      if (match) { operationSession.acceptAdmission(match.request_id, match); setOperation(match); setUncertain(!['succeeded', 'failed', 'canceled', 'interrupted'].includes(match.state)); }
       await openServiceConfiguration(props.service, match?.state === 'succeeded' ? pendingSource() : undefined);
     } catch (error) { if (admitted()) { await openServiceConfiguration(props.service); setServiceConfigurationError(String(error)); } }
     finally { if (admitted()) setBusy(false); }
@@ -333,9 +339,9 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
       <Show when={dirty()}><Button size="sm" variant="ghost" disabled={busy() || uncertain() || !current()} onClick={() => void openServiceConfiguration(props.service, serviceConfigurationSourceID())}>{i18n.t('filePreview.discardChanges')}</Button></Show>
     </header>
     <Show when={uncertain()}><p role="alert">{i18n.t('settings.operationUnknown')}</p></Show>
-    <fieldset class="min-w-0 space-y-4" disabled={!canSave() || busy() || !!review()}>
+    <fieldset class="min-w-0 space-y-4" aria-busy={serviceConfigurationLoading()} disabled={!canSave() || busy() || !!review() || serviceConfigurationLoading()}>
       <Show when={serviceConfigurationTarget()?.configuration.mode === 'local'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.services.configurationUnavailable')}</strong></div>}>
-        <Show when={!serviceConfigurationLoading()} fallback={<div class="container-service-config-loading"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.loading')}</div>}>
+        <Show when={serviceConfiguration() || !serviceConfigurationLoading()} fallback={<div class="h-64 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" aria-hidden="true" />}>
           <Show when={serviceConfiguration()} fallback={<div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div>}>
             <Show when={serviceConfigurationError()}><div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div></Show>
             <Show when={serviceConfigurationSource()} keyed>{source => <>

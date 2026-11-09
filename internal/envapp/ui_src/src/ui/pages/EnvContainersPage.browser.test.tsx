@@ -6,7 +6,8 @@ import '../../index.css';
 import { commands, page, userEvent } from 'vitest/browser';
 import { LayoutProvider, ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { createRoot, createSignal } from 'solid-js';
+import { createContainerOperationSession, type ContainerOperationSession } from '../services/containerOperationSession';
 import { FlowerTurnLauncherWindow as SharedLauncher } from '../widgets/FlowerTurnLauncherWindow';
 import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,6 +17,7 @@ import { requestContainerResourceNavigation } from '../services/containerResourc
 
 const browserHarness = vi.hoisted(() => ({
   scope: '',
+  session: undefined as ContainerOperationSession | undefined,
   askFlower: vi.fn(),
   phase: () => 'ready' as 'ready' | 'revalidating',
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
@@ -25,6 +27,8 @@ const browserHarness = vi.hoisted(() => ({
   imageBuildHistory: vi.fn(),
   volumeDiskUsage: vi.fn(),
   listOperations: vi.fn(),
+  getOperation: vi.fn(),
+  openSettings: vi.fn(),
   preflight: vi.fn(),
   createExecSession: vi.fn(),
   deleteExecSession: vi.fn(),
@@ -50,11 +54,13 @@ vi.mock('../widgets/FilePreviewContext', async (importOriginal) => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
+    containerOperationSession: browserHarness.session,
     resourceCacheAccess: () => ({ phase: browserHarness.phase(), generation: 0, scope: browserHarness.scope }),
     env_id: () => 'env-26',
     openFlowerTurnLauncher: browserHarness.askFlower,
     env: () => ({ name: 'udesk26', permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
     goActivity: vi.fn(),
+    openSettings: browserHarness.openSettings,
   }),
 }));
 
@@ -87,7 +93,8 @@ vi.mock('../protocol/redeven_v1', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('../services/containerResourcesApi', () => ({
+vi.mock('../services/containerResourcesApi', async original => ({
+  ...await original<typeof import('../services/containerResourcesApi')>(),
   listContainerRuntimes: browserHarness.listRuntimes,
   listContainerServices: vi.fn().mockResolvedValue([
     {
@@ -136,6 +143,7 @@ vi.mock('../services/containerResourcesApi', () => ({
     network_tx_bytes: 4_194_304,
   }),
   preflightContainerOperation: browserHarness.preflight,
+  getContainerOperation: browserHarness.getOperation,
   subscribeContainerOperation: vi.fn(),
   subscribeContainerLogs: vi.fn().mockResolvedValue(undefined),
   subscribeContainerStats: vi.fn().mockImplementation(async (_identity: string, _engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
@@ -201,12 +209,14 @@ function mount(variant: 'activity' | 'workbench' = 'activity', appearance: 'ligh
 
 describe('native Containers responsive product surface', () => {
   let dispose: (() => void) | undefined;
+  let disposeSession: (() => void) | undefined;
 
   beforeEach(async () => {
     await mediaCommands.installContainerServiceIconRoutes();
     const api = await import('../services/containerResourcesApi');
     vi.mocked(api.listContainerOperationEvents).mockReset().mockResolvedValue([]);
     vi.mocked(api.cancelContainerOperation).mockReset();
+    vi.mocked(api.listContainerServices).mockReset().mockResolvedValue([{service_id:'container_service_docker',engine:'docker',name:'Docker Engine',implementation:'docker_engine',state:'running',version:'27.3.1',capabilities:{start:false,stop:true,restart:true},configuration:{mode:'local',sources:['engine','docker_cli']}},{service_id:'container_service_podman',engine:'podman',name:'Podman',implementation:'unavailable',state:'not_installed',guidance_code:'install',capabilities:{start:false,stop:false,restart:false},configuration:{mode:'unavailable'}}]);
     browserHarness.scope = '';
     browserHarness.askFlower.mockReset();
     browserHarness.phase = () => 'ready';
@@ -271,11 +281,30 @@ describe('native Containers responsive product surface', () => {
   });
 
   afterEach(async () => {
-    dispose?.();
+    dispose?.(); disposeSession?.(); disposeSession=undefined; browserHarness.session=undefined;
     dispose = undefined;
     document.body.replaceChildren();
     document.documentElement.classList.remove('dark');
     await page.viewport(1280, 720);
+  });
+
+  it('keeps engine execution observable after the container page is replaced', async () => {
+    createRoot(cleanup => {disposeSession=cleanup; browserHarness.session=createContainerOperationSession({env_id:()=> 'env-26'});});
+    const operation={operation_id:'background-restart',request_id:'background-request',method:'container.services.restart',engine:'docker',resource_kind:'container_service',resource_identity:'container_service_docker',state:'running',created_at_unix_ms:1,updated_at_unix_ms:1};
+    browserHarness.listOperations.mockResolvedValue([operation]); browserHarness.getOperation.mockResolvedValue(operation);
+    let mounted=mount(); dispose=mounted.dispose;
+    await page.getByRole('button',{name:'Container engine services',exact:true}).click();
+    await expect.poll(()=>mounted.host.querySelector('.container-service-operation')?.textContent).toContain('Restarting');
+    dispose(); mounted.host.remove();
+    expect(browserHarness.session!.operations()[0].state).toBe('running');
+    mounted=mount(); dispose=mounted.dispose;
+    await page.getByRole('button',{name:'Container engine services',exact:true}).click();
+    await expect.poll(()=>mounted.host.querySelector('.container-service-operation')?.textContent).toContain('Restarting');
+    dispose(); mounted.host.remove();
+    const complete={...operation,state:'succeeded',updated_at_unix_ms:2};
+    browserHarness.listOperations.mockResolvedValue([complete]); browserHarness.getOperation.mockResolvedValue(complete);
+    await expect.poll(()=>browserHarness.session!.operations()[0].state,{timeout:5000}).toBe('succeeded');
+    expect(browserHarness.session!.revision()).toBe(1);
   });
 
   it('uses the actual container row through right-click, preview and submission', async () => {
@@ -457,6 +486,7 @@ describe('native Containers responsive product surface', () => {
       updated_at_unix_ms: now - index * 300000, finished_at_unix_ms: now - index * 300000,
     }))];
     browserHarness.listOperations.mockResolvedValue(history);
+    browserHarness.getOperation.mockImplementation(async id => ({...history.find(item => item.operation_id === id)!, updated_at_unix_ms: Date.now()}));
     vi.mocked(api.listContainerOperationEvents).mockImplementation(async operationID => [
       { sequence: 1, operation_id: operationID, type: 'state', state: 'queued', created_at_unix_ms: now - 46000 },
       { sequence: 2, operation_id: operationID, type: 'state', state: 'running', created_at_unix_ms: now - 45000 },
@@ -502,9 +532,9 @@ describe('native Containers responsive product surface', () => {
     const rows = [...nav.querySelectorAll<HTMLButtonElement>('button')];
     if (width === 1440 && locale === 'zh-CN') {
       rows[0].focus();
-      const previousCalls = browserHarness.listOperations.mock.calls.length;
+      const previousCalls = browserHarness.getOperation.mock.calls.length;
       browserHarness.listOperations.mockImplementation(async () => history.map(item => ({ ...item, updated_at_unix_ms: Date.now() })));
-      await expect.poll(() => browserHarness.listOperations.mock.calls.length, { timeout: 3500 }).toBeGreaterThan(previousCalls);
+      await expect.poll(() => browserHarness.getOperation.mock.calls.length, { timeout: 5000 }).toBeGreaterThan(previousCalls);
       await settle();
       expect(nav.querySelector('button')).toBe(rows[0]);
       expect(document.activeElement).toBe(rows[0]);
@@ -520,16 +550,18 @@ describe('native Containers responsive product surface', () => {
     rows[0].focus();
     await userEvent.keyboard('{Enter}');
     await expect.poll(() => rows[0].getAttribute('aria-pressed')).toBe('true');
-    browserHarness.listOperations.mockResolvedValue([{ ...active, state: 'canceling' }, ...history.slice(1)]);
+    const canceling = {...active, state:'canceling', updated_at_unix_ms:Date.now()};
+    browserHarness.listOperations.mockResolvedValue([canceling, ...history.slice(1)]);
+    browserHarness.getOperation.mockResolvedValue(canceling);
     vi.mocked(api.cancelContainerOperation).mockResolvedValue({ ...active, engine: 'docker', state: 'canceling', request_id: 'request', request_hash: 'request', plan_hash: 'plan', cancel_requested: true });
     await page.getByRole('dialog').getByRole('button', { name: copy.cancel, exact: true }).click();
     expect(api.cancelContainerOperation).toHaveBeenCalledWith(active.operation_id);
     await expect.element(page.getByRole('dialog').getByRole('button', { name: copy.cancel, exact: true })).toBeDisabled();
     if (width === 1440 && locale === 'zh-CN') {
       browserHarness.listOperations.mockResolvedValue([history[1]]);
-      await expect.poll(() => nav.querySelectorAll('button').length, { timeout: 3500 }).toBe(1);
-      await expect.poll(() => nav.querySelector('button')?.getAttribute('aria-pressed')).toBe('true');
-      expect(workspace.querySelector('.container-operation-detail')?.getAttribute('data-state')).toBe('failed');
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      expect(nav.querySelectorAll('button').length).toBe(3);
+      expect(workspace.querySelector('.container-operation-detail')?.getAttribute('data-state')).not.toBe('failed');
     }
   });
 
@@ -545,6 +577,7 @@ describe('native Containers responsive product surface', () => {
       state: 'running', created_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
     };
     browserHarness.listOperations.mockResolvedValue([operation]);
+    browserHarness.getOperation.mockImplementation(async () => ({...operation, updated_at_unix_ms: Date.now()}));
     const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
     await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
     await page.getByRole('button', { name: 'Container engine services', exact: true }).click();
@@ -552,12 +585,13 @@ describe('native Containers responsive product surface', () => {
     expect(mounted.host.querySelector<HTMLElement>('.container-service-card__actions')?.hidden).toBe(true);
     await expect.element(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
     const cancel = mounted.host.querySelector('.container-service-operation button');
-    const previousCalls = browserHarness.listOperations.mock.calls.length;
+    const previousCalls = browserHarness.getOperation.mock.calls.length;
     browserHarness.listOperations.mockImplementation(async () => [{ ...operation, updated_at_unix_ms: Date.now() }]);
-    await expect.poll(() => browserHarness.listOperations.mock.calls.length, { timeout: 3500 }).toBeGreaterThan(previousCalls);
+    await expect.poll(() => browserHarness.getOperation.mock.calls.length, { timeout: 5000 }).toBeGreaterThan(previousCalls);
     expect(mounted.host.querySelector('.container-service-operation button')).toBe(cancel);
     vi.mocked(api.listContainerServices).mockResolvedValueOnce([{ ...stopped, state: 'running' }]);
-    browserHarness.listOperations.mockResolvedValue([{ ...operation, state: 'succeeded' }]);
+    browserHarness.listOperations.mockResolvedValue([{ ...operation, state: 'succeeded', updated_at_unix_ms:Date.now() }]);
+    browserHarness.getOperation.mockResolvedValue({...operation, state: 'succeeded', updated_at_unix_ms:Date.now()});
     await expect.poll(() => mounted.host.querySelector('.container-service-card')?.getAttribute('data-state'), { timeout: 3500 }).toBe('running');
     await expect.element(page.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
     expect(document.querySelector('[data-container-operations]')).toBeNull();
@@ -582,7 +616,7 @@ describe('native Containers responsive product surface', () => {
         risk_flags: [{ id: 'container_service_interruption', title: 'Raw risk title', detail: 'Raw risk detail' }] },
     };
     browserHarness.preflight.mockResolvedValue(preflight);
-    vi.mocked(api.createContainerOperation).mockClear().mockResolvedValue({ operation_id: 'reviewed-service', request_id: 'service-request', request_hash: preflight.request_hash, plan_hash: preflight.plan_hash, cancel_requested: false, method: preflight.method, engine: 'docker', resource_kind: 'container_service', resource_identity: 'container_service_docker', state: 'queued', created_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now() });
+    vi.mocked(api.createContainerOperation).mockClear().mockImplementation(async (_preflight, _request, requestID) => ({ operation_id: 'reviewed-service', request_id: requestID!, request_hash: preflight.request_hash, plan_hash: preflight.plan_hash, cancel_requested: false, method: preflight.method, engine: 'docker', resource_kind: 'container_service', resource_identity: 'container_service_docker', state: 'queued', created_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now() }));
     vi.mocked(api.subscribeContainerOperation).mockResolvedValue(undefined);
     const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
     await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
@@ -611,7 +645,7 @@ describe('native Containers responsive product surface', () => {
     await page.screenshot({ path: '__screenshots__/container-service-confirm-' + width + '-' + locale + '-' + action + '.png' });
     await page.getByRole('dialog').getByRole('button', { name: actionLabel, exact: true }).click();
     await expect.poll(() => vi.mocked(api.createContainerOperation).mock.calls.length).toBe(1);
-    expect(api.createContainerOperation).toHaveBeenCalledWith(preflight, { engine: 'docker', service_id: 'container_service_docker', confirmation_name: 'Docker Engine' });
+    expect(api.createContainerOperation).toHaveBeenCalledWith(preflight, { engine: 'docker', service_id: 'container_service_docker', confirmation_name: 'Docker Engine' }, expect.any(String));
     await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.querySelector('[data-container-operations]')).toBeNull();
   });
@@ -1544,16 +1578,9 @@ describe('native Containers responsive product surface', () => {
     expect(visibleButtons.every((button) => button.getBoundingClientRect().height >= 44)).toBe(true);
     Array.from(servicePage.querySelectorAll<HTMLButtonElement>('.container-service-card button')).find((button) => button.textContent?.includes('Configure'))?.click();
     await settle();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    const dialogRect = dialog.getBoundingClientRect();
-    expect(dialogRect.left).toBeGreaterThanOrEqual(0);
-    expect(dialogRect.right).toBeLessThanOrEqual(390);
-    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Docker CLI'))?.click();
-    await settle();
-    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Proxies'))?.click();
-    await settle();
-    expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
-    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+    expect(browserHarness.openSettings).toHaveBeenCalledWith('containers', {resource: 'container_service_docker'});
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    expect((await page.screenshot({save: false})).length).toBeGreaterThan(1000);
   });
 
   it('adapts service cards to the Workbench width inside a wide application window', async () => {
@@ -1607,7 +1634,7 @@ describe('native Containers responsive product surface', () => {
     await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
   });
 
-  it('shows official service branding and complete local Docker CLI configuration', async () => {
+  it('shows official service branding and opens the global configuration owner', async () => {
     await page.viewport(1440, 900);
     const mounted = mount('workbench');
     dispose = mounted.dispose;
@@ -1633,22 +1660,7 @@ describe('native Containers responsive product surface', () => {
     Array.from(cards[0].querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Configure'))?.click();
     await settle();
 
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(dialog).not.toBeNull();
-    expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(2);
-    expect(dialog.querySelector('.container-service-config-editor')).not.toBeNull();
-    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Docker CLI'))?.click();
-    await settle();
-    expect(dialog.querySelectorAll('.container-service-cli-setting-card')).toHaveLength(2);
-    const outputFormats = dialog.querySelector<HTMLDetailsElement>('.container-service-cli-disclosure')!;
-    expect(outputFormats.open).toBe(false);
-    outputFormats.querySelector<HTMLElement>('summary')?.click();
-    await settle();
-    expect(outputFormats.open).toBe(true);
-    expect(outputFormats.textContent).toContain('docker ps');
-    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Proxies'))?.click();
-    await settle();
-    expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
+    expect(browserHarness.openSettings).toHaveBeenCalledWith('containers', {resource: 'container_service_docker'});
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
   });
 

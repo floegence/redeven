@@ -1,10 +1,12 @@
-import { readSessionEvents } from '../services/sessionHTTP';
+import { isSessionEventAuthorizationError, readSessionEvents } from '../services/sessionHTTP';
 import { createSignal } from 'solid-js';
 
 import { fetchLocalApiJSON } from '../services/localApi';
 
 export type ManagedOperation = Readonly<{
 	cancel_requested?: boolean;
+  observation_error?: string;
+  request_id?: string;
   operation_id: string;
   service_id: string;
   action: 'install' | 'start' | 'stop' | 'restart' | 'retry' | 'retry_install' | 'update' | 'reconfigure' | 'uninstall' | 'detach' | 'restore' | 'recover';
@@ -51,9 +53,9 @@ export type ManagedOperation = Readonly<{
   delete_workspace?: boolean;
 }>;
 
-type ManagedOperationControllerOptions = Readonly<{
+export type ManagedOperationControllerOptions = Readonly<{
   streamFailedMessage: () => string;
-  timedOutMessage: () => string;
+  canObserve?: () => boolean;
   onSubmittingOperationAccepted?: (submittingOperationID: string, operationID: string) => void;
   onOperationUpdated?: (operation: ManagedOperation) => void;
   onOperationReleased?: (operationID: string) => void;
@@ -96,64 +98,98 @@ function operationProgressTotal(action: ManagedOperation['action']): number {
 export function createManagedServiceOperationController(options: ManagedOperationControllerOptions) {
   const [states, setStates] = createSignal<Record<string, ManagedOperationState>>({});
   const streams = new Map<string, ActiveStream>();
+  const listeners = new Set<ManagedOperationControllerOptions>([options]);
+  const released = new Set<string>();
+  let generation = 0;
+  let submissionSequence = 0;
 
   const update = (operation: ManagedOperation) => {
     const previous = states()[operation.service_id]?.operation;
-    if (previous?.state === 'submitting' && previous.operation_id !== operation.operation_id) {
-      options.onSubmittingOperationAccepted?.(previous.operation_id, operation.operation_id);
+    if (previous?.operation_id === operation.operation_id) {
+      if (operationTerminal(previous) && !operationTerminal(operation)) return previous;
+      if ((previous.updated_at_unix_ms ?? 0) > (operation.updated_at_unix_ms ?? 0)) return previous;
     }
+    if (previous?.state === 'submitting' && previous.operation_id !== operation.operation_id) {
+      for (const listener of listeners) listener.onSubmittingOperationAccepted?.(previous.operation_id, operation.operation_id);
+    }
+    if (previous && previous.operation_id !== operation.operation_id) released.delete(previous.operation_id);
     setStates((current) => ({ ...current, [operation.service_id]: { operation } }));
-    options.onOperationUpdated?.(operation);
-  };
-
-  const begin = (serviceID: string, action: ManagedOperation['action']): ManagedOperation => {
-    const operation: ManagedOperation = {
-      operation_id: `submitting:${serviceID}:${action}`,
-      service_id: serviceID,
-      action,
-      state: 'submitting',
-      stage: submittingStage(action),
-      progress_current: 0,
-      progress_total: operationProgressTotal(action),
-    };
-    update(operation);
+    for (const listener of listeners) listener.onOperationUpdated?.(operation);
     return operation;
   };
 
-  const track = (operation: ManagedOperation): Promise<ManagedOperation> => {
-    update(operation);
-    if (operationTerminal(operation)) return Promise.resolve(operation);
-    const existing = streams.get(operation.operation_id);
-    if (existing) return existing.promise;
+  const begin = (serviceID: string, action: ManagedOperation['action']): ManagedOperation => {
+    const previous = states()[serviceID]?.operation;
+    if (previous && !operationTerminal(previous)) throw new Error('A service operation is already active');
+    return update({
+      operation_id: `submitting:${serviceID}:${action}:${++submissionSequence}`,
+      service_id: serviceID, action, state: 'submitting', stage: submittingStage(action),
+      progress_current: 0, progress_total: operationProgressTotal(action),
+    });
+  };
 
+  const pause = (signal: AbortSignal, delay: number) => new Promise<void>((resolve, reject) => {
+    const abort = () => { window.clearTimeout(timer); reject(new DOMException('Observation retired', 'AbortError')); };
+    const timer = window.setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, delay);
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+  });
+
+  const track = (initial: ManagedOperation): Promise<ManagedOperation> => {
+    const existing = streams.get(initial.operation_id);
+    if (existing) return existing.promise;
+    const operation = update(initial);
+    if (operationTerminal(operation)) return Promise.resolve(operation);
     const controller = new AbortController();
-    let timedOut = false;
-    const timeout = window.setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, 35 * 60_000);
-    const promise = (async () => {
-      try {
-        for await (const frame of readSessionEvents(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/events`, {
-          method: 'GET', signal: controller.signal,
-        })) {
-          if (!frame.data) continue;
-          try {
-            const snapshot = JSON.parse(frame.data) as ManagedOperation;
-            update(snapshot);
-            if (operationTerminal(snapshot)) return snapshot;
-          } catch {
-            // Continue until the stream provides a complete operation snapshot.
-          }
-        }
-        throw new Error(options.streamFailedMessage());
-      } catch (error) {
-        if (timedOut) throw new Error(options.timedOutMessage());
-        throw error;
-      } finally {
-        window.clearTimeout(timeout);
+    const epoch = generation;
+    const current = () => epoch === generation && !controller.signal.aborted;
+    const accept = (snapshot: ManagedOperation) => {
+      if (!snapshot || snapshot.operation_id !== operation.operation_id || snapshot.service_id !== operation.service_id || snapshot.action !== operation.action || !['pending', 'running', 'cancelling', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(snapshot.state)) {
+        throw new Error('Invalid service operation snapshot');
       }
-    })().finally(() => {
+      if (!current()) throw new DOMException('Observation retired', 'AbortError');
+      return update({ ...snapshot, observation_error: undefined });
+    };
+    const promise = (async () => {
+      let retryDelay = 1000;
+      while (current()) {
+        if (options.canObserve?.() === false) { await pause(controller.signal, retryDelay); continue; }
+        try {
+          for await (const frame of readSessionEvents(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/events`, {
+            method: 'GET', signal: controller.signal,
+          })) {
+            if (!frame.data) continue;
+            const snapshot = accept(JSON.parse(frame.data) as ManagedOperation);
+            retryDelay = 1000;
+            if (operationTerminal(snapshot)) return snapshot;
+          }
+        } catch (error) {
+          if (!current()) throw error;
+          if (isSessionEventAuthorizationError(error)) throw error;
+        }
+        if (!current()) break;
+        // Losing observation says nothing about execution. Reconcile this exact
+        // operation, never replay the mutation that created it.
+        try {
+          if (options.canObserve?.() !== false) {
+            const snapshot = accept(await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}`, { method: 'GET', signal: controller.signal }));
+            if (operationTerminal(snapshot)) return snapshot;
+          }
+        } catch (error) {
+          if (!current()) throw error;
+          if (isSessionEventAuthorizationError(error) || (error instanceof Object && 'status' in error && error.status === 404)) throw error;
+        }
+        const latest = states()[operation.service_id]?.operation;
+        if (current() && latest?.operation_id === operation.operation_id && !operationTerminal(latest)) update({ ...latest, observation_error: options.streamFailedMessage() });
+        await pause(controller.signal, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 15000);
+      }
+      throw new DOMException('Observation retired', 'AbortError');
+    })().catch(error => {
+      const latest = states()[operation.service_id]?.operation;
+      if (current() && latest?.operation_id === operation.operation_id && !operationTerminal(latest)) update({ ...latest, observation_error: options.streamFailedMessage() });
+      throw error;
+    }).finally(() => {
       if (streams.get(operation.operation_id)?.controller === controller) streams.delete(operation.operation_id);
     });
     streams.set(operation.operation_id, { controller, promise });
@@ -161,31 +197,37 @@ export function createManagedServiceOperationController(options: ManagedOperatio
   };
 
   const clear = (operationID: string) => {
-    let released = false;
-    setStates((current) => {
-      const serviceID = Object.keys(current).find((key) => current[key]?.operation.operation_id === operationID);
-      if (!serviceID) return current;
-      const next = { ...current };
-      delete next[serviceID];
-      released = true;
-      return next;
-    });
-    if (released) options.onOperationReleased?.(operationID);
+    const operation = Object.values(states()).find(state => state.operation.operation_id === operationID)?.operation;
+    if (!operation || !operationTerminal(operation) || released.has(operationID)) return;
+    released.add(operationID);
+    for (const listener of listeners) listener.onOperationReleased?.(operationID);
   };
 
+  const reject = (submission: ManagedOperation, errorCode: string) => {
+    update({ ...submission, state: 'failed', stage: 'failed', error_code: errorCode });
+    clear(submission.operation_id);
+  };
   const cancel = async (operation: ManagedOperation) => {
+    const epoch = generation;
     const updated = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/cancel`, { method: 'POST' });
-    update(updated);
+    if (epoch === generation) update(updated);
     return updated;
   };
-
-  const operationForService = (serviceID: string) => states()[serviceID]?.operation ?? null;
-  const knows = (operationID: string) => Object.values(states()).some((state) => state.operation.operation_id === operationID);
-
-  const dispose = () => {
-    for (const stream of streams.values()) stream.controller.abort();
-    streams.clear();
+  const subscribe = (listener: ManagedOperationControllerOptions) => {
+    listeners.add(listener);
+    for (const { operation } of Object.values(states())) {
+      listener.onOperationUpdated?.(operation);
+      if (released.has(operation.operation_id)) listener.onOperationReleased?.(operation.operation_id);
+    }
+    return () => { listeners.delete(listener); };
   };
-
-  return { begin, track, clear, cancel, operationForService, knows, dispose };
+  const operationForService = (serviceID: string) => states()[serviceID]?.operation ?? null;
+  const knows = (operationID: string) => streams.has(operationID) || Object.values(states()).some(({operation}) => operation.operation_id === operationID && (operationTerminal(operation) || operation.state === 'submitting'));
+  const operations = () => Object.values(states()).map(state => state.operation);
+  const dispose = () => {
+    ++generation;
+    for (const stream of streams.values()) stream.controller.abort();
+    streams.clear(); released.clear(); setStates({});
+  };
+  return { begin, track, clear, reject, update, cancel, subscribe, operations, operationForService, knows, dispose };
 }

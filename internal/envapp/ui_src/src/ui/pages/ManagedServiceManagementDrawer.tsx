@@ -194,6 +194,7 @@ export function ManagedServiceManagementDrawer(props: {
               <Show when={pathCopy() === 'copied'} fallback={<Copy class="h-3.5 w-3.5" />}><Check class="h-3.5 w-3.5" /></Show>
             </Button>;
   let generation = 0;
+  let executionGeneration = 0;
   const text = (key: string) =>
     i18n.t(`webServices.management.${key}` as EnvAppTranslationKey);
   const serviceID = createMemo(() => props.service?.service_id);
@@ -201,6 +202,8 @@ export function ManagedServiceManagementDrawer(props: {
     on(
       () => [serviceID(), props.initialAction] as const,
       () => {
+        ++executionGeneration;
+        setExecuting(false);
         if (!props.service) { generation++; return; }
         setRequest({ action: props.initialAction });
         setRestartReview(false);
@@ -280,6 +283,7 @@ export function ManagedServiceManagementDrawer(props: {
   const execute = async () => {
     const current = plan();
     if (inspecting() || mutationDisabled() || !props.service || !current || current.blockers.length || loading() || error()) return;
+    const execution = executionGeneration;
     setExecuting(true);
     setError('');
     try {
@@ -287,13 +291,14 @@ export function ManagedServiceManagementDrawer(props: {
         ...current.request,
         plan_digest: current.plan_digest,
       });
-      setRevision((value) => value + 1);
+      if (execution === executionGeneration) setRevision((value) => value + 1);
     } catch (cause) {
+      if (execution !== executionGeneration) return;
       setError(
         cause instanceof LocalApiError ? cause.code : 'OPERATION_FAILED',
       );
     } finally {
-      setExecuting(false);
+      if (execution === executionGeneration) setExecuting(false);
     }
   };
   const retainedArchive = () =>

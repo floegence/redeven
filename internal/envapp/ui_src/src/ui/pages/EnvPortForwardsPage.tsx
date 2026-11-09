@@ -25,8 +25,7 @@ import {
   DirectoryPicker,
 } from '@floegence/floe-webapp-core/ui';
 import { WebServicesHeader, WebServicesListSkeleton } from './WebServicesPresentation';
-import { createEnvCachedResource } from '../services/envResourceCache';
-import { forwardSnapshot, managedServiceSnapshot } from '../services/envResourceSnapshots';
+import { createManagedServiceSession } from '../services/managedServiceSession';
 import { openWebServiceRoute, resolveWebServiceOpenRoute } from '../services/webServiceWindows';
 export { resolveWebServiceOpenRoute, type WebServiceOpenRoute } from '../services/webServiceWindows';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
@@ -79,7 +78,6 @@ import {
   type ManagedServiceReconfigureDraft,
 } from './ManagedServiceSettingsDrawer';
 import {
-  createManagedServiceOperationController,
   type ManagedOperation,
 } from './managedServiceOperationController';
 import {
@@ -364,7 +362,7 @@ type ManagedInstallReceipt = Readonly<{
   service: Pick<ManagedService, 'service_id' | 'template_id' | 'workspace_path' | 'observed_state'>;
   operation: ManagedOperation;
 }>;
-type ManagedInstallSubmission = Readonly<{
+export type ManagedInstallSubmission = Readonly<{
   sourcePreview?: SourcePreview;
   marketItem?: MarketTemplate;
   requestID: string;
@@ -1057,6 +1055,7 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
 const managedOperationActive = (operation: ManagedOperation | null | undefined) => Boolean(operation && ['submitting', 'pending', 'running', 'cancelling'].includes(operation.state));
 
 function managedOperationActivityLabel(operation: ManagedOperation, i18n: WebServicesI18n): string {
+  if (operation.observation_error) return operation.observation_error;
   const stage = ['failed', 'interrupted', 'cancelled'].includes(operation.state) ? operation.state : operation.stage;
   return operation.state === 'submitting'
     ? i18n.t('webServices.managed.operationStarting')
@@ -1737,6 +1736,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
   const statusLabel = createMemo(() => {
     const current = activeOperation();
     if (!current) return i18n.t(managementStatusKey(props.service.status ?? props.service.observed_state));
+    if (current.observation_error) return current.observation_error;
     return current.state === 'submitting' ? i18n.t('webServices.managed.operationStarting') : managedStageLabel(current.stage, i18n);
   });
   const busy = () => props.busy || managedOperationActive(props.operation);
@@ -2317,8 +2317,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     });
   }));
 
-  const forwardResource = createEnvCachedResource(ctx, () => 'web-service-forwards', forwardSnapshot);
-  const managedResource = createEnvCachedResource(ctx, () => 'managed-web-services', managedServiceSnapshot);
+  const serviceSession = ctx.managedServiceSession ?? createManagedServiceSession(ctx, {
+    streamFailedMessage: () => i18n.t('webServices.managed.operationStreamFailed'),
+  });
+  const { forwardResource, managedResource } = serviceSession;
   const [refreshSeq, setRefreshSeq] = createSignal(0);
   const bumpRefresh = () => { if (!forwardResource.ready()) forwardResource.retry(); forwardResource.invalidate(); setRefreshSeq(n => n + 1); };
   const refreshForwards = () => forwardResource.refresh(async signal => {
@@ -2349,9 +2351,9 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const managedOperationPresentation = createManagedServiceOperationPresentation({
     isExpanded: (operationID) => Boolean(expandedManagedOperations()[operationID]),
   });
-  const managedOperations = createManagedServiceOperationController({
+  const managedOperations = serviceSession.operations;
+  const unsubscribeOperations = managedOperations.subscribe({
     streamFailedMessage: () => i18n.t('webServices.managed.operationStreamFailed'),
-    timedOutMessage: () => i18n.t('webServices.managed.operationTimedOut'),
     onOperationUpdated: managedOperationPresentation.update,
     onOperationReleased: managedOperationPresentation.release,
     onSubmittingOperationAccepted: (submittingOperationID, operationID) => {
@@ -2363,8 +2365,9 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       });
     },
   });
+  onCleanup(unsubscribeOperations);
   const [managedInstallSubmitting, setManagedInstallSubmitting] = createSignal(false);
-  const [installSubmissions, setInstallSubmissions] = createSignal<readonly ManagedInstallSubmission[]>([]);
+  const { installSubmissions, setInstallSubmissions } = serviceSession;
   const [checkingInstallRequests, setCheckingInstallRequests] = createSignal<readonly string[]>([]);
   const patchInstallSubmission = (requestID: string, patch: Partial<ManagedInstallSubmission>) => setInstallSubmissions(current => current.map(item => item.requestID === requestID ? {...item, ...patch} : item));
   const dropInstallSubmission = (requestID: string) => setInstallSubmissions(current => current.filter(item => item.requestID !== requestID));
@@ -2435,7 +2438,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const [managedLogs, setManagedLogs] = createSignal<string[] | null>(null);
   const [updateNoticeAcceptances, setUpdateNoticeAcceptances] = createSignal<Record<string, number>>({});
   const [managementExecution, setManagementExecution] = createSignal(false);
-  const [operationReleases, setOperationReleases] = createSignal<Record<string, { current?: string; target: string }>>({});
+  const { operationReleases, setOperationReleases } = serviceSession;
   const [managementTarget, setManagementTarget] = createSignal<{ service: ManagedService; action: ManagementAction } | null>(null);
   createEffect(on(() => managementTarget()?.service.service_id, () => setManagementExecution(false)));
   const closeManagement = () => {
@@ -2537,7 +2540,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   let managedLoadGeneration = 0;
   const loadManaged = async (refreshCatalog = true) => {
-    if (!permissionReady() || !canRead() || !managedResource.ready()) return;
+    if (disposed || !permissionReady() || !canRead() || !managedResource.ready()) return;
     const generation = ++managedLoadGeneration;
     setManagedLoading(true);
     try {
@@ -2562,23 +2565,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         if (operation && !managedOperationActive(operation)) managedOperations.clear(operation.operation_id);
       }
       setInstallSubmissions(current => current.filter(item => !serviceIDs.has(item.serviceID)));
-      for (const service of nextServices) {
-        const activeOperation = service.active_operation;
-        if (!activeOperation || managedOperations.knows(activeOperation.operation_id)) continue;
-        void managedOperations.track(activeOperation)
-          .then(async (terminal) => {
-            try {
-              await loadManaged(false);
-            } finally {
-              managedOperations.clear(terminal.operation_id);
-            }
-          })
-          .catch((error) => {
-            if (error instanceof DOMException && error.name === 'AbortError') return;
-            managedOperations.clear(activeOperation.operation_id);
-            notify.error(i18n.t('webServices.managed.operationStreamFailed'), error instanceof Error ? error.message : String(error));
-          });
-      }
+
     } catch (error) {
       if (generation === managedLoadGeneration && !(error instanceof DOMException && error.name === 'AbortError')) setManagedLoadError(true);
     } finally { if (generation === managedLoadGeneration) setManagedLoading(false); }
@@ -2646,7 +2633,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
   const acceptInstallReceipt = (submission: ManagedInstallSubmission, result: ManagedInstallReceipt, authority: () => boolean) => {
-    if (!authority() || disposed) return;
+    if (!authority()) return;
     if (result.service.service_id !== submission.serviceID || result.operation.service_id !== submission.serviceID || result.operation.action !== 'install') {
       patchInstallSubmission(submission.requestID, { phase: 'unknown', message: i18n.t('webServices.managed.installSubmissionUnknownDetail') });
       return;
@@ -2654,18 +2641,18 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     patchInstallSubmission(submission.requestID, { phase: 'accepted', message: undefined });
     const operationPromise = managedOperations.track(result.operation);
     void operationPromise.then(async operation => {
-      if (!authority() || disposed) return;
+      if (!authority()) return;
       await loadManaged(false);
-      if (!authority() || disposed) return;
+      if (!authority()) return;
       bumpRefresh();
       if (operation.state !== 'succeeded') {
         notify.error(i18n.t('webServices.notifications.failedToAddTitle'), managedOperationFailureMessage(operation, i18n));
       } else notify.success(i18n.t('webServices.notifications.serviceAddedTitle'), i18n.t('webServices.notifications.serviceAddedMessage'));
     }).catch(error => {
-      if (!authority() || disposed || (error instanceof DOMException && error.name === 'AbortError')) return;
+      if (!authority() || (error instanceof DOMException && error.name === 'AbortError')) return;
       patchInstallSubmission(submission.requestID, {phase: 'unknown', message: i18n.t('webServices.managed.operationStreamFailed')});
       void loadManaged(false);
-    }).finally(() => { if (authority() && !disposed && managedState().some(service => service.service_id === submission.serviceID)) managedOperations.clear(result.operation.operation_id); });
+    }).finally(() => { if (authority() && managedState().some(service => service.service_id === submission.serviceID)) managedOperations.clear(result.operation.operation_id); });
     const target = submission.release?.candidate;
     const targetLabel = target?.version || target?.tag || submission.presentation.defaultReleaseLabel;
     if (targetLabel) setOperationReleases(current => ({...current, [result.operation.operation_id]: {target: targetLabel}}));
@@ -2674,16 +2661,16 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const checkInstallSubmission = async (submission: ManagedInstallSubmission) => {
     if (!canManageManagedService() || checkingInstallRequests().includes(submission.requestID)) return;
-    const authority = managedResource.captureAuthority();
+    const authority = serviceSession.captureAuthority();
     setCheckingInstallRequests(current => [...current, submission.requestID]);
     try {
       const result = await fetchLocalApiJSON<{receipt: ManagedInstallReceipt | null}>(`/_redeven_proxy/api/managed-web-services/install-requests/${encodeURIComponent(submission.requestID)}`, {method: 'GET'});
-      if (!authority() || disposed) return;
+      if (!authority()) return;
       if (result.receipt) acceptInstallReceipt(submission, result.receipt, authority);
       else patchInstallSubmission(submission.requestID, {phase: 'unknown', message: i18n.t('webServices.managed.installSubmissionUnknownDetail')});
     } catch {
-      if (authority() && !disposed) patchInstallSubmission(submission.requestID, {phase: 'unknown', message: i18n.t('webServices.managed.installSubmissionUnknownDetail')});
-    } finally { if (authority() && !disposed) setCheckingInstallRequests(current => current.filter(id => id !== submission.requestID)); }
+      if (authority()) patchInstallSubmission(submission.requestID, {phase: 'unknown', message: i18n.t('webServices.managed.installSubmissionUnknownDetail')});
+    } finally { if (authority()) setCheckingInstallRequests(current => current.filter(id => id !== submission.requestID)); }
   };
 
   const reviewInstallSubmission = (submission: ManagedInstallSubmission) => {
@@ -2706,7 +2693,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const installManaged = async () => {
     const template = selectedTemplate();
     if (!template || managedInstallSubmitting() || !template.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || installedServiceForTemplate(template.template_id) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService()) return;
-    const authority = managedResource.captureAuthority();
+    const authority = serviceSession.captureAuthority();
     const prepared = installPreparation.current();
     if (!prepared) return;
     const {request, plan: review} = prepared;
@@ -2740,7 +2727,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       const result = await fetchLocalApiJSON<ManagedInstallReceipt>('/_redeven_proxy/api/managed-web-services', {method: 'POST', body});
       acceptInstallReceipt(submission, result, authority);
     } catch (error) {
-      if (!authority() || disposed) return;
+      if (!authority()) return;
       const rejected = error instanceof LocalApiError && error.code !== 'HTTP_ERROR' && error.status >= 400 && error.status < 500 && error.status !== 408;
       const message = rejected ? managedFailureMessage(error.code, i18n) : i18n.t('webServices.managed.installSubmissionUnknownDetail');
       patchInstallSubmission(requestID, {phase: rejected ? 'failed' : 'unknown', message});
@@ -2749,51 +2736,59 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
 	const managedAction = async (serviceID: string, action: ManagedAction | 'update', noticeRevisions: Readonly<Record<string, number>> = {}, updatePlanID = '', callbacks?: Readonly<{ onAccepted?: (operation: ManagedOperation) => void; onFailure?: (error: unknown) => boolean }>) => {
     if (!canManageManagedService() || managedOperationActive(managedRowOperation(serviceID))) return;
+    const authority = serviceSession.captureAuthority();
     const submission = managedOperations.begin(serviceID, action);
     let operationID = submission.operation_id;
     try {
-		const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions, ...(updatePlanID ? { update_plan_id: updatePlanID } : {}) }) });
+		const result = await serviceSession.admit(submission, { request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions, ...(updatePlanID ? { update_plan_id: updatePlanID } : {}) });
+      if (!authority()) return;
       operationID = result.operation_id;
       const operationPromise = managedOperations.track(result);
-      callbacks?.onAccepted?.(result);
+      if (!disposed) callbacks?.onAccepted?.(result);
       await loadManaged(false);
       const operation = await operationPromise;
+      if (!authority()) return;
       await loadManaged(false);
       if (operation.state !== 'succeeded') throw new LocalApiError({ code: operation.error_code, message: managedOperationFailureMessage(operation, i18n) });
       if (action === 'update') {
         notify.success(i18n.t('webServices.managed.updateComplete'), i18n.t('webServices.managed.updateCompleteMessage'));
       }
     } catch (error) {
+      if (!authority()) return;
       const requestFailed = operationID === submission.operation_id;
       const errorCode = error instanceof LocalApiError ? error.code : 'UI_REQUEST_FAILED';
       const message = requestFailed ? managedFailureMessage(errorCode, i18n) : error instanceof Error ? error.message : String(error);
-      if (requestFailed) {
-        managedOperationPresentation.update({ ...submission, state: 'failed', stage: 'failed', error_code: errorCode });
+      if (requestFailed && !(error instanceof DOMException && error.name === 'AbortError')) {
+        managedOperations.reject(submission, errorCode);
       }
-      if (!callbacks?.onFailure?.(error)) notify.error(managedActionFailureTitle(action, i18n), message);
+      if (!authority()) return;
+      if (disposed || !callbacks?.onFailure?.(error)) notify.error(managedActionFailureTitle(action, i18n), message);
     }
-    finally { if (operationID) managedOperations.clear(operationID); }
+    finally { if (authority() && operationID) managedOperations.clear(operationID); }
   };
 
   const reconfigureManagedService = async (serviceID: string, request: ManagedReconfigureRequest) => {
     if (!canManageManagedService()) throw new Error(i18n.t('webServices.permission.executeRequired'));
-    let operationID = managedOperations.begin(serviceID, 'reconfigure').operation_id;
+    const authority = serviceSession.captureAuthority();
+    const submission = managedOperations.begin(serviceID, 'reconfigure');
+    let operationID = submission.operation_id;
     try {
-      const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, {
-        method: 'POST',
-        body: JSON.stringify({ request_id: managedRequestID(), action: 'reconfigure', reconfigure: request }),
-      });
+      const result = await serviceSession.admit(submission, { request_id: managedRequestID(), action: 'reconfigure', reconfigure: request });
+      if (!authority()) throw new DOMException('Environment retired', 'AbortError');
       operationID = result.operation_id;
       const operationPromise = managedOperations.track(result);
       await loadManaged(false);
       const operation = await operationPromise;
+      if (!authority()) return;
       await loadManaged(false);
       if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n));
     } catch (error) {
+      if (!authority()) throw error;
+      if (operationID === submission.operation_id && !(error instanceof DOMException && error.name === 'AbortError')) managedOperations.reject(submission, error instanceof LocalApiError ? error.code : 'UI_REQUEST_FAILED');
       notify.error(managedActionFailureTitle('reconfigure', i18n), error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
-      if (operationID) managedOperations.clear(operationID);
+      if (authority() && operationID) managedOperations.clear(operationID);
     }
   };
 
@@ -2809,11 +2804,14 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const restoreManagement = async () => {
     const review = managementReview();
     if (!canManageManagedService() || !review || managementRestoreBusy()) return;
+    const authority = serviceSession.captureAuthority();
+    const target = managementTarget();
     setManagementRestoreBusy(true);
     try {
       await fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(review.service_id)}/restore-management`, { method: 'POST', body: JSON.stringify({ saved_identity: review.saved_identity, fingerprint: review.fingerprint, confirmed: true }) });
-      setManagementReview(null);
-      await loadManaged(false);
+      if (!authority()) return;
+      if (!disposed && managementTarget() === target) setManagementReview(null);
+      await serviceSession.refresh();
     } catch (error) { notify.error(i18n.t('webServices.managed.restoreManagement'), error instanceof LocalApiError ? managedFailureMessage(error.code, i18n) : error instanceof Error ? error.message : String(error)); }
     finally { setManagementRestoreBusy(false); }
   };
@@ -2855,7 +2853,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     }
   };
 
-  createEffect(on(() => [managedResource.identity(), ctx.resourceCacheAccess?.().generation, canManageManagedService()], () => {
+  createEffect(on(() => [managedResource.identity(), canManageManagedService()], () => {
     // Review candidates belong to the previous authenticated environment. Let
     // them expire there instead of sending cleanup through a new connection.
     setInstallSourcePreview(undefined);
@@ -2866,10 +2864,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     setGitImportOpen(false);
     setMarketSource(undefined);
     closeTemplateDrawer();
-    managedOperations.dispose();
-    for (const operationID of managedOperationPresentation.operationIDs()) managedOperations.clear(operationID);
     managedOperationPresentation.pruneServices(new Set());
-    setInstallSubmissions([]);
     setCheckingInstallRequests([]);
     setManagedInstallSubmitting(false);
   }, {defer: true}));
@@ -3549,7 +3544,6 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   onCleanup(() => {
     managedLoadGeneration += 1;
     clearCopySource();
-    managedOperations.dispose();
     managedOperationPresentation.dispose();
   });
 
@@ -4160,15 +4154,26 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         onLegacyRestore={() => { const target = managementTarget(); if (target) void reviewManagement(target.service); }}
 		ownershipReview={<Show when={managementReview()?.service_id === managementTarget()?.service.service_id && managementReview()}>{(review) => <div class="space-y-3 rounded-lg border p-3"><p class="text-[length:var(--floe-type-body)]">{i18n.t('webServices.managed.restoreManagementHelp')}</p><p class="break-all font-mono text-xs">{i18n.t('webServices.managed.processFacts', { pid: review().pid, group: review().process_group, executable: review().executable, user: review().user_id, birth: review().birth })}</p><Button size="sm" onClick={() => void restoreManagement()} disabled={managementRestoreBusy()}>{i18n.t('webServices.managed.confirmProcess')}</Button></div>}</Show>}
         onExecute={async (request: ManagementRequest & { plan_digest: string }) => {
-          const target = managementTarget(); if (!target) return;
-          const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(target.service.service_id)}/operations`, { method: 'POST', body: JSON.stringify({ ...request, request_id: managedRequestID() }) });
+          const target = managementTarget(); if (request.action === 'inspect' || !target || managedOperationActive(managedRowOperation(target.service.service_id))) return;
+          const authority = serviceSession.captureAuthority();
+          const submission = managedOperations.begin(target.service.service_id, request.action);
+          let operationID = submission.operation_id;
           try {
+            const result = await serviceSession.admit(submission, { ...request, request_id: managedRequestID() });
+            if (!authority()) return;
+            operationID = result.operation_id;
             const completed = await managedOperations.track(result);
+            if (!authority()) return;
             await loadManaged(false); bumpRefresh();
             if (completed.state !== 'succeeded') throw new LocalApiError({ message: completed.error_message ?? '', code: completed.error_code ?? 'OPERATION_FAILED', status: 409 });
-            closeManagement();
+            if (!disposed && managementTarget() === target) closeManagement();
+          } catch (error) {
+            if (!authority()) return;
+            if (operationID === submission.operation_id && !(error instanceof DOMException && error.name === 'AbortError')) managedOperations.reject(submission, error instanceof LocalApiError ? error.code : 'UI_REQUEST_FAILED');
+            if (disposed || managementTarget() !== target) notify.error(managedActionFailureTitle(request.action, i18n), error instanceof LocalApiError ? managedFailureMessage(error.code, i18n) : String(error));
+            throw error;
           } finally {
-            managedOperations.clear(result.operation_id);
+            if (authority()) managedOperations.clear(operationID);
           }
         }}
       />

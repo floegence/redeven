@@ -4,22 +4,22 @@ title: Browser Editor runtime
 tags: [code-app, browser-editor, local-ui, desktop]
 quality_exception: Cross-surface Browser Editor contract spanning Code App runtime state, Desktop transfer, Env App orchestration, remote download validation, and codespace navigation security.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/<id>/` routes or through remote `cs-*` sandbox hosts, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.
+Code App owns Browser Editor runtime. Local UI `/cs/<id>/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.
 
 # Contract
 
 ## Mechanism
-The Code App app server backend owns codespace lifecycle, port resolution, managed runtime status, setup operations, Desktop-transfer chunks, completion, version selection, version removal, and operation cancellation. Only one setup operation may run at a time, an accepted operation id cannot be reused during the RuntimeManager lifetime, and stale chunk, completion, cancellation, or progress updates cannot terminate or overwrite a different operation.
+Code App owns lifecycle, ports, status, setup, transfer chunks, versions and cancellation. Setup is single-flight; accepted IDs cannot be reused within RuntimeManager lifetime. Stale chunks, completion, cancellation or progress cannot alter another operation.
 
-External system-browser and ordinary browser opens retain the existing Local UI or remote launcher flow.
+Shell owns Browser Editor orchestration, Desktop delivery, progress and cancellation state across page replacement. Pages own optional follow-on opening. Explicit Cancel requests cancellation; environment retirement only aborts observation/transport. New views reuse pending preparation and cannot start duplicates. External browser opens retain the Local UI or remote launcher flow.
 
 # Boundaries
 
-Opening or managing Browser Editor is not just a static file route. The session-scoped Desktop bridge values are transport bootstrap inputs for the current isolated app origin; they do not grant broader runtime permissions or replace controller source, origin, and capability validation.
+Desktop bridge bootstrap values belong to the current isolated app origin. They cannot grant runtime permission or replace source, origin and capability validation.
 
 # Evidence
 

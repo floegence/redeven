@@ -114,6 +114,7 @@ export async function startOrReconcileBrowserEditorRuntimeOperation(args: Readon
     });
     return { kind: 'created', operation };
   } catch (error) {
+    if (args.signal?.aborted) throw new DOMException('Observation retired', 'AbortError');
     if (!shouldReconcileCreateError(error)) {
       throw new BrowserEditorRuntimeCreateError(error, true);
     }

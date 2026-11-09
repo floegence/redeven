@@ -14,7 +14,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock('@floegence/floe-webapp-core', () => ({ secureRandomUUID: () => crypto.randomUUID() }));
 vi.mock('../EnvContext', () => ({ useEnvContext: () => ({
-  resourceCacheAccess: () => state.access(), env: () => ({ permissions: state.permissions() }), openSettings: state.open,
+  env_id: () => 'container-settings-test', resourceCacheAccess: () => state.access(), env: () => ({ permissions: state.permissions() }), openSettings: state.open,
 }) }));
 vi.mock('./EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.access().phase === 'ready', canAdmin: () => state.permissions().can_admin }) }));
 vi.mock('./SettingsPrimitives', () => ({ SettingsResourceToolbar: (props: { label: string; children: import('solid-js').JSX.Element; actions?: import('solid-js').JSX.Element }) => <div aria-label={props.label}>{props.children}{props.actions}</div> }));
@@ -215,11 +215,11 @@ it('does not discard a new draft when Refresh observes an already-consumed succe
 });
 
 
-it('recovers a known operation by exact ID even outside the recent list', async () => {
+it('automatically reconciles a disconnected operation by exact ID without consulting recent history', async () => {
   state.subscribe.mockRejectedValueOnce(new Error('stream disconnected'));
   await mount(); edit('{"engine":"saved"}'); await review(); run().click(); await settle();
-  expect(save().disabled).toBe(true); state.operations.mockRejectedValue(new Error('recent list unavailable'));
-  sourceRefresh().click(); await settle();
+  state.operations.mockRejectedValue(new Error('recent list unavailable'));
+  await settle();
   expect(state.operation).toHaveBeenCalledExactlyOnceWith('op-a'); expect(state.operations).not.toHaveBeenCalled();
   expect(save().disabled).toBe(false); expect(state.create).toHaveBeenCalledOnce();
 });

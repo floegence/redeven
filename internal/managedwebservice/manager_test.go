@@ -336,10 +336,12 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = manager.Close() })
-	driver := &blockingStopDriver{started: make(chan struct{})}
+	driver := &blockingStopDriver{started: make(chan struct{}), canceled: make(chan struct{})}
 	manager.host = driver
 
-	op, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{RequestID: "request-stop-one", Action: ActionStop})
+	requestContext, abandonRequest := context.WithCancel(context.Background())
+	defer abandonRequest()
+	op, err := manager.Operate(requestContext, service.ServiceID, OperationRequest{RequestID: "request-stop-one", Action: ActionStop})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,6 +349,26 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 	case <-driver.started:
 	case <-time.After(3 * time.Second):
 		t.Fatal("stop operation did not reach driver")
+	}
+
+	// Neither the submitting request nor a foreground event consumer owns execution.
+	abandonRequest()
+	_, leaveView, err := manager.Subscribe(op.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaveView()
+	select {
+	case <-driver.canceled:
+		t.Fatal("foreground retirement canceled accepted work")
+	case <-time.After(50 * time.Millisecond):
+	}
+	observed, err := manager.OperationByRequestID(context.Background(), "request-stop-one")
+	if err != nil || observed.OperationID != op.OperationID || observed.State != "running" {
+		t.Fatalf("exact admission lookup = %+v, err=%v", observed, err)
+	}
+	if _, err := manager.OperationByRequestID(context.Background(), "missing-request"); managedErrorCode(err) != "OPERATION_NOT_FOUND" {
+		t.Fatalf("absent request lookup = %v", err)
 	}
 
 	replayed, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{RequestID: "request-stop-one", Action: ActionStop})
@@ -673,8 +695,9 @@ func TestSafeManagedFailureCauseOmitsPathAndSecret(t *testing.T) {
 }
 
 type blockingStopDriver struct {
-	once    sync.Once
-	started chan struct{}
+	once     sync.Once
+	started  chan struct{}
+	canceled chan struct{}
 }
 
 type recoveryDriver struct {
@@ -718,6 +741,7 @@ func (d *blockingStopDriver) Start(context.Context, *pfregistry.ManagedService) 
 func (d *blockingStopDriver) Stop(ctx context.Context, _ *pfregistry.ManagedService) error {
 	d.once.Do(func() { close(d.started) })
 	<-ctx.Done()
+	close(d.canceled)
 	return ctx.Err()
 }
 func (d *blockingStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {

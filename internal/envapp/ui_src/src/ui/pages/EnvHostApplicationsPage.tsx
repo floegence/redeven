@@ -1,3 +1,5 @@
+import { createHostApplicationOperationSession } from '../services/hostApplicationOperationSession';
+import { ComponentAcquisitionError, createHostApplicationSetupSession } from '../services/hostApplicationSetupSession';
 import { SettingsDisclosure, SettingsList } from './settings/SettingsPrimitives';
 import { ApplicationPictureSettings } from './settings/ApplicationPictureSettings';
 import { DesktopAuthorizationSettings } from './settings/DesktopAuthorizationSettings';
@@ -16,9 +18,8 @@ import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, getHostApplicationTransferPlan, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
-import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress, hostApplicationDesktopDetail, type HostApplicationDesktopProgress } from './HostApplicationSetupPanel';
-import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
+import { addHostApplication, getHostApplicationSetup, hostApplicationSetupActive, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, type RunningHostApplication, type HostApplication, type HostApplicationCatalog } from '../services/hostApplicationsApi';
+import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress, hostApplicationDesktopDetail } from './HostApplicationSetupPanel';
 import { updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
@@ -32,9 +33,6 @@ import { HostAccessWelcome, HostAccessPermissions, HostAccessFeatureSettings, Ho
 import { hostAccessState, setHostAccess, type HostAccessState } from '../services/hostAccess';
 import { getRemoteDesktopStatus, type RemoteDesktopStatus } from '../services/remoteDesktopApi';
 
-class ComponentAcquisitionError extends Error {
-  constructor(readonly translationKey: EnvAppTranslationKey) { super(translationKey); }
-}
 
 function ApplicationIcon(props: { app: HostApplication }) {
   return <span class="host-app-icon" aria-hidden="true">
@@ -164,37 +162,23 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   const [category, setCategory] = createSignal('');
   const [busy, setBusy] = createSignal<Record<string, boolean>>({});
   const [appErrors, setAppErrors] = createSignal<Record<string, string>>({});
-  const [setup, setSetup] = createSignal<HostApplicationSetup | null>(null);
-  const [setupBusy, setSetupBusy] = createSignal(false);
-  const [setupPlan, setSetupPlan] = createSignal<HostApplicationTransferPlan | null>(null);
-  const [planBusy, setPlanBusy] = createSignal(false);
+  const setupSession = ctx.hostApplicationSetupSession ?? createHostApplicationSetupSession(ctx);
+  const { setup, setupBusy, setupPlan, planBusy, acquisitionProgress, setupDisconnected, setSetupDisconnected, observeSetup, inspectPreparation } = setupSession;
+  createEffect(() => { const cause = setupSession.error(); if (cause) setError(translateError(cause)); });
   const [downloadMethod, setDownloadMethod] = createSignal<'host' | 'desktop'>('host');
-  const [acquisitionProgress, setAcquisitionProgress] = createSignal<HostApplicationDesktopProgress | null>(null);
   const preparationActive = () => Boolean(acquisitionProgress()) || hostApplicationSetupActive(setup());
   const preparationNeedsAttention = () => ['failed', 'interrupted'].includes(setup()?.state ?? '');
-  const [setupDisconnected, setSetupDisconnected] = createSignal(false);
   const [setupDialog, setSetupDialog] = createSignal(false);
   const [selectedApplication, setSelectedApplication] = createSignal<HostApplication | null>(null);
   type PendingApplication = { app: HostApplication; popup: Window | null; preparationID?: string; active: boolean };
   const pendingApplications = new Map<string, PendingApplication>();
-  let setupObserver: AbortController | undefined;
-  let setupTransfer: AbortController | undefined;
-  let setupRequestID = '';
-  let setupRequestSignature = '';
-  let setupCancelled = false;
-  let relaying = false;
-  let relaySourceReceiving = false;
   let completingSetup = false;
   registerFlowerPageReader(() => ({ query: query(), category: category(), running_only: runningOnly() }), props.registerPageContext);
   const [quitting, setQuitting] = createSignal<{ app: HostApplication; instances: string[]; force?: boolean } | null>(null);
   const [quitBusy, setQuitBusy] = createSignal(false);
   const [quitError, setQuitError] = createSignal('');
-  type HostApplicationOperation = {
-    kind: 'close_windows' | 'force_quit';
-    instances: string[];
-    state: 'submitting' | 'accepted' | 'failed';
-  };
-  const [operations, setOperations] = createSignal<Record<string, HostApplicationOperation>>({});
+  const applicationOperations = ctx.hostApplicationOperationSession ?? createHostApplicationOperationSession(ctx);
+  const operations = applicationOperations.operations;
   const [addOpen, setAddOpen] = createSignal(false);
   const [addBusy, setAddBusy] = createSignal(false);
   const [name, setName] = createSignal('');
@@ -248,6 +232,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
           return value;
         });
         if (disposed || controller.signal.aborted) return;
+        if (next.running) applicationOperations.reconcile(next.running);
         setError('');
         if (ready() && pendingApplications.size) void continuePreparedApplications();
         if (!quiet && next.availability.supported && next.availability.backend !== 'macos') {
@@ -309,10 +294,9 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     }
   });
   onCleanup(() => {
-    disposed = true; request?.abort(); setupObserver?.abort(); setupTransfer?.abort(); removePreparationClosedListener?.();
+    disposed = true; request?.abort(); removePreparationClosedListener?.();
     for (const pending of pendingApplications.values()) closePending(pending);
     pendingApplications.clear();
-    if (relaying) void window.redevenDesktopShell?.applicationComponents?.({ action: 'cancel' });
   });
 
   const preparationView = (app: HostApplication): HostApplicationPreparationView => ({
@@ -369,24 +353,14 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     } catch (e) { if (!disposed) setError(translateError(e)); }
     finally { completingSetup = false; }
   };
-  const acceptSetup = (next: HostApplicationSetup) => {
+  const acceptSetup = setupSession.acceptSetup;
+  const unsubscribeSetup = setupSession.subscribe(next => {
     if (disposed) return;
-    const previous = setup();
-    if (previous?.package?.digest !== next.package?.digest) setSetupPlan(null);
-    setSetup(next); setSetupDisconnected(false);
-    void updatePending().catch(() => { if (!disposed) setSetupDisconnected(true); });
-    if (next.state === 'ready' && (pendingApplications.size > 0 || (previous && previous.state !== 'ready'))) void continuePreparedApplications();
-  };
-  const observeSetup = () => {
-    if (disposed || setupObserver) return;
-    const controller = new AbortController(); setupObserver = controller;
-    setSetupDisconnected(false);
-    void observeHostApplicationSetup(next => {
-      if (!controller.signal.aborted) acceptSetup(next);
-    }, controller.signal).catch(() => {
-      if (!disposed && !controller.signal.aborted) { setSetupDisconnected(true); void updatePending().catch(() => {}); }
-    }).finally(() => { if (setupObserver === controller) setupObserver = undefined; });
-  };
+    void updatePending().catch(() => setSetupDisconnected(true));
+    if (next.state === 'ready') void continuePreparedApplications();
+  });
+  onCleanup(unsubscribeSetup);
+  createEffect(() => { acquisitionProgress(); untrack(() => { void updatePending().catch(() => setSetupDisconnected(true)); }); });
   const reserveApplication = async (app: HostApplication): Promise<PendingApplication> => {
     const existing = pendingApplications.get(app.id);
     if (existing && (existing.preparationID ? await pendingIsOpen(existing) : existing.active && !existing.popup?.closed)) return existing;
@@ -408,148 +382,24 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     pendingApplications.set(app.id, pending);
     return pending;
   };
-  const inspectPreparation = async () => {
-    setPlanBusy(true);
-    try {
-      const plan = await getHostApplicationTransferPlan();
-      if (!disposed) setSetupPlan(plan);
-      return plan;
-    } finally { if (!disposed) setPlanBusy(false); }
-  };
   const viewUpdate = async () => {
     setSelectedApplication(null); setSetupManaging(true); setSetupDialog(true); setError('');
     try { await inspectPreparation(); }
     catch (e) { if (!disposed) setError(translateError(e)); }
   };
   const prepare = async (file?: File) => {
-    if (!canLaunch() || setupBusy() || relaying) return;
-    setSetupBusy(true);
-    setupCancelled = false;
-    setError('');
-    try {
-      if (file && (!setup()?.package || file.size < setup()!.package!.size_bytes || file.size > setup()!.package!.size_bytes + 2 * 1048576)) throw new Error('The component package does not match this host.');
-      const app = selectedApplication();
-      // Reserve browser popups in the original click before awaiting network work.
-      if (app) await reserveApplication(app);
-      if (!setup()?.installed?.ready) {setBrowse(true);setSetupDialog(false);}
-      const plan = file ? null : await inspectPreparation();
-      if (disposed || setupCancelled) return;
-      let next = setup();
-      if (!file && plan && plan.missing_bytes > 0 && downloadMethod() === 'desktop') {
-        if (!next?.package || !window.redevenDesktopShell?.applicationComponents) throw new Error('Desktop component acquisition is unavailable.');
-        await relayPreparation(next, plan);
-        observeSetup();
-        return;
-      }
-      if (!file && next?.state === 'receiving') return;
-      if (!hostApplicationSetupActive(setup())) {
-        const source = file ? 'upload' : plan?.missing_bytes === 0 ? 'cache' : 'download';
-        const signature = `${source}:${file?.size ?? 0}:${setup()?.package?.digest ?? ''}`;
-        if (!setupRequestID || setupRequestSignature !== signature || (setup() && ['failed', 'cancelled', 'interrupted'].includes(setup()!.state))) {
-          setupRequestID = crypto.randomUUID();
-        }
-        setupRequestSignature = signature;
-        next = await startHostApplicationSetup(setupRequestID, source, file?.size ?? 0, plan?.package_digest ?? setup()?.package?.digest);
-        if (setupCancelled || (disposed && file)) {
-          if (next.can_cancel && next.operation_id) await cancelHostApplicationSetup(next.operation_id);
-          return;
-        }
-        if (disposed) return;
-        acceptSetup(next);
-      }
-      if (next?.state === 'receiving' && next.can_cancel) {
-        if (file) {
-          if (!next.operation_id || file.size !== next.expected_bytes) throw new Error('The component package does not match this host.');
-          setupTransfer = new AbortController();
-          observeSetup();
-          acceptSetup(await uploadHostApplicationSetup(next.operation_id, file, setupTransfer.signal));
-          setupTransfer = undefined;
-        }
-      }
-      observeSetup();
-    } catch (e) {
-      if (!disposed && !setupTransfer?.signal.aborted) {
-        if (e instanceof LocalApiError && e.code === 'HOST_APP_SETUP_BUSY') {
-          try { acceptSetup(await getHostApplicationSetup()); observeSetup(); }
-          catch { setSetupDisconnected(true); }
-        } else setError(translateError(e));
-      }
-    }
-    finally { if (!relaying) setupTransfer = undefined; if (!disposed) setSetupBusy(false); }
-  };
-  const relayPreparation = async (source: HostApplicationSetup, plan: HostApplicationTransferPlan) => {
-    const bridge = window.redevenDesktopShell;
-    const acquire = bridge?.applicationComponents;
-    if (!canLaunch() || !acquire || !source.package || relaying || disposed) return;
-    relaying = true; relaySourceReceiving = source.state === 'receiving';
-    const transfer = new AbortController(); setupTransfer = transfer;
-    const updateAcquisition = (progress: HostApplicationComponentsProgress) => {
-      if (disposed || transfer.signal.aborted) return;
-      setAcquisitionProgress(progress);
-      void updatePending().catch(() => {});
-    };
-    const remove = bridge.onApplicationComponentsProgress?.(updateAcquisition);
-    updateAcquisition({ phase: 'checking', component_bytes: plan.missing_bytes, downloaded_bytes: 0 });
-    try {
-      const capability = await acquire({ action: 'capabilities' });
-      if (disposed || transfer.signal.aborted) return;
-      if (!capability.ok || !capability.supports_transfer_plan || !capability.supports_cache_progress) throw new ComponentAcquisitionError('hostApplications.update.desktopMismatch');
-      const bundle = await acquire({ action: 'acquire', architecture: source.package.architecture, plan });
-      if (disposed || transfer.signal.aborted) return;
-      if (!bundle.ok || !bundle.size) throw new ComponentAcquisitionError(bundle.error === 'target_mismatch' ? 'hostApplications.update.desktopMismatch' : 'hostApplications.prepare.networkError');
-      if (source.state === 'receiving' && bundle.size !== source.expected_bytes) throw new Error('The component package does not match this transfer.');
-      if (source.state !== 'receiving') {
-        const signature = `upload:${bundle.size}:${plan.package_digest}`;
-        if (!setupRequestID || setupRequestSignature !== signature || ['failed', 'cancelled', 'interrupted'].includes(source.state)) setupRequestID = crypto.randomUUID();
-        setupRequestSignature = signature;
-      }
-      const next = source.state === 'receiving' ? source : await startHostApplicationSetup(setupRequestID, 'upload', bundle.size, plan.package_digest);
-      if (disposed || transfer.signal.aborted) {
-        if (next.can_cancel && next.operation_id) await cancelHostApplicationSetup(next.operation_id);
-        return;
-      }
-      setAcquisitionProgress(current => current ? { ...current, phase: 'uploading' } : null);
-      acceptSetup(next);
-      if (next.state === 'receiving' && next.operation_id) {
-        acceptSetup(await uploadHostApplicationSetup(next.operation_id, { size: bundle.size, read: async offset => {
-          const chunk = await acquire({ action: 'read', offset });
-          if (!chunk.ok || !chunk.data) throw new Error('Desktop component transfer failed.');
-          return new Blob([Uint8Array.from(chunk.data)]);
-        } }, transfer.signal));
-      }
-    } catch (e) {
-      if (!disposed && !transfer.signal.aborted) {
-        setError(translateError(e));
-        // Reconcile uncertain admission or upload results with the host operation.
-        try { acceptSetup(await getHostApplicationSetup()); }
-        catch { setSetupDisconnected(true); }
-      }
-    } finally {
-      remove?.();
-      setAcquisitionProgress(null);
-      try { await acquire({ action: 'cancel' }); }
-      finally { if (setupTransfer === transfer) setupTransfer = undefined; relaying = false; }
-    }
+    if (!canLaunch() || setupBusy() || setupSession.relaying()) return;
+    const app = selectedApplication();
+    if (app) await reserveApplication(app);
+    if (!canLaunch() || disposed) return;
+    if (!setup()?.installed?.ready) { setBrowse(true); setSetupDialog(false); }
+    await setupSession.prepare(file, downloadMethod());
   };
   const cancelPreparation = async () => {
-    if (!canLaunch() || (!relaying && !setup()?.operation_id)) return;
-    const operationID = setup()?.operation_id;
-    setupCancelled = true;
-    const localAcquisitionOnly = relaying && !relaySourceReceiving && acquisitionProgress() !== null && acquisitionProgress()?.phase !== 'uploading';
-    setupTransfer?.abort();
-    setAcquisitionProgress(null);
+    if (!canLaunch()) return;
     for (const pending of pendingApplications.values()) closePending(pending);
-    pendingApplications.clear();
-    setSelectedApplication(null);
-    if (relaying) {
-      await window.redevenDesktopShell?.applicationComponents?.({ action: 'cancel' });
-      setSetup(value => value ? { ...value, state: 'cancelled', can_cancel: false } : value);
-      if (localAcquisitionOnly) return;
-    }
-    if (!operationID) return;
-    try {
-      acceptSetup(await cancelHostApplicationSetup(operationID));
-    } catch (e) { setError(translateError(e)); }
+    pendingApplications.clear(); setSelectedApplication(null);
+    await setupSession.cancelPreparation();
   };
 
   const preparationPanel = (inDialog = false) => <HostApplicationSetupPanel setup={setup()} desktopProgress={acquisitionProgress()} plan={setupPlan()} checkingPlan={planBusy()} inDialog={inDialog}
@@ -584,54 +434,36 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     if (!operation || operation.state === 'failed' || !operationMatches(item)) return null;
     return operation?.kind === 'force_quit' ? 'hostApplications.forceQuitPending' : 'hostApplications.closeWindowsPending';
   };
-  createEffect(() => {
-    const liveInstances = new Map(runningApplications().map(item => [item.application_id, new Set(item.instances)]));
-    setOperations(previous => {
-      let changed = false;
-      const next = { ...previous };
-      for (const [applicationID, operation] of Object.entries(previous)) {
-        const live = liveInstances.get(applicationID);
-        if (!live || !operation.instances.some(instance => live.has(instance))) {
-          delete next[applicationID];
-          changed = true;
-        }
-      }
-      return changed ? next : previous;
-    });
-  });
   const requestQuit = async () => {
     const target = quitting();
     if (!target || quitBusy() || !canLaunch()) return;
+    const operationResource = applicationResource.identity();
+    const operationCurrent = applicationResource.captureAuthority();
     setQuitBusy(true); setQuitError('');
     try {
-      const operationResource = applicationResource.identity();
-    const operationCurrent = applicationResource.captureAuthority();
       const runningNow = await listRunningHostApplications();
       if (disposed || !operationCurrent()) return;
       const instances = runningNow.find(item => item.application_id === target.app.id)?.instances ?? [];
       if (instances.length === 0) {
         setQuitting(null);
-        setOperations(previous => { const next = { ...previous }; delete next[target.app.id]; return next; });
+        applicationOperations.forget(target.app.id);
         invalidateCatalog();
         await refresh(true);
         return;
       }
       if ([...instances].sort().join(',') !== [...target.instances].sort().join(',')) {
-        setOperations(previous => { const next = { ...previous }; delete next[target.app.id]; return next; });
+        applicationOperations.forget(target.app.id);
         setQuitting({ ...target, instances });
         setQuitError(i18n.t('hostApplications.applicationChanged'));
         return;
       }
-      setOperations(previous => ({ ...previous, [target.app.id]: { kind: target.force ? 'force_quit' : 'close_windows', instances, state: 'submitting' } }));
-      await (target.force ? terminateHostApplication : quitHostApplication)(target.app.id, instances);
+      await applicationOperations.submit(target.app.id, instances, Boolean(target.force));
       invalidateCatalog(operationResource);
-      if (disposed) return;
-      setOperations(previous => ({ ...previous, [target.app.id]: { kind: target.force ? 'force_quit' : 'close_windows', instances, state: 'accepted' } }));
-      setQuitting(null);
+      if (disposed || !operationCurrent()) return;
+      if (quitting() === target) setQuitting(null);
       await refresh(true);
     } catch (e) {
-      if (!disposed) {
-        setOperations(previous => target ? ({ ...previous, [target.app.id]: { kind: target.force ? 'force_quit' : 'close_windows', instances: target.instances, state: 'failed' } }) : previous);
+      if (!disposed && operationCurrent() && quitting() === target) {
         setQuitError(translateError(e, isMac() ? 'hostApplications.macQuitFailed' : 'hostApplications.macOperationFailed'));
       }
     }
