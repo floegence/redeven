@@ -2350,6 +2350,7 @@
       "permissionDenied": "Vous n’avez pas l’autorisation d’effectuer cette opération Git.",
       "scopeChanged": "L’état du dépôt a changé. Actualisez et vérifiez à nouveau la sélection.",
       "resourceLimit": "Cette requête Git dépasse les ressources disponibles. Réduisez la sélection ou attendez la fin des autres opérations.",
+      "worktreeReviewLimit": "L’arbre de travail lié dépasse les limites de vérification avant suppression ou n’a pas pu être inspecté en toute sécurité. Arrêtez les processus qui le modifient ou déplacez les fichiers de compilation volumineux hors de l’arbre, puis relancez la vérification.",
       "outcomeUnknown": "Le résultat de l’opération n’a pas pu être confirmé. Actualisez le dépôt avant de réessayer.",
       "requestRejected": "Git a refusé cette requête. Vérifiez l’état du dépôt et l’opération sélectionnée."
     }

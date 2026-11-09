@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../primitives/Tooltip', () => ({
   Tooltip: (props: any) => (
-    <div data-testid="tooltip" data-content={String(props.content ?? '')}>
+    <div data-testid="tooltip" data-content={String(props.content ?? '')} data-placement={props.placement}>
       {props.children}
     </div>
   ),
@@ -40,6 +40,7 @@ describe('GitHistoryModeSwitch', () => {
       expect(gitButton).toBeTruthy();
       expect((gitButton as HTMLButtonElement | undefined)?.disabled).toBe(true);
       expect(gitButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toBe(disabledReason);
+      expect(gitButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-placement')).toBe('bottom');
       gitButton?.dispatchEvent(new FocusEvent('focus'));
       expect(preview).not.toHaveBeenCalled();
     } finally {

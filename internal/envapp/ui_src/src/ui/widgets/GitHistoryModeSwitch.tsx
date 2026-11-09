@@ -77,7 +77,7 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
         when={props.gitHistoryDisabled && gitDisabledReason()}
         fallback={renderGitButton()}
       >
-        <Tooltip content={gitDisabledReason()} placement="top" delay={0} anchorClass="h-full min-w-0">
+        <Tooltip content={gitDisabledReason()} placement="bottom" delay={0} anchorClass="h-full min-w-0">
           <span class="flex h-full min-w-0 flex-1">{renderGitButton()}</span>
         </Tooltip>
       </Show>

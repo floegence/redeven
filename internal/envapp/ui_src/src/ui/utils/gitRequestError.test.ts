@@ -11,6 +11,7 @@ describe('Git request error presentation', () => {
     [403, 'git.errors.permissionDenied'], [404, 'git.errors.scopeChanged'],
     [409, 'git.errors.scopeChanged'], [40901, 'git.errors.scopeChanged'],
     [41301, 'git.errors.resourceLimit'], [41307, 'git.errors.resourceLimit'],
+    [41304, 'git.errors.worktreeReviewLimit'],
     [499, 'git.errors.outcomeUnknown'], [504, 'git.errors.outcomeUnknown'],
     [400, 'git.errors.requestRejected'], [42201, 'git.errors.requestRejected'],
   ] as const)('presents structured RPC code %s without private diagnostics', (code, key) => {

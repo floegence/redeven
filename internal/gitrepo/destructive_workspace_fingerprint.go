@@ -16,11 +16,10 @@ import (
 )
 
 const (
-	destructiveScanMaxEntries      = 100_000
-	destructiveScanMaxPathBytes    = 16 << 20
-	destructiveScanMaxHeapBytes    = 32 << 20
-	destructiveScanMaxContentBytes = int64(1 << 30)
-	destructiveScanTimeout         = 10 * time.Second
+	destructiveScanMaxEntries   = 1_000_000
+	destructiveScanMaxPathBytes = 256 << 20
+	destructiveScanMaxHeapBytes = 32 << 20
+	destructiveScanTimeout      = 30 * time.Second
 )
 
 var errDestructiveWorkspaceScanLimit = errors.New("destructive workspace scan limit exceeded")
@@ -34,7 +33,6 @@ type destructiveWorkspaceScanner struct {
 	entries         int
 	pathBytes       int
 	heapBytes       int
-	contentBytes    int64
 }
 
 func (s *Service) destructiveWorkspaceFingerprint(ctx context.Context, worktreePath string) (string, error) {
@@ -71,7 +69,7 @@ func (s *Service) destructiveWorkspaceFingerprint(ctx context.Context, worktreeP
 	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
 		return "", errDestructiveWorkspaceScanLimit
 	}
-	scanner.writeField("destructive_workspace_fingerprint_v1")
+	scanner.writeField("destructive_workspace_fingerprint_v2")
 	if err := scanner.scanDirectory(rootDirectory, identity.WorktreeRoot, "", true, rootInfo); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return "", errDestructiveWorkspaceScanLimit
@@ -93,7 +91,14 @@ func (s *destructiveWorkspaceScanner) scanDirectory(directory *os.File, absPath 
 		return errDestructiveWorkspaceScanLimit
 	}
 	s.writeEntry("directory", relativePath, before.Mode())
+	if err := s.writeFileState(before); err != nil {
+		return err
+	}
 	entries := make([]os.DirEntry, 0, 256)
+	// Only directory entries still retained by the traversal consume heap.
+	// Counting already released siblings made normal build trees hit the cap.
+	retainedBytes := 0
+	defer func() { s.heapBytes -= retainedBytes }()
 	for {
 		batch, readErr := directory.ReadDir(256)
 		for _, entry := range batch {
@@ -105,6 +110,7 @@ func (s *destructiveWorkspaceScanner) scanDirectory(directory *os.File, absPath 
 			if err := s.admitEntry(childRelative, name); err != nil {
 				return err
 			}
+			retainedBytes += destructiveEntryHeapBytes(childRelative, name)
 			entries = append(entries, entry)
 		}
 		if errors.Is(readErr, io.EOF) {
@@ -137,7 +143,7 @@ func (s *destructiveWorkspaceScanner) scanDirectory(directory *os.File, absPath 
 		}
 	}
 	after, err := directory.Stat()
-	if err != nil || !os.SameFile(before, after) || before.ModTime() != after.ModTime() || before.Mode() != after.Mode() {
+	if err != nil || !sameDestructiveFileState(before, after) {
 		return errDestructiveWorkspaceScanLimit
 	}
 	pathAfter, err := os.Lstat(absPath)
@@ -150,6 +156,8 @@ func (s *destructiveWorkspaceScanner) scanDirectory(directory *os.File, absPath 
 func (s *destructiveWorkspaceScanner) scanEntry(parent *os.File, name string, absPath string, relativePath string, info os.FileInfo) error {
 	switch {
 	case info.Mode().IsRegular():
+		// Identity, size, mtime and kernel ctime fence the review without reading
+		// gigabytes of ignored build output. Restoring mtime cannot hide a rewrite.
 		return s.scanRegularFile(parent, name, absPath, relativePath, info)
 	case info.IsDir():
 		directory, err := openDirectoryAtNoFollow(parent, name)
@@ -167,10 +175,13 @@ func (s *destructiveWorkspaceScanner) scanEntry(parent *os.File, name string, ab
 			return errDestructiveWorkspaceScanLimit
 		}
 		after, err := os.Lstat(absPath)
-		if err != nil || !os.SameFile(info, after) || info.ModTime() != after.ModTime() || info.Mode() != after.Mode() {
+		if err != nil || !sameDestructiveFileState(info, after) {
 			return errDestructiveWorkspaceScanLimit
 		}
 		s.writeEntry("symlink", relativePath, info.Mode())
+		if err := s.writeFileState(info); err != nil {
+			return err
+		}
 		s.writeField(target)
 		return nil
 	default:
@@ -178,50 +189,25 @@ func (s *destructiveWorkspaceScanner) scanEntry(parent *os.File, name string, ab
 	}
 }
 
-func (s *destructiveWorkspaceScanner) scanRegularFile(parent *os.File, name string, absPath string, relativePath string, before os.FileInfo) error {
+func (s *destructiveWorkspaceScanner) scanRegularFile(parent *os.File, name, absPath, relativePath string, before os.FileInfo) error {
 	file, err := openRegularAtNoFollow(parent, name)
 	if err != nil {
 		return errDestructiveWorkspaceScanLimit
 	}
 	defer file.Close()
 	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(before, opened) {
-		return errDestructiveWorkspaceScanLimit
-	}
-	if opened.Size() < 0 || opened.Size() > destructiveScanMaxContentBytes-s.contentBytes {
+	if err != nil || !opened.Mode().IsRegular() || !sameDestructiveFileState(before, opened) {
 		return errDestructiveWorkspaceScanLimit
 	}
 	s.writeEntry("file", relativePath, opened.Mode())
-	s.writeUint64(uint64(opened.Size()))
-	buffer := make([]byte, 64<<10)
-	for {
-		if err := s.ctx.Err(); err != nil {
-			return err
-		}
-		n, readErr := file.Read(buffer)
-		if n > 0 {
-			if int64(n) > destructiveScanMaxContentBytes-s.contentBytes {
-				return errDestructiveWorkspaceScanLimit
-			}
-			s.contentBytes += int64(n)
-			_, _ = s.hash.Write(buffer[:n])
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil {
-			return errDestructiveWorkspaceScanLimit
-		}
+	if err := s.writeFileState(opened); err != nil {
+		return err
 	}
-	after, err := file.Stat()
-	if err != nil || !os.SameFile(opened, after) || opened.Size() != after.Size() || opened.ModTime() != after.ModTime() || opened.Mode() != after.Mode() {
+	after, err := os.Lstat(absPath)
+	if err != nil || !sameDestructiveFileState(opened, after) {
 		return errDestructiveWorkspaceScanLimit
 	}
-	pathAfter, err := os.Lstat(absPath)
-	if err != nil || !pathAfter.Mode().IsRegular() || !os.SameFile(opened, pathAfter) {
-		return errDestructiveWorkspaceScanLimit
-	}
-	return nil
+	return s.ctx.Err()
 }
 
 func (s *destructiveWorkspaceScanner) verifyGitControlEntry(parent *os.File, name string, gitEntry string, info os.FileInfo) error {
@@ -300,7 +286,7 @@ func (s *destructiveWorkspaceScanner) admitEntry(relativePath string, name strin
 	if err := s.ctx.Err(); err != nil {
 		return err
 	}
-	entryHeap := len(relativePath) + len(name) + 256
+	entryHeap := destructiveEntryHeapBytes(relativePath, name)
 	if s.entries >= destructiveScanMaxEntries || len(relativePath) > destructiveScanMaxPathBytes-s.pathBytes || entryHeap > destructiveScanMaxHeapBytes-s.heapBytes {
 		return errDestructiveWorkspaceScanLimit
 	}
@@ -308,6 +294,27 @@ func (s *destructiveWorkspaceScanner) admitEntry(relativePath string, name strin
 	s.pathBytes += len(relativePath)
 	s.heapBytes += entryHeap
 	return nil
+}
+
+func destructiveEntryHeapBytes(relativePath, name string) int {
+	return len(relativePath) + len(name) + 256
+}
+
+func (s *destructiveWorkspaceScanner) writeFileState(info os.FileInfo) error {
+	state, err := destructiveFileState(info)
+	if err != nil {
+		return errDestructiveWorkspaceScanLimit
+	}
+	for _, value := range state {
+		s.writeUint64(value)
+	}
+	return nil
+}
+
+func sameDestructiveFileState(left, right os.FileInfo) bool {
+	l, leftErr := destructiveFileState(left)
+	r, rightErr := destructiveFileState(right)
+	return leftErr == nil && rightErr == nil && l == r
 }
 
 func readFileBounded(file *os.File, limit int) ([]byte, error) {

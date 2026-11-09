@@ -9,6 +9,10 @@ import (
 
 var errNoFollowUnavailable = errors.New("no-follow filesystem access unavailable")
 
+func destructiveFileState(os.FileInfo) ([8]uint64, error) {
+	return [8]uint64{}, errNoFollowUnavailable
+}
+
 func openRootDirectoryNoFollow(string) (*os.File, error) {
 	return nil, errNoFollowUnavailable
 }

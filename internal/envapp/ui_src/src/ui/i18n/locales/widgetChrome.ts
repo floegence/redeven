@@ -211,6 +211,7 @@ export const enUSWidgetChrome = defineDictionary({
       permissionDenied: "You do not have permission to perform this Git operation.",
       scopeChanged: "The repository state changed. Refresh and review the selection again.",
       resourceLimit: "This Git request exceeds the available resources. Narrow the selection or try again after other operations finish.",
+      worktreeReviewLimit: "The linked worktree exceeds deletion review limits or could not be inspected safely. Stop processes changing it or move large build output outside the worktree, then review again.",
       outcomeUnknown: "The operation result could not be confirmed. Refresh the repository before trying again.",
       requestRejected: "Git rejected this request. Review the repository state and the selected operation.",
     },

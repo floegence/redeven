@@ -1026,6 +1026,11 @@ func TestE2E_GitRepoRPC_PreviewDeleteBranchWithLinkedWorktree(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(worktree, "scratch.txt"), []byte("pending worktree file\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(scratch.txt): %v", err)
 	}
+	writeFixtureFile(t, fixture.Root, ".git/info/exclude", []byte("DerivedData/\n"))
+	writeFixtureFile(t, worktree, "DerivedData/Build/large.bin", nil)
+	if err := os.Truncate(filepath.Join(worktree, "DerivedData/Build/large.bin"), 2<<30); err != nil {
+		t.Fatal(err)
+	}
 
 	svc := NewService(serviceRoot)
 	client, closeServer := startGitRepoRPCSession(t, svc)

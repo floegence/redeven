@@ -2350,6 +2350,7 @@
       "permissionDenied": "Você não tem permissão para executar esta operação do Git.",
       "scopeChanged": "O estado do repositório mudou. Atualize e revise a seleção novamente.",
       "resourceLimit": "Esta solicitação do Git excede os recursos disponíveis. Reduza a seleção ou aguarde a conclusão das outras operações.",
+      "worktreeReviewLimit": "A árvore de trabalho vinculada excede os limites de revisão para exclusão ou não pôde ser inspecionada com segurança. Pare os processos que a modificam ou mova os arquivos grandes de compilação para fora da árvore e revise novamente.",
       "outcomeUnknown": "Não foi possível confirmar o resultado da operação. Atualize o repositório antes de tentar novamente.",
       "requestRejected": "O Git rejeitou esta solicitação. Verifique o estado do repositório e a operação selecionada."
     }

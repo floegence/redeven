@@ -3,7 +3,7 @@ type: UI Contract
 title: Git workspace generations, diffs and visual state
 tags: [ui, git, files, state, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -25,7 +25,7 @@ Directory navigation and bulk actions retain changes/staged/conflicted section i
 
 Deletion uses the authoritative preview for every consequence, even when entered through a branch-only action. Any worktree blocker disables both safe and force confirmation before merged status is considered. Primary, locked and nested-worktree blockers are localized from structured codes. Show the reviewed removal/discard effects and carry both authorizations; an ignored-only worktree still requires discard review.
 
-Stable public error codes produce localized permission, stale-state, resource, request-rejection or unknown-outcome guidance without private Git/transport diagnostics. Unknown outcomes require refresh and review; never automatically replay a mutation.
+Stable public error codes produce localized permission, stale-state, resource, request-rejection or unknown-outcome guidance without private Git/transport diagnostics. Unknown outcomes require refresh and review; never automatically replay a mutation. Deletion-inspection limits (41304) explain the linked-worktree review failure separately from transient resource pressure; never imply that waiting alone resolves an oversized tree.
 
 ## Diff requests
 Inline/Activity/Workbench/dialog share one owner. Caller patch snapshots are previews; refresh or authoritative empty/failure cannot revive them. Runtime owns first-parent meaning.
@@ -38,6 +38,8 @@ Navigation/branches/history/summaries/files use `ring`-derived interaction token
 One measured owner lays out graph rails/connectors/nodes/columns within available width without moving summaries or changing actions/selection. Workspace/commit/branch status/history/comparison reuse retained file/diff navigation; filtering/removal/section/commit changes retire stale selections. Narrow/Workbench views remain contained with independent scrolling.
 
 Every preset has complete interaction roles. Forced colors expose selection/focus/Current-chip boundaries through system colors. Selected navigation, branches, stashes and file rows use a complete surface without a colored left stripe; keyboard focus and forced-color selection retain an inset whole-row outline.
+
+The Files/Git switch places its disabled-reason tooltip below the tabs through the published Floe floating layer. Keep both buttons unobscured from the first visible animation frame in viewport and projected-surface hosts, contain wrapped text, and dismiss on pointer exit.
 
 ## Review presentation
 Git groups stay flat without decorative side rails or empty-status subtitles. Branch rows expose their selected state; text follows published body/caption roles. Dialog, Button, Input and Textarea retain Floe material, sizing, placement and presence. A Dialog owns its only footer separator/padding; window-local stash review supplies one equivalent footer. Narrow reviews scroll their body while actions stay reachable.
@@ -60,3 +62,5 @@ Layout persistence proves no content freshness. Workbench target stability canno
 - `redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx` - Chromium selection across 28 themes and standard/soft material, with real branch sidebar widths.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/GitDialogVisual.browser.test.tsx` - Real dialogs, 28-theme notice contrast, single footer, narrow scrolling, exact confirmation/button identity, pending geometry, keyboard return, localization and reduced motion.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitHistoryModeSwitch.browser.test.tsx` - First-frame clearance, narrow viewport wrapping, projected-surface placement and pointer dismissal.

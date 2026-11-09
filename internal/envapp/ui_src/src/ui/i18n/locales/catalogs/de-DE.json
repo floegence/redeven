@@ -2350,6 +2350,7 @@
       "permissionDenied": "Sie haben keine Berechtigung für diesen Git-Vorgang.",
       "scopeChanged": "Der Repository-Zustand hat sich geändert. Aktualisieren Sie die Ansicht und prüfen Sie die Auswahl erneut.",
       "resourceLimit": "Diese Git-Anfrage überschreitet die verfügbaren Ressourcen. Verkleinern Sie die Auswahl oder warten Sie, bis andere Vorgänge abgeschlossen sind.",
+      "worktreeReviewLimit": "Der verknüpfte Arbeitsbaum überschreitet die Prüfgrenzen für das Löschen oder konnte nicht sicher geprüft werden. Beenden Sie Prozesse, die ihn verändern, oder verschieben Sie große Build-Artefakte aus dem Arbeitsbaum und prüfen Sie erneut.",
       "outcomeUnknown": "Das Ergebnis konnte nicht bestätigt werden. Aktualisieren Sie das Repository vor einem erneuten Versuch.",
       "requestRejected": "Git hat die Anfrage abgelehnt. Prüfen Sie den Repository-Zustand und den ausgewählten Vorgang."
     }

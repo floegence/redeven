@@ -2350,6 +2350,7 @@
       "permissionDenied": "你沒有執行此 Git 操作的權限。",
       "scopeChanged": "儲存庫狀態已變更，請重新整理並再次檢查選取內容。",
       "resourceLimit": "此 Git 請求超出可用資源，請縮小範圍或等待其他操作完成後再試。",
+      "worktreeReviewLimit": "關聯工作樹超出刪除檢查限制，或無法安全檢查。請停止修改該目錄的程序，或將大型建置產物移至工作樹之外，再重新檢查。",
       "outcomeUnknown": "無法確認操作結果，請先重新整理儲存庫，再決定是否重試。",
       "requestRejected": "Git 拒絕了此請求，請檢查儲存庫狀態和選取的操作。"
     }

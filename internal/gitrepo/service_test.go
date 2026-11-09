@@ -2464,6 +2464,7 @@ func TestDestructiveWorkspaceScannerAdmissionIsHardBounded(t *testing.T) {
 		if err := scanner.admitEntry("a", "a"); err != nil {
 			t.Fatalf("admitEntry(%d): %v", index, err)
 		}
+		scanner.heapBytes -= destructiveEntryHeapBytes("a", "a")
 	}
 	if err := scanner.admitEntry("overflow", "overflow"); !errors.Is(err, errDestructiveWorkspaceScanLimit) {
 		t.Fatalf("overflow admission error=%v", err)
