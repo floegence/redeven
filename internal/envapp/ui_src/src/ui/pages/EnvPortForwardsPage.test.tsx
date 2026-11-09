@@ -2012,17 +2012,82 @@ describe('EnvPortForwardsPage', () => {
     } finally { dispose(); }
   });
 
-  it('shows an existing-instance blocker when the market does not know the installed source yet', async () => {
+  it.each(['host', 'container', 'compose'] as const)('recognizes an installed market %s without a local template catalog entry', async (kind) => {
+    const fixture = marketHandoffFixture();
+    fixture.item.deployment = kind;
+    const service = {...fixture.receipt.service, name: 'Current market service', template_source: 'git', status: 'running', observed_state: 'running', management_state: 'active', deployment: kind, access_mode: 'unified_proxy', forward_id: 'pf-market', runtime_port: 3080, release_status: releaseStatus('npm', '1.0.0')};
+    const assign = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close: vi.fn() } as unknown as Window);
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/managed-web-services') && init?.method !== 'POST') return Promise.resolve({services: [service]});
+      if (url.endsWith('/open-session')) return Promise.resolve({state: 'ready', forward: {forward_id: service.forward_id, target_url: 'http://127.0.0.1:3080'}, app_path: '/'});
+      if (url.endsWith('/touch')) return Promise.resolve({});
+      return normalFetch(url, init);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
+      await flushPage();
+      expect(host.querySelector(`[data-template-id="${fixture.item.template_id}"]`)?.getAttribute('data-template-state')).toBe('installed');
+      expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
+      const open = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find(button => button.title === 'Open')!;
+      expect(open.disabled).toBe(false);
+      open.click();
+      await waitForAssertion(() => expect(assign).toHaveBeenCalledWith('https://localhost/pf/pf-market/'));
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(`/_redeven_proxy/api/managed-web-services/${service.service_id}/open-session`, expect.objectContaining({method: 'POST'}));
+      expect(host.querySelector('[data-testid="managed-install-form"]')).toBeNull();
+      expect(fixture.acquire).not.toHaveBeenCalled();
+      expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => String(url).endsWith('/install-plans'))).toHaveLength(0);
+      expect(fixture.posts()).toHaveLength(0);
+    } finally { dispose(); }
+  });
+
+  it.each([
+    {name: 'stopped active instance', templateID: 'handoff-host', management: 'active', observed: 'stopped', installed: true},
+    {name: 'detached instance', templateID: 'handoff-host', management: 'detached', observed: 'running', installed: false},
+    {name: 'independent personal copy with the same name', templateID: 'personal-handoff', management: 'active', observed: 'running', installed: false},
+  ])('uses exact current identity for a $name', async ({templateID, management, observed, installed}) => {
     const fixture = marketHandoffFixture();
     const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
     localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
-      if (url.endsWith('/managed-web-services') && init?.method !== 'POST') return Promise.resolve({services: [{...fixture.receipt.service, status: 'running', management_state: 'active', deployment: 'host'}]});
+      if (url.endsWith('/managed-web-services') && init?.method !== 'POST') return Promise.resolve({services: [{...fixture.receipt.service, template_id: templateID, name: 'Market service', template_source: 'git', management_state: management, status: observed, observed_state: observed, deployment: 'host'}]});
+      return normalFetch(url, init);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
+      await flushPage();
+      expect(host.querySelector(`[data-template-id="${fixture.item.template_id}"]`)?.getAttribute('data-template-state')).toBe(installed ? 'installed' : 'available');
+      expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(installed);
+      if (installed) {
+        const open = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find(button => button.title?.startsWith('Open'))!;
+        expect(open.disabled).toBe(true);
+      }
+      expect(fixture.acquire).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  });
+
+  it('blocks deployment when an instance arrives during source acquisition', async () => {
+    const fixture = marketHandoffFixture();
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const pending = deferred<typeof fixture.candidate>();
+    fixture.acquire.mockReturnValueOnce(pending.promise);
+    let installed = false;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/managed-web-services') && init?.method !== 'POST') return Promise.resolve({services: installed ? [{...fixture.receipt.service, status: 'running', management_state: 'active', deployment: 'host'}] : []});
       return normalFetch(url, init);
     });
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await flushPage(); await fixture.open();
-      expect(host.querySelector('[data-testid="managed-install-form"]')).not.toBeNull();
+      installed = true;
+      host.querySelector<HTMLButtonElement>('[data-testid="web-services-refresh"]')?.click();
+      await flushPage();
+      pending.resolve(fixture.candidate);
+      await flushPage();
       expect(host.querySelector('[data-testid="managed-install-blocker"]')?.textContent).toContain('installed');
       expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(true);
       expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => String(url).endsWith('/install-plans'))).toHaveLength(0);

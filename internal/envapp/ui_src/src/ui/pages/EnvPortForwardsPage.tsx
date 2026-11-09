@@ -2705,7 +2705,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const installManaged = async () => {
     const template = selectedTemplate();
-    if (!template || managedInstallSubmitting() || !template.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some(service => service.template_id === template.template_id && (service.management_state ?? 'active') === 'active') || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService()) return;
+    if (!template || managedInstallSubmitting() || !template.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || installedServiceForTemplate(template.template_id) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService()) return;
     const authority = managedResource.captureAuthority();
     const prepared = installPreparation.current();
     if (!prepared) return;
@@ -2874,7 +2874,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     setManagedInstallSubmitting(false);
   }, {defer: true}));
 
-  const installedServiceForTemplate = (template: ManagedCatalogTemplate) => managedState().find((service) => (service.management_state ?? 'active') === 'active' && service.template_id === template.template_id);
+  const installedServiceForTemplate = (templateID: string) => managedState().find((service) => (service.management_state ?? 'active') === 'active' && service.template_id === templateID);
   const templateOpenUnavailableReason = (service: ManagedService | undefined) => {
     if (!service) return '';
     if (managedOperationActive(managedRowOperation(service.service_id))) return i18n.t('webServices.managed.openUnavailableOperation');
@@ -2885,14 +2885,13 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     return '';
   };
   const openInstalledTemplate = (templateID: string) => {
-    const template = templateByID(templateID);
-    const service = template ? installedServiceForTemplate(template) : undefined;
+    const service = installedServiceForTemplate(templateID);
     if (!service || templateOpenUnavailableReason(service)) return;
     void openManaged(service);
   };
   const templatePresentation = (template: ManagedCatalogTemplate): ServiceTemplatePresentation => {
     const identity = managedTemplateLocalizedIdentity(template, i18n);
-    const installedService = installedServiceForTemplate(template);
+    const installedService = installedServiceForTemplate(template.template_id);
     const openUnavailableReason = templateOpenUnavailableReason(installedService);
     return {
       id: template.template_id,
@@ -2927,9 +2926,21 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     if (templateCollection() === 'library') return managedTemplates().filter(template => template.source !== 'builtin').map(templatePresentation);
     const discovered: ServiceTemplatePresentation[] = marketItems().map(item => {
       const locale = item.localizations[i18n.locale()] ?? item.localizations[item.default_locale];
-      const installed = managedTemplates().find(template => template.template_id === item.template_id);
-      const installedPresentation = installed ? templatePresentation(installed) : undefined;
-      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:item.classification,marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:item.status === 'available',editable:false,sourceURL:`https://github.com/${item.source.repository}/tree/${item.source.commit_sha}/${item.source.path}`,supportedPlatforms:item.supported_platforms,searchText:[item.document_template_id,item.source.repository,...Object.values(item.localizations).flatMap(locale => [locale.name,locale.description])].join(' ')};
+      const installedService = installedServiceForTemplate(item.template_id);
+      const openUnavailableReason = templateOpenUnavailableReason(installedService);
+      return {
+        id: item.template_id, name: locale?.name ?? item.document_template_id, description: locale?.description ?? '',
+        source: 'git', classification: item.classification, marketplace: true, kind: item.deployment as ServiceTemplateKind,
+        icon: item.icon?.media_type === 'image/svg+xml' ? {...item.icon, media_type: 'image/svg+xml'} : undefined,
+        deploymentLabel: managedDeploymentLabel(item.deployment as ManagedDeployment, i18n), revision: item.revision,
+        defaultReleaseLabel: item.recommended_version, developerPreview: item.developer_preview,
+        available: item.status === 'available', availabilityReason: item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,
+        installed: Boolean(installedService), openable: Boolean(installedService) && !openUnavailableReason, openUnavailableReason,
+        duplicateable: item.status === 'available', editable: false,
+        sourceURL: `https://github.com/${item.source.repository}/tree/${item.source.commit_sha}/${item.source.path}`,
+        supportedPlatforms: item.supported_platforms,
+        searchText: [item.document_template_id, item.source.repository, ...Object.values(item.localizations).flatMap(locale => [locale.name, locale.description])].join(' '),
+      };
     });
     return discovered.filter(item => templateCollection() === 'discover' || item.classification === templateCollection());
   });
@@ -2949,7 +2960,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   });
   const installSelection = createMemo(() => {
     const template = selectedTemplate();
-    if (!templateDrawerOpen() || templateDrawerView() !== 'install' || deploymentSourceLoading() || deploymentSourceError() || !template?.available || installedServiceForTemplate(template) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService() || templateRecommendationUnavailable() || !workspacePath().trim() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances())) return null;
+    if (!templateDrawerOpen() || templateDrawerView() !== 'install' || deploymentSourceLoading() || deploymentSourceError() || !template?.available || installedServiceForTemplate(template.template_id) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService() || templateRecommendationUnavailable() || !workspacePath().trim() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances())) return null;
     const parameters = {...selectedTemplateRelease()?.parameters, ...installParameters()};
     if ((template.effective_spec?.parameters ?? template.spec?.parameters ?? []).some(parameter => parameter.required && !(parameters[parameter.name] ?? parameter.default ?? '').trim())) return null;
     return {
@@ -2968,7 +2979,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     if (code) return i18n.t(code === 'TEMPLATE_SOURCE_RATE_LIMITED' ? 'webServices.sources.rateLimited' : code === 'TEMPLATE_SCHEMA_UNSUPPORTED' ? 'webServices.sources.upgradeRequired' : 'webServices.sources.failed');
     const template = selectedTemplate();
     if (template && !template.available) return templateUnavailableReason(template) || i18n.t('webServices.managed.unavailableToDeploy');
-    if (template && installedServiceForTemplate(template)) return i18n.t('webServices.managed.templateInstalled');
+    if (template && installedServiceForTemplate(template.template_id)) return i18n.t('webServices.managed.templateInstalled');
     if (template && installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed')) return i18n.t('webServices.managed.openUnavailableOperation');
     return installPreparationError();
   };
@@ -4230,7 +4241,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                     <p>{i18n.t(deploymentSourceMode() === 'desktop_transfer' ? 'webServices.sources.desktopCredential' : 'webServices.sources.remoteCredential')}</p>
                   </div>
                 </details></Show>
-                <Show when={!selectedTemplate() || (!installedServiceForTemplate(selectedTemplate()!) && !installSubmissions().some(item => item.template.service_family_id === selectedTemplate()!.service_family_id && item.phase !== 'failed'))}><Button size="sm" variant="outline" onClick={retryDeployment} disabled={deploymentSourceLoading()}>{i18n.t('webServices.managed.retry')}</Button></Show>
+                <Show when={!selectedTemplate() || (!installedServiceForTemplate(selectedTemplate()!.template_id) && !installSubmissions().some(item => item.template.service_family_id === selectedTemplate()!.service_family_id && item.phase !== 'failed'))}><Button size="sm" variant="outline" onClick={retryDeployment} disabled={deploymentSourceLoading()}>{i18n.t('webServices.managed.retry')}</Button></Show>
               </div></Show>
               <Button data-testid="managed-install-submit" size="lg" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || deploymentSourceLoading() || Boolean(deploymentBlocker()) || !installPreparation.current()} loading={deploymentSourceLoading() || installPreparation.loading()} aria-busy={deploymentSourceLoading() || installPreparation.loading()}>{i18n.t('webServices.managed.deploy')}</Button>
             </Show>

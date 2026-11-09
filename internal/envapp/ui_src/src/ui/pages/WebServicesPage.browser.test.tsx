@@ -378,6 +378,24 @@ describe('Web Services product interaction', () => {
       await expect.poll(() => document.querySelector('[data-testid="managed-service-row"][data-managed-service-id="compact-install"]')).toBeTruthy();
       await expect.poll(() => document.querySelector('[data-testid="managed-install-submission"]')).toBeNull();
       expect(requests).toBe(1);
+      await userEvent.click(page.getByTestId('service-templates-button'));
+      const installed = page.getByTestId('service-template-primary');
+      await expect.element(installed).toBeDisabled();
+      expect(document.querySelector(`[data-template-id="${template.template_id}"]`)?.getAttribute('data-template-state')).toBe('installed');
+      expect(attempts).toBe(2);
+      const installedPanel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+      await Promise.allSettled(installedPanel.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+      expect(installedPanel.textContent).not.toContain('Loading');
+      const installedButton = document.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.getBoundingClientRect();
+      expect(installedButton.left).toBeGreaterThanOrEqual(0);
+      expect(installedButton.right).toBeLessThanOrEqual(width);
+      expect(installedButton.bottom).toBeLessThanOrEqual(800);
+      if (evidence) await page.screenshot({path: `${evidence}/market-${kind}-${width}-installed.png`});
+      await userEvent.click(page.getByTestId('service-template-more'));
+      await userEvent.click(page.getByRole('menuitem', {name: 'Open', exact: true}));
+      await expect.poll(() => api.open.mock.calls.length).toBe(1);
+      expect(api.fetch).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services/compact-install/open-session', expect.objectContaining({method: 'POST'}));
+      expect(attempts).toBe(2); expect(requests).toBe(1);
     });
   }
 
