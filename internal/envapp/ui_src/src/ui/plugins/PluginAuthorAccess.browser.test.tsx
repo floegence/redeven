@@ -23,10 +23,16 @@ const item: PluginInventoryItem = {
 let dispose: (() => void) | undefined;
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.spyOn(console, 'warn');
   api.loadInventoryProjection.mockResolvedValue({ items: [item] });
   api.listConnections.mockResolvedValue({ connections: [{ connector_id: 'api', revision: 0, scope: 'environment', status: 'unconfigured' }] });
 });
-afterEach(() => { dispose?.(); dispose = undefined; document.body.replaceChildren(); });
+afterEach(() => {
+  dispose?.(); dispose = undefined; document.body.replaceChildren();
+  const ownerWarnings = vi.mocked(console.warn).mock.calls.filter(([message]) => String(message).includes('computations created outside'));
+  vi.restoreAllMocks();
+  expect(ownerWarnings).toHaveLength(0);
+});
 function mount(embedded = false) {
   const [visible, setVisible] = createSignal(true);
   const [canManage, setCanManage] = createSignal(true);

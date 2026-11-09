@@ -32,6 +32,10 @@ export function PluginAuthorAccess(props: Props): JSX.Element {
   const [pending, setPending] = createSignal(false);
   const [connections, setConnections] = createSignal(false);
   const permissionAdmission = createMemo(() => ({ authority: authority(), loading: loading(), failed: failed(), pending: pending(), revision: item()?.managementRevision, authorization: item()?.authorization?.revisions }));
+  // IMPORTANT: Connection event handlers read these props outside render. Hoist
+  // conditional computations into this owner; inline JSX getters leak memos.
+  const connectionsOpen = createMemo(() => props.embeddedConnections ? Boolean(item()?.networkConnectors?.length) : connections());
+  const canManageConnections = createMemo(() => props.canManage && !failed() && !loading() && !pending());
   let controller: AbortController | undefined;
   let disposed = false;
 
@@ -130,12 +134,12 @@ export function PluginAuthorAccess(props: Props): JSX.Element {
             <PluginConnectionsDialog
               embedded={props.embeddedConnections}
               visible={props.visible}
-              open={props.embeddedConnections ? Boolean(value().networkConnectors?.length) : connections()}
+              open={connectionsOpen()}
               onOpenChange={setConnections}
               item={value()}
               ownerScope={scope()}
               authorityKey={props.authorityKey}
-              canManage={props.canManage && !failed() && !loading() && !pending()}
+              canManage={canManageConnections()}
               api={api()}
             />
           </>
