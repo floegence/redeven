@@ -7,48 +7,40 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime, Web, Desktop and iOS share one authenticated catalog. Official contracts and pinned models.dev inventory require released adapters and qualified limits, replay, tools, images and reasoning. Refreshes preserve configured model selections and stored conversation identities.
+Runtime/Web/Desktop/iOS share an authenticated reviewed catalog. Pinned models.dev inventory and official contracts require released adapters plus qualified limits/replay/tools/images/reasoning. Refresh preserves selections/conversation identities. Review dates: October12 baseline, October24 Kimi; no audio/video/embeddings/restricted models.
 
 # Contract
 
-Baseline review: October 12; Kimi update: October 24. Audio, video, embeddings and restricted models remain excluded.
-
-| Provider | Current public Agent models reviewed | Runtime route and constraints |
-| --- | --- | --- |
-| OpenAI | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna | `/v1/responses`; function tools for GPT-6.1 Sol require Responses. Sol/Luna permit `none`; 6.1 Sol and Astra do not. 1,050,000 context and 128,000 output tokens. |
-| Anthropic | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 and 4.5 | `/v1/messages`, API version `2023-06-01`; SDK base is the origin without `/v1`. Opus/Sonnet 5.5 use adaptive thinking with effort, reject manual budgets and `disabled`, and expose 1M context / 128K output. |
-| Google | Gemini 3.8 Flash | Supported `/v1beta/openai/chat/completions` with model-specific effort/budget settings and opaque tool thought signatures.  |
-| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | Published Floret Responses supports Flash (qualified since v7.19.0). Flash and both official aliases support images, while Pro is text-only. All support off/low/high/max and a 393,216-token output ceiling. Built-in search remains ignored by the provider. |
-| Qwen | Qwen3.8 Max, Flash, Omni Flash | `/compatible-mode/v1/chat/completions`; existing qualified search models use Responses. Omni Flash: tools, text/image input, text output. Qwen3.7 Max/Plus output ceilings rise to 131,072. |
-| Moonshot | Kimi K3.1 Pro / Highspeed, K3, K2.7 Code, K2.6 | `/v1/chat/completions`; K3/K3.1 require thinking, support low/high/max, omit fixed sampling parameters, and accept `max_completion_tokens` up to 1,048,576 (provider default 131,072). Search for K3/K3.1 remains unintegrated. |
-| Kimi Code | K3.1 Pro / Highspeed, K3 / 256K, K2.8 Preview, K2.7 Code Highspeed | Personal subscription key; native /coding/v1/responses on api.kimi.com or api.kimi.ai. Six reviewed wire IDs; no custom aliases or thinking-off fallback. |
-| Z.ai | GLM-5.3, GLM-5.3-Flash/FlashX | `/api/paas/v4/chat/completions`; FlashX has 1M context and 128K output, forced thinking with low/high/max. The persisted provider type stays `chatglm`; display branding is Z.ai. |
-| xAI | Grok 4.7 | `/v1/chat/completions` is still supported but marked legacy. Responses is the supplier's preferred API for new features. 4.7 supports low/medium/high/xhigh, defaults to high, and cannot disable thinking. |
-| Groq | GPT-OSS 120B/20B and Qwen3.8-27B | `/openai/v1/chat/completions`; preview status stays explicit.  |
-| OpenRouter | Dynamic provider inventory | Discover tool-capable models from `/api/v1/models`; preserve explicit user selection. |
-| Ollama | Installed local inventory | `/api/tags`, `/api/ps`, `/api/show`, then `/v1/chat/completions`; serving context and tools must be discovered. |
-| Custom compatible | User-defined models | Retain explicit endpoint, token limits, and capability configuration. |
+| Reviewed provider/model | Route and constraints |
+| --- | --- |
+| OpenAI GPT-6 Astra,6.1 Sol,6 Sol,6 Luna | Responses;6.1Sol function tools require it. Sol/Luna allow none,6.1Sol/Astra do not. Context1050000/output128000. |
+| Anthropic Fable5.1,Opus/Sonnet/Haiku5.5,Haiku4.5 | /v1/messages,2023-06-01,SDK origin without/v1. Opus/Sonnet5.5 adaptive effort, no manual budget/disabled;1M/128K. |
+| Gemini3.8Flash | /v1beta/openai/chat/completions, model-specific effort/budget, opaque thought signatures. |
+| DeepSeek Flash(V4.1),v4Pro | Published Responses (Flash since7.19);Flash/official aliases image-capable,Pro text-only;off/low/high/max,393216output. Provider ignores built-in search. |
+| Qwen3.8Max/Flash/OmniFlash | compatible-mode Chat; qualified search uses Responses. Omni tools/text-image→text;3.7Max/Plus output131072. |
+| Moonshot K3.1Pro/Highspeed,K3,K2.7Code,K2.6 | Chat;K3/K3.1 mandatory thinking low/high/max,no fixed sampling, max_completion_tokens<=1048576/default131072;search unintegrated. |
+| Kimi Code K3.1Pro/Highspeed,K3/256K,K2.8Preview,K2.7CodeHighspeed | Personal key,native /coding/v1/responses on api.kimi.com/ai,six reviewed IDs,no aliases/thinking-off fallback. |
+| Z.ai GLM5.3/Flash/FlashX | /api/paas/v4/chat/completions;FlashX1M/128K,mandatory thinking low/high/max;persist chatglm,display Z.ai. |
+| xAI Grok4.7 | Chat supported/legacy, supplier prefers Responses for new features;low/medium/high/xhigh,default high,no off. |
+| Groq GPT-OSS120B/20B,Qwen3.8-27B | /openai/v1/chat/completions;preview explicit. |
+| OpenRouter | /api/v1/models tool-capable discovery;explicit selection retained. |
+| Ollama | tags/ps/show then Chat;discover serving context/tools. |
+| Custom compatible | Explicit endpoint/limits/capabilities retained. |
 
 ## October catalog refresh
-upstream.json records baseline and per-provider refresh hashes. [ChatGPT authentication](chatgpt-account-lifecycle.md#local-admission) intersects account inventory with reviewed capabilities.
+upstream.json retains baseline/provider hashes. [ChatGPT admission](chatgpt-account-lifecycle.md#local-admission) intersects account inventory with reviewed capabilities.
 
 ## Kimi review on October 24
-K3.1 Pro/Highspeed launched October 23. Floret v7.83.0 qualifies Moonshot catalog, output controls and reasoning/tool replay from the same snapshot. The downstream adoption test exercises its public gateway with Redeven capabilities.
+October23 K3.1 release is qualified by Floret7.83.0 catalog/output/reasoning/tool replay and downstream public-gateway adoption. Six subscription IDs:K3/K3.1 Plus/Moderato default262144;Pro/Allegretto may select1048576/Highspeed. Offline refresh proves no credentials/entitlement/quota.
 
-The six subscription IDs are catalogued. K3/K3.1 default to 262,144 context for Plus/Moderato; Pro/Allegretto users can choose 1,048,576 and Highspeed. Offline refresh cannot verify credentials, entitlements or quota.
+Native Responses replays canonical reasoning/messages/tool pairs, no response-ID continuation/invented IDs. Client=Redeven. Quota/policy429 stops retry; transient overload honors Retry-After. Kimi owns personal interactive membership/key/billing; new model family starts new conversation. Native search unintegrated. Live qualification needs eligible user key; fixtures cover routing/tools/reasoning/images/usage/cancel/errors.
 
-Native Responses replays canonical reasoning, messages and tool pairs without response-ID continuation or invented reasoning IDs. Client identity is Redeven. Quota/policy 429 stops retries; transient overload honors Retry-After. Kimi owns keys, allowances and Extra Usage billing. Membership is personal and interactive; start a new conversation for model-family changes. Native Kimi search remains unintegrated.
-
-Sources: [models](https://www.kimi.com/code/docs/kimi-code/models.html), [membership](https://www.kimi.com/code/docs/kimi-code/membership.html), [errors](https://www.kimi.com/code/docs/kimi-code/error-reference.html), [usage policy](https://www.kimi.com/code/docs/kimi-code/community-guidelines.html), [platform quickstart](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart), and [Responses](https://platform.kimi.com/docs/api/responses.md). HTTP fixtures cover routing, tools, reasoning, images, usage and cancellation/errors. Live acceptance requires a user key and eligible plan.
+Sources: [models](https://www.kimi.com/code/docs/kimi-code/models.html), [membership](https://www.kimi.com/code/docs/kimi-code/membership.html), [errors](https://www.kimi.com/code/docs/kimi-code/error-reference.html), [policy](https://www.kimi.com/code/docs/kimi-code/community-guidelines.html), [platform](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart), [Responses](https://platform.kimi.com/docs/api/responses.md).
 
 # Boundaries
 
-Provider additions qualify in Floret before Redeven adopts its published module with GOWORK=off. No sibling wiring or upstream copies. Hosts own credentials, subscriptions and selection. Preserve configured regional bases. Supplier search alone does not enable search.
-
-Runtime owns routing and projection. Native Anthropic/Google discovery preserves authentication/pagination; supported compatible providers use their inventories. Unknown identities need explicit adapter-supported capabilities. [Model directory](model-directory-and-selection.md) owns discovery deadlines and scope isolation.
+Qualify upstream before published GOWORK=off consumption, no sibling/copies. Host owns credentials/subscriptions/selection/regional endpoints; supplier search alone cannot enable it. Runtime owns routing/projection; native Anthropic/Google preserve authentication/pagination, compatible providers use supported inventories. Unknown identity requires explicit adapter capabilities. [Directory](model-directory-and-selection.md) owns deadlines/scope isolation.
 
 # Evidence
 
-- `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev projection and original SHA-256.
-- redeven:internal/ai/model_gateway_kimi_code_test.go
-- Subscription wire, canonical replay, quota classification and K3.1 platform parameters.
+scripts/model-catalog/upstream.json retains pinned projection/SHA256. internal/ai/model_gateway_kimi_code_test.go verifies wire/replay/quota/K3.1 parameters.
