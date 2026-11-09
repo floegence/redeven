@@ -749,7 +749,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     <Show when={!props.settingsOnly}>
     <HostApplicationsHeader feedback={feedback()} actions={<>
 <RemoteDesktopLauncher active={!props.settingsOnly || presented()} request={desktopRequest()} onStatus={value => { if (!props.settingsOnly) setDesktopStatus(value); }} onManage={openSettings} />
-        <Button variant="outline" size="sm" disabled={!canRead()} onClick={openSettings}><Settings class="w-4 h-4" />{i18n.t('hostAccess.settings')}</Button>
+        <Button variant="ghost" size="icon" class="h-8 w-8" title={i18n.t('hostAccess.settings')} aria-label={i18n.t('hostAccess.settings')} disabled={!canRead()} onClick={openSettings}><Settings class="w-4 h-4" aria-hidden="true" /></Button>
 
         <Button variant="ghost" size="sm" onClick={() => void refresh()} aria-busy={loading()} disabled={loading() || !canRead()} title={i18n.t('hostApplications.refresh')} aria-label={i18n.t('hostApplications.refresh')}><Refresh class={`w-4 h-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
         <Button aria-label={i18n.t(emptyLinuxHost() ? 'hostApplications.addExisting' : 'hostApplications.add')} title={i18n.t(emptyLinuxHost() ? 'hostApplications.addExisting' : 'hostApplications.add')} variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" /><span>{i18n.t(emptyLinuxHost() ? 'hostApplications.addExisting' : 'hostApplications.add')}</span></Button>
