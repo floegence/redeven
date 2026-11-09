@@ -184,8 +184,7 @@ try {
   // A successful first artifact can appear while Flower is still running its
   // checks. Review its completed result before exercising the retained preview.
   await expect(workspace.getByRole('button', { name: 'Stop', exact: true })).toBeHidden({ timeout: 900000 });
-  const completedUpdate = workspace.getByRole('button', { name: 'Update preview', exact: true });
-  if (await completedUpdate.isVisible()) await completedUpdate.click();
+  await expect(workspace.getByRole('button', { name: 'Preview versions', exact: true })).toBeEnabled();
   await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', /.+/, { timeout: 30000 });
   await frame.getByText('25:00', { exact: true }).waitFor();
   await frame.getByRole('button', { name: 'Start', exact: true }).click();
@@ -257,22 +256,16 @@ try {
   await page.screenshot({ path: path.join(reportRoot, 'canvas-comment.png') });
   await comment.getByRole('button', { name: 'Ask Flower to change', exact: true }).click();
   await expect(workspace.locator('.plugin-creation-flower-composer textarea')).toHaveValue(ordinaryDraft);
-  const apply = workspace.getByRole('button', { name: 'Update preview', exact: true });
-  await apply.waitFor({ timeout: 900000 });
-  await expect(workspace.getByRole('button', { name: 'Stop', exact: true })).toBeHidden({ timeout: 900000 });
-  await expect(apply).toBeEnabled();
-  await expect(frame.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
-  await expect(frame.getByRole('button', { name: 'Begin focus', exact: true })).toHaveCount(0);
-  await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', previewInstance);
-  report.assertions.push('A completed revision leaves the original application and surface instance active until explicit preview update');
-  await phase('Applying the generated revision');
+  await frame.getByText('Focus session ready', { exact: true }).waitFor({ timeout: 900000 });
+  await phase('Canvas comment produced an automatically displayed revision');
   await page.setViewportSize({ width: 390, height: 844 });
   await workspace.getByRole('tab', { name: 'Preview', exact: true }).click();
-  await workspace.getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Update preview', exact: true }).click();
   await frame.getByText('Focus session ready', { exact: true }).waitFor({ timeout: 60000 });
   await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', /.+/, { timeout: 30000 });
-  await expect(workspace.locator('.plugin-creation-version')).toContainText('0.1.1');
+  await workspace.getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Preview versions', exact: true }).click();
+  await expect(page.getByRole('menuitem').filter({ hasText: '0.1.1' }).first()).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(workspace).toHaveAttribute('data-project-id', report.draftID);
   await expect(workspace).toHaveAttribute('data-thread-id', report.threadID);
   await expect(workspace.locator('[data-plugin-surface-diagnostics]')).toHaveCount(0);
@@ -282,7 +275,7 @@ try {
   await page.screenshot({ path: path.join(reportRoot, 'revised-preview.png') });
   await expect(workspace.locator('.plugin-creation-flower-composer textarea')).toHaveValue(ordinaryDraft);
   await workspace.locator('.plugin-creation-flower-composer textarea').fill('');
-  report.assertions.push('A native sandbox right-click comment changes the selected element through the same real Flower thread, preserves unsent composer text and builds an explicitly applied revision');
+  report.assertions.push('A native sandbox right-click comment changes the selected element through the same real Flower thread, preserves unsent composer text and builds an automatically displayed revision');
   await phase('Generated revision applied');
   await workspace.getByRole('button', { name: 'Install in this environment', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm installation', exact: true }).click();

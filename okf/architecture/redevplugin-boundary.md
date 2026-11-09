@@ -39,6 +39,8 @@ Platform author locks are atomically close-on-exec: child terminals/services mus
 
 Released direct Surface KV/SQLite/files/settings need no Worker forwarding. Dedicated-origin binary/WebSocket handlers require exact handshakes; Host checks session ceilings/scope/grants/quotas/revocation. Product only mounts/presents. Conflict/unknown cannot replay; coalesced watches are not logs. Private-file migration remains upstream and separate from author/control schemas; snapshots/recovery stay opaque. Trusted parent query/event/cancel binds exact current gateway/plugin scope through authenticated handlers; malformed/stale/plugin-origin calls cannot widen to management. Read-only ceilings precede process effects; compiled SQL excludes host paths and bounds values/complexity/concurrency.
 
+Author preview history uses released immutable artifacts and exact package hashes. Local selection may revisit lower or same-version builds; retained package selection restores its platform-owned data generation. Redeven owns follow-latest/pinned-history presentation and close/review deferral. External installation keeps independent release-version rules and exact-byte inspection.
+
 ## Visual review and distribution
 Opt-in context menus are upstream capability: bounded hints/normalized geometry, validated source/port/frame/handle/sequence. Product owns annotations, artifact binding, comments and Flower submission. Metadata is untrusted context, never permission, parent DOM access or another dispatcher.
 

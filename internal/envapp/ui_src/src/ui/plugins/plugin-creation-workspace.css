@@ -3,8 +3,15 @@
 .plugin-creation-toolbar > button { font-size: 11px; }
 .plugin-creation-identity { display: flex; align-items: baseline; gap: 8px; width: clamp(210px, calc(26vw - 48px), 280px); min-width: 0; padding-right: 14px; }
 .plugin-creation-identity h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
-.plugin-creation-save-state, .plugin-creation-version { color: var(--muted-foreground); font-size: 10px; white-space: nowrap; }
-.plugin-creation-version { padding: 0 4px; font-variant-numeric: tabular-nums; }
+.plugin-creation-save-state { color: var(--muted-foreground); font-size: 10px; white-space: nowrap; }
+/* One compact control owns revision selection in both desktop and narrow layouts. */
+.plugin-creation-version-picker { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; height: 28px; padding: 0 7px; border-radius: var(--floe-radius-control); color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
+.plugin-creation-version-picker:hover { background: var(--floe-state-hover); color: var(--foreground); }
+.plugin-creation-version-picker:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.plugin-creation-version-picker[aria-disabled='true'] { opacity: .5; cursor: default; }
+.plugin-creation-version-latest { color: var(--muted-foreground); font-size: 10px; }
+.floe-floating-menu:has(.plugin-creation-version-menu-marker) { max-height: min(420px, calc(100dvh - 96px)); max-width: calc(100vw - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.floe-floating-menu:has(.plugin-creation-version-menu-marker) [role='menuitem'] > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-creation-toolbar-space { flex: 1; }
 .plugin-creation-workspace-body { display: grid; grid-template-columns: var(--plugin-conversation-width, clamp(280px, 26vw, 328px)) minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
 .plugin-creation-main, .plugin-creation-preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
@@ -90,9 +97,10 @@
   .plugin-creation-toolbar { gap: 2px; height: 48px; padding-inline: 4px; }
   .plugin-creation-toolbar > button, .plugin-creation-toolbar > [aria-haspopup] { min-height: 44px; }
   .plugin-creation-toolbar button, .plugin-creation-toolbar > [aria-haspopup] { min-width: 44px; }
-  .plugin-creation-toolbar .plugin-creation-check-button, .plugin-creation-version { display: none; }
+  .plugin-creation-toolbar .plugin-creation-check-button, .plugin-creation-version-latest { display: none; }
+  .plugin-creation-version-control { display: none; }
   .plugin-creation-identity { flex: 1; width: auto; padding-right: 4px; }
-  .plugin-creation-toolbar-space, .plugin-creation-apply { display: none; }
+  .plugin-creation-toolbar-space { display: none; }
   .plugin-creation-canvas-tools { display: none; }
   .plugin-creation-workspace-body { display: flex; }
   .plugin-creation-main, .plugin-creation-preview { flex: 1; }

@@ -1,8 +1,8 @@
-import { For, Show, Suspense, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
+import { For, Show, Suspense, batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { ArrowLeft, AlertTriangle, Check, MoreHorizontal, Refresh } from '@floegence/floe-webapp-core/icons';
-import { Monitor, Smartphone, MessageSquare, CircleCheck, CircleDashed } from 'lucide-solid';
+import { Monitor, Smartphone, MessageSquare, CircleCheck, CircleDashed, ChevronDown, History } from 'lucide-solid';
 import { ResizeHandle } from '@floegence/floe-webapp-core/layout';
-import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
+import { readUIStorageItem, writeUIStorageItem, removeUIStorageItem } from '../services/uiStorage';
 import { Button, Dropdown, Input, Tabs } from '@floegence/floe-webapp-core/ui';
 import { Dialog, ConfirmDialog } from '../primitives/EnvAppModal';
 import type { FlowerEmbeddedConversation, FlowerConversationParts } from '../../../../../flower_ui/src';
@@ -23,7 +23,6 @@ import {
 import {
   authorStatus,
   applyAuthorArtifact,
-  checkAuthorArtifact,
   inspectAuthorArtifact,
   installAuthorArtifact,
   queryAuthorInstall,
@@ -182,6 +181,16 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   const [deleteOpen, setDeleteOpen] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
   const [applying, setApplying] = createSignal(false);
+  const [pinnedArtifactID, setPinnedArtifactID] = createSignal<string>();
+  const [blockedArtifactID, setBlockedArtifactID] = createSignal<string>();
+  const previewPreferenceKey = (id: string) => `redeven.plugin-creation.preview-version:${id}`;
+  const savePreviewPreference = (artifactID?: string) => {
+    setPinnedArtifactID(artifactID);
+    const id = draft()?.workspace_id;
+    if (!id) return;
+    if (artifactID) writeUIStorageItem(previewPreferenceKey(id), artifactID);
+    else removeUIStorageItem(previewPreferenceKey(id));
+  };
   const [leaving, setLeaving] = createSignal(false);
   const [previewClosed, setPreviewClosed] = createSignal(false);
   const [review, setReview] = createSignal<ExternalPluginInspection>();
@@ -190,7 +199,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   const [installing, setInstalling] = createSignal(false);
   const [reviewing, setReviewing] = createSignal(false);
   let createPending: Promise<PluginDraft> | undefined;
-  let previewClose: (() => Promise<boolean>) | null = null;
+  const [previewClose, setPreviewClose] = createSignal<(() => Promise<boolean>) | null>(null);
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const [activeInstallRequest, setActiveInstallRequest] = createSignal('');
@@ -199,13 +208,13 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   let observingInstall = false;
   let refreshPending: Promise<void> | undefined;
   let snapshotRevision = 0;
+  let retryPreview: (() => Promise<boolean>) | undefined;
   let notifiedInstall = '';
   const installationUnsettled = () =>
     installing() ||
     (Boolean(activeInstallRequest()) && !installAbsent() && (!install() || install()?.mutation_outcome === 'unknown'));
   const installedInstance = () => draft()?.installed_plugin_id || (install()?.mutation_outcome === 'committed' && install()?.execution.status === 'completed' ? install()?.execution.plugin_instance_id : undefined);
   const currentInstalled = () =>
-    !pendingArtifact() &&
     install()?.mutation_outcome === 'committed' &&
     install()?.execution.status === 'completed' &&
     draft()?.install_artifact_id === currentArtifact()?.artifact_id;
@@ -300,6 +309,22 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   const currentArtifact = createMemo(() =>
     snapshot()?.artifacts.find((a) => a.artifact_id === snapshot()?.preview.artifact_id),
   );
+  const artifactLabel = (artifactID?: string) => {
+    const artifacts = snapshot()?.artifacts ?? [];
+    const index = artifacts.findIndex(artifact => artifact.artifact_id === artifactID);
+    return index < 0 ? '' : i18n.t('uiCopy.plugin.creation.buildRevision', { number: artifacts.length - index });
+  };
+  const versionSelectionDisabled = () => !props.canManage || applying() || leaving() || deleting() || reviewing() || Boolean(review()) || installationUnsettled();
+  const versionItems = () => [
+    { id: 'latest', label: i18n.t('uiCopy.plugin.creation.followLatest'), icon: () => <Refresh class="plugin-creation-version-menu-marker h-3.5 w-3.5" /> },
+    { id: 'versions-divider', label: '', separator: true },
+    ...(snapshot()?.artifacts ?? []).map((artifact) => ({
+      id: artifact.artifact_id,
+      icon: narrow() && artifact.artifact_id === currentArtifact()?.artifact_id ? () => <Check class="h-3.5 w-3.5" /> : undefined,
+      label: `${artifactLabel(artifact.artifact_id)} · ${artifact.version}${artifact.created_at ? ` · ${i18n.formatDateTime(artifact.created_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`,
+    })),
+  ];
+  const selectVersion = (id: string) => void apply(id === 'latest' ? undefined : id);
   const pendingArtifact = createMemo(() => {
     const latest = snapshot()?.artifacts[0];
     return latest?.artifact_id !== snapshot()?.preview.artifact_id ? latest : undefined;
@@ -351,17 +376,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
       if (packageConflict() && value.artifacts[0]?.artifact_id !== snapshot()?.artifacts[0]?.artifact_id) {
         setPackageConflict(false); setError('');
       }
-      setSnapshot(value);
-      setPreviewClosed(false);
-      if (!value.preview.artifact_id && value.artifacts[0] && !applying()) {
-        setApplying(true);
-        try {
-          const next = await applyAuthorArtifact(id, value.artifacts[0].artifact_id);
-          if (!disposed && snapshotRevision === revision && draft()?.lifecycle === 'active') setSnapshot(next);
-        } finally {
-          setApplying(false);
-        }
-      }
+      batch(() => { setSnapshot(value); setPreviewClosed(false); });
     })().finally(() => {
       refreshPending = undefined;
     });
@@ -388,6 +403,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
         || (props.canManage && found.lifecycle === 'active' && Boolean(found.thread_id));
       const value = needsResume ? await resumePluginDraft(found.id) : found;
       if (disposed) return;
+      setPinnedArtifactID(value.workspace_id ? readUIStorageItem(previewPreferenceKey(value.workspace_id)) ?? undefined : undefined);
       setDraft(value);
       if (value.lifecycle === 'deleting') {
         await remove();
@@ -461,27 +477,65 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   createEffect(() => {
     if (draft()?.workspace_id && props.visible) void untrack(refresh).catch(fail);
   });
-  const apply = async (expectedArtifactID?: string) => {
+  const apply = async (artifactID?: string, automatic = false) => {
     const id = draft()?.workspace_id;
-    const next = pendingArtifact();
-    if (!id || !next || (expectedArtifactID && next.artifact_id !== expectedArtifactID) || applying() || leaving() || deleting() || installationUnsettled()) return false;
+    const next = snapshot()?.artifacts.find(artifact => artifact.artifact_id === (artifactID ?? snapshot()?.artifacts[0]?.artifact_id));
+    if (!id || !next || !props.canManage || applying() || leaving() || deleting() || reviewing() || review() || installationUnsettled()) return false;
+    if (preview() && !previewClose()) return false;
+    if (next.artifact_id === currentArtifact()?.artifact_id && !previewClosed()) {
+      if (!automatic) savePreviewPreference(artifactID);
+      setBlockedArtifactID(undefined);
+      retryPreview = undefined;
+      return true;
+    }
     snapshotRevision++;
     setApplying(true);
+    setBlockedArtifactID(undefined);
+    retryPreview = undefined;
     setError('');
     try {
-      if (previewClose && !(await previewClose())) return false;
+      const close = previewClose();
+      if (close && !(await close())) {
+        // A canceled close is an intentional choice to keep this live version.
+        if (automatic) savePreviewPreference(currentArtifact()?.artifact_id);
+        return false;
+      }
+      if (disposed) return false;
+      // Keep the accepted selection through a lost response. A status read may
+      // confirm that it committed before an explicit retry is needed.
+      if (!automatic) savePreviewPreference(artifactID);
       setPreviewClosed(true);
-      setReview(undefined);
-      setSnapshot(await applyAuthorArtifact(id, next.artifact_id));
-      setPreviewClosed(false);
+      const nextSnapshot = await applyAuthorArtifact(id, next.artifact_id);
+      if (disposed) return false;
+      batch(() => {
+        setSnapshot(nextSnapshot);
+        setPreviewClosed(false);
+      });
       return true;
     } catch (e) {
+      // Do not repeat an uncertain mutation or an error dialog on every poll.
+      setBlockedArtifactID(next.artifact_id);
+      retryPreview = () => apply(artifactID, automatic);
       fail(e);
     } finally {
       setApplying(false);
-      if (previewClosed()) await refresh().catch(fail);
+      if (!disposed && previewClosed()) {
+        await refreshPending?.catch(fail);
+        await refresh().catch(fail);
+      }
     }
+    return false;
   };
+  createEffect(() => {
+    const state = snapshot();
+    const desired = pinnedArtifactID() ?? state?.artifacts[0]?.artifact_id;
+    if (!state || !desired || !props.visible || !props.canManage || applying() || leaving() || deleting()
+      || loading() || reviewing() || review() || installationUnsettled() || commentOpen() || previewClosed()
+      || blockedArtifactID() === desired || (preview() && !previewClose())) return;
+    if (state.preview.artifact_id === desired) return;
+    if (!state.artifacts.some(artifact => artifact.artifact_id === desired)) return;
+    void untrack(() => apply(desired, true));
+  });
   const repairPackage = async () => {
     const parts = conversationParts();
     if (!parts?.submitMessage || !parts.canSubmitMessage?.() || repairSending() || !packageConflict()) return;
@@ -493,16 +547,12 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   };
   const inspect = async () => {
     const id = draft()?.workspace_id;
-    const artifact = pendingArtifact() ?? currentArtifact();
+    const artifact = currentArtifact();
     if (!id || !artifact || !props.canManage || reviewing() || applying() || leaving() || deleting() || previewClosed() || installationUnsettled()) return;
     setReviewing(true);
     setError('');
     try {
-      const value = pendingArtifact()
-        ? await checkAuthorArtifact(id, artifact.artifact_id)
-        : await inspectAuthorArtifact(id, artifact.artifact_id);
-      if (disposed) return;
-      if (pendingArtifact() && !(await apply(artifact.artifact_id))) return;
+      const value = await inspectAuthorArtifact(id, artifact.artifact_id);
       if (disposed || artifact.artifact_id !== currentArtifact()?.artifact_id) return;
       setReviewArtifact(artifact.artifact_id);
       setReview(value);
@@ -592,6 +642,12 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   };
   const retry = async () => {
     setError('');
+    if (retryPreview) {
+      const retry = retryPreview;
+      await refresh();
+      await retry();
+      return;
+    }
     if (!commentSaved() && draft()) { changeComment(commentText()); await commentSave; }
     if (!draft() && initialID === 'new') {
       await ensureDraft();
@@ -665,7 +721,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     if (applying() || leaving() || deleting() || commentSending()) return false;
     setLeaving(true);
     try {
-      if (previewClose && !(await previewClose())) return false;
+      if (previewClose() && !(await previewClose()!())) return false;
       snapshotRevision++;
       setPreviewClosed(true);
       if (!draft() && (createPending || latestComposer && (latestComposer.value.text
@@ -696,7 +752,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     finally { setOpeningInstalled(false); }
   };
   const remove = async () => {
-    if (deleting() || commentSending()) return;
+    if (applying() || deleting() || commentSending()) return;
     let value = draft();
     if (!value && !createPending) {
       props.onBack();
@@ -707,7 +763,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     setError('');
     try {
       if (!value) value = await createPending!;
-      if (previewClose && !(await previewClose())) return;
+      if (previewClose() && !(await previewClose()!())) return;
       setPreviewClosed(true);
       await refreshPending?.catch(() => {});
       const result = await deletePluginDraft(value);
@@ -718,6 +774,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
         await saveChain.catch(() => {});
         await commentSave.catch(() => {});
         await removePluginComposer(value.id);
+        if (value.workspace_id) removeUIStorageItem(previewPreferenceKey(value.workspace_id));
         props.onBack();
       }
     } catch (e) {
@@ -802,12 +859,20 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
               onClick={() => commentOpen() ? setCommentOpen(false) : selectComment()}><MessageSquare size={15} /></button>
 
           </div>
-          <Show when={currentArtifact()}><span class="plugin-creation-version">{currentArtifact()?.version}</span></Show>
-          <Show when={pendingArtifact() && currentArtifact()}>
-            <Button size="sm" variant="secondary" class="plugin-creation-apply" aria-label={i18n.t('uiCopy.plugin.creation.apply')}
-              title={i18n.t('uiCopy.plugin.creation.apply')} disabled={reviewing() || applying() || installationUnsettled()} onClick={() => void apply()}>
-              <Refresh class="h-3.5 w-3.5" /><span>{i18n.t('uiCopy.plugin.creation.apply')}</span>
-            </Button>
+          <Show when={snapshot()?.artifacts.length}>
+            <Dropdown
+              triggerAriaLabel={i18n.t('uiCopy.plugin.creation.previewVersions')}
+              class="plugin-creation-version-control"
+              triggerClass="plugin-creation-version-picker"
+              disabled={versionSelectionDisabled()}
+              value={pinnedArtifactID() ?? (pendingArtifact() ? undefined : 'latest')}
+              items={versionItems()}
+              onSelect={selectVersion}
+              trigger={<><Show when={applying()} fallback={<History size={13} />}><Refresh class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /></Show>
+                <span class="plugin-creation-version-label">{artifactLabel(currentArtifact()?.artifact_id) || i18n.t('uiCopy.plugin.creation.previewVersions')}</span>
+                <Show when={!pinnedArtifactID() && !pendingArtifact()}><span class="plugin-creation-version-latest">{i18n.t('uiCopy.plugin.creation.latestVersion')}</span></Show>
+                <ChevronDown size={12} /></>}
+            />
           </Show>
           <button type="button" class="plugin-creation-check-button" aria-label={i18n.t('uiCopy.plugin.creation.checks')}
             data-build-state={buildState()} aria-describedby="plugin-creation-build-status"
@@ -851,8 +916,8 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
         </Show>
         <Dropdown
           items={[
+            ...(narrow() && snapshot()?.artifacts.length ? [{ id: 'versions', label: i18n.t('uiCopy.plugin.creation.previewVersions'), disabled: versionSelectionDisabled(), children: versionItems() }] : []),
             ...(!currentInstalled() && installedInstance() && props.onOpenInstalled ? [{ id: 'open', label: i18n.t('common.actions.open'), disabled: openingInstalled() }] : []),
-            ...(narrow() && pendingArtifact() && currentArtifact() ? [{ id: 'apply', label: i18n.t('uiCopy.plugin.creation.apply'), disabled: reviewing() || applying() || installationUnsettled() }] : []),
             ...(narrow() && preview() ? [{ id: 'comment', label: i18n.t('uiCopy.plugin.creation.comment') }] : []),
             ...(settingsHost && snapshot()?.preview.plugin_instance_id ? [{ id: 'permissions', label: i18n.t('uiCopy.plugin.external.permissions') }] : []),
             { id: 'checks', label: i18n.t('uiCopy.plugin.creation.checks') },
@@ -860,10 +925,10 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
             { id: 'delete', label: i18n.t('uiCopy.plugin.creation.deleteDraft') },
           ]}
           onSelect={(id) => {
-            if (id === 'open') {
+            if (id === 'latest' || snapshot()?.artifacts.some(artifact => artifact.artifact_id === id)) {
+              selectVersion(id);
+            } else if (id === 'open') {
               void openInstalled();
-            } else if (id === 'apply') {
-              void apply();
             } else if (id === 'comment') {
               selectComment();
             } else if (id === 'permissions') {
@@ -878,7 +943,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
           }}
           triggerAriaLabel={i18n.t('common.actions.more')}
           triggerClass="inline-flex h-8 w-8 items-center justify-center rounded-control hover:bg-[var(--floe-state-hover)]"
-          trigger={<span class="relative"><MoreHorizontal class="h-4 w-4" /><Show when={narrow() && pendingArtifact() && currentArtifact()}><span class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-label={i18n.t('uiCopy.plugin.creation.apply')} /></Show></span>}
+          trigger={<MoreHorizontal class="h-4 w-4" />}
         />
       </header>
       <Show when={error()}>
@@ -1058,7 +1123,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
                     if (['activation', 'focus', 'wheel', 'action'].includes(event.kind)) setSelectionChanged(true);
                   }}
                   registerClose={(close) => {
-                    previewClose = close;
+                    setPreviewClose(() => close);
                   }}
                 />
               )}

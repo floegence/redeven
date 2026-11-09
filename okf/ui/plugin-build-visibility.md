@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Proposed upstream build progress, not shipped behavior. Keep one canvas, preview authority and compact status control. Existing first-artifact auto-preview and early runnable milestones need no new platform API; deliver the requested layout and a useful interaction with labeled examples or explicit missing-data states.
+Proposed upstream build progress, not shipped behavior. Keep one canvas, preview authority and compact status control. Existing successful-artifact auto-preview and early runnable milestones need no new platform API; deliver the requested layout and a useful interaction with labeled examples or explicit missing-data states.
 
 # Contract
 
@@ -26,7 +26,7 @@ Persist snapshots/outcomes, coalesce logs, isolate slow observers and mark unfin
 Release Go APIs, author schemas, generated clients/DTOs, fixtures, compatibility metadata, tests and signed proof together. Review Rust without another IPC/ABI axis. Platform owns migrations/recovery; no copied pipeline/local links.
 
 ## Redeven consumes and presents
-Pin published artifacts and map verified facts into existing Checks/status/all locales. Flower owns edits/approvals; platform owns builds/artifacts. No derived percentage or new dispatch authority. First-artifact apply is the only automatic preview transition. Request useful milestones, not per-edit builds; finish the original task. Measure cold/warm paths before latency promises or caches.
+Pin published artifacts and map verified facts into existing Checks/status/all locales. Flower owns edits/approvals; platform owns builds/artifacts. No derived percentage or new dispatch authority. Successful artifacts auto-apply while following latest; choosing history pins the exact artifact until Follow latest resumes. Request useful milestones, not per-edit builds; finish the original task. Measure cold/warm paths before latency promises or caches.
 
 ## Acceptance and delivery order
 1. Ship canvas/milestone guidance against existing APIs; prompts alone prove no delivery.
@@ -37,7 +37,7 @@ Pin published artifacts and map verified facts into existing Checks/status/all l
 # Evidence
 
 ## Current implementation
-At ReDevPlugin 3.24.1, WorkspaceStore.Build persists running status before Project.Build, then copies completed stages/commands. No progress observer exists; faster polling cannot reveal absent events. Product polls at 2.5 seconds; first artifact auto-applies, later artifacts require Apply. Checks shows completed stages/bounded logs. Decorative motion proves nothing; generation, build, sandbox readiness and acceptance remain separate.
+At ReDevPlugin 3.24.1, WorkspaceStore.Build persists running status before Project.Build, then copies completed stages/commands. No progress observer exists; faster polling cannot reveal absent events. Product polls at 2.5 seconds; successful artifacts auto-apply while following latest; historical selection pins an exact build. Checks shows completed stages/bounded logs. Decorative motion proves nothing; generation, build, sandbox readiness and acceptance remain separate.
 
 ## Open-source comparison
 The November 6 comparison informed design only: bolt.diy separates actions from server/port readiness; Dyad separates refresh/restart/diagnostics; E2B Fragments executes before results; Sandpack composes preview/tests/console. No runtime/storage/sandbox/bridge/permission copying is authorized. Moving sources remain historical references: [bolt](https://github.com/stackblitz-labs/bolt.diy/blob/main/app/lib/runtime/action-runner.ts), [Dyad](https://www.dyad.sh/docs/guides/previewing), [Fragments](https://github.com/e2b-dev/fragments/blob/main/app/api/sandbox/route.ts), [Sandpack](https://sandpack.codesandbox.io/docs/advanced-usage/components).

@@ -25,6 +25,7 @@ afterEach(async () => {
   dispose?.();
   release?.();
   vi.unstubAllGlobals();
+  localStorage.removeItem('redeven.plugin-creation.preview-version:author-1');
   document.body.replaceChildren();
   lifetime.opened = 0;
   lifetime.disposed = 0;
@@ -124,6 +125,8 @@ it.each([1200, 390].flatMap(width => ['applied', 'rejected', 'cancelled', 'pendi
   await page.viewport(width, 800);
   lifetime.close.mockResolvedValue(outcome !== 'cancelled');
   let applied = false;
+  let built = false;
+  let rejectApply = outcome === 'rejected';
   let finishApply: (() => void) | undefined;
   const pendingApply = new Promise<void>((resolve) => { finishApply = resolve; });
   const artifacts = [
@@ -134,14 +137,14 @@ it.each([1200, 390].flatMap(width => ['applied', 'rejected', 'cancelled', 'pendi
     plugin_id: 'dev.example.focus', plugin_instance_id: 'instance-1', management_revision: 4,
     manifest: { plugin: { display_name: 'Focus Timer' }, surfaces: [{ kind: 'view', surface_id: 'focus.view' }] },
   }];
-  const snapshot = () => ({ artifacts, preview: {
+  const snapshot = () => ({ artifacts: built ? artifacts : artifacts.slice(1), preview: {
     artifact_id: applied ? 'artifact-2' : 'artifact-1', plugin_instance_id: 'instance-1', generation: applied ? 2 : 1,
   } });
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
     if (path.endsWith('/apply')) {
       if (outcome === 'pending') await pendingApply;
-      if (outcome === 'rejected') return Response.json({ error: { message: 'Update rejected' } }, { status: 409 });
+      if (rejectApply) return Response.json({ error: { message: 'Update rejected' } }, { status: 409 });
       applied = true;
       return Response.json({ data: snapshot() });
     }
@@ -160,21 +163,15 @@ it.each([1200, 390].flatMap(width => ['applied', 'rejected', 'cancelled', 'pendi
       renderFlower={() => <div>Conversation fixture</div>} />
   </I18nProvider></FloeConfigProvider>, host);
   await expect.poll(() => lifetime.opened).toBe(1);
-  if (width < 720) {
-    await page.getByRole('button', { name: 'More actions', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Update preview', exact: true }).click();
-  } else await page.getByRole('button', { name: 'Update preview', exact: true }).click();
-  await expect.poll(() => lifetime.close.mock.calls.length).toBe(1);
+  built = true;
+  await expect.poll(() => lifetime.close.mock.calls.length, { timeout: 6000 }).toBe(1);
   if (outcome === 'pending') {
     try {
       await expect.element(page.getByRole('button', { name: 'Install in this environment', exact: true })).toBeDisabled();
     } finally { finishApply?.(); }
   }
   if (outcome === 'cancelled') {
-    if (width < 720) {
-      await page.getByRole('button', { name: 'More actions', exact: true }).click();
-      await expect.element(page.getByRole('menuitem', { name: 'Update preview', exact: true })).toBeEnabled();
-    } else await expect.element(page.getByRole('button', { name: 'Update preview', exact: true })).toBeEnabled();
+    if (width >= 720) await expect.element(page.getByRole('button', { name: 'Preview versions', exact: true })).toBeEnabled();
     expect(lifetime.opened).toBe(1);
     expect(lifetime.disposed).toBe(0);
     expect(fetch.mock.calls.some(([input]) => String(input).endsWith('/apply'))).toBe(false);
@@ -182,6 +179,13 @@ it.each([1200, 390].flatMap(width => ['applied', 'rejected', 'cancelled', 'pendi
   }
   await expect.poll(() => lifetime.opened, { timeout: 6000 }).toBe(2);
   expect(lifetime.disposed).toBe(1);
+  if (outcome === 'rejected') {
+    await expect.element(page.getByText('Update rejected', { exact: true })).toBeVisible();
+    rejectApply = false;
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await expect.poll(() => applied).toBe(true);
+    await expect.poll(() => lifetime.opened).toBe(3);
+  }
 });
 it.each(['accepted', 'failed', 'pending'])('preserves the author preview while opening the installed application: %s', async (outcome) => {
   const draft = { id: 'draft-1', title: 'Focus Timer', lifecycle: 'active', revision: 3, workspace_id: 'author-1',
@@ -239,9 +243,9 @@ it.each(['accepted', 'failed', 'pending'])('preserves the author preview while o
 
 // The released Host owns update validation; this fixture exercises the complete
 // product sequence and verifies exact artifact/request binding at each boundary.
-it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer'].map(outcome => ({ width, outcome }))))('updates an installed plugin without leaving creation: $outcome at $width px', async ({ width, outcome }) => {
+it.each([1200, 390].flatMap(width => ['completed', 'newer'].map(outcome => ({ width, outcome }))))('updates an installed plugin without leaving creation: $outcome at $width px', async ({ width, outcome }) => {
   await page.viewport(width, 800);
-  lifetime.close.mockResolvedValue(outcome !== 'cancelled');
+  lifetime.close.mockResolvedValue(true);
   let draft = { id: 'draft-1', title: 'Focus Timer', lifecycle: 'active', revision: 3, workspace_id: 'author-1',
     installed_plugin_id: 'installed-1', install_request_id: 'install-1', install_artifact_id: 'artifact-1', install_inspection_id: 'review-1' };
   let latest = 'artifact-1', preview = 'artifact-1';
@@ -256,10 +260,9 @@ it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer
       preview: { artifact_id: preview, plugin_instance_id: 'preview-1', generation: preview === 'artifact-1' ? 1 : 2 } });
     if (path.endsWith('/status')) return Response.json({ data: snapshot() });
     if (path.endsWith('/apply')) { calls.push({ action: 'apply', body });
-      if (outcome === 'failed') return Response.json({ error: { message: 'Update rejected' } }, { status: 409 });
       preview = body.artifact_id; return Response.json({ data: snapshot() }); }
-    if (path.endsWith('/check')) {
-      calls.push({ action: 'check', body });
+    if (path.endsWith('/inspect')) {
+      calls.push({ action: 'inspect', body });
       return Response.json({ data: { inspection_id: 'review-2', intent: { action: 'update', plugin_instance_id: 'installed-1' },
         plugin_id: 'dev.example.focus', publisher_id: 'dev.example', version: '0.2.0', expires_at: '2026-12-01T00:00:00Z',
         inspected_hashes: { package_sha256: hash, manifest_sha256: hash, entries_sha256: hash },
@@ -297,19 +300,12 @@ it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer
   await expect.element(page.getByRole('heading', { name: 'Daily Focus', exact: true })).toBeVisible();
   await expect.element(page.getByRole('button', { name: 'Update', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Update', exact: true }).click();
-  if (outcome === 'cancelled' || outcome === 'failed') {
-    await expect.element(page.getByRole('button', { name: 'Update', exact: true })).toBeEnabled();
-    expect(calls.map(call => call.action)).toEqual(outcome === 'cancelled' ? ['check'] : ['check', 'apply']);
-    expect(conversation.isConnected).toBe(true);
-    expect(conversation.value).toBe('Keep my next request');
-    return;
-  }
   await expect.element(page.getByRole('dialog')).toBeVisible();
   if (outcome === 'newer') {
     latest = 'artifact-3';
     await expect.element(page.getByText('This installs the current preview. Changes that have not been applied are not included.', { exact: true })).toBeVisible();
   }
-  expect(calls.map(call => call.action)).toEqual(['check', 'apply']);
+  expect(calls.map(call => call.action)).toEqual(['apply', 'inspect']);
   expect(calls.every(call => call.body.artifact_id === 'artifact-2')).toBe(true);
   await page.getByRole('dialog').getByRole('button', { name: 'Update plugin', exact: true }).click();
   await expect.poll(() => calls.filter(call => call.action === 'install').length).toBe(1);
@@ -330,4 +326,132 @@ it.each([1200, 390].flatMap(width => ['completed', 'cancelled', 'failed', 'newer
   expect(onOpen).toHaveBeenCalledWith('installed-1');
   expect(conversation.isConnected).toBe(true);
   expect(conversation.value).toBe('Keep my next request');
+});
+
+
+it.each([1200, 390])('follows new builds, pins history across reopen and resumes latest at %s px', async width => {
+  await page.viewport(width, 800);
+  const openVersions = async () => {
+    if (width < 720) {
+      await page.getByRole('button', { name: 'More actions', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Preview versions', exact: true }).click();
+    } else await page.getByRole('button', { name: 'Preview versions', exact: true }).click();
+  };
+  lifetime.close.mockResolvedValue(true);
+  let latest = 'artifact-1';
+  let selected = 'artifact-1';
+  const applied: string[] = [];
+  const inspected: string[] = [];
+  const artifacts = ['artifact-1'];
+  let reading = 0;
+  let finishApply: (() => void) | undefined;
+  let delayApply = false;
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    const snapshot = () => ({
+      artifacts: artifacts.map(artifact_id => ({ artifact_id, version: '0.1.0', stages: [] })),
+      preview: { artifact_id: selected, plugin_instance_id: 'preview-1', generation: applied.length + 1 },
+    });
+    if (path.endsWith('/inspect')) {
+      inspected.push(JSON.parse(String(init?.body)).artifact_id);
+      return Response.json({ error: { message: 'Selected history review fixture' } }, { status: 409 });
+    }
+    if (path.endsWith('/apply')) {
+      const artifactID = JSON.parse(String(init?.body)).artifact_id;
+      if (delayApply) await new Promise<void>(resolve => { finishApply = resolve; });
+      selected = artifactID;
+      applied.push(selected);
+      return Response.json({ data: snapshot() });
+    }
+    if (path.endsWith('/status')) { reading++; return Response.json({ data: snapshot() }); }
+    if (path.endsWith('/catalog/query')) return Response.json({ ok: true, data: { plugins: [{
+      plugin_id: 'dev.example.focus', plugin_instance_id: 'preview-1', management_revision: 4,
+      manifest: { plugin: { display_name: 'Focus Timer' }, surfaces: [{ kind: 'view', surface_id: 'focus.view' }] },
+    }] } });
+    return Response.json({ data: { id: 'draft-1', title: 'Focus Timer', lifecycle: 'active', revision: 3, workspace_id: 'author-1' } });
+  });
+  vi.stubGlobal('fetch', fetch);
+  release = bindSessionHTTP({ fetch, events: async function* () {} });
+  const host = document.createElement('div'); host.style.cssText = 'height:700px;width:100%'; document.body.append(host);
+  const [visible, setVisible] = createSignal(true);
+  const mount = () => render(() => <FloeConfigProvider><I18nProvider>
+    <PluginCreationWorkspace draftCoordinator={createFlowerComposerDraftCoordinator()} draftID="draft-1"
+      visible={visible()} canManage onBack={vi.fn()} onSaved={vi.fn()} onInstalled={vi.fn()}
+      renderFlower={() => <textarea aria-label="Conversation draft" />} />
+  </I18nProvider></FloeConfigProvider>, host);
+  dispose = mount();
+  await expect.poll(() => lifetime.opened).toBe(1);
+  setVisible(false);
+  latest = 'artifact-2'; artifacts.unshift(latest);
+  setVisible(true);
+  await expect.poll(() => applied, { timeout: 6500 }).toEqual(['artifact-2']);
+  expect(lifetime.close).toHaveBeenCalledOnce();
+  await expect.poll(() => lifetime.opened).toBe(2);
+  await openVersions();
+  await page.getByRole('menuitem', { name: 'Build 1', exact: false }).click();
+  await expect.poll(() => selected).toBe('artifact-1');
+  await expect.poll(() => localStorage.getItem('redeven.plugin-creation.preview-version:author-1')).toBe('artifact-1');
+  latest = 'artifact-3'; artifacts.unshift(latest);
+  const priorRead = reading;
+  await expect.poll(() => reading, { timeout: 6000 }).toBeGreaterThan(priorRead);
+  expect(selected).toBe('artifact-1');
+  await page.getByRole('button', { name: 'Install in this environment', exact: true }).click();
+  await expect.poll(() => inspected).toEqual(['artifact-1']);
+  expect(selected).toBe('artifact-1');
+  dispose?.(); dispose = mount();
+  await expect.poll(() => host.querySelector('.plugin-creation-version-label')?.textContent).toBe('Build 1');
+  expect(selected).toBe('artifact-1');
+  delayApply = true;
+  await openVersions();
+  await page.getByRole('menuitem', { name: 'Follow latest', exact: true }).click();
+  await expect.poll(() => Boolean(finishApply)).toBe(true);
+  latest = 'artifact-4'; artifacts.unshift(latest);
+  delayApply = false; finishApply?.();
+  await expect.poll(() => selected, { timeout: 6000 }).toBe('artifact-4');
+  expect(applied).toEqual(['artifact-2', 'artifact-1', 'artifact-3', 'artifact-4']);
+  expect(localStorage.getItem('redeven.plugin-creation.preview-version:author-1')).toBeNull();
+});
+
+it('reconciles a lost historical apply response without following latest or repeating the mutation', async () => {
+  await page.viewport(1200, 800);
+  lifetime.close.mockResolvedValue(true);
+  let selected = 'artifact-2';
+  const applied: string[] = [];
+  const snapshot = () => ({
+    artifacts: ['artifact-2', 'artifact-1'].map(artifact_id => ({ artifact_id, version: '0.1.0', stages: [] })),
+    preview: { artifact_id: selected, plugin_instance_id: 'preview-1', generation: applied.length + 1 },
+  });
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith('/apply')) {
+      selected = JSON.parse(String(init?.body)).artifact_id;
+      applied.push(selected);
+      throw new Error('Preview response lost');
+    }
+    if (path.endsWith('/status')) return Response.json({ data: snapshot() });
+    if (path.endsWith('/catalog/query')) return Response.json({ ok: true, data: { plugins: [{
+      plugin_id: 'dev.example.focus', plugin_instance_id: 'preview-1', management_revision: 4,
+      manifest: { plugin: { display_name: 'Focus Timer' }, surfaces: [{ kind: 'view', surface_id: 'focus.view' }] },
+    }] } });
+    return Response.json({ data: { id: 'draft-1', title: 'Focus Timer', lifecycle: 'active', revision: 3, workspace_id: 'author-1' } });
+  });
+  vi.stubGlobal('fetch', fetch);
+  release = bindSessionHTTP({ fetch, events: async function* () {} });
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeConfigProvider><I18nProvider>
+    <PluginCreationWorkspace draftCoordinator={createFlowerComposerDraftCoordinator()} draftID="draft-1"
+      visible canManage onBack={vi.fn()} onSaved={vi.fn()} onInstalled={vi.fn()}
+      renderFlower={() => <div>Conversation fixture</div>} />
+  </I18nProvider></FloeConfigProvider>, host);
+  await expect.poll(() => lifetime.opened).toBe(1);
+  await page.getByRole('button', { name: 'Preview versions', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^Build 1/ }).click();
+  await expect.element(page.getByText('Preview response lost', { exact: true })).toBeVisible();
+  await expect.poll(() => lifetime.opened).toBe(2);
+  expect(selected).toBe('artifact-1');
+  expect(localStorage.getItem('redeven.plugin-creation.preview-version:author-1')).toBe('artifact-1');
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect.element(page.getByText('Preview response lost', { exact: true })).not.toBeInTheDocument();
+  expect(applied).toEqual(['artifact-1']);
+  expect(lifetime.opened).toBe(2);
 });

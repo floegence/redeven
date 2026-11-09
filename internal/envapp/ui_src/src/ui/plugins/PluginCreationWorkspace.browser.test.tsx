@@ -574,17 +574,19 @@ it('blocks preview changes while installation is unknown and queries the origina
   };
   const original = globalThis.fetch;
   const queries: string[] = [];
+  let selected = 'artifact-1';
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith('/status'))
+      if (String(input).endsWith('/apply')) selected = JSON.parse(String(init?.body)).artifact_id;
+      if (/\/(status|apply)$/.test(String(input)))
         return Response.json({
           data: {
             artifacts: [
               { artifact_id: 'artifact-2', version: '0.2.0', stages: [] },
               { artifact_id: 'artifact-1', version: '0.1.0', stages: [] },
             ],
-            preview: { artifact_id: 'artifact-1' },
+            preview: { artifact_id: selected, generation: selected === 'artifact-1' ? 1 : 2 },
           },
         });
       if (String(input).endsWith('/installation')) {
@@ -612,7 +614,7 @@ it('blocks preview changes while installation is unknown and queries the origina
   });
   mount();
   await expect.element(page.getByText('Outcome is unknown', { exact: true })).toBeVisible();
-  await expect.element(page.getByRole('button', { name: 'Update preview', exact: true })).toBeDisabled();
+  await expect.element(page.getByRole('button', { name: 'Preview versions', exact: true })).toHaveAttribute('aria-disabled', 'true');
   await expect
     .element(
       page.getByRole('button', {
@@ -622,11 +624,10 @@ it('blocks preview changes while installation is unknown and queries the origina
     )
     .toBeDisabled();
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect.element(page.getByRole('button', { name: 'Update preview', exact: true })).toBeEnabled();
+  await expect.element(page.getByRole('button', { name: 'Preview versions', exact: true })).toBeEnabled();
   expect(queries).toEqual(['install-original', 'install-original']);
-  expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => /\/(install|apply)$/.test(String(input)))).toBe(
-    false,
-  );
+  expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input).endsWith('/install'))).toBe(false);
+  await expect.poll(() => selected).toBe('artifact-2');
 });
 it('renames a draft with its current revision', async () => {
   const original = globalThis.fetch;

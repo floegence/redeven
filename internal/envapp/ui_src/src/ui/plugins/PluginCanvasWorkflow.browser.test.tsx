@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { page, commands, userEvent } from 'vitest/browser';
 import { FloeConfigProvider } from '@floegence/floe-webapp-core';
 import { createFlowerComposerDraftCoordinator, type FlowerConversationParts, type FlowerEmbeddedConversation } from '../../../../../flower_ui/src';
-import { readUIStorageItem, removeUIStorageItem } from '../services/uiStorage';
+import { readUIStorageItem, removeUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { bindSessionHTTP } from '../services/sessionHTTP';
 import { I18nProvider } from '../i18n';
 import { writeStoredLanguagePreference } from '../i18n/storage';
@@ -25,8 +25,9 @@ vi.mock('./PluginAuthorPreview', () => ({ PluginAuthorPreview: (props: PreviewPr
 let dispose: (() => void) | undefined;
 let release: (() => void) | undefined;
 const id = 'canvas-comment-fixture';
-afterEach(async () => { dispose?.(); release?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); writeStoredLanguagePreference('en-US'); await removePluginComposer(id); surface.opens = 0; surface.closes = 0; surface.current = true; removeUIStorageItem('redeven.plugin-creation.conversation-width.v1'); await page.viewport(1280, 800); });
+afterEach(async () => { dispose?.(); release?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); writeStoredLanguagePreference('en-US'); await removePluginComposer(id); surface.opens = 0; surface.closes = 0; surface.current = true; removeUIStorageItem('redeven.plugin-creation.conversation-width.v1'); removeUIStorageItem('redeven.plugin-creation.preview-version:author-1'); await page.viewport(1280, 800); });
 function mount(title = 'Focus Timer', pendingUpdate = false) {
+  if (pendingUpdate) writeUIStorageItem('redeven.plugin-creation.preview-version:author-1', 'artifact-1');
   let embedded!: FlowerEmbeddedConversation;
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     if (String(input).endsWith('/status')) return Response.json({ data: {
@@ -113,7 +114,6 @@ it.each([320, 390].flatMap(width => [false, true].map(pendingUpdate => ({ width,
     expect(rect.height).toBeGreaterThanOrEqual(44);
   }
   await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  if (pendingUpdate) await expect.element(page.getByRole('menuitem', { name: 'Update preview', exact: true })).toBeVisible();
   await page.getByText('Comment', { exact: true }).click();
   await expect.element(page.getByRole('dialog', { name: 'Comment', exact: true })).toBeVisible();
   await expect.element(page.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -278,7 +278,7 @@ it('keeps the live canvas and composer on package conflict and sends one explici
   const fixture = mount('Focus Timer', true);
   await expect.poll(() => surface.opens).toBe(1);
   const original = fixture.fetch.getMockImplementation()!;
-  fixture.fetch.mockImplementation(async input => String(input).endsWith('/check')
+  fixture.fetch.mockImplementation(async input => String(input).endsWith('/inspect')
     ? Response.json({ error: { code: 'plugin_author_package_conflict', message: 'raw integrity error' } }, { status: 409 })
     : original(input));
   const frame = fixture.host.querySelector('iframe');
@@ -324,4 +324,31 @@ it('resizes with the pointer and keyboard, persists locally and clamps narrow wi
   dispose?.(); release?.(); fixture.host.remove();
   const reopened = mount();
   await expect.poll(() => reopened.host.querySelector('[data-plugin-conversation-resizer]')?.getAttribute('aria-valuenow')).toBe(String(saved));
+});
+
+it('defers a new preview while a canvas comment is being edited', async () => {
+  const fixture = mount();
+  await expect.poll(() => surface.opens).toBe(1);
+  select(fixture.host);
+  await page.getByRole('textbox', { name: 'What would you like Flower to change?' }).fill('Keep this target while I describe the change');
+  const original = fixture.fetch.getMockImplementation()!;
+  let applied = false, observed = 0;
+  fixture.fetch.mockImplementation(async input => {
+    if (String(input).endsWith('/apply')) applied = true;
+    if (/\/(apply|status)$/.test(String(input))) {
+      observed++;
+      return Response.json({ data: {
+        artifacts: [{ artifact_id: 'artifact-2', version: '0.2.0', stages: [] }, { artifact_id: 'artifact-1', version: '0.1.0', stages: [] }],
+        preview: { artifact_id: applied ? 'artifact-2' : 'artifact-1', plugin_instance_id: 'preview-1', generation: applied ? 2 : 1 },
+      } });
+    }
+    return original(input);
+  });
+  await expect.poll(() => observed, { timeout: 6000 }).toBeGreaterThan(0);
+  expect(applied).toBe(false);
+  expect(surface.closes).toBe(0);
+  await page.getByRole('button', { name: 'Close comment', exact: true }).click();
+  await expect.poll(() => applied).toBe(true);
+  await expect.poll(() => surface.opens).toBe(2);
+  expect(await loadPluginComment(id)).toBe('Keep this target while I describe the change');
 });

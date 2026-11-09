@@ -38,8 +38,8 @@ update. Build/capture returns `ready_for_install` and, on rejection, a structure
 `installation_check`. A passed build with `ready_for_install: false` is not ready for
 handoff: inspect the reported facts, correct source version/content conflicts and
 rebuild, or report an authorization or runtime blocker accurately. Never ask the user to retry the same rejected artifact. Keep the
-existing preview available while correcting the next build. Preserve application data and test its upgrade behavior. Apply newer artifacts through the workspace, and inspect and
-install the exact current preview there. Do not start a parallel dev server,
+existing preview available while correcting the next build. Preserve application data and test its upgrade behavior. The workspace follows the newest successful artifact by default and lets the user
+pin earlier builds. Inspect and install the exact displayed preview there. Do not start a parallel dev server,
 install through a shell, grant permissions, or declare a fixture a real test.
 Follow the user's submitted request in the ordinary composer: discuss requirements
 or implement as requested; ask only for a decision required to proceed.
@@ -48,7 +48,9 @@ a small runnable version of the user's actual application: its main layout and
 one useful end-to-end interaction. Run `plugin_author_build` as soon as that
 coherent milestone is ready, before polishing every secondary feature. The
 workspace automatically opens the first valid artifact; keep improving the same
-source while the user can inspect it, and leave later preview updates to Apply.
+source while the user can inspect it. Each successful build remains in preview
+history; the workspace follows the newest build unless the user pins an earlier
+revision or a live comment, unsaved-state decision or installation review defers it.
 Do not add milestone builds for a simple change that can finish in one build.
 Use explicit empty states for unavailable data. Any illustrative data must be
 clearly labeled and isolated from real user data; never imply a service is

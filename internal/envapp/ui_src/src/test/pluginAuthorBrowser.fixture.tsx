@@ -11,7 +11,7 @@ import { createPluginConfirmationQueue, PluginConfirmationDialog } from '../ui/p
 import { createPluginSurfacePlacementCoordinator, createRedevenPluginPlatform } from '../ui/plugins/pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from '../ui/plugins/pluginTypes';
 
-const configuration: { draftID: string; workspaceID: string; formal: boolean; target: PluginSurfaceLaunchTarget } =
+const configuration: { draftID: string; workspaceID: string; formal: boolean; history?: boolean; target: PluginSurfaceLaunchTarget } =
   await (await fetch('/qualification.json')).json();
 const release = bindSessionHTTP({ fetch: globalThis.fetch.bind(globalThis), events: async function* () {} });
 const platform = createRedevenPluginPlatform();
@@ -66,7 +66,7 @@ render(
                   onInstalled={() => {}}
                   renderFlower={() => (
                     <p style={{ padding: '12px', 'font-size': '13px' }}>
-                      The real model has completed this draft. This carrier exercises preview, review and installation.
+                      {configuration.history ? 'This carrier exercises build history and exact preview selection.' : 'The real model has completed this draft. This carrier exercises preview, review and installation.'}
                     </p>
                   )}
                 />

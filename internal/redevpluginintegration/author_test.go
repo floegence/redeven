@@ -385,6 +385,14 @@ func TestAuthorWorkspaceRealHostInstallRecoveryAndDeletion(t *testing.T) {
 	}
 	requireOK(call("check", map[string]any{"artifact_id": updatedArtifact.ID}, true), &inspection)
 	requireOK(call("apply", map[string]any{"artifact_id": updatedArtifact.ID}, true), &state)
+	// Historical previews use the released immutable-artifact selection, including
+	// lower package versions. They never roll back the editable source project.
+	generation := state.Preview.Generation
+	requireOK(call("apply", map[string]any{"artifact_id": artifact.ID}, true), &state)
+	if state.Preview.ArtifactID != artifact.ID || state.Preview.Generation <= generation {
+		t.Fatalf("historical preview lost its exact identity: %+v", state.Preview)
+	}
+	requireOK(call("apply", map[string]any{"artifact_id": updatedArtifact.ID}, true), &state)
 	// The pre-apply inspection remains bound to the exact artifact after preview replacement.
 	if inspection.Intent.Action != "update" || inspection.Intent.PluginInstanceID != result.Execution.PluginInstanceID {
 		t.Fatalf("formal update lost original instance: %+v", inspection.Intent)
