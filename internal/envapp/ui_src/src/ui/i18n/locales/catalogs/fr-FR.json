@@ -3851,6 +3851,7 @@
       "modified": "Modifié",
       "removed": "Supprimé",
       "stale": "Cet aperçu n’est plus à jour. Vérifiez à nouveau la source du modèle avant de confirmer.",
+      "rateLimited": "GitHub limite temporairement les requêtes vers les sources. Réessayez plus tard ou utilisez un jeton GitHub temporaire avec un accès en lecture au dépôt.",
       "failed": "Impossible d’accéder à cette source ou de la valider. Vérifiez le lien GitHub, le jeton d’accès et le mode de transfert, puis réessayez.",
       "github": "Modèle GitHub",
       "progress": "Progression de l’import",

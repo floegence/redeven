@@ -3952,6 +3952,7 @@ export const enUS = defineDictionary({
       "modified": "Modified",
       "removed": "Removed",
       "stale": "This review is no longer current. Check the template source again before confirming.",
+      "rateLimited": "GitHub has temporarily limited source requests. Wait and retry, or use a temporary GitHub token with repository read access.",
       "failed": "Could not access or validate this source. Check the GitHub link, access token, and transfer method, then retry.",
       "github": "GitHub template",
       "progress": "Import progress",

@@ -296,6 +296,42 @@ describe('GitHub source review in the browser', () => {
       expect(api.request.mock.calls.filter(([url]) => String(url).endsWith('source-confirmations'))).toHaveLength(1);
     });
   }
+  it('keeps source controls and footer stable through pending acquisition, rate limit and explicit retry', async () => {
+    await page.viewport(1024, 768);
+    let complete!: (value: unknown) => void;
+    const acquire = vi.fn().mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+    window.redevenDesktopTemplateSources = { acquire, cancel: vi.fn() };
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <GitTemplateImport open template={template} onClose={() => {}} onImported={() => {}} serviceName={id => id} />, host);
+    await expect.element(page.getByRole('dialog')).toBeVisible();
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
+    await Promise.all(panel.getAnimations().map(animation => animation.finished));
+    const action = page.getByRole('button', {name:'Check updates',exact:true});
+    const button = Array.from(panel.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Check updates')!;
+    const title = panel.querySelector('h2')!;
+    const initial = [panel, title, button].map(element => element.getBoundingClientRect());
+    const stable = () => [panel, title, button].forEach((element, index) => {
+      const current = element.getBoundingClientRect();
+      for (const edge of ['x','y','width','height'] as const) expect(current[edge]).toBeCloseTo(initial[index][edge], 1);
+    });
+    await userEvent.click(action);
+    await expect.element(action).toBeDisabled();
+    stable();
+    complete({ok:false,error_code:'TEMPLATE_SOURCE_RATE_LIMITED'});
+    await expect.element(page.getByRole('alert')).toHaveTextContent('GitHub has temporarily limited source requests');
+    await expect.element(action).toBeEnabled();
+    stable();
+    expect(acquire).toHaveBeenCalledTimes(1);
+    await page.screenshot({path:'../../../dist/template-market/source-rate-limit.png'});
+    await userEvent.click(action);
+    stable();
+    complete({ok:false,error_code:'TEMPLATE_SOURCE_RATE_LIMITED'});
+    await expect.element(action).toBeEnabled();
+    stable();
+    expect(acquire).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps file preview geometry through deferred reads, failure and retry without showing the previous file', async () => {
     await page.viewport(390, 800);
     const host = document.createElement('div'); document.body.append(host);

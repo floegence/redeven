@@ -3851,6 +3851,7 @@
       "modified": "Modificado",
       "removed": "Eliminado",
       "stale": "Esta vista previa ya no está actualizada. Comprueba de nuevo el origen antes de confirmar.",
+      "rateLimited": "GitHub ha limitado temporalmente las solicitudes de origen. Inténtalo más tarde o usa un token temporal de GitHub con acceso de lectura al repositorio.",
       "failed": "No se pudo acceder a la fuente o validarla. Revisa el enlace de GitHub, el token de acceso y el método de transferencia e inténtalo de nuevo.",
       "github": "Plantilla de GitHub",
       "progress": "Progreso de importación",

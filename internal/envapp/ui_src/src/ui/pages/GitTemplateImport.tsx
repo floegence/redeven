@@ -859,6 +859,8 @@ export function GitTemplateImport(props: {
               {i18n.t(
                 error() === 'TEMPLATE_SOURCE_REVIEW_STALE'
                   ? 'webServices.sources.stale'
+                  : error() === 'TEMPLATE_SOURCE_RATE_LIMITED'
+                    ? 'webServices.sources.rateLimited'
                   : error() === 'TEMPLATE_SCHEMA_UNSUPPORTED'
                     ? 'webServices.sources.upgradeRequired'
                     : 'webServices.sources.failed',

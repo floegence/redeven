@@ -3851,6 +3851,7 @@
       "modified": "Modificado",
       "removed": "Removido",
       "stale": "Esta prévia não está mais atualizada. Verifique novamente a origem do modelo antes de confirmar.",
+      "rateLimited": "O GitHub limitou temporariamente as solicitações de origem. Tente novamente mais tarde ou use um token temporário do GitHub com permissão de leitura do repositório.",
       "failed": "Não foi possível acessar ou validar a origem. Verifique o link do GitHub, o token de acesso e o método de transferência e tente novamente.",
       "github": "Modelo do GitHub",
       "progress": "Progresso da importação",

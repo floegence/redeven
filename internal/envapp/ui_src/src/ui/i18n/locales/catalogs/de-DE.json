@@ -3851,6 +3851,7 @@
       "modified": "Geändert",
       "removed": "Entfernt",
       "stale": "Diese Vorschau ist nicht mehr aktuell. Prüfen Sie die Vorlagenquelle vor der Bestätigung erneut.",
+      "rateLimited": "GitHub hat Quellanfragen vorübergehend begrenzt. Versuche es später erneut oder verwende ein temporäres GitHub-Token mit Lesezugriff auf das Repository.",
       "failed": "Die Quelle konnte nicht abgerufen oder geprüft werden. Prüfe den GitHub-Link, das Zugriffstoken und den Übertragungsweg und versuche es erneut.",
       "github": "GitHub-Vorlage",
       "progress": "Importfortschritt",

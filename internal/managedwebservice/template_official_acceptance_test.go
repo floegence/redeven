@@ -33,15 +33,27 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 		t.Fatal("catalog cache differs")
 	}
 	client := templatecontract.GitHubClient{}
-	discovered, err := client.Discover(ctx, templatecontract.GitSource{Repository: "floegence/redeven-service-templates", Ref: "main"}, os.Getenv("GITHUB_TOKEN"))
-	if err != nil {
-		t.Fatal(err)
+	desktopSnapshots := os.Getenv("REDEVEN_OFFICIAL_TEMPLATE_DESKTOP_SNAPSHOTS")
+	var discovered templatecontract.SourceCatalog
+	if desktopSnapshots == "" {
+		discovered, err = client.Discover(ctx, templatecontract.GitSource{Repository: "floegence/redeven-service-templates", Ref: "main"}, os.Getenv("GITHUB_TOKEN"))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	indexed := map[string]templatemarket.Item{}
 	for _, item := range catalog.Items {
 		if item.Classification == "official" {
 			indexed[item.Source.Path] = item
 		}
+	}
+	if desktopSnapshots != "" {
+		for _, item := range catalog.Items {
+			if item.Classification == "official" {
+				discovered.Templates = append(discovered.Templates, templatecontract.SourceEntry{Path: item.Source.Path})
+			}
+		}
+		t.Log("qualification boundary: anonymous Desktop snapshots -> Runtime review -> deployment; unpinned API discovery is qualified separately")
 	}
 	if len(indexed) != len(discovered.Templates) || len(indexed) == 0 {
 		t.Fatalf("official source/catalog mismatch: %d/%d", len(discovered.Templates), len(indexed))
@@ -63,17 +75,43 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 			t.Cleanup(func() { os.RemoveAll(root) })
 			m := openDockerManagementTest(t, root, false)
 			expected := templatecontract.SourceExpectation{RepositoryID: item.Source.RepositoryID, CommitSHA: item.Source.CommitSHA, SHA256: item.SHA256}
-			snapshot, err := client.CapturePinned(ctx, templatecontract.GitSource{Repository: item.Source.Repository, Ref: item.Source.Ref, Path: item.Source.Path}, expected, os.Getenv("GITHUB_TOKEN"))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if item.Source.CommitSHA != discovered.Source.CommitSHA {
-				current, err := client.Capture(ctx, templatecontract.GitSource{Repository: item.Source.Repository, Ref: discovered.Source.CommitSHA, Path: item.Source.Path}, os.Getenv("GITHUB_TOKEN"))
-				if err != nil || current.SHA256 != item.SHA256 {
-					t.Fatal("official catalog does not match current directory bytes", err)
+			var snapshot templatecontract.Snapshot
+			if desktopSnapshots != "" {
+				raw, readErr := os.ReadFile(filepath.Join(desktopSnapshots, item.DocumentTemplateID+".snapshot.json"))
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				if err := json.Unmarshal(raw, &snapshot); err != nil {
+					t.Fatal(err)
+				}
+				if err := expected.Verify(snapshot); err != nil {
+					t.Fatal(err)
+				}
+				if snapshot.Source.Repository != item.Source.Repository || snapshot.Source.Path != item.Source.Path || snapshot.Source.Ref != item.Source.Ref {
+					t.Fatal("Desktop source selection differs")
+				}
+				remote, err := client.CapturePinned(ctx, templatecontract.GitSource{Repository: item.Source.Repository, Ref: item.Source.Ref, Path: item.Source.Path}, expected, "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				left, _ := json.Marshal(snapshot)
+				right, _ := json.Marshal(remote)
+				if string(left) != string(right) {
+					t.Fatal("Desktop and Runtime anonymous acquisitions differ")
+				}
+			} else {
+				snapshot, err = client.CapturePinned(ctx, templatecontract.GitSource{Repository: item.Source.Repository, Ref: item.Source.Ref, Path: item.Source.Path}, expected, os.Getenv("GITHUB_TOKEN"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if item.Source.CommitSHA != discovered.Source.CommitSHA {
+					current, err := client.Capture(ctx, templatecontract.GitSource{Repository: item.Source.Repository, Ref: discovered.Source.CommitSHA, Path: item.Source.Path}, os.Getenv("GITHUB_TOKEN"))
+					if err != nil || current.SHA256 != item.SHA256 {
+						t.Fatal("official catalog does not match current directory bytes", err)
+					}
 				}
 			}
+
 			evidence, err := templatecontract.InspectMarketTemplate(snapshot)
 			if err != nil {
 				t.Fatal(err)

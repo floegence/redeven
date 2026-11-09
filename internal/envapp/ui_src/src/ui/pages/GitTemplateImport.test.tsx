@@ -67,6 +67,20 @@ describe('GitHub template import review', () => {
     expect([...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Check updates')?.disabled).toBe(false);
   });
 
+  it('explains rate limits and allows explicit retry without changing the source', async () => {
+    const acquire = vi.fn().mockResolvedValue({ ok: false, error_code: 'TEMPLATE_SOURCE_RATE_LIMITED' });
+    window.redevenDesktopTemplateSources = { acquire, cancel: vi.fn() };
+    mount(template);
+    click('Check updates');
+    await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('GitHub has temporarily limited source requests'));
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('temporary GitHub token');
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(api.request).not.toHaveBeenCalled();
+    click('Check updates');
+    await vi.waitFor(() => expect(acquire).toHaveBeenCalledTimes(2));
+    expect(acquire.mock.calls[1][0].source).toEqual(acquire.mock.calls[0][0].source);
+  });
+
   it('explains the complete transfer route and keeps optional source fields collapsed', () => {
     window.redevenDesktopTemplateSources = {
       acquire: vi.fn(),

@@ -3851,6 +3851,7 @@
       "modified": "修改",
       "removed": "刪除",
       "stale": "此預覽已過期或來源已變更，請重新檢查範本來源後確認。",
+      "rateLimited": "GitHub 暫時限制了來源請求。請稍後重試，或使用具備儲存庫讀取權限的臨時 GitHub 存取權杖。",
       "failed": "無法存取或驗證此來源。請檢查 GitHub 連結、存取權杖與取得方式後重試。",
       "github": "GitHub 範本",
       "progress": "匯入進度",

@@ -3851,6 +3851,7 @@
       "modified": "修改",
       "removed": "删除",
       "stale": "此预览已过期或来源已变化，请重新检查模板来源后确认。",
+      "rateLimited": "GitHub 暂时限制了来源请求。请稍后重试，或使用具有仓库读取权限的临时 GitHub 访问令牌。",
       "failed": "无法访问或验证此来源。请检查 GitHub 链接、访问令牌和获取方式后重试。",
       "github": "GitHub 模板",
       "progress": "导入进度",
