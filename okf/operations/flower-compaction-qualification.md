@@ -7,63 +7,38 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Explicit isolated qualification uses published Floret through production runtime and surfaces. Deterministic compaction, installed Ollama and real DeepSeek lanes have distinct evidence and cleanup. Native tokens and visible characters stay independent; old attribution failures and untested providers remain explicit.
+Qualify published Floret through production Runtime/surfaces in isolated deterministic, installed Ollama and real DeepSeek lanes. Native tokens and visible characters are independent. Retain attribution failures, exact source scope and untested providers.
 
 # Contract
 
 ## Compaction
 ### Deterministic timeline qualification
-`REDEVEN_COMPACTION_RUNTIME_UI=1 GOWORK=off go test ./internal/ai -run '^TestFlowerCompactionRuntimeUI$' -count=1 -v` starts a task-owned SQLite Runtime and dynamic HTTP port with a scripted overflow provider.
-
-Browser checks retain every operation, canonical neighbor order, one row per operation, complete collapse and refresh. Empty managed-context collections map to wire arrays without mutating upstream snapshots.
+REDEVEN_COMPACTION_RUNTIME_UI=1 GOWORK=off go test ./internal/ai -run '^TestFlowerCompactionRuntimeUI$' -count=1 -v starts owned SQLite/HTTP state and a scripted overflow provider. Browser checks require every operation, canonical neighbor order, one row per operation, complete collapse and refresh. Empty managed-context collections become wire arrays without upstream mutation.
 
 ### Real DeepSeek qualification
-`scripts/check_flower_context_deepseek.sh --compaction` reads the configured official DeepSeek model and credentials through production parsers and uses isolated state.
-
-Every lane has bounded rounds and time.
-
-Its output retains synthetic canonical snapshots, screenshots, and sanitized request accounting.
+scripts/check_flower_context_deepseek.sh --compaction reads the configured official model/credentials through production parsers into isolated state. Bound rounds/time; retain synthetic canonical snapshots, screenshots and sanitized request accounting.
 
 ## Historical attribution
-Schema 23→24 preserves prior migrations/bytes. Upstream full/API/adoption/tag pass; earlier one-second compaction race timeout remains. Redeven Go/race/Node 1113+845 pass; browser 730/nine failures reproduce e5781b318.
+Schema 23→24 preserved migrations/bytes; upstream full/API/adoption/tag passed, with an earlier one-second race timeout retained. Redeven Go/race/Node 1113+845 passed; nine browser failures reproduced e5781b318: two companion, three approval, one parent report and three subagent geometry failures. Official-account character/usage scopes imply no causal token share.
 
 ## Ollama context
 ### Scope and ownership
-[AI model and context runtime](../ai/model-context-runtime.md) owns model capacity, budget, usage, and compaction semantics.
-
-The test closes its own services and proxy; Go removes its temporary stores.
+[Context runtime](../ai/model-context-runtime.md) owns capacity/budget/usage/compaction. Tests close owned services/proxy; Go removes stores.
 
 ### Acceptance cases
-- Small history: `/compact` returns one `noop/context_too_small` record, does not request a summary, and retains the original facts.
-- Manual compaction: enough synthetic history is added to cross Floret's compaction target without reaching automatic pressure. Bounded history growth must trigger the ordinary `engine/pre_request/threshold` path. Focused browser tests separately check the indicator's keyboard, tooltip, localization, and context-error recovery behavior.
+Small history yields one noop/context_too_small record, no summary request and retained facts. Manual compaction crosses Floret's target without automatic pressure; bounded growth separately exercises engine/pre_request/threshold. Focused browser tests own indicator keyboard/tooltip/localization/error recovery.
 
 ### Execution and evidence
-Run `scripts/check_flower_context_ollama.sh`. It is never part of ordinary CI or the push gate.
-
-A report's `pass` describes that scenario only; the Go process exit status is authoritative for the complete run.
+Run scripts/check_flower_context_ollama.sh explicitly, outside ordinary CI/push gates. Scenario pass is local; process exit certifies the complete run.
 
 # Boundaries
 
-These checks qualify published Floret through public APIs and actual Flower surfaces. They never substitute for deterministic historical migration and adoption release gates.
-
-Nine baseline failures:two companion, three approval, one parent report, three subagent geometry. Official-account character/usage scopes imply no causal token share. Mock arithmetic is not provider accuracy; user excluded push/gate. Git retains historical details.
-
-Results qualify the selected installed model and its observed serving capacity, not every Ollama model or host. This suite does not replace the separate browser interaction checks.
+These lanes do not replace historical migration/adoption gates or separate browser interaction checks. Installed-model capacity is not universal Ollama evidence; mock arithmetic is not provider accuracy. Preserve original failures/source identities in Git and raw evidence. Historical local delivery excluded push/gate.
 
 # Evidence
 
 ## Compaction
-The 2026-10-25 published-v7.87.0 run passed the live compaction, collapse/reopen and
-reload assertions in 5.323 seconds. The fixture now opens an explicit canonical
-reading window and uses the published SSE parser. Its first run failed because
-the old detail-only fixture never established the reading interest needed for
-live context updates; aligning the fixture restored coverage without changing
-production code or weakening the assertions. Optional private historical-copy
-and real-provider lanes were not rerun by this check.
-
-- `redeven:internal/ai/flower_compaction_ui_test.go` - Tests.
+October 25, published v7.87.0: live compaction/collapse/reopen/reload passed in 5.323 seconds. Initial detail-only fixture failed because it had no canonical reading interest; opening that window and using the published SSE parser restored coverage without production/assertion changes. Private historical-copy and real-provider lanes were not rerun. Source: internal/ai/flower_compaction_ui_test.go.
 
 ## Historical attribution
-[Context contract](../ai/flower-managed-model-context.md) owns current semantics. October 16/18 historical provider and frozen-cache observations remain in Git; empty headings are removed.
-
-- `redeven:internal/ai/model_catalog.go` - Source.
+[Managed context](../ai/flower-managed-model-context.md) owns current semantics. October 16/18 provider and frozen-cache details remain in Git; internal/ai/model_catalog.go owns implementation.

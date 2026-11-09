@@ -7,75 +7,46 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Runtime owns public listeners, saved HTTPS identity and session admission; Desktop presents explicit next-start changes. A signing failure retains only current addresses covered by the previous valid leaf and reports `certificate_refresh_failed`; retries recover automatically.
+Runtime owns public listeners, saved HTTPS identity and admission; Desktop presents explicit next-start settings. Signing failure retains only addresses covered by the prior valid leaf, reports certificate_refresh_failed and retries recovery.
 
 # Contract
 
 ## Network exposure
 ### HTTPS certificate ownership
-[Local UI certificates](#certificates) owns creation, import, replacement, removal, validation, and client trust. It never creates or repairs certificate material, installs trust, or falls back to HTTP. Certificate replacement affects the next start; the running TLS identity and sessions remain intact.
+[Certificates](#certificates) owns explicit creation/import/replacement/removal/validation/trust. Startup never creates/repairs identity or falls back to HTTP. Replacement is next-start; running TLS/sessions remain.
 
 ### Listener and origin boundary
-The public listener accepts only canonical authorities derived from its actual bound addresses.
-An HTTP loopback listener also routes the exact plugin child origins derived
-from its current parent authority and port exclusively to ReDevPlugin's Web
-resource handler. Child routing strips parent credentials and never enters
-Local UI management. A removed parent, different port, network-only address,
-or HTTPS listener cannot use this loopback resource route. The platform still
-validates each asset session, origin, ticket, and surface lifetime.
-
-Its isolated `flowersec-private-loopback/1` profile is unchanged and cannot authorize public clients.
+Accept only canonical authorities derived from actual bound addresses. HTTP loopback routes exact current parent/port-derived plugin child origins exclusively to released Web resource handler, stripping parent credentials and excluding management. Removed parent/different port/network-only/HTTPS cannot use that route. Platform still verifies asset session/origin/ticket/lifetime. flowersec-private-loopback/1 never grants public access.
 
 ### Native Desktop default-port recovery
-Only native Desktop launches with saved default `localhost:23998` and no explicit one-start bind override opt in through `--local-ui-default-port-fallback`. Other errors, custom ports, numeric loopback overrides, network binds, and wildcard binds never silently select another port.
-
-External bookmarks containing the old fixed port cannot follow the temporary address.
+Only native launch with saved localhost:23998 and no explicit one-start bind may opt into --local-ui-default-port-fallback. Custom/numeric/network/wildcard overrides and other errors cannot change ports silently. Old bookmarks do not follow temporary ports.
 
 ### Network changes and current reports
-While network exposure is enabled, Runtime enumerates eligible interfaces every two seconds. Its public list is explicit, including `[]`; private bridge endpoints cannot supply missing public addresses.
-
-Address failures affect public availability and never assert that the Runtime process has stopped or expose private management URLs.
+Enabled exposure refreshes eligible interfaces every2s with explicit list, including empty. Private endpoints cannot fill absent public addresses. Failures affect availability, not process status, and never expose private management URLs.
 
 ### Admission and lifecycle
-A network listener starts only for a concrete non-loopback IP or wildcard with a fixed nonzero port and an effective password.
-
-Occupied explicit ports fail with a startup error instead of silently selecting another port.
-
-Flowersec owns admission, session establishment, liveness, handler dispatch, close, and lease release; Redeven does not copy those loops.
+Network listeners require concrete nonloopback or wildcard, fixed nonzero port and effective password. Occupied explicit ports fail. Flowersec owns admission/session/liveness/dispatch/close/lease loops; no copied host lifecycle.
 
 ### Server-owned access configuration
-[Runtime two-factor authentication](runtime-two-factor-authentication.md) owns the persistent credential authority, one-time bcrypt verifier migration, TOTP enrollment, recovery, replay protection, and ordinary-session revocation. Explicit password changes remain next-start settings when MFA is disabled; MFA-enabled settings cannot clear/replace that password or downgrade HTTPS.
-
-Failed catalog saves roll back verifier initialization as well as replacement and clearing.
+[Two-factor](runtime-two-factor-authentication.md) owns credential authority, verifier migration, TOTP/recovery/replay/revocation. Password change is next-start only when MFA disabled; enabled MFA blocks clearing/replacement and HTTPS downgrade. Catalog-save failure rolls back verifier initialization/replacement/clearing.
 
 ## Certificates
 ### Identity and trust
-The user explicitly creates a device CA with `local-authority device-ca generate` and inspects it with `status`. Runtime startup never generates, replaces, or repairs certificate material.
-
-Public export contains certificate material only, never the key.
+User explicitly runs local-authority device-ca generate/status. Public export contains certificates, never keys; startup never generates/replaces/repairs them.
 
 ### Explicit certificate changes
-`import`, `regenerate`, and `remove` require `--confirm`. Reject malformed or extraneous PEM blocks, trailing text, encrypted/mismatched keys, invalid dates, invalid chains, missing SANs, and certificates unsuitable for server authentication.
-
-This supports process-interruption recovery; it does not promise an OS trust rollback or filesystem power-loss durability.
+import/regenerate/remove require --confirm. Reject malformed/extraneous PEM/trailing text/encrypted or mismatched keys/dates/chains/missing SAN/server-auth failures. Process-interruption recovery promises neither OS trust rollback nor power-loss durability.
 
 ### Coverage during network changes
-[Local UI network exposure](#network-exposure) owns the two-second interface refresh and atomic public snapshot.
-
-Startup and explicit saved-identity preflight retain their strict validation boundary.
+Two-second refresh atomically publishes public snapshots. Startup and explicit saved-identity preflight remain strict.
 
 ### Desktop interaction and private input
-The compact HTTPS panel presents certificate validity, expiry, and system trust separately. Public path, fingerprint, and bounded selectable diagnostics live in the expandable details section.
-
-Saving next-start HTTPS settings remains possible with an unusable certificate, with an explicit startup warning.
+Compact panel separates validity/expiry/system trust; paths/fingerprint/bounded selectable diagnostics are expandable. Saving unusable next-start identity remains possible with explicit startup warning.
 
 # Boundaries
 
-Installing trust in each HTTPS client is an explicit user action outside Runtime startup. Browser capabilities requiring a secure context remain unavailable with feature-specific guidance; browser security is never disabled. The private Desktop profile still requires exact preload provenance and numeric loopback, independently of explicit public HTTP support.
-
-Runtime owns saved identity validation and replacement; Desktop owns explicit management presentation and private file acquisition. Certificate operations cannot silently restart Runtime, install system-wide trust, or expose private material to the renderer.
+Client trust installation is explicit, outside startup. Missing secure-context capabilities receive specific guidance, never browser-security bypass. Private Desktop requires exact preload provenance/numeric loopback regardless of public HTTP. Certificate actions cannot restart Runtime silently, install system trust or expose keys to renderer. Runtime validates identity; Desktop owns management/private file acquisition.
 
 # Evidence
 
-- `redeven:internal/localui/public_address_refresh.go` - Source.
-- `redeven:internal/localui/public_address_refresh_test.go` - Tests.
+internal/localui/public_address_refresh.go and public_address_refresh_test.go cover refreshed identity/public snapshots.

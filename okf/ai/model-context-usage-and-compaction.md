@@ -7,85 +7,39 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns confirmed usage, pressure, bounded compaction and canonical installation; Redeven maps independent token, byte and image evidence. Aggregate image evidence carries exact image counts or decoded bytes, with preparation/response stage; counts never occupy byte or token fields.
+Floret owns confirmed usage, pressure, bounded compaction and canonical installation. Redeven projects independent token/byte/image evidence; exact image counts/decoded bytes retain preparation/response stage and never occupy another unit's fields.
 
 # Contract
 
 ## Usage and recovery
 ### Evidence and projection
-Lifecycle evidence may retain frozen trigger candidates, pressure and validated replacement. Floret installs complete actor-owned context before publishing its version. Changed context bypasses text cadence; equal snapshots coalesce text in bounded queues. Redeven neither accumulates usage nor reconstructs lifecycle facts, invents budgets or infers capacity from weights.
+Retain frozen trigger candidates, pressure and validated replacement. Install complete actor-owned context before version publication. Changed context bypasses text cadence; equal snapshots coalesce bounded text. Host never accumulates usage, reconstructs lifecycle, invents budgets or infers capacity from weights.
 
 ### Independent capacity evidence
-Published Floret v7.94.0 supplies optional typed request-byte and image-capacity evidence alongside
-compaction decisions. Host preparation failures include exact actual/limit byte
-counts; server HTTP 413 carries no guessed counts. Both can occur while the last
-measured token ratio is low. The indicator retains that confirmed ratio, while
-the divider explains the independent capacity cause and message-text estimate.
-Cause-only events, reloads and Desktop RPC retain this distinction. Historical
-records without this evidence remain unknown; no error-text inference is used.
+Published request-byte/image evidence is independent of token pressure. Preparation failures retain actual/limit bytes; HTTP413 invents no counts. Keep last confirmed token ratio even if low and explain the separate capacity cause/message-text estimate. Cause-only events, reload and Desktop RPC preserve this distinction; absent historical evidence is unknown, without error-text inference.
 
-Desktop
-RPC reconstructs the typed upstream cause before Engine recovery; incompatible peers
-are rejected at the version handshake. During recovery
-the inline divider says “Organizing image history…” in every shipped locale and
-shows measured cause details. Token utilization remains independently measured.
-
-Floret owns bounded recovery, complete ordered image-summary batching, protected
-current inputs and replacement validation. A failed/cancelled summary never
-installs a partial checkpoint, and completed tools are never replayed. Schema 34
-migration belongs exclusively to Floret; Redeven never patches upstream records.
+RPC reconstructs upstream typed cause before Engine recovery; version handshake rejects incompatible peers. Localized inline image-history organizing divider shows measured details. Floret owns bounded ordered image-summary batches, protected current inputs, replacement validation and schema34 migration. Failed/canceled summaries install no partial checkpoint; completed tools never replay.
 
 ### Timeline
-One row between short separators uses a compact surface-owned tooltip without expansion or reflow. Success labels canonical message text estimates explicitly, never as full provider-request input. Localize missing-count, running and cancelled explanations. Wrap original errors without clipping; localize the fallback only when absent.
-
-The tooltip follows the active surface and global theme outside chat. Prefer above, or below near the top boundary. Delay pointer-exit dismissal for hovering/selection. Escape, Tab, blur and outside clicks dismiss it; the visibility owner closes it on process collapse. Retain keyboard/touch access and independent retry.
+One compact row/short separators and surface-owned tooltip, no expansion/reflow. Success explicitly labels message-text estimates, not full request input. Localize absent/running/canceled counts; wrap original errors and localize only missing fallback. Tooltip follows surface/global theme, prefers above unless bounded, permits hover/selection through delayed pointer exit, and dismisses on Escape/Tab/blur/outside/process collapse. Retain touch/keyboard and independent Retry.
 
 ## Request measurement
-Floret calculates pressure from a qualified native prefix plus the remaining frozen-input estimate, or the complete estimate when proof does not match.
+Pressure uses qualified native prefix plus remaining frozen estimate, or full estimate without matching proof. Desktop prepares on credential owner, returning estimate/fingerprint; execution/refits/retries share frozen input. DeepSeek uses upstream credential-scoped expiring authorized image uploads across preparations. RPC claims native proof only if transferred and validated.
 
-Desktop RPC prepares supported provider requests on the credential-owning side and
-returns the rendered estimate and fingerprint. Execution, output refits and retries
-use the same frozen input. DeepSeek prepares authorized images through Floret's
-credential-scoped, expiring upload owner and reuses cached uploads for repeated
-preparations. The Desktop bridge does not claim native usage measurement proof
-that was not transferred and validated across the RPC boundary. Floret's logical
-preparation context releases Desktop handles after settlement or discard, while
-single-attempt close preserves replay for as long as that context remains active.
-Floret v7.107.4 verifies saved DeepSeek assistant boundaries even inside
-Runtime-grouped messages when Retry follows retained reasoning with a new tool
-call. Desktop forwards opaque state unchanged; confirmed effects and native
-history survive restart and Fork without replaying the tool.
+Logical preparation context owns Desktop handles through settlement/discard; closing one attempt retains replay while context lives. Published Floret v7.107.4 validates saved DeepSeek assistant boundaries within Runtime-grouped messages when Retry adds a tool after reasoning. Forward opaque state unchanged; restart/Fork retain effects/history without replay.
 
-RPC applies one-part request credit, bounded response reassembly and per-request
-cancellation. Prepared handles transfer ownership only after the client acknowledges
-the result; cancellation before acknowledgment releases them on Desktop. A slow consumer cannot fill another request's queue or close the
-shared connection; incompatible older peers fail the version handshake.
-
-The 90% threshold and public output reservation semantics remain upstream.
-
-Unknown gateways, hosted execution, automatic truncation and hidden continuation do not qualify.
-
-Output refits and transport retries preserve the same frozen input; failed or cancelled attempts never supply committed response evidence.
+One-part request credit, bounded response reassembly and per-request cancellation isolate slow consumers. Handle ownership transfers only on client acknowledgement; earlier cancellation releases Desktop resources. Old peers fail handshake. Upstream owns90% threshold/output reservation. Unknown gateways, hosted execution, automatic truncation and hidden continuation provide no measurement proof. Failed/canceled attempts provide no committed response evidence.
 
 ## Manual compaction
-Pure compaction ends after install/noop; Goal continuation prepares context and uses existing Engine/current review in the same execution. Floret owns Stop/Retry/restart.
+Pure compact stops after install/noop. Goal continuation prepares context under existing Engine/current review in the same execution; upstream owns Stop/Retry/restart.
 
 ### Explicit manual intent
-`POST /_redeven_proxy/api/ai/threads/{id}/context/compact` accepts `storage_generation`, `client_request_id` and optional `continue_goal`. True selects `goal_continuation` only when Floret finds an active canonical Goal during admission.
-
-Failure and noop retain their actionable error or result.
+POST /_redeven_proxy/api/ai/threads/{id}/context/compact accepts storage_generation/client_request_id/optional continue_goal. True becomes goal_continuation only when admission finds an active canonical Goal. Failure/noop retains actionable result.
 
 # Boundaries
 
-Floret owns summary, validation, convergence and installation. Never reclassify historical `/compact` output as successful compaction. [Cache counts and latest/cumulative rates](model-request-reuse.md#cache-usage-presentation) use confirmed canonical usage, not another host store.
-
-Floret alone checks attempt identity, commits output, persists and revalidates measurements, selects pressure and executes bounded [compaction and recovery](#usage-and-recovery). [Request reuse](model-request-reuse.md) cannot broaden native coverage proof.
-
-Floret exclusively owns canonical compaction and Goal execution. [Usage and presentation](#usage-and-recovery) maps upstream facts; [qualification](../operations/flower-compaction-qualification.md#compaction) defines isolated runtime and provider checks.
+Summary, convergence, installation, attempt identity, commit, persisted measurement/revalidation, pressure and recovery belong to Floret. Never reinterpret historical /compact as success or add a host usage store. [Cache rates](model-request-reuse.md#cache-usage-presentation) need confirmed usage; reuse never broadens coverage. [Qualification](../operations/flower-compaction-qualification.md#compaction) owns isolated checks.
 
 # Evidence
 
-- `redeven:internal/ai/floret_thread_context.go` - Source.
-- `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Tests.
-
-- HTTP proof isolation, WebSocket lifetime changes, hidden execution rejection and explicit zero output.
+internal/ai/floret_thread_context.go and internal/flower_ui/src/runtimeCurrentView.test.ts own projection; HTTP proof-isolation/WebSocket lifetime/hidden-execution/explicit-zero tests cover boundaries.

@@ -7,52 +7,33 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Retain successful same-resource content through refresh while initial loads occupy final geometry. Refresh preserves successful same-resource content, including empty results. Equal items retain DOM identity, focus, expansion and scroll; pagination progress stays at the end.
+Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end.
 
 # Contract
 
 ## Page continuity
-Without a successful result, retain initial presentation until authoritative data/actionable error. Keep mutation, attachment, maintenance and plugin execution progress separate from inventory loading.
+Retain initial presentation until authoritative data or actionable error; inventory loading is separate from mutation/attachment/maintenance/plugin execution. Use existing action indicators, accessible out-of-flow status or geometry-neutral overlays. Pending/stale/failed/recovered states add no rows or width changes; an empty reserved status lane is not a workaround.
 
-Use existing header/action indicators, accessible out-of-flow status or geometry-neutral local overlays. Never insert additional loading, cached-result or refresh-status text into normal flow: pending, stale, failed and recovered states cannot add rows, move existing controls/content or change their width. Do not reserve an empty status row as a workaround.
+Use structural placeholders and bounded responsive bodies with reachable header/close/footer, published Floe components and no arbitrary delay/height animation. Runtime/resource/source identity scopes retention; replacement/access loss fences late replies. Preserve same-resource drafts, but submit only with current readiness/permission. Unknown Runtime is pending, not missing. Library initialization cannot erase a selected canvas card before arrival. Failed preview shows the requested path/retry, never previous-file content.
 
-Initial reads use structural placeholders in final geometry. Editors/previews/settings retain bounded responsive body viewports with reachable headers/close/footer. Use published Floe components/theme tokens without arbitrary delays/height animations.
-
-Runtime/resource/source identity scopes retention. Navigation, replacement and access loss invalidate it and fence late replies. Preserve unsaved same-resource drafts; submission requires readiness/permission. Unknown Runtime status is pending, never missing installation. Canvas opening is separate from library initialization: keep the selected card until arrival. Failed file-preview requests show their requested path/retry in the same viewport, never previous-file results. Expose real progress/permission failures/errors.
-
-- Host Applications/Web Services/Containers/Codespaces use shared frames/skeletons; [resource cache](env-resource-cache.md) owns snapshots/refresh/fencing.
-- Files keeps real workspace chrome with blank regions until the directory owner admits its first valid response.
-- Terminal/Monitoring use shared status until catalog/first live sample/error, retaining content on later attachment/polling. Metrics are not inventory.
-- Settings/Flower/Tessiven/Plugin Center/dynamic plugins use shared module status; resource/runtime/lifecycle owners govern readiness/errors.
-
-`ENV_PAGE_PRESENTATIONS` exhaustively covers `BuiltinActivityPage` loading/reload policies in Activity and Workbench. [Filesystem navigation](filesystem-picker-navigation.md) retains its security boundary.
+Host Apps/Services/Containers/Codespaces use shared frames and [resource snapshots](env-resource-cache.md). Files keeps workspace chrome until first directory response. Terminal/Monitoring retain content after initial catalog/sample/error; metrics are not inventory. Settings/Flower/Tessiven/Plugin Center/plugins share module status with feature-owned readiness. ENV_PAGE_PRESENTATIONS exhaustively maps Activity/Workbench BuiltinActivityPage loading/reload; [filesystem navigation](filesystem-picker-navigation.md) retains security.
 
 ## Connection continuity
-An admitted same-resource workspace stays mounted and locally interactive through recoverable transport loss, including Flower drafts, pane placement and plugin drawers. A compact accessible status exposes stop/resume/retry and technical details on demand. Remote commands and submissions still require the current published session and permission; unavailable session HTTP rejects without queuing a later mutation. Initial loading, revoked access and terminal recovery failure retain their blocking surfaces. Completion does not add a success-overlay delay.
+Admitted same-resource workspaces stay mounted and locally usable through recoverable transport loss, including drafts/panes/plugin drawers. Compact accessible status exposes stop/resume/retry and optional details. Current session/permission still gates remote commands; unavailable HTTP never queues a later mutation. Initial loading, revoked access and terminal recovery failures remain blocking. No completion-overlay delay.
 
 ## Asynchronous layout
-Use published Button loading slot/`icon`; changing labels use `StableText` with every localized transient/completion/failure label. Host preparation has independently scrolling body/persistent action baseline. Unknown image dimensions use bounded 16:9 contain sizing; long diagrams/render errors scroll in reserved viewports.
-
-Template discovery keeps its refresh label and icon slot fixed; loading uses the published Button spinner, failure uses its warning icon, and details remain in an out-of-flow tooltip plus an accessible live description. Retry stays on the same button. Initial reads use the existing catalog skeleton; successful empty catalogs remain empty during refresh. Reserve scrollbar gutters on scrolling bodies so placeholder/content changes cannot shift their chrome horizontally.
+Published Button owns spinner/icon; StableText includes every localized transient/result label. Preparation body scrolls independently of fixed actions. Unknown images use bounded 16:9 contain regions; diagrams/errors scroll in reserved viewports. Template refresh retains label/icon slot, uses warning/spinner, and exposes failure details out of flow plus live description; Retry is the same button. Empty catalogs stay empty during refresh. Reserve scrollbar gutters, not status lanes.
 
 ## Reload geometry
-HTML head installs Floe's independent `reload-placeholder` before external modules/styles. It serializes no HTML, resource text, images, inputs, URLs or permissions and invents no resource count. Shared page registry governs reload eligibility; [Activity navigation](activity-navigation-restoration.md) owns selection. Fresh authoritative data may change final layout.
+Install independent Floe reload-placeholder in HTML head before modules/styles. It stores no HTML/content/images/inputs/URLs/permissions and invents no resource count. Shared page registry and [Activity restoration](activity-navigation-restoration.md) own eligibility/selection; fresh data may change final layout.
 
 ## Asset recovery
-Capture document ESM entry URLs with published `createDocumentAssetRecovery`; unobtrusive notice reports updated/unavailable content. Retain authenticated route and explicit user reload. Never retain old bundles, rewrite module names or serve HTML as JavaScript.
+Published createDocumentAssetRecovery captures entry URLs and exposes unobtrusive updated/unavailable notice with explicit reload. Preserve authenticated route; never retain old bundles, rewrite names or serve HTML as JavaScript.
 
 # Boundaries
 
-Loading stays local to page/widget; never replace unrelated mounted content, the canvas or successful results. Authentication/access loss outranks retention, which grants no permission.
-
-Normal-state acceptance measures actual content tops, including charts and session table: stable empty feedback lanes/margins cannot pass. Validate published dependencies without aliases/overlays.
-
-Remembered geometry conveys no resource data/authority; unavailable storage cannot block startup or hide recovery. Transport readiness proves neither current nor loadable assets. Build/import failures expose recovery without reloading over unsaved work or changing authentication/Desktop process identity.
+Loading remains local; access loss outranks retention. Acceptance measures real content tops (charts/session tables), not empty feedback margins. Use published dependencies without overlays. Remembered geometry grants no data/authority; storage failure cannot block recovery. Transport readiness proves no asset validity. Import/build failures cannot auto-reload over drafts or change authentication/process identity.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.templateContinuity.browser.test.tsx` - Actual template drawer geometry, input identity/focus, selection, scroll and tooltip bounds through initial/cache/refresh/failure/recovery; Host, Container and Compose at desktop and narrow localized sizes, including empty snapshots.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.
-- `redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx` - Fixed preview region and failed different-file retry.
-- `redeven:internal/envapp/ui_src/src/styles/tessiven-runtime-dialog-continuity.browser.test.tsx` - Library card/focus retention through delayed or failed opening.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPageLoading.tsx` - Source.
+EnvPortForwardsPage.templateContinuity.browser.test.tsx measures real drawer/input/focus/selection/scroll/tooltip bounds across cache/failure/recovery, Host/Container/Compose and localized narrow/desktop/empty states. FlowerSurface.settingsDialog, GitTemplateImport and tessiven-runtime-dialog-continuity browser suites cover retained settings, failed new-file previews and canvas arrival. EnvPageLoading.tsx owns frames.

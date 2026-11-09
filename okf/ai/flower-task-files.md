@@ -7,55 +7,41 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Flower keeps intermediates in Runtime state and finals at the user's destination. Private roots grant no sibling authority. Registry [filesystem policy](tool-permission-runtime.md) applies to every file/patch operation; cwd only resolves paths. Transactionally publish settings/validated canonical upload claims while retaining the source-deletion gate.
+Intermediates belong to Runtime state; finals to requested destination. Private roots grant no sibling authority. [Filesystem policy](tool-permission-runtime.md) governs all tools; cwd resolves paths only. Publish settings/validated canonical upload claims transactionally under source-deletion gate.
 
 # Contract
 
 ## Placement and authority
-Runtime owns `<StateDir>/task-files/<ThreadID>/{scratch,staging}`; finals belong at the requested destination or selected project/worktree, independent of temporary cwd. Admission/provider context publish identical absolute roots. System placement overrides skills without filename heuristics or new permissions; source/tests/builds retain normal locations. Children get FLOWER_SCRATCH_DIR/FLOWER_STAGING_DIR, never FLOWER_OUTPUT_DIR; cwd/HOME/cache/TMPDIR keep normal semantics.
-
-Reject escaping symlinks/siblings without adding whitelists for authorized external/detached roots.
+Runtime owns StateDir/task-files/ThreadID/{scratch,staging}; finals use user's destination/project/worktree, independent of temporary cwd. Admission/provider context share absolute roots. System placement overrides skills without filename heuristics/new grants; ordinary source/test/build locations remain. Children receive FLOWER_SCRATCH_DIR/FLOWER_STAGING_DIR, never FLOWER_OUTPUT_DIR; cwd/HOME/cache/TMPDIR retain semantics. Reject escaping links/siblings without whitelisting authorized external roots.
 
 ## Fork and recovery
-Fork copies current scratch/staging even at historical cuts, not historical file snapshots; projects/finals remain shared. Block source admissions/cleanup, cancellably drain admitted work and reject unreaped processes. Rooted bounded copying preserves executable bits, checks identity/size/time/final tree, rejects unsupported types/external/hard links and renames complete private staging only.
+Fork copies current scratch/staging even at historical cut, not historical snapshots; project/finals stay shared. Block source admissions/cleanup, cancellably drain admitted work, reject unreaped processes. Rooted bounded copy preserves executable bits, checks identity/size/time/final tree, rejects external/hard links/unsupported types and renames complete private staging only.
 
-Unadmitted copies stay invisible; canonical replay finishes preparation without recopying admitted edits/cleanup. Source markers support interrupted publication/context, survive cleanup and disappear on deletion. Recheck ownership before failed-copy removal.
-
-Startup/periodic recovery scans 50 names/batch, skips in-flight gates and removes private stages/marked forks lacking settings. Explicit orphan operations share the target gate. Retry keeps canonical identity but copies afresh. Context maps ancestor suffixes, including nested forks; request inspection/repair of hardcoded paths without rewriting history. Ancestor cleanup cannot delete descendants.
+Unadmitted copies remain invisible; canonical replay finishes publication without recopying admitted edits. Source markers survive cleanup until deletion and support interrupted context/publication. Recheck ownership before removing failed copies. Startup/periodic scans50names/batch, skips in-flight and removes private stages/marked forks without settings. Orphan actions share target gate. Retry preserves canonical identity with fresh copy. Context maps nested ancestor suffixes; inspect/repair hardcoded paths without rewriting history. Ancestor cleanup never deletes descendants.
 
 ## Delivery and discovery
-file_present validates/hashes an authorized regular file outside application state, cancellably checking identity/size/mtime. Return path/title/MIME/size/SHA-256/mtime/endpoint and thread/turn/run IDs; never relocate originals.
+file_present cancellably validates/hashes authorized regular files outside app state with identity/size/mtime checks; returns path/title/MIME/size/SHA256/mtime/endpoint/thread/turn/run without moving original. Files discovers canonical authorized successful results (50records/page,32KiB/record), retaining restart/Fork provenance without crawling/ledger. Availability checks unchanged size/mtime, no historical rehash; missing/changed/unavailable are observations.
 
-Files discovers successful authorized Floret results (50 records/page,32 KiB/record), preserving Fork/restart provenance without crawling or another ledger. Available means accessible with unchanged size/mtime; history does not rehash. Changed/missing/unavailable are observations.
+Default deliveries/uploads; Process files separates tool images/temporary files without retention change. One controller advances50item/128byte-preview windows through empty/search pages until cursor end; viewport end drives reads. Initial sources may parallelize, then serialize. Repeated cursor offers Retry; temporary/child preview pauses discovery, no fullView/retention scans. Equal same-owner refresh preserves successful rows/focus/scroll. Scope change invalidates; close/change aborts discovery/preview/download reads and fences replies. Partial failure retains successes. Floe Dialog owns bounds/Tab/Escape/restoration; close retains query/filter/scroll, folder handoff closes. Env has rich renderers; Desktop image/PDF/text/Markdown/opaqueHTML, otherwise Download.
 
-Default view is deliveries/uploads; Process files separates tool images/Temporary files without changing retention. One controller reads 50-item/128-byte-preview windows through empty/search results until cursor end; viewport end advances. Initial sources may parallelize, then serialize. Repeated cursors expose Retry; temporary navigation/child preview pauses discovery. No full View/retention scan.
-
-Same-owner refresh retains equal/successful rows, focus and scroll. Thread/runtime change invalidates; close/change aborts discovery/previews/download reads and fences late replies. Partial failure keeps successful rows. Floe Dialog owns placement/focus/Tab/Escape/row restoration; close retains query/filter/scroll, folder handoff closes it. Env supplies rich renderers; Desktop supports image/PDF/text/Markdown and opaque-origin sandboxed HTML, otherwise Download.
-
-loadTaskFile uses validated endpoints, reauthorizes each 256 KiB, rejects version/offset drift, caps previews at20 MiB and streams downloads. Desktop permits exact thread endpoints/query keys with IPC cancel. Browser Blob sinks retain their memory cost; reads never publish originals.
+loadTaskFile validates endpoint and reauthorizes every256KiB, rejects version/offset drift, caps preview20MiB and streams downloads. Desktop permits exact thread endpoint/query keys with IPC cancel. Blob sinks retain memory costs; reads never publish original.
 
 ## Downloads and panel
-Enqueue before destination selection in Shell Downloads: Env top bar, one Desktop full/companion owner. Deliveries/temp use validated chunks; uploads/images use attachment reads. Retry binds original thread/source/runtime; metadata stores no URLs/Blobs.
+Enqueue in Shell Downloads before destination: one Env topbar/Desktop full-companion owner. Deliveries/temporary use validated chunks; uploads/images use attachment reader. Retry binds original source/thread/runtime; metadata contains no URL/Blob. Manager owns destination/progress/cancel/failure/retry/completion. Thread/list changes stop previews, not admitted downloads; reopened lists check active downloads before cleanup. Late settlement cannot revive cancellation; finalization cannot cancel. Native destination offers Reveal/Open, browser handoff stays explicit. Retain until Shell exit/Clear finished, never import OS history.
 
-The manager owns progress/destination/cancel/failure/retry/completion. List/thread changes stop previews, not admitted downloads. Reopened lists consult active downloads before cleanup. Late settlement cannot revive cancellation; finalization cannot cancel. Native destinations offer Reveal/Open; identify browser handoff. Retain records until Shell exit/Clear finished, never import OS history.
+Published controls/icons/tokens: title/close header, search/refresh body, filters only multiple known kinds, removed choice resets All. No ambiguous totals/empty headings/collapsed images/manual paging. Delivered means file_present. Preserve same-name image names/times. Keyboard rows show origin/size/lazy thumbnail/exceptional availability, hiding success badges/MIME parameters/IDs/absolute paths even in tooltip; paths remain action inputs. Phone labels wrap beside accessible download/folder/source.
 
-Use published Floe controls/icons/tokens. Title/close in header, search/refresh in body; filters only for multiple known kinds, vanished selection resets All. No ambiguous totals, empty headings, collapsed images or manual paging. Delivered means file_present. Keep same-name image names/timestamps. Rows offer keyboard preview, origin/size, lazy thumbnails and exceptional availability; hide success badges/MIME parameters/IDs/absolute paths even in tooltips. Paths remain action inputs. Phone names wrap beside accessible download/folder/source actions.
-
-Temporary files appears only when present, with Back/preview/confirmed cleanup; Process files has no blanket cleanup. Restore focus/scroll; active work/downloads disable cleanup. Failed pages expose Retry beside retained content. Only body scrolls in a stable responsive viewport; explicit locales and [loading continuity](../ui/page-loading-continuity.md#page-continuity) apply.
+Temporary files appears only when present, with Back/preview/confirmed cleanup; Process files has no blanket delete. Restore focus/scroll, active work/downloads block cleanup. Failed pages offer Retry beside retained data. Body alone scrolls in stable viewport; complete locales and [loading continuity](../ui/page-loading-continuity.md#page-continuity) apply.
 
 ## Cleanup/deletion
-List <=200 files after <=10,000 entries, disclosing truncation/lower bounds. Confirmed RWX cleanup pins Runtime-owned roots, rejects symlinks and checks opened identities; paths grant no deletion authority. Active/queued turns, interactions, admitted work and unreaped terminals block it through in-memory admissions/canonical View.
+List<=200 after<=10000entries, disclose truncation/lower bound. Confirmed RWX cleanup pins owned roots, rejects symlinks/checks opened identity; path grants no delete authority. Active/queued turns/interactions/admitted work/unreaped terminals block via admissions/canonicalView. Deletion settles canonical work/stops owned terminals; force explicitly cancels. Resume settings cleanup only after Summary ErrThreadDeleted. Maintenance handles50settings/pass/bounded waits, advances failures/retries next cycle. Clean files before product/child records; remove anchors only after success.
 
-Deletion settles canonical work/stops owned terminals; force explicitly cancels. Resume from settings only after Summary confirms ErrThreadDeleted. Maintenance handles50 settings/pass with bounded waits, advances failures and retries next cycle. Clean files before product/child state; remove anchors only on success.
-
-Cleanup preserves uploads/images. Deletion releases upload claims while canonical retention protects other queues/forks/references. Exclude finals; archival deletes nothing and has no TTL. Disclose project-local state.
+Cleanup preserves uploads/images. Deletion releases claims while canonical retention protects queues/forks/references. Exclude finals; archive deletes nothing/noTTL. Disclose project-local state.
 
 # Boundaries
 
-Legacy tmp/task-evidence names prove no ownership: leave them for explicit browser inspection/deletion. Never relocate history or guess ownership. Complete terminal logs and immutable snapshots remain separate, unclaimed capabilities.
+Legacy tmp/task-evidence names prove no ownership; leave for explicit inspection/deletion, never relocate/guess. Complete terminal logs/immutable snapshots remain separate capabilities.
 
 # Evidence
 
-- [File owner](../../internal/ai/task_files.go), [lifecycle tests](../../internal/ai/task_files_test.go) and [publication/restart/attachment regressions](../../internal/ai/conversation_files_regression_test.go).
-- Browser acceptance covers theme/phone/search/partial failure/cancel/routing/focus/cleanup; layer-4000 hit tests cover foreground previews, keyboard, temporary reads, same-name images and HTML/Markdown in both carriers.
-- [Explicit local DeepSeek qualification](../../internal/ai/task_files_qualification_test.go): configured V4.1 Flash (1017), deepseek-flash, isolated state; preserve source config/secrets/selected production model. Verify project cleanliness, cross-turn reuse, final placement/provenance, Fork/nested Fork after ancestor cleanup, restart, parent deletion, modification detection and final preservation.
+internal/ai/task_files.go/task_files_test.go/conversation_files_regression_test.go cover ownership/publication/restart/attachments. Browser covers phone/themes/search/partial/cancel/routing/focus/cleanup and layer4000 preview/keyboard/temporary/same-name/HTML/Markdown in both hosts. task_files_qualification_test.go uses configured deepseek-flash/isolated state with config/secrets/model preserved; verifies clean project/cross-turn reuse/final provenance/Fork/nestedFork after ancestor cleanup/restart/deletion/change detection/final retention.

@@ -7,37 +7,31 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Gateway independently owns Runtime attachment/device admission/relay, working without Cloud account, cached authority or public Internet. Cloud alone owns membership/organizations/roles. Gateway has no Cloud machine registration, Namespace assignment, management renewal, delegated Runtime publication or Cloud command receiver.
+Gateway independently owns attachment/device admission/relay without Cloud account, cached authority or public Internet. Cloud alone owns membership/organizations/roles. Gateway has no Cloud machine/Namespace/renewal/delegated-publication/command ownership.
 
 # Contract
 
 ## Authority ownership
-Gateway owns its stable identity, paired client keys, Runtime attachments, local network policy and active transports. Runtime explicitly consents to each attachment and owns its application TLS identity, environment password/MFA, sessions and host execution restrictions. Gateway administration grants no Runtime lifecycle or application authority. Desktop and Web Center provide the environment directory and opening experience; Gateway catalogs only describe attached Runtimes. The authorized platform model gateway is a separate Cloud AI endpoint, not this service. Device access, host administration and Runtime application authorization are independently verified. Desktop and Web Center hold their own client identities; saved host coordinates and client observations confer no management authority.
-
-Runtime may independently enroll with Cloud. Gateway failure affects only traffic using that Gateway.
+Gateway owns stable identity/client keys/attachments/local policy/transports. Runtime explicitly consents and owns application TLS/password/MFA/sessions/host restrictions. Gateway admin grants no Runtime lifecycle/app authority. Desktop/Web Center own directory/opening and separate client identities; catalogs describe attachments only. Cloud AI gateway is a different endpoint. Verify device/host/application authority independently; coordinates/observations grant none. Runtime may independently enroll Cloud; Gateway outage affects only its traffic.
 
 ## Public and private endpoints
-One advertised HTTPS origin serves client pairing/identity/catalog/application admission, Runtime invitation exchange/enrollment/mTLS attachment, and optional restricted egress. All advertised origins prove one stable Gateway identity. Host restrictions apply before protocol admission. The public handler never mounts management or operation-query routes.
+One advertised HTTPS origin serves pairing/identity/catalog/app admission, invitation/enrollment/mTLS attachment and optional restricted egress. All origins prove same identity; host restrictions precede protocol. No public management/operation-query routes.
 
-The native Gateway packages support Linux and macOS. Administration uses a temporary private directory (0700), Unix socket (0600), and private host credential. SSH/container bridges reach that same host socket. A loopback TCP address or request header is not host proof. Windows Desktop manages remote/container Gateways; this change does not introduce a native Windows Gateway package or named-pipe implementation.
+Linux/macOS native packages administer through temporary0700directory/0600Unix socket/private credential, also reached by SSH/container bridge. Loopback/header is not host proof. Windows manages remote/container only; no native Windows/named-pipe addition.
 
 ## State and lifecycle
-Gateway state schema 6 owns local attachments and policy; authority epoch 70 owns the independent Gateway wire break. Unsupported attachment state and retired cloud-access.json fail before creating identities or rewriting data. Desktop saved-connection schema 5 migrates its local locator to connection_id while retaining the independently pinned gateway_id and device credentials.
+Schema6 owns attachments/policy, epoch70 Gateway wire. Unsupported state/retired cloud-access.json fails before identity creation or rewrite. Desktop connection schema5 migrates locator to connection_id while preserving pinned gateway_id/credentials. Trust schema4 removes host classification but preserves all identities/revocations; it changes neither attachment6 nor connection5. Runtime observation epoch71 does not advance Gateway70.
 
-Trust schema 4 removes historical host classification while preserving every device identity and revocation. Attachment schema 6 and saved-connection schema 5 do not change. Runtime epoch 71 owns its new observation response; it does not advance Gateway epoch 70.
+Explicit host maintenance is independent of client admission/stale service observations. Update/ordinary reinstall replaces package only, preserving config/identity/access; unsupported state fails unchanged, no implicit migration.
 
-Explicit host maintenance is independent of client-device admission and prior service observations. Update and ordinary reinstall replace only the managed package, preserving configuration, identity and client access. Unsupported state still fails unchanged; reinstall is never an implicit schema migration.
+Host-only configuration-reset requires explicit existing root,--confirm,stopped service and valid private trust. Archive owned attachment/network/hooks/retired-Cloud/operation config under private configuration-history/reset-*, preserving identity/revocations. Reject unsafe paths before moves. Durable marker fences startup/repeat reset; ordinary failures roll back, uncertainty keeps marker/archive for inspection without replay. Requires reconnect/reconfigure. Desktop separately confirms reset, verifies package before it, then starts/reconnects via host management. No public reset endpoint.
 
-Host-only configuration-reset requires an explicit existing state root, --confirm, a stopped service and valid existing private trust file. It archives Gateway-owned attachment, network/policy-hook, retired Cloud and host-operation configuration under a private configuration-history/reset-* directory, retaining device identity and revocations. Unsafe paths fail before moving files. A durable reset marker fences startup and repeat reset during interrupted file moves. Ordinary move failures roll back; uncertain failures retain the marker/archive for host inspection, never automatic replay. Reset requires reconnecting Runtimes and configuring network policy. Desktop exposes it as a separately confirmed reinstall option, prepares and verifies the package before reset, then starts and reconnects through host management. No public endpoint can invoke it.
-
-Saving, refresh, pairing and attachment management never implicitly start a stopped service. Removing a Desktop connection does not remove remote attachments or stop its service. Release/build metadata is diagnostic; unrelated Runtime releases do not change Gateway authority.
+Save/refresh/pairing/attachment never start stopped service implicitly. Removing Desktop registration neither removes attachments nor stops service. Release metadata is diagnostic; Runtime releases cannot change Gateway authority.
 
 # Boundaries
-Published Flowersec supplies invitation exchange, connection controllers, ByteStreams, relay and HTTPS proxy mechanisms. Redeven supplies product identity, explicit consent, local policy and host adapters. No sibling dependency links, copied transport implementations or Go replacements are used.
+
+Published Flowersec owns invitation/controller/ByteStream/relay/HTTPS mechanisms; Redeven owns product identity/consent/policy/adapters. No sibling links/copied transport/Go replacements.
 
 # Evidence
 
-- redeven:internal/gatewayservice/public_endpoint_test.go — One public endpoint admits pairing and rejects host routes.
-- redeven:internal/gatewayservice/host_admin_test.go — Private socket context plus credential; loopback/header spoof rejection.
-
-- redeven:cmd/redeven-gateway/configuration_reset_test.go — Explicit recovery, lock/path rejection, retained trust and recovered host catalog.
+internal/gatewayservice/public_endpoint_test.go verifies pairing/public-route exclusion; host_admin_test.go checks socket+credential/spoof denial. cmd/redeven-gateway/configuration_reset_test.go verifies explicit reset/locks/paths/trust/catalog recovery.

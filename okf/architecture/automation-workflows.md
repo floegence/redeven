@@ -55,7 +55,7 @@ The independent canvas offers a DAG, inspector, undo/redo, draft recovery, expli
 
 # Evidence
 
-- internal/automation: definitions, migrations, shared context, versioned grants, schedule adapter and deterministic engine tests.
+- internal/automation: definitions, migrations, shared context, grants and deterministic engine tests. internal/codeapp/automation_migration_test.go verifies real service startup/restart from schemas 1/2, unpublished drafts, retained publications/grants and byte-identical rejection of unsupported state.
 - internal/flowerwork and internal/ai/automation*: profile resolution, canonical execution, isolation and real-provider qualification.
 - internal/codeapp/automation*: current-policy authorization, fixed tools and scoped scheduled-report qualification.
 - internal/redevpluginintegration/agent_work*: installed-host capability adapter, review and revocation tests.

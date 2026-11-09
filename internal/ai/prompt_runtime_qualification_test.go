@@ -48,7 +48,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Minute)
 	defer cancel()
-	recorder := &deepSeekContextRecorder{}
+	recorder := &deepSeekContextRecorder{traceDir: root}
 	provider.BaseURL = newDeepSeekRecordingProxy(t, provider.BaseURL, recorder)
 	provider.ModelSelection = nil
 	provider.Models = []config.AIProviderModel{model}
@@ -208,7 +208,9 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			currentResults = append(currentResults, result)
 		}
 	}
-	if err := checkQualificationTerminalContinuation(currentResults); err != nil {
+	completion := qualificationTerminalHostWork(t, ctx, svc, thread.ThreadID, currentResults, root, recorder.snapshot()[terminalStart:])
+	report["terminal_completion"] = completion
+	if err := checkQualificationTerminalContinuation(currentResults, completion); err != nil {
 		t.Error(err)
 	}
 	report["terminal_results"] = currentResults
@@ -347,7 +349,108 @@ func qualificationFileSnapshot(t *testing.T, root string) map[string]string {
 	return files
 }
 
-func checkQualificationTerminalContinuation(results []flruntime.ThreadToolResult) error {
+// Completion evidence comes from the canonical host-work receipt, sealed output
+// and a user-role notice actually sent to the provider, never assistant prose.
+type qualificationTerminalCompletion struct {
+	Work         flruntime.HostWork      `json:"work"`
+	Snapshot     terminalProcessSnapshot `json:"snapshot"`
+	Notice       string                  `json:"delivered_notice"`
+	RequestIndex int                     `json:"request_index"`
+}
+
+func qualificationTerminalHostWork(t *testing.T, ctx context.Context, svc *Service, thread string, results []flruntime.ThreadToolResult, root string, requests []deepSeekContextObservation) qualificationTerminalCompletion {
+	t.Helper()
+	var process string
+	for _, result := range results {
+		if result.ToolName != "terminal_exec" {
+			continue
+		}
+		var receipt struct {
+			Data struct {
+				ProcessID string `json:"process_id"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(result.Content), &receipt); err != nil {
+			t.Fatal(err)
+		}
+		process = receipt.Data.ProcessID
+		break
+	}
+	works, err := svc.threadRuntime.(flruntime.ThreadHostWorkService).ListHostWork(ctx, identity.ThreadID(thread))
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := qualificationTerminalCompletion{RequestIndex: -1}
+	for _, work := range works {
+		if work.WorkID == process {
+			evidence.Work = work
+			break
+		}
+	}
+	if evidence.Work.WorkID == "" {
+		return evidence
+	}
+	evidence.Snapshot, err = readSealedTerminal(ctx, svc.threadRuntime, identity.ThreadID(thread), process, 0, terminalProcessModelReadBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence.Snapshot.ThreadID != thread || strings.TrimSpace(evidence.Snapshot.Output) != "14638" {
+		t.Fatalf("sealed command identity/output mismatch: %+v", evidence.Snapshot)
+	}
+	for _, request := range requests {
+		if request.Kind != "main" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(root, fmt.Sprintf("request-%03d.json", request.Index)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if qualificationRequestContainsHostNotice(raw, evidence.Work.Notice) {
+			evidence.Notice, evidence.RequestIndex = evidence.Work.Notice, request.Index
+			break
+		}
+	}
+	return evidence
+}
+
+func qualificationRequestContainsHostNotice(raw []byte, notice string) bool {
+	if notice == "" {
+		return false
+	}
+	var request struct {
+		Input []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"input"`
+	}
+	if json.Unmarshal(raw, &request) != nil {
+		return false
+	}
+	for _, message := range request.Input {
+		if message.Role != "user" {
+			continue
+		}
+		var text string
+		if json.Unmarshal(message.Content, &text) == nil && strings.Contains(text, notice) {
+			return true
+		}
+		var parts []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(message.Content, &parts) != nil {
+			continue
+		}
+		for _, part := range parts {
+			if part.Type == "input_text" && strings.Contains(part.Text, notice) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func checkQualificationTerminalContinuation(results []flruntime.ThreadToolResult, completions ...qualificationTerminalCompletion) error {
 	process := ""
 	cursor := float64(0)
 	completed := false
@@ -385,6 +488,25 @@ func checkQualificationTerminalContinuation(results []flruntime.ThreadToolResult
 		completed = status == terminalProcessStatusSuccess
 	}
 	if !completed {
+		for _, evidence := range completions {
+			work, snapshot := evidence.Work, evidence.Snapshot
+			var facts terminalProcessSnapshot
+			if json.Unmarshal(work.Result, &facts) != nil {
+				continue
+			}
+			if process != "" && work.WorkID == process && !work.Inherited && work.State == "completed" && work.OutputAvailable &&
+				snapshot.ProcessID == process && facts.ProcessID == process &&
+				work.TurnID.String() != "" && snapshot.TurnID == work.TurnID.String() && facts.TurnID == snapshot.TurnID &&
+				work.RunID.String() != "" && snapshot.RunID == work.RunID.String() && facts.RunID == snapshot.RunID &&
+				work.ToolCallID != "" && snapshot.ToolID == work.ToolCallID && facts.ToolID == snapshot.ToolID &&
+				snapshot.Status == terminalProcessStatusSuccess && facts.Status == terminalProcessStatusSuccess && snapshot.ExitCode == 0 && facts.ExitCode == 0 &&
+				!snapshot.Truncated && !snapshot.HasMore && snapshot.Output != "" && float64(snapshot.LastSeq) >= cursor &&
+				work.Notice == terminalCompletionNotice(snapshot) && evidence.Notice == work.Notice && evidence.RequestIndex >= 0 {
+				completed = true
+			}
+		}
+	}
+	if !completed {
 		return fmt.Errorf("finite command was not observed to completion")
 	}
 	return nil
@@ -399,6 +521,59 @@ func TestQualificationTerminalContinuationOracle(t *testing.T) {
 	for _, results := range [][]flruntime.ThreadToolResult{{start}, {start, start}, {start, {ToolName: "terminal_read", Arguments: `{"process_id":"other","after_seq":19}`, Content: read.Content}}, {start, {ToolName: "terminal_read", Arguments: `{"process_id":"build","after_seq":0}`, Content: read.Content}}} {
 		if err := checkQualificationTerminalContinuation(results); err == nil {
 			t.Fatal("accepted incomplete/relaunched/wrong-cursor execution")
+		}
+	}
+}
+
+func TestQualificationTerminalHostCompletionOracle(t *testing.T) {
+	start := flruntime.ThreadToolResult{ToolName: "terminal_exec", Arguments: `{"command":"build"}`, Content: `{"data":{"process_id":"build","status":"running","last_seq":19}}`}
+	read := flruntime.ThreadToolResult{ToolName: "terminal_read", Arguments: `{"process_id":"build","after_seq":19}`, Content: `{"data":{"process_id":"build","status":"running","last_seq":20}}`}
+	snapshot := terminalProcessSnapshot{ProcessID: "build", TurnID: "turn", RunID: "run", ToolID: "call", Status: terminalProcessStatusSuccess, Output: "14638\n", LastSeq: 20, LatestSeq: 20}
+	facts, _ := json.Marshal(snapshot)
+	notice := terminalCompletionNotice(snapshot)
+	complete := qualificationTerminalCompletion{Work: flruntime.HostWork{WorkID: "build", TurnID: "turn", RunID: "run", ToolCallID: "call", State: "completed", Result: facts, Notice: notice, OutputAvailable: true}, Snapshot: snapshot, Notice: notice, RequestIndex: 2}
+	if err := checkQualificationTerminalContinuation([]flruntime.ThreadToolResult{start, read}, complete); err != nil {
+		t.Fatal(err)
+	}
+	for name, change := range map[string]func(*qualificationTerminalCompletion){
+		"foreign process":  func(e *qualificationTerminalCompletion) { e.Work.WorkID = "other" },
+		"foreign turn":     func(e *qualificationTerminalCompletion) { e.Work.TurnID = "other" },
+		"foreign run":      func(e *qualificationTerminalCompletion) { e.Work.RunID = "other" },
+		"foreign call":     func(e *qualificationTerminalCompletion) { e.Work.ToolCallID = "other" },
+		"inherited":        func(e *qualificationTerminalCompletion) { e.Work.Inherited = true },
+		"unfinished":       func(e *qualificationTerminalCompletion) { e.Work.State = "bound" },
+		"unknown":          func(e *qualificationTerminalCompletion) { e.Work.State = "unknown" },
+		"failed":           func(e *qualificationTerminalCompletion) { e.Snapshot.Status = "error" },
+		"exit":             func(e *qualificationTerminalCompletion) { e.Snapshot.ExitCode = 1 },
+		"missing output":   func(e *qualificationTerminalCompletion) { e.Work.OutputAvailable = false },
+		"truncated":        func(e *qualificationTerminalCompletion) { e.Snapshot.Truncated = true },
+		"partial":          func(e *qualificationTerminalCompletion) { e.Snapshot.HasMore = true },
+		"stale cursor":     func(e *qualificationTerminalCompletion) { e.Snapshot.LastSeq = 19 },
+		"wrong output":     func(e *qualificationTerminalCompletion) { e.Snapshot.Output = "wrong" },
+		"missing delivery": func(e *qualificationTerminalCompletion) { e.Notice = "" },
+		"missing request":  func(e *qualificationTerminalCompletion) { e.RequestIndex = -1 },
+		"invalid facts":    func(e *qualificationTerminalCompletion) { e.Work.Result = json.RawMessage(`{}`) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := complete
+			change(&bad)
+			if checkQualificationTerminalContinuation([]flruntime.ThreadToolResult{start, read}, bad) == nil {
+				t.Fatal("invalid completion accepted")
+			}
+		})
+	}
+	if checkQualificationTerminalContinuation([]flruntime.ThreadToolResult{start, start}, complete) == nil {
+		t.Fatal("completion hid replay")
+	}
+	wrongCursor := read
+	wrongCursor.Arguments = `{"process_id":"build","after_seq":0}`
+	if checkQualificationTerminalContinuation([]flruntime.ThreadToolResult{start, wrongCursor}, complete) == nil {
+		t.Fatal("completion hid invalid cursor")
+	}
+	for _, role := range []string{"user", "assistant", "system"} {
+		raw, _ := json.Marshal(map[string]any{"input": []any{map[string]any{"role": role, "content": []any{map[string]any{"type": "input_text", "text": notice}}}}})
+		if qualificationRequestContainsHostNotice(raw, notice) != (role == "user") {
+			t.Fatalf("incorrect notice authority: %s", role)
 		}
 	}
 }

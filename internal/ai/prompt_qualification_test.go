@@ -879,7 +879,13 @@ func TestFlowerPromptQualificationRetainedEvidence(t *testing.T) {
 			if name == "repair_results" {
 				err = checkQualificationFixtureRules(results, qualificationRuntimeFixtures())
 			} else {
-				err = checkQualificationTerminalContinuation(results)
+				var completion qualificationTerminalCompletion
+				if raw := runtime["terminal_completion"]; len(raw) > 0 {
+					if decodeErr := json.Unmarshal(raw, &completion); decodeErr != nil {
+						t.Fatal(decodeErr)
+					}
+				}
+				err = checkQualificationTerminalContinuation(results, completion)
 			}
 			if err != nil {
 				runtimeIssues = append(runtimeIssues, name+": "+err.Error())

@@ -7,54 +7,41 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Operations bind exact engine, endpoint and resource identity. Known storage, registry, rate-limit, not-found and permission codes receive localized guidance beside the durable timeline.
+Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline.
 
 # Contract
 
 ## Operation ownership
 ### Admission and serialization
-The key binds engine, opaque endpoint ID, resource kind and canonical identity; a reused request ID with different hashes yields an idempotency conflict.
+Key by engine, opaque endpoint ID, kind and canonical identity. Reused request ID with changed hashes conflicts, never creates another operation.
 
 ### Exact recovery
-Settings reads a known operation by ID, or uses the read-only `by-request/<request_id>` endpoint when creation returned no operation ID. Neither depends on the bounded recent-operation list. Absence remains uncertain because admission may still be in flight; observation never replays a mutation. `Container-Operation-Admission: rejected` is emitted only before entering operation storage, never for a storage-boundary failure.
+Read exact operation ID or read-only by-request/<request_id>, independent of recent-list limits. Absence remains uncertain while admission may be in flight; never replay. Container-Operation-Admission: rejected is valid only before operation storage, not a storage-boundary failure.
 
 ### Execution, cancellation, and events
-The service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.
-
-Unknown codes receive generic localized failure copy; raw diagnostics stay separate. Timeout does not prove execution stopped. Desktop recovery directs users to its native application and status revalidation. History shows actual transitions, not synthetic stages/percentages.
+Service context spans queue through reconciliation. Only explicit API cancels; closing UI/streams/browser does not. Unknown codes use localized generic failure; raw code/message remain diagnostics. Timeout acknowledges possibly running host work. Desktop setup/startup directs to native app plus status revalidation. Service history uses actual transitions, no generic stages/percentage.
 
 ### Authoritative terminal observation
-After execution, reload the exact endpoint-bound resource or bounded inventory. Presence or absence never authorizes replay.
+After execution, reload exact endpoint resource/bounded inventory; presence/absence never authorizes replay.
 
 ### UI observation
-Shell owns pending admissions, concurrent operation streams and settlement invalidation. Settings and inventory views own only presentation. Ambiguous submissions retain their exact request identity and block duplicate work while background reads reconcile admission. View disposal cannot cancel accepted work. Same-owner reconnect retains history; authentication/environment changes retire observers. Inventory reads remain runtime/endpoint/view-generation fenced; stale snapshots cannot regress operation state.
-
-Mobile/desktop share state and cancellation authority. Lifecycle feedback stays on service cards; terminal polling refreshes facts after stream loss. The portaled drawer scrolls independently, with a desktop sidebar or narrow horizontal history strip. Stable operation IDs and pressed selection preserve focus/detail nodes. Details separate identity, cancellation, duration/health and timeline; active steps show pending, never completion.
+Shell owns pending admissions, concurrent streams and settlement invalidation; Settings/inventory own presentation only. Ambiguous submission retains exact request and blocks duplicates while background reads reconcile. Disposal never cancels admitted work; same-owner reconnect retains history, authentication/environment change retires observers. Fence requests/events by runtime/endpoint/view/generation; stale inventory cannot regress operations. Mobile/desktop share state/cancel authority. Card owns live lifecycle; history is secondary. Terminal polls refresh service/Runtime even after stream loss. Portaled drawer owns responsive container/scroll: sidebar on desktop, horizontal history above narrow details. Stable IDs/pressed rows preserve focus/detail DOM. Separate identity, cancel, duration/current health and timeline; active final step stays pending.
 
 ## Engine execution
-Observe Docker/Podman independently without probing inactive contexts or changing global selection.
+Observe Docker/Podman independently; never probe inactive contexts or change global selection.
 
 ### Execution ownership
-Observation failures return errors, never an empty project or successful removal.
+Every operation revalidates exact endpoint/resource; observation error is never empty project or successful removal.
 
 ### Image pull observation
-Pulls preserve CLI endpoint/credential helpers. Unix's dedicated terminal runner captures both streams with bounded lines and stripped controls; other runners stay unchanged. Windows uses combined pipes and only actual CLI counters. Cancel terminates the task process group; never replay a pull as a non-streaming fallback.
+Preserve CLI endpoint/credential helpers. Unix dedicated pull supplies terminal output and continuously reads both streams with bounded lines/control stripping; ordinary runners unchanged. Windows reports only actual combined-pipe counters. Cancellation stops owned process group; never replay executed pull through nonstreaming fallback.
 
-Downloaded bytes sum observed compressed counters; totals remain unknown until all noncached layers report sizes. Cached layers add no transfer bytes. Extraction is separate and may continue after download. Suppress unchanged redraws; retain bounded trailing error evidence, including containerd unresolved-reference not-found.
+Sum observed compressed-download counters even with unknown layers. Total stays unknown until every noncached layer reports it; cached contributes zero, extraction never replaces download and completed download is not completed extraction. Suppress unchanged redraws. Preserve bounded trailing error evidence, including containerd unresolved-reference missing errors.
 
 # Boundaries
 
-- The database is operation evidence, not a mutation queue or replay journal.
-- UI inventory and SSE consumers observe service authority; they do not own lifecycle state or reconciliation.
-- A runtime restart converts active work to interrupted after read-only observation; it never assumes success or retries the command.
-- The full native container ownership contract is defined in [Native container resources](container-resources-capability.md#authority).
-
-Endpoint identifiers remain internal, and current endpoint resolution precedes each operation. Unsupported engine methods fail explicitly. Public DTOs retain the native resource contract's redaction and permission rules.
+DB is evidence, not queue/replay journal. UI observes lifecycle; restart read-only reconciliation marks active work interrupted, never success/retry. [Native authority](container-resources-capability.md#authority) owns redaction/permissions. Endpoints stay internal and resolve freshly before operations; unsupported methods fail explicitly.
 
 # Evidence
 
-- `redeven:internal/containerresource/service.go` - Source.
-
-- `redeven:internal/containerengine/runtime_detection_test.go` - Tests.
-- `redeven:internal/containerengine/image_pull_stream_unix_test.go` - Terminal output, cancellation, and late failure evidence.
-- `redeven:internal/containerengine/cli_client_test.go` - Mixed unknown/cached layers and download/extraction accounting.
+internal/containerresource/service.go owns service. internal/containerengine/runtime_detection_test.go, image_pull_stream_unix_test.go and cli_client_test.go cover detection, terminal/cancel/late failures and mixed unknown/cached/extraction accounting.

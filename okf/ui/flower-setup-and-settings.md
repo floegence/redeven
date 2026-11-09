@@ -26,7 +26,7 @@ Settings edit the environment profile even with a Desktop model source. Flat sec
 [Provider configuration](flower-provider-configuration.md#provider-configuration) owns authentication, layout and connection-before-model sequencing.
 
 ## Retained panels
-Product settings commands enter the global [Settings host](runtime-settings.md#unified-settings-host), preserving Flower chat, composer, thread and extension owners. Standalone Flower retains its bounded fallback modal. Covered transcripts never acknowledge reads through modal exit. One canonical FlowerSettingsPanel/FlowerSettingsSurface owns provider/default edits; host adapters cannot duplicate its account or secret controller.
+Product settings commands enter the global [Settings host](runtime-settings.md#host-and-destinations), preserving Flower chat, composer, thread and extension owners. Standalone Flower retains its bounded fallback modal. Covered transcripts never acknowledge reads through modal exit. One canonical FlowerSettingsPanel/FlowerSettingsSurface owns provider/default edits; host adapters cannot duplicate its account or secret controller.
 
 ## Saving and ownership
 Independent adapter operations save permission, model profile and default model. Permission uses a serialized 700 ms coalescing controller, fences older responses and restores the last confirmed value on failure. Computer-use failures restore the confirmed switch and expose errors.

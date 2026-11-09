@@ -7,44 +7,36 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Welcome projects authoritative registration owners into a stable library. Show the Environment title, description and search/refresh/create actions. Keep counts on category filters and Runtime/window states on cards; show current snapshot issues below the description without reserving an empty row.
+Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows.
 
 # Contract
 
 ## Library
-- Pair Local/SSH/WSL with Cloud only when linked Runtime ID, Cloud origin, Cloud ID and ENV ID agree. Access-point origin is routing metadata. Current health outranks old window reports; retained display grants no control.
-- Search/equivalent snapshots preserve selection; source defaults apply once. Trusted Gateway summaries show name, endpoints, attachment identity/phase and selected egress dependency. One member needs no selector; refresh cannot restore retired selections or confirmation substitute missing members. Preserve menu order/capability checks.
-- Cloud uses one section per signed-in account and a shared grid. Offer Refresh normally/after sync failure, Sign in again after expiry. Either owner pin puts the group in Pinned; controls change only the active owner and explain the other pin.
+Pair Local/SSH/WSL with Cloud only when Runtime ID, Cloud origin/ID and ENV ID agree; access-point origin is routing. Current health outranks old window reports; display grants no control. Search/equal snapshots preserve selection; source defaults apply once. Gateway summaries retain trusted identity/endpoints/attachment/egress. One member needs no selector; refresh cannot restore retired choices or substitute missing members/confirmation. Keep menu order/capabilities.
+
+Cloud groups by signed-in account in a shared grid. Refresh serves normal/sync-failure states; expiry offers Sign in again. Either owner's pin makes the group Pinned; controls affect active owner only and explain another pin.
 
 ## Registration ownership
-Each action names Local, Runtime target, saved URL or Gateway-member storage ownership. Desktop serializes writes, publishes committed snapshots immediately and fences late probe/Open replies so removed records cannot return.
+Actions identify Local/Runtime target/URL/Gateway-member storage. Main serializes writes, immediately publishes committed snapshots and fences late probes/Open after removal. Explicit EnvironmentRegistrationRef, never renderer/placement inference, owns create/edit/rename/pin/remove. First WSL fills empty default; selection replaces, deletion clears atomically.
 
-- Create/edit/rename/pin/remove use explicit `EnvironmentRegistrationRef`, never renderer kind or placement inference. First WSL registration fills an empty default; explicit selection replaces it; deletion clears it atomically.
-- The one-time retired SSH-catalog migration matches destination, port and normalized root, transfers credentials/settings, preserves Runtime Target names and removes duplicate built-in Local projections without touching remote targets. Remove decoder/journal only when the supported catalog minimum excludes that schema.
-- Every Launcher Operation declares `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall` or `gateway`. Main/renderer title, details and cancellation consume it without another timeline.
+Retired SSH-catalog migration matches destination/port/normalized root, transfers credentials/settings, retains target names and removes duplicate built-in Local projections without remote mutation. Remove decoder/journal only when catalog minimum excludes it. Launcher declares active_progress_surface(open/runtime_lifecycle/reinstall/gateway); Main/renderer consume it without another timeline.
 
 ## Card presentation
-- Cards retain one opaque theme-derived plane and a quiet, stable contour. Connected cards carry a restrained success tint; fine-pointer hover gently shifts the same plane without removing the tint, swapping gradients, adding shadows or moving controls. Shared Floe color timing reverses from the painted state; reduced motion settles immediately and touch never latches hover.
-- Use **Open window** for unopened environments and **Show window** to focus existing sessions, preserving readiness, authority, lifecycle and session ownership. Use Environment/environment window/Redeven in settings, progress, recovery and titles; Env App is internal. Every shipped catalog translates the copy.
-- Card controls stay single-line; long progress actions wrap. Four creation entries form an equal-column 2x2 grid. Copy log/Close share Floe outline treatment, widths and row height without translation overflow.
-- Center primary content excluding the menu toggle; idle reserves no icon space. Submission shows loader/shimmer, accessible busy state and blocks repeat clicks; completion restores centered text. Keep geometry and icon-label grouping stable.
-- Batch refresh owns the header until the batch settles. Each card refresh follows its own probe/request and stops independently. Observation never makes primary actions pending; card actions cannot release batch ownership, nor batch completion clear card actions.
-- Runtime/Cloud/paired Gateway tabs occupy the standalone badge slot. Cloud auth/sync failure cannot disable Runtime actions. [Center navigation](desktop-welcome-navigation.md) preserves layout and never restarts on snapshots.
+One opaque themed plane/quiet contour, restrained connected-success tint and fine-pointer hover using reversible Floe color timing; no gradient swaps/shadows/moving controls. Reduced motion settles, touch cannot latch. Open window launches, Show window focuses, preserving authority/readiness/lifecycle. Localized Environment/environment window/Redeven replace internal Env App copy.
+
+Single-line controls/whole wrapping long progress; four creation entries form equal2×2grid. Copy log/Close share outline/width/height without locale overflow. Center primary excluding menu, with no idle icon reservation; busy loader/shimmer blocks duplicates, restores centered text and preserves geometry.
+
+Header owns batch refresh until all settle; each card owns its probe independently. Observations never make actions pending; batch/card completion cannot clear each other's ownership. Runtime/Cloud/paired Gateway tabs use badge slot; Cloud failure cannot disable Runtime. [Navigation](desktop-welcome-navigation.md) retains layout across snapshots.
 
 ## Platform presentation
-Last-known facts survive disconnect/restart until replaced; unknown OS never blocks Runtime or changes geometry, selection or focus.
+Retain last facts through disconnect/restart; unknown OS changes neither admission nor geometry/focus. Trusted runtime_platform/runtime_linux_distribution come from startup/attach/health/management/hello. Only exact distribution ID selects bundled original-color mark, never ID_LIKE/names/Desktop/WSL/image inference. Unknown Linux=Tux, unknown platform=device.
 
-- Trusted `runtime_platform`/optional `runtime_linux_distribution` arrive through startup/attach, health, management status and bridge hello. Only exact distribution ID selects its bundled mark, never `ID_LIKE`, names, Desktop identity, WSL labels or image names. Unknown Linux uses Tux; unknown platforms a device mark.
-- Main persists `runtime_platform_facts` in existing UI state by environment kind/stable identity. Renderer storage cannot write it or make remembered facts health/access authority.
-- Reserve a nonshrinking 1rem title slot, .875rem original-color OS mark and truncated single-line name. No tint/mask/grayscale. Localize accessibility copy, not brand names.
+Main persists runtime_platform_facts by stable environment identity in existing UI state; renderer cannot write or treat memory as health/access. Nonshrinking1rem slot contains .875rem untinted mark and truncated single-line name. Localize accessibility, not brand.
 
 # Boundaries
 
-Desktop owns registration metadata: edits/removal cannot delete Runtime/Gateway/WSL/remote resources or change policy. Recovery diagnostics are transient, not persistence or management authority. Platform display grants no access, lifecycle or plugin capability; [readiness](desktop-runtime-process-lifecycle.md#readiness) owns admission.
-
-[Interaction continuity](desktop-interaction-continuity.md) owns drafts, authority, visibility and stale responses; [SSH settings](desktop-ssh-environment-settings.md) owns fields and [WSL operations](desktop-wsl-runtime-operations.md) discovery/lifecycle.
+Registration edits never remove Runtime/Gateway/WSL/remote resources or change policy. Diagnostics are transient; platform display grants no capabilities. [Readiness](desktop-runtime-process-lifecycle.md#readiness) owns admission, [continuity](desktop-interaction-continuity.md) drafts/authority/fencing, [SSH settings](desktop-ssh-environment-settings.md)/[WSL operations](desktop-wsl-runtime-operations.md) their fields/lifecycle.
 
 # Evidence
 
-- `redeven:desktop/src/main/environmentAccess.ts` - Source.
-- `redeven:desktop/src/main/runtimeConnectionProjection.test.ts` - Tests.
+ desktop/src/main/environmentAccess.ts and runtimeConnectionProjection.test.ts own projection/regressions.

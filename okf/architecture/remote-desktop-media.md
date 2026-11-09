@@ -12,9 +12,9 @@ Published native packages own capture/encode/playback; session contract owns aut
 # Contract
 
 - Intel AV1 uses publisher-verified pinned amd64 musl media-driver/GMM in the private closure, never the root DRM exporter. Copies are intentional, not zero-copy claims.
-- Wayland cursor-free pixels/shapes come from one authorized PipeWire stream. Cursor-only buffers cannot restore a lost baseline. [Wayland evidence](../operations/remote-desktop-wayland-results.md#cursor-and-scheduling) distinguishes native/browser from physical latency results.
+- Wayland cursor-free pixels/shapes come from one authorized PipeWire stream. Cursor-only buffers cannot restore a lost baseline. [Wayland evidence](../operations/remote-desktop-wayland-results.md#evidence) distinguishes native/browser from physical latency results.
 - The privileged service owns login identity, input generation, painted-frame authority and uinput. Unprivileged media workers encode/cursor-report only. Disconnect, VT/session transition, stop or replacement release held input before new ownership.
-- DRM conversion retains producer DMA-BUF. Only qualified legacy Rockchip SDR XR24 modifier `0x0800000000000051` maps through AB24 to validated linear XB24; [AFBC evidence](../operations/remote-desktop-results.md#afbc-and-device-viewer) owns that narrow exception.
+- DRM conversion retains producer DMA-BUF. Only qualified legacy Rockchip SDR XR24 modifier `0x0800000000000051` maps through AB24 to validated linear XB24; [AFBC evidence](../operations/remote-desktop-results.md#evidence) owns that narrow exception.
 
 # Boundaries
 

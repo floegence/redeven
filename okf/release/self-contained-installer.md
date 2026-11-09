@@ -7,50 +7,36 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Release builds macOS/Linux amd64/arm64 self-contained installers without CGO and renders entry from exact binary digests, all signed via SHA256SUMS. Receiving hosts need no Go/Cosign/Python/OpenSSL/package manager, but require shell, HTTPS downloader and SHA256 utility.
+Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager.
 
 # Contract
 
 ## Trust and acquisition
-The HTTPS bootstrap is the initial trust boundary. Its reviewed fixed digest authenticates the installer before execution. Upstream Cosign Blob API verifies exact repository workflow, OIDC issuer and tag through authenticated TUF roots, certificate transparency and Rekor. Accept detached .sig plus PEM/base 64 PEM only; no format guessing, mutable trust overrides, disabled verification or fabricated markers. Signature/digest failure never executes Runtime.
+Initial HTTPS bootstrap's reviewed fixed digest authenticates installer. Upstream Cosign Blob API verifies exact repository/workflow/OIDC/tag using authenticated TUF roots/certificate transparency/Rekor. Only detached.sig and PEM/base64PEM; no format guessing/trust overrides/bypass/fake markers. Failures never execute Runtime.
 
-TUF requests are cancellable/time-bounded without writing user trust cache. Bound log responses before SDK parsing and admit detached X.509 hashedrekord/0.0.1 only; reject OpenPGP-capable/other types before the general parser. Pass unchanged bytes to upstream cryptographic checks.
+TUF requests are bounded/cancellable, without user trust cache. Bound log replies before SDK parsing; admit only detached X.509 hashedrekord/0.0.1, rejecting OpenPGP/other types before generic parser. Crypto receives unchanged bytes.
 
-Default installation resolves GitHub latest unless an exact version is supplied. Explicit managed channel uses the public version manifest and GitHub-first sources; self-upgrade environment semantics remain. Automatic resolution cannot downgrade a known version; explicit rollback can.
+Default resolves GitHub latest, exact version overrides. Explicit managed channel uses public manifest/GitHub-first acquisition; self-upgrade environment semantics remain. Automatic resolution cannot downgrade known version; explicit rollback can.
 
 ## Activation transaction
-A no-follow nonblocking lock serializes the root. Closed bounded archive membership rejects links, duplicates, traversal, missing/extra files, bad trailers and changed bytes. Published artifact-cache owns verified acquisition/storage.
+No-follow nonblocking root lock and closed bounded archive reject links/duplicates/traversal/missing-extra members/trailers/changed bytes. Published artifact-cache owns verified acquisition.
 
-Stage complete suites in .redeven-runtime-suites/<archive-sha256>, sync, read back digests/inventory/version and prepare pinned ripgrep before atomic redeven symlink replacement. Ripgrep 15.2.0 uses Linux musl archives on both architectures. New/reused executables must actually run and report that version; missing loader, timeout, wrong version or oversized output leaves prior activation unchanged. Detect concurrent changes; restore and verify prior entry after post-switch failure. Distinguish unchanged from committed-but-unconfirmed errors.
+Stage complete .redeven-runtime-suites/<archive-sha256>, sync/read back inventory/digests/version, prepare pinned ripgrep before atomic symlink switch. Linux uses musl ripgrep15.2.0 both architectures. New/reused binaries must execute/report exact version; loader/timeout/version/output failures preserve old activation. Detect concurrent change; restore/verify old entry after post-switch failure. Distinguish unchanged from committed-unconfirmed.
 
-Retain published suites and legacy flat resources: live older processes can still need them after multiple upgrades. Installer owns no process lifetime, so removal needs an explicit unused/rollback assessment; disk usage grows with distinct archives.
-
-Fresh install uses a writable user directory without implicit sudo. Idempotent bash/zsh/fish blocks update future PATH; print the current-shell command or direct path for unknown shells. Upgrade changes no shell profile and starts/restarts no service. Runtime owns maintenance/re-exec after success.
+Keep published suites/legacy flat resources for live old processes; deletion needs explicit unused/rollback assessment, with disk growth disclosed. Fresh install uses writable user directory, no sudo. Idempotent bash/zsh/fish PATH blocks affect future shells; print current-shell/direct-path guidance. Upgrade edits no profile and starts no service; Runtime owns maintenance/re-exec.
 
 ## Publication and promotion
-From v0.13.13, authenticated redeven-installer-contract.json declares minimum installer, closed targets and archive contract; older installers stop before incompatible acquisition. Render GitHub and Portal bootstraps from one template and four actual installer hashes; sign both through aggregate checksums. Portal uses its official mirror fallback, not another implementation.
+Since0.13.13 signed redeven-installer-contract.json declares minimum installer/closed targets/archive; older installers stop before incompatible acquisition. One template renders GitHub/Portal using four actual pins, signed aggregate checksums. Portal uses official mirror fallback, not another implementation.
 
-Publish assets with --latest=false. Before promotion, check-distribution authenticates inventory/contract and each bootstrap's complete digest, tag, channel and four pins without relying on the current default. After promotion, --check-active-entry requires GitHub byte equality; Portal authenticates its active bootstrap against its own signed release and candidate minimum installer, permitting an older recommended Runtime. Read back GitHub's default independently.
-
-README selects generated GitHub bootstrap; The Portal UI and install endpoint redirect to the generated Portal entry under its channel contract. Redirects confer no signature trust. No placeholder hashes/missing assets may activate. Public deployment is explicit. Rollback selects compatible immutable signed releases, never obsolete external-tool installers or duplicated shell code. Historical upgrade/native execution/page integration remain explicit acceptance, outside ordinary push gates.
+Publish --latest=false. Before promotion, check-distribution authenticates inventory/contract and full bootstrap digest/tag/channel/four pins independently of default. After promotion, --check-active-entry requires GitHub byte equality; Portal validates its active bootstrap's own signed release/candidate minimum, allowing older recommended Runtime. Independently read default back. README selects generated GitHub bootstrap; Portal UI/endpoint redirect to generated channel entry, without signature authority. Missing/placeholder assets cannot activate. Deployment is explicit. Rollback uses compatible immutable signed releases, never obsolete external-tool installers/duplicate shell logic. Historical/native/page qualification stays explicit outside push gates.
 
 ## Dependency security
-Consume checksum-verified published Cosign/Rekor patches. Require go-jose >=4.1.6 and no imported legacy golang.org/x/crypto/openpgp packages; preserve identity, signing time, roots and transparency. Qualify official releases plus tampering/cross-tag denial. The distinct general SDK OpenPGP finding and its format-rejection boundary remain documented below; a nonzero scanner is never a clean audit.
+Use verified published Cosign/Rekor, go-jose>=4.1.6 and released gRPC1.83.1 fixes; preserve identity/signing time/roots/transparency. Qualify official releases/tamper/cross-tag denial. No imported legacy golang.org/x/crypto/openpgp path; the general SDK's distinct deprecated OpenPGP implementation remains reported as GO-2026-5932. Reject those formats before SDK parsing. Nonzero symbol scans are not clean audits; no blanket suppression or removal of boundary without upstream replacement review/fixtures.
 
 # Boundaries
 
-Verification is online; transparency or trust-service outages fail closed.
-The bootstrap cannot defend against compromise of its original HTTPS script.
-Cross-compilation alone does not certify execution on every target OS.
-
-The dependency audit fixes the reviewed gRPC findings by selecting released
-`v1.83.1`. The general SDK still imports the deprecated OpenPGP implementation
-reported by `GO-2026-5932`; symbol scanning can continue to report it. The
-installer rejects those input formats before SDK parsing. Do not describe a
-nonzero scanner result as a clean audit, add a blanket suppression, or remove
-this boundary without reviewing the upstream replacement and genuine fixtures.
+Online trust/transparency outage fails closed. Bootstrap cannot protect against original HTTPS script compromise. Cross-compilation proves no native execution. Preserve reviewed scanner limitation and exact accepted input format.
 
 # Evidence
 
-- `redeven:internal/installer/signature.go:1` - Source.
-- `redeven:internal/installer/install_test.go:1` - Tests.
+internal/installer/signature.go and install_test.go cover authentication/transaction boundaries; Git retains audit and release provenance.

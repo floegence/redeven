@@ -7,64 +7,46 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns canonical provider history/rendering lineage; Redeven supplies model, prompt, permissions and ephemeral overlays at declared boundaries. Hosted search includes web_search_call.action.sources for Activity URLs; Qwen keeps its tool shape. Floret7.97.0 ResponsesOutput reconciles done/terminal.
+Floret owns canonical provider history/rendering lineage; Redeven supplies models, prompts, permissions and ephemeral overlays. Hosted search projects action.sources URLs into Activity; Qwen retains its own shape. Published ResponsesOutput reconciles done and terminal events.
 
 # Contract
 
 ## Tool argument ownership
-Floret owns syntax/schema validation and bounded model correction. Native Gateway
-calls and Desktop model-source RPC preserve exact nonempty argument text in
-`args_json`, including malformed JSON, rather than decoding it into an object.
-RPC v7 fences older peers before streaming because v6 requires an argument object.
-Object-based adapters retain `args`; a call cannot supply both authorities.
-Missing identity/arguments or incomplete streams remain transport failures.
-Canonical rejected calls and paired feedback cross history preparation unchanged;
-Redeven neither repairs arguments nor exposes correction feedback as Activity.
-Only validated calls may acquire authorization, execution or waiting-question
-ownership. Exhaustion retains confirmed effects and uses explicit Retry.
+Floret owns syntax/schema validation and bounded correction. Gateway and Desktop model-source RPC v7 retain exact nonempty args_json, including malformed/non-object JSON; v6 peers are fenced before streaming. Object adapters retain args; dual authorities fail. Missing identity/arguments and incomplete streams are transport failures. Canonical rejection/feedback crosses history unchanged, without host repair or correction Activity. Only validated calls acquire execution/authorization/questions. Exhaustion preserves confirmed effects and offers explicit Retry.
 
 ## Tool names
-Redeven owns the canonical-to-callable alias table at its provider boundary. Internal definitions, execution, history and Flower keep canonical names. When serialization changes a name, the detached tool description explicitly maps its canonical name to the callable name using that same table. OpenAI Responses/Chat, ChatGPT namespaces and DeepSeek receive this guidance before request measurement and freezing; unchanged names, including Anthropic definitions, receive none. Prompts, user content, scripts, argument schemas and canonical records are never text-rewritten. Returned stream/final calls still map back through the registered aliases; frozen retries retain identical guidance. This requires no Floret API, storage or dependency change.
+[Tool permissions](tool-permission-runtime.md) owns canonical names and the final provider surface. Definitions, calls, execution, history and Flower use the same provider-safe names; no provider alias table or prompt/script rewriting. Historical name migration belongs to its released owner, not an execution-time fallback.
 
 ## Responses
-Strict OpenAI rendering makes optional object properties required but nullable.
-Only adapter-added nulls are restored to omission before canonical validation;
-required fields, canonical nulls and false/zero/empty values keep their meaning.
-The nullable property's description retains its original guidance and explicitly
-says to use null for omission. Canonical schemas and non-strict DeepSeek requests
-remain unchanged. This belongs to Redeven's existing provider-schema adapter.
+Strict OpenAI schemas make optional properties required/nullable and explicitly document null-as-omission. Restore only adapter-added nulls; canonical null/required fields and false/zero/empty remain meaningful. Canonical schemas/non-strict DeepSeek remain unchanged.
 
-Completed reasoning ciphertext wins; fill only missing/null/empty from matching terminal item. Search done bytes win when only valid action.sources differ,never merge/overwrite lists; answer annotations independent. Validate terminal-only fallback; omitted terminal retains ordered done events. Duplicate done,identity/content/arguments/status/inputs/unknown fields/missing items/byte limits remain strict.
+Completed reasoning ciphertext wins; matching terminal items fill only missing/null/empty. Search done bytes win when only valid action.sources differ; never merge lists. Answer annotations are independent. Validate terminal-only fallback and retain ordered done events when terminal omits them. Duplicate done, identity/content/arguments/status/input/unknown-field/missing-item/byte violations remain strict.
 
-Redeven maps opaque SDK bytes/typed errors. CompleteWithDiagnostics returns safe paths,boundary,counts/chosen authority,never query/URL/values. Localize post-response.completed validation failure with exact copyable conflict detail. Attempt epochs identify requests,not failed retries. Validation never advances history,changes retry policy or replays effects.
+Map opaque SDK bytes and typed errors. CompleteWithDiagnostics exposes safe paths/boundary/counts/authority, never queries/URLs/values. Localized post-response.completed errors retain copyable safe conflict detail. Attempt epochs identify requests, not failed retries; validation cannot advance history/replay effects/change retry policy.
 
-Floret7.92.2 PrepareResponsesHistory owns OpenAI key/compatible/Qwen/ChatGPT replay. Hosted receipts,encrypted reasoning/functions survive disabled tools/search. Confirmed incomplete Responses keep snapshots for length continuation; failed/interrupted streams install none. ChatGPT rejects incomplete; filtering never advances history. Activity is not replay state.
+Floret PrepareResponsesHistory owns OpenAI/compatible/Qwen/ChatGPT replay. Hosted receipts, encrypted reasoning and functions survive disabled tools/search. Confirmed incomplete Responses retain length-continuation snapshots; failed/interrupted streams install none. ChatGPT rejects incomplete; filtering never advances history. Activity is not replay state.
 
-Estimate full native input. Only explicit API-key OpenAI responses_continuation plus Engine permission uses response-ID/suffix; others full input. Freeze request/choice through transport retry; rejected IDs cannot drop evidence. Explicit config may choose full replay. ChatGPT retains namespace/OAuth/WebSocket/published state. Historical ID-only states retain opt-in but missing bytes unrecoverable; new states store full upstream envelope. Reader removal requires future-major migration,not v7. Changed prefix discards stale IDs/suffix; Floret isolates model/account/secrets. Manual Retry/Fork keep facts/tools,clear source state.
+Measure full native input. Only explicit API-key OpenAI responses_continuation plus Engine permission enables response-ID/suffix; others use full input. Freeze request/choice across transport retries. Rejected IDs cannot drop evidence; explicit config may force full replay. ChatGPT retains namespace/OAuth/WebSocket/published state. Historical ID-only states remain opt-in but missing bytes are unrecoverable; new state stores full upstream envelopes. Reader removal needs a future-major migration. Prefix changes discard stale IDs/suffix; upstream isolates model/account/secrets. Manual Retry/Fork preserve facts/tools and clear source state.
 
-Floret7.99.0 CommitAssistant binds full text once before ordered functions. Hosted Activity boundaries are presentation. Old split bindings stay readable at saved prefixes; remap only native-proven whitespace coordinates,save next successful commit. Preserve search/reasoning/phases; changed content/role/tool/namespace/order fails without reset/replay. ResponsesHistoryError carries safe reason,zero-based record/canonical positions,counts/allowlisted fields via history_detail/Desktop RPC. Both hosts distinguish pre-network preparation/post-response commit,show details/manual Retry,omit irrelevant setup.
+CommitAssistant binds full text once before ordered functions. Old split bindings remain readable at saved prefixes; remap only native-proven whitespace coordinates and save on next successful commit. Preserve search/reasoning/phases; changed role/content/tool/namespace/order fails without reset/replay. ResponsesHistoryError exposes safe reason, zero-based record/canonical positions, counts and allowlisted fields through history_detail/Desktop RPC. Both hosts distinguish pre-network preparation from post-response commit and show details/manual Retry without unrelated setup.
 
-Floret7.37.0 owns append-only lineage keyed provider/model/reasoning/prompt/local-hosted tools/adapter/context policy/state compatibility. Flower uses saved Activity/neutral display,never unknown JSON/arguments.
+Append-only lineage keys provider/model/reasoning/prompt/local-hosted tools/adapter/context policy/state compatibility. Flower uses saved Activity or neutral display, never unknown JSON/arguments.
 
 ## Measurement/recovery
-Floret7.26.0 EstimateRenderedRequest owns Responses/Chat/Gemini signatures/Moonshot/Anthropic. Verified models use official vocabularies; unknown explicit multilingual BPE proxy. Server rendering may differ; no host calibration/preflight. Floret7.79.0 owns [measurement](model-context-usage-and-compaction.md#request-measurement),frozen-prefix pressure/schema28; [recovery](model-request-recovery.md) owns retries/deadlines/diagnostics/current feedback.
+Floret EstimateRenderedRequest owns provider rendering/signatures and vocabulary-backed counts; unknown models use an explicit multilingual BPE proxy. Server rendering may differ; no host calibration/preflight. [Measurement](model-context-usage-and-compaction.md#request-measurement) owns frozen-prefix pressure/accounting; [recovery](model-request-recovery.md) owns retries/deadlines/diagnostics.
 
 ## Anthropic
-Floret7.95.0 owns HTTP/SSE,frozen cache hints,authorized attachments,signed output; Redeven maps public Gateway content/controls/usage/events,retiring SDK route. Brand selects no behavior. Engine permits<=4 ephemeral cache markers separate from opaque state. Cache-off keeps signed history; secrets clear both reuse paths.
+Published Floret owns HTTP/SSE, frozen cache hints, authorized attachments and signed output; Redeven maps public content/controls/usage/events. Brand implies no behavior. Engine allows at most four ephemeral cache markers, separate from opaque state. Cache-off retains signed history; secret changes clear reuse.
 
-Completed output survives continuation/restart. Retry/Fork/compaction retain facts,clear source;never invent signed thinking/convert to answer. Frozen retries resolve no attachments,use new attempt IDs. Usage separates uncached/read/write; measured input requires complete partitions and no service-transformed hosted/signed input,otherwise estimated. Failed stream preserves billing without history advance. Structured HTTP errors/exact limits remain diagnostic.
+Completed output survives continuation/restart. Retry/Fork/compaction retain facts and clear source without invented thinking/answer conversion. Frozen retries resolve no attachments and use new attempt IDs. Usage separates uncached/read/write; measured input requires complete partitions and no transformed hosted/signed input, otherwise estimate. Failed streams preserve billing without history advance. Structured HTTP errors/exact limits remain diagnostic.
 
 ## DeepSeek temporary images
-Floret7.89.1 owns Files upload/validation/expiring reuse/accounting/frozen replay. Explicit official HTTPS root(/v1 allowed) only,one-hour expiry/48MiB request. Custom stays inline/32MiB. Runtime/Desktop each bound reuse by provider identity; endpoint/credential change selects new owner. Rotation uses HMAC-SHA256/random local key,not reusable plain credential hash. Reauthorize attachments each preparation;no host file-ID persistence/migration. Explicit missing/expired ref allows one upstream re-preparation; quota/upload/media errors never enter summary loop.
+Published Floret owns upload/validation/expiring reuse/accounting/frozen replay. Explicit official HTTPS root (/v1 allowed): one-hour expiry, 48MiB request. Custom endpoints remain inline/32MiB. Runtime/Desktop independently scope reuse by provider identity; endpoint/credential changes select a new owner. Rotation uses HMAC-SHA256 with random local key, never reusable plain credential hashes. Reauthorize each preparation; no host file-ID persistence/migration. Explicit missing/expired references permit one upstream re-preparation; quota/upload/media errors never enter summary loops.
 
 # Boundaries
 
-Redeven maps typed product state,never persists envelopes,reconstructs history or infers UI authority. [Context usage](model-context-usage-and-compaction.md#usage-and-recovery) owns accounting/compaction/capacity.
+Redeven maps typed state, never persists provider envelopes, reconstructs history or infers UI authority. [Context usage](model-context-usage-and-compaction.md#usage-and-recovery) owns accounting/compaction/capacity.
 
 # Evidence
 
-- `redeven:internal/ai/model_gateway_result_test.go` and `desktop_model_source_test.go`: raw malformed, non-object and large-integer arguments survive transport and history; ambiguous authorities fail.
-- `redeven:internal/ai/flower_control_correction_integration_test.go` and `flower_argument_correction_integration_test.go`: real DeepSeek transport to Service correction, valid questions, exhaustion, restart and explicit Retry without replaying confirmed effects.
-- `redeven:internal/ai/model_gateway_tool_names_test.go` - Real builtin definitions across 15 provider routes verify dispatched mappings, unchanged inputs/schemas, canonical stream/final identities and byte-identical retries.
-- model_gateway_responses_output_test.go/Floret restart:source variants,terminal-only citations,all adapters,one Activity,Goal/restart/Fork/Retry with confirmed tools. TestResponsesLiveHostedSearchCompletion uses synthetic searches/recreated adapters/configured provider,never production state.
-- model_gateway_anthropic_test.go:wire/usage/cache/secrets/frozen identity;Service signed/redacted two-turn thinking plus shared arguments/attachments/cancel.
+internal/ai/model_gateway_result_test.go and desktop_model_source_test.go preserve malformed/non-object/large-integer arguments and reject dual authority. flower_{control,argument}_correction_integration_test.go cover real transport, correction, questions, exhaustion, restart and Retry without replay. model_gateway_tool_names_test.go checks all provider routes/canonical identities and unchanged arguments/schemas/retries. Responses output/restart tests cover sources, citations, Activity, Goal/Fork/Retry; synthetic hosted-search tests use no production state. Anthropic tests cover wire/usage/cache/secrets/frozen identity, signed/redacted history, attachments and cancellation.

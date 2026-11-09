@@ -52,7 +52,13 @@ it.each([
     await vi.waitFor(() => expect(opened).toHaveBeenCalledOnce());
     expect(calls).not.toContain('DELETE /_redeven_proxy/api/remote-desktop/sessions/one');
   } else {
-    await vi.waitFor(() => expect(document.querySelector('[role=alert]')?.textContent).toContain('Invalid Web Service window request.'));
+    await vi.waitFor(() => expect(document.querySelector('[role=alert]')?.textContent).toContain('The desktop window could not open'));
+    const details = [...document.querySelectorAll<HTMLButtonElement>('[role=alert] button')]
+      .find(button => controlText(button) === 'Error details')!;
+    expect(details.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[role=alert] code')).toBeNull();
+    details.click();
+    await vi.waitFor(() => expect(document.querySelector('[role=alert] code')?.textContent).toBe('Invalid Web Service window request.'));
     expect(opened).not.toHaveBeenCalled();
     expect(calls).toContain('DELETE /_redeven_proxy/api/remote-desktop/sessions/one');
     expect(document.querySelector('.remote-desktop-guidance')).toBeNull();

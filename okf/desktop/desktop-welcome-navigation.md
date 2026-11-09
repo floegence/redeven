@@ -7,52 +7,34 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Welcome consumes published Floe presence and menu/tooltip CSS. Each surface has one presence owner; closing immediately revokes pointer/keyboard input and accessibility exposure, freezes its measured placement, and retains the DOM through the CSS exit.
+Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit.
 
 # Contract
 
-- Header, logo, sidebar and contextual actions select locally. Health/progress/snapshot updates cannot override navigation. Main captures navigation after asynchronous reads so stale destinations cannot publish newer revisions.
-- Selecting Environments, Redeven Cloud or Gateways renders immediately. Hiding/disposing cancels motion; return does not replay it. [Environment library](desktop-environment-library.md#library) retains card/state ownership.
-- Environments and Flower mount on first visit and remain mounted until disposal. Filesystem invalidation uses environment ID, Runtime start identity and session key, never health/probe timestamps.
+Header/logo/sidebar/context actions select locally. Health/progress cannot override selection; Main captures navigation after async reads to fence stale destinations. Environments/Redeven Cloud/Gateways render immediately. Hiding/disposal cancels motion without replay; [library](desktop-environment-library.md#library) owns cards. Environments/Flower mount on first use and persist; filesystem identity uses environment ID, Runtime start identity and session key, never probe times.
 
-- Gateway management is an in-shell detail page. Returning to All Gateways restores list search, filter, scroll and focus. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns its sections, enrollment dialogs and recovery behavior; global navigation preserves the retained management context.
+Gateway management is an in-shell detail page; All Gateways restores search/filter/scroll/focus. Global navigation retains its context; [Gateway interactions](../gateway/gateway-desktop-interactions.md) owns enrollment/recovery.
 
 ## Popup and dropdown ownership
+Reopening reverses the same panel with drafts/selection. Transform only the inner surface; measure untransformed layout. Resolved collision direction/anchor owns origin; reduced motion uses immediate Floe presence.
 
-Reopening reverses the same panel and preserves drafts/selection. Only the inner surface transforms; placement reads untransformed layout dimensions. Resolved collision direction and the anchor point determine motion origin. Reduced motion uses Floe's immediate recipe.
+- DesktopAnchoredOverlaySurface owns Environment split actions. DesktopActionPopover uses it for Runtime/Gateway progress/recovery, Cloud account/connections, SSH loading and directory help; DesktopPopover/DesktopTooltip use shared shorter tooltip presence.
+- EndpointsPopover retains QR as internal disclosure; DesktopThemePicker shares surface ownership. DesktopAnchoredListbox owns language/container/official Cloud provider/SSH destination options.
+- Published Dropdown owns saved Gateway/address pickers and object/connection actions. Select owns member/leave/Cloud-route/bootstrap and native form/listbox semantics.
+- Flower adapters retain model/permission/reasoning/thread/child/Goal/composer/context presence. Published Select/Dropdown own settings/extensions/browser connections/tool capabilities/Kimi/frame rate; rate input stays outside dragging.
+- File encoding/sheets use Select; find/info/cell panels retain shared presence. Compaction tooltip remains selectable. FlowerContextMenu retains presentation through exit.
+- Published palette/feedback/dialog/drawer/directory components retain focus/presence. Contextual Ask Flower uses content-sized PromptCard for placement/input/focus/motion.
 
-| Welcome entry points | Owner |
-| --- | --- |
-| Environment split actions | `DesktopAnchoredOverlaySurface` |
-| Runtime/Gateway progress, recovery, Cloud account/connection details, SSH loading details and directory help | `DesktopActionPopover` through the same surface |
-| Hover details and help | `DesktopPopover` / `DesktopTooltip`; tooltip uses the shorter Floe recipe |
-| Connection details and retained QR disclosure | `EndpointsPopover` through the same surface; QR expansion stays an internal disclosure |
-| Appearance picker | `DesktopThemePicker` through the same surface |
-| Language, container, official Cloud provider and SSH destination options | `DesktopAnchoredListbox` |
-| Saved Gateway/address pickers and Gateway object/connection actions | Published `Dropdown` |
-| Gateway member/leave target, Cloud route and SSH bootstrap strategy | Published `Select`, including native form state and accessible listbox semantics |
-| Embedded Flower model, permission, reasoning, thread switcher, subagent, goal, composer overflow/reference/command and context/compaction details | Existing Flower adapters consuming shared Floe presence |
-| Embedded Flower settings, extensions and browser connection selectors | Published `Select` / `Dropdown` |
-| Embedded Flower tool capability, Kimi endpoint and computer frame rate | Published `Select`; frame-rate input stays isolated from window dragging |
-| File preview encoding/worksheet selectors and find/info/cell details | Published `Select` and a retained shared-presence preview panel |
-| Compaction detail tooltip | Shared tooltip presence; text remains selectable while open |
-| Embedded Flower thread/transcript context menus | `FlowerContextMenu`; callers retain the current presentation through the shared exit |
-| Command palette, feedback disclosure, dialogs and drawers, working-directory picker | Published Floe components retain their own presence and focus lifecycle |
-| Contextual Ask Flower | Published content-sized `PromptCard`, including placement, input, focus and entrance/exit motion |
+Action popovers use observeDialogHeight: one outer material/height owner, inner content clip without fill/border/shadow. Top placement anchors bottom/trigger gap without text scaling. Observe beneath the height owner to avoid feedback; close freezes painted height, reduced motion commits natural size.
 
-Action popovers opt into published Floe `observeDialogHeight`; their content clip adds no second fill, border or shadow. The outer rounded surface owns material and height, while top placement anchors its bottom edge so expansion preserves the trigger gap without scaling text. Geometry observes the inner clip, below the height owner, to avoid ResizeObserver feedback. Closing during resize freezes the painted height through exit; reduced motion commits the natural size immediately.
+Environment split actions retain primary button/anchor through admission/progress/recovery/completion. StableText covers localized transient labels; published slow color tokens ease inverse ink/fill together. Tooltip changes never remount controls or change authority.
 
-An Environment split action retains one primary button and one anchor across admission, progress, recovery and completion. Localized transient labels use `StableText`; Floe's slow color tokens ease the inverse fill and foreground together. Tooltip availability cannot remount the control, and its existing action authority and progress disclosure behavior remain unchanged.
-
-Do not put these components inside open-only `Show` blocks; that would destroy their exit. Product observations may update content but never reopen a dismissed operation surface or release a newly reopened session. Selection and confirmation authority remain with their existing feature owners. Selects use the published popup contract. Ask Flower supplies product content and admission to the published `PromptCard`; Floe owns its compact appearance, input response, file-selection controls, model menu and motion. Desktop supplies the existing model directory and attachment transport. Changing the model affects the current request without writing global preferences; unknown-admission retry reuses the captured model and staged files.
+Do not wrap these components in open-only Show blocks. Observations cannot reopen dismissed surfaces or release a newer session. Existing owners retain selection/confirmation. PromptCard receives product content/admission and Desktop's model directory/attachment transport; Floe owns appearance/input/file/model/motion. Request-local model selection never changes global defaults; uncertain retry retains captured model/staged files.
 
 # Boundaries
 
-Navigation grants no Runtime authority. [Ask Flower cards](../ui/flower-activity-companion.md#contextual-window) owns contextual placement.
+Navigation grants no Runtime authority. [Ask Flower](../ui/flower-activity-companion.md#contextual-window) owns contextual placement.
 
 # Evidence
 
-- `redeven:desktop/src/welcome/App.tsx` - Source.
-- `redeven:desktop/scripts/check-welcome-popup-motion.mjs` - Browser sampling of entrance/exit, reversal, reduced motion, directions, viewport bounds and stable position layers at desktop/narrow widths in light/dark.
-- `redeven:desktop/src/welcome/DesktopOverlayMotion.client.test.tsx` - Exit input revocation, retained drafts and completion.
-- `redeven:desktop/scripts/check-office-preview.mjs` - Electron file-protocol selection, nested popup dismissal, responsive preview controls and retained document identity.
+App.tsx owns navigation. check-welcome-popup-motion.mjs samples directions, bounds, stable layers, entrance/exit/reversal and reduced motion at desktop/narrow light/dark. DesktopOverlayMotion.client.test.tsx covers input revocation/draft retention/completion. check-office-preview.mjs covers real Electron file-protocol selection, nested dismissal, responsive controls and retained document identity.
