@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -16,10 +16,15 @@ await session.run(async () => {
   const require = createRequire(path.join(desktop, 'package.json'));
   const { _electron } = createRequire(path.join(desktop, '../internal/envapp/ui_src/package.json'))('playwright');
   const bundle = process.env.REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT;
-  const evidence = process.env.REDEVEN_OFFICIAL_TEMPLATE_EVIDENCE;
-  assert.ok(bundle && evidence && path.isAbsolute(bundle) && path.isAbsolute(evidence));
+  const sourceEvidence = process.env.REDEVEN_OFFICIAL_TEMPLATE_EVIDENCE;
+  assert.ok(bundle && sourceEvidence && path.isAbsolute(bundle) && path.isAbsolute(sourceEvidence));
+  const evidence = path.join(sourceEvidence, 'product-' + randomUUID());
+  await mkdir(evidence);
+  console.log('Product evidence', evidence);
   const manifest = JSON.parse(await readFile(path.join(bundle, 'desktop-bundle-manifest.json'), 'utf8'));
-  const directory = await session.directory(await mkdtemp(path.join(tmpdir(), 'redeven-template-product-')));
+  // Public container inspection intentionally redacts macOS /private paths.
+  // Use the shared home, matching the native Docker acceptance contract.
+  const directory = await session.directory(await mkdtemp(path.join(homedir(), '.redeven-template-product-')));
   const state = path.join(directory, 'state');
   const home = path.join(directory, 'home');
   await mkdir(path.join(state, 'local-environment'), { recursive: true });
@@ -67,7 +72,7 @@ await session.run(async () => {
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     await page.getByRole('button', { name: 'Web Services', exact: true }).click();
     await page.getByRole('button', { name: 'Service templates', exact: true }).click();
-    const catalog = JSON.parse(await readFile(path.join(evidence, 'desktop-catalog.json'), 'utf8'));
+    const catalog = JSON.parse(await readFile(path.join(sourceEvidence, 'desktop-catalog.json'), 'utf8'));
     const item = catalog.data.find(item => item.document_template_id === 'deepseek-harness-container');
     assert.ok(item);
     const row = page.locator(`[data-template-id="${item.template_id}"]`);
@@ -93,7 +98,10 @@ await session.run(async () => {
     assert.ok(response.ok(), JSON.stringify(envelope));
     serviceID = (envelope.data ?? envelope).service.service_id; assert.ok(serviceID);
     report.service_id = serviceID;
-    await waitFor(async () => (await api(`/${serviceID}/inspection`)).status === 'running', 180000, 'real container installation');
+    report.receipt = envelope.data ?? envelope;
+    console.log('Created owned service', serviceID);
+    await waitFor(async () => { const inspected = await api(`/${serviceID}/inspection`); report.last_inspection = inspected; return inspected.status === 'running' || Boolean(inspected.last_failure); }, 180000, 'real container installation');
+    assert.equal(report.last_inspection.status, 'running', JSON.stringify(report.last_inspection.last_failure));
     report.steps.push('install form -> preflight -> container running');
     await page.screenshot({ path: path.join(evidence, 'product-running.png') });
     const service = page.locator(`[data-testid="managed-service-row"][data-managed-service-id="${serviceID}"]`);
@@ -109,11 +117,12 @@ await session.run(async () => {
     report.status = 'passed';
   } catch (error) {
     report.status = 'failed'; report.error = String(error);
+    if (serviceID && page && !page.isClosed()) report.inventory = await api('');
     if (page && !page.isClosed()) { await page.screenshot({ path: path.join(evidence, 'product-failure.png') }); report.visible = await page.locator('body').innerText(); }
     throw error;
   } finally {
     await cleanup();
-    await writeFile(path.join(evidence, 'product-deployment.json'), JSON.stringify(report, null, 2));
+    await session.writeEvidence(path.join(evidence, 'product-deployment.json'), report);
     await session.closeElectron(application);
   }
   console.log('Assertions complete: actual Desktop template review, deploy, open and cleanup');
