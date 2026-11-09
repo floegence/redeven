@@ -2205,6 +2205,7 @@
       "reviewFailed": "삭제 검토에 실패했습니다.",
       "chooseBranch": "삭제 계획을 검토하려면 지점을 선택하세요.",
       "safeDeleteBlocked": "안전 삭제가 차단되었습니다.",
+      "technicalDetails": "기술 세부 정보",
       "forceConsequences": "강제 삭제 결과",
       "type": "유형",
       "copyBranchName": "분기 이름 복사",

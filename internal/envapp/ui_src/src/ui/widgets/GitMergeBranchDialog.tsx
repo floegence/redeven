@@ -4,7 +4,7 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Dialog } from '../primitives/EnvAppModal';
 import type { GitBranchSummary, GitCommitFileSummary, GitPreviewMergeBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName, changeSecondaryPath, exactGitPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
-import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
@@ -168,20 +168,20 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
       <Dialog
         open={props.open}
         onOpenChange={(open) => {
-          if (!open) props.onClose();
+          if (!open && !merging()) props.onClose();
         }}
         title={i18n.t('uiCopy.git.mergeBranch')}
         bodyDescription={i18n.t('uiCopy.git.mergeDescription', { branch: branchName(), target: currentRef() })}
-        contentClass="p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
+        contentClass="git-dialog-body"
         footer={(
-          <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
-            <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-              <Button size="sm" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={loading() || merging()} onClick={props.onClose}>
+          <>
+            <div class="git-dialog-actions">
+              <Button size="md" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={loading() || merging()} onClick={props.onClose}>
                 {i18n.t('common.actions.close')}
               </Button>
               <Show when={props.previewError && props.branch}>
                 <Button
-                  size="sm"
+                  size="md"
                   variant="outline"
                   class={cn('w-full sm:w-auto', outlineControlClass)}
                   disabled={loading() || merging()}
@@ -191,7 +191,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                 </Button>
               </Show>
               <Button
-                size="sm"
+                size="md"
                 variant="default"
                 class="w-full sm:w-auto"
                 disabled={!canConfirm()}
@@ -206,22 +206,21 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                 <StableText reserve={[i18n.t('uiCopy.git.mergeBranch'), i18n.t('uiCopy.git.fastForwardTarget', { target: currentRef() }), i18n.t('uiCopy.git.mergeIntoTarget', { target: currentRef() }), i18n.t('git.notifications.upToDateTitle')]}>{confirmLabel()}</StableText>
               </Button>
             </div>
-          </div>
+          </>
         )}
         class={cn(
-          'flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl',
-          '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
+          'git-operation-dialog max-w-none',
           layout.isMobile() ? 'w-[calc(100vw-0.5rem)] max-w-none' : 'w-[min(60rem,96vw)]',
         )}
       >
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div class="min-w-0">
           <Show
             when={!loading()}
-            fallback={<GitStatePane loading loadingVariant="comparison" loadingRows={5} message={i18n.t('uiCopy.git.reviewingMergePlan')} class="m-4" surface />}
+            fallback={<GitStatePane loading loadingVariant="comparison" loadingRows={5} message={i18n.t('uiCopy.git.reviewingMergePlan')} surface />}
           >
-            <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? i18n.t('uiCopy.git.mergePreviewFailed')} class="m-4" surface />}>
-              <Show when={props.branch && preview()} fallback={<GitStatePane message={i18n.t('uiCopy.git.chooseBranchMergePlan')} class="m-4" surface />}>
-                <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-2 pb-4">
+            <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? i18n.t('uiCopy.git.mergePreviewFailed')} surface />}>
+              <Show when={props.branch && preview()} fallback={<GitStatePane message={i18n.t('uiCopy.git.chooseBranchMergePlan')} surface />}>
+                <div class="flex min-w-0 flex-col">
                   <div class="flex flex-col gap-3">
                     <GitSubtleNote class="text-foreground">
                       <div class="space-y-2">
@@ -259,12 +258,12 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                       </GitSubtleNote>
                     </Show>
                     <Show when={blockingReason()}>
-                      <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">
+                      <GitSubtleNote tone="warning">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                           <span>{blockingReason()}</span>
                           <Show when={canOpenStashShortcut()}>
                             <Button
-                              size="sm"
+                              size="md"
                               variant="outline"
                               class={cn('rounded-md', outlineControlClass)}
                               disabled={loading() || merging()}
@@ -285,7 +284,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                       </GitSubtleNote>
                     </Show>
                     <Show when={props.actionError}>
-                      <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.actionError}</GitSubtleNote>
+                      <GitSubtleNote tone="warning">{props.actionError}</GitSubtleNote>
                     </Show>
 
                     <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">

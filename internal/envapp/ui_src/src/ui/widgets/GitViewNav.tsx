@@ -18,9 +18,9 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 export function GitViewNav(props: GitViewNavProps) {
   const i18n = useI18n();
   const buttonBaseClass =
-    'cursor-pointer grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-xs transition-[background-color,color,border-color] duration-150';
+    'cursor-pointer grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-[length:var(--floe-type-body)] transition-[background-color,color,border-color] duration-150';
   const badgeBaseClass =
-    'inline-flex min-w-[1.25rem] items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold tabular-nums transition-colors duration-150';
+    'inline-flex min-w-[1.25rem] items-center justify-center rounded px-1 py-0.5 text-[length:var(--floe-type-caption)] font-semibold tabular-nums transition-colors duration-150';
   const tabRefs = new Map<GitWorkbenchSubview, HTMLButtonElement>();
   const itemIds = () => props.items.map((item) => item.id);
 

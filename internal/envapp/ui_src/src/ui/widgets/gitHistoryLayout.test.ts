@@ -303,7 +303,7 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-3 py-1.5 font-medium';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-3 py-2.5 align-top';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';");
-    expect(primitivesSrc).toContain("grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5");
+    expect(primitivesSrc).toContain("grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5");
     expect(primitivesSrc).toContain("'grid grid-cols-1 gap-2 border-t px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2'");
     expect(primitivesSrc).toContain("redevenDividerRoleClass()");
     expect(primitivesSrc).toContain("redevenSurfaceRoleClass('inset')");
@@ -376,7 +376,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('data-testid="git-sidebar-scroll-region"');
     expect(src).toContain('overflow-auto overscroll-contain');
     expect(src).toContain('grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2');
-    expect(src).toContain('min-h-4 truncate text-[10px]');
+    expect(src).toContain('min-h-4 truncate text-[length:var(--floe-type-caption)]');
     expect(src).toContain('gitToneSelectableCardClass(tone(), active())');
     expect(src).toContain('gitSelectedSecondaryTextClass(active())');
     expect(src).toContain('gitSelectedChipClass(true)');
@@ -535,9 +535,9 @@ describe('browser workspace layout wiring', () => {
     const patchSrc = read('./GitPatchViewer.tsx');
     const patchUtilSrc = read('../utils/gitPatch.ts');
 
-    expect(dialogSrc).toContain('flex max-w-none flex-col overflow-hidden rounded-md p-0');
-    expect(dialogSrc).toContain('rounded-md p-0');
-    expect(dialogSrc).toContain('contentClass="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"');
+    expect(dialogSrc).toContain('max-w-none overflow-hidden');
+    expect(dialogSrc).not.toContain('[&>div:first-child]');
+    expect(dialogSrc).toContain('contentClass="flex min-h-0 flex-1 flex-col overflow-hidden"');
     expect(dialogSrc).toContain("h-full w-full");
     expect(panelSrc).toContain("i18n.t('uiCopy.git.fullContext')");
     expect(panelSrc).toContain("i18n.t('gitDiff.loadingFullContext')");

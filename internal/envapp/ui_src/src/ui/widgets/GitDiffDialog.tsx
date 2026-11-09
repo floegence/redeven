@@ -30,10 +30,9 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
           onOpenChange={props.onOpenChange}
           title={title()}
           bodyDescription={props.description}
-          contentClass="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+          contentClass="flex min-h-0 flex-1 flex-col overflow-hidden"
           class={cn(
-            "flex max-w-none flex-col overflow-hidden rounded-md p-0",
-            "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
+            "max-w-none overflow-hidden",
             layout.isMobile()
               ? "h-full w-full"
               : "h-[88vh] max-h-[88vh] w-[min(1100px,94vw)]",

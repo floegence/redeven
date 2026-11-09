@@ -927,7 +927,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                       required
                                     >
                                       <Show when={props.reviewError}>
-                                        <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.reviewError}</GitSubtleNote>
+                                        <GitSubtleNote tone="warning">{props.reviewError}</GitSubtleNote>
                                       </Show>
                                       <div class="flex flex-wrap gap-2">
                                         <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} onClick={() => props.onCancelReview?.()}>

@@ -2205,6 +2205,7 @@
       "reviewFailed": "Échec de la suppression de la révision.",
       "chooseBranch": "Choisissez une succursale pour consulter son plan de suppression.",
       "safeDeleteBlocked": "La suppression sécurisée est bloquée.",
+      "technicalDetails": "Détails techniques",
       "forceConsequences": "Forcer les conséquences de la suppression",
       "type": "Taper",
       "copyBranchName": "Copier le nom de la branche",

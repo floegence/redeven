@@ -1,5 +1,4 @@
 import { Show, type JSX } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
 import { GitDeleteBranchReviewDialog } from './GitDeleteBranchReviewDialog';
@@ -87,13 +86,13 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
       safeConfirmLabel={worktreeMode() ? i18n.t('git.deleteBranch.deleteBranchAndWorktree') : i18n.t('git.deleteBranch.deleteBranch')}
       forceConfirmLabel={worktreeMode() ? i18n.t('git.deleteBranch.forceDeleteBranchAndWorktree') : i18n.t('git.deleteBranch.forceDeleteBranch')}
       dialogDesktopWidthClass={worktreeMode() ? 'w-[min(34rem,94vw)]' : 'w-[min(36rem,94vw)]'}
-      summaryNoteClass={cn('text-foreground', worktreeMode() && requiresWorktreeRemoval() ? 'border-error/20 bg-error/10' : '')}
+      summaryNoteClass="text-foreground"
       safeSummary={(
         <div class="space-y-2">
           <div class="text-xs font-semibold text-foreground">{i18n.t('git.deleteBranch.thisActionWill')}</div>
-          <ul class="space-y-1.5 pl-4 text-[11px] leading-relaxed text-muted-foreground">
+          <ul class="space-y-1.5 pl-4 text-[length:var(--floe-type-body)] leading-relaxed text-foreground">
             <li class="list-disc">
-              {renderHighlightedPlaceholder(i18n, 'git.deleteBranch.deleteLocalBranch', 'branch', branchName(), 'font-medium text-foreground')}
+              {renderHighlightedPlaceholder(i18n, 'git.deleteBranch.deleteLocalBranch', 'branch', branchName(), 'break-words font-medium text-foreground')}
             </li>
             <Show when={worktreeMode() && requiresWorktreeRemoval()}>
               <li class="list-disc">
@@ -110,9 +109,9 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
         </div>
       )}
       forceDeleteSummary={(
-        <ul class="space-y-1.5 pl-4 text-[11px] leading-relaxed text-muted-foreground">
+        <ul class="space-y-1.5 pl-4 text-[length:var(--floe-type-body)] leading-relaxed text-foreground">
           <li class="list-disc">
-            {renderHighlightedPlaceholder(i18n, 'git.deleteBranch.branchPermanentlyRemoved', 'branch', branchName(), 'font-medium text-foreground')}
+            {renderHighlightedPlaceholder(i18n, 'git.deleteBranch.branchPermanentlyRemoved', 'branch', branchName(), 'break-words font-medium text-foreground')}
           </li>
           <Show when={worktreeMode()}>
             <li class="list-disc">

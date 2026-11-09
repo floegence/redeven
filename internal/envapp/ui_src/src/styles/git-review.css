@@ -1,3 +1,78 @@
+/* Git adapters retain Floe's modal material, control scale and presence. */
+.git-section {
+  min-width: 0;
+}
+
+.git-notice {
+  min-width: 0;
+  padding: var(--floe-pad-control) var(--floe-pad-group);
+  border-radius: var(--floe-radius-field);
+  background: var(--redeven-surface-inset);
+  color: var(--foreground);
+  font-size: var(--floe-type-body);
+  line-height: var(--floe-line-body);
+  overflow-wrap: anywhere;
+}
+
+.git-notice[data-git-notice='warning'] {
+  background: color-mix(in srgb, var(--redeven-status-warning) 4%, var(--background));
+}
+
+.git-notice[data-git-notice='danger'] {
+  background: color-mix(in srgb, var(--redeven-status-error) 4%, var(--background));
+}
+
+.git-dialog-body {
+  overflow-wrap: anywhere;
+}
+
+.git-dialog-actions {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--floe-gap-control);
+}
+
+/* WindowModal has no shared footer shell; this adapter supplies exactly one. */
+.git-window-dialog-footer {
+  flex-shrink: 0;
+  padding: var(--floe-pad-control) var(--floe-pad-group);
+  border-top: 1px solid var(--floe-line);
+}
+.git-window-dialog-body > :not(p) {
+  padding: var(--floe-pad-control) var(--floe-pad-group) var(--floe-pad-group);
+}
+
+.git-operation-dialog :where(ul, label, [data-git-review-heading]) {
+  font-size: var(--floe-type-body);
+}
+
+.git-review-details {
+  margin-top: var(--floe-gap-control);
+  font-size: var(--floe-type-caption);
+}
+.git-review-details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.git-review-details summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.git-review-details p { margin-top: var(--floe-gap-control); }
+
+@media (max-width: 639px) {
+  .git-dialog-actions { flex-direction: column-reverse; align-items: stretch; }
+  .git-dialog-actions > *, .git-dialog-actions button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-browser-interactive, .browser-mode-switch button { transition: none; }
+}
+
 /* Git review uses dense, stable rows and independent constrained viewports. */
 .git-diff-split {
   container-type: inline-size;

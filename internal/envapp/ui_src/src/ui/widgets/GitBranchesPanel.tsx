@@ -1875,17 +1875,16 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         }}
         title={i18n.t('uiCopy.git.compareBranches')}
         bodyDescription={i18n.t('uiCopy.git.compareDescription')}
-        contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
+        contentClass="flex min-h-0 flex-1 flex-col overflow-hidden"
         class={cn(
-          "flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl [&>div:last-child]:!overflow-hidden [&>div:last-child]:flex [&>div:last-child]:!p-0",
-          "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
+          "max-w-none overflow-hidden",
           layout.isMobile()
             ? "h-full w-full"
             : "h-[min(760px,88vh)] w-[min(1280px,94vw)]",
         )}
       >
         <div class="flex min-h-0 flex-1 flex-col">
-          <div class="flex shrink-0 flex-col gap-2 px-4 pb-1">
+          <div class="flex shrink-0 flex-col gap-2 pb-1">
             <div class="grid gap-3 md:grid-cols-2">
               <label class="block">
                 <GitLabelBlock class="min-w-0" label={i18n.t('skillsSettings.table.source')} tone="violet">
@@ -1909,7 +1908,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
             </div>
           </div>
 
-          <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-2 pb-4">
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
             <Show
               when={!loading()}
               fallback={

@@ -381,7 +381,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 <GitMetaPill tone="info">{localizedSyncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount, i18n)}</GitMetaPill>
               </Show>
             </div>
-            <div class="git-repository-path mt-0.5 truncate text-[10px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>
+            <div class="git-repository-path mt-0.5 truncate text-[length:var(--floe-type-caption)] text-muted-foreground" title={repoPath()}>{repoPath()}</div>
           </div>
 
           <div class="flex shrink-0 items-center gap-1">
@@ -459,7 +459,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           </div>
         </div>
         <Show when={headDisplay().detached}>
-          <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[10px] text-muted-foreground">
+          <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[length:var(--floe-type-caption)] text-muted-foreground">
             <span class="text-foreground">{detachedHeadSummary()}</span>
             <Show when={headDisplay().detail}><GitMetaPill tone="neutral">{headDisplay().detail}</GitMetaPill></Show>
             <Show when={reattachBranch()}><span>{reattachSummary()}</span></Show>

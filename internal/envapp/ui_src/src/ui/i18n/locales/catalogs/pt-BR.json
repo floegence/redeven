@@ -2205,6 +2205,7 @@
       "reviewFailed": "Falha na revisão de exclusão.",
       "chooseBranch": "Escolha uma filial para revisar seu plano de exclusão.",
       "safeDeleteBlocked": "A exclusão segura está bloqueada.",
+      "technicalDetails": "Detalhes técnicos",
       "forceConsequences": "Conseqüências de exclusão forçada",
       "type": "Digite",
       "copyBranchName": "Copie o nome da filial",

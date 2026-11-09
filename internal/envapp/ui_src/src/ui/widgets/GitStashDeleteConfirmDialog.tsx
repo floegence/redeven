@@ -3,7 +3,7 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 import type { GitStashSummary } from '../protocol/redeven_v1';
-import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitSubtleNote } from './GitWorkbenchPrimitives';
 import { WindowModal } from './WindowModal';
 import { useI18n, type I18nHelpers } from '../i18n';
@@ -44,20 +44,20 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
     return parts.join(' • ');
   });
   const footer = (
-    <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
-      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-        <Button size="sm" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={props.loading} onClick={props.onClose}>
+    <>
+      <div class="git-dialog-actions">
+        <Button size="md" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={props.loading} onClick={props.onClose}>
           {i18n.t('common.actions.cancel')}
         </Button>
-        <Button size="sm" variant="destructive" class="w-full sm:w-auto" loading={props.loading} disabled={props.loading} onClick={() => props.onConfirm?.()}>
+        <Button size="md" variant="destructive" class="w-full sm:w-auto" loading={props.loading} disabled={props.loading} onClick={() => props.onConfirm?.()}>
           {i18n.t('git.stashDelete.confirmDelete')}
         </Button>
       </div>
-    </div>
+    </>
   );
   const body = (
-    <div class="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-2 pb-4">
-      <GitSubtleNote class="border-error/25 bg-error/10 text-foreground">
+    <div class="flex min-w-0 flex-col gap-3">
+      <GitSubtleNote tone="danger">
         <div class="space-y-1.5">
           <div class="text-xs font-semibold text-foreground">{stashHeadline()}</div>
           <Show when={stashMeta()}>
@@ -66,12 +66,12 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
         </div>
       </GitSubtleNote>
 
-      <GitSubtleNote class="border-warning/25 bg-warning/10 text-foreground">
+      <GitSubtleNote tone="warning">
         {i18n.t('git.stashDelete.warning')}
       </GitSubtleNote>
 
       <Show when={props.reviewError}>
-        <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.reviewError}</GitSubtleNote>
+        <GitSubtleNote tone="warning">{props.reviewError}</GitSubtleNote>
       </Show>
     </div>
   );
@@ -83,10 +83,11 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
         host={props.host ?? null}
         title={i18n.t('git.stashDelete.title')}
         bodyDescription={i18n.t('git.stashDelete.description')}
-        footer={footer}
-        class="w-[min(28rem,calc(100%-1rem))]"
+        footer={<div class="git-window-dialog-footer">{footer}</div>}
+        class="git-operation-dialog w-[min(28rem,calc(100%-1rem))]"
+        bodyClass="git-window-dialog-body"
         onOpenChange={(open) => {
-          if (!open) props.onClose();
+          if (!open && !props.loading) props.onClose();
         }}
       >
         {body}
@@ -98,15 +99,14 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
     <Dialog
       open={props.open}
       onOpenChange={(open) => {
-        if (!open) props.onClose();
+        if (!open && !props.loading) props.onClose();
       }}
       title={i18n.t('git.stashDelete.title')}
       bodyDescription={i18n.t('git.stashDelete.description')}
-      contentClass="p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
+      contentClass="git-dialog-body"
       footer={footer}
       class={cn(
-        'flex max-w-none flex-col overflow-hidden rounded-md p-0',
-        '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
+        'git-operation-dialog max-w-none',
         layout.isMobile() ? 'w-[calc(100vw-0.5rem)] max-w-none' : 'w-[min(28rem,calc(100vw-2rem))]',
       )}
     >

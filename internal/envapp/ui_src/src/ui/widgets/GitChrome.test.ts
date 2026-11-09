@@ -19,7 +19,6 @@ import {
   gitToneHeaderActionButtonClass,
   gitToneInsetClass,
   gitToneSelectableCardClass,
-  gitToneSurfaceClass,
   workspaceSectionTone,
 } from './GitChrome';
 
@@ -62,7 +61,7 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitChangePathClass('copied')).toBe('text-primary');
   });
 
-  it('keeps git chrome surfaces with tone-specific accent borders on transparent background', () => {
+  it('keeps git badges semantic and inset surfaces neutral', () => {
     expect(gitToneBadgeClass('info')).toContain('border-[var(--redeven-status-info-border)]');
     expect(gitToneBadgeClass('info')).toContain('bg-[var(--redeven-status-info-soft)]');
     expect(gitToneBadgeClass('info')).toContain('text-[var(--redeven-status-info-foreground)]');
@@ -80,15 +79,6 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneDotClass('warning')).toContain('git-tone-dot--warning');
     expect(gitToneDotClass('brand')).not.toContain('bg-blue-600/80');
     expect(gitToneDotClass('neutral')).not.toContain('bg-muted-foreground/55');
-
-    expect(gitToneSurfaceClass('brand')).toContain('border-l-[3px]');
-    expect(gitToneSurfaceClass('brand')).toContain('border-l-primary/60');
-    expect(gitToneSurfaceClass('brand')).not.toContain('bg-');
-    expect(gitToneSurfaceClass('warning')).toContain('border-l-warning/60');
-    expect(gitToneSurfaceClass('warning')).not.toContain('bg-');
-    expect(gitToneSurfaceClass('info')).not.toContain('bg-');
-    expect(gitToneSurfaceClass('violet')).not.toContain('bg-');
-    expect(gitToneSurfaceClass('neutral')).not.toContain('bg-');
 
     expect(gitToneInsetClass('violet')).toContain('redeven-surface-inset');
     expect(gitToneInsetClass('violet')).toContain('border');

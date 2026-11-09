@@ -247,6 +247,14 @@ describe('Git browser rendered selection contract', () => {
           const selected = host.querySelector<HTMLElement>('[data-git-sidebar-branch-key="refs/heads/feature/git-selection"]');
           expect(current?.textContent, `${themeName} ${width}px current`).toBe('Current');
           expect(selected?.className, `${themeName} ${width}px selected`).toContain('git-browser-selection-row');
+          expect(selected?.getAttribute('aria-pressed')).toBe('true');
+          expect(host.textContent).not.toContain('No extra status');
+          for (const group of host.querySelectorAll<HTMLElement>('.git-section')) {
+            const heading = group.firstElementChild!;
+            const label = heading.firstElementChild!.getBoundingClientRect();
+            const count = heading.lastElementChild!.getBoundingClientRect();
+            expect(Math.abs(label.top - count.top), `${themeName} ${width}px group count alignment`).toBeLessThanOrEqual(1);
+          }
           const selectedStyle = getComputedStyle(selected!);
           expect(selectedStyle.borderLeftWidth).toBe(selectedStyle.borderRightWidth);
           expect(selectedStyle.borderLeftColor).toBe(selectedStyle.borderRightColor);

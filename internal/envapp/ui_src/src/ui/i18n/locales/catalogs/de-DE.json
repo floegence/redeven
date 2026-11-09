@@ -2205,6 +2205,7 @@
       "reviewFailed": "Löschüberprüfung fehlgeschlagen.",
       "chooseBranch": "Wählen Sie einen Zweig aus, um dessen Löschplan zu überprüfen.",
       "safeDeleteBlocked": "Sicheres Löschen ist blockiert.",
+      "technicalDetails": "Technische Details",
       "forceConsequences": "Löschkonsequenzen erzwingen",
       "type": "Typ",
       "copyBranchName": "Zweignamen kopieren",

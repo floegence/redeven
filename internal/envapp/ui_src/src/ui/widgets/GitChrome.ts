@@ -47,27 +47,6 @@ export function gitToneDotClass(tone?: GitChromeTone): string {
   return cn('git-tone-dot', `git-tone-dot--${normalized}`);
 }
 
-export function gitToneSurfaceClass(tone?: GitChromeTone): string {
-  const base = 'border-l-[3px]';
-  switch (normalizeTone(tone)) {
-    case 'info':
-      return `${base} border-l-[var(--redeven-status-info)]`;
-    case 'brand':
-      return `${base} border-l-primary/60`;
-    case 'success':
-      return `${base} border-l-success/60`;
-    case 'warning':
-      return `${base} border-l-warning/60`;
-    case 'danger':
-      return `${base} border-l-error/60`;
-    case 'violet':
-      return `${base} border-l-[var(--redeven-categorical-6)]`;
-    case 'neutral':
-    default:
-      return `${base} border-l-muted-foreground/25`;
-  }
-}
-
 export function gitToneInsetClass(_tone?: GitChromeTone): string {
   return insetBaseClass;
 }

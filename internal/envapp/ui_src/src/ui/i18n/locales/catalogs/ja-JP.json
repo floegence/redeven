@@ -2205,6 +2205,7 @@
       "reviewFailed": "レビューの削除に失敗しました。",
       "chooseBranch": "ブランチを選択して、削除計画を確認します。",
       "safeDeleteBlocked": "安全な削除はブロックされています。",
+      "technicalDetails": "技術的な詳細",
       "forceConsequences": "強制削除の結果",
       "type": "タイプ",
       "copyBranchName": "ブランチ名をコピー",

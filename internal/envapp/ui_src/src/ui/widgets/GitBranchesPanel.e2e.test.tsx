@@ -2489,14 +2489,7 @@ describe("GitBranchesPanel interactions", () => {
         "Approve permanent file discard",
       );
       expect(controlText(document.body)).not.toContain("scratch.txt");
-      const footer = Array.from(document.body.querySelectorAll("div")).find(
-        (node) =>
-          node.className.includes("border-t") &&
-          node.className.includes("redeven-surface-inset") &&
-          node.className.includes("px-4") &&
-          node.className.includes("pt-3") &&
-          node.className.includes("pb-4"),
-      ) as HTMLDivElement | undefined;
+      const footer = document.body.querySelector<HTMLDivElement>("[data-floe-dialog-footer]");
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),
       ).find(
@@ -2971,14 +2964,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(controlText(document.body)).not.toContain("Files discarded");
       expect(controlText(document.body)).not.toContain("Safe delete ready");
       expect(controlText(document.body)).not.toContain("Delete Confirmation");
-      const footer = Array.from(document.body.querySelectorAll("div")).find(
-        (node) =>
-          node.className.includes("border-t") &&
-          node.className.includes("redeven-surface-inset") &&
-          node.className.includes("px-4") &&
-          node.className.includes("pt-3") &&
-          node.className.includes("pb-4"),
-      ) as HTMLDivElement | undefined;
+      const footer = document.body.querySelector<HTMLDivElement>("[data-floe-dialog-footer]");
       const confirmButton = Array.from(
         document.body.querySelectorAll('[role="dialog"] button'),
       ).find((node) => controlText(node)?.trim() === "Delete Branch") as
@@ -3072,7 +3058,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(confirmationInput?.placeholder).toBe("feature/unmerged");
       const tooltip = await revealTooltipForButton(confirmButton);
       expect(controlText(tooltip)).toContain(
-        "Type feature/unmerged to enable force delete.",
+        "Branch name must match exactly.",
       );
       confirmationInput!.value = "feature/unmerged";
       confirmationInput!.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3851,7 +3837,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(confirmationInput?.placeholder).toBe("feature/linked-blocked");
       const tooltip = await revealTooltipForButton(confirmButton);
       expect(controlText(tooltip)).toContain(
-        "Type feature/linked-blocked to enable force delete.",
+        "Branch name must match exactly.",
       );
       confirmationInput!.value = "feature/linked-blocked";
       confirmationInput!.dispatchEvent(new Event("input", { bubbles: true }));
@@ -4228,11 +4214,10 @@ describe("GitBranchesPanel interactions", () => {
         | HTMLDivElement
         | undefined;
       expect(dialogRoot).toBeTruthy();
-      expect(dialogRoot?.className).toContain(
-        "[&>div:last-child]:!overflow-hidden",
-      );
-      expect(dialogRoot?.className).toContain("[&>div:last-child]:flex");
-      expect(dialogRoot?.className).toContain("[&>div:last-child]:!p-0");
+      const dialogBody = dialogRoot?.querySelector('[data-floe-dialog-body]');
+      expect(dialogBody?.className).toContain("overflow-hidden");
+      expect(dialogBody?.className).toContain("flex-col");
+      expect(dialogRoot?.className).not.toContain("[&>div:last-child]");
       const closeButton = dialogRoot?.querySelector(
         'button[aria-label="Close"]',
       ) as HTMLButtonElement | null | undefined;

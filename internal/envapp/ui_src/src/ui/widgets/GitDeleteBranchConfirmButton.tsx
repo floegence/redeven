@@ -1,4 +1,4 @@
-import { Show, type JSX } from 'solid-js';
+import type { JSX } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse } from '../protocol/redeven_v1';
 import { Tooltip } from '../primitives/Tooltip';
@@ -27,24 +27,20 @@ export interface GitDeleteBranchConfirmButtonProps {
 
 export function GitDeleteBranchConfirmButton(props: GitDeleteBranchConfirmButtonProps) {
   const disabledReason = () => trimDeleteBranchReason(props.disabledReason);
-  const renderButton = () => (
-    <Button
-      size="sm"
-      variant="destructive"
-      class={props.class}
-      disabled={props.disabled}
-      loading={props.loading}
-      onClick={props.onClick}
-    >
-      {props.label}
-    </Button>
-  );
-
   return (
-    <Show when={props.disabled && disabledReason()} fallback={renderButton()}>
-      <Tooltip content={disabledReason()} placement="top" delay={0}>
-        <span class="flex w-full sm:w-auto">{renderButton()}</span>
-      </Tooltip>
-    </Show>
+    <Tooltip content={disabledReason()} disabled={!props.disabled || !disabledReason()} placement="top" delay={0} anchorClass="w-full sm:w-auto">
+      <span class="flex w-full sm:w-auto">
+        <Button
+          size="md"
+          variant="destructive"
+          class={props.class}
+          disabled={props.disabled}
+          loading={props.loading}
+          onClick={props.onClick}
+        >
+          {props.label}
+        </Button>
+      </span>
+    </Tooltip>
   );
 }

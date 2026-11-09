@@ -487,6 +487,7 @@ export const enUSWidgetChrome = defineDictionary({
       reviewFailed: 'Delete review failed.',
       chooseBranch: 'Choose a branch to review its deletion plan.',
       safeDeleteBlocked: 'Safe delete is blocked.',
+      technicalDetails: 'Technical details',
       forceConsequences: 'Force delete consequences',
       type: 'Type',
       copyBranchName: 'Copy branch name',

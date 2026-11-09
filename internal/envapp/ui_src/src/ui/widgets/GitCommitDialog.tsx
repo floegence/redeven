@@ -1,5 +1,5 @@
 import { For, Show, createMemo } from 'solid-js';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { Button, Textarea } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
 import { exactGitPath, isGitWorkspaceDirectoryEntry } from '../utils/gitWorkbench';
@@ -57,13 +57,13 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
         if (!open) props.onClose();
       }}
       title={i18n.t('git.commitDialog.title')}
-      class="border border-border/60 shadow-xl"
+      class="git-operation-dialog" contentClass="git-dialog-body"
       footer={(
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" class={outlineControlClass} onClick={props.onClose} disabled={props.loading}>
+        <div class="git-dialog-actions">
+          <Button size="md" variant="outline" class={outlineControlClass} onClick={props.onClose} disabled={props.loading}>
             {i18n.t('common.actions.cancel')}
           </Button>
-          <Button size="sm" variant="default" onClick={() => props.onConfirm?.()} loading={props.loading} disabled={!props.canCommit}>
+          <Button size="md" variant="default" onClick={() => props.onConfirm?.()} loading={props.loading} disabled={!props.canCommit}>
             {i18n.t('git.commitDialog.commit')}
           </Button>
         </div>
@@ -131,10 +131,11 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
         </GitTableFrame>
 
         <div>
-          <label class="mb-1 block text-xs font-medium text-foreground">{i18n.t('git.commitDialog.messageLabel')}</label>
-          <textarea
+          <label for="git-commit-message" class="mb-1 block text-xs font-medium text-foreground">{i18n.t('git.commitDialog.messageLabel')}</label>
+          <Textarea
+            id="git-commit-message"
             rows={4}
-            class={`w-full resize-y rounded-md border bg-background px-3 py-2 text-xs leading-5 text-foreground ${outlineControlClass}`}
+            class="resize-y"
             value={props.message}
             placeholder={i18n.t('git.commitDialog.messagePlaceholder')}
             onInput={(event) => props.onMessageChange?.(event.currentTarget.value)}

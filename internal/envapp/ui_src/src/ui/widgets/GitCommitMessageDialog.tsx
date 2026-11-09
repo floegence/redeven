@@ -46,11 +46,11 @@ export function GitCommitMessageDialog(props: GitCommitMessageDialogProps) {
       onOpenChange={props.onOpenChange}
       title={i18n.t('uiCopy.git.fullCommitMessage')}
       bodyDescription={i18n.t('uiCopy.git.fullCommitMessageDescription')}
-      class="w-[min(44rem,92vw)] border border-border/60 shadow-xl"
+      class="git-operation-dialog w-[min(44rem,92vw)]" contentClass="git-dialog-body"
       footer={(
-        <div class="flex justify-end">
+        <div class="git-dialog-actions">
           <Button
-            size="sm"
+            size="md"
             variant="outline"
             class={redevenSurfaceRoleClass('control')}
             onClick={() => props.onOpenChange(false)}

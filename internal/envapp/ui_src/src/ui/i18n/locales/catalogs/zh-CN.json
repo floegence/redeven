@@ -2205,6 +2205,7 @@
       "reviewFailed": "删除审查失败。",
       "chooseBranch": "选择分支以审查删除计划。",
       "safeDeleteBlocked": "安全删除被阻止。",
+      "technicalDetails": "技术详情",
       "forceConsequences": "强制删除后果",
       "type": "输入",
       "copyBranchName": "复制分支名称",

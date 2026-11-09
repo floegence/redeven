@@ -205,14 +205,14 @@ describe('GitDeleteBranchConfirmDialog', () => {
       await flushPositioning();
 
       const tooltip = document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
-      expect(tooltip?.textContent).toContain('Type backup/main-before-protocol-hardening-cleanup-20260308 to enable force delete.');
+      expect(tooltip?.textContent).toContain('Branch name must match exactly.');
       expect(dialog?.querySelector('[role="tooltip"]')).toBeNull();
     } finally {
       dispose();
     }
   });
 
-  it('copies the exact force-delete branch name from the label affordances', async () => {
+  it('copies the exact force-delete branch name from one explicit action', async () => {
     const blockedReason = 'Branch is not fully merged into HEAD.';
     const branchName = 'backup/main-before-protocol-hardening-cleanup-20260308';
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -256,7 +256,7 @@ describe('GitDeleteBranchConfirmDialog', () => {
       await flushPositioning();
 
       const branchNameButton = Array.from(document.body.querySelectorAll('button')).find(
-        (node) => node.getAttribute('aria-label') === `Copy branch name ${branchName}`,
+        (node) => node.getAttribute('aria-label') === 'Copy branch name',
       ) as HTMLButtonElement | undefined;
       expect(branchNameButton).toBeTruthy();
 

@@ -517,7 +517,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                 {localizedWorkspaceHealthLabel(workspaceSummary(), i18n)}
                               </div>
                               <Show when={headDisplay().detached}>
-                                <div class="mt-0.5 text-[10px] leading-relaxed text-warning">{i18n.t('uiCopy.git.detachedReadOnly')}</div>
+                                <div class="mt-0.5 text-[length:var(--floe-type-caption)] leading-relaxed text-warning">{i18n.t('uiCopy.git.detachedReadOnly')}</div>
                               </Show>
                             </div>
                             <GitMetaPill tone={workspaceCount() > 0 ? 'warning' : 'success'}>
@@ -549,7 +549,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                         <Dynamic component={resolveWorkspaceSectionIcon(section)} class="mt-0.5 h-3.5 w-3.5 shrink-0" />
                                         <div class="min-w-0 flex-1">
                                         <div class="font-medium text-current">{localizedWorkspaceViewSectionLabel(section, i18n)}</div>
-                                        <div class={cn('mt-0.5 min-h-3.5 text-[10px] leading-relaxed', gitSelectedSecondaryTextClass(active()))}>
+                                        <div class={cn('mt-0.5 min-h-3.5 text-[length:var(--floe-type-caption)] leading-relaxed', gitSelectedSecondaryTextClass(active()))}>
                                           <Show
                                             when={!sectionLoading()}
                                             fallback={<GitInlineLoadingStatus class="w-16">{i18n.t('files.loadingFiles')}</GitInlineLoadingStatus>}
@@ -561,7 +561,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       </div>
                                       <span
                                         class={cn(
-                                          'inline-flex min-w-[1.75rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold',
+                                          'inline-flex min-w-[1.75rem] items-center justify-center rounded px-1.5 py-0.5 text-[length:var(--floe-type-caption)] font-semibold',
                                           active() ? gitSelectedChipClass(true) : gitToneBadgeClass(tone())
                                         )}
                                       >
@@ -596,6 +596,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       ref={(element) => registerBranchButton(branch, element)}
                                       type="button"
                                       data-git-sidebar-branch-key={branchIdentity(branch)}
+                                      aria-pressed={active()}
                                       class={cn('w-full rounded px-2.5 py-1.5 text-left', gitToneSelectableCardClass(tone(), active()))}
                                       onClick={(event) => {
                                         captureSelectionScrollAnchor(branch, event.currentTarget);
@@ -608,13 +609,15 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       <div class="grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                                         <span class="flex min-w-0 flex-1 items-center gap-1.5 truncate">
                                           <GitBranch class="h-3.5 w-3.5 shrink-0" />
-                                          <span class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
+                                          <span class="truncate text-[length:var(--floe-type-body)] font-medium text-current">{branchDisplayName(branch)}</span>
                                         </span>
                                         <Show when={branch.current}>
-                                          <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', gitCurrentBranchChipClass())}>{i18n.t('uiCopy.git.current')}</span>
+                                          <span class={cn('rounded px-1.5 py-0.5 text-[length:var(--floe-type-caption)] font-medium', gitCurrentBranchChipClass())}>{i18n.t('uiCopy.git.current')}</span>
                                         </Show>
                                       </div>
-                                      <div class={cn('mt-0.5 min-h-4 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))} title={localizedBranchStatusSummary(branch, i18n)}>{localizedBranchContextSummary(branch, i18n)}</div>
+                                      <Show when={branch.upstreamRef || branch.upstreamGone || branch.aheadCount || branch.behindCount || branch.worktreePath}>
+                                        <div class={cn('mt-0.5 min-h-4 truncate text-[length:var(--floe-type-caption)]', gitSelectedSecondaryTextClass(active()))} title={localizedBranchStatusSummary(branch, i18n)}>{localizedBranchContextSummary(branch, i18n)}</div>
+                                      </Show>
                                     </button>
                                   );
                                 }}
@@ -634,6 +637,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       ref={(element) => registerBranchButton(branch, element)}
                                       type="button"
                                       data-git-sidebar-branch-key={branchIdentity(branch)}
+                                      aria-pressed={active()}
                                       class={cn('w-full rounded px-2.5 py-1.5 text-left', gitToneSelectableCardClass('violet', active()))}
                                       onClick={(event) => {
                                         captureSelectionScrollAnchor(branch, event.currentTarget);
@@ -645,9 +649,9 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                     >
                                       <div class="flex items-center gap-1.5 truncate">
                                         <GitBranch class="h-3.5 w-3.5 shrink-0" />
-                                        <span class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
+                                        <span class="truncate text-[length:var(--floe-type-body)] font-medium text-current">{branchDisplayName(branch)}</span>
                                       </div>
-                                      <div class={cn('mt-0.5 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))}>{branch.subject || localizedBranchStatusSummary(branch, i18n)}</div>
+                                      <div class={cn('mt-0.5 truncate text-[length:var(--floe-type-caption)]', gitSelectedSecondaryTextClass(active()))}>{branch.subject || localizedBranchStatusSummary(branch, i18n)}</div>
                                     </button>
                                   );
                                 }}

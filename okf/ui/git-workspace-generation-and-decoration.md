@@ -39,6 +39,11 @@ One measured owner lays out graph rails/connectors/nodes/columns within availabl
 
 Every preset has complete interaction roles. Forced colors expose selection/focus/Current-chip boundaries through system colors. Selected navigation, branches, stashes and file rows use a complete surface without a colored left stripe; keyboard focus and forced-color selection retain an inset whole-row outline.
 
+## Review presentation
+Git groups stay flat without decorative side rails or empty-status subtitles. Branch rows expose their selected state; text follows published body/caption roles. Dialog, Button, Input and Textarea retain Floe material, sizing, placement and presence. A Dialog owns its only footer separator/padding; window-local stash review supplies one equivalent footer. Narrow reviews scroll their body while actions stay reachable.
+
+Warning/danger notices use restrained semantic tint with readable theme ink, never solid-fill foreground tokens on a pale background. All built-in themes meet 4.5:1 notice-text contrast. Deletion shows one consequence summary; safe-delete guidance is localized, with raw diagnostics behind explicit technical details. Exact-name confirmation uses one labeled field and one copy action. Validation keeps the same confirm button mounted, and deletion retains its reviewed consequences/field while disabling editing and dismissal until the effect settles. Reduced motion removes Git row travel/transitions and preserves shared modal presence rules.
+
 # Boundaries
 
 Revisions grant read consistency, never mutation authority. UI cancellation cannot prove an effect did not run; unknown outcomes still invalidate. Non-Git Flowersec outbound allocation remains outside this transport budget and cannot be claimed fixed by batching.
@@ -53,3 +58,5 @@ Layout persistence proves no content freshness. Workbench target stability canno
 - `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/gitRequests.test.ts` - All 31 Git methods at the public RPC adapter boundary.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx`, `GitChangesPanel.e2e.test.tsx`, `GitDeleteBranchConfirmDialog.test.tsx` - Scoped interactions and reviewed deletion consequences.
 - `redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx` - Chromium selection across 28 themes and standard/soft material, with real branch sidebar widths.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDialogVisual.browser.test.tsx` - Real dialogs, 28-theme notice contrast, single footer, narrow scrolling, exact confirmation/button identity, pending geometry, keyboard return, localization and reduced motion.

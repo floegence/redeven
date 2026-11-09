@@ -6,7 +6,7 @@ import { Tooltip } from '../primitives/Tooltip';
 import { useI18n } from '../i18n';
 import { localizedGitChangeLabel } from '../utils/localizedGitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
+import { gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, type GitChromeTone } from './GitChrome';
 
 function gitTagVariant(tone?: GitChromeTone): TagProps['variant'] {
   switch (tone) {
@@ -39,24 +39,24 @@ export interface GitSectionProps {
 
 export function GitSection(props: GitSectionProps) {
   return (
-    <section class={cn('rounded-md border-l bg-muted/[0.08] px-3 py-2.5', redevenDividerRoleClass(), gitToneSurfaceClass(props.tone), props.class)}>
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
+    <section class={cn('git-section px-3 py-2.5', props.class)}>
+      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5">
         <div class="min-w-0 space-y-1">
           <div class="flex items-center gap-2">
             <span class={cn('h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20', gitToneDotClass(props.tone))} aria-hidden="true" />
-            <div class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/75">{props.label}</div>
+            <div class="text-[length:var(--floe-type-caption)] font-medium text-muted-foreground">{props.label}</div>
           </div>
           <Show when={props.description}>
             <div class="pl-0 text-xs leading-relaxed text-muted-foreground sm:pl-4">{props.description}</div>
           </Show>
         </div>
         <Show when={props.aside}>
-          <div class="flex max-w-full flex-wrap items-center gap-1.5 text-[11px] font-medium leading-5 text-muted-foreground sm:min-w-fit sm:justify-end sm:text-right">{props.aside}</div>
+          <div class="flex max-w-full min-w-fit flex-wrap items-center justify-end gap-1.5 text-[length:var(--floe-type-caption)] font-medium leading-5 text-right text-muted-foreground">{props.aside}</div>
         </Show>
       </div>
 
       <Show when={props.children}>
-        <div class={cn('mt-2.5 pl-0 sm:pl-4', props.bodyClass)}>{props.children}</div>
+        <div class={cn('mt-2.5', props.bodyClass)}>{props.children}</div>
       </Show>
     </section>
   );
@@ -76,7 +76,7 @@ export function GitLabelBlock(props: GitLabelBlockProps) {
     <div class={cn('space-y-1', props.class)}>
       <div class="flex flex-wrap items-center gap-2">
         <span class={cn('h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20', gitToneDotClass(props.tone))} aria-hidden="true" />
-        <div class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/75">{props.label}</div>
+        <div class="text-[length:var(--floe-type-caption)] font-medium text-muted-foreground">{props.label}</div>
         <Show when={props.meta}>
           <div class="flex min-w-0 flex-wrap items-center gap-1.5">{props.meta}</div>
         </Show>
@@ -139,8 +139,8 @@ export function GitStatStrip(props: GitStatStripProps) {
     <div class={cn('grid gap-1 rounded-md bg-muted/[0.08] p-1 text-[11px]', props.columnsClass || 'grid-cols-2 lg:grid-cols-4', props.class)}>
       <For each={props.items}>
         {(item) => (
-          <div class="rounded px-2.5 py-2 transition-colors duration-150 hover:bg-muted/[0.14]">
-            <div class="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/70">{item.label}</div>
+          <div class="rounded px-2.5 py-2">
+            <div class="text-[length:var(--floe-type-caption)] text-muted-foreground">{item.label}</div>
             <div class="mt-1 text-xs font-semibold tracking-tight text-foreground">{item.value}</div>
             <Show when={item.hint}>
               <div class="mt-1 text-[11px] text-muted-foreground">{item.hint}</div>
@@ -153,12 +153,13 @@ export function GitStatStrip(props: GitStatStripProps) {
 }
 
 export interface GitSubtleNoteProps {
+  tone?: 'neutral' | 'warning' | 'danger';
   class?: string;
   children: JSX.Element;
 }
 
 export function GitSubtleNote(props: GitSubtleNoteProps) {
-  return <div class={cn('rounded-md bg-muted/[0.10] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
+  return <div data-git-notice={props.tone ?? 'neutral'} class={cn('git-notice', props.class)}>{props.children}</div>;
 }
 
 export type GitContentSkeletonVariant =
@@ -671,8 +672,8 @@ export function GitTableBadge(props: { tone?: GitChromeTone; children: JSX.Eleme
 
 export function gitChangedFilesRowClass(active: boolean): string {
   return active
-    ? cn('git-browser-interactive group border-b git-browser-selection-surface transition-all duration-150 ease-out focus-visible:outline-none last:border-b-0', redevenDividerRoleClass())
-    : cn('git-browser-interactive group border-b bg-transparent transition-all duration-150 ease-out focus-visible:outline-none last:border-b-0', redevenDividerRoleClass());
+    ? cn('git-browser-interactive group border-b git-browser-selection-surface transition-colors duration-150 ease-out focus-visible:outline-none last:border-b-0', redevenDividerRoleClass())
+    : cn('git-browser-interactive group border-b bg-transparent transition-colors duration-150 ease-out focus-visible:outline-none last:border-b-0', redevenDividerRoleClass());
 }
 
 export function gitChangedFilesStickyCellClass(active: boolean): string {
