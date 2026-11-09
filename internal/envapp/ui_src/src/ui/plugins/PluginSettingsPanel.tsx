@@ -1,11 +1,13 @@
 import { SettingsSelect as Select } from '../pages/settings/SettingsSelect';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from 'solid-js';
+import { Refresh } from '@floegence/floe-webapp-core/icons';
+import { PluginIcon } from './PluginPresentationPrimitives';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useSettingsPanelHost } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { useI18n } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { useEnvSettingsPage } from '../pages/settings/EnvSettingsPageContext';
-import { SettingsResourceToolbar } from '../pages/settings/SettingsPrimitives';
+import { SettingsResourceHeader, SettingsResourceList, SettingsResourceRow } from '../pages/settings/SettingsResources';
 import { createEnvResourceCollection } from '../services/envResourceCache';
 import { PluginAuthorAccess } from './PluginAuthorAccess';
 import { listPluginDrafts } from './pluginCreationApi';
@@ -76,10 +78,11 @@ export function PluginSettingsPanel(props: { resource?: string; installed?: Plug
   // workspace + instance identity can never fall through to an installed plugin,
   // resume a workspace, or silently retarget after an artifact replacement.
   const choose = (value: string) => {
+    if (!active()) return;
     setResolvedSelections(previous => { const next = { ...previous }; delete next[value]; return next; });
     env.openSettings('plugins', value ? { resource: value } : undefined);
   };
-  const retry = () => { setRefresh(value => value + 1); void props.installed?.refresh(); };
+  const retry = () => { if (!active() || !authority()) return; setRefresh(value => value + 1); void props.installed?.refresh(); };
   // IMPORTANT: Select reads these props from event handlers. Compute conditional
   // option/value state under this panel's owner so those reads allocate no roots.
   const resourceValue = createMemo(() => selectedDraft() ? pluginAuthorSettingsResource({ draftID: selectedDraft()!.id, workspaceID: selectedDraft()!.workspace_id! }) : props.resource ?? '');
@@ -91,17 +94,22 @@ export function PluginSettingsPanel(props: { resource?: string; installed?: Plug
   // IMPORTANT: Settings owns connection configuration only. Plugin Center's
   // catalog, installation, updates and removal remain in its standalone modal.
   return <div class="redeven-settings-stack" data-plugin-settings>
-    <SettingsResourceToolbar label={i18n.t('settings.plugins.target')} actions={<Button variant="ghost" disabled={!authority() || drafts.loading || preview.loading} onClick={retry}>{i18n.t('common.actions.refresh')}</Button>}>
-      <Select section="plugins" class="w-full" ariaLabel={i18n.t('settings.plugins.target')}
+    <SettingsResourceHeader active={active()}><div class="settings-resource-header">
+      <Show when={props.resource}><div data-settings-resource-picker><Select section="plugins" class="w-full" ariaLabel={i18n.t('settings.plugins.target')}
         value={resourceValue()} options={resourceOptions()}
-        // IMPORTANT: Explicit same-value reselection is the only way to release
-        // a pinned workspace identity; refresh must never silently retarget it.
-        onOptionSelect={option => choose(option.value)} />
-    </SettingsResourceToolbar>
+        // IMPORTANT: Explicit reselection alone releases a pinned preview identity.
+        onOptionSelect={option => choose(option.value)} /></div></Show>
+      <Button size="icon" variant="ghost" icon={Refresh} aria-label={i18n.t('common.actions.refresh')} title={i18n.t('common.actions.refresh')} disabled={!authority() || drafts.loading || preview.loading} onClick={retry} />
+    </div></SettingsResourceHeader>
     <Show when={drafts.error}><div role="alert" class="text-sm text-destructive">{i18n.t('uiCopy.plugin.creation.draftsLoadFailed')} <Button variant="ghost" onClick={retry}>{i18n.t('common.actions.retry')}</Button></div></Show>
     <Show when={!props.resource}>
-      <For each={installedItems()}>{item => <Button class="w-full justify-start" variant="outline" onClick={() => choose(pluginInstalledSettingsResource(item.pluginInstanceID!))}>{item.displayName}</Button>}</For>
-      <Show when={!props.installed?.loading && !installedItems().length}><p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.connections.empty')}</p></Show>
+      <Show when={installedItems().length}><SettingsResourceList label={i18n.t('settings.plugins.installed')}>
+        <For each={installedItems()}>{item => <SettingsResourceRow label={item.displayName} onClick={() => choose(pluginInstalledSettingsResource(item.pluginInstanceID!))}><PluginIcon item={item} size="card" /><span class="settings-resource-name">{item.displayName}</span></SettingsResourceRow>}</For>
+      </SettingsResourceList></Show>
+      <Show when={draftData()?.length}><section class="space-y-2"><h3 class="text-xs font-medium text-muted-foreground">{i18n.t('settings.plugins.preview')}</h3><SettingsResourceList label={i18n.t('settings.plugins.preview')}>
+        <For each={draftData()}>{draft => <SettingsResourceRow label={draft.title.trim() || i18n.t('uiCopy.plugin.creation.untitled')} onClick={() => choose(pluginAuthorSettingsResource({ draftID: draft.id, workspaceID: draft.workspace_id! }))}><PluginIcon item={{}} size="card" /><span class="settings-resource-name">{draft.title.trim() || i18n.t('uiCopy.plugin.creation.untitled')}</span></SettingsResourceRow>}</For>
+      </SettingsResourceList></section></Show>
+      <Show when={!props.installed?.loading && !drafts.loading && !drafts.error && !installedItems().length && !draftData()?.length}><p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.empty')}</p></Show>
     </Show>
     <Show when={installedID() && !props.installed?.loading && !installedItem()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
     <Show when={props.installed}>{owner => <For each={visitedInstalled()}>{captured => {
@@ -110,7 +118,7 @@ export function PluginSettingsPanel(props: { resource?: string; installed?: Plug
       const visible = createMemo(() => active() && installedID() === captured.pluginInstanceID && !!current());
       const admittedAuthority = createMemo(() => current() ? authority() : false);
       const canManage = createMemo(() => !!current() && owner().canManage);
-      return <PluginConnectionsDialog embedded open visible={visible()}
+      return <PluginConnectionsDialog embedded open refreshRevision={refresh()} visible={visible()}
         item={item() ?? captured} ownerScope={installedOwnerScope} authorityKey={admittedAuthority()}
         canManage={canManage()} api={owner().api} onOpenChange={() => {}} />;
     }}</For>}</Show>

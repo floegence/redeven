@@ -1,0 +1,35 @@
+/* Product composition only: Floe owns control interaction, focus and motion. */
+.settings-resource-list { overflow: hidden; }
+.settings-resource-row { display: flex; width: 100%; height: auto; min-height: 60px; justify-content: space-between; gap: 16px; padding: 12px 16px; border-radius: 0; text-align: start; font-weight: 400; }
+.settings-resource-row + .settings-resource-row { border-top: 1px solid var(--border); }
+.settings-resource-identity { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.settings-resource-identity > svg { width: 32px; height: 32px; flex: none; }
+.settings-resource-identity .service-template-identity { align-items: center; width: 100%; }
+.settings-resource-identity .service-template-identity__icon { width: 32px; height: 32px; border-radius: var(--floe-radius-md); }
+.settings-resource-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--floe-type-control); }
+.settings-resource-header { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.settings-resource-header > [data-settings-resource-picker] { width: 240px; max-width: 100%; min-width: 0; }
+.settings-resource-header > button { flex: none; }
+.redeven-settings-header-resource { min-width: 0; flex: 1; }
+.redeven-settings-header-resource .settings-resource-header { justify-content: flex-end; }
+.container-settings-configuration .container-service-config-unavailable { min-height: 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--floe-radius-group); text-align: start; display: flex; align-items: flex-start; gap: 12px; }
+.container-settings-configuration .container-service-config-unavailable strong { font-size: var(--floe-type-control); font-weight: 400; }
+.container-settings-configuration .container-service-config-unavailable svg { flex: none; }
+.container-settings-configuration .floe-tabs { background: transparent; }
+@container redeven-settings (width < 768px) {
+  .redeven-settings-header:has(.redeven-settings-header-resource) > div:first-child { flex: 0 1 120px; }
+  .redeven-settings-header-resource .settings-resource-header > [data-settings-resource-picker] { width: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .settings-resource-row { transition: background-color 140ms ease, color 140ms ease; }
+}
+
+/* Long resource names keep usable space on small dialogs; both rows remain
+ * inside the modal header, never as another content toolbar. */
+@container redeven-settings (width < 480px) {
+  .redeven-settings-header:has(.redeven-settings-header-resource) { flex-wrap: wrap; }
+  .redeven-settings-header:has(.redeven-settings-header-resource) > div:first-child { flex: 1 1 100%; }
+  .redeven-settings-header-resource { flex: 1 1 100%; }
+  .redeven-settings-header-resource .settings-resource-header > [data-settings-resource-picker] { flex: 1; }
+  .redeven-env-settings-dialog-header:has(.redeven-settings-header-resource) { align-items: flex-start; }
+}

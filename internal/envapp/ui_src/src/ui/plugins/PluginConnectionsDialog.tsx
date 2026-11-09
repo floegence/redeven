@@ -1,5 +1,6 @@
+import { SettingsSelect } from '../pages/settings/SettingsSelect';
 import { For, Show, createEffect, createSignal, on, onCleanup, type JSX } from 'solid-js';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, Checkbox, SettingsList, SettingRow } from '@floegence/floe-webapp-core/ui';
 import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import { useI18n } from '../i18n';
@@ -15,6 +16,7 @@ type Review = Awaited<ReturnType<PluginConnectionsAPI['reviewConnection']>>['rev
 type Props = {
   visible?: boolean;
   embedded?: boolean;
+  refreshRevision?: number;
   authorityKey?: unknown;
   open: boolean; item?: PluginInventoryItem; ownerScope?: object | false; canManage: boolean;
   api: PluginConnectionsAPI; onOpenChange: (open: boolean) => void;
@@ -106,6 +108,10 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
     if (open && (!scope || !id)) { props.onOpenChange(false); return; }
     if (open && scope && id && props.authorityKey !== false) void run((signal, target, current) => refresh(signal, target, current, Boolean(sameOwner)));
   }));
+  createEffect(on(() => props.refreshRevision, () => {
+    // Review is a deliberate user decision; a header refresh cannot replace it.
+    if (props.visible !== false && !review()) void run((signal, id, current) => refresh(signal, id, current));
+  }, { defer: true }));
   onCleanup(() => { generation += 1; controller?.abort(); });
 
   function prepareReview() {
@@ -159,22 +165,20 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
         </div>
       </>}</Show>}>
         <Show when={connections().length} fallback={<Show when={!busy()}><p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.connections.empty')}</p></Show>}>
-          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.connector')}</span>
-            <select class="w-full rounded-md border bg-background px-3 py-2" value={connectorID()} disabled={busy()} onChange={(event) => choose(event.currentTarget.value)}>
-              <Show when={dirty() && connectorID() && !selected()}><option value={connectorID()}>{connectorID()} · {i18n.t('settings.targetUnavailable')}</option></Show>
-              <For each={connections()}>{(connection) => <option value={connection.connector_id}>{connection.connector_id} · {statusLabel(connection.status)}</option>}</For>
-            </select>
-          </label>
-          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.destination')}</span><Input value={destination()} disabled={!editable()} onInput={(event) => { setDirty(true); setDestination(event.currentTarget.value); }} /></label>
-          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.privatePrefixes')}</span><Input value={prefixes()} disabled={!editable()} onInput={(event) => { setDirty(true); setPrefixes(event.currentTarget.value); }} /><span class="block text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.privateHelp')}</span></label>
-          <Show when={declaration()?.httpMethods.length}><fieldset class="flex flex-wrap gap-3 text-sm"><legend>{i18n.t('uiCopy.plugin.connections.methods')}</legend>
-            <For each={declaration()?.httpMethods}>{(method) => <label class="inline-flex items-center gap-2"><input type="checkbox" disabled={!editable()} checked={methods().includes(method)} onChange={(event) => { setDirty(true); setMethods((previous) => event.currentTarget.checked ? [...previous, method] : previous.filter((entry) => entry !== method)); }} />{method}</label>}</For>
-          </fieldset></Show>
+          <SettingsList>
+            <SettingRow title={i18n.t('uiCopy.plugin.connections.connector')} control={<SettingsSelect section="plugins" active={props.visible !== false && props.open} class="w-full sm:w-64" ariaLabel={i18n.t('uiCopy.plugin.connections.connector')} value={connectorID()} disabled={busy()} onChange={choose}
+              options={[...(dirty() && connectorID() && !selected() ? [{ value: connectorID(), label: `${connectorID()} · ${i18n.t('settings.targetUnavailable')}` }] : []), ...connections().map(connection => ({ value: connection.connector_id, label: `${connection.connector_id} · ${statusLabel(connection.status)}` }))]} />} />
+            <SettingRow title={i18n.t('uiCopy.plugin.connections.destination')} control={<Input class="w-full sm:w-64" aria-label={i18n.t('uiCopy.plugin.connections.destination')} value={destination()} disabled={!editable()} onInput={(event) => { setDirty(true); setDestination(event.currentTarget.value); }} />} />
+            <SettingRow title={i18n.t('uiCopy.plugin.connections.privatePrefixes')} description={i18n.t('uiCopy.plugin.connections.privateHelp')} control={<Input class="w-full sm:w-64" aria-label={i18n.t('uiCopy.plugin.connections.privatePrefixes')} value={prefixes()} disabled={!editable()} onInput={(event) => { setDirty(true); setPrefixes(event.currentTarget.value); }} />} />
+            <Show when={declaration()?.httpMethods.length}><SettingRow title={i18n.t('uiCopy.plugin.connections.methods')} control={<div class="flex flex-wrap gap-3">
+              <For each={declaration()?.httpMethods}>{method => <Checkbox label={method} disabled={!editable()} checked={methods().includes(method)} onChange={checked => { setDirty(true); setMethods(previous => checked ? [...previous, method] : previous.filter(entry => entry !== method)); }} />}</For>
+            </div>} /></Show>
+          </SettingsList>
           <Show when={selected()?.expires_at}>{(expires) => <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.expires')}: {date(expires())}</p>}</Show>
         </Show>
         <div class="flex flex-wrap justify-end gap-2">
           <Show when={dirty()}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="ghost" disabled={busy() || props.authorityKey === false} onClick={() => void run((signal, id, current) => refresh(signal, id, current, false))}>{i18n.t('filePreview.discardChanges')}</Button></Show>
-          <Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" loading={busy()} disabled={busy() || props.authorityKey === false} onClick={() => void run((signal, id, current) => refresh(signal, id, current))}>{i18n.t('common.actions.refresh')}</Button>
+          <Show when={!props.embedded || props.refreshRevision === undefined}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" loading={busy()} disabled={busy() || props.authorityKey === false} onClick={() => void run((signal, id, current) => refresh(signal, id, current))}>{i18n.t('common.actions.refresh')}</Button></Show>
           <Show when={selected()?.status === 'active'}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" disabled={!editable()} onClick={() => mutate('revoke')}>{i18n.t('uiCopy.plugin.connections.revoke')}</Button></Show>
           <Show when={declaration()?.configurable}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} disabled={!editable() || !selected() || !destination().trim() || (declaration()?.transport === 'http' && !methods().length)} onClick={prepareReview}>{i18n.t('uiCopy.plugin.connections.review')}</Button></Show>
         </div>
@@ -182,7 +186,7 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
     </div>;
   // IMPORTANT: The author preview editor lives in the global Settings dialog.
   // This presentation reuses the same owner and review protocol, never a second store.
-  if (props.embedded) return <section hidden={!props.open || props.visible === false}><h3 class="mb-3 font-medium">{i18n.t('uiCopy.plugin.connections.title')}</h3>{body()}</section>;
+  if (props.embedded) return <section aria-label={i18n.t('uiCopy.plugin.connections.title')} hidden={!props.open || props.visible === false}>{body()}</section>;
   return <Dialog open={props.open && props.visible !== false} title={i18n.t('uiCopy.plugin.connections.title')}
     onOpenChange={(open) => { if (!open && !busy()) { void cancelReview(true); } }}>{body()}</Dialog>;
 }

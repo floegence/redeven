@@ -1,10 +1,15 @@
+import { SettingsSelect } from './settings/SettingsSelect';
+import { createStore, reconcile } from 'solid-js/store';
+import { SettingsDisclosure } from './settings/SettingsPrimitives';
 import { HostedSettingsPanel, useSettingsPanelHost } from '../../../../../settings_ui/src/SettingsPanelHost';
 import './managed-service-settings.css';
-import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
+  batch,
+  untrack,
   ErrorBoundary,
   For,
+  Index,
   Show,
   Suspense,
   createEffect,
@@ -237,7 +242,7 @@ function TextListField(props: {
         {props.label}
       </span>
       <Textarea
-        rows={4}
+        rows={3}
         value={lines(props.value)}
         placeholder={props.placeholder}
         disabled={props.disabled}
@@ -248,6 +253,31 @@ function TextListField(props: {
       />
     </label>
   );
+}
+
+function ServiceLabelFields(props: { value: Record<string, string>; onChange: (value: Record<string, string>) => void; text: (key: string) => string }) {
+  const [keys, setKeys] = createSignal<string[]>([]);
+  // IMPORTANT: Names are editable keys, never DOM identities. Retain row order
+  // independently of object insertion order; values have one draft owner.
+  createEffect(() => {
+    const next = Object.keys(props.value), previous = untrack(keys);
+    setKeys([...previous.filter(key => next.includes(key)), ...next.filter(key => !previous.includes(key))]);
+  });
+  const rename = (index: number, name: string) => {
+    const previous = keys()[index];
+    if (previous === name || Object.hasOwn(props.value, name)) return;
+    batch(() => {
+      setKeys(current => current.map((key, position) => position === index ? name : key));
+      props.onChange(Object.fromEntries(keys().map(key => [key, props.value[key === name ? previous : key]])));
+    });
+  };
+  return <div><div class="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 class="text-xs font-semibold">{props.text('labels')}</h4>
+    <Button size="sm" variant="outline" disabled={Object.hasOwn(props.value, '')} onClick={() => props.onChange({ ...props.value, '': '' })}><Plus class="size-3.5" />{props.text('addLabel')}</Button>
+  </div><div class="space-y-2"><Index each={keys()}>{(key, index) => <div class="managed-settings-entry managed-settings-entry--pair">
+    <Input class="font-mono text-xs" value={key()} placeholder="com.example.role" onInput={event => { rename(index, event.currentTarget.value); if (event.currentTarget.value !== keys()[index]) event.currentTarget.value = keys()[index]; }} />
+    <Input class="font-mono text-xs" value={props.value[key()]} placeholder={props.text('labelValue')} onInput={event => props.onChange({ ...props.value, [key()]: event.currentTarget.value })} />
+    <Button size="icon" variant="ghost" aria-label={props.text('remove')} onClick={() => { const next = { ...props.value }; delete next[key()]; props.onChange(next); }}><Trash class="size-3.5" /></Button>
+  </div>}</Index></div></div>;
 }
 
 export function ManagedServiceSettingsDrawer(props: {
@@ -280,7 +310,14 @@ export function ManagedServiceSettingsDrawer(props: {
   const sectionDOMID = createUniqueId();
   const sectionTitle = (id: SectionID) => settingText(`section.${id}`);
   const [loaded, setLoaded] = createSignal<SettingsView | null>(null);
-  const [draft, setDraft] = createSignal<SettingsView | null>(null);
+  const [draftStore, setDraftStore] = createStore<{ value: SettingsView | null }>({ value: null });
+  const draft = () => draftStore.value;
+  // IMPORTANT: Draft edits must preserve DOM and field identity while typing.
+  // Reconcile resource IDs in place; never key an editor on cloned snapshots.
+  const setDraft = (next: SettingsView | null | ((current: SettingsView | null) => SettingsView | null)) => {
+    const value = typeof next === 'function' ? next(draft()) : next;
+    setDraftStore('value', reconcile(value, { key: 'resource_id' }));
+  };
   const [section, setSection] = createSignal<SectionID>("general");
   const [composeService, setComposeService] = createSignal("");
   const [loading, setLoading] = createSignal(false);
@@ -466,7 +503,9 @@ export function ManagedServiceSettingsDrawer(props: {
   };
 
   const saveMetadata = async () => {
-    const value = draft();
+    // IMPORTANT: A stable reactive store is not a submission snapshot. Capture
+    // immutable bytes so late acknowledgments cannot overwrite newer edits.
+    const value = clone(draft());
     if (savingMetadata() || !value || !value.name.trim() || !metadataDirty() || !readConfirmed() || !props.canManage || !props.open) return;
     // IMPORTANT: The admitted PATCH belongs to this service owner, not its
     // visible category. Navigation cannot unlock a duplicate write or lose its
@@ -632,7 +671,7 @@ export function ManagedServiceSettingsDrawer(props: {
 
   const footer = () => (
     <div class="flex w-full flex-wrap items-center gap-2">
-      <span class="mr-auto text-xs text-muted-foreground">
+      <span role="status" class="mr-auto text-xs text-muted-foreground">
         {dirtyCount()
           ? settingText("unsavedCount", { count: dirtyCount() })
           : settingText("noUnsavedChanges")}
@@ -691,7 +730,7 @@ export function ManagedServiceSettingsDrawer(props: {
           >
             {settingText("preflight")}
           </Button>
-          <Button
+          <Show when={plan()}><Button
             size="sm"
             variant="default"
             onClick={() => void apply()}
@@ -703,7 +742,7 @@ export function ManagedServiceSettingsDrawer(props: {
             }
           >
             {settingText("apply")}
-          </Button>
+          </Button></Show>
         </Show>
       </Show>
     </div>
@@ -767,37 +806,13 @@ export function ManagedServiceSettingsDrawer(props: {
               </nav>
 }><Tabs ariaLabel={settingText("sections")} class="managed-settings-tabs" activeId={section()}
                 items={sections.filter(sectionVisible).map(id => ({ id, label: sectionTitle(id), domId: `${sectionDOMID}-${id}`, panelId: `${sectionDOMID}-content` }))}
-                onChange={id => setSection(id as SectionID)} features={{ indicator: { mode: 'slider' }, containerBorder: true, scrollButtons: 'auto' }} />
+                onChange={id => setSection(id as SectionID)} size="sm" features={{ indicator: { mode: 'slider' }, containerBorder: false, scrollButtons: 'auto' }} />
               </Show>
               <div class="managed-settings-content" id={`${sectionDOMID}-content`} role={embedded() ? "tabpanel" : undefined} aria-labelledby={embedded() ? `${sectionDOMID}-${section()}` : undefined}>
                 <Show when={resolved().deployment === "compose"}>
-                  <div
-                    class="mb-4 flex items-center gap-1 border-b pb-2"
-                    role="tablist"
-                    aria-label={settingText("composeServices")}
-                  >
-                    <For
-                      each={Object.keys(
-                        resolved().runtime.compose ?? {},
-                      ).sort()}
-                    >
-                      {(name) => (
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={composeService() === name}
-                          onClick={() => setComposeService(name)}
-                          class={cn(
-                            "cursor-pointer rounded-md px-3 py-1.5 font-mono text-xs",
-                            composeService() === name
-                              ? redevenSegmentedItemClass(true) : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
-                          )}
-                        >
-                          {name}
-                        </button>
-                      )}
-                    </For>
-                  </div>
+                  <Tabs class="managed-settings-tabs mb-4" ariaLabel={settingText('composeServices')} size="sm" activeId={composeService()}
+                    items={Object.keys(resolved().runtime.compose ?? {}).sort().map(name => ({ id: name, label: name }))}
+                    onChange={setComposeService} features={{ indicator: { mode: 'slider' }, containerBorder: false }} />
                 </Show>
                 <Show when={error()}>
                   <div
@@ -833,9 +848,7 @@ export function ManagedServiceSettingsDrawer(props: {
                 <Show when={section() === "general"}>
                   <section class="max-w-3xl space-y-4">
                     <header>
-                      <h3 class="text-sm font-semibold">
-                        {sectionTitle("general")}
-                      </h3>
+                      <Show when={!embedded()}><h3 class="text-sm font-semibold">{sectionTitle("general")}</h3></Show>
                       <p class="mt-1 text-xs text-muted-foreground">
                         {settingText("generalHelp")}
                       </p>
@@ -860,34 +873,19 @@ export function ManagedServiceSettingsDrawer(props: {
                         <span class="mb-1 block text-xs font-medium">
                           {settingText("accessMode")}
                         </span>
-                        <select
-                          class="h-8 w-full cursor-pointer"
-                          value={resolved().access_mode}
-                          onChange={(event) =>
-                            updateDraft((value) => {
-                              value.access_mode = event.currentTarget
-                                .value as AccessMode;
-                            }, false)
-                          }
-                        >
-                          <option value="unified_proxy">
-                            {settingText("unifiedProxy")}
-                          </option>
-                          <option value="desktop_loopback">
-                            {settingText("desktopLoopback")}
-                          </option>
-                        </select>
+                        <SettingsSelect section="services" resource={props.serviceID} active={props.open} class="managed-settings-select" ariaLabel={settingText("accessMode")}
+                          value={resolved().access_mode} options={[{ value: 'unified_proxy', label: settingText('unifiedProxy') }, { value: 'desktop_loopback', label: settingText('desktopLoopback') }]}
+                          onChange={next => updateDraft(value => { value.access_mode = next as AccessMode; }, false)} />
                         <Show when={resolved().access_mode === 'desktop_loopback'}><span class="mt-1 block min-h-4 text-[11px] text-muted-foreground">
                           {settingText("accessModeHelp")}
                         </span></Show>
                       </label>
-                    </div>
-                    <label class="managed-settings-field">
+                    <label class="managed-settings-field managed-settings-field--multiline">
                       <span class="mb-1 block text-xs font-medium">
                         {settingText("serviceDescription")}
                       </span>
                       <Textarea
-                        rows={4}
+                        rows={3}
                         value={resolved().description ?? ""}
                         maxlength={4000}
                         onInput={(event) =>
@@ -897,6 +895,8 @@ export function ManagedServiceSettingsDrawer(props: {
                         }
                       />
                     </label>
+                    </div>
+                    <Show when={resolved().locked?.length}><SettingsDisclosure title={i18n.t('settings.connection.technicalInformation')}>
                     <For
                       each={resolved().locked?.filter(
                         (item) =>
@@ -928,22 +928,21 @@ export function ManagedServiceSettingsDrawer(props: {
                         </div>
                       )}
                     </For>
+                    </SettingsDisclosure></Show>
                   </section>
                 </Show>
 
                 <Show when={section() === "parameters"}>
                   <section class="max-w-4xl space-y-5">
                     <header>
-                      <h3 class="text-sm font-semibold">
-                        {settingText("section.parameters")}
-                      </h3>
+                      <Show when={!embedded()}><h3 class="text-sm font-semibold">{settingText("section.parameters")}</h3></Show>
                       <p class="mt-1 text-xs text-muted-foreground">
                         {settingText("parametersHelp")}
                       </p>
                     </header>
                     <Show when={currentContainer()} keyed>
                       {(container) => (
-                        <div class="grid gap-4 rounded-lg border p-3 sm:grid-cols-2">
+                        <div class="managed-settings-fields">
                           <label>
                             <span class="mb-1 block text-xs font-medium">
                               {settingText("entrypoint")}
@@ -963,25 +962,11 @@ export function ManagedServiceSettingsDrawer(props: {
                             <span class="mb-1 block text-xs font-medium">
                               {settingText("restartPolicy")}
                             </span>
-                            <select
-                              class="h-8 w-full cursor-pointer"
-                              value={container.restart_policy ?? "no"}
-                              onChange={(event) =>
-                                updateContainer((value) => {
-                                  value.restart_policy =
-                                    event.currentTarget.value;
-                                })
-                              }
-                            >
-                              <option value="no">no</option>
-                              <option value="unless-stopped">
-                                unless-stopped
-                              </option>
-                              <option value="always">always</option>
-                              <option value="on-failure">on-failure</option>
-                            </select>
+                            <SettingsSelect section="services" resource={props.serviceID} active={props.open} class="managed-settings-select" ariaLabel={settingText("restartPolicy")}
+                              value={container.restart_policy ?? 'no'} options={['no', 'unless-stopped', 'always', 'on-failure'].map(value => ({ value, label: value }))}
+                              onChange={next => updateContainer(value => { value.restart_policy = next; })} />
                           </label>
-                          <div class="sm:col-span-2">
+                          <div class="managed-settings-full-field">
                             <TextListField
                               label={settingText("commandArguments")}
                               value={container.command}
@@ -1005,7 +990,7 @@ export function ManagedServiceSettingsDrawer(props: {
                       <div class="divide-y overflow-hidden rounded-lg border">
                         <For each={resolved().parameter_definitions ?? Object.keys(resolved().parameters ?? {}).map(name => ({name,type:"string"}))}>
                           {(parameter) => (
-                            <div class="grid grid-cols-[minmax(10rem,0.7fr)_1fr] items-center gap-3 px-3 py-2">
+                            <div class="managed-settings-parameter">
                               <label class="text-xs" for={`service-parameter-${parameter.name}`}>{parameter.name}</label>
                               <Input
                                 id={`service-parameter-${parameter.name}`}
@@ -1036,87 +1021,7 @@ export function ManagedServiceSettingsDrawer(props: {
                         </Show>
                       </div>
                     </div>
-                    <Show when={currentContainer()} keyed>
-                      {(container) => (
-                        <div>
-                          <div class="mb-2 flex items-center justify-between">
-                            <h4 class="text-xs font-semibold">
-                              {settingText("labels")}
-                            </h4>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              class="cursor-pointer"
-                              onClick={() =>
-                                updateContainer((value) => {
-                                  value.labels = {
-                                    ...(value.labels ?? {}),
-                                    "": "",
-                                  };
-                                })
-                              }
-                            >
-                              <Plus class="mr-1 h-3.5 w-3.5" />
-                              {settingText("addLabel")}
-                            </Button>
-                          </div>
-                          <div class="space-y-2">
-                            <For each={Object.entries(container.labels ?? {})}>
-                              {([name, value]) => (
-                                <div class="grid grid-cols-[1fr_1fr_auto] gap-2">
-                                  <Input
-                                    class="h-8 font-mono text-xs"
-                                    value={name}
-                                    placeholder="com.example.role"
-                                    onInput={(event) =>
-                                      updateContainer((next) => {
-                                        const labels = {
-                                          ...(next.labels ?? {}),
-                                        };
-                                        delete labels[name];
-                                        labels[event.currentTarget.value] =
-                                          value;
-                                        next.labels = labels;
-                                      })
-                                    }
-                                  />
-                                  <Input
-                                    class="h-8 font-mono text-xs"
-                                    value={value}
-                                    placeholder={settingText("labelValue")}
-                                    onInput={(event) =>
-                                      updateContainer((next) => {
-                                        next.labels = {
-                                          ...(next.labels ?? {}),
-                                          [name]: event.currentTarget.value,
-                                        };
-                                      })
-                                    }
-                                  />
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    class="cursor-pointer px-0"
-                                    aria-label={settingText("remove")}
-                                    onClick={() =>
-                                      updateContainer((next) => {
-                                        const labels = {
-                                          ...(next.labels ?? {}),
-                                        };
-                                        delete labels[name];
-                                        next.labels = labels;
-                                      })
-                                    }
-                                  >
-                                    <Trash class="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              )}
-                            </For>
-                          </div>
-                        </div>
-                      )}
-                    </Show>
+                    <Show when={currentContainer()} keyed>{container => <ServiceLabelFields value={container.labels ?? {}} text={settingText} onChange={labels => updateContainer(next => { next.labels = labels; })} />}</Show>
                   </section>
                 </Show>
 
@@ -1128,9 +1033,7 @@ export function ManagedServiceSettingsDrawer(props: {
                     <section class="max-w-4xl">
                       <header class="flex items-end justify-between gap-3">
                         <div>
-                          <h3 class="text-sm font-semibold">
-                            {settingText("section.environment")}
-                          </h3>
+                          <Show when={!embedded()}><h3 class="text-sm font-semibold">{settingText("section.environment")}</h3></Show>
                           <p class="mt-1 text-xs text-muted-foreground">
                             {settingText("environmentHelp")}
                           </p>
@@ -1155,7 +1058,7 @@ export function ManagedServiceSettingsDrawer(props: {
                       <div class="mt-4 space-y-2">
                         <For each={container.environment ?? []}>
                           {(item, index) => (
-                            <div class="grid grid-cols-[minmax(8rem,0.65fr)_minmax(10rem,1fr)_auto_auto] items-center gap-2">
+                            <div class="managed-settings-entry managed-settings-entry--environment">
                               <Input
                                 class="h-8 font-mono text-xs"
                                 value={item.name}
@@ -1211,7 +1114,7 @@ export function ManagedServiceSettingsDrawer(props: {
                                   })
                                 }
                               >
-                                <Trash class="h-3.5 w-3.5" />
+                                <Trash class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">{settingText("remove")}</span>
                               </Button>
                             </div>
                           )}
@@ -1229,9 +1132,7 @@ export function ManagedServiceSettingsDrawer(props: {
                     <section class="max-w-5xl">
                       <header class="flex items-end justify-between">
                         <div>
-                          <h3 class="text-sm font-semibold">
-                            {settingText("section.storage")}
-                          </h3>
+                          <Show when={!embedded()}><h3 class="text-sm font-semibold">{settingText("section.storage")}</h3></Show>
                           <p class="mt-1 text-xs text-muted-foreground">
                             {settingText("storageHelp")}
                           </p>
@@ -1262,41 +1163,14 @@ export function ManagedServiceSettingsDrawer(props: {
                       <div class="mt-4 overflow-hidden rounded-lg border">
                         <For each={container.mounts ?? []}>
                           {(mount, index) => (
-                            <div class="grid grid-cols-[7rem_minmax(9rem,1fr)_minmax(8rem,0.8fr)_auto_auto] items-center gap-2 border-b px-3 py-2 last:border-b-0">
-                              <select
-                                class="h-8 cursor-pointer"
-                                value={mount.type}
-                                disabled={managedMountLocked(
-                                  mount.resource_id,
-                                )}
-                                onChange={(event) =>
-                                  updateContainer((value) => {
-                                    const nextType = event.currentTarget
-                                      .value as MountSetting["type"];
-                                    const next = value.mounts![index()];
-                                    next.type = nextType;
-                                    next.source =
-                                      nextType === "volume"
-                                        ? `service-${next.resource_id}`
-                                        : "";
-                                    next.tmpfs_options =
-                                      nextType === "tmpfs"
-                                        ? [
-                                            "rw",
-                                            "noexec",
-                                            "nosuid",
-                                            "nodev",
-                                            "size=536870912",
-                                          ]
-                                        : undefined;
-                                  })
-                                }
-                              >
-                                <option value="workspace">workspace</option>
-                                <option value="bind">bind</option>
-                                <option value="volume">volume</option>
-                                <option value="tmpfs">tmpfs</option>
-                              </select>
+                            <div class="managed-settings-entry managed-settings-entry--mount">
+                              <SettingsSelect section="services" resource={props.serviceID} active={props.open} class="managed-settings-select" ariaLabel={settingText("section.storage")}
+                                value={mount.type} disabled={managedMountLocked(mount.resource_id)} options={['workspace', 'bind', 'volume', 'tmpfs'].map(value => ({ value, label: value }))}
+                                onChange={nextType => updateContainer(value => {
+                                  const next = value.mounts![index()]; next.type = nextType as MountSetting['type'];
+                                  next.source = nextType === 'volume' ? `service-${next.resource_id}` : '';
+                                  next.tmpfs_options = nextType === 'tmpfs' ? ['rw', 'noexec', 'nosuid', 'nodev', 'size=536870912'] : undefined;
+                                })} />
                               <div class="flex min-w-0 items-center gap-1">
                                 <Input
                                   class="h-8 min-w-0 font-mono text-xs"
@@ -1386,7 +1260,7 @@ export function ManagedServiceSettingsDrawer(props: {
                                   })
                                 }
                               >
-                                <Trash class="h-3.5 w-3.5" />
+                                <Trash class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">{settingText("remove")}</span>
                               </Button>
                             </div>
                           )}
@@ -1403,9 +1277,7 @@ export function ManagedServiceSettingsDrawer(props: {
                   {(container) => (
                     <section class="max-w-3xl">
                       <header>
-                        <h3 class="text-sm font-semibold">
-                          {settingText("section.resources")}
-                        </h3>
+                        <Show when={!embedded()}><h3 class="text-sm font-semibold">{settingText("section.resources")}</h3></Show>
                         <p class="mt-1 text-xs text-muted-foreground">
                           {settingText("resourcesHelp")}
                         </p>
@@ -1460,9 +1332,7 @@ export function ManagedServiceSettingsDrawer(props: {
                   {(container) => (
                     <section class="max-w-5xl">
                       <header>
-                        <h3 class="text-sm font-semibold">
-                          {settingText("section.network")}
-                        </h3>
+                        <Show when={!embedded()}><h3 class="text-sm font-semibold">{settingText("section.network")}</h3></Show>
                         <p class="mt-1 text-xs text-muted-foreground">
                           {settingText("networkHelp")}
                         </p>
@@ -1542,8 +1412,8 @@ export function ManagedServiceSettingsDrawer(props: {
                       <div class="mt-2 space-y-2">
                         <For each={container.ports ?? []}>
                           {(port, index) => (
-                            <div class="grid grid-cols-[1fr_1fr_1fr_6rem_auto] gap-2">
-                              <Input
+                            <div class="managed-settings-entry managed-settings-entry--port">
+                              <label class="managed-settings-entry-field"><span>{i18n.t('containers.run.listenAddress')}</span><Input aria-label={i18n.t('containers.run.listenAddress')}
                                 class="h-8 font-mono text-xs"
                                 value={port.host_ip ?? ""}
                                 placeholder="127.0.0.1"
@@ -1553,8 +1423,8 @@ export function ManagedServiceSettingsDrawer(props: {
                                       event.currentTarget.value;
                                   })
                                 }
-                              />
-                              <Input
+                              /></label>
+                              <label class="managed-settings-entry-field"><span>{i18n.t('containers.run.hostPort')}</span><Input aria-label={i18n.t('containers.run.hostPort')}
                                 class="h-8 font-mono text-xs"
                                 type="number"
                                 value={port.host_port ?? 0}
@@ -1565,8 +1435,8 @@ export function ManagedServiceSettingsDrawer(props: {
                                     );
                                   })
                                 }
-                              />
-                              <Input
+                              /></label>
+                              <label class="managed-settings-entry-field"><span>{i18n.t('containers.run.containerPort')}</span><Input aria-label={i18n.t('containers.run.containerPort')}
                                 class="h-8 font-mono text-xs"
                                 type="number"
                                 value={port.container_port}
@@ -1576,20 +1446,10 @@ export function ManagedServiceSettingsDrawer(props: {
                                       Number(event.currentTarget.value);
                                   })
                                 }
-                              />
-                              <select
-                                class="h-8 cursor-pointer"
-                                value={port.protocol ?? "tcp"}
-                                onChange={(event) =>
-                                  updateContainer((value) => {
-                                    value.ports![index()].protocol = event
-                                      .currentTarget.value as "tcp" | "udp";
-                                  })
-                                }
-                              >
-                                <option>tcp</option>
-                                <option>udp</option>
-                              </select>
+                              /></label>
+                              <SettingsSelect section="services" resource={props.serviceID} active={props.open} class="managed-settings-select" ariaLabel={i18n.t('containers.run.protocol')}
+                                value={port.protocol ?? 'tcp'} options={['tcp', 'udp'].map(value => ({ value, label: value }))}
+                                onChange={next => updateContainer(value => { value.ports![index()].protocol = next as 'tcp' | 'udp'; })} />
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -1602,7 +1462,7 @@ export function ManagedServiceSettingsDrawer(props: {
                                   })
                                 }
                               >
-                                <Trash class="h-3.5 w-3.5" />
+                                <Trash class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">{settingText("remove")}</span>
                               </Button>
                             </div>
                           )}
@@ -1619,9 +1479,7 @@ export function ManagedServiceSettingsDrawer(props: {
                   {(container) => (
                     <section class="max-w-4xl">
                       <header>
-                        <h3 class="text-sm font-semibold">
-                          {settingText("section.security")}
-                        </h3>
+                        <Show when={!embedded()}><h3 class="text-sm font-semibold">{settingText("section.security")}</h3></Show>
                         <p class="mt-1 text-xs text-muted-foreground">
                           {settingText("securityHelp")}
                         </p>
@@ -1731,7 +1589,7 @@ export function ManagedServiceSettingsDrawer(props: {
                         <div class="space-y-2">
                           <For each={container.devices ?? []}>
                             {(device, index) => (
-                              <div class="grid grid-cols-[1fr_1fr_6rem_auto] gap-2">
+                              <div class="managed-settings-entry managed-settings-entry--device">
                                 <Input
                                   class="h-8 font-mono text-xs"
                                   value={device.host_path}
@@ -1789,7 +1647,7 @@ export function ManagedServiceSettingsDrawer(props: {
                                     })
                                   }
                                 >
-                                  <Trash class="h-3.5 w-3.5" />
+                                  <Trash class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">{settingText("remove")}</span>
                                 </Button>
                               </div>
                             )}
@@ -1828,42 +1686,16 @@ export function ManagedServiceSettingsDrawer(props: {
                   {(host) => (
                     <section class="flex h-full min-h-[32rem] max-w-5xl flex-col">
                       <header>
-                        <h3 class="text-sm font-semibold">
-                          {settingText("section.lifecycle")}
-                        </h3>
+                        <Show when={!embedded()}><h3 class="text-sm font-semibold">{settingText("section.lifecycle")}</h3></Show>
                         <p class="mt-1 text-xs text-muted-foreground">
                           {resolved().template_source === "builtin"
                             ? settingText("lifecycleLockedHelp")
                             : settingText("lifecycleHelp")}
                         </p>
                       </header>
-                      <div class="mt-4 flex gap-1 border-b pb-2">
-                        <For
-                          each={
-                            [
-                              "install_script",
-                              "start_script",
-                              "stop_script",
-                              "uninstall_script",
-                            ] as Array<keyof HostSettings>
-                          }
-                        >
-                          {(name) => (
-                            <button
-                              type="button"
-                              class={cn(
-                                "cursor-pointer rounded-md px-3 py-1.5 text-xs",
-                                scriptName() === name
-                                  ? "bg-accent text-foreground"
-                                  : "text-muted-foreground",
-                              )}
-                              onClick={() => setScriptName(name)}
-                            >
-                              {settingText(name)}
-                            </button>
-                          )}
-                        </For>
-                      </div>
+                      <Tabs class="managed-settings-tabs mt-4" ariaLabel={settingText('section.lifecycle')} size="sm" activeId={scriptName()}
+                        items={(['install_script', 'start_script', 'stop_script', 'uninstall_script'] as const).map(name => ({ id: name, label: settingText(name) }))}
+                        onChange={name => setScriptName(name as keyof HostSettings)} features={{ indicator: { mode: 'slider' }, containerBorder: false }} />
                       <div class="mt-3 min-h-[22rem] flex-1 overflow-hidden rounded-md border">
                         <Show
                           when={resolved().template_source !== "builtin"}
@@ -1968,7 +1800,7 @@ export function ManagedServiceSettingsDrawer(props: {
             </div>
           )}
         </Show>
-        </div><div data-managed-settings-footer class="shrink-0 border-t p-3">{footer()}</div></div>
+        </div><Show when={!embedded() || dirtyCount() || plan() || applying() || savingMetadata()}><div data-managed-settings-footer class="shrink-0 border-t p-3">{footer()}</div></Show></div>
       </HostedSettingsPanel>
       <DirectoryPicker
         open={props.open && pickerOpen()}

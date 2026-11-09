@@ -594,7 +594,7 @@ describe('EnvSettingsPage', () => {
 
     const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
-      'Appearance & Language', 'Terminal', 'Browser', 'Host Applications & Desktop', 'Containers', 'Services', 'Extensions', 'Plugin configuration', 'Storage & Recovery',
+      'Appearance & Language', 'Terminal', 'Browser', 'Host Applications & Desktop', 'Containers', 'Services', 'Extensions', 'Plugin configuration', 'Flower recovery', 'Storage',
       'Config File', 'Connection', 'Runtime Status', 'Shell & Workspace', 'Codespaces & Tooling', 'Logging', 'Permission Policy', 'Flower', 'Debug Console',
     ]);
     const renderedIDs = Array.from(host.querySelectorAll('[data-settings-nav-item]')).map(node => node.getAttribute('data-settings-nav-item'));
@@ -630,7 +630,7 @@ describe('EnvSettingsPage', () => {
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
-    expect(aiGroupSections).toEqual(['ai', 'extensions', 'plugins']);
+    expect(aiGroupSections).toEqual(['ai', 'extensions', 'plugins', 'flower_recovery']);
     expect(host.querySelector('[data-settings-nav-item="plugins"]')).not.toBeNull();
 
     await openSettingsSection(host, 'debug_console');
@@ -690,8 +690,8 @@ describe('EnvSettingsPage', () => {
     expect(connectionCard?.textContent).toContain('Instance ID');
     expect(connectionCard?.textContent).toContain('ai_runtime_123');
     expect(connectionCard?.textContent).toContain('Security key');
-    expect(connectionCard?.textContent).toContain('Change connection');
-    expect(connectionCard?.textContent).toContain('Desktop Connection Center');
+    expect(connectionCard?.textContent).toContain('Connection management');
+    expect(connectionCard?.textContent).toContain('Manage environments, gateways and SSH connections in Redeven Desktop.');
     expect(connectionCard?.textContent).not.toContain('Connection details managed by the Control Plane');
     expect(connectionCard?.textContent).not.toContain('This is not a connection settings form');
     expect(connectionCard?.textContent).not.toContain('Generated automatically');

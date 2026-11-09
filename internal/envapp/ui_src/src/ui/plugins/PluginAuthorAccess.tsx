@@ -102,7 +102,7 @@ export function PluginAuthorAccess(props: Props): JSX.Element {
   }
 
   return (
-    <div class="space-y-3 p-3" data-plugin-author-access aria-busy={loading()}>
+    <div class={props.embeddedConnections ? "space-y-4" : "space-y-3 p-3"} data-plugin-author-access aria-busy={loading()}>
       <Show when={loading()}>
         <p role="status" class="text-xs text-muted-foreground">
           {i18n.t('common.status.loading')}
@@ -133,6 +133,7 @@ export function PluginAuthorAccess(props: Props): JSX.Element {
             </Show>
             <PluginConnectionsDialog
               embedded={props.embeddedConnections}
+              refreshRevision={props.embeddedConnections ? props.refreshRevision : undefined}
               visible={props.visible}
               open={connectionsOpen()}
               onOpenChange={setConnections}

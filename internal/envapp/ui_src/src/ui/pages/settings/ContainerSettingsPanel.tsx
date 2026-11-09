@@ -5,7 +5,8 @@ import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, on, untrack } from 'solid-js';
 import { Button, Input, Tabs, Tag, SettingsSection, SettingsList, SettingRow } from '@floegence/floe-webapp-core/ui';
 import { AlertTriangle, Eye, EyeOff, Info, Lock, Plus, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
-import { SettingsResourceToolbar } from './SettingsPrimitives';
+import { SettingsResourceHeader, SettingsResourceList, SettingsResourceRow } from './SettingsResources';
+import { ContainersWorkbenchIcon } from '../../icons/ContainersIcon';
 import { useEnvContext } from '../EnvContext';
 import { useI18n } from '../../i18n';
 import { useEnvSettingsPage } from './EnvSettingsPageContext';
@@ -75,27 +76,34 @@ export function ContainerSettingsPanel(props: { resource?: string }) {
   const [services, { refetch }] = createResource(() => cache.ready() && !!env.env()?.permissions?.can_read, async () => cache.refresh(listContainerServices));
   const serviceData = () => services.error ? undefined : services();
   const [selected, setSelected] = createSignal('');
+  const [refreshRevision, setRefreshRevision] = createSignal(0);
   const stableServices = new Map<string, ContainerService>();
   createEffect(() => { for (const service of serviceData() ?? []) stableServices.set(service.service_id, service); });
   const ids = createMemo(() => (serviceData() ?? []).map(service => service.service_id));
-  const target = () => props.resource ?? selected();
+  const target = () => host ? props.resource ?? '' : props.resource ?? selected();
+  const presented = () => !host || host.present() && host.target()?.section === 'containers';
+  const choose = (id: string) => { if (!presented()) return; setSelected(id); env.openSettings('containers', id ? { resource: id } : undefined); };
   const [visited, setVisited] = createSignal<string[]>([]);
   createEffect(() => { const id = target(); if (id && ids().includes(id)) setVisited(old => old.includes(id) ? old : [...old, id]); });
   return <div class="space-y-5 min-w-0" data-testid="container-settings-panel" aria-busy={services.loading}>
-    <SettingsResourceToolbar label={i18n.t('containers.services.title')} actions={
-      <Button size="sm" variant="ghost" icon={Refresh} disabled={services.loading || !ctx.canInteract()} onClick={() => void refetch()} aria-label={i18n.t('common.actions.refresh')}>{i18n.t('common.actions.refresh')}</Button>
-    }><Select section="containers" class="w-full" value={target()} onChange={id => { setSelected(id); env.openSettings('containers', { resource: id }); }}
-      options={ (serviceData() ?? []).map(service => ({ value: service.service_id, label: service.name })) } placeholder={i18n.t('containers.services.title')} ariaLabel={i18n.t('containers.services.title')} />
-    </SettingsResourceToolbar>
+    <SettingsResourceHeader active={presented()}><div class="settings-resource-header">
+      <Show when={target()}><div data-settings-resource-picker><Select section="containers" class="w-full" value={target()} onChange={choose}
+        options={[{ value: '', label: i18n.t('containers.services.title') }, ...(serviceData() ?? []).map(service => ({ value: service.service_id, label: service.name })), ...(target() && !ids().includes(target()) ? [{ value: target(), label: i18n.t('settings.targetUnavailable'), disabled: true }] : [])]} ariaLabel={i18n.t('containers.services.title')} /></div></Show>
+      <Button data-settings-config-refresh size="icon" variant="ghost" icon={Refresh} disabled={services.loading || !ctx.canInteract()} onClick={() => { if (!presented() || !ctx.canInteract()) return; void refetch(); setRefreshRevision(value => value + 1); }} aria-label={i18n.t('common.actions.refresh')} title={i18n.t('common.actions.refresh')} />
+    </div></SettingsResourceHeader>
+    <Show when={!target() && ids().length}><SettingsResourceList label={i18n.t('containers.services.title')}>
+      <For each={serviceData()}>{service => <SettingsResourceRow label={service.name} onClick={() => choose(service.service_id)}><ContainersWorkbenchIcon /><span class="settings-resource-name">{service.name}</span></SettingsResourceRow>}</For>
+    </SettingsResourceList></Show>
+    <Show when={!target() && !services.loading && !services.error && !ids().length}><p role="status" class="text-xs text-muted-foreground">{i18n.t('containers.empty.title')}</p></Show>
     <Show when={services.error}><p role="alert">{String(services.error)}</p></Show>
     <Show when={target() && !services.loading && !ids().includes(target())}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
     <For each={visited()}>{id => <div hidden={target() !== id} inert={target() !== id}>
-      <ContainerServiceSettings service={(serviceData() ?? []).find(service => service.service_id === id) ?? stableServices.get(id)!} available={() => ids().includes(id)} active={() => target() === id && (!host || host.present() && host.target()?.section === 'containers' && host.target()?.resource === id)} captureAuthority={cache.captureAuthority} />
+      <ContainerServiceSettings refreshRevision={refreshRevision()} service={(serviceData() ?? []).find(service => service.service_id === id) ?? stableServices.get(id)!} available={() => ids().includes(id)} active={() => target() === id && (!host || host.present() && host.target()?.section === 'containers' && host.target()?.resource === id)} captureAuthority={cache.captureAuthority} />
     </div>}</For>
   </div>;
 }
 
-function ContainerServiceSettings(props: { service: ContainerService; available: () => boolean; active: () => boolean; captureAuthority: () => () => boolean }) {
+function ContainerServiceSettings(props: { refreshRevision: number; service: ContainerService; available: () => boolean; active: () => boolean; captureAuthority: () => () => boolean }) {
   const env = useEnvContext();
   const operationSession = env.containerOperationSession ?? createContainerOperationSession(env);
   const i18n = useI18n();
@@ -328,19 +336,19 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
     } catch (error) { if (admitted()) { await openServiceConfiguration(props.service); setServiceConfigurationError(String(error)); } }
     finally { if (admitted()) setBusy(false); }
   };
+  createEffect(on(() => props.refreshRevision, () => { if (props.active()) void reconcile(); }, { defer: true }));
   // IMPORTANT: The global settings page owns scrolling; configuration fields
   // stay in natural flow and do not recreate the work surface's dialog viewport.
   return <section class="container-settings-configuration space-y-4" aria-label={i18n.t('containers.services.configurationTitle', { name: props.service.name })}>
-    <header class="flex flex-wrap items-center gap-2">
-      {/* IMPORTANT: Source actions share its tab row. Inventory refresh above
-          and exact-operation reconciliation here retain separate owners. */}
-      <Tabs class="min-w-0 flex-1" items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration'), disabled: !canSave() || busy() || !!review() || serviceConfigurationLoading() }))} activeId={serviceConfigurationSourceID()} onChange={(id) => { if (canSave() && !busy() && !review() && !serviceConfigurationLoading()) selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID); }} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} />
-      <Button data-settings-config-refresh size="icon" variant="ghost" icon={Refresh} disabled={!current() || busy()} aria-label={i18n.t('common.actions.refresh')} title={i18n.t('common.actions.refresh')} onClick={() => void reconcile()} />
+    <Show when={props.service.configuration.mode === 'local' && ((serviceConfiguration()?.sources.length ?? 0) > 1 || dirty())}><header class="flex flex-wrap items-center gap-2">
+      {/* IMPORTANT: The dialog header refreshes inventory and reconciles this
+          exact editor; it cannot replace drafts or replay uncertain writes. */}
+      <Show when={(serviceConfiguration()?.sources.length ?? 0) > 1}><Tabs class="min-w-0 flex-1" items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration'), disabled: !canSave() || busy() || !!review() || serviceConfigurationLoading() }))} activeId={serviceConfigurationSourceID()} onChange={(id) => { if (canSave() && !busy() && !review() && !serviceConfigurationLoading()) selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID); }} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} /></Show>
       <Show when={dirty()}><Button size="sm" variant="ghost" disabled={busy() || uncertain() || !current()} onClick={() => void openServiceConfiguration(props.service, serviceConfigurationSourceID())}>{i18n.t('filePreview.discardChanges')}</Button></Show>
-    </header>
+    </header></Show>
     <Show when={uncertain()}><p role="alert">{i18n.t('settings.operationUnknown')}</p></Show>
     <fieldset class="min-w-0 space-y-4" aria-busy={serviceConfigurationLoading()} disabled={!canSave() || busy() || !!review() || serviceConfigurationLoading()}>
-      <Show when={serviceConfigurationTarget()?.configuration.mode === 'local'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.services.configurationUnavailable')}</strong></div>}>
+      <Show when={props.service.configuration.mode === 'local'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.services.configurationUnavailable')}</strong></div>}>
         <Show when={serviceConfiguration() || !serviceConfigurationLoading()} fallback={<div class="h-64 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" aria-hidden="true" />}>
           <Show when={serviceConfiguration()} fallback={<div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div>}>
             <Show when={serviceConfigurationError()}><div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div></Show>
@@ -423,7 +431,7 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
     </SettingsSection>}</Show>
     <Show when={operation()}>{value => <p role="status">{i18n.t(`containers.operationStates.${value().state}` as Parameters<typeof i18n.t>[0])}</p>}</Show>
     <Show when={operation()?.error_code}><p role="alert">{operation()?.error_code}: {operation()?.error_message}</p></Show>
-    <Show when={!review()}><div class="flex flex-wrap justify-end gap-2">
+    <Show when={!review() && props.service.configuration.mode === 'local'}><div class="flex flex-wrap justify-end gap-2">
       <Button variant="outline" disabled={!canSave() || busy() || !serviceConfigurationSourceEditable() || serviceConfigurationLoading()} onClick={() => void submitServiceConfiguration('save')}>{i18n.t('containers.services.save')}</Button>
       <Show when={serviceConfigurationSource()?.apply_modes.includes('save_and_restart')}><Button disabled={!canSave() || busy() || !serviceConfigurationSourceEditable() || !props.service?.capabilities.restart || serviceConfigurationLoading()} onClick={() => void submitServiceConfiguration('save_and_restart')}>{i18n.t('containers.services.saveRestart')}</Button></Show>
     </div></Show>

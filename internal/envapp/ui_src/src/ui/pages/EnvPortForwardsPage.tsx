@@ -1,5 +1,5 @@
 import { SettingsSelect as Select } from './settings/SettingsSelect';
-import { SettingsResourceToolbar } from './settings/SettingsPrimitives';
+import { SettingsResourceHeader, SettingsResourceList, SettingsResourceRow } from './settings/SettingsResources';
 import {createServiceTemplateMarket} from './serviceTemplateMarket';
 import type { MarketTemplate } from '@floegence/redeven-service-templates';
 import { useSettingsPanelHost, useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
@@ -3555,6 +3555,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     if (untrack(managedSettingsService)?.service_id !== service?.service_id) setManagedSettingsService(service ?? null);
   });
 
+  // Duplicate display names keep their real workspace/instance identity visible.
+  const settingsServiceDescription = (service: ManagedService) => managedState().filter(item => managedServicePresentation(item, i18n).name === managedServicePresentation(service, i18n).name).length > 1
+    ? service.workspace_path || service.service_id : undefined;
+
   // Create service handler
   const doCreate = async (target: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
     if (!canExecute()) return;
@@ -4095,15 +4099,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         </div>
       </main>
 
-      </>}><SettingsResourceToolbar label={i18n.t('webServices.collection.title')} actions={<Button variant="ghost" size="sm" disabled={managedLoading()} onClick={() => { void loadManaged(false); setManagedSettingsRevision(value => value + 1); }}><RefreshIcon class="size-3.5" />{i18n.t('common.actions.refresh')}</Button>}>
-        <Select section="services" ariaLabel={i18n.t('webServices.collection.title')} value={settingsHost?.target()?.resource ?? ''}
-          options={[{ value: '', label: i18n.t('webServices.collection.title') }, ...managedState().map(service => ({ value: service.service_id, label: service.name })), ...(settingsHost?.target()?.resource && !managedSettingsService() ? [{ value: settingsHost.target()!.resource!, label: i18n.t('settings.targetUnavailable'), disabled: true }] : [])]}
-          onChange={id => ctx.openSettings('services', { resource: id || undefined })} />
-      </SettingsResourceToolbar><Show when={!managedSettingsService()}>
+      </>}><SettingsResourceHeader active={!!settingsHost?.present() && settingsHost.target()?.section === 'services'}><div class="settings-resource-header">
+        <Show when={settingsHost?.target()?.resource}><div data-settings-resource-picker><Select section="services" ariaLabel={i18n.t('webServices.collection.title')} value={settingsHost?.target()?.resource ?? ''}
+          options={[{ value: '', label: i18n.t('webServices.collection.title') }, ...managedState().map(service => ({ value: service.service_id, label: managedServicePresentation(service, i18n).name, description: settingsServiceDescription(service) })), ...(settingsHost?.target()?.resource && !managedSettingsService() ? [{ value: settingsHost.target()!.resource!, label: i18n.t('settings.targetUnavailable'), disabled: true }] : [])]}
+          onChange={id => ctx.openSettings('services', { resource: id || undefined })} /></div></Show>
+        <Button variant="ghost" size="icon" aria-label={i18n.t('common.actions.refresh')} title={i18n.t('common.actions.refresh')} disabled={managedLoading()} onClick={() => { if (!settingsHost?.present() || settingsHost.target()?.section !== 'services') return; void loadManaged(false); setManagedSettingsRevision(value => value + 1); }}><RefreshIcon class="size-3.5" /></Button>
+      </div></SettingsResourceHeader><Show when={!settingsHost?.target()?.resource}>
         <Show when={!managedLoading() && !managedState().length}><p role="status" class="text-xs text-muted-foreground">{i18n.t('webServices.empty.title')}</p></Show>
-        <For each={managedState()}>{service => <Button class="w-full justify-between" variant="outline" onClick={() => { setManagedSettingsService(service); ctx.openSettings('services', { resource: service.service_id }); }}><span class="truncate">{service.name}</span><ChevronRight class="size-4 shrink-0" /></Button>}</For>
-        <Show when={settingsHost?.target()?.resource && !managedSettingsService()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
-      </Show></Show>
+        <Show when={managedState().length}><SettingsResourceList label={i18n.t('webServices.collection.title')}><For each={managedState()}>{service => <SettingsResourceRow label={managedServicePresentation(service, i18n).name} onClick={() => { if (!settingsHost?.present() || settingsHost.target()?.section !== 'services') return; setManagedSettingsService(service); ctx.openSettings('services', { resource: service.service_id }); }}><ServiceTemplateIdentity template={managedServicePresentation(service, i18n)} compact metadata={<Show when={settingsServiceDescription(service)}>{identity => <span class="block truncate text-xs text-muted-foreground" title={identity()}>{identity()}</span>}</Show>} /></SettingsResourceRow>}</For></SettingsResourceList></Show>
+      </Show><Show when={settingsHost?.target()?.resource && !managedSettingsService()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show></Show>
       {/* Create dialog */}
       <CreateForwardDialog open={createOpen()} loading={createLoading()} onOpenChange={setCreateOpen} onCreate={doCreate} />
       <ForwardMetadataDialog

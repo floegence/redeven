@@ -121,6 +121,7 @@ const sectionComponents: Partial<Record<EnvSettingsSection, () => JSX.Element>> 
 };
 
 type EnvSettingsPageProps = {
+  resourceHeader?: JSX.Element;
   initialSection?: EnvSettingsSection;
   context?: EnvSettingsPageContextValue;
   panels?: Partial<Record<EnvSettingsSection, () => JSX.Element>>;
@@ -180,6 +181,7 @@ function EnvSettingsPageContent(props: EnvSettingsPageProps = {}) {
           ariaLabel={i18n.t('settings.runtimeTitle')} class="w-full"
         /></div>
         </div>
+        <Show when={props.resourceHeader}><div class="redeven-settings-header-resource">{props.resourceHeader}</div></Show>
         <Show when={!props.onHeaderChange || !props.panels?.[ctx.activeSection()]}><Button size="sm" variant="ghost" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">
           <RefreshIcon class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">{i18n.t('common.actions.refresh')}</span>
@@ -280,13 +282,13 @@ export function EnvSettingsPage(props: EnvSettingsPageProps = {}) {
   if (props.context) {
     return (
       <EnvSettingsPageCtx.Provider value={props.context}>
-        <EnvSettingsPageContent context={props.context} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
+        <EnvSettingsPageContent resourceHeader={props.resourceHeader} context={props.context} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
       </EnvSettingsPageCtx.Provider>
     );
   }
   return (
     <EnvSettingsPageProvider initialSection={props.initialSection}>
-      <EnvSettingsPageContent panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
+      <EnvSettingsPageContent resourceHeader={props.resourceHeader} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
     </EnvSettingsPageProvider>
   );
 }

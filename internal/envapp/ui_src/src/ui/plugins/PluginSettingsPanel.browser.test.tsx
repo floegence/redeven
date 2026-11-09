@@ -49,17 +49,15 @@ async function mount(width: number, installed?: PluginSettingsOwner) {
 it.each([390, 1100])('uses a labelled Floe resource picker and preserves author drafts at %ipx', async width => {
   await mount(width);
   const dialog = page.getByRole('dialog', { name: 'Settings' });
-  await expect.element(dialog.getByRole('group', { name: 'Plugin configuration' })).toBeVisible();
+  await expect.element(dialog.getByRole('group', { name: 'Author preview' })).toBeVisible();
   const picker = dialog.getByRole('combobox', { name: 'Plugin configuration' });
-  await picker.click();
-  await expect.element(page.getByRole('listbox', { name: 'Plugin configuration' })).toBeVisible();
-  await page.getByRole('option', { name: 'Draft A', exact: true }).click();
+  await page.getByRole('button', { name: 'Draft A', exact: true }).click();
   await expect.element(dialog.getByRole('textbox', { name: 'Connection draft' })).toBeVisible();
   const editor = document.querySelector('[data-preview-editor="preview-a"]')!;
   await dialog.getByRole('textbox', { name: 'Connection draft' }).fill('https://draft.example');
   await picker.click(); await page.getByRole('option', { name: 'Plugin configuration', exact: true }).click();
   expect(document.querySelector('[data-plugin-center-view]')).toBeNull();
-  await picker.click(); await page.getByRole('option', { name: 'Draft A', exact: true }).click();
+  await page.getByRole('button', { name: 'Draft A', exact: true }).click();
   await expect.element(dialog.getByRole('textbox', { name: 'Connection draft' })).toHaveValue('https://draft.example');
   expect(document.querySelector('[data-preview-editor="preview-a"]')).toBe(editor);
   const surface = document.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -75,7 +73,7 @@ it.each([390, 1100])('keeps installed connection drafts and exact targets outsid
   const owner: PluginSettingsOwner = { items, ownerScope: {}, loading: false, canManage: true, refresh: async () => undefined, api: { listConnections: state.connections, reviewConnection: state.mutate, approveConnection: state.mutate, cancelConnectionReview: state.mutate, revokeConnection: state.mutate } };
   await mount(width, owner);
   const picker = page.getByRole('combobox', { name: 'Plugin configuration', exact: true });
-  await picker.click(); await page.getByRole('option', { name: 'Metrics', exact: true }).click();
+  await page.getByRole('button', { name: 'Metrics', exact: true }).click();
   await expect.poll(() => state.connections.mock.calls.length).toBe(1);
   const destination = page.getByRole('textbox', { name: 'Destination', exact: true });
   await expect.element(destination).toBeVisible();
@@ -96,7 +94,7 @@ it.each([390, 1100])('keeps installed connection drafts and exact targets outsid
 it('requires explicit same-value selection before adopting a replaced author preview', async () => {
   await mount(900);
   const picker = page.getByRole('combobox', { name: 'Plugin configuration' });
-  await picker.click(); await page.getByRole('option', { name: 'Draft A', exact: true }).click();
+  await page.getByRole('button', { name: 'Draft A', exact: true }).click();
   await expect.poll(() => document.querySelector('[data-preview-editor="preview-a"]')).not.toBeNull();
   state.identity.mockResolvedValue({ preview: { plugin_instance_id: 'preview-replaced' } });
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -118,8 +116,7 @@ it('preserves installed drafts and their CAS revision across temporary authority
   state.mutate.mockResolvedValue({ review: { plugin_instance_id: 'metrics-instance', review_id: 'review-a', connector_id: 'workspace-api', destination: 'https://unsaved.example.com', scope: 'environment', expected_revision: 1, http_methods: ['GET'], review_expires_at: new Date(Date.now() + 60000).toISOString(), expires_at: new Date(Date.now() + 3600000).toISOString() } });
   const owner: PluginSettingsOwner = { get items() { return transport() ? [item] : []; }, get ownerScope() { return transport(); }, loading: false, get canManage() { return manage(); }, refresh: async () => undefined, api: { listConnections: state.connections, reviewConnection: state.mutate, approveConnection: state.mutate, cancelConnectionReview: state.mutate, revokeConnection: state.mutate } };
   await mount(900, owner);
-  await page.getByRole('combobox', { name: 'Plugin configuration', exact: true }).click();
-  await page.getByRole('option', { name: 'Metrics', exact: true }).click();
+  await page.getByRole('button', { name: 'Metrics', exact: true }).click();
   const destination = page.getByRole('textbox', { name: 'Destination', exact: true });
   await expect.element(destination).toHaveValue('https://saved.example.com');
   await destination.fill('https://unsaved.example.com');

@@ -46,7 +46,8 @@ async function prepare() {
   await ready();
   await page.getByRole('textbox', { name: 'Destination', exact: true }).fill(reviewed.destination);
   await page.getByRole('textbox', { name: 'Private networks (optional)' }).fill('127.0.0.1/32');
-  await page.getByRole('checkbox', { name: 'GET', exact: true }).click();
+  await userEvent.click(page.getByRole('checkbox', { name: 'GET', exact: true }).element().closest('label')!);
+  await expect.element(page.getByRole('checkbox', { name: 'GET', exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'Review connection', exact: true }).click();
   await vi.waitFor(() => expect(document.querySelector('[data-connection-review]')).not.toBeNull());
 }
@@ -164,7 +165,7 @@ it.each(['zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR',
 it('retains draft content and original CAS on refresh until an explicit discard', async () => {
   const mounted = mount(); await ready();
   await page.getByRole('textbox', { name: 'Destination', exact: true }).fill('https://draft.example/');
-  await page.getByRole('checkbox', { name: 'GET', exact: true }).click();
+  await userEvent.click(page.getByRole('checkbox', { name: 'GET', exact: true }).element().closest('label')!);
   vi.mocked(mounted.api.listConnections).mockResolvedValue({ connections: [{ ...active, revision: 9, destination: 'https://confirmed.example/' }] });
   await page.getByRole('button', { name: 'Refresh', exact: true }).click(); await ready();
   await expect.element(page.getByRole('textbox', { name: 'Destination', exact: true })).toHaveValue('https://draft.example/');

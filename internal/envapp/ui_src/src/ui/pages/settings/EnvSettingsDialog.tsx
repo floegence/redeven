@@ -1,3 +1,4 @@
+import { SettingsResourceHeaderContext } from './SettingsResources';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { X } from '@floegence/floe-webapp-core/icons';
 import { ENV_APP_FLOATING_LAYER } from '../../utils/envAppLayers';
@@ -39,6 +40,11 @@ export function EnvSettingsDialog(props: {
   const env = useEnvContext();
   const i18n = useI18n();
   const [header, setHeader] = createSignal<JSX.Element>(null);
+  const [resourceHeader, setResourceHeader] = createSignal<JSX.Element>(null);
+  const publishResourceHeader = (content: JSX.Element) => {
+    setResourceHeader(() => content);
+    return () => setResourceHeader(previous => previous === content ? null : previous);
+  };
   const target = props.session.target;
   // IMPORTANT: Keep derived target ownership here. Inline conditional prop
   // getters can allocate reactive computations when controls read on events.
@@ -105,7 +111,7 @@ export function EnvSettingsDialog(props: {
     {/* IMPORTANT: An invalid deep link is presentation state, not an owner change.
         Keep the scope-owned forms alive so returning never discards drafts. */}
     <div class="h-full min-h-0" hidden={!supported()} inert={!supported()}>
-      <Show when={scope()} keyed>{(_scope) => <EnvSettingsPage panels={panels} initialSection={(target()?.section ?? 'appearance') as EnvSettingsSection} onNavigate={section => props.session.open({ section })} onHeaderChange={content => setHeader(() => content)} />}</Show>
+      <SettingsResourceHeaderContext.Provider value={publishResourceHeader}><Show when={scope()} keyed>{(_scope) => <EnvSettingsPage resourceHeader={resourceHeader()} panels={panels} initialSection={(target()?.section ?? 'appearance') as EnvSettingsSection} onNavigate={section => props.session.open({ section })} onHeaderChange={content => setHeader(() => content)} />}</Show></SettingsResourceHeaderContext.Provider>
     </div>
     <Show when={!supported()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
   </SettingsDialog>;

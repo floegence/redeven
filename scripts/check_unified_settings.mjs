@@ -117,3 +117,15 @@ assert.match(storage, /props.active/);
 assert.match(storage, /abort\?\.abort\(\)/);
 assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/SettingsPrimitives.tsx'), /Omit<SettingRowProps, 'icon'>/);
 assert.match(read('internal/envapp/ui_src/src/ui/pages/EnvAIPage.tsx'), /onReviewIssues=\{\(\) => env.openSettings\('flower_recovery'/);
+
+// IMPORTANT: Resource indexes never repeat a picker above their grouped list.
+for (const file of ['internal/envapp/ui_src/src/ui/pages/settings/ContainerSettingsPanel.tsx', 'internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx', 'internal/envapp/ui_src/src/ui/plugins/PluginSettingsPanel.tsx']) {
+  const source = read(file);
+  assert.match(source, /<SettingsResourceHeader/);
+  assert.match(source, /<SettingsResourceList/);
+  assert.doesNotMatch(source, /SettingsResourceToolbar/);
+}
+const managedSettings = read('internal/envapp/ui_src/src/ui/pages/ManagedServiceSettingsDrawer.tsx');
+assert.doesNotMatch(managedSettings, /<select[ >]/);
+assert.match(managedSettings, /const value = clone\(draft\(\)\)/);
+assert.match(read('internal/envapp/ui_src/src/ui/plugins/PluginConnectionsDialog.tsx'), /<SettingsList>/);

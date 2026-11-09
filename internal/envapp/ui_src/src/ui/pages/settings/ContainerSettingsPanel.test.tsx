@@ -17,7 +17,6 @@ vi.mock('../EnvContext', () => ({ useEnvContext: () => ({
   env_id: () => 'container-settings-test', resourceCacheAccess: () => state.access(), env: () => ({ permissions: state.permissions() }), openSettings: state.open,
 }) }));
 vi.mock('./EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.access().phase === 'ready', canAdmin: () => state.permissions().can_admin }) }));
-vi.mock('./SettingsPrimitives', () => ({ SettingsResourceToolbar: (props: { label: string; children: import('solid-js').JSX.Element; actions?: import('solid-js').JSX.Element }) => <div aria-label={props.label}>{props.children}{props.actions}</div> }));
 vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('../../services/containerResourcesApi', async original => ({
   ...await original<typeof import('../../services/containerResourcesApi')>(),
@@ -81,7 +80,7 @@ const visible = (element: Element) => !element.closest('[hidden]');
 const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => visible(item) && (item.textContent === label || item.getAttribute('aria-label') === label))!;
 const save = () => button('containers.services.save');
 const run = () => button('containers.actions.run');
-const sourceRefresh = () => host.querySelector<HTMLButtonElement>('.container-settings-configuration > header button[aria-label="common.actions.refresh"]')!;
+const sourceRefresh = () => host.querySelector<HTMLButtonElement>('button[aria-label="common.actions.refresh"]')!;
 const editor = () => [...host.querySelectorAll<HTMLTextAreaElement>('textarea[data-source-editor]')].find(visible)!;
 function edit(value: string) { editor().value = value; editor().dispatchEvent(new Event('input', { bubbles: true })); }
 async function selectSource(source: 'engine' | 'docker_cli') { button(source === 'engine' ? 'containers.services.engineConfiguration' : 'containers.services.dockerCLI').click(); await settle(); }
@@ -100,7 +99,7 @@ it('never substitutes the first service for an invalid or unspecified global tar
   await mount('missing-service'); expect(host.textContent).toContain('settings.targetUnavailable');
   expect(state.configuration).not.toHaveBeenCalled(); expect(editor()).toBeUndefined();
   setTarget(undefined); await settle(); expect(state.configuration).not.toHaveBeenCalled();
-  const target = host.querySelector<HTMLSelectElement>('select')!; target.value = 'docker-a'; target.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+  button('Docker A').click(); setTarget('docker-a'); await settle();
   expect(state.open).toHaveBeenCalledExactlyOnceWith('containers', { resource: 'docker-a' }); expect(state.configuration).toHaveBeenCalledOnce();
 });
 

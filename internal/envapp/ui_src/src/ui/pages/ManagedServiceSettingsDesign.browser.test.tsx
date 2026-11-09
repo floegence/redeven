@@ -39,7 +39,7 @@ it.each([1280, 390])('keeps service sections readable with reachable actions at 
   }
   await userEvent.click(navigation.querySelector('button')!);
   const fields = [...document.querySelectorAll<HTMLElement>('.managed-settings-fields > label')];
-  expect(fields).toHaveLength(2);
+  expect(fields).toHaveLength(3);
   if (width === 1280) {
     const label = fields[0].firstElementChild!.getBoundingClientRect();
     const input = fields[0].querySelector('input')!.getBoundingClientRect();
@@ -170,7 +170,7 @@ it('settles a hidden preflight without accepting its stale plan', async () => {
   setOpen(false); finish({ configuration_revision: 3, plan_digest: 'stale', risks: [], changed_sections: ['runtime'] });
   setOpen(true);
   await expect.element(page.getByRole('button', { name: 'Review changes', exact: true })).toBeEnabled();
-  await expect.element(page.getByRole('button', { name: 'Apply configuration', exact: true })).toBeDisabled();
+  await expect.element(page.getByRole('button', { name: 'Apply configuration', exact: true })).not.toBeInTheDocument();
 });
 
 it.each([false, true])('settles a retained metadata save and preserves later edits=%s', async editWhileSaving => {
@@ -256,4 +256,36 @@ it.each([1280, 390])('uses one natural-flow service settings surface inside a ca
   expect(getComputedStyle(content).paddingLeft).toBe('0px');
   expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
   expect(host.querySelectorAll('[role="tablist"]')).toHaveLength(1);
+});
+
+
+it.each([320, 390, 1100])('keeps populated hosted fields aligned and mounted at %ipx', async width => {
+  await page.viewport(width, 1000);
+  api.request.mockReset().mockResolvedValue({ service_id: 'polish', name: 'Development API', description: 'Workspace service', access_mode: 'unified_proxy', deployment: 'container', template_source: 'custom', observed_state: 'stopped', configuration_revision: 1, configuration_sha256: 'sha', parameters: { PORT: '3000' }, parameter_definitions: [{ name: 'PORT', type: 'string' }], locked: [{ path: 'runtime.image', reason: 'Owned by the template.' }], runtime: { container: { entrypoint: '', command: ['serve'], environment: [{ name: 'PORT', value: '3000' }], labels: { role: 'api', stage: 'dev' }, restart_policy: 'no', network_mode: 'bridge', ports: [{ resource_id: 'port', container_port: 3000 }], mounts: [{ resource_id: 'mount', type: 'bind', source: '/workspace', target: '/data' }], cpus: 2, memory_bytes: 1024, cap_add: [], cap_drop: ['ALL'], devices: [{ resource_id: 'device', host_path: '/dev/dri', container_path: '/dev/dri' }], read_only_root: true } } });
+  const host = document.createElement('div'); host.style.padding = '16px'; document.body.append(host);
+  dispose = render(() => <FloeProvider><ManagedServiceSettingsDrawer embedded open serviceID="polish" serviceName="Development API" canManage onOpenChange={() => {}} onChanged={() => {}} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={async () => {}} /></FloeProvider>, host);
+  await expect.element(page.getByTestId('managed-service-settings')).toBeVisible();
+  expect(host.querySelector('[data-managed-settings-footer]')).toBeNull();
+  expect(host.querySelector('.managed-settings-content h3')).toBeNull();
+  const name = host.querySelector<HTMLInputElement>('.managed-settings-fields input')!;
+  await userEvent.type(name, ' new');
+  expect(host.querySelector('.managed-settings-fields input')).toBe(name);
+  expect(document.activeElement).toBe(name);
+  for (const tab of [...host.querySelectorAll<HTMLElement>('.managed-settings-tabs [role=tab]')]) {
+    await userEvent.click(tab);
+    const content = host.querySelector<HTMLElement>('.managed-settings-content')!;
+    expect(content.scrollWidth, tab.textContent ?? '').toBeLessThanOrEqual(content.clientWidth + 1);
+    for (const control of content.querySelectorAll<HTMLElement>('input, textarea, select')) {
+      if (control.checkVisibility()) expect(control.getBoundingClientRect().right, tab.textContent ?? '').toBeLessThanOrEqual(width - 15);
+    }
+    if (tab.textContent?.trim() === 'Parameters') {
+      const entry = page.getByPlaceholder('/usr/local/bin/start'); await expect.element(entry).toBeVisible(); const node = entry.element();
+      await userEvent.type(entry, '/app'); expect(entry.element()).toBe(node); expect(document.activeElement).toBe(node);
+      const label = page.getByPlaceholder('com.example.role').first(); const labelNode = label.element();
+      await userEvent.type(label, '.name'); expect(label.element()).toBe(labelNode); expect(document.activeElement).toBe(labelNode);
+      await expect.element(label).toHaveValue('role.name');
+    }
+    await page.screenshot({ path: `../../../dist/settings-resources/service-${width}-${tab.textContent?.trim().toLowerCase()}.png` });
+  }
+  expect(api.request.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true);
 });

@@ -26,11 +26,11 @@ it.each([1100, 390])('uses one scrolling owner and aligned configuration rows at
   expect(getComputedStyle(content).overflowY).toBe('visible');
   const header = content.querySelector(':scope > header')!;
   expect(header.querySelector('[role=tablist]')).not.toBeNull();
-  const refresh = header.querySelector<HTMLButtonElement>('[data-settings-config-refresh]')!;
+  const refresh = host.querySelector<HTMLButtonElement>('[data-settings-config-refresh]')!;
   expect(refresh.getAttribute('aria-label')).toBe('Refresh');
   refresh.click();
   await expect.poll(() => api.configuration.mock.calls.length).toBe(2);
-  expect(api.list).toHaveBeenCalledTimes(1);
+  expect(api.list).toHaveBeenCalledTimes(2);
   for (const name of ['HTTP proxy', 'HTTPS proxy', 'No proxy']) {
     const input = host.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!;
     expect(input.closest('.floe-setting-row')).not.toBeNull();
@@ -88,4 +88,26 @@ it.each([1100, 390])('keeps Docker CLI controls usable and drafts intact across 
   expect(api.preflight).not.toHaveBeenCalled();
   expect(api.create).not.toHaveBeenCalled();
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
+});
+
+
+it('presents unsupported engines without empty tabs or unavailable save actions', async () => {
+  api.list.mockResolvedValue([{ service_id: 'remote', name: 'Remote Podman', engine: 'podman', implementation: 'podman', state: 'running', capabilities: {}, configuration: { mode: 'unsupported', sources: [] } }]);
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <ContainerSettingsPanel resource="remote" />, host);
+  await expect.poll(() => host.querySelector('.container-service-config-unavailable')?.textContent).toContain('configuration');
+  expect(host.querySelector('[role="tablist"]')).toBeNull();
+  expect([...host.querySelectorAll('button')].some(button => button.textContent?.includes('Save'))).toBe(false);
+  expect(api.configuration).not.toHaveBeenCalled();
+});
+
+it('shows engine identities in one grouped list without a duplicate selector', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <ContainerSettingsPanel />, host);
+  await expect.element(page.getByRole('button', { name: 'Docker A', exact: true })).toBeVisible();
+  expect(host.querySelector('[role="combobox"]')).toBeNull();
+  const list = host.querySelector('[data-settings-resource-list]');
+  expect(list).not.toBeNull();
+  expect(list?.querySelector('svg')).not.toBeNull();
+  expect(api.configuration).not.toHaveBeenCalled();
 });

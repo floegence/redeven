@@ -2,7 +2,7 @@ import '../../index.css';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { FloeConfigProvider } from '@floegence/floe-webapp-core';
 import { I18nProvider } from '../i18n';
 import type { PluginInventoryItem } from './pluginTypes';
@@ -108,7 +108,7 @@ it('reviews and approves a connection for the author preview from the embedded s
   api.reviewConnection.mockResolvedValue({ review: { plugin_instance_id: 'preview', connector_id: 'api', expected_revision: 0, review_id: 'review-author', scope: 'environment', destination: 'https://preview.example/', http_methods: ['GET'], expires_at: new Date(Date.now() + 86400000).toISOString(), review_expires_at: new Date(Date.now() + 60000).toISOString() } });
   api.approveConnection.mockResolvedValue({}); mount(true);
   await page.getByRole('textbox', { name: 'Destination', exact: true }).fill('https://preview.example/');
-  await page.getByRole('checkbox', { name: 'GET', exact: true }).click();
+  await userEvent.click(page.getByRole('checkbox', { name: 'GET', exact: true }).element().closest('label')!);
   await page.getByRole('button', { name: 'Review connection', exact: true }).click();
   expect(api.approveConnection).not.toHaveBeenCalled();
   await page.getByRole('button', { name: 'Approve connection', exact: true }).click();
@@ -119,7 +119,7 @@ it.each(['authority', 'management'] as const)('retains the same author connectio
   const mounted = mount(true);
   await page.getByRole('textbox', { name: 'Destination', exact: true }).fill('https://retained.example/');
   await page.getByRole('textbox', { name: 'Private networks (optional)' }).fill('10.1.0.0/16');
-  await page.getByRole('checkbox', { name: 'GET', exact: true }).click();
+  await userEvent.click(page.getByRole('checkbox', { name: 'GET', exact: true }).element().closest('label')!);
   const editor = document.querySelector('[data-plugin-connections]');
   if (change === 'authority') mounted.setAuthority(false); else mounted.setCanManage(false);
   await Promise.resolve();
@@ -138,7 +138,7 @@ it.each(['authority', 'management'] as const)('invalidates connection review acr
   api.reviewConnection.mockResolvedValue({ review: { plugin_instance_id: 'preview', connector_id: 'api', expected_revision: 0, review_id: 'review-author', scope: 'environment', destination: 'https://draft.example/', http_methods: ['GET'], expires_at: new Date(Date.now() + 86400000).toISOString(), review_expires_at: new Date(Date.now() + 60000).toISOString() } });
   const mounted = mount(true);
   await page.getByRole('textbox', { name: 'Destination', exact: true }).fill('https://draft.example/');
-  await page.getByRole('checkbox', { name: 'GET', exact: true }).click();
+  await userEvent.click(page.getByRole('checkbox', { name: 'GET', exact: true }).element().closest('label')!);
   await page.getByRole('button', { name: 'Review connection', exact: true }).click();
   await expect.element(page.getByRole('button', { name: 'Approve connection', exact: true })).toBeVisible();
   api.listConnections.mockResolvedValue({ connections: [{ connector_id: 'api', revision: 9, scope: 'environment', status: 'active', destination: 'https://other.example/', http_methods: ['GET'] }] });

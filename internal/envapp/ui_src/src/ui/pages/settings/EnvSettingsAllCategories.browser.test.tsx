@@ -182,7 +182,7 @@ function inspectCategory(section: EnvSettingsSection, panel: HTMLElement, locale
   }
   expect(header.querySelectorAll('.redeven-settings-header')).toHaveLength(1);
   const refresh = [...header.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.getAttribute('aria-label') === copy.t('common.actions.refresh'));
-  expect(refresh.length, `${section}: refresh belongs to its API owner`).toBe(genericRefreshOwners.has(section) ? 1 : 0);
+  expect(refresh.length, `${section}: refresh belongs to its API owner`).toBe(genericRefreshOwners.has(section) || ['containers', 'services', 'plugins'].includes(section) ? 1 : 0);
   expect(header.querySelector('[aria-label="Back to Flower"]')).toBeNull();
   expect(dialog.querySelectorAll('.flower-extensions-header')).toHaveLength(0);
   expect([...panel.querySelectorAll<HTMLElement>('h1')].filter(node => node.checkVisibility() && !node.classList.contains('sr-only')), `${section}: no second visible page heading`).toHaveLength(0);
@@ -547,7 +547,7 @@ it('retains exact service drafts through real resource switches, invalid targets
   expect(name.element()).toBe(first);
   const reads = () => api.request.mock.calls.filter(([url]) => String(url).endsWith('/design-service/settings')).length;
   const before = reads();
-  await page.getByRole('group', { name: 'Added services', exact: true }).getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect.poll(reads).toBeGreaterThan(before);
   await expect.element(name).toHaveValue('Unsaved API details');
   expect(name.element()).toBe(first);
@@ -560,7 +560,7 @@ it('retains exact service drafts through real resource switches, invalid targets
 
 it.each(['appearance','terminal','browser','containers','services','plugins','logging'] as const)('retires %s category selector portal on navigation', async section => {
  await mount(1440); const panel = await openCategory(section);
- const selector=panel.querySelector<HTMLElement>('[role=combobox]')!; expect(selector).not.toBeNull();
+ const selector=(['containers','services','plugins'].includes(section) ? document.querySelector<HTMLElement>('.redeven-settings-header-resource [role=combobox]') : panel.querySelector<HTMLElement>('[role=combobox]'))!; expect(selector).not.toBeNull();
  selector.click();
  await expect.poll(() => document.querySelectorAll('[role=listbox]').length).toBeGreaterThan(0);
  session.open({section:section==='appearance'?'terminal':'appearance'});
@@ -584,4 +584,26 @@ it('stale selected terminal option cannot navigate from another category', async
  const option=[...document.querySelectorAll<HTMLElement>('[role=option]')].find(node=>node.getAttribute('aria-selected')!=='true')!;
  session.open({section:'appearance'}); option.click(); await new Promise(resolve=>setTimeout(resolve,0));
  expect(session.target()?.section).toBe('appearance');
+});
+
+
+it.each([320, 1024])('uses one icon list and header-owned resource navigation at %ipx', async width => {
+  await mount(width, 'zh-CN', true);
+  for (const section of ['containers', 'services', 'plugins'] as const) {
+    session.open({ section });
+    const panel = document.querySelector<HTMLElement>(`[data-testid="settings-section-${section}"]`);
+    await expect.element(page.getByTestId(`settings-section-${section}`)).toBeVisible();
+    const live = () => document.querySelector<HTMLElement>(`[data-testid="settings-section-${section}"]`)!;
+    await expect.poll(() => live().querySelectorAll('[data-settings-resource-list] button').length).toBeGreaterThan(0);
+    expect(live().querySelector('[role=combobox]')).toBeNull();
+    for (const row of live().querySelectorAll('[data-settings-resource-list] button')) expect(row.querySelector('svg, img')).not.toBeNull();
+    await page.screenshot({ path: `../../../../dist/settings-resources/list-${width}-${section}.png` });
+    live().querySelector<HTMLButtonElement>('[data-settings-resource-list] button')!.click();
+    await expect.poll(() => document.querySelector('.redeven-settings-header-resource [role=combobox]')).not.toBeNull();
+    expect(live().querySelector('[data-settings-resource-list]')).toBeNull();
+    const header = document.querySelector<HTMLElement>('.redeven-settings-header-resource')!;
+    if (width === 320) expect(header.querySelector('[role=combobox]')!.getBoundingClientRect().width).toBeGreaterThan(150);
+    await page.screenshot({ path: `../../../../dist/settings-resources/detail-${width}-${section}.png` });
+    expect(panel?.querySelector('[data-settings-resource-toolbar]')).toBeNull();
+  }
 });

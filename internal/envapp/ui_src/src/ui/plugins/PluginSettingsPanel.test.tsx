@@ -9,10 +9,10 @@ type Editor = Parameters<typeof PluginAuthorAccess>[0];
 const state = vi.hoisted(() => ({ list: vi.fn(), identity: vi.fn(), open: vi.fn(), changed: vi.fn(), error: vi.fn(),
   ready: () => true, interact: (): boolean => true, generation: () => 0, manage: () => true, present: () => true, resource: () => undefined as string | undefined, editors: [] as Editor[] }));
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: any) => <button disabled={props.disabled} onClick={props.onClick}>{props.children}</button>,
+  Button: (props: any) => <button aria-label={props['aria-label']} disabled={props.disabled} onClick={props.onClick}>{props.children}</button>,
+  SettingsList: (props: any) => <div data-settings-resource-list>{props.children}</div>,
   Select: (props: any) => <select aria-label={props.ariaLabel} value={props.value} onChange={event => props.onOptionSelect(props.options.find((option: any) => option.value === event.currentTarget.value))}>{props.options.map((option: any) => <option value={option.value} disabled={option.disabled}>{option.label}</option>)}</select>,
 }));
-vi.mock('../pages/settings/SettingsPrimitives', () => ({ SettingsResourceToolbar: (props: any) => <div data-settings-resource-toolbar><span>{props.label}</span>{props.children}{props.actions}</div> }));
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('../pages/EnvContext', () => ({ useEnvContext: () => ({ resourceCacheAccess: () => ({ phase: state.ready() ? 'ready' : 'denied', generation: state.generation() }), openSettings: state.open, bumpSettingsSeq: state.changed }) }));
 vi.mock('../pages/settings/EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.interact(), canAdmin: () => state.manage(), notify: { error: state.error } }) }));
@@ -40,21 +40,18 @@ async function mount(resource?: string) {
   await settle();
 }
 function shown() { return [...host.querySelectorAll<HTMLElement>('[data-editor]')].filter(node => !node.parentElement!.hidden); }
-function refresh() { [...host.querySelectorAll('button')].find(button => button.textContent === 'common.actions.refresh')!.click(); }
-it('groups its labelled resource picker and scoped refresh in the shared settings toolbar', async () => {
+function refresh() { [...host.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === 'common.actions.refresh')!.click(); }
+it('groups catalog resources without a duplicate selector', async () => {
   await mount();
-  const toolbar = host.querySelector('[data-settings-resource-toolbar]');
-  expect(toolbar).not.toBeNull();
-  expect(toolbar!.querySelector('select')?.getAttribute('aria-label')).toBe('settings.plugins.target');
-  expect(toolbar!.querySelector('button')?.textContent).toBe('common.actions.refresh');
+  expect(host.querySelector('[data-settings-resource-list]')).not.toBeNull();
+  expect(host.querySelector('select')).toBeNull();
+  expect(host.querySelector('button[aria-label="common.actions.refresh"]')).not.toBeNull();
 });
 it('discovers author previews from the catalog without opening a workspace', async () => {
   await mount();
-  const select = host.querySelector('select')!;
-  expect([...select.options].map(option => option.text)).toEqual(['settings.plugins.target', 'Draft A', 'Draft B']);
   expect(state.identity).not.toHaveBeenCalled(); expect(state.editors).toHaveLength(0);
-  select.value = pluginAuthorSettingsResource({ draftID: draft.id, workspaceID: draft.workspace_id }); select.dispatchEvent(new Event('change', { bubbles: true }));
-  expect(state.open).toHaveBeenCalledWith('plugins', { resource: select.value });
+  host.querySelector<HTMLButtonElement>('button[aria-label="Draft A"]')!.click();
+  expect(state.open).toHaveBeenCalledWith('plugins', { resource: pluginAuthorSettingsResource({ draftID: draft.id, workspaceID: draft.workspace_id }) });
 });
 it('loads only the exact author identity and renders its embedded editor', async () => {
   await mount(exact()); expect(shown()).toHaveLength(1); expect(state.identity).toHaveBeenCalledWith('author-a');
