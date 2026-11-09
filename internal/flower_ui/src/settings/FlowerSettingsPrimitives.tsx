@@ -1,6 +1,6 @@
 import { StableText } from '@floegence/floe-webapp-core/ui';
 import type { Component, JSX } from 'solid-js';
-import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Show, children, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Check } from '@floegence/floe-webapp-core/icons';
 
@@ -14,8 +14,9 @@ export const FlowerSubSectionHeader: Component<{
   title: string;
   description?: string;
   actions?: JSX.Element;
-}> = (props) => (
-  <div class="flower-settings-subsection-header">
+}> = (props) => {
+  const actions = children(() => props.actions);
+  return <div class="flower-settings-subsection-header">
     <div class="flower-settings-subsection-copy">
       <div class="flower-settings-subsection-title-row">
         <h3 class="flower-settings-subsection-title">{props.title}</h3>
@@ -25,11 +26,11 @@ export const FlowerSubSectionHeader: Component<{
         <p class="flower-settings-subsection-description">{props.description}</p>
       </Show>
     </div>
-    <Show when={props.actions}>
-      <div class="flower-settings-subsection-actions">{props.actions}</div>
+    <Show when={actions.toArray().some(value => value != null && typeof value !== 'boolean')}>
+      <div class="flower-settings-subsection-actions">{actions()}</div>
     </Show>
-  </div>
-);
+  </div>;
+};
 
 export const FlowerFieldLabel: Component<{ children: JSX.Element; hint?: string }> = (props) => (
   <label class="mb-1.5 flex min-w-0 items-center justify-between gap-2">

@@ -5447,6 +5447,8 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(notesButton).toBeTruthy();
       expect(notesButton?.getAttribute('data-tooltip')).toBe('Notes overlay (⌘.)');
       expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
+      expect(host.querySelector('[data-envapp-theme-trigger]')).toBeNull();
+      expect(host.querySelector('button[aria-label="Change appearance"]')).toBeNull();
       expect(appearanceButton?.getAttribute('aria-label')).toBe('Settings');
       expect(appearanceButton?.getAttribute('data-tooltip')).toBe('Settings');
 
@@ -5505,6 +5507,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(notesOverlayState.lastProps?.open).toBe(true);
 
+      expect(host.querySelector('[data-envapp-theme-trigger]')).toBeNull();
+      expect(host.querySelector('button[aria-label="Change appearance"]')).toBeNull();
       expect(appearanceButton?.getAttribute('aria-label')).toBe('Settings');
       expect(appearanceButton?.getAttribute('data-tooltip')).toBeNull();
     } finally {

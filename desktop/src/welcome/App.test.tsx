@@ -1069,7 +1069,7 @@ describe('DesktopWelcomeShell', () => {
   it('renders language inline with the published accessible Select', () => {
     const src = readWelcomeSource();
     const picker = src.slice(src.indexOf('function DesktopLanguageSettings'), src.indexOf('function DesktopCommandRegistrar'));
-    expect(picker).toContain('<Select ariaLabel=');
+    expect(picker).toContain('<SettingsSelect section="appearance" ariaLabel=');
     expect(picker).toContain('value={props.snapshot.preference}');
     expect(picker).toContain('REDEVEN_LOCALE_PREFERENCES.map');
     expect(picker).toContain('localePreferenceDisplayName(preference)');
@@ -1111,7 +1111,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('execute: () => props.openThemePicker()');
     expect(appSrc).toContain("openThemePicker={() => settingsHost.open({ section: 'appearance' })}");
     expect(appSrc).toContain('<DesktopThemePicker');
-    expect(appSrc).toContain('presentation="inline"');
+    expect(appSrc).toContain('<DesktopThemePicker active={unifiedSettings.present()');
     expect(appSrc).toContain('onSourceChange={updateDesktopThemeSource}');
     expect(appSrc).toContain('onShellThemeChange={updateDesktopShellTheme}');
     expect(appSrc).toContain('shellPresetStorageKey: DESKTOP_FLOE_SHELL_THEME_STORAGE_KEY');
@@ -1734,7 +1734,7 @@ describe('DesktopWelcomeShell', () => {
     expect(cloudConnectionPanelRule).toContain(
       'max-height: calc(var(--redeven-anchored-overlay-max-height, 100dvh - 1rem) - 2px);',
     );
-    expect((styles.match(/100dvh/g) ?? []).length).toBe(4);
+    expect((styles.match(/100dvh/g) ?? []).length).toBe(3);
 
     expect((appSrc.match(/class=\{(?:cn\()?CONNECTION_DIALOG_CLASS/g) ?? []).length).toBe(3);
     expect(appSrc).toContain('function ControlPlaneDialog');

@@ -42,11 +42,13 @@ test('Desktop leaves dialog decoration and environment card depth to Floe', () =
 test('product floating boundaries opt into upstream material without copying shadows', () => {
   for (const file of [
     'desktop/src/welcome/DesktopAnchoredOverlaySurface.tsx',
-    'internal/envapp/ui_src/src/ui/EnvAppThemePicker.tsx',
     'internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx',
   ]) {
     assert.match(read(file), /data-floe-surface="floating"/, file);
   }
+  const appearance = read('internal/envapp/ui_src/src/ui/EnvAppThemePicker.tsx');
+  assert.doesNotMatch(appearance, /data-floe-surface|TopBarIconButton|createFloatingPresence/);
+  assert.match(appearance, /<ThemePicker /, 'inline settings consume the published non-floating appearance surface');
   const modal = read('internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx');
   assert.doesNotMatch(modal, /backdrop-blur|shadow-\[/);
 });

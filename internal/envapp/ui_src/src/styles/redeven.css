@@ -253,7 +253,6 @@
   --redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-sidebar-bg));
   --redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-sidebar-bg));
   --redeven-settings-sidebar-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);
-  --redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);
   --redeven-settings-sidebar-note-fg: var(--muted-foreground);
   --redeven-settings-sidebar-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-sidebar-inset-bg));
   --redeven-settings-inset-bg: var(--redeven-settings-panel-bg);
@@ -471,7 +470,6 @@
   --redeven-settings-sidebar-hover-bg: var(--accent);
   --redeven-settings-sidebar-selection-bg: var(--selection-bg);
   --redeven-settings-sidebar-selection-fg: var(--selection-fg);
-  --redeven-settings-sidebar-selection-indicator: var(--selection-fg);
   --redeven-settings-sidebar-note-fg: var(--foreground);
   --redeven-settings-sidebar-control-border: var(--input);
   --redeven-settings-inset-bg: var(--card);
@@ -1626,15 +1624,6 @@ html.dark .git-changes-table-pending {
   color: var(--redeven-settings-sidebar-selection-fg) !important;
 }
 
-.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]::before {
-  content: '';
-  position: absolute;
-  inset-block: 0.375rem;
-  inset-inline-start: 0.25rem;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--redeven-settings-sidebar-selection-indicator);
-}
 
 .redeven-settings-section {
   border: 0;
@@ -1844,9 +1833,6 @@ html.dark .git-changes-table-pending {
     color: HighlightText !important;
   }
 
-  .redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]::before {
-    background: HighlightText;
-  }
 }
 
 .redeven-settings-alert--danger {

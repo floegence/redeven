@@ -179,8 +179,17 @@ function inspectCategory(section: EnvSettingsSection, panel: HTMLElement, locale
   // real subgroups, never repeat the current localized destination.
   const categoryTitle = header.querySelector<HTMLElement>('.redeven-settings-breadcrumb [title]')!.title;
   expect([...panel.querySelectorAll<HTMLElement>('h1, h2, h3, [role=heading]')].filter(node => node.checkVisibility() && !node.classList.contains('sr-only') && node.textContent?.trim() === categoryTitle), `${section}: no duplicate category title`).toHaveLength(0);
+  const selected = dialog.querySelector('.floe-settings-navigation__item[aria-current]');
+  if (selected) expect(getComputedStyle(selected, '::before').content).toBe('none');
+  if (section === 'ai') expect(panel.querySelector('.flower-settings-title-row')).toBeNull();
   if (section === 'appearance') {
-    expect(panel.querySelectorAll('[data-envapp-theme-preset]').length).toBeGreaterThan(10);
+    const rail = panel.querySelector<HTMLElement>('.floe-theme-picker__modes')!;
+    expect(rail.getBoundingClientRect().width).toBeLessThan(340);
+    expect(rail.getBoundingClientRect().height).toBeLessThanOrEqual(50);
+    expect(panel.querySelectorAll('[data-theme-preset]').length).toBeGreaterThan(10);
+    const checked = [...panel.querySelectorAll<HTMLElement>('.floe-theme-picker__caption > .floe-theme-picker__check')].filter(node => getComputedStyle(node).visibility === 'visible');
+    expect(checked).toHaveLength(1);
+    expect(checked[0].closest('[data-theme-preset]')?.getAttribute('aria-checked')).toBe('true');
     expect(getComputedStyle(panel.querySelector<HTMLElement>('[data-envapp-theme-menu=inline]')!).boxShadow).toBe('none');
     expect([...panel.querySelectorAll('h2')].map(node => node.textContent)).toContain(copy.t('shell.themePicker.title'));
     expect([...panel.querySelectorAll('h2')].map(node => node.textContent)).toContain(copy.t('uiCopy.preview.markdownControls'));

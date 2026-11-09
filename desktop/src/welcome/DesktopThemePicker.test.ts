@@ -127,32 +127,14 @@ describe('DesktopThemePicker', () => {
     }
 
     expect(pickerSource).toContain(': preset.displayName;');
-    expect(pickerSource).toContain("'background-color': preview()?.background");
-    expect(pickerSource).toContain("'background-color': preview()?.surface");
-    expect(pickerSource).toContain("'background-color': preview()?.sidebar ?? preview()?.surface");
-    expect(pickerSource).toContain("'border-color': preview()?.border");
-    expect(pickerSource).toContain("'background-color': preview()?.primary");
-    expect(pickerSource).toContain('<For each={preview()?.colors ?? []}>');
+    expect(pickerSource).toContain('<ThemePicker mode={props.snapshot.source}');
   });
 
-  it('implements the signed non-modal radiogroup keyboard and focus contract', () => {
+  it('delegates appearance rendering and keyboard mechanics to the published control', () => {
     const pickerSource = readPickerSource();
-
-    expect(pickerSource).toContain('aria-haspopup="dialog"');
-    expect(pickerSource).toContain('ariaModal={false}');
-    expect(pickerSource.match(/role="radiogroup"/gu)).toHaveLength(2);
-    expect((pickerSource.match(/role="radio"/gu) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect(pickerSource).toContain('tabIndex={selected() ? 0 : -1}');
-    expect(pickerSource).toContain('rovingRadioIndexForKey(event.key');
-    expect(pickerSource).toContain("event.key === 'Enter' || event.key === ' '");
-    expect(pickerSource).toContain("event.key === 'Escape'");
-    expect(pickerSource).toContain("document.addEventListener('mousedown', handleMouseDown)");
-    expect(pickerSource).toContain('closePicker(false)');
-    expect(pickerSource).toContain('closePicker(true)');
-    expect(pickerSource).toContain('buttonRef?.focus()');
-    expect(pickerSource).toContain("scrollIntoView({ block: 'nearest' })");
-    expect(pickerSource).toContain('modeChanged && themeGroupFocused()');
-    expect(pickerSource).toContain('queueMicrotask(() => {');
+    expect(pickerSource).toContain("import { ThemePicker } from '@floegence/floe-webapp-core/ui'");
+    expect(pickerSource).not.toMatch(/TopBarIconButton|DesktopAnchoredOverlaySurface|rovingRadioIndexForKey|role="radio"/);
+    expect(readWelcomeStyles()).not.toContain('.redeven-theme-picker');
   });
 
   it('keeps system mode selected while changing only the currently resolved preset', () => {
@@ -171,30 +153,8 @@ describe('DesktopThemePicker', () => {
     expect(pickerSource).toContain('if (result.source !== source)');
     expect(pickerSource).toContain('if (result.shellThemes[mode] !== preset.name)');
     expect((pickerSource.match(/showUpdateFailure\(\);/gu) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(pickerSource).toContain('role="alert"');
+    expect(pickerSource).toContain('error={error()}');
     expect(pickerSource).not.toContain('setThemeSnapshot');
-  });
-
-  it('keeps the picker responsive, readable, pointer-friendly, and accessible', () => {
-    const styles = readWelcomeStyles();
-
-    expect(styles).toContain('width: min(26rem, calc(100vw - 1rem));');
-    expect(styles).toContain('max-height: min(34rem, calc(100dvh - var(--redeven-desktop-titlebar-height) - 1.5rem));');
-    expect(styles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
-    expect(styles).toContain('@media (max-width: 34rem)');
-    expect(styles).toContain('grid-template-columns: minmax(0, 1fr);');
-    expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(styles).toContain('@media (forced-colors: active)');
-    expect(styles).toContain('.redeven-theme-picker__mode:focus-visible');
-    expect(styles).toContain('.redeven-theme-picker__theme:focus-visible');
-    expect((styles.match(/cursor: pointer;/gu) ?? []).length).toBeGreaterThanOrEqual(3);
-
-    const nameRuleStart = styles.indexOf('.redeven-theme-picker__theme-name {');
-    const nameRuleEnd = styles.indexOf('\n}', nameRuleStart);
-    const nameRule = styles.slice(nameRuleStart, nameRuleEnd);
-    expect(nameRule).toContain('overflow-wrap: anywhere;');
-    expect(nameRule).not.toContain('text-overflow: ellipsis;');
-    expect(nameRule).not.toContain('white-space: nowrap;');
   });
 
   it('derives Welcome shell surfaces from Floe semantic tokens instead of fixed theme colors', () => {

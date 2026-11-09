@@ -1986,7 +1986,7 @@
     "certificateInvalid": "無効な証明書",
     "certificateInvalidHelp": "このデバイスの証明書を確認し、HTTPS を起動する前に無効な証明書 ID を置き換えてください。HTTP が自動的に選択されることはありません。",
     "certificateManualTrust": "公開 CA 証明書を、このブラウザーまたはクライアントが使用する信頼ストアにインポートしてください。",
-    "interfaceTitle": "インターフェイス",
+    "interfaceTitle": "外観と言語",
     "desktopBridgeAccess": "Desktop のみ · プライベート ブリッジ",
     "browserURL": "ブラウザー URL",
     "desktopBridgeAccessHelp": "Desktop は認証済みのプライベート チャネルでこの環境を開きます。保存したポートは次回の直接 Local UI 起動時に適用されます。",

@@ -5170,6 +5170,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     </TopBarBrandButton>
   );
 
+  // IMPORTANT: Appearance has one Settings destination. Do not restore a
+  // separate top-bar theme picker or toggle; commands open that same category.
   const HeaderActions = () => (
     <div class="flex items-center gap-1">
       <Show when={!layout.isMobile()}>

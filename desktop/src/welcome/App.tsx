@@ -1,3 +1,5 @@
+import { SettingsSelect } from '../../../internal/settings_ui/src/SettingsSelect';
+import { SettingsList, SettingRow, SettingsSection } from '@floegence/floe-webapp-core/ui';
 import { SettingsPanelContext, type SettingsPanelRegistration } from '../../../internal/settings_ui/src/SettingsPanelHost';
 import { createSettingsSession } from '../../../internal/settings_ui/src/settingsSession';
 import { DesktopSettingsDialog } from './DesktopSettingsDialog';
@@ -39,7 +41,6 @@ import {
   Dropdown,
   Input,
   SegmentedControl,
-  Select,
   Switch,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
@@ -2240,16 +2241,14 @@ function desktopUpdateBridge() {
   return candidate;
 }
 
-function DesktopLanguageSettings(props: Readonly<{
+export function DesktopLanguageSettings(props: Readonly<{
   snapshot: RedevenLanguageSnapshot;
   i18n: DesktopI18n;
   onPreferenceChange: (preference: RedevenLocalePreference) => void;
 }>) {
-  return <div class="space-y-2"><label class="text-sm font-medium">{props.i18n.t('common.language')}</label>
-    <Select ariaLabel={props.i18n.t('common.language')} value={props.snapshot.preference}
+  return <SettingsList><SettingRow title={props.i18n.t('common.language')} control={<SettingsSelect section="appearance" ariaLabel={props.i18n.t('common.language')} value={props.snapshot.preference}
       options={REDEVEN_LOCALE_PREFERENCES.map(preference => ({ value: preference, label: preference === SYSTEM_LOCALE_PREFERENCE ? props.i18n.t('language.systemDefault') : localePreferenceDisplayName(preference) }))}
-      onChange={value => props.onPreferenceChange(value as RedevenLocalePreference)} />
-  </div>;
+      onChange={value => props.onPreferenceChange(value as RedevenLocalePreference)} />} /></SettingsList>;
 }
 
 function DesktopCommandRegistrar(props: Readonly<{
@@ -6769,7 +6768,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       />
 
       <Show when={unifiedSettingsVisited()}><DesktopSettingsDialog session={unifiedSettings} panels={unifiedPanels()} i18n={i18n()}
-        flowerScope={settingsFlowerOwner() ? JSON.stringify([settingsFlowerOwner()!.id, settingsFlowerOwner()!.runtime_started_at_unix_ms, settingsFlowerOwner()!.open_session_key]) : ''} flowerLabel={settingsFlowerOwner()?.label ?? ''} available={settingsFlowerAvailable()} changed={() => void flowerSettingsChanged()}
+        flowerScope={settingsFlowerOwner() ? JSON.stringify([settingsFlowerOwner()!.id, settingsFlowerOwner()!.runtime_started_at_unix_ms, settingsFlowerOwner()!.open_session_key]) : ''} available={settingsFlowerAvailable()} changed={() => void flowerSettingsChanged()}
         createFlowerAdapter={(signal) => {
           const owner = settingsFlowerOwner();
           const environmentID = owner?.id;
@@ -6777,11 +6776,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           if (!environmentID) throw new Error('SETTINGS_ENVIRONMENT_UNAVAILABLE');
           return createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, { runtimeEnvironmentID: environmentID, expectedRuntimeStartedAt: owner?.runtime_started_at_unix_ms, signal, isAvailable: () => settingsFlowerAvailable(owner), browserTransferAvailable: () => settingsTransferAvailable(owner), runtimeDisplayName: owner?.label });
         }}
-        appearance={() => <div class="space-y-5"><h1 class="text-lg font-semibold">{i18n().t('settings.languageTitle')}</h1>
+        appearance={() => <div class="redeven-settings-dialog-stack">
           <DesktopLanguageSettings snapshot={languageSnapshot()} i18n={i18n()} onPreferenceChange={updateDesktopLanguagePreference} />
-          <DesktopThemePicker presentation="inline" openRequest={0} snapshot={themeSnapshot()} i18n={i18n()} onSourceChange={updateDesktopThemeSource} onShellThemeChange={updateDesktopShellTheme} />
+          <SettingsSection title={i18n().t('shell.themePicker.title')}><DesktopThemePicker active={unifiedSettings.present() && unifiedSettings.target()?.section === 'appearance'} snapshot={themeSnapshot()} i18n={i18n()} onSourceChange={updateDesktopThemeSource} onShellThemeChange={updateDesktopShellTheme} /></SettingsSection>
         </div>}
-        connections={() => <div class="space-y-3"><h1 class="text-lg font-semibold">{i18n().t('settings.settingsWindowTitle')}</h1><For each={snapshot().environments}>{environment => <Button variant="outline" class="w-full justify-start" onClick={() => openSettingsSurface(environment.id)}>{environment.label}</Button>}</For></div>} />
+        connections={() => <div class="space-y-3"><For each={snapshot().environments}>{environment => <Button variant="outline" class="w-full justify-start" onClick={() => openSettingsSurface(environment.id)}>{environment.label}</Button>}</For></div>} />
       </Show>
       <EnvironmentSettingsDialog open={Boolean(settingsSession())} environment={settingsSession()?.environment ?? null} unavailable={!settingsOwnerAvailable()}
         tab={settingsPresentation()?.tab ?? 'connection'} i18n={i18n()} onClose={cancelSettings}

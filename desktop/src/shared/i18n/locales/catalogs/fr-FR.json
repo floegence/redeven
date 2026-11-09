@@ -1986,7 +1986,7 @@
     "certificateInvalid": "Certificat non valide",
     "certificateInvalidHelp": "Vérifiez le certificat sur cet appareil et remplacez l’identité invalide avant de démarrer HTTPS. HTTP n’est jamais sélectionné automatiquement.",
     "certificateManualTrust": "Importez le certificat CA public dans le magasin de confiance utilisé par ce navigateur ou client.",
-    "interfaceTitle": "Interface",
+    "interfaceTitle": "Apparence et langue",
     "desktopBridgeAccess": "Desktop uniquement · bridge privé",
     "browserURL": "URL du navigateur",
     "desktopBridgeAccessHelp": "Desktop ouvre cet environnement via un canal privé authentifié. Le port enregistré s’applique au prochain démarrage direct de Local UI.",

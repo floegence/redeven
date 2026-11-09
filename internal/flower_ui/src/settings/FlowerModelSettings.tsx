@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, createUniqueId, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, createUniqueId, type Component, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -16,6 +16,7 @@ import { createFlowerActivityDisclosureMotion } from '../activityDisclosure';
 
 export type FlowerModelSettingsProps = Readonly<{
   copy: FlowerSettingsCopy;
+  actions?: JSX.Element;
   providers: readonly FlowerProvider[];
   currentModelID: string;
   disabled?: boolean;
@@ -41,7 +42,7 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
 
   return <>
     <section class="flower-settings-section flower-settings-current-model" aria-label={copy().currentModel}>
-      <FlowerSubSectionHeader title={copy().models} />
+      <FlowerSubSectionHeader title={copy().models} actions={props.actions} />
       <div class="flower-settings-section-content flower-settings-model-group">
         <Show when={props.currentModelID || modelGroups().length} fallback={<p class="flower-body-copy text-muted-foreground">{copy().noModelSelected}</p>}>
           <div class="flower-settings-model-field">

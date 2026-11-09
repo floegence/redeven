@@ -27,7 +27,7 @@ export function AppearanceSettings(props: {
         ]} onChange={value => void i18n.setLocalePreference(normalizeLocalePreference(value))} />} />
     </SettingsList>
     <SettingsSection title={i18n.t('shell.themePicker.title')}>
-      <EnvAppThemePicker presentation="inline" onSourceChange={value => presented() ? props.onThemeSourceChange(value) : false} onShellThemeChange={(mode, preset) => presented() ? props.onShellThemeChange(mode, preset) : false} />
+      <EnvAppThemePicker active={presented()} onSourceChange={value => presented() ? props.onThemeSourceChange(value) : false} onShellThemeChange={(mode, preset) => presented() ? props.onShellThemeChange(mode, preset) : false} />
     </SettingsSection>
     <WorkbenchAppearanceSettings />
     <SettingsSection title={i18n.t('uiCopy.preview.markdownControls')}><SettingsList>

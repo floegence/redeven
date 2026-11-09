@@ -10,7 +10,7 @@ import { runtimeConnectionFixture } from '../testSupport/runtimeConnectionFixtur
 import { SettingsPanelContext, type SettingsPanelRegistration } from '../../../internal/settings_ui/src/SettingsPanelHost';
 import { createSettingsSession } from '../../../internal/settings_ui/src/settingsSession';
 let dispose: (() => void) | undefined;
-afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); });
+afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 it('retargets the canonical connection form, preserves locale drafts and cancels the exact opening on close', async () => {
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }); HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -30,7 +30,7 @@ it('retargets the canonical connection form, preserves locale drafts and cancels
     return <FloeProvider><SettingsPanelContext.Provider value={registry}>
       <EnvironmentSettingsDialog open={!!controller.session()} environment={controller.session()?.environment ?? null} tab="connection" i18n={createDesktopI18n(language())}
         onClose={controller.close} onTabChange={() => undefined} connection={<input aria-label="Connection draft" />} access={null} />
-      <DesktopSettingsDialog session={session} panels={panels()} i18n={createDesktopI18n(language())} flowerScope="" flowerLabel="" available={false} createFlowerAdapter={adapter} changed={() => undefined} appearance={() => <input aria-label="Appearance draft" />} connections={() => <span>Connection list</span>} />
+      <DesktopSettingsDialog session={session} panels={panels()} i18n={createDesktopI18n(language())} flowerScope="" available={false} createFlowerAdapter={adapter} changed={() => undefined} appearance={() => <input aria-label="Appearance draft" />} connections={() => <span>Connection list</span>} />
     </SettingsPanelContext.Provider></FloeProvider>;
   }, host);
   controller.open(a, 'a'); await vi.waitFor(() => expect(document.querySelector('[aria-label="Connection draft"]')).not.toBeNull());
@@ -46,4 +46,28 @@ it('retargets the canonical connection form, preserves locale drafts and cancels
   session.open({ section: 'browser', resource: 'removed-thread' });
   await vi.waitFor(() => expect(document.querySelector('[role="alert"]')).not.toBeNull());
   expect(adapter).not.toHaveBeenCalled();
+});
+
+it('gives appearance one dialog identity and no separate scope strip', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(320);
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const host = document.createElement('div'); document.body.append(host);
+  const session = createSettingsSession();
+  dispose = render(() => <FloeProvider><DesktopSettingsDialog session={session} panels={[]} i18n={createDesktopI18n('en-US')}
+    flowerScope="local" available={false} createFlowerAdapter={vi.fn()} changed={() => undefined}
+    appearance={() => <span data-appearance-content />} connections={() => <span />} /></FloeProvider>, host);
+  session.open({ section: 'appearance' });
+  await vi.waitFor(() => expect(document.querySelector('[data-appearance-content]')).not.toBeNull());
+  expect(document.querySelector('.floe-settings-navigation__item[aria-current]')?.textContent).toBe('Appearance & Language');
+  expect(document.querySelector('.redeven-unified-settings-dialog-header')?.textContent).toContain('Appearance & Language');
+  document.querySelector<HTMLButtonElement>('.redeven-settings-dialog-mobile [role=combobox]')!.click();
+  await vi.waitFor(() => expect(document.querySelectorAll('[role=listbox]')).toHaveLength(1));
+  const revision = session.revision();
+  const option = [...document.querySelectorAll<HTMLElement>('[role=option]')].find(node => node.textContent?.trim() === 'Environment settings')!;
+  option.click();
+  expect(session.target()?.section).toBe('connection');
+  expect(session.revision()).toBe(revision + 1);
+  session.open({ section: 'browser' });
+  expect(document.querySelector('.redeven-unified-settings-dialog-root')?.textContent).not.toContain('Local Environment');
 });

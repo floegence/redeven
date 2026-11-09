@@ -5,9 +5,41 @@
 .redeven-unified-settings-dialog-content > * { min-width: 0; width: 100%; }
 @media (max-width: 640px) { .redeven-unified-settings-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; } }
 
-/* The settings host presents the existing theme controls inline. */
-.redeven-theme-settings .redeven-theme-picker__panel { width: 100%; max-width: none; box-shadow: none; }
-.redeven-theme-settings .redeven-theme-picker__theme-scroll { max-height: none; }
-
 .redeven-unified-settings-dialog-root { flex: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .redeven-unified-settings-dialog-header { flex-shrink: 0; min-width: 0; }
+
+/* IMPORTANT: Welcome and Env are one continuous settings surface. The host
+   owns padding/scrolling; embedded feature panels must not add page chrome. */
+.redeven-unified-settings-dialog { container: redeven-settings / inline-size; background: var(--redeven-settings-content-bg, var(--background)); }
+.redeven-desktop-settings { --redeven-settings-content-bg: var(--background); }
+.redeven-desktop-settings .floe-settings-layout,
+.redeven-desktop-settings .floe-settings-layout__sidebar { background: var(--background); color: var(--foreground); }
+.redeven-settings-dialog-heading { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--background); }
+.redeven-settings-dialog-breadcrumb { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; font-size: var(--floe-type-control); }
+.redeven-settings-dialog-breadcrumb > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
+.redeven-settings-dialog-breadcrumb svg { width: 14px; height: 14px; flex: none; color: var(--muted-foreground); }
+.redeven-settings-dialog-close { flex: none; }
+.redeven-settings-dialog-mobile { display: none; min-width: 0; flex: 1; }
+.redeven-settings-dialog-page { padding: 24px; }
+.redeven-settings-dialog-stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.redeven-settings-dialog-stack > .floe-settings-section + .floe-settings-section { margin-top: 0; }
+.redeven-unified-settings-dialog .flower-settings-surface[data-settings-embedded] { height: auto; overflow: visible; background: transparent; }
+.redeven-unified-settings-dialog .flower-settings-surface[data-settings-embedded] .flower-settings-frame { width: 100%; padding: 0; }
+.redeven-unified-settings-dialog .flower-settings-surface[data-settings-embedded] .flower-settings-current-model { padding-top: 0; }
+@container redeven-settings (width < 768px) {
+  .redeven-desktop-settings .floe-settings-layout__sidebar { display: none; }
+  .redeven-settings-dialog-breadcrumb { display: none; }
+  .redeven-settings-dialog-mobile { display: block; }
+  .redeven-settings-dialog-heading { padding: 6px 12px; }
+  .redeven-settings-dialog-page { padding: 16px; }
+}
+@media (max-width: 640px) {
+  [data-floe-dialog-overlay-root]:has(> div > .redeven-unified-settings-dialog) { --floe-dialog-gap-x: 0px; --floe-dialog-gap-y: 0px; }
+}
+
+/* Model feedback stays in the existing heading row at every width. It must
+   never turn an idle hidden indicator into a second blank row on mobile. */
+.redeven-unified-settings-dialog .flower-settings-current-model > .flower-settings-subsection-header { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.redeven-unified-settings-dialog .flower-settings-current-model .flower-settings-subsection-actions { min-width: 0; justify-content: flex-end; }
+.redeven-desktop-settings .floe-setting-row__control > * { width: 258px; max-width: 100%; }
+@container floe-settings (max-width: 600px) { .redeven-desktop-settings .floe-setting-row__control > * { width: 100%; } }

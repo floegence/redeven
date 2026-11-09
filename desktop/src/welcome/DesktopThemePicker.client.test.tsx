@@ -14,80 +14,76 @@ afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlob
 
 function mount() {
   const host = document.createElement('div'); document.body.append(host);
+  const [active, setActive] = createSignal(true);
   const [snapshot, setSnapshot] = createSignal<DesktopThemePickerSnapshot>({ source: 'system', resolvedTheme: 'dark', shellThemes: { light: 'porcelain-light', dark: 'porcelain-dark' } });
   let resolve!: (value: DesktopThemePickerSnapshot) => void;
   let reject!: (reason: Error) => void;
   const onSourceChange = vi.fn(() => new Promise<DesktopThemePickerSnapshot>((done, fail) => { resolve = done; reject = fail; }));
   const onShellThemeChange = vi.fn(() => new Promise<DesktopThemePickerSnapshot>((done, fail) => { resolve = done; reject = fail; }));
-  dispose = render(() => <DesktopThemePicker openRequest={0} snapshot={snapshot()} i18n={createDesktopI18n('en-US')} onSourceChange={onSourceChange} onShellThemeChange={onShellThemeChange} />, host);
-  const trigger = host.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!;
-  trigger.click();
-  return { snapshot, setSnapshot, trigger, onSourceChange, onShellThemeChange, accept(next: DesktopThemePickerSnapshot) { setSnapshot(next); resolve(next); }, reject(error: Error) { reject(error); } };
+  dispose = render(() => <DesktopThemePicker active={active()} snapshot={snapshot()} i18n={createDesktopI18n('en-US')} onSourceChange={onSourceChange} onShellThemeChange={onShellThemeChange} />, host);
+  return { snapshot, setSnapshot, setActive, onSourceChange, onShellThemeChange, accept(next: DesktopThemePickerSnapshot) { setSnapshot(next); resolve(next); }, reject(error: Error) { reject(error); } };
 }
-function preset(name: string) { return document.querySelector<HTMLButtonElement>(`[data-desktop-theme-preset="${name}"]`)!; }
+function preset(name: string) { return document.querySelector<HTMLButtonElement>(`[data-theme-preset="${name}"]`)!; }
 
-describe('Desktop appearance interaction', () => {
-  it('uses a single Theme heading above the accessibly named color modes', () => {
+describe('Desktop appearance', () => {
+  it('uses the published compact picker without an extra heading or trigger', () => {
     mount();
-    const dialog = document.querySelector('[role="dialog"]')!;
-    expect(dialog.querySelector('h2')?.textContent).toBe('Theme');
-    expect(dialog.getAttribute('aria-label')).toBe('Theme');
-    expect(dialog.querySelector('.redeven-theme-picker__header')?.textContent).toBe('Theme');
-    expect(dialog.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe('Color mode');
-    expect(dialog.querySelector('[id$="-mode-label"]')).toBeNull();
-    expect(dialog.textContent).not.toContain('System is currently using');
+    expect(document.querySelector('.floe-theme-picker')).not.toBeNull();
+    expect(document.querySelector('h2, [aria-haspopup="dialog"]')).toBeNull();
+    expect(document.querySelectorAll('[data-theme-preset]')).toHaveLength(15);
   });
-
-  it('selects Soft Black through the shared persistence request', async () => {
-    const view = mount();
-    preset('soft-black').click();
-    await vi.waitFor(() => expect(view.onShellThemeChange).toHaveBeenCalledWith('dark', 'soft-black'));
-    view.accept({ ...view.snapshot(), shellThemes: { light: 'cloud-white', dark: 'soft-black' } });
-    await vi.waitFor(() => expect(preset('soft-black').getAttribute('aria-checked')).toBe('true'));
-    view.setSnapshot({ ...view.snapshot(), resolvedTheme: 'light' });
-    await vi.waitFor(() => expect(preset('cloud-white').getAttribute('aria-checked')).toBe('true'));
-  });
-
-  it('paints loading before sending a write, deduplicates pending clicks and keeps the checked option authoritative', async () => {
-    const view = mount();
-    preset('nord').click();
+  it('retains authoritative selection, serializes pending writes and surfaces failure for explicit retry', async () => {
+    const view = mount(); preset('nord').click(); preset('soft-black').click();
     expect(preset('nord').getAttribute('aria-busy')).toBe('true');
-    expect(preset('nord').getAttribute('aria-checked')).toBe('false');
     expect(preset('porcelain-dark').getAttribute('aria-checked')).toBe('true');
-    expect(document.querySelector('[role="status"]')?.textContent).toContain('Switching appearance');
     expect(view.onShellThemeChange).not.toHaveBeenCalled();
-    preset('nord').click(); preset('graphite').click();
+    expect(document.querySelector('[role=status]')?.textContent).toContain('Switching appearance');
     await vi.waitFor(() => expect(view.onShellThemeChange).toHaveBeenCalledTimes(1));
-    expect(view.onShellThemeChange).toHaveBeenCalledWith('dark', 'nord');
-    view.accept({ ...view.snapshot(), shellThemes: { light: 'porcelain-light', dark: 'nord' } });
-    await vi.waitFor(() => expect(view.trigger.getAttribute('aria-busy')).toBe('false'));
-    expect(preset('nord').getAttribute('aria-checked')).toBe('true');
-    expect(view.snapshot().source).toBe('system');
-  });
-
-  it('allows closing during a pending write and presents a failed write on reopening', async () => {
-    const view = mount(); preset('nord').click();
-    await vi.waitFor(() => expect(view.onShellThemeChange).toHaveBeenCalled());
-    document.querySelector<HTMLButtonElement>('.redeven-theme-picker__close')!.click();
-    const exiting = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(exiting.dataset.floatingPresence).toBe('exiting');
-    expect(exiting.inert).toBe(true);
-    view.reject(new Error('unavailable'));
-    await vi.waitFor(() => expect(view.trigger.getAttribute('aria-busy')).toBe('false'));
-    view.trigger.click();
-    expect(document.querySelector('[role="alert"]')?.textContent).toBe('Could not update appearance. Try again.');
+    view.reject(new Error('offline'));
+    await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not update'));
     expect(preset('porcelain-dark').getAttribute('aria-checked')).toBe('true');
+    view.setActive(false); view.setActive(true);
+    expect(document.querySelector('[role=alert]')?.textContent).toContain('Could not update');
     preset('nord').click();
     await vi.waitFor(() => expect(view.onShellThemeChange).toHaveBeenCalledTimes(2));
     view.accept({ ...view.snapshot(), shellThemes: { light: 'porcelain-light', dark: 'nord' } });
+    await vi.waitFor(() => expect(preset('nord').getAttribute('aria-checked')).toBe('true'));
+    expect(view.snapshot().source).toBe('system');
   });
-
-  it('retains the open picker and keyboard focus when system appearance replaces the focused preset', async () => {
+  it('rejects new choices from a retained hidden category and cancels pre-paint admission', async () => {
+    const view = mount(); preset('nord').click(); view.setActive(false);
+    await vi.waitFor(() => expect(preset('nord').getAttribute('aria-busy')).toBe('false'));
+    expect(view.onShellThemeChange).not.toHaveBeenCalled();
+    preset('soft-black').click();
+    expect(view.onShellThemeChange).not.toHaveBeenCalled();
+  });
+  it('selects a color mode through the native authority and validates its acknowledgement', async () => {
     const view = mount();
-    await vi.waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('radio'));
-    preset('porcelain-dark').focus();
+    const light = [...document.querySelectorAll<HTMLButtonElement>('.floe-theme-picker__modes [role=radio]')].find(button => button.textContent === 'Light')!;
+    light.click();
+    expect(light.getAttribute('aria-checked')).toBe('false');
+    await vi.waitFor(() => expect(view.onSourceChange).toHaveBeenCalledWith('light'));
+    view.accept({ ...view.snapshot(), source: 'system' });
+    await vi.waitFor(() => expect(document.querySelector('[role=alert]')).not.toBeNull());
+    light.click();
+    await vi.waitFor(() => expect(view.onSourceChange).toHaveBeenCalledTimes(2));
+    view.accept({ ...view.snapshot(), source: 'light', resolvedTheme: 'light' });
+    await vi.waitFor(() => expect(light.getAttribute('aria-checked')).toBe('true'));
+    expect(preset('porcelain-light')).not.toBeNull();
+  });
+  it.each(['mode', 'preset'])('retires a deferred %s choice after hiding and immediately returning', async kind => {
+    const view = mount();
+    const target = kind === 'preset' ? preset('nord') : [...document.querySelectorAll<HTMLButtonElement>('.floe-theme-picker__modes [role=radio]')].find(node => node.textContent === 'Light')!;
+    target.click(); view.setActive(false); view.setActive(true);
+    await vi.waitFor(() => expect(target.getAttribute('aria-busy')).toBe('false'));
+    expect(view.onSourceChange).not.toHaveBeenCalled(); expect(view.onShellThemeChange).not.toHaveBeenCalled();
+    target.click();
+    await vi.waitFor(() => expect(kind === 'preset' ? view.onShellThemeChange : view.onSourceChange).toHaveBeenCalledTimes(1));
+    view.accept(kind === 'preset' ? { ...view.snapshot(), shellThemes: { ...view.snapshot().shellThemes, dark: 'nord' } } : { ...view.snapshot(), source: 'light' });
+  });
+  it('keeps keyboard focus when system appearance replaces the focused preset', async () => {
+    const view = mount(); preset('porcelain-dark').focus();
     view.setSnapshot({ ...view.snapshot(), resolvedTheme: 'light' });
     await vi.waitFor(() => expect(document.activeElement).toBe(preset('porcelain-light')));
-    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
   });
 });

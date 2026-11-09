@@ -1,4 +1,4 @@
-import { type JSX } from 'solid-js';
+import { children, type JSX } from 'solid-js';
 import { createRetainedContent } from '@floegence/floe-webapp-core';
 import { DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
 import { FlowerContextDialog } from '../../flower_ui/src/FlowerContextDialog';
@@ -26,7 +26,10 @@ function RetainedSettingsDialog(props: SettingsDialogProps) {
   const Content = createRetainedContent(() => <div class="redeven-unified-settings-dialog-root">{props.children}</div>);
   // IMPORTANT: Header controls share the retained page owner. Floe's published
   // custom header slot keeps the accessible title and owns modal behavior.
-  const Header = props.header === undefined ? undefined : createRetainedContent(() => <div class="redeven-unified-settings-dialog-header">{props.header}</div>);
+  // IMPORTANT: Resolve the slot once. Reading a JSX getter for both presence
+  // and content creates two control owners and duplicates controlled popups.
+  const header = children(() => props.header);
+  const Header = header() === undefined ? undefined : createRetainedContent(() => <div class="redeven-unified-settings-dialog-header">{header()}</div>);
   return <FlowerContextDialog globalZIndex={props.globalZIndex} open={props.open} onOpenChange={open => { if (!open) props.onClose(); }} onPresenceChange={props.onPresenceChange}
         title={props.title} closeLabel={props.closeLabel} header={Header ? <Header /> : undefined} closeOnBackdropClick={props.closeOnBackdropClick ?? false}
         class="redeven-unified-settings-dialog" contentClass="redeven-unified-settings-dialog-content">

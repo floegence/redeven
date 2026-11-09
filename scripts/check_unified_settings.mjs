@@ -90,8 +90,21 @@ assert.match(read('internal/envapp/ui_src/src/ui/services/hostApplicationSetting
 for (const file of ['AppearanceSettings', 'WorkbenchAppearanceSettings', 'BrowserDisplaySettings', 'ConversationDefaultsSettings', 'ContainerSettingsPanel', 'TerminalSettingsPanel']) {
   assert.match(read(`internal/envapp/ui_src/src/ui/pages/settings/${file}.tsx`), /SettingsSelect as Select/);
 }
-const selector = read('internal/envapp/ui_src/src/ui/pages/settings/SettingsSelect.tsx');
+const selector = read('internal/settings_ui/src/SettingsSelect.tsx');
 assert.match(selector, /open=\{presentedOpen\(\)\}/);
 assert.match(selector, /onChange=\{value => \{ if \(admitted\(\)\)/);
 for (const file of ['internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx', 'internal/envapp/ui_src/src/ui/plugins/PluginSettingsPanel.tsx', 'internal/envapp/ui_src/src/ui/pages/settings/sections/LoggingSection.tsx']) assert.match(read(file), /SettingsSelect as Select/);
+
+// IMPORTANT: Both hosts use the published compact appearance view. Do not
+// restore a page-local theme implementation or duplicate top-bar control.
+for (const file of ['internal/envapp/ui_src/src/ui/EnvAppThemePicker.tsx', 'desktop/src/welcome/DesktopThemePicker.tsx']) {
+  assert.match(read(file), /<ThemePicker /);
+  assert.doesNotMatch(read(file), /TopBarIconButton|createFloatingPresence|DesktopAnchoredOverlaySurface|role="radio"/);
+}
+assert.doesNotMatch(shell, /<EnvAppThemePicker|<ThemeToggle/);
+const welcome = read('desktop/src/welcome/DesktopSettingsDialog.tsx');
+assert.doesNotMatch(welcome, /props\.flowerLabel|settings.languageTitle|onBack=\{props.session.close/);
+assert.match(welcome, /header=\{/);
+assert.match(welcome, /closeOnBackdropClick/);
+assert.match(read('desktop/src/welcome/App.tsx'), /<SettingsSelect section="appearance"/);
 console.log('Unified settings ownership contract passed.');

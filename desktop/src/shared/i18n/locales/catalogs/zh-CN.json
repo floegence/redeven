@@ -1986,7 +1986,7 @@
     "certificateInvalid": "证书无效",
     "certificateInvalidHelp": "请检查此设备上的证书，并在启动 HTTPS 前替换无效的证书身份。系统不会自动切换为 HTTP。",
     "certificateManualTrust": "请将公开 CA 证书导入此浏览器或客户端使用的信任存储。",
-    "interfaceTitle": "界面",
+    "interfaceTitle": "外观与语言",
     "desktopBridgeAccess": "仅限 Desktop · 私有 bridge",
     "browserURL": "浏览器 URL",
     "desktopBridgeAccessHelp": "Desktop 通过经过身份验证的私有通道打开此环境。保存的端口将在下一次直接启动 Local UI 时生效。",

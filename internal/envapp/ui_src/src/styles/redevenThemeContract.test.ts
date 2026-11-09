@@ -101,7 +101,6 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-sidebar-bg));',
       '--redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-sidebar-bg));',
       '--redeven-settings-sidebar-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);',
-      '--redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);',
       '--redeven-settings-sidebar-note-fg: var(--muted-foreground);',
       '--redeven-settings-sidebar-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-sidebar-inset-bg));',
       '--redeven-settings-inset-bg: var(--redeven-settings-panel-bg);',
@@ -133,9 +132,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('background: var(--redeven-settings-sidebar-hover-bg) !important;');
     expect(src).toContain('background: var(--redeven-settings-sidebar-selection-bg) !important;');
     expect(src).toContain('color: var(--redeven-settings-sidebar-selection-fg) !important;');
-    expect(src).toContain('.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]::before {');
-    expect(src).toContain('inset-inline-start: 0.25rem;');
-    expect(src).toContain('width: 3px;');
+    expect(src).not.toContain('.floe-settings-navigation__item[aria-current="page"]::before');
     expect(src).toContain('.redeven-settings-section {');
     expect(src).toContain('border: 0;');
     expect(src).toContain('background: transparent;');
@@ -370,7 +367,6 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-surface-control--muted {');
     expect(src).toContain('.git-browser-selection-surface {');
     expect(src).toContain('.git-browser-selection-row {');
-    expect(src).toContain('.git-browser-selection-nav {');
     expect(src).toContain('.git-browser-selection-secondary {');
     expect(src).toContain('.git-browser-selection-chip {');
     expect(src).toContain('.git-browser-current-chip {');

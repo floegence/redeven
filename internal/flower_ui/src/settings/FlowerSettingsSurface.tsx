@@ -589,12 +589,28 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     clearPermissionAutosaveTimer();
   });
 
+  // IMPORTANT: Embedded settings put feedback beside Models, never in an
+  // empty page header. Pending and error feedback retain their existing owner.
+  const SaveFeedback = () => (
+    <div class="flower-settings-title-actions">
+      <div class="flower-settings-title-feedback" aria-live="polite">
+        <FlowerAutoSaveIndicator
+          dirty={dirty() || permissionDirty()}
+          copy={copy().autoSave}
+          saving={props.saving || providerToggleSaving() || permissionSaving()}
+          error={settingsError() || permissionError()}
+          savedAt={Math.max(props.savedAt ?? 0, permissionSavedAt() ?? 0) || null}
+        />
+      </div>
+      {props.headerTrailingActions}
+    </div>
+  );
+
   return (
     <>
-      <div class="flower-panel flower-scroll flower-settings-surface">
+      <div class="flower-panel flower-scroll flower-settings-surface" data-settings-embedded={props.dialog || undefined}>
         <div class="flower-settings-frame">
-          <header class="flower-settings-title-row">
-            <Show when={!props.dialog}>
+          <Show when={!props.dialog}><header class="flower-settings-title-row">
               <div class="flex min-w-0 items-start gap-2.5">
                 <Show when={props.onBackToChat}>
                   <button
@@ -617,22 +633,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   </p>
                 </div>
               </div>
-            </Show>
-            <div class="flower-settings-title-actions">
-              <div class="flower-settings-title-feedback" aria-live="polite">
-                <FlowerAutoSaveIndicator
-                  dirty={dirty() || permissionDirty()}
-                  copy={copy().autoSave}
-                  saving={props.saving || providerToggleSaving() || permissionSaving()}
-                  error={settingsError() || permissionError()}
-                  savedAt={Math.max(props.savedAt ?? 0, permissionSavedAt() ?? 0) || null}
-                />
-              </div>
-              {props.headerTrailingActions}
-            </div>
-          </header>
+            <SaveFeedback />
+          </header></Show>
 
-          <FlowerModelSettings copy={copy()} providers={providers()} currentModelID={currentModelID()}
+          <FlowerModelSettings actions={props.dialog ? <SaveFeedback /> : undefined} copy={copy()} providers={providers()} currentModelID={currentModelID()}
             disabled={props.saving || providerToggleSaving()}
             providerReady={provider => provider.auth_method === 'chatgpt'
               ? props.snapshot?.chatgpt_accounts?.[provider.id]?.state === 'ready'

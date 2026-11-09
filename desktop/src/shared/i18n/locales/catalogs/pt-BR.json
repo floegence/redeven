@@ -1986,7 +1986,7 @@
     "certificateInvalid": "Certificado inválido",
     "certificateInvalidHelp": "Verifique o certificado neste dispositivo e substitua a identidade inválida antes de iniciar o HTTPS. O HTTP nunca é selecionado automaticamente.",
     "certificateManualTrust": "Importe o certificado público de CA para o repositório de confiança usado por este navegador ou cliente.",
-    "interfaceTitle": "Interface",
+    "interfaceTitle": "Aparência e idioma",
     "desktopBridgeAccess": "Somente no Desktop · bridge privado",
     "browserURL": "URL do navegador",
     "desktopBridgeAccessHelp": "O Desktop abre este ambiente por um canal privado autenticado. A porta salva será aplicada na próxima inicialização direta da Local UI.",

@@ -1986,7 +1986,7 @@
     "certificateInvalid": "憑證無效",
     "certificateInvalidHelp": "請檢查此裝置上的憑證，並在啟動 HTTPS 前替換無效的憑證身分。系統不會自動切換為 HTTP。",
     "certificateManualTrust": "請將公開 CA 憑證匯入此瀏覽器或用戶端使用的信任存放區。",
-    "interfaceTitle": "介面",
+    "interfaceTitle": "外觀與語言",
     "desktopBridgeAccess": "僅限 Desktop · 私有 bridge",
     "browserURL": "瀏覽器 URL",
     "desktopBridgeAccessHelp": "Desktop 會透過經過驗證的私有通道開啟此環境。儲存的連接埠會在下次直接啟動 Local UI 時套用。",

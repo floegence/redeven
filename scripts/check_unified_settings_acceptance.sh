@@ -10,3 +10,5 @@ npm run test:browser -- src/ui/EnvAppShell.flowerCompanion.browser.test.tsx src/
 cd "$ROOT_DIR/desktop"
 npx vitest run --maxWorkers=2 src/main/runtimeSettingsTarget.test.ts src/main/hostApplicationWindow.test.ts src/main/mainRouting.test.ts src/welcome/environmentSettingsSession.test.ts src/welcome/App.test.tsx ../internal/flower_ui/src/browserInstallationController.test.ts
 npx vitest run --config vitest.client.config.mts --maxWorkers=2 src/welcome/DesktopSettingsDialog.client.test.tsx src/welcome/EnvironmentSettingsEntry.client.test.tsx src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.client.test.tsx src/welcome/DesktopThemePicker.client.test.tsx
+
+node scripts/check-unified-settings-design.mjs
