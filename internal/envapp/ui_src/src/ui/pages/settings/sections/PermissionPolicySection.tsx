@@ -1,4 +1,5 @@
-import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
+import { For, Show, batch, createSignal, createEffect, onCleanup } from 'solid-js';
+import { createStore, produce, reconcile } from 'solid-js/store';
 import { Shield, Trash, ShieldCheck } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -25,13 +26,18 @@ export function PermissionPolicySection() {
   const [localRead, setLocalRead] = createSignal(true);
   const [localWrite, setLocalWrite] = createSignal(false);
   const [localExecute, setLocalExecute] = createSignal(true);
-  const [byUser, setByUser] = createSignal<PermissionRow[]>([]);
-  const [byApp, setByApp] = createSignal<PermissionRow[]>([]);
+  // IMPORTANT: A rule owns stable input identity. Mutate its store fields rather
+  // than replacing rows on every keystroke; retain surviving subjects on removal
+  // and reconcile acknowledged server rows by subject, never by array position.
+  const [byUser, setByUser] = createStore<PermissionRow[]>([]);
+  const [byApp, setByApp] = createStore<PermissionRow[]>([]);
   const [dirty, setDirty] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [failure, setFailure] = createSignal<{ kind: 'validation' | 'request'; message: string } | null>(null);
   const error = () => failure()?.message;
+  let editRevision = 0;
+  const changed = () => { editRevision += 1; setFailure(null); setDirty(true); };
   const localMaxDescription = () => [
     i18n.t('permissionPolicy.localMaxDescription'),
     localExecute() && !localWrite() ? i18n.t('terminal.executePermissionDescription') : '',
@@ -45,15 +51,22 @@ export function PermissionPolicySection() {
       setLocalRead(p?.local_max?.read ?? true);
       setLocalWrite(p?.local_max?.write ?? false);
       setLocalExecute(p?.local_max?.execute ?? true);
-      setByUser(mapToPermissionRows(p?.by_user as any));
-      setByApp(mapToPermissionRows(p?.by_app as any));
+      setByUser(reconcile(mapToPermissionRows(p?.by_user as any), { key: 'key' }));
+      setByApp(reconcile(mapToPermissionRows(p?.by_app as any), { key: 'key' }));
     }
   });
 
   createEffect(() => {
     const r = localRead(), w = localWrite(), x = localExecute();
-    setByUser((prev) => prev.map((it) => ({ ...it, read: r ? it.read : false, write: w ? it.write : false, execute: x ? it.execute : false })));
-    setByApp((prev) => prev.map((it) => ({ ...it, read: r ? it.read : false, write: w ? it.write : false, execute: x ? it.execute : false })));
+    const applyCeiling = produce<PermissionRow[]>(rows => {
+      for (const row of rows) {
+        if (!r) row.read = false;
+        if (!w) row.write = false;
+        if (!x) row.execute = false;
+      }
+    });
+    setByUser(applyCeiling);
+    setByApp(applyCeiling);
   });
 
   let autoSaveTimer: number | undefined;
@@ -69,18 +82,24 @@ export function PermissionPolicySection() {
       try {
         body = buildPermissionPolicyValue(
           { read: localRead(), write: localWrite(), execute: localExecute() },
-          byUser(), byApp(),
+          byUser, byApp,
         );
       } catch (e) {
         setFailure({ kind: 'validation', message: formatUnknownError(e) || i18n.t('permissionPolicy.saveFailed') });
         return;
       }
+      const savingRevision = editRevision;
       setSaving(true);
       try {
         await ctx.saveSettings({ permission_policy: body });
-        setSaving(false); setSavedAt(Date.now()); setDirty(false); setFailure(null);
+        // IMPORTANT: An admitted save may settle after further typing. Only its
+        // own revision becomes clean; keep newer edits queued and controls mounted.
+        batch(() => {
+          setSaving(false); setSavedAt(Date.now());
+          setDirty(editRevision !== savingRevision); setFailure(null);
+        });
       } catch (e) {
-        setSaving(false); setFailure({ kind: 'request', message: formatUnknownError(e) || i18n.t('permissionPolicy.saveFailed') });
+        batch(() => { setSaving(false); setFailure({ kind: 'request', message: formatUnknownError(e) || i18n.t('permissionPolicy.saveFailed') }); });
       }
     }, AUTO_SAVE_DELAY_MS);
   });
@@ -89,11 +108,11 @@ export function PermissionPolicySection() {
 
   const addUserRule = () => {
     setByUser((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]);
-    setFailure(null); setDirty(true);
+    changed();
   };
   const addAppRule = () => {
     setByApp((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]);
-    setFailure(null); setDirty(true);
+    changed();
   };
 
   // One matrix owns the shared user/app rule interaction and permission ceiling.
@@ -102,7 +121,6 @@ export function PermissionPolicySection() {
     const setRows = kind === 'user' ? setByUser : setByApp;
     const permissions = ['read', 'write', 'execute'] as const;
     const ceiling = (permission: typeof permissions[number]) => ({ read: localRead(), write: localWrite(), execute: localExecute() })[permission];
-    const changed = () => { setFailure(null); setDirty(true); };
     return <div class="space-y-3">
       <SubSectionHeader title={i18n.t(kind === 'user' ? 'settingsDesign.userOverrides' : 'settingsDesign.appOverrides')}
         description={i18n.t(kind === 'user' ? 'permissionPolicy.byUserDescription' : 'permissionPolicy.byAppDescription')}
@@ -115,21 +133,22 @@ export function PermissionPolicySection() {
             <th scope="col"><span class="sr-only">{i18n.t('common.actions.delete')}</span></th>
           </tr></thead>
           <tbody>
-            <For each={rows()}>{(row, index) => <tr>
-              <td><Input value={row.key} size="sm" class="w-full min-w-0 font-mono text-xs" disabled={!canEdit()}
+            <For each={rows}>{(row, index) => <tr class="settings-permission-rule">
+              <td class="settings-permission-subject"><Input value={row.key} size="sm" class="w-full min-w-0 font-mono text-xs" disabled={!canEdit()}
                 aria-label={i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader')}
                 placeholder={i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader')}
-                onInput={e => { setRows(previous => previous.map((item, i) => i === index() ? { ...item, key: e.currentTarget.value } : item)); changed(); }} /></td>
-              <For each={permissions}>{permission => <td>
+                onInput={e => { setRows(index(), 'key', e.currentTarget.value); changed(); }} /></td>
+              <For each={permissions}>{permission => <td class="settings-permission-value">
+                <span class="settings-permission-name" aria-hidden="true">{i18n.t(`permissionPolicy.permission.${permission}`)}</span>
                 <Checkbox checked={row[permission]} disabled={!canEdit() || !ceiling(permission)}
                   aria-label={`${row.key || i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader')}: ${i18n.t(`permissionPolicy.permission.${permission}`)}`}
-                  onChange={value => { setRows(previous => previous.map((item, i) => i === index() ? { ...item, [permission]: value } : item)); changed(); }} />
+                  onChange={value => { setRows(index(), permission, value); changed(); }} />
               </td>}</For>
-              <td><Button size="icon" variant="ghost" icon={Trash} disabled={!canEdit()}
+              <td class="settings-permission-remove"><Button size="icon" variant="ghost" icon={Trash} disabled={!canEdit()}
                 aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t(kind === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader') })}
                 onClick={() => { setRows(previous => previous.filter((_, i) => i !== index())); changed(); }} /></td>
             </tr>}</For>
-            <Show when={!rows().length}><tr><td colSpan={5} class="settings-permission-empty">{i18n.t(kind === 'user' ? 'permissionPolicy.noUserOverrides' : 'permissionPolicy.noAppOverrides')}</td></tr></Show>
+            <Show when={!rows.length}><tr><td colSpan={5} class="settings-permission-empty">{i18n.t(kind === 'user' ? 'permissionPolicy.noUserOverrides' : 'permissionPolicy.noAppOverrides')}</td></tr></Show>
           </tbody>
         </table>
       </div>
@@ -149,7 +168,7 @@ export function PermissionPolicySection() {
               { key: 'write' as const, value: localWrite, set: setLocalWrite },
               { key: 'execute' as const, value: localExecute, set: setLocalExecute },
             ]}>{permission => <Checkbox label={i18n.t(`permissionPolicy.permission.${permission.key}`)}
-              checked={permission.value()} disabled={!canEdit()} onChange={value => { permission.set(value); setFailure(null); setDirty(true); }} />}</For>
+              checked={permission.value()} disabled={!canEdit()} onChange={value => { permission.set(value); changed(); }} />}</For>
           </div>} />
       </SettingsList>
       {renderRules('user')}

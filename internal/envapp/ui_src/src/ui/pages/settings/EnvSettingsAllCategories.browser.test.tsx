@@ -4,7 +4,7 @@ import { FloeProvider, builtInShellThemePresets, BUILT_IN_SHELL_THEME_DEFAULTS }
 import { onCleanup, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
-import { commands, page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { createRuntimeSettingsFixture } from '../../../../scripts/fixtures/runtime-settings/fixture';
 import { createSettingsSession } from '../../../../../../settings_ui/src/settingsSession';
 import { SettingsPanelContext } from '../../../../../../settings_ui/src/SettingsPanelHost';
@@ -262,6 +262,114 @@ it.each([1440, 390, 320])('gives host settings deliberate feature rows and align
     for (const field of fields) expect(Math.abs(field.left - fields[0].left)).toBeLessThan(1);
   }
   await page.screenshot({ path: `../../../../dist/settings-all-categories/redesign-${width}-applications.png` });
+});
+
+it.each(['en-US', 'de-DE'] as const)('keeps narrow permission rules readable and editable in %s', async locale => {
+  await mount(320, locale);
+  const panel = await openCategory('permission_policy');
+  const row = panel.querySelector<HTMLElement>('.settings-permission-table tbody tr')!;
+  const copy = createTestI18nHelpers(locale);
+  const labels = [...row.querySelectorAll<HTMLElement>('.settings-permission-name')];
+  expect(labels).toHaveLength(3);
+  expect(labels.map(label => label.textContent)).toEqual((['read', 'write', 'execute'] as const).map(permission => copy.t(`permissionPolicy.permission.${permission}`)));
+  const field = row.querySelector<HTMLInputElement>('input[data-floe-control=input]')!;
+  expect(field.getBoundingClientRect().width).toBeGreaterThan(180);
+  for (const label of labels) {
+    expect(label.checkVisibility()).toBe(true);
+    expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth + 1);
+    expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(parseFloat(getComputedStyle(label).lineHeight) + 1);
+  }
+  expect(row.querySelectorAll('input[type=checkbox]')).toHaveLength(3);
+  const original = field.value;
+  await userEvent.type(page.getByRole('textbox', { name: copy.t('permissionPolicy.userHeader'), exact: true }), '_edited');
+  // IMPORTANT: Query the live panel; a detached former row can falsely prove continuity.
+  expect(field.isConnected).toBe(true);
+  expect(panel.querySelector('.settings-permission-table input[data-floe-control=input]')).toBe(field);
+  expect(document.activeElement).toBe(field);
+  expect(field.value).toBe(original + '_edited');
+  inspectCategory('permission_policy', panel, locale);
+  await page.screenshot({ path: `../../../../dist/settings-all-categories/redesign-${locale}-320-permission_policy.png` });
+});
+
+
+it.each([1440, 320])('preserves live permission controls through editing, ceilings, deletion and resize at %ipx', async width => {
+  await mount(width);
+  await media.emulateTouchInput(width === 320);
+  const panel = await openCategory('permission_policy');
+  const table = panel.querySelector<HTMLElement>('.settings-permission-table')!;
+  const original = table.querySelector<HTMLInputElement>('input[data-floe-control=input]')!;
+  const originalRead = table.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+  const name = original.value;
+  await userEvent.type(page.getByRole('textbox', { name: 'User', exact: true }), '_typed');
+  expect(original.value).toBe(name + '_typed');
+  expect(original.isConnected).toBe(true);
+  expect(document.activeElement).toBe(original);
+  await userEvent.click(originalRead.labels![0]);
+  expect(originalRead.isConnected).toBe(true);
+  expect(originalRead.checked).toBe(false);
+  await userEvent.click((page.getByRole('checkbox', { name: 'Write', exact: true }).element() as HTMLInputElement).labels![0]);
+  const originalWrite = original.closest('tr')!.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[1];
+  expect(original.isConnected).toBe(true);
+  expect(originalWrite.disabled).toBe(true);
+  expect(originalWrite.checked).toBe(false);
+  await page.getByRole('button', { name: createTestI18nHelpers('en-US').t('permissionPolicy.addRule'), exact: true }).first().click();
+  await page.getByRole('button', { name: createTestI18nHelpers('en-US').t('permissionPolicy.addRule'), exact: true }).first().click();
+  const later = table.querySelectorAll<HTMLInputElement>('input[data-floe-control=input]');
+  const second = later[1], third = later[2];
+  await userEvent.type(page.getByRole('textbox', { name: 'User', exact: true }).nth(1), 'user_second');
+  await userEvent.type(page.getByRole('textbox', { name: 'User', exact: true }).nth(2), 'user_third');
+  expect(second.value).toBe('user_second'); expect(third.value).toBe('user_third');
+  second.focus();
+  // Remove the preceding subject without moving keyboard focus to the row that shifts into its index.
+  original.closest('tr')!.querySelector<HTMLButtonElement>('button')!.click();
+  expect(original.isConnected).toBe(false);
+  expect(second.isConnected).toBe(true); expect(third.isConnected).toBe(true);
+  expect(document.activeElement).toBe(second);
+  expect([...table.querySelectorAll('input[data-floe-control=input]')]).toEqual([second, third]);
+  await userEvent.keyboard('_kept');
+  expect(second.value).toBe('user_second_kept'); expect(third.value).toBe('user_third');
+  const secondExecute = second.closest('tr')!.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[2];
+  await userEvent.click(secondExecute.labels![0]);
+  expect(secondExecute.isConnected).toBe(true); expect(secondExecute.checked).toBe(false);
+  expect(third.closest('tr')!.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[2].checked).toBe(true);
+  second.focus();
+  await page.viewport(width === 320 ? 1440 : 320, 1000);
+  expect(second.isConnected).toBe(true); expect(document.activeElement).toBe(second);
+  await expect.poll(() => fixture.requests.filter(request => request.init.method === 'PUT').length).toBeGreaterThan(0);
+  expect(second.isConnected, 'autosave acknowledgement retains the exact edited control').toBe(true);
+  expect(document.activeElement).toBe(second);
+  const policy = fixture.settings().permission_policy!;
+  expect(policy.by_user).toEqual({ user_second_kept: { read: true, write: false, execute: false }, user_third: { read: true, write: false, execute: true } });
+  expect(policy.local_max).toEqual({ read: true, write: false, execute: true });
+});
+
+
+it('keeps newer permission edits across delayed autosave acknowledgement', async () => {
+  await mount(1440);
+  const panel = await openCategory('permission_policy');
+  const field = panel.querySelector<HTMLInputElement>('.settings-permission-table input[data-floe-control=input]')!;
+  const original = field.value;
+  const save = context.saveSettings;
+  let release!: () => void;
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  const writes = vi.fn(async (...args: Parameters<typeof save>) => {
+    if (writes.mock.calls.length === 1) await delayed;
+    return save(...args);
+  });
+  context.saveSettings = writes;
+  await userEvent.type(page.getByRole('textbox', { name: 'User', exact: true }), '_first');
+  await expect.poll(() => writes.mock.calls.length).toBe(1);
+  await userEvent.keyboard('_second');
+  expect(field.value).toBe(original + '_first_second');
+  release();
+  await expect.poll(() => fixture.requests.length).toBeGreaterThan(0);
+  expect(field.isConnected, 'older acknowledged snapshot must not replace the live edited rule').toBe(true);
+  expect(field.value).toBe(original + '_first_second');
+  expect(document.activeElement).toBe(field);
+  await expect.poll(() => writes.mock.calls.length).toBe(2);
+  await expect.poll(() => fixture.settings().permission_policy!.by_user?.[original + '_first_second']).toEqual({ read: true, write: false, execute: false });
+  expect(field.isConnected).toBe(true); expect(document.activeElement).toBe(field);
+  expect(fixture.settings().permission_policy!.by_user?.[original + '_first']).toBeUndefined();
 });
 
 it('saves real picture selections immediately and never writes from category navigation', async () => {

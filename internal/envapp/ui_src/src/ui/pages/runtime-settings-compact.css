@@ -63,7 +63,23 @@
 .redeven-settings-shell .host-access-system { padding-top: 0; border-top: 0; }
 /* Published Select has a wrapper: size the public class, not just the button. */
 .application-picture-fields .floe-setting-row__control > * { width: 200px; max-width: 100%; }
-.application-picture-feedback { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: var(--floe-type-supporting); }
+/* IMPORTANT: Feedback uses one compact inline slot in an existing setting row.
+ * Saving, errors and recovery must never insert a footer or shift later settings. */
+.application-picture-row { position: relative; --application-picture-feedback-size: 28px; }
+.application-picture-row .floe-setting-row__label { padding-inline-end: calc(var(--application-picture-feedback-size) + 8px); }
+.application-picture-control { position: relative; }
+.application-picture-control > :last-child { width: 100%; min-width: 0; }
+.application-picture-feedback { position: absolute; inset-inline-end: calc(100% + 8px); top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: var(--application-picture-feedback-size); height: var(--application-picture-feedback-size); }
+.application-picture-progress { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+@media (pointer: coarse) { .application-picture-row { --application-picture-feedback-size: 44px; } }
+@container floe-settings (max-width: 600px) {
+  .application-picture-fields .floe-setting-row__control > .application-picture-control { position: static; width: 100%; }
+  .application-picture-feedback { inset-inline-end: 12px; top: calc(22px - var(--application-picture-feedback-size) / 2); transform: none; }
+}
+@media (max-width: 600px) {
+  .application-picture-fields .floe-setting-row__control > .application-picture-control { position: static; width: 100%; }
+  .application-picture-feedback { inset-inline-end: 12px; top: calc(22px - var(--application-picture-feedback-size) / 2); transform: none; }
+}
 
 
 .redeven-settings-shell .redeven-settings-page .floe-settings-section__body {
@@ -229,6 +245,20 @@
 .settings-permission-table th:last-child { width: 44px; }
 .settings-permission-table tr + tr, .settings-permission-table tbody { border-top: 1px solid var(--redeven-settings-divider); }
 .settings-permission-table .settings-permission-empty { color: var(--redeven-settings-note-fg); padding: 20px 12px; }
+.settings-permission-name { display: none; }
+/* IMPORTANT: A narrow rule is one subject followed by named permissions. Keep
+ * the same inputs mounted; never squeeze localized table headings into letters. */
+@media (max-width: 640px) {
+  .settings-permission-table table, .settings-permission-table tbody { display: block; }
+  .settings-permission-table thead { display: none; }
+  .settings-permission-table tbody { border-top: 0; }
+  .settings-permission-table .settings-permission-rule { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 8px 4px; padding: 12px; }
+  .settings-permission-table .settings-permission-rule > td { width: auto; padding: 0; min-width: 0; }
+  .settings-permission-table .settings-permission-subject { grid-column: 1; grid-row: 1; }
+  .settings-permission-table .settings-permission-remove { grid-column: 2; grid-row: 1; display: flex; justify-content: end; align-items: center; }
+  .settings-permission-table .settings-permission-value { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; text-align: left; }
+  .settings-permission-name { display: block; overflow-wrap: normal; }
+}
 .settings-permission-options { border: 1px solid var(--redeven-settings-inset-border); border-radius: var(--floe-radius-group); background: var(--redeven-settings-inset-bg); overflow: hidden; }
 .settings-permission-option { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; min-height: var(--floe-control-height-lg); padding: 12px; text-align: left; cursor: pointer; }
 .settings-permission-option + .settings-permission-option { border-top: 1px solid var(--redeven-settings-divider); }

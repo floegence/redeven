@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createResource, createSignal, on, onCleanup, Show } from 'solid-js';
-import { Button, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, CircularProgress, FeedbackIndicator, Select, type FeedbackIndicatorEntry } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../../i18n';
 import { useEnvContext } from '../EnvContext';
 import { fetchLocalApiJSON } from '../../services/localApi';
@@ -74,23 +74,35 @@ export function ApplicationPictureSettings(props: { allowed: boolean; macOS: boo
     queued = true; void save();
   };
   const retry = () => { if (!editable() || busy()) return; setError(''); queued = true; void save(); };
+  const refresh = () => { if (disposed || !presented() || !resources.ready() || saved.loading || busy()) return; void refetch(); };
+  let pictureControl: HTMLDivElement | undefined;
+  // IMPORTANT: Feedback belongs to this presentation, not the retained draft.
+  // Resolve action JSX under this owner, and retire its popup while hidden.
+  const feedback = createMemo<readonly FeedbackIndicatorEntry[]>(() => {
+    const message = error() || (saved.error ? i18n.t('hostApplications.errors.failed') : '');
+    if (!presented() || !message) return [];
+    return [{ id: 'picture', severity: 'error', summary: message, actions: saved.error
+      ? <Button size="sm" variant="ghost" disabled={!resources.ready() || saved.loading || busy()} onClick={refresh}>{i18n.t('common.actions.refresh')}</Button>
+      : <Button size="sm" variant="ghost" disabled={!editable() || busy()} onClick={retry}>{i18n.t('common.actions.retry')}</Button> }];
+  });
   return <section data-testid="application-picture-settings">
-    <fieldset disabled={!editable()} class="min-w-0"><SettingsList class="application-picture-fields">
-      <SettingRow title={i18n.t('hostApplications.macPicture')} control={<Select ariaLabel={i18n.t('hostApplications.macPicture')} disabled={!editable()} open={presentedField() === 'mode'} onOpenChange={value => open('mode', value)} value={draft().mode} options={[
+    {/* IMPORTANT: Disable each setting, not the feedback recovery action. A failed
+        initial read must still expose Refresh; every action rechecks admission. */}
+    <fieldset class="min-w-0"><SettingsList class="application-picture-fields">
+      <SettingRow class="application-picture-row" title={i18n.t('hostApplications.macPicture')} control={<div ref={pictureControl} tabIndex={-1} class="application-picture-control">
+        <div class="application-picture-feedback">
+          <FeedbackIndicator entries={feedback()} label={i18n.t('hostApplications.macPicture')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => pictureControl?.querySelector<HTMLElement>('button[role="combobox"]:not(:disabled)') ?? pictureControl} />
+          <Show when={presented() && busy() && !error()}><span role="status" class="application-picture-progress"><CircularProgress size={16} indeterminate aria-hidden="true" /><span class="sr-only">{i18n.t('settings.autoSave.saving')}</span></span></Show>
+        </div>
+        <Select ariaLabel={i18n.t('hostApplications.macPicture')} disabled={!editable()} open={presentedField() === 'mode'} onOpenChange={value => open('mode', value)} value={draft().mode} options={[
         { value: 'auto', label: i18n.t('hostApplications.macPictureAuto') }, { value: 'clarity', label: i18n.t('hostApplications.macPictureClarity') },
         { value: 'smooth', label: i18n.t('hostApplications.macPictureSmooth') }, { value: 'data', label: i18n.t('hostApplications.macPictureData') },
-      ]} onChange={mode => change({ mode: mode as Picture['mode'] })} />} />
+      ]} onChange={mode => change({ mode: mode as Picture['mode'] })} /></div>} />
       <Show when={props.macOS}>
         <SettingRow title={i18n.t('hostApplications.macPictureResolution')} control={<Select ariaLabel={i18n.t('hostApplications.macPictureResolution')} disabled={!editable()} open={presentedField() === 'max_dimension'} onOpenChange={value => open('max_dimension', value)} value={String(draft().max_dimension)} options={[0, 1600, 1920, 2560, 3840, 4096].map(value => ({ value: String(value), label: value ? `${value} px` : i18n.t('hostApplications.macPictureAuto') }))} onChange={value => change({ max_dimension: Number(value) })} />} />
         <SettingRow title={i18n.t('hostApplications.macPictureFrameRate')} control={<Select ariaLabel={i18n.t('hostApplications.macPictureFrameRate')} disabled={!editable()} open={presentedField() === 'frame_rate'} onOpenChange={value => open('frame_rate', value)} value={String(draft().frame_rate)} options={[0, 15, 24, 30, 60].map(value => ({ value: String(value), label: value ? `${value} FPS` : i18n.t('hostApplications.macPictureAuto') }))} onChange={value => change({ frame_rate: Number(value) })} />} />
       </Show>
     </SettingsList>
     </fieldset>
-    <Show when={busy() && !error()}><p role="status" class="application-picture-feedback text-muted-foreground">{i18n.t('settings.autoSave.saving')}</p></Show>
-    <Show when={saved.error || error()}><div class="application-picture-feedback"><p role="alert" class="text-destructive">{error() || i18n.t('hostApplications.errors.failed')}</p>
-      <Show when={saved.error} fallback={<Button size="sm" variant="ghost" disabled={!editable() || busy()} onClick={retry}>{i18n.t('common.actions.retry')}</Button>}>
-        <Button size="sm" variant="ghost" disabled={!resources.ready()} onClick={() => void refetch()}>{i18n.t('common.actions.refresh')}</Button>
-      </Show>
-    </div></Show>
   </section>;
 }

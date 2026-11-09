@@ -1,18 +1,20 @@
 // @vitest-environment jsdom
-import { createSignal } from 'solid-js';
+import { For, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApplicationPictureSettings } from './ApplicationPictureSettings';
 import { SettingsPanelContext } from '../../../../../../settings_ui/src/SettingsPanelHost';
 
-const state = vi.hoisted(() => ({ fetch: vi.fn(), access: () => ({ phase: 'ready', generation: 0 }) }));
+type ButtonProbe = { children: unknown; onClick: () => void; disabled?: boolean };
+const state = vi.hoisted(() => ({ fetch: vi.fn(), access: () => ({ phase: 'ready', generation: 0 }), buttons: [] as ButtonProbe[] }));
 vi.mock('../../services/localApi', () => ({ fetchLocalApiJSON: state.fetch }));
 vi.mock('../EnvContext', () => ({ useEnvContext: () => ({ resourceCacheAccess: () => state.access() }) }));
 vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('@floegence/floe-webapp-core/ui', async original => ({
   ...await original<object>(),
-  Button: (props: any) => <button disabled={props.disabled} onClick={props.onClick}>{props.children}</button>,
-  Select: (props: any) => <select aria-label={props.ariaLabel ?? props['aria-label']} value={props.value} onChange={event => props.onChange(event.currentTarget.value)}>{props.options.map((option: { value: string; label: string }) => <option value={option.value}>{option.label}</option>)}</select>,
+  Button: (props: any) => { state.buttons.push(props); return <button disabled={props.disabled} onClick={props.onClick}>{props.children}</button>; },
+  FeedbackIndicator: (props: any) => <span data-feedback><For each={props.entries}>{(entry: any) => <><span role="alert">{entry.summary}</span>{entry.actions}</>}</For></span>,
+  Select: (props: any) => <select disabled={props.disabled} aria-label={props.ariaLabel ?? props['aria-label']} value={props.value} onChange={event => props.onChange(event.currentTarget.value)}>{props.options.map((option: { value: string; label: string }) => <option value={option.value}>{option.label}</option>)}</select>,
 }));
 let host: HTMLDivElement, dispose: (() => void) | undefined;
 let setAccess!: (value: { phase: string; generation: number }) => void;
@@ -21,7 +23,7 @@ let setPresented!: (value: boolean) => void;
 const initial = { mode: 'auto', max_dimension: 0, frame_rate: 0 };
 const settle = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
-beforeEach(() => { vi.resetAllMocks(); state.fetch.mockResolvedValue(initial); host = document.createElement('div'); document.body.append(host); });
+beforeEach(() => { vi.resetAllMocks(); state.buttons.length = 0; state.fetch.mockResolvedValue(initial); host = document.createElement('div'); document.body.append(host); });
 afterEach(() => { dispose?.(); host.remove(); });
 async function mount(macOS = true, allowed = true) {
   dispose = render(() => {
@@ -52,14 +54,14 @@ it('keeps native-only limits in the same record while Linux changes only its sup
 
 it('rejects programmatic changes without current authority', async () => {
   await mount(); setAllowed(false); await settle();
-  expect(host.querySelector('fieldset')!.disabled).toBe(true); change(0, 'clarity'); expect(state.fetch).toHaveBeenCalledOnce();
+  expect([...host.querySelectorAll('select')].every(select => select.disabled)).toBe(true); change(0, 'clarity'); expect(state.fetch).toHaveBeenCalledOnce();
   setAllowed(true); setAccess({ phase: 'disconnected', generation: 1 }); await settle();
   change(0, 'data'); expect(state.fetch).toHaveBeenCalledOnce();
 });
 
 it('recovers a failed GET through explicit refresh without submitting a default record', async () => {
   state.fetch.mockRejectedValueOnce(new Error('offline')); await mount();
-  expect(host.querySelector('[role=alert]')).not.toBeNull(); expect(host.querySelector('fieldset')!.disabled).toBe(true);
+  expect(host.querySelector('[role=alert]')).not.toBeNull(); expect([...host.querySelectorAll('select')].every(select => select.disabled)).toBe(true);
   state.fetch.mockResolvedValue({ mode: 'data', max_dimension: 0, frame_rate: 0 }); button('common.actions.refresh').click(); await settle();
   expect(host.querySelector('select')!.value).toBe('data');
   expect(state.fetch.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
@@ -139,4 +141,27 @@ it('revalidates reads on authority generation changes and ignores a retired init
   retired.resolve({ mode: 'data', max_dimension: 1600, frame_rate: 15 }); await settle();
   expect(host.querySelector('select')!.value).toBe('clarity');
   expect(button('common.actions.retry')).toBeUndefined();
+});
+
+it('keeps saving and error feedback in the existing picture row without a status footer', async () => {
+  await mount(); const pending = deferred<typeof initial>(); state.fetch.mockReturnValueOnce(pending.promise);
+  change(0, 'smooth'); await settle();
+  expect(host.querySelector('[role=status]')?.closest('.application-picture-row')).not.toBeNull();
+  expect(host.querySelector('[data-testid=application-picture-settings]')!.children).toHaveLength(1);
+  pending.reject(new Error('unknown outcome')); await settle();
+  expect(host.querySelector('[role=alert]')?.closest('.application-picture-row')).not.toBeNull();
+  expect(button('common.actions.retry')?.closest('.application-picture-row')).not.toBeNull();
+  expect(button('common.actions.save')).toBeUndefined(); expect(state.fetch).toHaveBeenCalledTimes(2);
+});
+
+it.each(['retry', 'refresh'] as const)('rejects a captured %s feedback action while hidden and does not replay on reopen', async action => {
+  if (action === 'refresh') state.fetch.mockRejectedValueOnce(new Error('failed read'));
+  await mount();
+  if (action === 'retry') { state.fetch.mockRejectedValueOnce(new Error('unknown outcome')); change(0, 'smooth'); await settle(); }
+  const captured = state.buttons.find(props => props.children === `common.actions.${action}`)!;
+  expect(captured).toBeDefined(); const requests = state.fetch.mock.calls.length;
+  setPresented(false); await settle(); captured.onClick(); await settle();
+  expect(state.fetch).toHaveBeenCalledTimes(requests); expect(host.querySelector('[role=alert]')).toBeNull();
+  setPresented(true); await settle(); expect(state.fetch).toHaveBeenCalledTimes(requests);
+  expect(host.querySelector('[role=alert]')).not.toBeNull();
 });

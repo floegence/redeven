@@ -325,8 +325,11 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
   // IMPORTANT: The global settings page owns scrolling; configuration fields
   // stay in natural flow and do not recreate the work surface's dialog viewport.
   return <section class="container-settings-configuration space-y-4" aria-label={i18n.t('containers.services.configurationTitle', { name: props.service.name })}>
-    <header class="flex flex-wrap items-center justify-end gap-2">
-      <Button size="sm" variant="ghost" icon={Refresh} disabled={!current() || busy()} onClick={() => void reconcile()}>{i18n.t('common.actions.refresh')}</Button>
+    <header class="flex flex-wrap items-center gap-2">
+      {/* IMPORTANT: Source actions share its tab row. Inventory refresh above
+          and exact-operation reconciliation here retain separate owners. */}
+      <Tabs class="min-w-0 flex-1" items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration'), disabled: !canSave() || busy() || !!review() || serviceConfigurationLoading() }))} activeId={serviceConfigurationSourceID()} onChange={(id) => { if (canSave() && !busy() && !review() && !serviceConfigurationLoading()) selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID); }} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} />
+      <Button data-settings-config-refresh size="icon" variant="ghost" icon={Refresh} disabled={!current() || busy()} aria-label={i18n.t('common.actions.refresh')} title={i18n.t('common.actions.refresh')} onClick={() => void reconcile()} />
       <Show when={dirty()}><Button size="sm" variant="ghost" disabled={busy() || uncertain() || !current()} onClick={() => void openServiceConfiguration(props.service, serviceConfigurationSourceID())}>{i18n.t('filePreview.discardChanges')}</Button></Show>
     </header>
     <Show when={uncertain()}><p role="alert">{i18n.t('settings.operationUnknown')}</p></Show>
@@ -335,7 +338,6 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
         <Show when={!serviceConfigurationLoading()} fallback={<div class="container-service-config-loading"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.loading')}</div>}>
           <Show when={serviceConfiguration()} fallback={<div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div>}>
             <Show when={serviceConfigurationError()}><div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div></Show>
-            <Tabs items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration') }))} activeId={serviceConfigurationSourceID()} onChange={(id) => selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID)} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} />
             <Show when={serviceConfigurationSource()} keyed>{source => <>
               <SettingsList><SettingRow title={i18n.t('containers.services.configurationPath')} control={<Tag variant={source.status === 'ready' ? 'success' : source.status === 'missing' ? 'neutral' : 'error'} tone="soft" size="sm">{i18n.t(`containers.services.sourceStates.${source.status}` as Parameters<typeof i18n.t>[0])}</Tag>}>
                 <code class="break-all text-xs text-muted-foreground">{source.display_path}</code>

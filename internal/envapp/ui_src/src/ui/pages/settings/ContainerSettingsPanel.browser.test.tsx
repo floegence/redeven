@@ -24,6 +24,13 @@ it.each([1100, 390])('uses one scrolling owner and aligned configuration rows at
   await expect.element(page.getByRole('textbox', { name: 'HTTP proxy', exact: true })).toBeVisible();
   const content = host.querySelector('fieldset')!.parentElement!;
   expect(getComputedStyle(content).overflowY).toBe('visible');
+  const header = content.querySelector(':scope > header')!;
+  expect(header.querySelector('[role=tablist]')).not.toBeNull();
+  const refresh = header.querySelector<HTMLButtonElement>('[data-settings-config-refresh]')!;
+  expect(refresh.getAttribute('aria-label')).toBe('Refresh');
+  refresh.click();
+  await expect.poll(() => api.configuration.mock.calls.length).toBe(2);
+  expect(api.list).toHaveBeenCalledTimes(1);
   for (const name of ['HTTP proxy', 'HTTPS proxy', 'No proxy']) {
     const input = host.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!;
     expect(input.closest('.floe-setting-row')).not.toBeNull();

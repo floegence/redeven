@@ -81,7 +81,7 @@ const visible = (element: Element) => !element.closest('[hidden]');
 const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => visible(item) && (item.textContent === label || item.getAttribute('aria-label') === label))!;
 const save = () => button('containers.services.save');
 const run = () => button('containers.actions.run');
-const sourceRefresh = () => host.querySelector<HTMLButtonElement>('.container-settings-configuration > header button')!;
+const sourceRefresh = () => host.querySelector<HTMLButtonElement>('.container-settings-configuration > header button[aria-label="common.actions.refresh"]')!;
 const editor = () => [...host.querySelectorAll<HTMLTextAreaElement>('textarea[data-source-editor]')].find(visible)!;
 function edit(value: string) { editor().value = value; editor().dispatchEvent(new Event('input', { bubbles: true })); }
 async function selectSource(source: 'engine' | 'docker_cli') { button(source === 'engine' ? 'containers.services.engineConfiguration' : 'containers.services.dockerCLI').click(); await settle(); }
