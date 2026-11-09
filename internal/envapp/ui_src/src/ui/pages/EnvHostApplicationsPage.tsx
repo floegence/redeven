@@ -138,16 +138,21 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     return 'hostAccess.beforeUse';
   };
   const [permissionBusy, setPermissionBusy] = createSignal(false);
-  const requestPermission = async (permission: 'screen_recording' | 'accessibility' | 'reveal_application' | 'restart_application', manage = false) => {
+  const requestPermission = async (permission: 'screen_recording' | 'accessibility' | 'reveal_application' | 'restart_application' | 'check_permissions', manage = false) => {
     if (!canLaunch() || permissionBusy()) return;
+    const operationResource = applicationResource.identity();
+    const operationCurrent = applicationResource.captureAuthority();
     setPermissionBusy(true);
     try {
       const app = selectedApplication();
       if (app && !manage && (permission === 'screen_recording' || permission === 'accessibility')) await reserveApplication(app);
       await requestHostApplicationPermission(manage && (permission === 'screen_recording' || permission === 'accessibility') ? `${permission}_settings` : permission);
+      invalidateCatalog(operationResource);
+      if (disposed || !operationCurrent()) return;
       await refresh();
+      if (props.settingsOnly) await refreshDesktop();
     }
-    catch (e) {setError(translateError(e));}
+    catch (e) {if (!disposed && operationCurrent()) setError(translateError(e));}
     finally {setPermissionBusy(false);}
   };
   const [loading, setLoading] = createSignal(false);
@@ -901,7 +906,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
       <Show when={isMac()} fallback={<Show when={!ready()||setupManaging()||!selectedApplication()}>{preparationPanel(true)}</Show>}>
         <Show when={catalog()?.availability.native_ready} fallback={<p>{i18n.t(availabilityDescription())}</p>}>
           <Show when={!nativeLaunch()||!selectedApplication()} fallback={<p>{i18n.t('hostAccess.nativeReady')}</p>}><Show when={!catalog()?.availability.ready} fallback={<p class="host-access-ready" role="status">{i18n.t('hostAccess.permissionsReady')}</p>}>
-            <HostAccessPermissions onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording??catalog()?.availability.ready)} input={Boolean(catalog()?.availability.permissions?.accessibility??catalog()?.availability.ready)} needsInput allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission,manage)=>void requestPermission(permission,manage)} onRefresh={()=>void refresh()} />
+            <HostAccessPermissions active={(!props.settingsOnly || presented()) && setupDialog()} onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording??catalog()?.availability.ready)} input={Boolean(catalog()?.availability.permissions?.accessibility??catalog()?.availability.ready)} needsInput allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission,manage)=>void requestPermission(permission,manage)} onRefresh={()=>void requestPermission('check_permissions')} />
           </Show></Show>
         </Show>
       </Show>

@@ -8338,7 +8338,10 @@
     "helperRestartConfirm": "Aktuelle App-Freigaben und Desktop-Verbindungen werden beendet. Verbinden Sie sich nach dem Neustart erneut.",
     "applyPermissions": "Berechtigungsänderungen anwenden",
     "restartHelper": "Desktop Access neu starten",
-    "requestPending": "Bestätigen Sie die macOS-Berechtigungsabfrage. Nach Ihrer Rückkehr wird automatisch geprüft. Erscheint keine Abfrage, öffnen Sie die Systemeinstellungen."
+    "requestPending": "Bestätigen Sie die macOS-Berechtigungsabfrage. Nach Ihrer Rückkehr wird automatisch geprüft. Erscheint keine Abfrage, öffnen Sie die Systemeinstellungen.",
+    "permissionInstruction": "Öffne {permission} in den macOS-Systemeinstellungen und aktiviere:",
+    "returnToCheck": "Kehre danach hierher zurück. Die Berechtigungen werden automatisch geprüft.",
+    "checkingPermissions": "Berechtigungen werden geprüft…"
   },
   "storage": {
     "title": "Speicher",

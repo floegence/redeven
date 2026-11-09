@@ -8334,7 +8334,10 @@
     "helperRestartConfirm": "当前的应用共享和桌面连接将结束。辅助程序重启后，请重新连接。",
     "applyPermissions": "应用权限更改",
     "restartHelper": "重启桌面访问辅助程序",
-    "requestPending": "请完成 macOS 授权提示。返回后会自动检查；如果没有出现提示，请打开系统设置。"
+    "requestPending": "请完成 macOS 授权提示。返回后会自动检查；如果没有出现提示，请打开系统设置。",
+    "permissionInstruction": "在 macOS 系统设置的「{permission}」中，打开：",
+    "returnToCheck": "开启后回到这里，权限会自动检查。",
+    "checkingPermissions": "正在检查权限…"
   },
   "storage": {
     "title": "存储管理",

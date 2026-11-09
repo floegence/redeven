@@ -235,7 +235,13 @@ export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => v
   const runAction = async (action: Action, title: EnvAppTranslationKey, run: () => Promise<unknown>) => {
     if (busy() || !full()) return;
     setBusy(action); setActionError(undefined);
-    try { await run(); await refresh(); }
+    try {
+      await run();
+      // A focus-triggered probe may predate the permission operation. Drain it
+      // before starting the authoritative post-operation read.
+      if (refreshRequest) await refreshRequest;
+      await refresh();
+    }
     catch (error) { if (!disposed) setActionError(desktopFailure(title, error)); }
     finally { if (!disposed) setBusy(undefined); }
   };
@@ -539,7 +545,7 @@ export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => v
       <For each={['control', 'view'] as const}>{value => <label data-selected={mode() === value}><input type="radio" name={descriptionID} value={value} checked={mode() === value} disabled={!!busy()} onChange={() => setMode(value)} /><span>{i18n.t(value === 'view' ? 'remoteDesktop.view' : 'hostAccess.controlMode')}</span></label>}</For>
     </div></fieldset>
     <Show when={macPermission()}>
-      <HostAccessPermissions onRecovery={action => void runAction('permission', 'remoteDesktop.permissionFailed', () => requestHostApplicationPermission(action))} permissionAppName={status()?.permission_app_name} desktop screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} needsInput={mode()==='control'} allowed={full()} busy={!!busy()} onRefresh={()=>void refresh()} onPermission={(permission,manage)=>void runAction('permission','remoteDesktop.permissionFailed',()=>requestHostApplicationPermission(manage?`${permission}_settings`:permission))} />
+      <HostAccessPermissions active={foreground()} onRecovery={action => void runAction('permission', 'remoteDesktop.permissionFailed', () => requestHostApplicationPermission(action))} permissionAppName={status()?.permission_app_name} desktop screen={Boolean(capabilities()?.screen)} input={Boolean(capabilities()?.input)} needsInput={mode()==='control'} allowed={full()} busy={!!busy()} onRefresh={()=>void runAction('permission', 'remoteDesktop.permissionFailed', () => requestHostApplicationPermission('check_permissions'))} onPermission={(permission,manage)=>void runAction('permission','remoteDesktop.permissionFailed',()=>requestHostApplicationPermission(manage?`${permission}_settings`:permission))} />
     </Show>
 
     <Show when={sshManaged() && loginService()?.state === 'active'}><p class="remote-desktop-service-status">{i18n.t('remoteDesktop.serviceActive')}</p></Show>

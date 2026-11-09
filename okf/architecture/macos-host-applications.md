@@ -3,7 +3,7 @@ type: Runtime Contract
 title: macOS application authority, capture and lifecycle
 tags: [runtime, desktop, applications, macos, security]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -20,7 +20,7 @@ Local focus during recapture grants no remote authority; pre-frame composition n
 One lazy Manager-owned signed `Redeven Desktop Access.app` serves Runtime catalog/app/desktop channels. Development uses the separate `Redeven Desktop Access Dev.app` identity. The bare executable is only a stdio relay; published FloeNativeDesktop launches the exact application through Launch Services before initializing privacy APIs. Private authenticated sockets preserve control and media channels. Empty inventory leaves it idle until Runtime closes, retaining ScreenCaptureKit identity. Released FloeNativeDesktop owns capture/native desktop input; separate binary media pipe and bounded per-channel queues avoid control serialization. Each response queue holds128 messages for supported result bursts. Authorization, input and frame credit stay independent; suspending one capture cannot affect another. Helper failure ends sharing, never apps; later explicit open may recover under native validation. Shutdown preserves unsaved applications.
 
 ## Management
-Remote application setup explains screen recording as showing application windows and accessibility as mouse/keyboard control. Existing grants are reused; local native launch needs neither. Permission requests, fixed Settings panes and revealing the actual helper in Finder are distinct explicit actions. A pending native prompt never immediately opens Settings. `permission_app_name` comes from the running helper bundle, never a parent environment. Passive checks refresh after focus and while setup is open; identity itself grants no capability. Missing Settings entries offer Finder reveal plus explicit add guidance. Applying changed permissions confirms that sharing connections will end, restarts only the helper, then probes the new process. Runtime, feature intent and open user applications survive; old channels cannot regain input authority and no operation is replayed. Opening settings neither grants nor revokes access. Feature pause/removal follows [independent access intent](host-applications.md#feature-access), never OS grant revocation.
+Remote application setup explains screen recording as showing application windows and accessibility as mouse/keyboard control. Existing grants are reused; local native launch needs neither. Permission requests, fixed Settings panes and revealing the actual helper in Finder are distinct explicit actions. A pending native prompt never immediately opens Settings. `permission_app_name` comes from the running helper bundle, never a parent environment. Setup presents one current permission, a persistent two-step completion trail (screen, then input), the exact app name and one primary action. After a request, that action becomes fixed Settings navigation; no duplicate action block is appended. View-only desktop omits input. Opening the visible setup step, returning from its explicit system permission flow, or pressing Check again uses `check_permissions`: renew only an idle native owner and re-read both grants. The lifecycle admission lock spans idle inspection and shutdown; any existing channel preserves its owner. A concurrent probe defers renewal until the next idle admission without losing the request. Active sharing can be restarted only through the existing confirmed recovery action. Polling and hidden setup remain passive. Invalidate the catalog after permission operations so a preceding in-flight snapshot cannot certify the result; refresh both application and desktop status. Identity itself grants no capability. Missing Settings entries offer Finder reveal plus explicit add guidance. Applying changed permissions confirms that sharing connections will end, restarts only the helper, then probes the new process. Runtime, feature intent and open user applications survive; old channels cannot regain input authority and no operation is replayed. Opening settings neither grants nor revokes access. Feature pause/removal follows [independent access intent](host-applications.md#feature-access), never OS grant revocation.
 
 AppKit's Running applications includes regular processes launched outside Redeven and windowless apps. Requests bind selected bundle plus opaque canonical path/PID/launch-time generations. Explicit graceful quit cannot force-kill/retarget. Acceptance is not exit evidence; stale/unavailable targets keep sharing and actionable error. Failed viewer admission never rolls back host sessions from stale catalog state.
 
@@ -48,8 +48,15 @@ Requires actual graphical login, macOS13+ helper and explicit capture/input perm
   helper identity, Launch Services parentage, catalog/desktop permission parity,
   native app launch without capture/input grants, fresh helper PIDs, EOF/SIGTERM/
   SIGKILL cleanup and survival of the opened fixture application. No TCC grant was
-  changed. Full capture/input after a new user grant still requires the user to
-  authorize this helper in macOS; passive checks do not certify that interaction.
+  changed. This evidence did not certify a newly granted capture/input path.
 - Focused Swift, Go race, API authorization, localized browser recovery and signed
   nested-bundle checks cover explicit requests, Finder reveal, confirmed restart,
   preserved feature intent, old-channel fencing, and desktop focus restoration.
+
+- November 9, 2026: the live old helper returned screen=false while a fresh
+  instance of the exact signed bundle returned screen=true and input=false.
+  The opt-in `TestMacPermissionNativeRenewalAndCapture` exercised the actual
+  published helper through the changed manager: idle renewal, retained grant,
+  1600x900 H.264 media and uninterrupted active capture during another check.
+  No TCC grant was changed and no frame was saved. Input grant transitions remain
+  deterministic fixture coverage; this machine had no helper accessibility grant.

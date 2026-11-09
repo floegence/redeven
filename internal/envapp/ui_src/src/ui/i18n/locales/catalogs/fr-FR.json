@@ -8338,7 +8338,10 @@
     "helperRestartConfirm": "Les partages d’applications et connexions au bureau seront interrompus. Reconnectez-vous après le redémarrage.",
     "applyPermissions": "Appliquer les autorisations",
     "restartHelper": "Redémarrer Desktop Access",
-    "requestPending": "Répondez à la demande de macOS. La vérification reprend automatiquement à votre retour. Sans invite, ouvrez les Réglages Système."
+    "requestPending": "Répondez à la demande de macOS. La vérification reprend automatiquement à votre retour. Sans invite, ouvrez les Réglages Système.",
+    "permissionInstruction": "Dans les Réglages Système de macOS, ouvre {permission} et active :",
+    "returnToCheck": "Reviens ici après avoir autorisé l’accès. Les autorisations seront vérifiées automatiquement.",
+    "checkingPermissions": "Vérification des autorisations…"
   },
   "storage": {
     "title": "Stockage",

@@ -8334,7 +8334,10 @@
     "helperRestartConfirm": "현재 앱 공유 및 데스크탑 연결이 종료됩니다. 보조 앱이 다시 시작되면 다시 연결하세요.",
     "applyPermissions": "권한 변경 사항 적용",
     "restartHelper": "Desktop Access 다시 시작",
-    "requestPending": "macOS 권한 요청을 완료하세요. 돌아오면 자동으로 확인합니다. 요청이 나타나지 않으면 시스템 설정을 여세요."
+    "requestPending": "macOS 권한 요청을 완료하세요. 돌아오면 자동으로 확인합니다. 요청이 나타나지 않으면 시스템 설정을 여세요.",
+    "permissionInstruction": "macOS 시스템 설정에서 {permission}을 열고 다음 앱을 켜세요:",
+    "returnToCheck": "허용한 후 여기로 돌아오면 권한을 자동으로 확인합니다.",
+    "checkingPermissions": "권한 확인 중…"
   },
   "storage": {
     "title": "저장 공간",

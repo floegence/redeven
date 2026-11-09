@@ -287,11 +287,16 @@ func (m *Manager) Permissions(ctx context.Context, permission string) error {
 	if m.macHelper() == "" {
 		return ErrUnavailable
 	}
-	if permission != "screen_recording" && permission != "accessibility" && permission != "screen_recording_settings" && permission != "accessibility_settings" && permission != "reveal_application" && permission != "restart_application" {
+	if permission != "screen_recording" && permission != "accessibility" && permission != "screen_recording_settings" && permission != "accessibility_settings" && permission != "reveal_application" && permission != "restart_application" && permission != "check_permissions" {
 		return ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	if permission == "check_permissions" {
+		m.refreshIdleMacHost()
+		_, err := m.macOnce(ctx, map[string]any{"action": "catalog", "paths": m.macPaths()})
+		return err
+	}
 	if permission == "restart_application" {
 		// Close only native sharing; user applications and Runtime stay alive.
 		// A fresh helper rechecks grants. Never replay input or reconnect viewers.

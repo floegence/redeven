@@ -8334,7 +8334,10 @@
     "helperRestartConfirm": "目前的 App 共享與桌面連線將結束。輔助程式重新啟動後，請重新連線。",
     "applyPermissions": "套用權限變更",
     "restartHelper": "重新啟動桌面存取輔助程式",
-    "requestPending": "請完成 macOS 授權提示。返回後會自動檢查；若未出現提示，請開啟系統設定。"
+    "requestPending": "請完成 macOS 授權提示。返回後會自動檢查；若未出現提示，請開啟系統設定。",
+    "permissionInstruction": "在 macOS 系統設定的「{permission}」中，開啟：",
+    "returnToCheck": "開啟後回到這裡，權限會自動檢查。",
+    "checkingPermissions": "正在檢查權限…"
   },
   "storage": {
     "title": "儲存空間管理",

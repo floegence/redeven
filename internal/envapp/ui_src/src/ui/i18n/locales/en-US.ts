@@ -326,6 +326,10 @@ export const enUS = defineDictionary({
     connectionCenter: 'Connection Center',
   },
   hostAccess: {
+    "permissionInstruction": "In macOS System Settings, open {permission} and enable:",
+    "returnToCheck": "Return here after enabling access. Permissions are checked automatically.",
+    "checkingPermissions": "Checking permissions…",
+
     "permissionApp": "Allow \"{app}\" in macOS. This helper displays the screen and delivers mouse and keyboard input.",
     "permissionAppUnknown": "Desktop Access is unavailable. Install a signed Redeven build to configure permissions.",
     "controlMode": "Mouse and keyboard",

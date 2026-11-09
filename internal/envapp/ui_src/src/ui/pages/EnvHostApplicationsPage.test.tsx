@@ -893,3 +893,22 @@ it.each([
   expect(document.querySelector('[data-testid=application-picture-settings]')).toBeNull();
   expect(access.save).not.toHaveBeenCalled(); expect(state.permission).not.toHaveBeenCalled();
 });
+
+
+it('rejects a pre-check catalog response and shows the newly observed grant', async () => {
+ const missing = { access_state:'enabled', availability:{backend:'macos',supported:true,native_ready:true,ready:false,reason:'macos_permissions',permissions:{screen_recording:false,accessibility:false}},applications:[app],sessions:[] };
+ state.catalog.mockResolvedValue(missing);
+ dispose=render(()=><EnvHostApplicationsPage />,host); await settle();
+ textButton('Continue setup',host).click(); await settle();
+ let stale!: (value: unknown) => void;
+ state.catalog.mockImplementationOnce(() => new Promise(resolve => { stale = resolve; }));
+ window.dispatchEvent(new Event('focus')); await settle();
+ const fresh = { ...missing, availability:{ ...missing.availability, permissions:{screen_recording:true,accessibility:false} } };
+ state.catalog.mockResolvedValue(fresh);
+ textButton('Check again',document.querySelector('[role=dialog]')!).click(); await settle();
+ await vi.waitFor(() => expect(document.querySelector('[aria-current=step]')?.textContent).toContain('Accessibility'));
+ stale(missing); await settle();
+ expect(document.querySelector('[aria-current=step]')?.textContent).toContain('Accessibility');
+ expect(state.permission).toHaveBeenLastCalledWith('check_permissions');
+ expect(state.launch).not.toHaveBeenCalled(); expect(access.save).not.toHaveBeenCalled();
+});

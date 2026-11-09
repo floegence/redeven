@@ -8334,7 +8334,10 @@
     "helperRestartConfirm": "現在のアプリ共有とデスクトップ接続は終了します。補助アプリの再起動後に再接続してください。",
     "applyPermissions": "権限の変更を適用",
     "restartHelper": "Desktop Access を再起動",
-    "requestPending": "macOS の許可画面で操作を完了してください。戻ると自動で確認します。許可画面が表示されない場合はシステム設定を開いてください。"
+    "requestPending": "macOS の許可画面で操作を完了してください。戻ると自動で確認します。許可画面が表示されない場合はシステム設定を開いてください。",
+    "permissionInstruction": "macOS のシステム設定で「{permission}」を開き、次をオンにします：",
+    "returnToCheck": "許可したらここに戻ってください。権限は自動で確認されます。",
+    "checkingPermissions": "権限を確認中…"
   },
   "storage": {
     "title": "ストレージ",

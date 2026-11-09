@@ -16,12 +16,13 @@ import (
 // an idle helper that has stopped capture can contend with a second helper's
 // replayd connection. Application state remains isolated by an opaque channel.
 type macHost struct {
-	mu      sync.Mutex
-	writeMu sync.Mutex
-	cmd     *exec.Cmd
-	input   io.WriteCloser
-	clients map[string]*macHostClient
-	done    chan struct{}
+	mu            sync.Mutex
+	writeMu       sync.Mutex
+	cmd           *exec.Cmd
+	input         io.WriteCloser
+	clients       map[string]*macHostClient
+	done          chan struct{}
+	renewWhenIdle bool // Guarded by Manager.nativeMu.
 }
 
 type macHostClient struct {
@@ -48,6 +49,15 @@ func (m *Manager) openMacClient() (*macHostClient, error) {
 		case <-h.done:
 			h = nil
 		default:
+		}
+	}
+	if h != nil && h.renewWhenIdle {
+		h.mu.Lock()
+		idle := len(h.clients) == 0
+		h.mu.Unlock()
+		if idle {
+			m.closeMacHostLocked()
+			h = nil
 		}
 	}
 	if h == nil {
@@ -196,6 +206,31 @@ func (c *macHostClient) Close() error {
 func (m *Manager) closeMacHost() {
 	m.nativeMu.Lock()
 	defer m.nativeMu.Unlock()
+	m.closeMacHostLocked()
+}
+
+// Privacy preflight can retain a denial for the process lifetime. An explicit
+// setup check may renew an idle owner, but cannot disconnect any live channel.
+// Hold admission through shutdown so no new client can attach to the old owner.
+func (m *Manager) refreshIdleMacHost() {
+	m.nativeMu.Lock()
+	defer m.nativeMu.Unlock()
+	if h := m.nativeHost; h != nil {
+		// A concurrent catalog/status read may still be finishing. Preserve the
+		// explicit renewal intent until the next idle admission instead of losing
+		// it to that race. Persistent sharing keeps the current owner throughout.
+		h.renewWhenIdle = true
+		h.mu.Lock()
+		active := len(h.clients) != 0
+		h.mu.Unlock()
+		if active {
+			return
+		}
+		m.closeMacHostLocked()
+	}
+}
+
+func (m *Manager) closeMacHostLocked() {
 	h := m.nativeHost
 	m.nativeHost = nil
 	if h == nil {

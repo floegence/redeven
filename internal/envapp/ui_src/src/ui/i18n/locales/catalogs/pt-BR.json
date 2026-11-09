@@ -8338,7 +8338,10 @@
     "helperRestartConfirm": "As conexões atuais com a mesa e os apps compartilhados serão encerradas. Conecte-se novamente após reiniciar.",
     "applyPermissions": "Aplicar alterações de permissões",
     "restartHelper": "Reiniciar Desktop Access",
-    "requestPending": "Conclua a solicitação do macOS. A verificação será automática ao voltar. Se não houver solicitação, abra os Ajustes do Sistema."
+    "requestPending": "Conclua a solicitação do macOS. A verificação será automática ao voltar. Se não houver solicitação, abra os Ajustes do Sistema.",
+    "permissionInstruction": "Nos Ajustes do Sistema do macOS, abra {permission} e ative:",
+    "returnToCheck": "Volte aqui após permitir o acesso. As permissões serão verificadas automaticamente.",
+    "checkingPermissions": "Verificando permissões…"
   },
   "storage": {
     "title": "Armazenamento",

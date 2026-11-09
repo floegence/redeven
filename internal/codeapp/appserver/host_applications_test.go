@@ -472,7 +472,7 @@ func (s *hostAppsStub) ClientAssets(owner, digest string) *nativeapps.ClientAsse
 }
 
 func TestDesktopAccessRecoveryRequiresFullSessionAuthority(t *testing.T) {
-	for _, action := range []string{"reveal_application", "restart_application"} {
+	for _, action := range []string{"reveal_application", "restart_application", "check_permissions"} {
 		for _, full := range []bool{false, true} {
 			backend := &hostAppsStub{}
 			server := &Server{configPath: writeTestConfig(t), hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}

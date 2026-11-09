@@ -1,6 +1,6 @@
 import { Button, Dropdown, Switch } from '@floegence/floe-webapp-core/ui';
 import { MoreHorizontal } from '@floegence/floe-webapp-core/icons';
-import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { useI18n } from '../i18n';
@@ -27,6 +27,7 @@ export function HostAccessWelcome(props: {
  </section>;
 }
 export function HostAccessPermissions(props: {
+    active?: boolean;
     permissionAppName?: string;
     onRecovery?: (action: 'reveal_application' | 'restart_application') => void;
     screen: boolean;
@@ -40,22 +41,45 @@ export function HostAccessPermissions(props: {
 }) {
     const i18n = useI18n();
     const [requested, setRequested] = createSignal<'screen_recording' | 'accessibility'>();
+    const [returnPending, setReturnPending] = createSignal(true);
+    let awaitingReturn = false;
     const next = (): 'screen_recording' | 'accessibility' | undefined => !props.screen ? 'screen_recording' : props.needsInput && !props.input ? 'accessibility' : undefined;
+    const granted = (permission: 'screen_recording' | 'accessibility') => permission === 'screen_recording' ? props.screen : props.input;
+    const permissionLabel = (permission: 'screen_recording' | 'accessibility') => i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission');
+    // Entering setup or returning from its explicit permission flow renews the idle
+    // native owner. Ordinary polling and unrelated focus never restart sharing.
+    const returned = () => { if (props.active !== false && awaitingReturn) { awaitingReturn = false; setReturnPending(true); } };
+    window.addEventListener('focus', returned);
+    onCleanup(() => window.removeEventListener('focus', returned));
+    createEffect(() => {
+      if (props.active !== false && returnPending() && next() && !props.busy && props.allowed) {
+        setReturnPending(false); props.onRefresh();
+      }
+    });
     return <section class="host-access-permissions" aria-label={i18n.t('hostAccess.requirements')}>
-  <Show when={next()}><HostAccessPermissionDestination name={props.permissionAppName} /></Show>
-  <For each={['screen_recording', 'accessibility'] as const}>{permission => <Show when={permission === 'screen_recording' ? !props.screen : props.needsInput && !props.input}>
-   <div class="host-access-permission">
-    <div class="host-access-permission-visual"><HostAccessPermissionIllustration kind={permission === 'screen_recording' ? 'screen' : 'input'} desktop={props.desktop} /></div>
-    <div><h3>{i18n.t(permission === 'accessibility' ? 'hostAccess.inputPurpose' : props.desktop ? 'hostAccess.desktopPurpose' : 'hostAccess.appPurpose')}</h3><p>{i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission')}</p></div>
-    <span>{i18n.t('hostAccess.required')}</span>
-   </div>
-  </Show>}</For>
-  <Show when={next()} fallback={<p role="status">{i18n.t('hostAccess.permissionsReady')}</p>}>{permission => <div class="host-access-actions">
-   <Button disabled={!props.allowed || props.busy} onClick={() => { setRequested(permission()); props.onPermission(permission()); }}>{i18n.t(permission() === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
-   <Button variant="ghost" disabled={props.busy} onClick={props.onRefresh}>{i18n.t('hostAccess.checkAgain')}</Button>
-  </div>}</Show>
-
-  <Show when={next() && requested() === next()}><div class="host-access-requested" role="status"><p>{i18n.t('hostAccess.requestPending')}</p><Button variant="outline" disabled={!props.allowed || props.busy} onClick={() => props.onPermission(next()!, true)}>{i18n.t('hostAccess.openSystemSettings')}</Button></div></Show>
+  <ol class="host-access-permission-progress" aria-label={i18n.t('hostAccess.requirements')}>
+    <For each={props.needsInput ? ['screen_recording', 'accessibility'] as const : ['screen_recording'] as const}>{(permission, index) =>
+      <li data-complete={granted(permission)} aria-current={next() === permission ? 'step' : undefined}>
+        <span class="host-access-step-number" aria-hidden="true"><Show when={granted(permission)} fallback={index() + 1}><svg viewBox="0 0 16 16" fill="none"><path d="m4 8 3 3 5-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg></Show></span>
+        <span>{permissionLabel(permission)}<Show when={granted(permission)}><span class="sr-only"> · {i18n.t('hostAccess.allowed')}</span></Show></span>
+      </li>
+    }</For>
+  </ol>
+  <Show when={next()} fallback={<p class="host-access-ready" role="status">{i18n.t('hostAccess.permissionsReady')}</p>}>{permission => <>
+    <div class="host-access-permission">
+      <div class="host-access-permission-visual"><HostAccessPermissionIllustration kind={permission() === 'screen_recording' ? 'screen' : 'input'} desktop={props.desktop} /></div>
+      <div><h3>{i18n.t(permission() === 'accessibility' ? 'hostAccess.inputPurpose' : props.desktop ? 'hostAccess.desktopPurpose' : 'hostAccess.appPurpose')}</h3>
+        <p>{i18n.t('hostAccess.permissionInstruction', { permission: permissionLabel(permission()) })}</p></div>
+    </div>
+    <div class="host-access-permission-target">{props.permissionAppName || i18n.t('hostAccess.permissionAppUnknown')}</div>
+    <div class="host-access-permission-footer">
+      <p role="status">{i18n.t(props.busy ? 'hostAccess.checkingPermissions' : 'hostAccess.returnToCheck')}</p>
+      <div class="host-access-actions">
+        <Button disabled={!props.allowed || props.busy} onClick={() => { const manage = requested() === permission(); setRequested(permission()); awaitingReturn = true; if (manage) props.onPermission(permission(), true); else props.onPermission(permission()); }}>{i18n.t(requested() === permission() ? 'hostAccess.openSystemSettings' : permission() === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>
+        <Button variant="ghost" disabled={!props.allowed || props.busy} onClick={props.onRefresh}>{i18n.t('hostAccess.checkAgain')}</Button>
+      </div>
+    </div>
+  </>}</Show>
   <Show when={next() && props.onRecovery}><HostAccessRecovery name={props.permissionAppName} allowed={props.allowed} busy={props.busy} onRecovery={props.onRecovery!} /></Show>
  </section>;
 }

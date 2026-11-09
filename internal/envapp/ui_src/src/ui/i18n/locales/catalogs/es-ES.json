@@ -8338,7 +8338,10 @@
     "helperRestartConfirm": "Se cerrarán las conexiones actuales al escritorio y las apps compartidas. Vuelve a conectarte tras reiniciar.",
     "applyPermissions": "Aplicar cambios de permisos",
     "restartHelper": "Reiniciar Desktop Access",
-    "requestPending": "Completa la solicitud de macOS. Se comprobará automáticamente cuando vuelvas. Si no aparece, abre Ajustes del Sistema."
+    "requestPending": "Completa la solicitud de macOS. Se comprobará automáticamente cuando vuelvas. Si no aparece, abre Ajustes del Sistema.",
+    "permissionInstruction": "En Ajustes del Sistema de macOS, abre {permission} y activa:",
+    "returnToCheck": "Vuelve aquí tras permitir el acceso. Los permisos se comprobarán automáticamente.",
+    "checkingPermissions": "Comprobando permisos…"
   },
   "storage": {
     "title": "Almacenamiento",

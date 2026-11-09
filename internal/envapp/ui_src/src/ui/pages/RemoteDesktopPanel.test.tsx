@@ -662,3 +662,37 @@ it('does not open a viewer when cancellation races a committed preparation', asy
   expect(state.create).not.toHaveBeenCalled(); expect(state.open).not.toHaveBeenCalled();
   button('Back to connection').click(); expect(host.querySelector('.remote-desktop-connect')).toBeTruthy();
 });
+
+
+it('reconciles macOS grants when the desktop permission step opens and returns', async () => {
+ const missing = { ...ready, capabilities: { ...ready.capabilities, screen:false, input:false, state:'screen_permission_required' } };
+ state.status.mockResolvedValue(missing);
+ state.permission.mockImplementation(async permission => {
+   if (permission === 'check_permissions') state.status.mockResolvedValue({ ...missing, capabilities:{ ...missing.capabilities, screen:true, state:'ready' } });
+ });
+ await mount();
+ await vi.waitFor(() => expect(state.permission).toHaveBeenCalledExactlyOnceWith('check_permissions'));
+ await vi.waitFor(() => expect(host.querySelector('[aria-current=step]')?.textContent).toContain('Accessibility'));
+ expect(state.create).not.toHaveBeenCalled(); expect(state.access).not.toHaveBeenCalled();
+ button('Allow mouse and keyboard').click();
+ await vi.waitFor(() => expect(state.permission).toHaveBeenLastCalledWith('accessibility'));
+ window.dispatchEvent(new Event('focus'));
+ await vi.waitFor(() => expect(state.permission).toHaveBeenLastCalledWith('check_permissions'));
+ expect(host.querySelector('[data-scene=screen]')).toBeNull();
+});
+
+
+it('waits out a stale desktop probe before reading updated permission state', async () => {
+ const missing = { ...ready, capabilities:{ ...ready.capabilities, screen:false, input:false, state:'screen_permission_required' } };
+ state.status.mockResolvedValue(missing); await mount();
+ await vi.waitFor(() => expect(button('Check again')?.disabled).toBe(false));
+ let finish!: (value: RemoteDesktopStatus) => void;
+ state.status.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+ window.dispatchEvent(new Event('focus'));
+ await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+ state.status.mockResolvedValue({ ...missing, capabilities:{ ...missing.capabilities, screen:true, state:'ready' } });
+ button('Check again').click();
+ finish(missing);
+ await vi.waitFor(() => expect(host.querySelector('[aria-current=step]')?.textContent).toContain('Accessibility'));
+ expect(state.create).not.toHaveBeenCalled(); expect(state.access).not.toHaveBeenCalled();
+});
